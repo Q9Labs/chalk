@@ -53,6 +53,67 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(rollback[1:], monitor_definitions(VARIABLES)[1:])
 
     @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
+    def test_observed_w33_w34_reports_alert_only_with_the_new_rules(self):
+        fixtures = json.loads(Path(__file__).with_name("testdata").joinpath("observed-connection-reports.json").read_text())
+        rows = []
+        for fixture in fixtures:
+            envelope = fixture["envelope"]
+            rows.append({"at": envelope["_time"], "service": envelope["service.name"],
+                         "event": envelope["attributes.event"], "tenant": envelope["attributes.tenant_id"],
+                         "episode": envelope["attributes.episode_id"], "participant": envelope["attributes.participant_id_hash"],
+                         "trigger": envelope["attributes.trigger"], "report": json.dumps(fixture["report"])})
+        baseline = self.query_fixture(rows, without_connection_reports=True)
+        self.assertTrue(all(not any(table["columns"]) for table in baseline["tables"]))
+        result = self.query_fixture(rows)
+        actual = {}
+        for table in result["tables"]:
+            fields = [field["name"] for field in table["fields"]]
+            for values in zip(*table["columns"]):
+                row = dict(zip(fields, values))
+                summary = row["alert_message"].split("\n")[4]
+                episode = summary.split("Episode: ")[1].split(".")[0]
+                failure = summary.split("Failure: ")[1].split(".")[0]
+                actual[episode] = (failure, row["value"])
+                self.assertIn("media_error_kind: unknown; media_error_step: unknown", summary)
+                self.assertIn("03:05:00 PKT", summary)
+        self.assertEqual(actual, {fixture["envelope"]["attributes.episode_id"]:
+                                 (fixture["expected_failure"], fixture["expected_count"]) for fixture in fixtures})
+
+    def query_fixture(self, rows, without_connection_reports=False):
+        fields = {
+            "service.name": "service", "attributes.event": "event",
+            "attributes.tenant_id": "tenant", "attributes.episode_id": "episode",
+            "attributes.participant_id_hash": "participant", "attributes.trigger": "trigger",
+            "attributes.report": "report", "chalk_alert_stream": "stream",
+            "chalk_alert_tenant": "tenant", "chalk_alert_tenant_name": "name",
+            "chalk_alert_rule": "rule", "chalk_alert_headline": "headline",
+            "chalk_alert_summary": "summary", "chalk_alert_next": "next",
+            "chalk_alert_engineers": "engineers",
+        }
+        schema = ",".join("['" + field + "']:string" for field in fields)
+        fixture = "let FixtureLogs=datatable(_time:datetime,chalk_alert_value:long," + schema + ")[" + ",".join(
+            "datetime(" + row.get("at", "2026-10-27T22:05:00Z") + ")," + str(row.get("value", 0)) + "," +
+            ",".join(json.dumps(row.get(key, "")) for key in fields.values()) for row in rows
+        ) + "];\n"
+        query = monitor_definitions(VARIABLES, without_connection_reports=without_connection_reports)[0]["aplQuery"].replace("['fixture-logs']", "FixtureLogs")
+        request = Request(
+            "https://api.axiom.co/v1/datasets/_apl?format=tabular",
+            data=json.dumps({"apl": fixture + query + " | where value > 0",
+                             "startTime": "2026-10-27T00:00:00Z", "endTime": "2026-10-29T00:00:00Z"}).encode(),
+            headers={"Authorization": "Bearer " + os.environ["AXIOM_TOKEN"],
+                     "X-Axiom-Org-Id": os.environ["AXIOM_ORG_ID"], "Content-Type": "application/json"},
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                result = json.load(response)
+        except HTTPError as error:
+            # The request contains synthetic fixtures only; never print credentials or headers.
+            with error:
+                self.fail(f"Axiom query HTTP {error.code}: {error.read(2000).decode()}")
+        self.assertFalse(result["status"]["isPartial"])
+        return result
+
+    @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
     def test_real_apl_single_failures_deduplication_noise_and_pkt_rollover(self):
         rows = [
             {"stream": "production-state-v2", "tenant": tenant, "name": name,
@@ -91,37 +152,7 @@ class MonitorTests(unittest.TestCase):
         report(participant="noise-4", service="another-service")
         report(participant="noise-5", trigger="recovery_exhausted", codes=("media_state",))
 
-        fields = {
-            "service.name": "service", "attributes.event": "event",
-            "attributes.tenant_id": "tenant", "attributes.episode_id": "episode",
-            "attributes.participant_id_hash": "participant", "attributes.trigger": "trigger",
-            "attributes.report": "report", "chalk_alert_stream": "stream",
-            "chalk_alert_tenant": "tenant", "chalk_alert_tenant_name": "name",
-            "chalk_alert_rule": "rule", "chalk_alert_headline": "headline",
-            "chalk_alert_summary": "summary", "chalk_alert_next": "next",
-            "chalk_alert_engineers": "engineers",
-        }
-        schema = ",".join("['" + field + "']:string" for field in fields)
-        fixture = "let FixtureLogs=datatable(_time:datetime,chalk_alert_value:long," + schema + ")[" + ",".join(
-            "datetime(" + row.get("at", "2026-10-27T22:05:00Z") + ")," + str(row.get("value", 0)) + "," +
-            ",".join(json.dumps(row.get(key, "")) for key in fields.values()) for row in rows
-        ) + "];\n"
-        query = monitor_definitions(VARIABLES)[0]["aplQuery"].replace("['fixture-logs']", "FixtureLogs")
-        request = Request(
-            "https://api.axiom.co/v1/datasets/_apl?format=tabular",
-            data=json.dumps({"apl": fixture + query + " | where value > 0",
-                             "startTime": "2026-10-27T00:00:00Z", "endTime": "2026-10-29T00:00:00Z"}).encode(),
-            headers={"Authorization": "Bearer " + os.environ["AXIOM_TOKEN"],
-                     "X-Axiom-Org-Id": os.environ["AXIOM_ORG_ID"], "Content-Type": "application/json"},
-        )
-        try:
-            with urlopen(request, timeout=30) as response:
-                result = json.load(response)
-        except HTTPError as error:
-            # The request contains synthetic fixtures only; never print credentials or headers.
-            with error:
-                self.fail(f"Axiom query HTTP {error.code}: {error.read(2000).decode()}")
-        self.assertFalse(result["status"]["isPartial"])
+        result = self.query_fixture(rows)
         actual = {}
         for table in result["tables"]:
             fields = [field["name"] for field in table["fields"]]

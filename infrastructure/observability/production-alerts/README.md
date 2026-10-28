@@ -117,10 +117,15 @@ python3 test_monitors.py
 ```
 
 With `AXIOM_TOKEN` and `AXIOM_ORG_ID` supplied privately, add `--live` to execute
-the real expanded monitor query against synthetic Axiom datatables. This proves
+the real expanded monitor query against Axiom datatables. The
+[observed fixtures](testdata/README.md) replay the actual W33/W34 diagnostic
+sequences and exported envelope fields, with identities and wall-clock times
+replaced. They prove the old query misses both failures and the expanded query
+alerts on each. Additional synthetic cases prove
 single-person thresholds, tenant/Episode isolation, duplicate suppression,
 noise exclusions, missing-name fallback and PKT date rollover without ingesting
-events or changing monitors. It does not prove Discord receipt or live SDK reports.
+events or changing monitors. This does not prove Discord receipt or fresh SDK
+report delivery.
 
 ## Reconcile the native monitors
 
