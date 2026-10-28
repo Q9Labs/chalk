@@ -38,7 +38,7 @@ export type ConnectionMediaSnapshot = {
   readonly cursor: { readonly incarnation: number; readonly sequence: number } | null;
   readonly localTracks: readonly ConnectionMediaLocalTrack[];
   readonly remoteTracks: readonly ConnectionMediaRemoteTrack[];
-  readonly failure: { readonly code: string; readonly recoverable: boolean } | null;
+  readonly failure: { readonly code: string; readonly recoverable: boolean; readonly diagnostic?: import("./failure-diagnostics").MediaFailureDiagnostic } | null;
 };
 
 export type MediaPlaneOutcome = "confirmed" | "satisfied" | "retryable_failure" | "terminal_failure" | "ambiguous";

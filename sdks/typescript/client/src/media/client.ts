@@ -5,6 +5,7 @@ import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { matchRemotePullTracks } from "./remote-track-response";
 import { CloudflareSFUError } from "./types";
+import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -1161,7 +1162,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #setFailure(error: unknown, fallback: CloudflareSFUFailureCode): void {
     const code = error instanceof CloudflareSFUError ? error.code : fallback;
-    this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication" });
+    this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication", diagnostic: classifyMediaFailure(error, "peer_connection") });
     this.#reportError(error);
   }
   #emitLocal(): void {
