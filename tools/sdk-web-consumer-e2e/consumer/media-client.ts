@@ -33,6 +33,7 @@ export class FixtureMediaClient {
   readonly #localListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #remoteListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #local = new Map<MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
+  readonly #pausedSources = new Set<MediaSource>();
   readonly #onFailure: (error: unknown, binding?: string) => void;
   readonly #onScreenEnded: () => void;
   readonly #participantId: string;
@@ -62,6 +63,7 @@ export class FixtureMediaClient {
   // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
   prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     if (source === "screen_audio") return;
+    if (this.#pausedSources.has(source)) track.enabled = false;
     this.#local.set(source, { track, enabled: false });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
@@ -89,7 +91,7 @@ export class FixtureMediaClient {
 
   async start(stream: MediaStream): Promise<void> {
     for (const track of stream.getTracks()) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
-    for (const local of this.#local.values()) local.enabled = true;
+    for (const local of this.#local.values()) local.enabled = local.track.enabled;
     this.#publish("connecting");
     await this.#connect();
     this.#sendPublications();
@@ -98,6 +100,7 @@ export class FixtureMediaClient {
 
   async restart(input: CloudflareSFUBootstrap | FixtureMediaAccess): Promise<void> {
     this.#bootstrap = fixtureBootstrap(input);
+    for (const local of this.#local.values()) local.enabled = local.track.enabled;
     this.#publish("recovering");
     this.#closeNetwork();
     try {
@@ -129,11 +132,27 @@ export class FixtureMediaClient {
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const local = this.#local.get(target.source);
     if (!local) return target.enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
+    if (target.enabled && this.#pausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     if (local.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     await this.#applyLocalTarget(target, local);
     this.#sendPublications();
     this.#publish();
     return { outcome: "confirmed", errorCode: null };
+  }
+
+  setLocalSourceIntent(source: MediaSource, enabled: boolean): void {
+    if (enabled) {
+      this.#pausedSources.delete(source);
+      return;
+    }
+    this.#pausedSources.add(source);
+    const local = this.#local.get(source);
+    if (local) local.track.enabled = false;
+  }
+
+  async closeForcedLocalPublication(source: MediaSource): Promise<void> {
+    this.setLocalSourceIntent(source, false);
+    await this.setLocalPublicationTarget({ operationId: "fixture-local-pause", participantId: this.#participantId, source, enabled: false });
   }
 
   async #applyLocalTarget(target: MediaPlaneTarget, local: { track: MediaStreamTrack; enabled: boolean }): Promise<void> {
@@ -388,6 +407,8 @@ export function bindFixtureMediaClient(client: FixtureMediaClient) {
     prepareLocalTrack: client.prepareLocalTrack.bind(client),
     clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
+    closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
   };
