@@ -72,6 +72,8 @@ async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => P
           `--egid=${20000 + index}`,
           "--clear-groups",
           chromium.executablePath(),
+          "--no-first-run",
+          "--no-default-browser-check",
           "--no-sandbox",
           "--disable-dev-shm-usage",
           "--remote-debugging-port=0",
