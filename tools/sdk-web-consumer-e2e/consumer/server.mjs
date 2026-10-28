@@ -112,8 +112,9 @@ async function configureFault(request, response) {
   return sendJSON(response, 200, { accepted: true });
 }
 
-function mediaRecoveryStatus(_request, response, url) {
+async function mediaRecoveryStatus(_request, response, url) {
   const fault = faults.get(url.searchParams.get("participant"));
+  if (fault?.hold && fault.until > Date.now()) await new Promise((resolve) => setTimeout(resolve, fault.until - Date.now()));
   const status = fault?.until > Date.now() ? (fault.status ?? 503) : 200;
   return sendJSON(response, status, { status });
 }
