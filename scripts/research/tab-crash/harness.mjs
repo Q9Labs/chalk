@@ -108,6 +108,10 @@ async function run(version, constrained) {
   }
   const browser = await chromium.launch({headless:true,args,executablePath}); browsers.push(browser);
   const browserCDP = await browser.newBrowserCDPSession();
+  if(constrained){
+    for(const info of (await browserCDP.send('SystemInfo.getProcessInfo')).processInfo)
+      execFileSync('sudo',['tee','/sys/fs/cgroup/chalk-crash-browser/cgroup.procs'],{input:String(info.id),stdio:['pipe','ignore','inherit']});
+  }
   const context = await browser.newContext({permissions:['camera','microphone']});
   await context.route('**/*', route => {
     const url=new URL(route.request().url());
@@ -134,7 +138,7 @@ async function run(version, constrained) {
     active={tenant,space,episode,path,admission,grants:0,forbidden:0,blockedSockets:0,css};
   };
   const navigate = async () => {await page.goto('http://127.0.0.1:8090');await page.waitForFunction(()=>window.__ready);};
-  const joinPage = async () => {await page.evaluate(()=>void window.__join()); await delay(constrained?1600:800);};
+  const joinPage = async () => {await delay(constrained?1600:800);}; // Chalk performs the production automatic join.
   const expire = (natural=false) => {
     const id=active.admission.participant.id;
     if(!natural) sql(`update participant_join_seats set expires_at=now()-interval '1 second' where participant_id='${id}';`);
@@ -142,6 +146,14 @@ async function run(version, constrained) {
     if(state!=='expired') throw new Error(`seat not expired: ${state}`);
   };
   emit({run:runName,chromium:browser.version(),profile:constrained?'1 GiB browser cgroup, 256 MiB V8 old space, 4x CPU throttle':'default',begin:true});
+  // Verify a full accelerated cycle before the long-duration incident window.
+  await fixture();await navigate();await joinPage();
+  await sample(page,cdp,browserCDP,'preflight-pending',runName,-1);
+  expire();await page.reload();await page.waitForFunction(()=>window.__ready);await joinPage();
+  if(!active.forbidden)throw new Error('preflight did not reach stale-seat 403');
+  await page.evaluate(()=>window.__unmount());await delay(1000);
+  await request(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes/${active.episode.id}/end`,{});
+  runStart=Date.now();
   // One full-duration incident: seven real grants over ~13 s, actual 120 s seat,
   // stale refresh and retries until seven minutes have elapsed.
   await fixture(); await navigate(); await joinPage();
