@@ -128,19 +128,42 @@ export const synchronizeChalkStaffDisplayName = () => {};
       define: { "process.env.NODE_ENV": '"production"' },
       logLevel: "silent",
     });
-    for (const mode of ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"]) {
+    const modes = process.env.W29_MODES?.split(",") ?? ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"];
+    for (const mode of modes) {
+      const cookieCount = mode === "cookie_small" ? 1 : mode === "cookie_large" ? 8 : mode === "cookie_huge" ? 40 : 0;
+      if (cookieCount) await context.addCookies(Array.from({ length: cookieCount }, (_, i) => ({ name: `w29_cookie_${i}`, value: "x".repeat(mode === "cookie_small" ? 100 : 3800), url: origin, sameSite: "Lax" })));
       const seat = await participant();
       const { page, grants } = await pageFor(bundle, seat, { clockAhead: mode === "clock_ahead" });
       fault = mode;
       dial = 0;
       const cdp = await context.newCDPSession(page);
+      const networkAudit = [];
+      await cdp.send("Network.enable");
+      cdp.on("Network.webSocketWillSendHandshakeRequest", ({ request }) => {
+        const cookie = Object.entries(request.headers).find(([name]) => name.toLowerCase() === "cookie")?.[1] ?? "";
+        networkAudit.push({ event: "websocket_handshake_request", cookie_header_bytes: Buffer.byteLength(String(cookie)) });
+      });
+      cdp.on("Network.webSocketHandshakeResponseReceived", ({ response }) => networkAudit.push({ event: "websocket_handshake_response", status: response.status }));
+      cdp.on("Network.requestWillBeSentExtraInfo", ({ headers }) => {
+        const cookie = Object.entries(headers).find(([name]) => name.toLowerCase() === "cookie")?.[1] ?? "";
+        networkAudit.push({ event: "http_request", cookie_header_bytes: Buffer.byteLength(String(cookie)) });
+      });
       if (mode === "slow_cpu") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       const began = Date.now();
-      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: ["live", "slow_cpu", "clock_ahead"].includes(mode) ? syncOrigin : faultURL });
+      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: ["live", "slow_cpu", "clock_ahead"].includes(mode) || cookieCount ? syncOrigin : faultURL });
       await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), null, { timeout: 45000 });
       const audit = await page.evaluate(() => window.audit);
-      const result = { version, mode, elapsed_ms: Date.now() - began, grants, audit, seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`) };
-      if (mode === "live" || mode === "slow_cpu")
+      const result = {
+        version,
+        mode,
+        elapsed_ms: Date.now() - began,
+        grants,
+        audit,
+        networkAudit,
+        synthetic_cookie_count: cookieCount,
+        seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`),
+      };
+      if (mode === "live" || mode === "slow_cpu" || mode === "cookie_small")
         assert(
           audit.some((row) => row.event === "join_ok"),
           JSON.stringify(result),
@@ -149,8 +172,10 @@ export const synchronizeChalkStaffDisplayName = () => {};
       console.log("W29_RESULT " + JSON.stringify(result));
       await page.evaluate(() => window.stopClient());
       await page.close();
+      if (cookieCount) await context.clearCookies({ name: /^w29_cookie_/ });
       for (const socket of sockets) socket.destroy();
     }
+    if (process.env.W29_SKIP_PREPARATION === "1") continue;
     const seat = await participant();
     const { page, grants } = await pageFor(bundle, seat, { hold: 4500, initialGrant: false });
     const intervals = [2456, 1842, 3479, 1776, 2168, 1766];
