@@ -89,7 +89,7 @@ shipment target from branch, release mode, or directory.
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
-- Formatting, Fallow, Semgrep, workspace type checks, coverage tests, and
+- Formatting, Fallow, structural checks, workspace type checks, coverage tests, and
   builds follow affected source files and workspace dependents.
 - The boundary gate covers cross-workspace dependency direction under `apps`,
   `packages`, and `sdks/typescript`. Use named package entrypoints or configured
