@@ -40,6 +40,11 @@ test("web browser cache key follows the engine's lockfile version, not the SDK's
   });
 });
 
+function assertStepOrder(...positions) {
+  assert.ok(positions[0] >= 0);
+  for (let index = 1; index < positions.length; index++) assert.ok(positions[index - 1] < positions[index]);
+}
+
 for (const cacheState of ["miss", "hit"]) {
   test(`web engine Chromium installs before proof on a cache ${cacheState}`, () => {
     const restore = steps.findIndex((step) => step.id === "web-browser-cache");
@@ -47,7 +52,7 @@ for (const cacheState of ["miss", "hit"]) {
     const verify = steps.findIndex((step) => step.uses === "./.github/actions/setup-playwright");
     const save = steps.findIndex((step) => step.uses?.startsWith("actions/cache/save@"));
     const proof = steps.findIndex((step) => step.run === "pnpm web:proof");
-    assert.ok(restore >= 0 && restore < install && install < verify && verify < save && save < proof);
+    assertStepOrder(restore, install, verify, save, proof);
     assert.equal(steps[verify].if, undefined);
     assert.equal(steps[install].if, undefined, `a cache ${cacheState} must not skip the engine installer`);
     assert.equal(steps[restore].with.path, "~/.cache/ms-playwright");
@@ -63,7 +68,7 @@ test("both runtimes are verified after the final shared cache restore and before
   const restore = steps.findIndex((step) => step.id === "web-browser-cache");
   const install = steps.findIndex((step) => step.run === "pnpm exec e2e-web install chromium webkit --with-deps");
   const save = steps.findIndex((step) => step.uses?.startsWith("actions/cache/save@"));
-  assert.ok(restore >= 0 && restore < install && install < sdk && sdk < save);
+  assertStepOrder(restore, install, sdk, save);
   assert.equal(steps[sdk].with.browsers, "chromium webkit");
   assert.equal(steps[sdk].with["verify-engine"], true);
   const action = load(readFileSync(process.env.SDK_PLAYWRIGHT_ACTION_PATH ?? new URL("../../.github/actions/setup-playwright/action.yml", import.meta.url), "utf8"));
@@ -71,7 +76,7 @@ test("both runtimes are verified after the final shared cache restore and before
   const sdkInstall = action.runs.steps.findIndex((step) => step.run?.includes("install_once()"));
   const verify = action.runs.steps.findIndex((step) => step.run?.includes("node scripts/ensure-playwright-browsers.mjs sdk"));
   const sdkSave = action.runs.steps.findIndex((step) => step.uses?.startsWith("actions/cache/save@"));
-  assert.ok(sdkRestore >= 0 && sdkRestore < sdkInstall && sdkInstall < verify && verify < sdkSave);
+  assertStepOrder(sdkRestore, sdkInstall, verify, sdkSave);
   assert.equal(action.runs.steps[verify].if, undefined);
   assert.equal(action.inputs["verify-engine"].default, "false");
   assert.equal(action.runs.steps[verify].env.VERIFY_ENGINE, "${{ inputs.verify-engine }}");

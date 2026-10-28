@@ -1,7 +1,8 @@
+import { acceptFixtureSocket, trackFixtureSockets } from "./sync-fixture-wire.mjs";
+import { fixtureParticipant, syncFixtureEntry } from "./sync-fixture-entry.mjs";
 // Local protocol fixture: real Chromium, WebSocket, SDK and failed-call screen.
 // No production requests. Run: node scripts/web-proof/join-startup.mjs [output-dir]
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -27,30 +28,8 @@ const entry = resolve(output, "page.tsx");
 await writeFile(
   entry,
   `
-import React from "react";
-import { createRoot } from "react-dom/client";
-import { createSpaceClientForPlatform } from "${resolve("sdks/typescript/client/src/space-client/space-client.ts")}";
-import { computeV1StateDigest } from "${resolve("sdks/typescript/client/src/sync/v1-reducer.ts")}";
 import { StatusSurface } from "${resolve(surface)}";
-const participant = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21";
-const recovery = "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c23";
-const deadline = Date.now() + 300000;
-const digest = await computeV1StateDigest({ revision: 1, stateSchemaVersion: 1, stateDigest: "0".repeat(64), status: "active", admissionPolicy: "open", deadlineAtMs: deadline, deadlineGeneration: 1, roleCapabilities: { owner: [] }, recording: null, participants: [{ participantId: participant, displayName: "Fixture", handRaised: false, admissionRevision: 1, role: "owner", eligibleRoles: [], capabilities: [] }], admissionRequests: [] });
-const head = { revision: 1, state_schema_version: 1, state_digest: digest };
-await fetch("/frames", { method: "POST", body: JSON.stringify([
-  { type: "welcome", protocol: 1, participant_id: participant, participant_generation: 1, recovery_id: recovery, head, mode: "snapshot", entry_confirmation: true, entry_generation: 1, snapshot: { control_revision: 1, state_schema_version: 1, state_digest: digest, status: "active", admission_policy: "open", deadline_at_ms: deadline, deadline_generation: 1, role_capabilities: { owner: [] }, recording: null, participants: [{ participant_id: participant, display_name: "Fixture", hand_raised: false, admission_revision: 1, role: "owner", capabilities: [] }], admission_requests: [] } },
-  ...["media", "presence"].map(stream => ({ type: "projection_snapshot", stream, projection_id: recovery, sequence: 0, items: [] })),
-  { type: "recovery_complete", recovery_id: recovery, head }
-]) });
-const token = audience => btoa('{"alg":"EdDSA"}') + "." + btoa(JSON.stringify({ aud: audience })) + ".fixture";
-const expires = new Date(deadline).toISOString();
-const diagnostics = [];
-let dialCount = 0;
-globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
-  construct(target, args) { dialCount += 1; return Reflect.construct(target, args); }
-});
-const client = createSpaceClientForPlatform({ space: "fixture", baseUrl: location.origin, getAccess: async () => ({ subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: participant, participant_generation: 1 }, sync: { token: token("chalk-sync"), expires_at: expires }, media: { token: token("chalk-media"), expires_at: expires, provider: "cloudflare_sfu", client_payload: { connectionId: "connection-1", stunServer: "stun:127.0.0.1:9" } } }) }, { apiBaseUrl: location.origin, syncUrl: location.origin.replace("http", "ws") + "/v1/sync", whiteboardUrl: null, onConnectionDiagnostic: event => diagnostics.push(event) });
-const root = createRoot(document.getElementById("root"));
+${syncFixtureEntry([fixtureParticipant("Fixture")], { owner: [] })}
 const started = performance.now();
 root.render(<StatusSurface phase="entering" callName="Fixture call" />);
 try {
@@ -64,15 +43,6 @@ window.proof = { dialCount, connection: client.getSnapshot().connection, diagnos
 window.disposeProof = () => client.dispose();
 `,
 );
-
-function frame(value) {
-  const payload = Buffer.from(JSON.stringify(value));
-  const header = Buffer.alloc(payload.length < 126 ? 2 : 4);
-  header[0] = 0x81;
-  header[1] = payload.length < 126 ? payload.length : 126;
-  if (payload.length >= 126) header.writeUInt16BE(payload.length, 2);
-  return Buffer.concat([header, payload]);
-}
 
 const browser = await chromium.launch({ headless: true });
 const results = [];
@@ -143,10 +113,7 @@ try {
           );
         }
       });
-      server.on("connection", (socket) => {
-        sockets.add(socket);
-        socket.on("close", () => sockets.delete(socket));
-      });
+      trackFixtureSockets(server, sockets);
       server.on("upgrade", (request, socket) => {
         attempts += 1;
         const step = lossPattern[Math.min(attempts - 1, lossPattern.length - 1)];
@@ -168,36 +135,7 @@ try {
         const timer = setTimeout(() => {
           timers.delete(timer);
           if (socket.destroyed) return;
-          const accept = createHash("sha1")
-            .update(request.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
-            .digest("base64");
-          socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-          let buffered = Buffer.alloc(0);
-          // Minimal RFC6455 fixture accepts partial/coalesced masked browser frames.
-          // Kept here with the socket owner; no production parser is changed.
-          // fallow-ignore-next-line complexity
-          socket.on("data", (chunk) => {
-            buffered = Buffer.concat([buffered, chunk]);
-            while (buffered.length >= 6) {
-              const opcode = buffered[0] & 15;
-              let length = buffered[1] & 127;
-              const offset = length === 126 ? 4 : 2;
-              if (length === 127 || buffered.length < offset + 4) return;
-              if (length === 126) length = buffered.readUInt16BE(2);
-              if (buffered.length < offset + 4 + length) return;
-              const mask = buffered.subarray(offset, offset + 4);
-              const payload = buffered.subarray(offset + 4, offset + 4 + length).map((byte, index) => byte ^ mask[index % 4]);
-              buffered = buffered.subarray(offset + 4 + length);
-              if (opcode === 8) {
-                socket.end();
-                return;
-              }
-              if (opcode !== 1) continue;
-              const message = JSON.parse(payload.toString());
-              if (message.type === "hello") for (const item of frames) socket.write(frame(item));
-              if (message.type === "entered") socket.write(frame({ type: "entered_ack" }));
-            }
-          });
+          acceptFixtureSocket(request, socket, () => frames);
         }, upgradeDelayMs);
         timers.add(timer);
       });

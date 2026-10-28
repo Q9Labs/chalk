@@ -77,12 +77,15 @@ const client = createFixtureSpaceClient({
 function installHarness(nextClient: SpaceClient): void {
   const history: string[] = [];
   const errors: string[] = [];
+  function recordChange(items: string[], value: string): void {
+    if (items.at(-1) !== value) items.push(value);
+  }
   nextClient.subscribe(() => {
     const connection = nextClient.getSnapshot().connection;
     const status = connection.status;
-    if (history.at(-1) !== status) history.push(status);
+    recordChange(history, status);
     const code = connection.lastError?.code;
-    if (code && errors.at(-1) !== code) errors.push(code);
+    if (code) recordChange(errors, code);
   });
   window.__chalk = {
     connectionHistory: () => history,

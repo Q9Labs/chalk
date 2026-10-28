@@ -106,14 +106,18 @@ export class FixtureMediaClient {
     try {
       await this.#connect();
     } catch (cause) {
-      const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
-      this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: status !== 401 && status !== 403 });
+      this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: this.#recoverableFailure(cause) });
       this.#emit();
       this.#onFailure(cause, this.#bootstrap.connectionId);
       throw cause;
     }
     this.#sendPublications();
     this.#publish("live");
+  }
+
+  #recoverableFailure(cause: unknown): boolean {
+    const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
+    return status !== 401 && status !== 403;
   }
 
   stop = (): void => {
@@ -131,13 +135,21 @@ export class FixtureMediaClient {
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const local = this.#local.get(target.source);
-    if (!local) return target.enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
-    if (target.enabled && this.#pausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+    if (!local) return this.#absentSourceResult(target.enabled);
+    if (this.#sourcePaused(target)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     if (local.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     await this.#applyLocalTarget(target, local);
     this.#sendPublications();
     this.#publish();
     return { outcome: "confirmed", errorCode: null };
+  }
+
+  #sourcePaused(target: MediaPlaneTarget): boolean {
+    return target.enabled && this.#pausedSources.has(target.source);
+  }
+
+  #absentSourceResult(enabled: boolean): MediaPlaneResult {
+    return enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
   }
 
   setLocalSourceIntent(source: MediaSource, enabled: boolean): void {
@@ -248,20 +260,21 @@ export class FixtureMediaClient {
       if (peer.negotiateAgain) await this.#negotiate(remote, peer);
       return;
     }
-    for (const transceiver of peer.connection.getTransceivers()) {
-      const source = transceiver.mid ? peer.remoteByMid.get(transceiver.mid) : undefined;
-      if (!source) continue;
-      transceiver.direction = "sendrecv";
-      peer.senders.set(source, transceiver.sender);
-      const local = this.#local.get(source);
-      if (local?.enabled) {
-        await transceiver.sender.replaceTrack(local.track);
-        transceiver.sender.setStreams(new MediaStream([local.track]));
-      }
-    }
+    for (const transceiver of peer.connection.getTransceivers()) await this.#answerTransceiver(peer, transceiver);
     const answer = await peer.connection.createAnswer();
     await peer.connection.setLocalDescription(answer);
     this.#sendSignal(remote, { description: peer.connection.localDescription!, mids: this.#localMids(peer) });
+  }
+
+  async #answerTransceiver(peer: PeerState, transceiver: RTCRtpTransceiver): Promise<void> {
+    const source = this.#sourceForMid(peer, transceiver.mid);
+    if (!source) return;
+    transceiver.direction = "sendrecv";
+    peer.senders.set(source, transceiver.sender);
+    const local = this.#local.get(source);
+    if (!local?.enabled) return;
+    await transceiver.sender.replaceTrack(local.track);
+    transceiver.sender.setStreams(new MediaStream([local.track]));
   }
 
   #ensurePeer(remote: string): PeerState {
@@ -270,24 +283,48 @@ export class FixtureMediaClient {
     const connection = registerPeer(new RTCPeerConnection());
     const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), offerer: this.#participantId < remote, makingOffer: false, negotiateAgain: false };
     this.#peers.set(remote, peer);
-    // Reserve both directions before the first offer. An answering participant
-    // may finish capture after that offer; replaceTrack must not require it to
-    // win a second negotiation just to send its initial microphone/camera.
-    for (const source of peer.offerer ? (["microphone", "camera"] as const) : []) {
-      const local = this.#local.get(source);
-      const track = local?.enabled ? local.track : null;
-      const transceiver = connection.addTransceiver(track ?? (source === "microphone" ? "audio" : "video"), { direction: "sendrecv", streams: track ? [new MediaStream([track])] : [] });
-      peer.senders.set(source, transceiver.sender);
-    }
-    for (const [source, local] of this.#local) if (peer.offerer && source !== "microphone" && source !== "camera" && local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
+    if (peer.offerer) this.#reserveSenders(peer);
     connection.addEventListener("icecandidate", (event) => this.#sendSignal(remote, { candidate: event.candidate?.toJSON() ?? null }));
     connection.addEventListener("track", (event) => {
-      const mid = event.transceiver.mid;
-      const source = (mid ? peer.remoteByMid.get(mid) : undefined) ?? (event.track.kind === "audio" ? "microphone" : "camera");
+      const source = this.#remoteSource(peer, event);
       recordFixtureRemoteTrack(this.#received, { participantId: remote, source, publicationId: `${remote}|${source}`, track: event.track });
       this.#publish();
     });
     return peer;
+  }
+
+  #sourceForMid(peer: PeerState, mid: string | null): MediaSource | undefined {
+    return mid ? peer.remoteByMid.get(mid) : undefined;
+  }
+
+  #enabledTrack(source: MediaSource): MediaStreamTrack | null {
+    const local = this.#local.get(source);
+    return local?.enabled ? local.track : null;
+  }
+
+  #remoteSource(peer: PeerState, event: RTCTrackEvent): MediaSource {
+    const mid = event.transceiver.mid;
+    const mapped = this.#sourceForMid(peer, mid);
+    return mapped ?? (event.track.kind === "audio" ? "microphone" : "camera");
+  }
+
+  #reserveTransceiver(peer: PeerState, source: "microphone" | "camera"): void {
+    const track = this.#enabledTrack(source);
+    const kind = { microphone: "audio", camera: "video" }[source];
+    const streams = track ? [new MediaStream([track])] : [];
+    const transceiver = peer.connection.addTransceiver(track ?? kind, { direction: "sendrecv", streams });
+    peer.senders.set(source, transceiver.sender);
+  }
+
+  #reserveSenders(peer: PeerState): void {
+    // Reserve both directions before the first offer, so late initial capture
+    // can use replaceTrack without winning another negotiation.
+    this.#reserveTransceiver(peer, "microphone");
+    this.#reserveTransceiver(peer, "camera");
+    for (const [source, local] of this.#local) {
+      if (["microphone", "camera"].includes(source)) continue;
+      if (local.enabled) peer.senders.set(source, peer.connection.addTrack(local.track, new MediaStream([local.track])));
+    }
   }
 
   async #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): Promise<void> {

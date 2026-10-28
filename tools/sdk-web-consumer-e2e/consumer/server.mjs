@@ -100,13 +100,25 @@ function forceMediaFailure(_request, response, url) {
   forceSocket(response, mediaSockets, url.searchParams.get("participant"), "message");
 }
 
+function projectParticipant(participant) {
+  for (const [key, publication] of publications) if (publication.participantId === participant) projectedPublications.set(key, publication);
+}
+
+function faultStatus(fault) {
+  return fault?.until > Date.now() ? (fault.status ?? 503) : 200;
+}
+
+async function waitForHeldFault(fault) {
+  if (fault?.hold && fault.until > Date.now()) await new Promise((resolve) => setTimeout(resolve, fault.until - Date.now()));
+}
+
 async function configureFault(request, response) {
   const fault = await readJSON(request);
   if (typeof fault.participant !== "string") return sendJSON(response, 400, { error: "participant_required" });
   faults.set(fault.participant, { ...fault, until: Date.now() + (fault.durationMs ?? 0) });
   if (fault.clear) {
     faults.delete(fault.participant);
-    for (const [key, publication] of publications) if (publication.participantId === fault.participant) projectedPublications.set(key, publication);
+    projectParticipant(fault.participant);
     broadcastState();
   }
   return sendJSON(response, 200, { accepted: true });
@@ -114,8 +126,8 @@ async function configureFault(request, response) {
 
 async function mediaRecoveryStatus(_request, response, url) {
   const fault = faults.get(url.searchParams.get("participant"));
-  if (fault?.hold && fault.until > Date.now()) await new Promise((resolve) => setTimeout(resolve, fault.until - Date.now()));
-  const status = fault?.until > Date.now() ? (fault.status ?? 503) : 200;
+  await waitForHeldFault(fault);
+  const status = faultStatus(fault);
   return sendJSON(response, status, { status });
 }
 
@@ -240,20 +252,37 @@ function handleDirectedRequestMessage(socket, actor, message) {
   handleDirectedRequest(socket, actor, message);
 }
 
-function handleCommandMessage(socket, actor, message) {
-  if (typeof message.id !== "string") return;
-  const fault = faults.get(actor);
-  if (fault?.syncReconnect && message.payload?.enabled === true) {
-    faults.set(actor, { ...fault, syncReconnect: false });
-    socket.close(4101, "fixture_sync_reconnect_during_unmute");
-    return;
-  }
-  if (fault?.projection === "reject" && message.name.startsWith("set_") && message.payload?.enabled === true) {
-    socket.send(JSON.stringify({ type: "ack", id: message.id, error: "media_update_rejected" }));
-    return;
-  }
+function rejectsEnable(fault, message) {
+  return fault.projection === "reject" && message.name.startsWith("set_");
+}
+
+function dispatchCommand(socket, actor, message) {
   const handler = syncOperationHandlers.get(message.name) ?? acknowledgeCommand;
   handler(socket, actor, message);
+}
+
+function handleEnableFault(socket, actor, message) {
+  const fault = faults.get(actor) ?? {};
+  if (fault.syncReconnect) {
+    faults.set(actor, { ...fault, syncReconnect: false });
+    socket.close(4101, "fixture_sync_reconnect_during_unmute");
+    return true;
+  }
+  if (rejectsEnable(fault, message)) {
+    socket.send(JSON.stringify({ type: "ack", id: message.id, error: "media_update_rejected" }));
+    return true;
+  }
+  return false;
+}
+
+function isEnableCommand(message) {
+  return message.payload?.enabled === true;
+}
+
+function handleCommandMessage(socket, actor, message) {
+  if (typeof message.id !== "string") return;
+  if (isEnableCommand(message) && handleEnableFault(socket, actor, message)) return;
+  dispatchCommand(socket, actor, message);
 }
 
 function handleDirectedRequest(socket, actor, message) {
@@ -392,9 +421,12 @@ function updatePublication(actor, item) {
   const key = `${actor}:${item.source}`;
   const publication = { participantId: actor, source: item.source, enabled: item.enabled === true, publicationId: item.enabled ? String(item.publicationId) : null };
   publications.set(key, publication);
-  const fault = faults.get(actor);
-  if (!fault?.projection) projectedPublications.set(key, publication);
-  if (fault?.projection === "delay")
+  projectPublication(key, publication, faults.get(actor) ?? {});
+}
+
+function projectPublication(key, publication, fault) {
+  if (!fault.projection) projectedPublications.set(key, publication);
+  if (fault.projection === "delay")
     setTimeout(() => {
       // Do not deliver a stale publication over a newer user revision.
       if (publications.get(key) === publication) projectedPublications.set(key, publication);
@@ -460,9 +492,13 @@ function replaceSocket(collection, participantId, socket) {
   collection.set(participantId, socket);
 }
 
+function deleteParticipantPublications(items, participantId) {
+  for (const key of items.keys()) if (key.startsWith(`${participantId}:`)) items.delete(key);
+}
+
 function clearPublications(participantId, { projected = true } = {}) {
-  for (const key of publications.keys()) if (key.startsWith(`${participantId}:`)) publications.delete(key);
-  if (projected) for (const key of projectedPublications.keys()) if (key.startsWith(`${participantId}:`)) projectedPublications.delete(key);
+  deleteParticipantPublications(publications, participantId);
+  if (projected) deleteParticipantPublications(projectedPublications, participantId);
 }
 
 function token(audience, subject) {
