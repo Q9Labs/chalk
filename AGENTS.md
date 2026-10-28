@@ -2,6 +2,8 @@
 
 Chalk is an open-source platform for real-time collaboration and communication. Use Space and Episode as defined in [GLOSSARY.md](GLOSSARY.md). Keep product language role-neutral unless an integration needs specific terms.
 
+Docs explain product intent, domain decisions, and operational judgment; verify claims about current behavior against code, contracts, and checks.
+
 Put shared behavior in packages first, then wire it into apps. Don't fix SDK behavior only in a demo. This repo is public: keep production identifiers, customer details, private runbooks, and raw debug artifacts out of Git.
 
 ## Architecture
