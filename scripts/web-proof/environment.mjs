@@ -4,6 +4,7 @@ export function childEnvironment(environment, { config, apiKey, invite, director
   return {
     ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
     E2E_TELEMETRY_DISABLED: "1",
+    CHALK_PROOF_WEBKIT: environment.CHALK_PROOF_WEBKIT ?? "0",
     CHALK_PROOF_WEB_URL: webUrl,
     CHALK_E2E_API_URL: config.api_url,
     CHALK_E2E_TENANT_ID: config.tenant_id,
