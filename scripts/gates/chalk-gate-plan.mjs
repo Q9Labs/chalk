@@ -367,6 +367,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/gates/doc-checks.test.mjs",
       "scripts/gates/remote-queue.test.mjs",
       "scripts/dev/chalk-resources.test.mjs",
+      "scripts/dev/cli-ready.test.mjs",
       "apps/mobile/scripts/run-ios.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",

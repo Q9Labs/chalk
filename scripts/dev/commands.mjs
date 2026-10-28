@@ -3,15 +3,16 @@ import { stdin as processStdin, stdout as processStdout } from "node:process";
 import { readManifest, readOwner, releaseStaleOwnership, removeRuntimeFiles, validateOwnedPid } from "./ownership.mjs";
 import { stopProcessGroup, tailLog } from "./process.mjs";
 import { DevCommand } from "./config.mjs";
-import { FailureKind, RuntimeState, failure, isReadyState } from "./model.mjs";
+import { FailureKind, RuntimeState, failure } from "./model.mjs";
 
 const helpText = `Usage: pnpm dev [command] [options]
 
-Commands: start, status, logs [service], smoke, stop, reset
-Options: --profile core|mobile, --fresh, --yes
+Commands: start, status, logs [service], stop, reset
+Options: --profile core|mobile, --fresh, --yes, --ready (status only)
 
 start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
-in the ready summary. Use the dev fixture for local media runs.`;
+in the ready summary. Use the dev fixture for local media runs. Run pnpm dev:smoke
+for the media smoke test.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
@@ -22,8 +23,6 @@ export async function runCommand(command, config, { supervisor, service, yes = f
       return statusCommand(config, { output });
     case DevCommand.LOGS:
       return logsCommand(config, { service, output });
-    case DevCommand.SMOKE:
-      return smokeCommand(config, { hooks, output });
     case DevCommand.STOP:
       return stopCommand(config, { supervisor, hooks, output });
     case DevCommand.RESET:
@@ -71,15 +70,6 @@ async function logsCommand(config, { service, lines = 200, output } = {}) {
     if (output && logs[name]) output(logs[name]);
   }
   return logs;
-}
-
-async function smokeCommand(config, { hooks, output } = {}) {
-  const owner = await readOwner(config);
-  if (!owner || !isReadyState(owner.state)) throw failure(FailureKind.NOT_READY, `runtime is ${owner?.state || RuntimeState.STOPPED}`, { stage: "smoke" });
-  if (!hooks.smoke) throw failure(FailureKind.CONFIG, "smoke hook is not configured", { stage: "smoke" });
-  const result = await hooks.smoke({ config, owner });
-  if (output && result !== undefined) output(typeof result === "string" ? result : JSON.stringify(result, null, 2));
-  return result;
 }
 
 export async function stopCommand(config, { supervisor, hooks = {}, output } = {}) {
