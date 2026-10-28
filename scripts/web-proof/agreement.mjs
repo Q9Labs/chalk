@@ -21,6 +21,12 @@ export async function sampleAgreement() {
   const tiles = [...document.querySelectorAll('[data-part="stage-tile"][data-participant-id]')];
   const localTile = tiles.find((tile) => tile.dataset.tour === "local-video");
   const self = snapshot?.self.participantId ?? localTile?.dataset.participantId;
+  const controls = localTile
+    ? {
+        microphone: Boolean(document.querySelector('button[aria-label="Mute microphone"]:not([disabled])')),
+        camera: Boolean(document.querySelector('button[aria-label="Turn off camera"]:not([disabled])')),
+      }
+    : null;
   const local = snapshot
     ? Object.fromEntries(["microphone", "camera"].map((source) => [source, snapshot.media.local[source].state]))
     : {
@@ -58,7 +64,7 @@ export async function sampleAgreement() {
       participant.badgeCamera = Boolean(tile.querySelector("video"));
     }
   }
-  return { self, local, participants, received };
+  return { self, local, controls, participants, received };
 }
 
 export function agreementIssues(before, after, { advancing = true } = {}) {
@@ -66,6 +72,7 @@ export function agreementIssues(before, after, { advancing = true } = {}) {
   if (after.length < 2 || new Set(after.map((sample) => sample.self)).size !== after.length) issues.push("agreement requires at least two distinct participant identities");
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
+    for (const source of ["microphone", "camera"]) if (owner.controls && owner.controls[source] !== (owner.local[source] === "enabled")) issues.push(`${owner.self} ${source}: own button disagrees with SDK state`);
     for (const observer of after.filter((observer) => observer.self !== owner.self)) {
       const participant = observer.participants.find((participant) => participant.id === owner.self);
       const received = observer.received.find((participant) => participant.id === owner.self);
