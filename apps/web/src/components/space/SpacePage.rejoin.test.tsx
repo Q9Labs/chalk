@@ -49,7 +49,12 @@ it.each([false, true])("retries failed terminal cleanup before fresh admission (
       }
     },
   );
-  const departure = Promise.withResolvers<Response>();
+  let resolveDeparture: (response: Response) => void = () => {};
+  let rejectDeparture: (error: Error) => void = () => {};
+  const departure = new Promise<Response>((resolve, reject) => {
+    resolveDeparture = resolve;
+    rejectDeparture = reject;
+  });
   const requests: string[] = [];
   let arrivals = 0;
   let leaves = 0;
@@ -66,7 +71,7 @@ it.each([false, true])("retries failed terminal cleanup before fresh admission (
       requests.push("leave");
       leaves++;
       if (leaves === 1) throw new TypeError("Failed to fetch");
-      return leaves === 2 ? departure.promise : new Response(null, { status: 204 });
+      return leaves === 2 ? departure : new Response(null, { status: 204 });
     }
     return Response.json({ error: { code: "auth.unauthorized", message: "Sign in required" } }, { status: 401 });
   });
@@ -85,19 +90,19 @@ it.each([false, true])("retries failed terminal cleanup before fresh admission (
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Join call" })));
   await screen.findByText("Couldn’t leave the call. Try Home again.");
   await act(async () => window.dispatchEvent(new Event("online")));
-  const rejoin = screen.getByRole<HTMLButtonElement>("button", { name: "Try again", exact: true });
+  const rejoin = screen.getByRole<HTMLButtonElement>("button", { name: "Try again" });
   expect(rejoin.disabled).toBe(false);
   await act(async () => fireEvent.click(rejoin));
   await waitFor(() => expect(leaves).toBe(2));
   expect(rejoin.disabled).toBe(true);
   expect(arrivals).toBe(1);
   if (failsAgain) {
-    await act(async () => departure.reject(new TypeError("Failed to fetch")));
+    await act(async () => rejectDeparture(new TypeError("Failed to fetch")));
     await waitFor(() => expect(rejoin.disabled).toBe(false));
     expect(arrivals).toBe(1);
     await act(async () => fireEvent.click(rejoin));
   } else {
-    await act(async () => departure.resolve(new Response(null, { status: 204 })));
+    await act(async () => resolveDeparture(new Response(null, { status: 204 })));
   }
   await screen.findByText("Asking to join Design Lab");
   expect(requests).toEqual(failsAgain ? ["arrive", "leave", "leave", "leave", "arrive"] : ["arrive", "leave", "leave", "arrive"]);
