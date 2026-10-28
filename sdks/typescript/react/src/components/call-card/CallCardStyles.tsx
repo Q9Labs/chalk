@@ -571,7 +571,7 @@ const styles = `.call-card-tabs {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #dcb740;
+  background: var(--chalk-warning);
   color: var(--chalk-accent-text);
   font-size: 12px;
   font-weight: 700;
