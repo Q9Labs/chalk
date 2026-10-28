@@ -18,7 +18,7 @@ type FixtureMediaClientInput = {
     readonly media: FixtureMediaAccess;
   };
   readonly credential: () => Promise<string>;
-  readonly onFailure: (error: unknown) => void;
+  readonly onFailure: (error: unknown, binding?: string) => void;
   readonly onScreenEnded: () => void;
 };
 
@@ -32,7 +32,7 @@ export class FixtureMediaClient {
   readonly #localListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #remoteListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #local = new Map<MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
-  readonly #onFailure: (error: unknown) => void;
+  readonly #onFailure: (error: unknown, binding?: string) => void;
   readonly #onScreenEnded: () => void;
   readonly #participantId: string;
   readonly #peers = new Map<string, PeerState>();
@@ -105,7 +105,7 @@ export class FixtureMediaClient {
       const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
       this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: status !== 401 && status !== 403 });
       this.#emit();
-      this.#onFailure(cause);
+      this.#onFailure(cause, this.#bootstrap.connectionId);
       throw cause;
     }
     this.#sendPublications();
@@ -195,7 +195,7 @@ export class FixtureMediaClient {
       this.#closeNetwork();
       this.#snapshot = this.#makeSnapshot("failed", { code: "peer_connection_failed", recoverable: true });
       this.#emit();
-      this.#onFailure(new TypeError("Fixture forced media failure"));
+      this.#onFailure(new TypeError("Fixture forced media failure"), this.#bootstrap.connectionId);
     }
   }
 
