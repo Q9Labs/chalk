@@ -21,6 +21,25 @@ export function validateBudgets(budgets) {
   }
 }
 
+export function validateScenarioBudgets(budgets, scenarios) {
+  const ids = new Set(scenarios.map((scenario) => scenario.id));
+  if (ids.size !== scenarios.length) throw new Error("Duplicate performance scenario ID");
+  for (const device of Object.keys(budgets.scenarios ?? {})) {
+    if (!Object.hasOwn(budgets.devices, device)) throw new Error(`Scenario budgets for unknown device: ${device}`);
+  }
+  for (const device of Object.keys(budgets.devices)) {
+    const deviceBudgets = budgets.scenarios?.[device] ?? {};
+    for (const id of Object.keys(deviceBudgets)) {
+      if (!ids.has(id)) throw new Error(`Scenario budget has no runner: ${device}/${id}`);
+    }
+    for (const { id } of scenarios) {
+      for (const metric of METRICS.filter((metric) => metric !== "firstCallMs" || id === "first-load")) {
+        if (!Number.isFinite(deviceBudgets[id]?.[metric])) throw new Error(`Missing explicit scenario budget: ${device}/${id}/${metric}`);
+      }
+    }
+  }
+}
+
 export function percentile(values, p) {
   if (!values.length || values.some((value) => !Number.isFinite(value))) throw new Error("Missing or invalid measurement");
   const sorted = [...values].sort((a, b) => a - b);

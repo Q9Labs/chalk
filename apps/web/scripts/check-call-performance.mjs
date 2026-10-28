@@ -11,7 +11,8 @@ import { serveBuild } from "./call-performance-server.mjs";
 import { installVideoQualityObserver, videoCounterDelta } from "./call-video-quality.mjs";
 import { checkLeaks, LEAK_JOURNEYS, leakShard } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
-import { validateBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
+import { validateBudgets, validateScenarioBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
+import { scenarios } from "./call-performance-scenarios.mjs";
 
 const runStarted = performance.now();
 const { values } = parseArgs({
@@ -44,26 +45,7 @@ const root = resolve(web, "../..");
 const dist = resolve(web, ".call-performance");
 const budgets = JSON.parse(await readFile(resolve(web, "perf-budgets.json"), "utf8"));
 validateBudgets(budgets);
-const scenarios = [
-  { id: "calm-six", state: "perf-six" },
-  { id: "grid-24", state: "perf-grid" },
-  { id: "panels", state: "perf-six" },
-  { id: "spotlight-share", state: "perf-share" },
-  { id: "board", state: "perf-board" },
-  { id: "reactions", state: "perf-six" },
-  { id: "reconnect", state: "perf-six" },
-  { id: "first-load", state: "perf-six" },
-];
-if (!values["record-baseline"]) {
-  for (const device of Object.keys(budgets.devices)) {
-    for (const scenario of scenarios) {
-      const limits = budgets.scenarios?.[device]?.[scenario.id];
-      for (const metric of METRICS.filter((metric) => metric !== "firstCallMs" || scenario.id === "first-load")) {
-        if (!Number.isFinite(limits?.[metric])) throw new Error(`Missing explicit scenario budget: ${device}/${scenario.id}/${metric}`);
-      }
-    }
-  }
-}
+if (!values["record-baseline"]) validateScenarioBudgets(budgets, scenarios);
 if (!values["skip-build"]) {
   execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=web..."], { cwd: root, stdio: "inherit", timeout: 300_000 });
   execFileSync("pnpm", ["exec", "vite", "build", "--config", "vite.call-performance.config.ts"], { cwd: web, stdio: "inherit", timeout: 300_000 });
