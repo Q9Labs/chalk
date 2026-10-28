@@ -344,7 +344,7 @@ async function waitFor(page, predicate, argument, timeoutMs = 10_000) {
 }
 
 async function waitForAccessRefresh(page) {
-  await page.waitForFunction(() => window.__chalk.accessRequests() >= 2, null, { timeout: 5_000 });
+  await page.waitForFunction(() => window.__chalk.accessReasons().includes("refresh"), null, { timeout: 10_000 });
 }
 
 async function waitForClean(page) {
