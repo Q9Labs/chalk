@@ -11,6 +11,7 @@ import { ReactionPicker } from "../components/composite/ReactionPicker";
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
