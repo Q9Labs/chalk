@@ -27,7 +27,6 @@ type LocalTrackState = {
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
   pendingOperationId: string | null;
-  pendingTrackName: string | null;
   desiredEnabled: boolean;
   enabled: boolean;
   endedListener: (() => void) | null;
@@ -146,7 +145,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       transceiver: reusable?.transceiver ?? null,
       providerPublicationId: reusable?.lifecycle.kind === "confirmed" ? reusable.lifecycle.handle.publicationId : null,
       pendingOperationId: null,
-      pendingTrackName: null,
       desiredEnabled: false,
       enabled: false,
       endedListener: null,
@@ -303,11 +301,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const publications = [...this.#ownedPublications].filter((item) => item.state.source === source);
     for (const publication of publications) this.#markPublicationRetiring(publication);
     if (state) {
-      state.track.enabled = false;
       state.desiredEnabled = false;
-      state.enabled = false;
-      state.providerPublicationId = null;
-      state.transceiver = null;
+      this.#clearLocalPublication(state);
     }
     this.#publishSnapshot();
     this.#emitLocal();
@@ -452,10 +447,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#emitLocal();
       return;
     }
-    if (operationId && state.pendingOperationId !== operationId) {
-      state.pendingOperationId = operationId;
-      state.pendingTrackName = `${state.source}-${operationId}`;
-    }
+    if (operationId) state.pendingOperationId = operationId;
     state.desiredEnabled = true;
     state.track.enabled = true;
     const generation = this.#generation;
@@ -480,7 +472,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
     state.enabled = false;
     state.pendingOperationId = null;
-    state.pendingTrackName = null;
     this.#publishSnapshot();
     this.#emitLocal();
     await detach;
@@ -550,7 +541,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
     const reusedTransceiver = state.transceiver !== null;
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
-    const publication: OwnedLocalPublication = { state, transceiver, trackName: state.pendingTrackName ?? `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, generation, lifecycle: { kind: "pending" } };
+    const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${state.pendingOperationId ?? globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, generation, lifecycle: { kind: "pending" } };
     this.#ownedPublications.add(publication);
     if (reusedTransceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
@@ -622,37 +613,33 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of publications) {
       const { state, transceiver, lifecycle } = publication;
       if (lifecycle.kind === "retired") continue;
-      if (lifecycle.kind === "retiring" || state.transceiver !== transceiver || this.#locallyPausedSources.has(state.source)) {
-        this.#markPublicationRetiring(publication);
-        if (state.transceiver === transceiver) {
-          state.transceiver = null;
-          state.providerPublicationId = null;
-          state.enabled = false;
-          state.desiredEnabled = false;
-          state.track.enabled = false;
-        }
-        await this.#closeOwnedPublication(publication);
+      if (lifecycle.kind === "confirmed" && state.transceiver === transceiver && !this.#locallyPausedSources.has(state.source)) {
+        state.enabled = true;
+        state.desiredEnabled = true;
+        state.track.enabled = true;
+        state.providerPublicationId = lifecycle.handle.publicationId;
+        state.pendingOperationId = null;
         continue;
       }
-      if (lifecycle.kind !== "confirmed") throw new CloudflareSFUError("Local publication was not confirmed", "invalid_publication");
-      state.enabled = true;
-      state.desiredEnabled = state.enabled;
-      state.track.enabled = state.enabled;
-      state.providerPublicationId = lifecycle.handle.publicationId;
-      state.pendingOperationId = null;
-      state.pendingTrackName = null;
+      this.#markPublicationRetiring(publication);
+      if (state.transceiver === transceiver) {
+        state.desiredEnabled = false;
+        this.#clearLocalPublication(state);
+      }
+      await this.#closeOwnedPublication(publication);
     }
+  }
+  #clearLocalPublication(state: LocalTrackState): void {
+    state.transceiver = null;
+    state.providerPublicationId = null;
+    state.enabled = false;
+    state.track.enabled = false;
   }
   async #discardLocalPublications(publications: readonly OwnedLocalPublication[]): Promise<void> {
     for (const publication of publications) {
       const { state, transceiver } = publication;
       this.#markPublicationRetiring(publication);
-      if (state.transceiver === transceiver) {
-        state.transceiver = null;
-        state.providerPublicationId = null;
-        state.enabled = false;
-        state.track.enabled = false;
-      }
+      if (state.transceiver === transceiver) this.#clearLocalPublication(state);
     }
     for (const publication of publications) {
       await this.#closeOwnedPublication(publication);
@@ -1110,7 +1097,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.transceiver = null;
     state.providerPublicationId = null;
     state.pendingOperationId = null;
-    state.pendingTrackName = null;
     state.endedListener = null;
   }
   #clearRemoteTracks(): void {

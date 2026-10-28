@@ -1211,13 +1211,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #confirmedLocal(source: "microphone" | "camera"): MediaSlice["local"][MediaSource] {
-    const publication = this.#ports?.media.getSnapshot().localTracks.find((item) => item.source === source);
+    const snapshot = this.#ports?.media.getSnapshot();
+    if (snapshot?.connection.phase === "stopped") return { source, state: "unavailable", track: null };
+    const publication = snapshot?.localTracks.find((item) => item.source === source);
     const sync = this.#ports?.sync.getSnapshot();
     const projected = sync?.media?.items.some((item) => item.participantId === sync.participantId && item.source === source && item.enabled && item.publicationId === publication?.publicationId) ?? false;
     const confirmed = this.#syncLive && livePublication(publication) && projected;
     const pending = this.#pendingSources.has(source) || this.#connection.getSnapshot().state === "joining";
-    const media = { source, track: publication?.track ?? this.#track(source) ?? null, state: "disabled" } satisfies MediaSlice["local"][MediaSource];
-    return confirmedLocalMedia(media, this.#hasConsent(source), pending, confirmed, this.#syncLive, this.#projection.state(source));
+    const track = publication?.track ?? this.#track(source) ?? null;
+    return { source, track, state: confirmedLocalMediaState(track, this.#hasConsent(source), pending, confirmed, this.#syncLive, this.#projection.state(source)) };
   }
   #publish(): void {
     const current = this.#store.getSnapshot();
@@ -1227,7 +1229,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const local = Object.freeze({
       microphone: this.#confirmedLocal("microphone"),
       camera: this.#confirmedLocal("camera"),
-      screen: localMedia("screen", this.#localTracks(), snapshot, false, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
+      screen: screenLocalMedia(this.#localTracks(), snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({
@@ -1250,11 +1252,11 @@ function liveTrack(track: MediaStreamTrack): boolean {
 function livePublication(publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
   return !!publication?.enabled && liveTrack(publication.track);
 }
-function confirmedLocalMedia(media: MediaSlice["local"][MediaSource], desired: boolean, pending: boolean, confirmed: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource] {
-  if (!desired) return { ...media, state: convergence === "failed" ? "failed" : "disabled" };
-  if (convergence) return { ...media, state: convergence };
-  if (!live && media.track && liveTrack(media.track)) return { ...media, state: "requesting" };
-  return { ...media, state: confirmed ? "enabled" : pending ? "requesting" : "disabled" };
+function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boolean, pending: boolean, confirmed: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource]["state"] {
+  if (!desired) return convergence === "failed" ? "failed" : "disabled";
+  if (convergence) return convergence;
+  if (!live && track && liveTrack(track)) return "requesting";
+  return confirmed ? "enabled" : pending ? "requesting" : "disabled";
 }
 function cancelledCaptureError(): ConnectionError {
   return new ConnectionError({ code: "invalid_state", action: null, recoverable: false, message: "Media capture was cancelled before its result could be used" });
@@ -1290,32 +1292,19 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
   if (camera) entries.push(["camera", camera]);
   return entries;
 }
-function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean) {
-  if (snapshot?.connection.phase === "stopped") return Object.freeze({ source, state: "unavailable" as const, track: null });
-  const track = tracks.get(source) ?? null;
-  const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
-  if (pending) return Object.freeze({ source, state: "requesting" as const, track });
-  if (locallyMuted(intended, track, publication)) return Object.freeze({ source, state: "disabled" as const, track });
-  if (publication?.enabled) return Object.freeze({ source, state: "enabled" as const, track });
-  if (publication && connectionState === "live") return Object.freeze({ source, state: "disabled" as const, track });
-  return Object.freeze({ source, state: localMediaState(source, track, intended, connectionState), track });
+function screenLocalMedia(tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
+  if (snapshot?.connection.phase === "stopped") return Object.freeze({ source: "screen", state: "unavailable", track: null });
+  const track = tracks.get("screen") ?? null;
+  const publication = snapshot?.localTracks.find((candidate) => candidate.source === "screen");
+  return Object.freeze({ source: "screen", state: pending ? "requesting" : screenLocalMediaState(track, publication?.enabled, connectionState), track });
 }
-function locallyMuted(intended: boolean, track: MediaStreamTrack | null, publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
-  return !intended && track?.enabled === false && publication?.enabled === false;
-}
-function localMediaState(source: MediaSource, track: MediaStreamTrack | null, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
-  if (!mediaIsDesired(source, track, intended)) return inactiveLocalMediaState(connectionState, track);
-  if (connectionState === "joining" || track) return "requesting";
-  return activeLocalMediaState(connectionState);
-}
-function mediaIsDesired(source: MediaSource, track: MediaStreamTrack | null, intended: boolean): boolean {
-  return source === "screen" ? track !== null : intended;
-}
-function inactiveLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], track: MediaStreamTrack | null): MediaSlice["local"][MediaSource]["state"] {
-  return connectionState === "live" || connectionState === "reconnecting" || track ? "disabled" : "unavailable";
-}
-function activeLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
-  return connectionState === "failed" || connectionState === "live" || connectionState === "reconnecting" ? "failed" : "unavailable";
+function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"]["screen"]["state"] {
+  if (enabled === false) {
+    if (track?.enabled === false || connectionState === "live") return "disabled";
+  }
+  if (enabled) return "enabled";
+  if (track) return "requesting";
+  return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
