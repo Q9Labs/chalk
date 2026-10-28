@@ -1,5 +1,6 @@
 import { contactSheetFont } from "./contact-sheet.mjs";
 import { recordingRejoinWindow } from "./recording-rejoin.mjs";
+import { requestEpisodeEnd } from "./episode-end.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
@@ -48,7 +49,7 @@ async function createSpace(run) {
 }
 export function episodeEnd(run, path) {
   let ended = false;
-  const ownerEnd = () => run.ownerRequest("POST", `${path}/end`, {});
+  const ownerEnd = () => requestEpisodeEnd(run.ownerRequest, path);
   let endRequest = ownerEnd;
   const end = async () => {
     if (!ended) {

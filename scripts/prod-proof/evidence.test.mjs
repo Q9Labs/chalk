@@ -57,6 +57,64 @@ test("a crashed guest falls back to the owner end endpoint and waits for durabil
     ["GET", "/episode"],
   ]);
 });
+test("owner fallback waits for a previously accepted SDK end to become durable", async () => {
+  let reads = 0;
+  const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
+  const ending = episodeEnd(
+    {
+      ownerRequest: async (method) => {
+        if (method === "POST") throw conflict;
+        return { status: ++reads === 1 ? "ending" : "ended" };
+      },
+    },
+    "/episode",
+  );
+  ending.useSDK({
+    evaluate: async () => {
+      throw new Error("SDK stopped before receipt");
+    },
+  });
+  await ending.end();
+  assert.ok(reads >= 2, "the conflict alone must not count as durable completion");
+});
+test("owner fallback still times out when an accepted end never completes", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
+  let reads = 0;
+  const ending = episodeEnd(
+    {
+      ownerRequest: async (method) => {
+        if (method === "POST") throw conflict;
+        reads++;
+        return { status: "ending" };
+      },
+    },
+    "/episode",
+  );
+  const result = assert.rejects(ending.end(), /timed out/);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(120_001);
+  await result;
+  assert.ok(reads > 0);
+});
+test("owner fallback preserves unrelated conflicts and an Episode still active", async () => {
+  for (const [apiCode, status] of [
+    ["participant.connection_superseded", "ending"],
+    ["episode.not_active", "active"],
+  ]) {
+    const conflict = Object.assign(new Error("conflict"), { status: 409, apiCode });
+    const ending = episodeEnd(
+      {
+        ownerRequest: async (method) => {
+          if (method === "POST") throw conflict;
+          return { status };
+        },
+      },
+      "/episode",
+    );
+    await assert.rejects(ending.end(), (error) => error === conflict);
+  }
+});
 test("fixture server preserves a localhost origin for exact-match CORS", async () => {
   const portProbe = createServer().listen(0, "127.0.0.1");
   await once(portProbe, "listening");

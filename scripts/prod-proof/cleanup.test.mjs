@@ -134,6 +134,70 @@ test("cleanup uses persisted IDs, revokes first and is repeatable after abort", 
   await cleanupByRunId(config, runId, directory);
 });
 
+test("cleanup reconciles an end accepted after its Episode listing", async (t) => {
+  const runId = "ending-run";
+  let reads = 0;
+  let archived = false;
+  const routes = {
+    spaces: () => ({ spaces: [{ id: "space", name: `chalk-proof:${runId}`, metadata: { proof_run_id: runId }, archived }], pagination: {} }),
+    episodes: () => ({ episodes: [{ id: "episode", status: "active", metadata: { proof_run_id: runId } }], pagination: {} }),
+    end: () => ({ error: { code: "episode.not_active", message: "Episode is not active" } }),
+    episode: () => ({ status: ++reads === 1 ? "ending" : "ended" }),
+    transcripts: () => ({ transcripts: [], pagination: {} }),
+    archive: () => {
+      archived = true;
+      return {};
+    },
+    space: () => ({ archived }),
+  };
+  const config = await fixture(t, (req, res) => {
+    const route = new URL(req.url, "http://local").pathname.split("/").at(-1);
+    res.writeHead(route === "end" ? 409 : 200).end(JSON.stringify(routes[route]()));
+  });
+  const directory = await mkdtemp(join(tmpdir(), "proof-ending-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(`${directory}/ownership.json`, "{}");
+  await cleanupByRunId(config, runId, directory);
+  assert.ok(reads >= 2);
+  assert.ok(archived);
+});
+
+test("cleanup fails without archiving when an accepted end never completes", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  let reads = 0;
+  const polling = Promise.withResolvers();
+  let archived = false;
+  const routes = {
+    spaces: () => ({ spaces: [{ id: "space", name: "chalk-proof:stuck-end", metadata: { proof_run_id: "stuck-end" } }], pagination: {} }),
+    episodes: () => ({ episodes: [{ id: "episode", status: "ending", metadata: { proof_run_id: "stuck-end" } }], pagination: {} }),
+    end: () => ({ error: { code: "episode.not_active" } }),
+    episode: () => {
+      reads++;
+      if (reads === 2) polling.resolve();
+      return { status: "ending" };
+    },
+    transcripts: () => ({ transcripts: [], pagination: {} }),
+    archive: () => {
+      archived = true;
+      return {};
+    },
+    space: () => ({ archived }),
+  };
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const route = url.pathname.split("/").at(-1);
+    return Response.json(routes[route](), { status: route === "end" ? 409 : 200 });
+  });
+  const directory = await mkdtemp(join(tmpdir(), "proof-stuck-end-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(`${directory}/ownership.json`, "{}");
+  const config = { api_url: "https://example.test", web_url: "https://example.test", api_key: "bootstrap", tenant_id: "tenant" };
+  const result = assert.rejects(cleanupByRunId(config, "stuck-end", directory), (error) => error.errors.some((failure) => failure.reason === "timeout"));
+  await Promise.race([polling.promise, result]);
+  t.mock.timers.tick(60_001);
+  await result;
+  assert.equal(archived, false);
+});
+
 function sweepSpacesPage(url) {
   const space = (id, name = `chalk-proof:${id}`) => ({ id, name, created_at: new Date(Date.now() - 3 * 3600_000).toISOString(), metadata: { proof_run_id: id } });
   return {
