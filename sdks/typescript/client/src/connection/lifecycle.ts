@@ -961,7 +961,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown): Effect.Effect<void> => {
         if (media !== model.media) return Effect.void;
-        if (active(model) && mediaAccessRejected(cause)) return failForSnapshot(lifecycleFailure("invalid_access", false, "Call access is no longer valid. Another tab or device may be using it. Rejoin explicitly to request access again.", cause));
+        if (active(model) && sfuAccessRejected(cause)) return failForSnapshot(lifecycleFailure("invalid_access", false, "Call access is no longer valid. Another tab or device may be using it. Rejoin explicitly to request access again.", cause));
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
@@ -1243,7 +1243,10 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   return lifecycleFailure(code, true, message, cause);
 }
 function mediaAccessRejected(cause: unknown): boolean {
-  return accessRejected(cause) || (cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403));
+  return accessRejected(cause) || sfuAccessRejected(cause);
+}
+function sfuAccessRejected(cause: unknown): boolean {
+  return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);
 }
 function accessRejected(cause: unknown): boolean {
   return cause instanceof ConnectionError
