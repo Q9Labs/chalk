@@ -133,7 +133,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
     document.body.append(container);
     const root = createRoot(container);
     try {
-      await act(async () => root.render(<Chalk client={client} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onError={onError} onEpisodeEnded={onEpisodeEnded} onJoined={onJoined} onLeft={onLeft} />));
       await act(async () => {
         await client.join({ microphone: false, camera: false });
         platform.emitSync({ ...platform.sync.getSnapshot(), control });
