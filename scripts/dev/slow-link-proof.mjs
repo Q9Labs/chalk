@@ -207,11 +207,37 @@ try {
     report.assertions.push({ label, snapshots });
     return snapshots;
   };
-  await sample("baseline");
+  const proveMediaFlow = async (label) => {
+    await Promise.all(
+      pages.map((page) =>
+        page.waitForFunction(
+          async () => {
+            for (const peer of window.peers)
+              for (const stat of (await peer.getStats()).values()) {
+                if (stat.type === "inbound-rtp" && stat.bytesReceived > 0) return true;
+              }
+            return false;
+          },
+          undefined,
+          { timeout: 30000 },
+        ),
+      ),
+    );
+    const before = await sample(`${label}: media start`);
+    await wait(3000);
+    const after = await sample(`${label}: media end`);
+    for (let index = 0; index < pages.length; index++)
+      for (const type of ["inbound-rtp", "outbound-rtp"]) {
+        const bytes = (snapshot) => snapshot.rtp.filter((stat) => stat.type === type).reduce((total, stat) => total + stat.bytes, 0);
+        assert.ok(bytes(after[index]) > bytes(before[index]), `${label}: participant ${index} ${type} must keep flowing`);
+      }
+  };
+  await proveMediaFlow("baseline");
   report.stage = "slow working link";
   setLink("delay", "1200ms", "200ms", "loss", "2%", "rate", "256kbit");
   await wait(45000);
   await sample("45s slow link");
+  await proveMediaFlow("slow working link");
   setLink("delay", "0ms");
   await wait(10000);
   for (const seconds of [5, 15, 30]) {
@@ -232,6 +258,7 @@ try {
       await wait(10000);
       await sample(`retry after ${seconds}s outage`);
     }
+    await proveMediaFlow(`after ${seconds}s outage`);
   }
   const final = await sample("final");
   const failures = final.flatMap((s) => s.states.filter((state) => state.connection.status === "failed"));
