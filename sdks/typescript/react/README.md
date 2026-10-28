@@ -139,4 +139,4 @@ Each message's `reactions` contains `{ emoji, count, participantIds }`; IDs iden
 
 Message reactions are stored separately from recording facts and are not rendered or added to recording timelines yet. Recording validators accept all 24 call-reaction emoji.
 
-`useChat()` returns the same state and `react(input)` action. Each hook message always has a reactions array; each group adds `isMine` for the current participant. Public types are `MessageReaction`, `ReactChatMessage`, and `UseChatResult`. No reaction UI is added by this change.
+`useChat()` returns the same state and `react(input)` action. Each hook message always has a reactions array; each group adds `isMine` for the current participant. Public types are `MessageReaction`, `ReactChatMessage`, and `UseChatResult`.
