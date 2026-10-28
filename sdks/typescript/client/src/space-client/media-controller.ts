@@ -465,9 +465,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (state.desired.revision !== intent.revision) return;
       state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
       if (state.result.cleanup) {
-        state.localEnabled = false;
-        this.#pauseTracks(source);
-        ports.media.setLocalSourceIntent?.(source, false);
+        if (intent.enabled && source !== "screen") this.#pausePublication(ports, source, intent.revision);
+        else {
+          state.localEnabled = false;
+          this.#pauseTracks(source);
+          ports.media.setLocalSourceIntent?.(source, false);
+        }
       }
     });
   }

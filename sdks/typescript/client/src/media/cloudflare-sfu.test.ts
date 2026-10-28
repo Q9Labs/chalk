@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { V1SyncError } from "../sync/v1-error";
+import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
@@ -162,6 +163,56 @@ it.each(["microphone", "camera"] as const)("retires only its own timed-out %s pu
     expect(track.enabled).toBe(true);
     expect(harness.transport.localPublications.has("another-tab")).toBe(true);
   } finally {
+    harness.client.stop();
+  }
+});
+
+it("retires a microphone publication when Sync disconnects after SFU commit but before enable settles", async () => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const microphone = new FakeTrack("rejected-enable", "audio");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn((enabled: boolean) => coordinator.send("set_microphone_enabled", "microphone", enabled));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("rejected-enable") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(microphone) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+  );
+  let committedPublication: string | undefined;
+  const unsubscribe = harness.client.observeLocalPublications((publications) => {
+    const publication = publications.find((item) => item.source === "microphone" && item.enabled);
+    if (publication && !committedPublication) {
+      committedPublication = publication.publicationId;
+      coordinator.disconnect("transport_closed");
+    }
+  });
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source: "microphone", publicationId: "another-tab" });
+    await expect(client.media.setMicrophoneEnabled(true)).rejects.toBeDefined();
+    expect(committedPublication).toBeDefined();
+    expect(microphone.enabled).toBe(false);
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    await vi.waitFor(() => expect(harness.transport.localPublications.has(committedPublication ?? "")).toBe(false));
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    expect(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.publicationId))).toEqual([committedPublication]);
+    expect(command).toHaveBeenCalledExactlyOnceWith(true);
+  } finally {
+    unsubscribe();
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
     harness.client.stop();
   }
 });
