@@ -7,7 +7,7 @@ import { superviseChalkWhiteboardController } from 'crash-host-whiteboard';
 let root, client;
 window.__errors = [];
 window.__mount = async () => {
-  const underlying = createSpaceClient({ space: window.__space, baseUrl: 'http://127.0.0.1:8080', getAccess: () => fetch('/access', { method: 'POST' }) });
+  const underlying = createSpaceClient({ space: window.__space, baseUrl: window.__baseURL ?? 'http://127.0.0.1:8080', getAccess: () => fetch('/access', { method: 'POST' }) });
   const supervised = superviseChalkWhiteboardController(underlying.whiteboard);
   client = { media: underlying.media, chat: underlying.chat, participants: underlying.participants, reactions: underlying.reactions,
     recording: underlying.recording, offline: underlying.offline, whiteboard: supervised.controller,

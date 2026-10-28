@@ -16,6 +16,7 @@ const out = join(task, 'results'); await mkdir(out);
 const apiURL = 'http://127.0.0.1:8080', token = randomUUID();
 const children = [], servers = [], browsers = [];
 const rows = [], events = [];
+const stalledSockets=new Set();
 let active, asset;
 function emit(event) { events.push({ at: new Date().toISOString(), ...event }); console.log(JSON.stringify(event)); }
 for(const [signal,code]of [['SIGINT',130],['SIGTERM',143]])process.once(signal,()=>{
@@ -128,7 +129,7 @@ async function run(version, constrained) {
     return route.continue();
   });
   await context.addInitScript({path:join(root,'scripts/research/tab-crash/instrument.js')});
-  await context.routeWebSocket(/\/v1\/sync/, socket => { active.blockedSockets++; /* Deliberately never connect to real Sync. */ });
+  if(process.env.CRASH_CHURN_ONLY!=='1')await context.routeWebSocket(/\/v1\/sync/, socket => { active.blockedSockets++; /* Deliberately never connect to real Sync. */ });
   const page = await context.newPage();
   page.on('crash',()=>emit({run:runName,crash:true}));
   page.on('pageerror',error=>emit({run:runName,pageerror:error.message}));
@@ -225,7 +226,7 @@ try {
   execFileSync('mix',['deps.get'],{cwd:join(root,'apps/sync'),env:{...process.env,...mixEnv},stdio:'ignore'});
   const sync=child('mix',['run','--no-halt'],mixEnv,'sync.log',join(root,'apps/sync'));
   await ready('http://127.0.0.1:4100/readyz',sync);
-  await server(async(req,res)=>{
+  const host=await server(async(req,res)=>{
     try {
       if(req.url==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(asset);return;}
       if(req.url==='/access'){
@@ -236,15 +237,26 @@ try {
         if(![201,403].includes(response.status))emit({accessUnexpected:response.status,body:await response.clone().text()});
         res.writeHead(response.status,{'Content-Type':'application/json'});res.end(await response.text());return;
       }
-      res.setHeader('Content-Type','text/html');res.end(`<!doctype html><style>html,body,#root{margin:0;height:100%;width:100%}${active.css}</style><div id="root"></div><script>window.__space=${JSON.stringify(active.space.slug)}</script><script type="module" src="/app.js"></script>`);
+      if(req.url.startsWith('/v1/')){
+        const chunks=[];for await(const chunk of req)chunks.push(chunk);
+        const response=await fetch(apiURL+req.url,{method:req.method,headers:{...req.headers,host:'127.0.0.1:8080'},body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)});
+        res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));return;
+      }
+      res.setHeader('Content-Type','text/html');res.end(`<!doctype html><style>html,body,#root{margin:0;height:100%;width:100%}${active.css}</style><div id="root"></div><script>window.__space=${JSON.stringify(active.space.slug)};window.__baseURL=${JSON.stringify(process.env.CRASH_CHURN_ONLY==='1'?'http://127.0.0.1:8090':apiURL)}</script><script type="module" src="/app.js"></script>`);
     }catch(error){emit({httpError:error.message});res.writeHead(500);res.end('harness failure');}
   },8090);
+  host.on('upgrade',(req,socket)=>{
+    active.blockedSockets++;stalledSockets.add(socket);
+    socket.on('close',()=>stalledSockets.delete(socket));
+    socket.setTimeout(60000,()=>socket.destroy());
+  });
   await bundle('5.2.0'); await bundle('master');
   for(const version of process.env.CRASH_VERSION?[process.env.CRASH_VERSION]:['5.2.0','master'])for(const low of [false,true])await run(version,low);
 } catch(error) {emit({failure:error.stack});process.exitCode=1;}
 finally {
   for(const browser of browsers)await browser.close().catch(()=>{});
   for(const proc of children){try{process.kill(-proc.pid,'SIGTERM');}catch{}}
+  for(const socket of stalledSockets)socket.destroy();
   for(const instance of servers)instance.closeAllConnections();
   await Promise.all(servers.map(instance=>new Promise(resolve=>instance.close(resolve))));
   await writeFile(join(out,'events.json'),JSON.stringify(events,null,2));
