@@ -147,6 +147,22 @@ async function run(version, constrained) {
     const state=sql(`select transition_participant_join_seat(tenant_id,space_id,episode_id,participant_id,generation,'expire') from participant_join_seats where participant_id='${id}'`);
     if(state!=='expired') throw new Error(`seat not expired: ${state}`);
   };
+  if(process.env.CRASH_CHURN_ONLY==='1'){
+    emit({run:runName,churn:true,begin:true,chromium:browser.version()});
+    await fixture();await navigate();await delay(1000);
+    for(let cycle=1;cycle<=21;cycle++){
+      await sample(page,cdp,browserCDP,'churn-mounted',runName,cycle);
+      await page.evaluate(()=>window.__detach());
+      if(cycle<21){await page.evaluate(()=>window.__mount());await delay(700);}
+    }
+    for(const [label,wait]of [['churn-settled-3s',3000],['churn-settled-10s',7000],['churn-settled-30s',20000]]){
+      await delay(wait);await sample(page,cdp,browserCDP,label,runName,21);
+    }
+    await cdp.send('HeapProfiler.collectGarbage');await sample(page,cdp,browserCDP,'churn-disposed-gc',runName,21);
+    await context.close();await browser.close();
+    if(constrained)emit({run:runName,memoryEvents:await readFile('/sys/fs/cgroup/chalk-crash-browser/memory.events','utf8')});
+    emit({run:runName,churn:true,complete:true});return;
+  }
   emit({run:runName,chromium:browser.version(),profile:constrained?'1 GiB browser cgroup, 256 MiB V8 old space, 4x CPU throttle':'default',begin:true});
   // Verify a full accelerated cycle before the long-duration incident window.
   await fixture();await navigate();await joinPage();
@@ -218,7 +234,7 @@ try {
     }catch(error){emit({httpError:error.message});res.writeHead(500);res.end('harness failure');}
   },8090);
   await bundle('5.2.0'); await bundle('master');
-  for(const version of ['5.2.0','master'])for(const low of [false,true])await run(version,low);
+  for(const version of process.env.CRASH_VERSION?[process.env.CRASH_VERSION]:['5.2.0','master'])for(const low of [false,true])await run(version,low);
 } catch(error) {emit({failure:error.stack});process.exitCode=1;}
 finally {
   for(const browser of browsers)await browser.close().catch(()=>{});

@@ -27,6 +27,12 @@ window.__unmount = async () => {
   await client.leave().catch(error => window.__errors.push({ code: error.code, message: error.message }));
   client.dispose(); client = null; root = null; window.__client = null;
 };
+window.__detach = () => {
+  const closing=client;
+  root.unmount();
+  void closing.leave().catch(error=>window.__errors.push({code:error.code,message:error.message})).finally(()=>closing.dispose());
+  client=null;root=null;window.__client=null;
+};
 window.__state = () => ({ connection: client?.getSnapshot().connection, errors: window.__errors.slice(-6) });
 await window.__mount();
 window.__ready = true;
