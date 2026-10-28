@@ -24,3 +24,10 @@ test("SFU On and muted Sync badges reproduce the split authority failure", () =>
 test("both directions need audible capture and advancing frames", () => {
   assert.deepEqual(agreementIssues(pair({ stale: true }), pair()), []);
 });
+
+test("a pending SDK state cannot hide a normal On button during a held fault", () => {
+  const samples = pair();
+  samples[0].local.microphone = "enabling";
+  samples[0].controls = { microphone: true, camera: true };
+  assert.deepEqual(truthIssues(samples), ["a microphone: normal On button without confirmed local state"]);
+});

@@ -107,8 +107,9 @@ export async function assertAgreement(endpoints, { timeoutMs = 15_000 } = {}) {
 }
 
 export function truthIssues(samples) {
-  return samples.flatMap((owner) =>
-    samples
+  return samples.flatMap((owner) => [
+    ...["microphone", "camera"].flatMap((source) => (owner.controls?.[source] && owner.local[source] !== "enabled" ? [`${owner.self} ${source}: normal On button without confirmed local state`] : [])),
+    ...samples
       .filter((observer) => observer.self !== owner.self)
       .flatMap((observer) =>
         ["microphone", "camera"].flatMap((source) => {
@@ -116,7 +117,7 @@ export function truthIssues(samples) {
           return owner.local[source] === "enabled" && !peer?.[source] ? [`${owner.self} ${source}: normal On while ${observer.self} shows Off`] : [];
         }),
       ),
-  );
+  ]);
 }
 
 // SDK release guests have no React UI. Play the SDK's gated received tracks.
