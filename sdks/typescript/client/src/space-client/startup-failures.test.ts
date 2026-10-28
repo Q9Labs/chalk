@@ -825,7 +825,7 @@ describe("public client exhausted recovery", () => {
     const diagnostics: ConnectionDiagnostic[] = [];
     const warn = vi.fn();
     const client = makeClient(
-      async () => accessGrant(),
+      async (request) => (request.replaceMediaConnection ? new Response(null, { status: 503 }) : accessGrant()),
       25,
       { warn },
       (event) => diagnostics.push(event),

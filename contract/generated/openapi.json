@@ -6511,7 +6511,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch"]
+            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch", "participant.media_replacement_pending"]
           },
           "413": {
             "content": {
@@ -13467,6 +13467,10 @@
           "current_media_token": {
             "minLength": 1,
             "type": "string"
+          },
+          "expected_media_connection_id": {
+            "minLength": 1,
+            "type": ["string", "null"]
           },
           "participant_generation": {
             "type": "integer"

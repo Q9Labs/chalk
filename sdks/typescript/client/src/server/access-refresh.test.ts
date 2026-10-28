@@ -32,12 +32,26 @@ describe("server-only Access refresh state", () => {
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: false, current_media_token: state.currentMediaToken });
   });
 
-  it("replaces media for a forwarded recovery request without sending the old credential", async () => {
+  it("forwards the browser's binding and replay credential instead of backend-retained state", async () => {
     const { initial, fetch, client, state } = forwardedRequestFixture();
-    const request = { space: "space-1", reason: "retry", replaceMediaConnection: true };
+    const request = { space: "space-1", reason: "retry", replaceMediaConnection: true, expectedMediaConnectionId: "browser-binding", currentMediaToken: "browser-replay-credential" };
     await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, request);
-    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true, expected_media_connection_id: "browser-binding", current_media_token: "browser-replay-credential" });
     expect(getAccessRefreshState(initial)).toEqual(state);
+  });
+
+  it("preserves unconditional explicit takeover when no expected binding is supplied", async () => {
+    const { fetch, client, state } = forwardedRequestFixture();
+    await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, { replaceMediaConnection: true });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true });
+  });
+
+  it("marks a pending replacement retryable without issuing an inner retry", async () => {
+    const initial = accessGrantFromParsed(accessGrant(Date.now() + 60_000, "initial"));
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json({ error: { code: "participant.media_replacement_pending" } }, { status: 409 }));
+    const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch });
+    await expect(client.participants.issueAccess("space-1", "episode-1", "participant-1", getAccessRefreshState(initial), { replaceMediaConnection: true })).rejects.toMatchObject({ code: "participant.media_replacement_pending", status: 409, retryable: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry a replacement requested through the forwarded context", async () => {

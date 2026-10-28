@@ -582,6 +582,7 @@ export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
 
 export const IssueAccessGrantRequestSchema = Schema.Struct({
   current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   participant_generation: Schema.Number,
   replace_media_connection: Schema.Boolean,
 });
@@ -3670,6 +3671,25 @@ export const ParticipantInvalidIdErrorSchema = ParticipantInvalidIdErrorWireSche
   }),
 );
 
+export class ParticipantMediaReplacementPendingError extends Schema.TaggedErrorClass<ParticipantMediaReplacementPendingError>()("ParticipantMediaReplacementPendingError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.media_replacement_pending"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantMediaReplacementPendingErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.media_replacement_pending"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantMediaReplacementPendingErrorSchema = ParticipantMediaReplacementPendingErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantMediaReplacementPendingError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantMediaReplacementPendingError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class ParticipantNotActiveError extends Schema.TaggedErrorClass<ParticipantNotActiveError>()("ParticipantNotActiveError", {
   error: Schema.Struct({
     code: Schema.Literal("participant.not_active"),
@@ -5480,6 +5500,7 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   ParticipantConnectionSupersededErrorSchema,
   ParticipantGenerationMismatchErrorSchema,
   ParticipantInvalidIdErrorSchema,
+  ParticipantMediaReplacementPendingErrorSchema,
   ParticipantNotFoundErrorSchema,
   RequestInvalidErrorSchema,
   RequestPayloadTooLargeErrorSchema,

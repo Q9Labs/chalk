@@ -160,8 +160,9 @@ export type IssueAccessGrantInput =
     }
   | {
       readonly participantGeneration: number;
-      readonly currentMediaToken?: never;
+      readonly currentMediaToken?: string;
       readonly replaceMediaConnection: true;
+      readonly expectedMediaConnectionId?: string;
     };
 export type APIKey = {
   readonly created_at: string;

@@ -25,6 +25,7 @@ type ParticipantGenerationAuthorizer interface {
 	BindParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	CheckParticipantMediaConnection(context.Context, accessgrants.Subject) error
 	ReplaceParticipantMediaConnection(context.Context, accessgrants.Subject, accessgrants.Subject) error
+	ReserveParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, [32]byte) error
 	LoadParticipantMediaRefresh(context.Context, accessgrants.Subject, [32]byte) (*accessgrants.StoredRefreshReplay, error)
 	CompleteParticipantMediaRefresh(context.Context, accessgrants.Subject, accessgrants.Subject, accessgrants.RefreshReplay) error
 }
@@ -57,9 +58,10 @@ type accessGrantResponse struct {
 }
 
 type issueAccessGrantBody struct {
-	ParticipantGeneration  int64  `json:"participant_generation"`
-	CurrentMediaToken      string `json:"current_media_token,omitempty"`
-	ReplaceMediaConnection bool   `json:"replace_media_connection"`
+	ParticipantGeneration     int64   `json:"participant_generation"`
+	CurrentMediaToken         string  `json:"current_media_token,omitempty"`
+	ReplaceMediaConnection    bool    `json:"replace_media_connection"`
+	ExpectedMediaConnectionID *string `json:"expected_media_connection_id,omitempty"`
 }
 
 type issueAccessGrantRequest struct {
@@ -114,7 +116,8 @@ func issueAccessGrantEndpoint(
 			)
 			currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
 			replaceMediaConnection := request.Body.ReplaceMediaConnection
-			if !replaceMediaConnection {
+			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
+			if !replaceMediaConnection || conditionalReplacement {
 				stage = "media_token"
 				if currentToken == "" {
 					return accessGrantResponse{}, apiErrorMediaTokenRequired
@@ -123,7 +126,7 @@ func issueAccessGrantEndpoint(
 				if err != nil && !errors.Is(err, accessgrants.ErrExpired) {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
-				replaceMediaConnection = errors.Is(err, accessgrants.ErrExpired)
+				replaceMediaConnection = replaceMediaConnection || errors.Is(err, accessgrants.ErrExpired)
 				if routeErr := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
 					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
@@ -150,10 +153,25 @@ func issueAccessGrantEndpoint(
 				return accessGrantResponse{}, apiErrorForbidden
 			}
 			previous := subject
-			implicitReplacement := replaceMediaConnection && !request.Body.ReplaceMediaConnection
-			if implicitReplacement {
+			if conditionalReplacement {
+				expected := strings.TrimSpace(*request.Body.ExpectedMediaConnectionID)
+				if expected == "" {
+					return accessGrantResponse{}, apiErrorInvalidRequest
+				}
+				if subject.CloudflareConnectionID != expected {
+					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
+				}
+				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
+				if err != nil {
+					return accessGrantResponse{}, err
+				}
+			}
+			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
+			if replayReplacement {
+				subject = previous
 				stage = "media_replay"
-				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, accessgrants.RefreshRequestHash(currentToken))
+				requestHash := accessgrants.RefreshRequestHash(currentToken)
+				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, requestHash)
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
@@ -177,13 +195,19 @@ func issueAccessGrantEndpoint(
 					replaceMediaConnection = false
 				} else {
 					stage = "media_binding"
-					reservationID, err := utilities.NewID()
-					if err != nil {
-						return accessGrantResponse{}, err
-					}
 					reservation := previous
-					reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
-					if err := generations.ReplaceParticipantMediaConnection(ctx, previous, reservation); err != nil {
+					if conditionalReplacement {
+						reservation.CloudflareConnectionID = fmt.Sprintf("replacement:%x", requestHash)
+						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
+					} else {
+						reservationID, idErr := utilities.NewID()
+						if idErr != nil {
+							return accessGrantResponse{}, idErr
+						}
+						reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
+					}
+					if err != nil {
 						return accessGrantResponse{}, accessGrantRefreshError(err)
 					}
 					original := previous
@@ -225,7 +249,7 @@ func issueAccessGrantEndpoint(
 			}
 			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
 			stage = "media_binding"
-			if implicitReplacement {
+			if replayReplacement {
 				body, err := json.Marshal(response)
 				if err != nil {
 					return accessGrantResponse{}, err
