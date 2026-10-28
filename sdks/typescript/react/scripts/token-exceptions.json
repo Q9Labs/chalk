@@ -1,0 +1,47 @@
+[
+  {
+    "file": "call-card/CallCardStyles.tsx",
+    "snippet": ".call-file-type { background: #5c5d65; }",
+    "reason": "File-extension category color; the visible extension label carries the same meaning without color."
+  },
+  {
+    "file": "call-card/CallCardStyles.tsx",
+    "snippet": ".call-file-type[data-extension=\"pdf\"] { background: #c42b2b; }",
+    "reason": "File-extension category color; the visible extension label carries the same meaning without color."
+  },
+  {
+    "file": "call-card/CallCardStyles.tsx",
+    "snippet": ".call-file-type:is([data-extension=\"doc\"],[data-extension=\"docx\"]) { background: #2f5fb3; }",
+    "reason": "File-extension category color; the visible extension label carries the same meaning without color."
+  },
+  {
+    "file": "call-card/CallCardStyles.tsx",
+    "snippet": ".call-file-type:is([data-extension=\"xls\"],[data-extension=\"xlsx\"]) { background: #1e7a46; }",
+    "reason": "File-extension category color; the visible extension label carries the same meaning without color."
+  },
+  {
+    "file": "call-card/CallCardStyles.tsx",
+    "snippet": ".call-file-type:is([data-extension=\"ppt\"],[data-extension=\"pptx\"]) { background: #b8481e; }",
+    "reason": "File-extension category color; the visible extension label carries the same meaning without color."
+  },
+  {
+    "file": "call-limbo/CallReady.tsx",
+    "snippet": "className=\"shrink-0 rounded-lg bg-white p-1\"",
+    "reason": "Fixed QR dark modules and light quiet zone preserve camera contrast across themes."
+  },
+  {
+    "file": "call-limbo/CallReady.tsx",
+    "snippet": "<path fill=\"#000\" d={qr.flatMap",
+    "reason": "Fixed QR dark modules and light quiet zone preserve camera contrast across themes."
+  },
+  {
+    "file": "control-bar/ShellStyles.tsx",
+    "snippet": ".chalk-shell-qr {\n  width: 112px;\n  height: 112px;\n  flex: none;\n  border-radius: 8px;\n  fill: #111;\n}",
+    "reason": "QR modules use fixed dark ink for camera contrast."
+  },
+  {
+    "file": "atomic/ReactionBubble.tsx",
+    "snippet": "const BASE_PARTICLE_COLORS = [\"#14b8a6\", \"#f59e0b\", \"#ec4899\", \"#8b5cf6\", \"#06b6d4\", \"#22c55e\"];",
+    "reason": "Decorative confetti palette, not a UI role; carries no information and is disabled with reduced motion."
+  }
+]

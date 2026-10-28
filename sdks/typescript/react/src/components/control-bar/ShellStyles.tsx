@@ -78,8 +78,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--chalk-warning, #dcb740);
-  color: #16140c;
+  background: var(--chalk-warning);
+  color: var(--chalk-accent-text);
   font-size: 11px;
   font-weight: 700;
   line-height: 16px;
@@ -109,7 +109,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--chalk-warning, #dcb740);
+  background: var(--chalk-warning);
   box-shadow: 0 0 0 2px var(--chalk-raised);
 }
 .chalk-shell-corner {
@@ -146,11 +146,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   height: 22px;
   padding: 0 8px;
   border-radius: 6px;
-  background: rgba(12,14,18,.75);
+  background: var(--chalk-overlay);
   font-size: 12px;
   display: flex;
   align-items: center;
-  color: #fff;
+  color: var(--chalk-on-overlay);
 }
 .chalk-shell-menu-separator {height:1px;background:var(--chalk-line);margin:6px 4px;}
 .chalk-shell-level {
@@ -291,7 +291,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   background: var(--chalk-pressed);
 }
 .chalk-shell-quality i:first-child {
-  background: var(--chalk-warning, #dcb740);
+  background: var(--chalk-warning);
 }
 .chalk-shell-modal-backdrop {
   position: absolute;
@@ -311,13 +311,13 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   background: var(--chalk-surface);
   border: 1px solid var(--chalk-line-strong);
   border-radius: 16px;
-  box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  box-shadow: var(--chalk-shadow);
   transition:transform .2s cubic-bezier(.16,1,.3,1);
 }
 .chalk-shell-modal[data-starting-style],.chalk-shell-modal[data-ending-style] {transform:translateY(8px);}
 .chalk-shell-modal-backdrop {transition:opacity .18s ease-out;}
 .chalk-shell-modal-backdrop[data-starting-style],.chalk-shell-modal-backdrop[data-ending-style] {opacity:0;}
-[data-chalk-theme="light"] .chalk-shell-modal {box-shadow:0 0 0 1px var(--chalk-line),0 12px 32px rgba(0,0,0,.12);}
+[data-chalk-theme="light"] .chalk-shell-modal {box-shadow:var(--chalk-shadow);}
 .chalk-shell-modal-heading {
   display: flex;
   justify-content: space-between;
@@ -354,7 +354,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   border-radius: 6px;
   background: var(--chalk-hover);
   color: var(--chalk-text);
-  box-shadow: inset 0 -1px 0 rgba(0,0,0,.4);
+  box-shadow: inset 0 -1px 0 var(--chalk-line-strong);
 }
 .chalk-shell-report {
   display: flex;
@@ -393,7 +393,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
 [data-chalk-theme="light"] .chalk-shell-reactions {
-  box-shadow: 0 0 0 1px var(--chalk-line), 0 12px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--chalk-shadow);
 }
 @media (max-width: 640px) {
   .chalk-shell-details-heading {display:none;}
@@ -511,7 +511,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   border: 1px solid var(--chalk-line-strong);
   border-radius: 999px;
   background: var(--chalk-popover);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--chalk-shadow);
 }
 .chalk-shell-reactions-enter {animation:chalk-shell-reactions-in .18s cubic-bezier(.16,1,.3,1);}
 @keyframes chalk-shell-reactions-in {from{opacity:0;translate:0 4px;}}
@@ -546,10 +546,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-raise svg {width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;}
 .chalk-shell-raise svg {color:var(--chalk-muted-text);}
 .chalk-shell-raise:hover {background:var(--chalk-pressed);}
-.chalk-shell-raise[aria-pressed="true"] svg {color:#16140c;}
+.chalk-shell-raise[aria-pressed="true"] svg {color:var(--chalk-accent-text);}
 .chalk-shell-raise[aria-pressed="true"] {
-  background: var(--chalk-warning, #dcb740);
-  color: #16140c;
+  background: var(--chalk-warning);
+  color: var(--chalk-accent-text);
 }
 .chalk-shell-reactions-expanded {
   display: grid;
