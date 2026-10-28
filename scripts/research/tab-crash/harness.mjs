@@ -53,6 +53,7 @@ async function bundle(version) {
     '@q9labsai/chalk-ui': 'packages/ui/src/index.ts',
     '@q9labsai/chalk-ui/reactions': 'packages/ui/src/reactions.ts',
     '@q9labsai/chalk-ui/assets': 'packages/ui/src/assets.ts',
+    '@q9labsai/chalk-assets': 'packages/assets/src/index.ts',
     '@q9labsai/recording-presentation': 'packages/recording-presentation/src/index.ts',
     '@q9labsai/facehash': 'packages/facehash/src/index.ts',
     '@q9labsai/facehash/react': 'packages/facehash/src/react.ts',
@@ -64,6 +65,7 @@ async function bundle(version) {
   const result = await build({ entryPoints: [entry], bundle: true, write: false, format: 'esm', target: 'chrome120', minify: true, sourcemap: 'inline',
     outdir: out, define: { 'process.env.NODE_ENV': '"production"' }, jsx: 'automatic',
     loader: { '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl', '.svg': 'dataurl' },
+    nodePaths:[join(root,'sdks/typescript/react/node_modules')],
     plugins: [hostPlugin,...(version === '5.2.0' ? [] : [{ name:'workspace-source', setup(plugin) { plugin.onResolve({filter:/^@q9labsai\//}, args => paths[args.path] ? {path:join(root,paths[args.path])} : undefined); } }])],
   });
   asset = result.outputFiles.find(file => file.path.endsWith('.js')).text;
@@ -73,16 +75,19 @@ async function bundle(version) {
 async function rss(browserCDP) {
   const { processInfo } = await browserCDP.send('SystemInfo.getProcessInfo');
   const values = [];
-  for (const info of processInfo.filter(info => info.type === 'renderer')) {
-    try { const status = await readFile(`/proc/${info.id}/status`,'utf8'); values.push({pid:info.id, rssMiB:Number(status.match(/VmRSS:\s+(\d+)/)?.[1] ?? 0)/1024}); } catch {}
+  for (const info of processInfo) {
+    try { const status = await readFile(`/proc/${info.id}/status`,'utf8'); values.push({pid:info.id,type:info.type,rssMiB:Number(status.match(/VmRSS:\s+(\d+)/)?.[1] ?? 0)/1024,cgroup:await readFile(`/proc/${info.id}/cgroup`,'utf8')}); } catch {}
   }
-  return { rendererRssMiB: values.reduce((sum,value)=>sum+value.rssMiB,0), renderers:values };
+  return { rendererRssMiB: values.filter(value=>value.type==='renderer').reduce((sum,value)=>sum+value.rssMiB,0), browserRssMiB:values.reduce((sum,value)=>sum+value.rssMiB,0),processes:values };
 }
 async function sample(page, cdp, browserCDP, label, run, cycle) {
   const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(metric=>[metric.name,metric.value]));
   const resources = await page.evaluate(()=>window.__resources());
   const state = await page.evaluate(()=>window.__state());
+  const targets=await browserCDP.send('Target.getTargets');
+  const memory=run.endsWith('-low')?{cgroupMiB:Number(await readFile('/sys/fs/cgroup/chalk-crash-browser/memory.current','utf8'))/1048576,cgroupPeakMiB:Number(await readFile('/sys/fs/cgroup/chalk-crash-browser/memory.peak','utf8'))/1048576}:{};
   const row = { run, cycle, label, elapsedSeconds:(Date.now()-runStart)/1000, heapMiB:metrics.JSHeapUsedSize/1048576, ...await rss(browserCDP), ...resources,
+    ...memory,workerTargets:targets.targetInfos.filter(target=>target.type.includes('worker')).length,
     status:state.connection?.status, lastError:state.connection?.lastError?.code, errors:state.errors, grants:active.grants, forbidden:active.forbidden, blockedSockets:active.blockedSockets };
   rows.push(row); await writeFile(join(out,'measurements.json'),JSON.stringify(rows,null,2));
   emit({sample:run,cycle,label,heapMiB:row.heapMiB,rssMiB:row.rendererRssMiB,tracks:row.activeTracks,peers:row.openPeers,timers:row.timers,status:row.status,grants:row.grants,forbidden:row.forbidden});

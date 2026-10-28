@@ -37,6 +37,9 @@
   window.setInterval = (callback, delay, ...args) => { const id = interval(callback, delay, ...args); timers.set(id, { kind: 'interval', delay }); return id; };
   window.clearTimeout = id => { timers.delete(id); clearTimeoutOriginal(id); };
   window.clearInterval = id => { timers.delete(id); clearIntervalOriginal(id); };
+  const frames = new Set(), requestFrame = window.requestAnimationFrame.bind(window), cancelFrame = window.cancelAnimationFrame.bind(window);
+  window.requestAnimationFrame = callback => { const id=requestFrame(time=>{frames.delete(id);callback(time);});frames.add(id);return id; };
+  window.cancelAnimationFrame = id => { frames.delete(id);cancelFrame(id); };
   window.__resources = () => {
     const live = {};
     for (const key of Object.keys(refs)) {
@@ -49,6 +52,6 @@
       if (key === 'sockets') live.openSockets = objects.filter(socket => socket.readyState < 2).length;
     }
     return { ...live, totals: { ...totals }, timers: timers.size, intervals: [...timers.values()].filter(timer => timer.kind === 'interval').length,
-      timerDelays: [...timers.values()], domCanvases: document.querySelectorAll('canvas').length, domNodes: document.querySelectorAll('*').length };
+      timerDelays: [...timers.values()], animationFrames:frames.size, domCanvases: document.querySelectorAll('canvas').length, domNodes: document.querySelectorAll('*').length };
   };
 })();
