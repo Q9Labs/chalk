@@ -5,6 +5,8 @@ import { assertAgreement, installAgreementProbe, sampleAgreement, truthIssues } 
 export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false }) {
   const failures = [];
   async function scenario(name, run) {
+    const filter = process.env.CHALK_AGREEMENT_CASE;
+    if (filter && !name.includes(filter)) return;
     const start = Date.now();
     const contexts = [];
     try {
@@ -88,9 +90,8 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
   await scenario("Sync reconnect during unmute", async (pages) => {
     await invoke(pages[0], "setMicrophoneEnabled", false);
     await assertAgreement(pages);
+    await fault({ syncReconnect: true });
     const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
-    const response = await fetch(`${baseURL}/test/force-sync?participant=agreementalice`, { method: "POST" });
-    assert.equal(response.status, 202);
     await unmute;
     await waitForState(pages[0], "live");
     await assertAgreement(pages);

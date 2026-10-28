@@ -36,14 +36,14 @@ test("web browser cache key follows the engine's lockfile version, not the SDK's
       cwd: root,
       env: { ...process.env, GITHUB_OUTPUT: output, ImageOS: "ubuntu24", RUNNER_ARCH: "X64" },
     });
-    assert.equal(readFileSync(output, "utf8").trim(), `key=e2e-web-playwright-${version}-chromium-ubuntu24-X64`);
+    assert.equal(readFileSync(output, "utf8").trim(), `key=e2e-web-playwright-${version}-chromium-webkit-ubuntu24-X64`);
   });
 });
 
 for (const cacheState of ["miss", "hit"]) {
   test(`web engine Chromium installs before proof on a cache ${cacheState}`, () => {
     const restore = steps.findIndex((step) => step.id === "web-browser-cache");
-    const install = steps.findIndex((step) => step.run === "pnpm exec e2e-web install chromium --with-deps");
+    const install = steps.findIndex((step) => step.run === "pnpm exec e2e-web install chromium webkit --with-deps");
     const verify = steps.findIndex((step) => step.uses === "./.github/actions/setup-playwright");
     const save = steps.findIndex((step) => step.uses?.startsWith("actions/cache/save@"));
     const proof = steps.findIndex((step) => step.run === "pnpm web:proof");
@@ -61,10 +61,10 @@ for (const cacheState of ["miss", "hit"]) {
 test("both runtimes are verified after the final shared cache restore and before any save", () => {
   const sdk = steps.findIndex((step) => step.uses === "./.github/actions/setup-playwright");
   const restore = steps.findIndex((step) => step.id === "web-browser-cache");
-  const install = steps.findIndex((step) => step.run === "pnpm exec e2e-web install chromium --with-deps");
+  const install = steps.findIndex((step) => step.run === "pnpm exec e2e-web install chromium webkit --with-deps");
   const save = steps.findIndex((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.ok(restore >= 0 && restore < install && install < sdk && sdk < save);
-  assert.equal(steps[sdk].with.browsers, "chromium");
+  assert.equal(steps[sdk].with.browsers, "chromium webkit");
   assert.equal(steps[sdk].with["verify-engine"], true);
   const action = load(readFileSync(process.env.SDK_PLAYWRIGHT_ACTION_PATH ?? new URL("../../.github/actions/setup-playwright/action.yml", import.meta.url), "utf8"));
   const sdkRestore = action.runs.steps.findIndex((step) => step.uses?.startsWith("actions/cache/restore@"));
