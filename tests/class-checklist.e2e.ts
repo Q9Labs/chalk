@@ -44,10 +44,10 @@ async function join(page: Page, name: string, url: string) {
 }
 
 async function shot(pages: Page[], label: string) {
-  for (const [index, page] of pages.entries()) await page.screenshot({ path: `${output}/${label}-${names[index]}.png` });
+  for (const [index, page] of pages.entries()) if (!page.isClosed()) await page.screenshot({ path: `${output}/${label}-${names[index]}.png` });
 }
 
-async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => Promise<void>) {
+async function classroom(scenario: string, check: (pages: Page[], contexts: BrowserContext[]) => Promise<void>) {
   await mkdir(output, { recursive: true });
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error("The class checklist requires disposable Linux/Instabox");
@@ -119,13 +119,10 @@ async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => P
     await join(pages[1], "Student", url);
     await join(pages[2], "Admin", url);
     await roster(pages);
-    await shot(pages, "joined");
+    await shot(pages, `${scenario}-joined`);
     await check(pages, contexts);
   } catch (error) {
-    await shot(
-      pages.filter((page) => !page.isClosed()),
-      "failure",
-    );
+    await shot(pages, `${scenario}-failure`);
     throw error;
   } finally {
     await Promise.all(browsers.map((browser) => browser.close()));
@@ -203,14 +200,15 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
   const rules =
     duration === 140_000
       ? [
-          ["-m", "owner", "--gid-owner", "20001", "!", "-d", "127.0.0.0/8", "-j", "DROP"],
-          ["-m", "owner", "--gid-owner", "20001", "-p", "tcp", "-m", "multiport", "--dports", "3070,8080,4100", "-j", "DROP"],
+          { tool: "iptables", args: ["-m", "owner", "--gid-owner", "20001", "!", "-d", "127.0.0.0/8", "-j", "DROP"] },
+          { tool: "ip6tables", args: ["-m", "owner", "--gid-owner", "20001", "!", "-d", "::1/128", "-j", "DROP"] },
+          { tool: "iptables", args: ["-m", "owner", "--gid-owner", "20001", "-p", "tcp", "-m", "multiport", "--dports", "3070,8080,4100", "-j", "DROP"] },
         ]
       : [];
-  const installed: string[][] = [];
+  const installed: typeof rules = [];
   try {
     for (const rule of rules) {
-      await command("sudo", ["-n", "iptables", "-I", "OUTPUT", ...rule]);
+      await command("sudo", ["-n", rule.tool, "-I", "OUTPUT", ...rule.args]);
       installed.push(rule);
     }
     await wait(duration);
@@ -220,7 +218,7 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
     expect(await tiles(student).count()).toBe(0);
     await student.screenshot({ path: `${output}/offline-${duration}.png` });
   } finally {
-    for (const rule of installed.reverse()) await command("sudo", ["-n", "iptables", "-D", "OUTPUT", ...rule]);
+    for (const rule of installed.reverse()) await command("sudo", ["-n", rule.tool, "-D", "OUTPUT", ...rule.args]);
     await context.setOffline(false);
   }
   await rejoin(student, pages);
@@ -228,7 +226,7 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
 
 test("C1: five consecutive joins reach the live call within ten seconds", async () => {
   await checkCase("C1", () =>
-    classroom(async (pages) => {
+    classroom("C1", async (pages) => {
       // The initial entrance is join 1; exercise four more admissions without reload.
       for (let attempt = 2; attempt <= 5; attempt++) {
         await pages[1].bringToFront();
@@ -243,7 +241,7 @@ test("C1: five consecutive joins reach the live call within ten seconds", async 
 });
 
 test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up", async () => {
-  await classroom(async (pages, contexts) => {
+  await classroom("C2-C7", async (pages, contexts) => {
     const [teacher, student] = pages;
     const mute = student.getByRole("button", { name: "Mute microphone", exact: true });
     if (await mute.count()) await mute.click();
@@ -251,6 +249,9 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
     if (await camera.count()) await camera.click();
     await teacher.bringToFront();
     await teacher.getByRole("button", { name: "Board", exact: true }).click();
+    await teacher.locator(".chalk-board[data-ready]").waitFor();
+    await student.bringToFront();
+    await student.locator(".chalk-board[data-ready]").waitFor();
     const cover = await contexts[1].newPage();
     await cover.bringToFront();
     expect(await student.evaluate(() => document.visibilityState)).toBe("hidden");
@@ -302,91 +303,97 @@ test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up
 
 test("C3 slow: close the student tab for three minutes then join a fresh tab", async () => {
   await checkCase("C3", () =>
-    classroom(async (pages, contexts) => {
+    classroom("C3", async (pages, contexts) => {
       const url = pages[1].url();
+      // Closing the last tab exits a native Chromium process. Keep the browser
+      // alive like a real desktop with other tabs; this page never joins Chalk.
+      const empty = await contexts[1].newPage();
       await pages[1].close();
       await wait(180_000);
       pages[1] = await contexts[1].newPage();
       await join(pages[1], "Student", url);
+      await empty.close();
       await roster(pages);
       await shot(pages, "C3");
     }),
   );
 });
 
-test("C4/C6 slow: sixty seconds offline, one Rejoin, live two-way media and restarted share", async () => {
-  await classroom(async (pages, contexts) => {
+test("C4 slow: sixty seconds offline then one Rejoin", async () => {
+  await classroom("C4", async (pages, contexts) => {
     await checkCase("C4", async () => {
       await drop(pages[1], contexts[1], 60_000, pages);
       await shot(pages, "C4");
     });
-    await checkCase("C6", async () => {
-      for (const page of pages.slice(0, 2)) {
-        await page.bringToFront();
-        await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
-        await page.getByRole("button", { name: "Turn on camera", exact: true }).click();
-      }
-      for (const [page, remote] of [
-        [pages[0], "Student"],
-        [pages[1], "Teacher"],
-      ] satisfies [Page, string][]) {
-        await expect.poll(() => page.evaluate(incomingAudioLevel), { timeout: 10_000 }).toBeGreaterThan(0);
-        const video = page
-          .locator('[data-part="stage-tile"]')
-          .filter({ has: tile(page, remote) })
-          .locator("video");
-        const frames = () => video.evaluate((video: HTMLVideoElement) => video.getVideoPlaybackQuality().totalVideoFrames);
-        await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
-        const before = await frames();
-        await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
-      }
-      // Deterministic moving display source, captured and transported by the real SDK/SFU.
-      await pages[0].evaluate(() => {
-        navigator.mediaDevices.getDisplayMedia = async () => {
-          const canvas = document.createElement("canvas");
-          canvas.width = 640;
-          canvas.height = 360;
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("No 2D display capture context");
-          let frame = 0;
-          const timer = setInterval(() => {
-            context.fillStyle = `hsl(${frame++ % 360} 80% 50%)`;
-            context.fillRect(0, 0, 640, 360);
-          }, 66);
-          const stream = canvas.captureStream(15);
-          stream.getVideoTracks()[0].addEventListener("ended", () => clearInterval(timer), { once: true });
-          return stream;
-        };
-      });
-      for (let attempt = 0; attempt < 2; attempt++) {
-        await pages[0].bringToFront();
-        const start = Date.now();
-        await pages[0].getByRole("button", { name: "Share screen", exact: true }).click();
-        for (const page of pages.slice(1)) {
-          const video = page.locator('[data-stage-item^="screen"] video');
-          await video.waitFor({ timeout: 10_000 });
-          const frames = () => video.evaluate((element: HTMLVideoElement) => element.getVideoPlaybackQuality().totalVideoFrames);
-          await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
-          const before = await frames();
-          await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
-        }
-        expect(Date.now() - start).toBeLessThan(10_000);
-        await shot(pages, `C6-share-${attempt}`);
-        await pages[0].getByRole("button", { name: "Stop sharing", exact: true }).click();
-        for (const page of pages.slice(1)) await page.locator('[data-stage-item^="screen"]').waitFor({ state: "detached" });
-      }
-      await roster(pages);
-    });
   });
 });
 
-test("C5 slow: visible student offline 140 seconds, one Rejoin without reload", async () => {
-  await checkCase("C5", () =>
-    classroom(async (pages, contexts) => {
+async function recoveredMedia(pages: Page[]) {
+  for (const page of pages.slice(0, 2)) {
+    await page.bringToFront();
+    await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
+    await page.getByRole("button", { name: "Turn on camera", exact: true }).click();
+  }
+  for (const [page, remote] of [
+    [pages[0], "Student"],
+    [pages[1], "Teacher"],
+  ] satisfies [Page, string][]) {
+    await expect.poll(() => page.evaluate(incomingAudioLevel), { timeout: 10_000 }).toBeGreaterThan(0);
+    const video = page
+      .locator('[data-part="stage-tile"]')
+      .filter({ has: tile(page, remote) })
+      .locator("video");
+    const frames = () => video.evaluate((video: HTMLVideoElement) => video.getVideoPlaybackQuality().totalVideoFrames);
+    await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
+    const before = await frames();
+    await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
+  }
+  // Deterministic moving display source, captured and transported by the real SDK/SFU.
+  await pages[0].evaluate(() => {
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 360;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("No 2D display capture context");
+      let frame = 0;
+      const timer = setInterval(() => {
+        context.fillStyle = `hsl(${frame++ % 360} 80% 50%)`;
+        context.fillRect(0, 0, 640, 360);
+      }, 66);
+      const stream = canvas.captureStream(15);
+      stream.getVideoTracks()[0].addEventListener("ended", () => clearInterval(timer), { once: true });
+      return stream;
+    };
+  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await pages[0].bringToFront();
+    const start = Date.now();
+    await pages[0].getByRole("button", { name: "Share screen", exact: true }).click();
+    for (const page of pages.slice(1)) {
+      const video = page.locator('[data-stage-item^="screen"] video');
+      await video.waitFor({ timeout: 10_000 });
+      const frames = () => video.evaluate((element: HTMLVideoElement) => element.getVideoPlaybackQuality().totalVideoFrames);
+      await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
+      const before = await frames();
+      await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
+    }
+    expect(Date.now() - start).toBeLessThan(10_000);
+    await shot(pages, `C6-share-${attempt}`);
+    await pages[0].getByRole("button", { name: "Stop sharing", exact: true }).click();
+    for (const page of pages.slice(1)) await page.locator('[data-stage-item^="screen"]').waitFor({ state: "detached" });
+  }
+  await roster(pages);
+}
+
+test("C5/C6 slow: visible 140-second drop, one Rejoin, live media and restarted share", async () => {
+  await classroom("C5-C6", async (pages, contexts) => {
+    await checkCase("C5", async () => {
       await drop(pages[1], contexts[1], 140_000, pages);
       await chat(pages[1], pages, "C5 chat after 140 seconds offline");
       await roster(pages);
       await shot(pages, "C5");
-    }),
-  );
+    });
+    await checkCase("C6", () => recoveredMedia(pages));
+  });
 });

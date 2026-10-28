@@ -13,7 +13,7 @@ Chromium (`pnpm exec e2e-web install chromium --with-deps` and
 `pnpm exec playwright install --with-deps chromium`), Xvfb and Docker available:
 
 ```sh
-GOTOOLCHAIN=auto CHALK_CLASS_SFU_FILE=/tmp/class-sfu.json CHALK_CLASS_RUN=1 xvfb-run -a pnpm test:class-checklist
+GOTOOLCHAIN=auto CHALK_CLASS_SFU_FILE="$HOME/class-sfu.json" CHALK_CLASS_RUN=1 xvfb-run -a pnpm test:class-checklist
 ```
 
 Supply the private JSON file over SSH, never in Git: `environment` must be
@@ -30,15 +30,16 @@ local stack and writes case outcomes/timings and screenshots under
 `.private/class-checklist/run-<CHALK_CLASS_RUN>/`. A setup failure before a case
 starts is **blocked**, not passed; a dependent C6 is not run if C4 fails.
 
-C2 and C7 share one eight-minute background interval. C4 and C6 share a recovered
-call. The student is muted with its camera off during background; another tab
+C2 and C7 share one eight-minute background interval. C5 and C6 share a recovered
+call, so a failing 60-second recovery does not prevent the media check after a
+successful 140-second recovery. The student is muted with its camera off during background; another tab
 in its own window hides it. CDP `noDefaults` avoids forcing it visible. This
 tests real background behaviour, not a synthetic freeze or an accelerated
 clock. It does not claim an active WebRTC connection enters intensive timer
 throttling. C4 uses Chromium network-offline emulation. C5 additionally drops
-the student's non-loopback traffic and local stack TCP traffic with a Linux
+the student's IPv4/IPv6 non-loopback traffic and local stack TCP traffic with a Linux
 process-group firewall rule, including SFU/UDP traffic that DevTools does not
-block. It needs passwordless `sudo`, `setpriv` and `iptables`; rules are removed in `finally`.
+block. It needs passwordless `sudo`, `setpriv`, `iptables` and `ip6tables`; rules are removed in `finally`.
 Neither test exercises a physical Wi-Fi adapter or a particular ISP.
 C6 uses distinguishable tones rather than speech
 recognition; it checks audio received both ways and advancing decoded video
