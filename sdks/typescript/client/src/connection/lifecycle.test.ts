@@ -265,7 +265,7 @@ describe("failed join admission cleanup", () => {
     { status: 403, initialStarter: false },
     { status: 401, initialStarter: true },
     { status: 403, initialStarter: true },
-  ])("refreshes rejected media access without a manual retry ($status, initialStarter=$initialStarter)", async ({ status, initialStarter }) => {
+  ])("requires explicit rejoin after rejected media access ($status, initialStarter=$initialStarter)", async ({ status, initialStarter }) => {
     const platform = createCoreTestPlatform();
     const requests: string[] = [];
     let mediaRequests = 0;
@@ -306,15 +306,16 @@ describe("failed join admission cleanup", () => {
             undefined,
             (media, stream) => Effect.tryPromise({ try: () => media.start(stream), catch: (cause) => cause }),
           );
-        yield* lifecycle.join();
-        expect(requests).toEqual(["join", "access_retry"]);
-        expect(mediaRequests).toBe(2);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", failure: null });
+        const result = yield* Effect.exit(lifecycle.join());
+        expect(result._tag).toBe("Failure");
+        expect(requests).toEqual(["join"]);
+        expect(mediaRequests).toBe(1);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Rejoin explicitly") } });
       }),
     );
   });
 
-  it.each([401, 403, 503])("bounds media access retry and preserves other startup failures (HTTP %s)", async (status) => {
+  it.each([401, 403, 503])("does not refresh rejected media access and preserves other startup failures (HTTP %s)", async (status) => {
     const platform = createCoreTestPlatform();
     const requests: string[] = [];
     const transport = createCloudflareSFUHTTPTransport({
@@ -346,8 +347,8 @@ describe("failed join admission cleanup", () => {
       Effect.gen(function* () {
         const result = yield* Effect.exit(lifecycle.join());
         expect(result._tag).toBe("Failure");
-        expect(requests).toEqual(status === 503 ? ["join"] : ["join", "access_retry"]);
-        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: status === 503 ? "media_start_failed" : "invalid_access" } });
+        expect(requests).toEqual(["join"]);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: status === 503 ? "media_start_failed" : "invalid_access", recoverable: status === 503 } });
       }),
     );
   });

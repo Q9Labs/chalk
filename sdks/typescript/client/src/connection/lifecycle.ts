@@ -514,7 +514,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                 trace(
                   "start_media",
                   (model.startInitialMedia ? model.startInitialMedia(media, stream!) : Effect.tryPromise({ try: () => media.start(stream!), catch: (cause) => cause })).pipe(
-                    Effect.mapError((cause) => (mediaAccessRejected(cause) ? lifecycleFailure("invalid_access", false, "Media access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause))),
+                    Effect.mapError((cause) =>
+                      sfuAccessRejected(cause)
+                        ? lifecycleFailure("invalid_access", false, "Media access was rejected. Another tab or device may be using it. Rejoin explicitly to request access again.", cause)
+                        : model.startInitialMedia
+                          ? lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)
+                          : failureFromCause(cause, "media_start_failed", "The media layer could not start"),
+                    ),
                   ),
                 ),
                 trace(
@@ -541,7 +547,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
                   }
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
-                  const retry = !retried && failure.code === "invalid_access";
+                  const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
                   if (!retry) yield* recordFailure(failure);
                   model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
@@ -1237,9 +1243,6 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   if (cause instanceof ConnectionError) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
   if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
   return lifecycleFailure(code, true, message, cause);
-}
-function mediaAccessRejected(cause: unknown): boolean {
-  return accessRejected(cause) || sfuAccessRejected(cause);
 }
 function sfuAccessRejected(cause: unknown): boolean {
   return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);

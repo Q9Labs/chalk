@@ -63,29 +63,46 @@ afterEach(() => {
 });
 
 describe("public client startup failure contract", () => {
-  it("shares overlapping joins while the first admission is slow", async () => {
-    const sockets = await liveBrowser();
-    let release!: (grant: ReturnType<typeof accessGrant>) => void;
-    const getAccess = vi.fn(
-      () =>
-        new Promise<ReturnType<typeof accessGrant>>((resolve) => {
-          release = resolve;
-        }),
+  it("starts a fresh join after unconfirmed Leave while the old join is blocked in Sync persistence", async () => {
+    await liveBrowser();
+    let release: () => void = () => {};
+    const persistence = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new InMemoryV1PendingTargetStore();
+    const put = vi.spyOn(store, "put").mockImplementation(async () => {
+      await persistence;
+    });
+    const getAccess = vi.fn(async () => accessGrant());
+    const client = createSpaceClientForPlatform(
+      { space: "test", baseUrl: "http://localhost:8080", getAccess },
+      {
+        dependencies: {
+          cancelPendingAdmission: async () => false,
+          createSyncClient: (input) => {
+            const sync = createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: store });
+            vi.spyOn(sync, "leave").mockRejectedValue(new Error("lost Leave acknowledgement"));
+            return sync;
+          },
+        },
+      },
     );
-    const client = makeClient(getAccess);
-    const first = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    const first = client.join({ microphone: false, camera: false, displayName: "First" }).catch((cause: unknown) => cause);
+    let second: Promise<unknown> | undefined;
     try {
-      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(1));
-      expect(client.getSnapshot().connection.status).toBe("joining");
-      const second = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
-      release(accessGrant());
-      expect(await Promise.all([first, second])).toEqual([undefined, undefined]);
-      expect(getAccess).toHaveBeenCalledTimes(1);
-      expect(sockets).toHaveLength(1);
+      await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
+      expect(client.getSnapshot().connection.status).toBe("live");
+      await expect(client.leave()).rejects.toMatchObject({ code: "connection.leave_unconfirmed" });
+      expect(client.getSnapshot().connection.status).toBe("left");
+      second = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(2));
+      expect(await second).toBeUndefined();
       expect(client.getSnapshot().connection.status).toBe("live");
     } finally {
       client.dispose();
+      release();
       await first;
+      await second;
     }
   });
 
