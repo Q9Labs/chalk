@@ -1,4 +1,4 @@
-import { Clock, Context, Duration, Effect, Layer } from "effect";
+import { Clock, Context, Duration, Effect, Fiber, Layer, Scope } from "effect";
 import { requireParsedAccessGrant, type AccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
@@ -74,8 +74,9 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
         featureFactories: dependencies,
         fetch: platform.fetch,
       });
+      const scope = yield* Effect.scope;
       return yield* Effect.acquireRelease(
-        Effect.sync(() => new SpaceClientCore(lifecycle, selection, store, controllers)),
+        Effect.sync(() => new SpaceClientCore(lifecycle, selection, store, controllers, scope)),
         (core) => Effect.sync(() => core.dispose()),
       );
     }),
@@ -83,18 +84,20 @@ export const makeSpaceClientCoreLayerFromServices = (options: SpaceClientOptions
 export class SpaceClientCore {
   readonly controllers: ControllerEffects;
   readonly #connection: ConnectionLifecycleCapability;
+  readonly #scope: Scope.Scope;
   readonly #store: SpaceStore;
   readonly #handlers: {
     [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>>;
   } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set() };
   #disposed = false;
-  #joining: ClientEffect<void> | null = null;
+  #joining: Fiber.Fiber<void, SpaceClientError> | null = null;
   #episodeEnded = false;
   #previous: SpaceSnapshot;
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeStore: (() => void) | null = null;
-  constructor(connection: ConnectionLifecycleCapability, _selection: MediaDeviceSelection, store: SpaceStore, controllers: ControllerEffects) {
+  constructor(connection: ConnectionLifecycleCapability, _selection: MediaDeviceSelection, store: SpaceStore, controllers: ControllerEffects, scope: Scope.Scope) {
     this.#connection = connection;
+    this.#scope = scope;
     this.#store = store;
     this.controllers = controllers;
     this.#store.updateConnection(connection.getSnapshot());
@@ -115,10 +118,10 @@ export class SpaceClientCore {
   }
   subscribe = (listener: () => void): (() => void) => this.#store.subscribe(listener);
   join(options: JoinOptions = {}): ClientEffect<void> {
-    return Effect.suspend(
-      () =>
-        this.#joining ??
-        Effect.cached(
+    return Effect.uninterruptible(
+      Effect.suspend(() => {
+        if (this.#joining) return Effect.succeed(this.#joining);
+        return Effect.forkIn(
           this.#join(options).pipe(
             Effect.ensuring(
               Effect.sync(() => {
@@ -126,13 +129,17 @@ export class SpaceClientCore {
               }),
             ),
           ),
+          this.#scope,
+          { startImmediately: false, uninterruptible: false },
         ).pipe(
-          Effect.flatMap((join) => {
-            this.#joining = join;
-            return join;
-          }),
-        ),
-    );
+          Effect.tap((join) =>
+            Effect.sync(() => {
+              this.#joining = join;
+            }),
+          ),
+        );
+      }),
+    ).pipe(Effect.flatMap(Fiber.join));
   }
   #join(options: JoinOptions): ClientEffect<void> {
     return Effect.sync(() => this.#requireActive()).pipe(
@@ -145,7 +152,10 @@ export class SpaceClientCore {
     );
   }
   leave(): ClientEffect<void> {
-    return this.#connection.leave().pipe(Effect.mapError(normalizeClientError));
+    return Effect.suspend(() => {
+      const joining = this.#joining;
+      return this.#connection.leave().pipe(Effect.andThen(joining ? Fiber.interrupt(joining) : Effect.void), Effect.mapError(normalizeClientError));
+    });
   }
   endEpisode(): ClientEffect<void> {
     return this.#connection

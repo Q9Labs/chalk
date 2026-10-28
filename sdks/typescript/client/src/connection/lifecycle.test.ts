@@ -6,7 +6,7 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
-import { CloudflareSFUError, createCloudflareSFUHTTPTransport } from "../media";
+import { createCloudflareSFUHTTPTransport } from "../media";
 import { streamFromTracks } from "./media-devices";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
@@ -260,32 +260,6 @@ function rejectFirstAccess(platform: ReturnType<typeof createCoreTestPlatform>) 
 }
 
 describe("failed join admission cleanup", () => {
-  it.each([401, 403])("stops a live client on rejected media access without reclaiming another client's seat (HTTP %s)", async (status) => {
-    const platform = createCoreTestPlatform();
-    const access = vi.fn(async () => parseParsedAccessGrant(opaqueAccessGrant(1)));
-    const restart = vi.fn(platform.dependencies.createMediaClient({ access: await access(), credential: async () => "fixture", onFailure: () => {}, onScreenEnded: () => {} }).restart);
-    access.mockClear();
-    let onFailure: (cause: unknown) => void = () => {};
-    const layer = admissionLayer({
-      access,
-      dependencies: {
-        ...platform.dependencies,
-        createMediaClient: (input) => {
-          onFailure = input.onFailure;
-          return { ...platform.dependencies.createMediaClient(input), restart };
-        },
-      },
-    });
-    await exerciseAdmission(layer, (lifecycle) =>
-      Effect.gen(function* () {
-        yield* lifecycle.join();
-        onFailure(new CloudflareSFUError("rejected", "signaling_failed", { status }));
-        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Another tab or device") } })));
-        expect(access).toHaveBeenCalledTimes(1);
-        expect(restart).not.toHaveBeenCalled();
-      }),
-    );
-  });
   it.each([
     { status: 401, initialStarter: false },
     { status: 403, initialStarter: false },

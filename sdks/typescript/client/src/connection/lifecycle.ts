@@ -493,7 +493,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
-                    onFailure: (cause) => enqueueBackground(Effect.suspend(() => handleMediaFailure(media, cause))),
+                    onFailure: () => enqueueBackground(Effect.suspend(() => handleMediaSnapshot(media, media.getSnapshot()))),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
@@ -959,11 +959,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
-      const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown): Effect.Effect<void> => {
-        if (media !== model.media) return Effect.void;
-        if (active(model) && sfuAccessRejected(cause)) return failForSnapshot(lifecycleFailure("invalid_access", false, "Call access is no longer valid. Another tab or device may be using it. Rejoin explicitly to request access again.", cause));
-        return handleMediaSnapshot(media, media.getSnapshot());
-      };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
         Effect.gen(function* () {
           const media = model.media;
