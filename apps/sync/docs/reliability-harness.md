@@ -6,7 +6,7 @@ One harness owns Sync reliability. Triggers select how deeply it runs:
 | ----------------- | ------------- | ------------------- |
 | Pull request      | `correctness` | Merge               |
 | Nightly schedule  | `topology`    | The scheduled check |
-| Release candidate | `release`     | Promotion           |
+| Release candidate | `release`     | Manual check; not wired to promotion |
 
 The correctness profile runs the full PostgreSQL-backed Sync suite with zero
 skips, the replayed v1 breaker, the TypeScript Sync client, and the separate
