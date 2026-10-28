@@ -141,6 +141,43 @@ describe("media recovery deadline", () => {
     });
   });
 
+  it("keeps an identical pending replacement recoverable after the provider timeout and recovers its replay", async () => {
+    const test = mediaRecoveryFixture();
+    const original = test.access.getMockImplementation();
+    if (!original) throw new Error("Missing access provider");
+    const committed = parseParsedAccessGrant(opaqueAccessGrant(2, "2", "connection-2"));
+    let resolveFirst: (grant: typeof committed) => void = () => {};
+    let attempts = 0;
+    test.access.mockImplementation(async (request) => {
+      if (!request.replaceMediaConnection) return original(request);
+      if (++attempts === 1)
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        });
+      if (attempts === 2) return requireParsedAccessGrant(Response.json({ error: { code: "participant.media_replacement_pending" } }, { status: 409 }));
+      return committed;
+    });
+    test.restart.mockImplementation(async () => test.mediaPhase("live"));
+    try {
+      await test.run(async (lifecycle) => {
+        test.mediaPhase("failed");
+        await test.advanceTo(9000);
+        expect(attempts).toBe(2);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: null, connection: { sync: "healthy" } });
+        expect(test.stopMedia).not.toHaveBeenCalled();
+        expect(test.stopSync).not.toHaveBeenCalled();
+        resolveFirst(committed);
+        await test.advanceTo(13000);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", failure: null });
+        expect(attempts).toBe(3);
+        const retries = test.access.mock.calls.filter(([request]) => request.replaceMediaConnection);
+        expect(retries.every(([request]) => request.expectedMediaConnectionId === "connection-1" && request.currentMediaToken === retries[0]?.[0].currentMediaToken)).toBe(true);
+      });
+    } finally {
+      resolveFirst(committed);
+    }
+  });
+
   it.each([undefined, [0]])("uses at most twelve replacement grants per minute even with backoff %s", async (backoffMs) => {
     const test = mediaRecoveryFixture(backoffMs);
     test.restart.mockRejectedValue(new Error("Temporary media failure"));

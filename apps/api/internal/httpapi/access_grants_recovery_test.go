@@ -153,6 +153,53 @@ func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
 	}
 }
 
+func TestAccessGrantRecoveryDuplicateDuringIssuanceIsRetryable(t *testing.T) {
+	subject := participantMediaSubject(t)
+	subject.CloudflareConnectionID = "tab-a"
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential, err := issuer.Issue(context.Background(), subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
+	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
+	active := accessgrants.NewActiveAuthorizer(repo)
+	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
+	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
+	expected := subject.CloudflareConnectionID
+	request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
+	var duplicateErr error
+	fixture.beforeCreate = func() {
+		fixture.beforeCreate = nil
+		_, duplicateErr = endpoint.handle(ctx, request)
+	}
+	committed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if duplicateErr == nil || accessGrantAPIError(duplicateErr).Status != 409 || accessGrantAPIError(duplicateErr).Code != "participant.media_replacement_pending" {
+		t.Fatalf("identical in-flight replacement must be retryable, not a takeover: %v", duplicateErr)
+	}
+	replayed, err := endpoint.handle(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed.Media.Token != committed.Media.Token || fixture.created != 1 {
+		t.Fatal("duplicate must replay the only allocated media grant")
+	}
+}
+
 type recoveryGrantPlane struct {
 	refreshGrantPlane
 }
