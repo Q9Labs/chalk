@@ -116,7 +116,7 @@ func issueAccessGrantEndpoint(
 			currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
 			replaceMediaConnection := request.Body.ReplaceMediaConnection
 			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
-			if !replaceMediaConnection || (conditionalReplacement && currentToken != "") {
+			if !replaceMediaConnection || conditionalReplacement {
 				stage = "media_token"
 				if currentToken == "" {
 					return accessGrantResponse{}, apiErrorMediaTokenRequired
@@ -157,21 +157,15 @@ func issueAccessGrantEndpoint(
 				if expected == "" {
 					return accessGrantResponse{}, apiErrorInvalidRequest
 				}
-				if currentToken != "" && subject.CloudflareConnectionID != expected {
+				if subject.CloudflareConnectionID != expected {
 					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
 				}
 				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
-				// Token-bearing recovery uses the replay reservation below instead.
-				if currentToken == "" {
-					if err := generations.CheckParticipantMediaConnection(ctx, previous); err != nil {
-						return accessGrantResponse{}, accessGrantRefreshError(err)
-					}
-				}
 			}
-			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || (conditionalReplacement && currentToken != "")
+			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
 			if replayReplacement {
 				subject = previous
 				stage = "media_replay"
@@ -257,10 +251,6 @@ func issueAccessGrantEndpoint(
 					return accessGrantResponse{}, err
 				}
 				if err := generations.CompleteParticipantMediaRefresh(ctx, previous, subject, replay); err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-			} else if conditionalReplacement {
-				if err := generations.ReplaceParticipantMediaConnection(ctx, previous, subject); err != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(err)
 				}
 			} else if replaceMediaConnection {
