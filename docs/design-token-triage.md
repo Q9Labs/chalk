@@ -109,7 +109,7 @@ The gate planner puts both checks in the always-scheduled CI `checks` group. SDK
 
 ## Browser evidence
 
-[Dark before/after contact sheet](proofs/design-token-triage/dark.png) · [Light before/after contact sheet](proofs/design-token-triage/light.png)
+[Dark before/after contact sheet](images/design-token-triage-dark.png) · [Light before/after contact sheet](images/design-token-triage-light.png)
 
 `node scripts/web-proof/design-tokens.mjs` captures real SDK presentation components and production styles in Chromium. It compares `a7f46229c` with the current source, with 390px, 1440px and 1920px viewports, light/dark themes, LTR/RTL and reduced motion: 24 combinations. The curated sheets pair laptop and phone captures. Raw captures and computed-style/interaction results stay in `.private/design-token-proof`, outside Git.
 
