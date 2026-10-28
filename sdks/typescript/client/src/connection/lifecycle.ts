@@ -491,7 +491,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
-                    onFailure: (cause) => enqueueBackground(handleMediaFailure(media, cause)),
+                    onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
@@ -722,7 +722,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             kind,
             deadline: now + boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000),
             attempts: kind === "sync" ? boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10) : null,
-            delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : kind === "media" ? [250, 500, 1000, 2000, 5000] : [100, 250, 500],
+            delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : kind === "media" ? [1000, 2000, 4000, 6000] : [100, 250, 500],
           })),
         );
       const attemptRecovery = (plan: RecoveryPlan, mediaAttempt: MediaRecoveryAttempt, syncAttempt: SyncRecoveryAttempt, onAttempt: () => void): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
@@ -757,7 +757,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const recoveryDelay = (plan: RecoveryPlan, attempt: number): number => {
         const delay = plan.delays[Math.min(attempt - 1, plan.delays.length - 1)] ?? 0;
         const finiteDelay = Number.isFinite(delay) ? Math.max(0, delay) : 0;
-        return plan.kind === "media" ? Math.min(5000, Math.max(100, finiteDelay)) : finiteDelay;
+        const mediaMinimum = [1000, 2000, 4000][attempt - 1] ?? 6000;
+        return plan.kind === "media" ? Math.min(6000, Math.max(mediaMinimum, finiteDelay)) : finiteDelay;
       };
       const finishRecovery = (attempt: number, epoch: number): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -964,9 +965,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
-      const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown): Effect.Effect<void> => {
-        if (media !== model.media) return Effect.void;
-        if (active(model) && media.getSnapshot().connection.phase === "failed" && sfuAccessRejected(cause)) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+      const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
+        if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
+        if (active(model) && sfuAccessRejected(cause)) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
@@ -1163,7 +1164,12 @@ function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
   return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
 }
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
-  return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? "Access was rejected" : "Could not reach the Space. Check your network and try again.", value.cause);
+  return lifecycleFailure(
+    value.code === "access.invalid" ? "invalid_access" : "access_unavailable",
+    value.code === "access.unavailable",
+    value.code === "access.invalid" ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Could not reach the Space. Check your network and try again.",
+    value.cause,
+  );
 }
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {
   if (cause instanceof ConnectionError && cause.cause === undefined) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
@@ -1252,16 +1258,7 @@ function sfuAccessRejected(cause: unknown): boolean {
   return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);
 }
 function accessRejected(cause: unknown): boolean {
-  return cause instanceof ConnectionError
-    ? cause.code === "invalid_access"
-    : typeof cause === "object" &&
-        cause !== null &&
-        "code" in cause &&
-        (
-          cause as {
-            readonly code?: unknown;
-          }
-        ).code === "access.invalid";
+  return cause instanceof ConnectionError ? cause.code === "invalid_access" : typeof cause === "object" && cause !== null && "code" in cause && (cause.code === "access.invalid" || cause.code === "participant.connection_superseded");
 }
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   const result = value ?? fallback;

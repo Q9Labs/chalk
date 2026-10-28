@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
 import { parseParsedAccessGrant } from "../access/grant";
+import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import type { ConnectionAccessRequest } from "./dependencies";
@@ -63,7 +64,8 @@ describe("media recovery deadline", () => {
       for (let index = 1; index < retries.length; index++) {
         const gap = (retries[index]?.timestamp ?? 0) - (retries[index - 1]?.timestamp ?? 0);
         expect(gap).toBeGreaterThanOrEqual(250);
-        expect(gap).toBeLessThanOrEqual(10000);
+        // The first attempt includes the observed 9.74-second peer wait.
+        expect(gap).toBeLessThanOrEqual(index === 1 ? 16000 : 6500);
       }
     });
   });
@@ -94,9 +96,52 @@ describe("media recovery deadline", () => {
       expect(test.access.mock.calls.map(([request]) => request.reason)).toEqual(["join", "media_recovery"]);
     });
   });
+
+  it("ignores a queued rejection for a binding replaced by a newer recovery grant", async () => {
+    const test = mediaRecoveryFixture();
+    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    await test.run(async (lifecycle) => {
+      test.mediaPhase("failed");
+      await test.advanceTo(1000);
+      expect(test.getBinding()).not.toBe("connection-1");
+      test.failMedia(new CloudflareSFUError("Old binding rejected", "signaling_failed", { status: 403 }), "connection-1");
+      await test.advanceTo(1500);
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: null });
+    });
+  });
+
+  it("preserves a takeover at recovery second 20 when the old tab retries at second 25", async () => {
+    const test = mediaRecoveryFixture();
+    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    await test.run(async (lifecycle) => {
+      test.mediaPhase("failed");
+      await test.advanceTo(20000);
+      expect(lifecycle.getSnapshot().state).toBe("reconnecting");
+      test.setBinding("legitimate-new-tab");
+      await test.advanceTo(25500);
+      expect(test.getBinding()).toBe("legitimate-new-tab");
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Another tab or device may be using it") } });
+      const count = test.access.mock.calls.length;
+      await test.advanceTo(60000);
+      expect(test.access).toHaveBeenCalledTimes(count);
+    });
+  });
+
+  it.each([undefined, [0]])("uses at most twelve replacement grants per minute even with backoff %s", async (backoffMs) => {
+    const test = mediaRecoveryFixture(backoffMs);
+    test.restart.mockRejectedValue(new Error("Temporary media failure"));
+    await test.run(async () => {
+      test.mediaPhase("failed");
+      await test.advanceTo(60000);
+      const grants = test.access.mock.calls.filter(([request]) => request.replaceMediaConnection);
+      expect(grants.length).toBeGreaterThan(3);
+      expect(grants.length).toBeLessThanOrEqual(12);
+      expect(test.restart).toHaveBeenCalledTimes(grants.length);
+    });
+  });
 });
 
-function mediaRecoveryFixture() {
+function mediaRecoveryFixture(backoffMs?: readonly number[]) {
   const platform = createCoreTestPlatform();
   const manual = new ManualClock();
   const startedAt = Date.now();
@@ -112,8 +157,9 @@ function mediaRecoveryFixture() {
   const stopMedia = vi.spyOn(media, "stop");
   const stopSync = vi.spyOn(platform.sync, "stop");
   const createSync = vi.fn(platform.dependencies.createSyncClient);
-  let failMedia: (cause: unknown) => void = () => {};
+  let failMedia: (cause: unknown, binding?: string) => void = () => {};
   const access = vi.fn(async (request: ConnectionAccessRequest) => {
+    if (request.replaceMediaConnection && request.expectedMediaConnectionId !== undefined && request.expectedMediaConnectionId !== binding) throw new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false });
     if (request.replaceMediaConnection) binding = `connection-${++generation}`;
     const grant = opaqueAccessGrant(generation, String(generation), binding);
     const expires_at = new Date(startedAt + (request.reason === "join" ? observed.accessRefreshed + 60000 : 3600000)).toISOString();
@@ -127,7 +173,7 @@ function mediaRecoveryFixture() {
     stopSync,
     createSync,
     mediaPhase,
-    failMedia: (cause: unknown) => failMedia(cause),
+    failMedia: (cause: unknown, binding?: string) => failMedia(cause, binding),
     setBinding: (value: string) => {
       binding = value;
     },
@@ -151,6 +197,7 @@ function mediaRecoveryFixture() {
           Effect.provide(
             makeConnectionLifecycleLayer({
               access,
+              recovery: { backoffMs },
               apiBaseURL: "https://api.chalk.test",
               syncURL: "wss://sync.chalk.test/v1/sync",
               dependencies: {

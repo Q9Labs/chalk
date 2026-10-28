@@ -208,7 +208,7 @@ function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
 }
 async function fetchAccessGrant(input: { readonly request?: ConnectionAccessRequest; readonly options: SpaceClientOptions; readonly platform: SpaceClientPlatform }): Promise<unknown> {
   if (input.platform.connectionAccess) return input.platform.connectionAccess(input.request);
-  return input.options.getAccess({ space: input.options.space.trim(), reason: accessReason(input.request?.reason), replaceMediaConnection: input.request?.replaceMediaConnection ?? false, signal: input.request?.signal });
+  return input.options.getAccess({ space: input.options.space.trim(), reason: accessReason(input.request?.reason), replaceMediaConnection: input.request?.replaceMediaConnection ?? false, expectedMediaConnectionId: input.request?.expectedMediaConnectionId, signal: input.request?.signal });
 }
 function accessReason(reason: ConnectionAccessReason | undefined): "join" | "refresh" | "retry" {
   if (reason === undefined || reason === "join") return "join";

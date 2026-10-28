@@ -578,6 +578,7 @@ export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
 
 export const IssueAccessGrantRequestSchema = Schema.Struct({
   current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   participant_generation: Schema.Number,
   replace_media_connection: Schema.Boolean,
 });

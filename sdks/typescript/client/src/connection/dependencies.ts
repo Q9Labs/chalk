@@ -13,6 +13,7 @@ export type ConnectionAccessRequest = {
   readonly signal?: AbortSignal;
   readonly currentMediaToken?: ParticipantMediaCredential;
   readonly expectedParticipantGeneration?: number;
+  readonly expectedMediaConnectionId?: string;
 };
 export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 export type ConnectionClock = {
@@ -80,7 +81,7 @@ export type ConnectionMediaFactoryInput = {
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
-  readonly onFailure: (error: unknown) => void;
+  readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
 };
 export type ConnectionSyncFactoryInput = {

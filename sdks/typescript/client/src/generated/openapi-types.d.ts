@@ -1568,6 +1568,7 @@ export interface components {
     IntegrationServiceId: string;
     IssueAccessGrantRequest: {
       current_media_token?: string;
+      expected_media_connection_id?: string | null;
       participant_generation: number;
       replace_media_connection: boolean;
     };

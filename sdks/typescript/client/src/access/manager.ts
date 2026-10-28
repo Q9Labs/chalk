@@ -110,6 +110,7 @@ function connectionAccessRequest(input: FetchInput, replaceMediaConnection: bool
       ? {
           currentMediaToken: input.current.access.media.token,
           expectedParticipantGeneration: input.current.access.subject.participantGeneration,
+          ...(replaceMediaConnection ? { expectedMediaConnectionId: input.current.access.media.clientPayload.connectionId } : {}),
         }
       : {}),
   });
