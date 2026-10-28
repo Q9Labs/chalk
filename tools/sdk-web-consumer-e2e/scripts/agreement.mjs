@@ -152,7 +152,9 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       const failed = await pages[0].evaluate(() => window.__chalk.snapshot());
       assert.equal(failed.failure?.code, "access.invalid");
       for (const source of ["microphone", "camera"]) assert.notEqual(failed.localMedia[source].state, "enabled");
-      await pages[0].getByRole("heading", { name: "Connection lost", exact: true }).waitFor();
+      await pages[0].getByRole("heading", { name: /^Couldn’t connect to / }).waitFor();
+      await pages[0].getByText("Access to this call was rejected. Refresh the page and try again.", { exact: true }).waitFor();
+      assert.equal(await pages[0].getByRole("button", { name: "Try again", exact: true }).count(), 1);
       assert.equal(await pages[0].getByRole("button", { name: "Mute microphone", exact: true }).count(), 0);
       assert.equal(await pages[0].getByRole("button", { name: "Turn off camera", exact: true }).count(), 0);
       assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
