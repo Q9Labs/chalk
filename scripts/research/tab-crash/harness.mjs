@@ -129,9 +129,10 @@ async function run(version, constrained) {
   const cdp = await context.newCDPSession(page); await cdp.send('Performance.enable');
   if(constrained) await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
   const tenant = await request('/v1/tenants',{name:`Crash research ${runName}`,default_media_plane:'cf_sfu',media_plane_provider_config:{enabled:true,provider:'cf_sfu',mode:'chalk_managed'}});
-  const space = await request(`/v1/tenants/${tenant.id}/spaces`,{name:'Crash research',slug:`crash-${randomUUID()}`,media_plane:'cf_sfu',recording_policy:'manual',transcription_policy:'disabled',default_episode_duration_seconds:3600,maximum_episode_duration_seconds:3600,linger_window_seconds:600});
+  let space;
   runStart = Date.now();
   const fixture = async () => {
+    space = await request(`/v1/tenants/${tenant.id}/spaces`,{name:'Crash research',slug:`crash-${randomUUID()}`,media_plane:'cf_sfu',recording_policy:'manual',transcription_policy:'disabled',default_episode_duration_seconds:3600,maximum_episode_duration_seconds:3600,linger_window_seconds:600});
     const episode = await request(`/v1/tenants/${tenant.id}/spaces/${space.id}/episodes`,{});
     const path = `/v1/tenants/${tenant.id}/spaces/${space.id}/episodes/${episode.id}/participants`;
     const admission = await request(path,{name:'Crash research tutor',role:'owner'});
@@ -165,7 +166,7 @@ async function run(version, constrained) {
   await page.reload();await page.waitForFunction(()=>window.__ready);await joinPage();
   if(!active.forbidden) throw new Error('stale refresh did not get real 403');
   await sample(page,cdp,browserCDP,'soak-stale-403',runName,0);
-  for(let n=1;n<=10;n++) { await page.evaluate(()=>window.__unmount());await page.evaluate(()=>window.__mount());await joinPage(); }
+  for(let n=1;n<=21;n++) { await page.evaluate(()=>window.__unmount());await page.evaluate(()=>window.__mount());await joinPage(); }
   for(let n=0;n<5;n++) {
     const next=(n+1)*59000+125000;const wait=next-(Date.now()-runStart);if(wait>0)await delay(wait);
     await sample(page,cdp,browserCDP,'soak',runName,n);
