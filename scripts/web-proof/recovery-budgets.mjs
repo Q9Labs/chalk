@@ -11,7 +11,9 @@ export function recoveryBudgets(source = readFileSync(new URL("../../sdks/typesc
     if (!value) throw new Error(`Cannot read lifecycle recovery budget ${name}`);
     return /^\d[\d_]*$/.test(value) ? Number(value.replaceAll("_", "")) : milliseconds(value, seen);
   }
-  const syncMs = milliseconds("SYNC_RECOVERY_BUDGET_MS");
+  const syncBudget = /waitForSyncLive\(sync,\s*boundedInteger\(options\.recovery\?\.budgetMs,\s*(\w+)/.exec(source)?.[1];
+  if (!syncBudget) throw new Error("Cannot read Sync recovery default");
+  const syncMs = milliseconds(syncBudget);
   const mediaMs = milliseconds("RECOVERY_BUDGET_MS");
   return { syncMs, mediaMs, timeoutMs: Math.max(syncMs, mediaMs) + 15_000 };
 }
