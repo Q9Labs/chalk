@@ -131,30 +131,35 @@ try {
   }
 
   async function serve(request, response) {
-    if (request.url.startsWith("/access?")) {
-      const name = new URL(request.url, origin).searchParams.get("name");
-      assert.ok(name === "Student" || name === "Teacher");
-      let seat = seats.get(name);
-      if (!seat) {
-        seat = await chalk.participants.admit(space.id, episode.id, { name, role: "owner" }, { idempotencyKey: crypto.randomUUID() });
-        seats.set(name, seat);
-      }
-      assert.ok(seat.access);
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify(seat.access));
-    } else if (request.url.startsWith("/v1/")) {
-      const chunks = [];
-      for await (const chunk of request) chunks.push(chunk);
-      const headers = { ...request.headers };
-      delete headers.host;
-      const body = Buffer.concat(chunks);
-      const upstream = await fetch(api + request.url, { method: request.method, headers, body: body.length ? body : undefined, signal: AbortSignal.timeout(15_000) });
-      response.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") ?? "application/json" });
-      response.end(Buffer.from(await upstream.arrayBuffer()));
-    } else {
-      response.setHeader("content-type", request.url === "/client.js" ? "text/javascript" : "text/html");
-      response.end(request.url === "/client.js" ? bundle.outputFiles[0].text : html);
+    if (request.url.startsWith("/access?")) return serveAccess(request, response);
+    if (request.url.startsWith("/v1/")) return proxyMediaRequest(request, response);
+    const asset = request.url === "/client.js" ? { type: "text/javascript", body: bundle.outputFiles[0].text } : { type: "text/html", body: html };
+    response.setHeader("content-type", asset.type);
+    response.end(asset.body);
+  }
+
+  async function serveAccess(request, response) {
+    const name = new URL(request.url, origin).searchParams.get("name");
+    assert.ok(name === "Student" || name === "Teacher");
+    let seat = seats.get(name);
+    if (!seat) {
+      seat = await chalk.participants.admit(space.id, episode.id, { name, role: "owner" }, { idempotencyKey: crypto.randomUUID() });
+      seats.set(name, seat);
     }
+    assert.ok(seat.access);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(seat.access));
+  }
+
+  async function proxyMediaRequest(request, response) {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const headers = { ...request.headers };
+    delete headers.host;
+    const body = Buffer.concat(chunks);
+    const upstream = await fetch(api + request.url, { method: request.method, headers, body: body.length ? body : undefined, signal: AbortSignal.timeout(15_000) });
+    response.writeHead(upstream.status, { "content-type": upstream.headers.get("content-type") ?? "application/json" });
+    response.end(Buffer.from(await upstream.arrayBuffer()));
   }
 } finally {
   for (const cleanup of [
