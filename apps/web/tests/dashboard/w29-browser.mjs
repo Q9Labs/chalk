@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir, symlink } from "node:fs/promises";
+import { writeFile, mkdir, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
@@ -66,7 +66,7 @@ try {
       if (mode === "slow_cpu") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       const began = Date.now();
       await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: mode === "live" || mode === "slow_cpu" ? syncOrigin : faultURL });
-      await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), { timeout: 45000 });
+      await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), null, { timeout: 45000 });
       const audit = await page.evaluate(() => window.audit);
       const result = { version, mode, elapsed_ms: Date.now() - began, grants, audit, seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`) };
       if (mode === "live" || mode === "slow_cpu") assert(audit.some((row) => row.event === "join_ok"), JSON.stringify(result));
