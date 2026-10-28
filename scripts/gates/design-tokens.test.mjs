@@ -73,7 +73,10 @@ const legacy = "text-[var(--chalk-text)] var(--foreground)";
   });
   const found = await findTokenViolations(root);
   assert.equal(found.filter(({ rule }) => rule === "palette-utility").length, 11);
-  assert.deepEqual(found.filter(({ rule }) => rule === "named-color").map(({ value }) => value), ["color: rebeccapurple", 'fill={"navy']);
+  assert.deepEqual(
+    found.filter(({ rule }) => rule === "named-color").map(({ value }) => value),
+    ["color: rebeccapurple", 'fill={"navy"'],
+  );
   assert.ok(found.some(({ value, line }) => value === "oklch(" && line === 2));
   assert.ok(found.some(({ value, line }) => value === "var(--foreground)" && line === 4));
   assert.ok(found.some(({ file, value }) => file === "nested/extra.css" && value === "#1234"));
@@ -83,7 +86,10 @@ test("exceptions are exact, single-use and do not hide neighboring or duplicate 
   const snippet = 'const qr = <path fill="#000" />;';
   const root = await fixture(t, { "qr.tsx": snippet + '\nconst bad = "#fff";' });
   const exceptions = [{ file: "qr.tsx", snippet, reason: "Fixed QR contrast" }];
-  assert.deepEqual((await findTokenViolations(root, exceptions)).map(({ value, line }) => ({ value, line })), [{ value: "#fff", line: 2 }]);
+  assert.deepEqual(
+    (await findTokenViolations(root, exceptions)).map(({ value, line }) => ({ value, line })),
+    [{ value: "#fff", line: 2 }],
+  );
   await writeFile(join(root, "qr.tsx"), snippet + "\n" + snippet);
   await assert.rejects(findTokenViolations(root, exceptions), /exactly once/u);
   await writeFile(join(root, "qr.tsx"), 'const qr = <path fill="#111" />;');
@@ -97,10 +103,12 @@ test("baseline accounting rejects stale and duplicate occurrences", () => {
 });
 
 test("Native detects quoted properties, JSX expressions, named colors and modern functions but ignores comments", async (t) => {
-  const root = await fixture(t, { "src/example.tsx": `// color: "red"
+  const root = await fixture(t, {
+    "src/example.tsx": `// color: "red"
 const style = { "backgroundColor": "oklch(50% .2 30)", tintColor: "rebeccapurple" };
 const icon = <Icon fill={"navy"} stroke="currentColor" />;
-` });
+`,
+  });
   const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs")], { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /oklch\(/u);

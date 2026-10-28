@@ -43,5 +43,10 @@
     "file": "atomic/ReactionBubble.tsx",
     "snippet": "const BASE_PARTICLE_COLORS = [\"#14b8a6\", \"#f59e0b\", \"#ec4899\", \"#8b5cf6\", \"#06b6d4\", \"#22c55e\"];",
     "reason": "Decorative confetti palette, not a UI role; carries no information and is disabled with reduced motion."
+  },
+  {
+    "file": "space-header/CallDetails.tsx",
+    "snippet": "<rect width=\"100%\" height=\"100%\" fill=\"white\" />",
+    "reason": "Fixed white QR quiet zone pairs with the fixed dark module ink for camera contrast."
   }
 ]
