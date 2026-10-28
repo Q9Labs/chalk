@@ -12,12 +12,26 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     if (filter && !name.includes(filter)) return;
     const start = Date.now();
     const contexts = [];
+    const evidence = new Map();
     try {
       const open = async (participant) => {
         const context = await browser.newContext({ ...device, permissions: ["camera", "microphone"] });
         contexts.push(context);
+        const reports = [];
+        await context.route("**/connection-reports", async (route) => {
+          reports.push(route.request().postDataJSON());
+          await route.fulfill({ status: 202, contentType: "application/json", body: "{}" });
+        });
         await context.addInitScript(installAgreementProbe);
         const page = await context.newPage();
+        const commands = [];
+        page.on("websocket", (socket) =>
+          socket.on("framesent", ({ payload }) => {
+            const message = JSON.parse(String(payload));
+            if (message.type === "command") commands.push(message);
+          }),
+        );
+        evidence.set(page, { reports, commands });
         page.on("pageerror", (error) => process.stdout.write(`[agreement fixture ${participant}] ${error.message}\n`));
         await page.goto(`${baseURL}/?fixtureUser=${participant}`);
         await page.waitForFunction(() => Boolean(window.__chalk));
@@ -36,7 +50,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       const pages = [await open("agreementalice"), await open("agreementbob")];
       await enabledCapture(pages);
       await assertAgreement(pages);
-      await run(pages, open);
+      await run(pages, open, evidence);
       process.stdout.write(`[agreement] ${name}: passed ${Date.now() - start}ms\n`);
     } catch (error) {
       failures.push(new Error(`${name}: ${error.message}`, { cause: error }));
@@ -74,6 +88,13 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
   async function enabledCapture(pages) {
     for (const page of pages) await page.waitForFunction(() => ["microphone", "camera"].every((source) => window.__chalk.snapshot().localMedia[source].state === "enabled"), null, { timeout: recoveryTimeoutMs });
   }
+  async function clickControl(page, name) {
+    const { width, height } = page.viewportSize();
+    await page.mouse.move(width / 2, height / 2);
+    await page.mouse.move(width / 2 + 10, height / 2 + 10);
+    await page.getByRole("toolbar", { name: "Space controls", exact: true }).hover();
+    await page.getByRole("button", { name, exact: true }).click();
+  }
   await scenario("join and every microphone/camera toggle", async (pages) => {
     for (const owner of pages)
       for (const action of ["setMicrophoneEnabled", "setCameraEnabled"])
@@ -88,27 +109,79 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     if (failures.length) throw new AggregateError(failures, "Fast media agreement failed");
     return;
   }
-  for (const projection of ["drop", "delay", "reject"])
-    await scenario(`Sync media update ${projection}`, async (pages) => {
-      await invoke(pages[0], "setMicrophoneEnabled", false);
+  for (const source of ["microphone", "camera"])
+    for (const projection of ["drop", "delay", "reject"])
+      await scenario(`Sync ${source} update ${projection}: fail closed and one-tap recovery`, async (pages, _open, evidence) => {
+        const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
+        const command = source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled";
+        const { commands, reports } = evidence.get(pages[0]);
+        await invoke(pages[0], action, false);
+        await assertAgreement(pages);
+        const initialCommands = commands.length;
+        await fault({ projection, durationMs: 12_000 });
+        const unmute = invoke(pages[0], action, true).catch((error) => error);
+        // Hold Sync behind a successful publication, rather than delaying capture.
+        await wait(300);
+        let failure;
+        try {
+          await truth(pages);
+        } catch (error) {
+          failure = error;
+        }
+        await unmute;
+        await pages[0].waitForFunction((source) => window.__chalk.snapshot().localMedia[source].state === "failed", source, { timeout: 15_000 });
+        assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false, "Failed capture must be physically paused");
+        await assertAgreement(pages);
+        await pages[0].getByText(`${source === "microphone" ? "Microphone" : "Camera"} didn’t reach the call. Turn it on to try again.`, { exact: true }).waitFor();
+        await wait(2000);
+        const mismatch = reports.filter((report) => report.trigger === "media_projection_mismatch");
+        assert.equal(mismatch.length, 1, "Persistent drift sends one report");
+        assert.deepEqual(
+          mismatch[0].events.filter((event) => event.event === "media_projection_mismatch").map(({ source, attempt, outcome }) => ({ source, attempt, outcome })),
+          [{ source, attempt: 0, outcome: "failed" }],
+        );
+        assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 1, "The monitor must not send automatic repair targets");
+        await fault({ clear: true });
+        await assertAgreement(pages);
+        // Use the person's actual control, not a second SDK enable that could
+        // hide a toggle which merely cancels an already failed action.
+        await clickControl(pages[0], source === "microphone" ? "Unmute microphone" : "Turn on camera");
+        await enabledCapture(pages);
+        await assertAgreement(pages);
+        assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 2, "One fresh tap sends exactly one enable");
+        assert.equal(reports.filter((report) => report.trigger === "media_projection_mismatch").length, 1);
+        if (failure) throw failure;
+      });
+  for (const source of ["microphone", "camera"]) {
+    const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
+    await scenario(`Sync ${source} confirms within grace`, async (pages, _open, evidence) => {
+      await invoke(pages[0], action, false);
       await assertAgreement(pages);
-      await fault({ projection, durationMs: 2000 });
-      const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
-      // Hold Sync behind a successful publication, rather than delaying capture.
+      await fault({ projection: "delay", durationMs: 2000 });
+      await invoke(pages[0], action, true);
       await wait(300);
-      let failure;
-      try {
-        await truth(pages);
-      } catch (error) {
-        failure = error;
-      }
-      await fault({ clear: true });
-      await unmute;
-      await invoke(pages[0], "setMicrophoneEnabled", true);
+      await truth(pages);
+      await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
       await enabledCapture(pages);
       await assertAgreement(pages);
-      if (failure) throw failure;
+      assert.equal(evidence.get(pages[0]).reports.length, 0);
     });
+    await scenario(`Pending ${source} cancels with shortcut and recovers with button`, async (pages, _open, evidence) => {
+      await invoke(pages[0], action, false);
+      await assertAgreement(pages);
+      await fault({ projection: "drop", durationMs: 12_000 });
+      await invoke(pages[0], action, true);
+      await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
+      await pages[0].keyboard.press(source === "microphone" ? "Control+d" : "Control+e");
+      await assertAgreement(pages);
+      assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false);
+      await fault({ clear: true });
+      await clickControl(pages[0], source === "microphone" ? "Unmute microphone" : "Turn on camera");
+      await enabledCapture(pages);
+      await assertAgreement(pages);
+      assert.equal(evidence.get(pages[0]).reports.length, 0);
+    });
+  }
   await scenario("Sync reconnect during unmute", async (pages) => {
     await invoke(pages[0], "setMicrophoneEnabled", false);
     await assertAgreement(pages);
@@ -128,6 +201,9 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await invoke(pages[0], "interruptMicrophone", event);
       await assertAgreement(pages);
       assert.notEqual((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia.microphone.state, "enabled", "Interrupted capture must not remain normal On");
+      await clickControl(pages[0], "Unmute microphone");
+      await enabledCapture(pages);
+      await assertAgreement(pages);
     });
   for (const hold of [true, false])
     await scenario(`${hold ? "Held media transport" : "SFU 503"} recovery beyond ten seconds; Sync healthy`, async (pages) => {
