@@ -1,81 +1,97 @@
 # Class checklist browser proof
 
-Baseline runtime: `775c0b99140879634e1753a6f0164af10086a8fd`.
-No runtime fixes are included. Run the opt-in slow suite using
-[scripts/web-proof/class-checklist.md](../../../scripts/web-proof/class-checklist.md).
-It starts a real local API, PostgreSQL-backed Sync and web app, with the real
-development SFU. Three native Chromium processes hold independent role contexts.
-Capture inputs are generated; admission, transport, playback and UI are real.
+**Result: no-go on the requested baseline. All three full suite invocations exited 1.**
+
+Runtime baseline: `775c0b99140879634e1753a6f0164af10086a8fd`. Frozen test implementation: `037c7417ff27952dc0d03f988907e83f4c3a7096`.
+No product runtime fixes are included. The opt-in slow suite starts a real local
+API, PostgreSQL-backed Sync and web app with the approved development SFU.
+Teacher, Student and Admin use separate native Chromium processes/contexts.
+Capture inputs are generated; admission, transport, decoding and UI are real.
+See [the runner instructions](../../../scripts/web-proof/class-checklist.md).
 
 ## Coverage before this change
 
-No complete C1–C7 case had a real-stack browser test at the baseline.
+No complete C1–C7 case had full real-stack coverage at the baseline.
 
-| Case                            | Existing evidence                                              | Missing part added                                                                                      |
-| ------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| C1, five joins                  | `tests/call.e2e.ts` has real two-browser audio/video           | Five timed admissions and exact three-way roster                                                        |
-| C2, eight minutes hidden        | #564 has headful Chromium + real Sync/Postgres heartbeat proof | Full API/media call, eight actual hidden minutes, continuous roster-loss checks                         |
-| C3, three-minute absence        | #568 SDK startup-failure fixtures                              | Close a real browser tab, wait 180 seconds, navigate and automatically rejoin <10 seconds               |
-| C4, 60 seconds offline          | #565 browser/SDK proof uses an in-process Sync fixture         | Real stack, terminal UI, no stale tiles, one Rejoin                                                     |
-| C5, 140 seconds offline         | #565/#568 recovery fixtures                                    | Visible browser, real wait, per-role IPv4/IPv6 and local-stack traffic cut, one Rejoin, roster and chat |
-| C6, media after recovery        | Real media on initial admission only                           | Both-way received audio, advancing camera/share frames, stop/restart share, no duplicate tiles          |
-| C7, whiteboard after background | Real board tests cover sync/layout/follow                      | Hidden-period stroke <10 seconds, new stroke and chat <5 seconds, no reload/rejoin                      |
+| Case / bug   | Existing evidence at baseline                                                                                                                                                                                                                                       | Full case already covered?            | New exact browser checks                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1 / W29     | `tests/call.e2e.ts:8`: real initial admission and media with two browsers.                                                                                                                                                                                          | No; real-stack partial only.          | All three initial admissions timed; Student enters five times total through four Leave/Rejoin cycles. Each join <10 s; exactly one tile per role on every side.                      |
+| C2 / W26     | #564: `sdks/typescript/client/scripts/background-heartbeat.mjs` + `apps/sync/test/support/browser/background_heartbeat.exs`: headful Chromium and real Sync/Postgres, including 21m15s hidden; socket-close/ended-reconnect wire tests. No full API/media host app. | No; browser/Sync proof only.          | Separate native processes; muted/camera-off Student actually hidden for eight real minutes; continuous roster-loss checks on all three sides.                                        |
+| C3 / W28     | #568: `sdks/typescript/client/src/space-client/startup-failures.test.ts:637,674`, replaced browser/network boundaries around expired admission.                                                                                                                     | No.                                   | Close Student tab, keep an unjoined blank tab so native Chrome survives, wait 180 s, navigate a fresh tab in the same context. Saved automatic entrance and all three rosters <10 s. |
+| C4 / W27     | #565: `scripts/web-proof/connection-lost.mjs`, real Chromium/SDK/UI against an in-process Sync protocol fixture.                                                                                                                                                    | No; not real multi-user API/Sync/SFU. | Actual 60 s DevTools-offline interval, exact terminal heading and one Rejoin button, zero stale tiles, one click and live roster <10 s.                                              |
+| C5 / W27/W28 | #565/#568 terminal/retry fixtures, not a visible 140 s real-stack outage.                                                                                                                                                                                           | No.                                   | 140 s real wait; Student-only IPv4/IPv6 external and local-stack traffic cut, including SFU/UDP. One Rejoin, no reload, exact roster and chat.                                       |
+| C6 / W27     | `tests/call.e2e.ts:8`: real audio/video on initial admission, not recovery/restarted display capture.                                                                                                                                                               | No; real-stack partial only.          | After C5: received audio both ways, advancing decoded camera/share frames, share to both peers, stop/restart <10 s, no duplicate tiles. Same helper runs in a fresh-call control.    |
+| C7 / W26     | `tests/board.e2e.ts:176,206,357`: real board sync/layout/follow, no eight-minute hidden interval. #564 dual-socket proof is not a rendered-board check.                                                                                                             | No; real-stack partial only.          | Teacher draws while Student is hidden; exact element count and painted pixels catch up <10 s, then new stroke and chat <5 s, without reload/rejoin.                                  |
 
-## Collected evidence
+## Three frozen-revision repetitions
 
-Completed full diagnostic on test commit `7d5b6cdb18b8dcc5c224c09dc40fe854d7530230`:
-972.10 seconds framework duration, exit 1. Case times are wall time inside each
-case, not individual admission latency. Every admission has its own <10-second
-assertion. C2/C7 share one hidden interval.
+All six framework tests were attempted in each repetition, without retries.
+BLOCKED means the real classroom fixture failed admission before the manual
+case started; it is not a pass. Blocked setup times are framework durations.
+Other times are case wall times; C1/C3 include fixture work. Each join/recovery
+has its separate asserted deadline. C2/C7 share one hidden interval; C5/C6 share
+one recovered call.
 
-| Case | Outcome                                                                                   | Case time |
-| ---- | ----------------------------------------------------------------------------------------- | --------- |
-| C1   | Pass                                                                                      | 15.433 s  |
-| C2   | Pass                                                                                      | 481.449 s |
-| C3   | Harness failure: automatic rejoin was already live; helper wrongly waited for a name form | 205.152 s |
-| C4   | Fail: Rejoin remained disabled after online restoration                                   | 75.098 s  |
-| C5   | Pass: dual-stack 140-second outage, one Rejoin, roster and chat                           | 142.481 s |
-| C6   | Audio assertion failed; source/sink attribution not yet established                       | 17.248 s  |
-| C7   | Pass                                                                                      | 2.320 s   |
+| Case                            | Run 1                   | Run 2                   | Run 3                   |
+| ------------------------------- | ----------------------- | ----------------------- | ----------------------- |
+| C1, five joins                  | PASS 18.880 s           | FAIL 14.686 s           | PASS 13.958 s           |
+| C2, eight minutes hidden        | PASS 482.638 s          | BLOCKED (13.24 s setup) | PASS 481.578 s          |
+| C3, three-minute absence        | FAIL 200.545 s          | BLOCKED (13.10 s setup) | BLOCKED (20.24 s setup) |
+| C4, 60 s offline                | BLOCKED (15.49 s setup) | BLOCKED (13.23 s setup) | BLOCKED (17.83 s setup) |
+| C5, 140 s drop                  | BLOCKED (12.73 s setup) | BLOCKED (12.73 s setup) | PASS 141.630 s          |
+| C6, media after recovery        | BLOCKED with C5         | BLOCKED with C5         | FAIL 14.854 s           |
+| C7, board/chat after background | PASS 2.389 s            | BLOCKED with C2         | PASS 2.390 s            |
 
-C3 now times navigation through automatic admission and checks every roster
-within ten seconds. A fresh-call media control and bounded sender/receiver
-statistics now distinguish a silent input or sink from a recovery regression.
-The fresh-call control was then driven on test commit
-`90419ab80a428baa749d141b77b0c488ec729eee` and failed in 28.36 seconds.
-Both sources were running, with live enabled tracks, about 0.15 source audio
-level and over 50 KB outbound audio each. Teacher received Student audio
-(606 packets, level 0.1523); Student had no inbound audio report. A silent
-generated source does not explain that failure. Its cause in the app,
-development SFU or network path is not established, and the failure is not
-specific to recovery. Share checks were not reached.
+| Run | Framework outcome  | Framework duration | Including stack startup/cleanup |
+| --- | ------------------ | ------------------ | ------------------------------- |
+| 1   | 2 passed, 4 failed | 762.80 s           | 835 s                           |
+| 2   | 0 passed, 6 failed | 81.33 s            | 113 s                           |
+| 3   | 2 passed, 4 failed | 750.11 s           | 766 s                           |
 
-An Instabox SSH/API outage interrupted execution briefly; access returned.
-**The required three final repetitions are not complete yet.** Queue attempts
-do not count as executions or passes. Corrected C3 and the full frozen suite
-will run without retries or relaxed deadlines.
+Fresh-call control: admission-blocked in Runs 1/2 (12.73/13.23 s); Run 3 failed
+at the first share-video wait (38.02 s framework duration), after two-way audio
+and camera assertions passed. The share restart was not reached.
 
-C4 failed at `tests/class-checklist.e2e.ts:148` on the diagnostic commit:
-`locator.click` timed out after 15000 ms on the disabled `Rejoin` button.
-The terminal heading and absence of stale tiles had passed. An earlier full
-diagnostic reproduced the same failure after its real 60-second outage.
-C6 failed at line 344 on that commit: the received audio level stayed zero for
-10000 ms. Camera/share checks were not reached. No product code, forced click,
-reload, retry or deadline relaxation hides either failure.
+## Retained failures
 
-![Key diagnostic frames](contact.png)
+- **Admission:** Run 2 C1 timed out on the initial Teacher tile at
+  `tests/class-checklist.e2e.ts:42`. Run 1 C3 timed out on Student after the real
+  180 s absence at line 353. API logs record SFU `create_connection` transport
+  failures (`http_status=0`, no upstream HTTP response), then local HTTP 500s on
+  public creation/arrival routes. Other fixtures were blocked the same way.
+  This does not establish a PC/ISP-specific W29 cause or isolate W28.
+- **Recovered audio:** Run 3 C6 failed line 392: received audio stayed zero for
+  the ten-second poll. Both generated sources were running with enabled live
+  tracks and source level about 0.15. Teacher received Student audio (601
+  packets, positive audio level); Student had no inbound audio report. Source
+  silence does not explain it. Cause in the app, development SFU or network is
+  not established. An earlier fresh-call control also failed one direction, so
+  recovery-specific attribution is not established either.
+- **Fresh share:** Run 3 control failed line 429 waiting ten seconds for a
+  remote screen video. The failure capture shows a share on Student and none
+  on Admin. The failed recipient index was not logged, so the image is not
+  treated as proof of which wait failed. `screen-share:` IDs and the stage
+  attribute were checked against the rendered component. C6 itself did not
+  reach camera/share assertions after its audio failure.
+- **C4 remains unresolved:** all final repetitions were admission-blocked.
+  A separate diagnostic on test `7d5b6cdb18b8dcc5c224c09dc40fe854d7530230`
+  executed the 60 s outage and failed because Rejoin stayed disabled after
+  going online (75.098 s case time, click timed out at its line 148; retained
+  at current line 174). No forced click, reload or runtime fix hides it.
 
-The first two frames show the actual eight-minute hidden interval and subsequent
-whiteboard/chat catch-up. The lower left shows the disabled recovery action.
-The lower right shows the successful roster/chat recovery after the 140-second
-network cut. An earlier separate diagnostic also saw room-creation HTTP 500s
-with an SFU transport error; those blocked setup and are not attributed to a
-specific browser/network regression.
+![Frozen-revision key frames](contact.png)
+
+Top: Run 1 hidden interval and board/chat catch-up. Middle: Run 1 C3 admission
+failure and Run 3 successful 140-second roster/chat recovery. Bottom: Student
+and Admin at Run 3's fresh-share failure. All frames use the frozen revision.
+The hidden board can show reconnect/offline while rosters are retained; C7
+checks its catch-up after foregrounding, not an always-connected hidden board.
 
 ## Limits
 
-- Role labels represent the public app's creator/guests, not an external host's role integration or account sign-in.
-- Generated tones prove audio reception, not intelligible speech.
-- Hidden Chromium tabs and Linux network cuts do not prove a particular PC, physical Wi-Fi adapter or ISP path. C8 is not covered.
+- Public app creator/guest role labels are not external-host role integration or account sign-in.
+- Generated tones prove received/decoded audio, not intelligible speech or a physical speaker.
+- Hidden Chromium and Linux firewall cuts do not prove a particular PC, Wi-Fi adapter or ISP. C8 is outside scope.
+- Cases blocked at admission were not executed; post-audio C6 steps and share restart remain unproved in the final repetitions.
 - Raw logs, private invitations, credentials and production identifiers are not published.
-- No merge, deployment or promote/nightly/npm workflow dispatch was performed.
+- No merge, production mutation or promote/nightly/npm workflow dispatch occurred.
