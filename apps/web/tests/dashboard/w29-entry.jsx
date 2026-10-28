@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
 import { createSpaceClientForPlatform } from "w29-sdk";
+import { ChalkClassroom } from "w29-th";
 
 window.audit = [];
 const started = performance.now();
@@ -25,20 +26,9 @@ window.startClient = (options) => {
 };
 window.stopClient = async () => { client?.dispose(); await window.joining; };
 
-// The integration prepares access before constructing its SDK client. Changing
-// the action dependency invalidates the in-flight result via an active flag.
+// The exact private integration source is supplied to the disposable runner,
+// never committed here. Only its external Convex/UI adapters are substituted.
 const root = createRoot(document.getElementById("root"));
-function Preparation({ action }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let active = true;
-    setReady(false);
-    record("prepare");
-    action().then(() => { if (active) { record("prepared"); setReady(true); } else record("discarded"); });
-    return () => { active = false; record("invalidated"); };
-  }, [action]);
-  return <div>{ready ? "ready" : "preparing"}</div>;
-}
-window.prepare = () => root.render(<Preparation action={() => window.access({ reason: "join", preparation: true })} />);
+window.prepare = () => root.render(<ChalkClassroom portal="teacher" target={{ kind: "class", classSessionId: "synthetic-w29" }} />);
 window.unmountPreparation = () => root.unmount();
 window.recordDone = () => record("done");

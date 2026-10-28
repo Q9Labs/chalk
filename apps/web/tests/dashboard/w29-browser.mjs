@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { writeFile, mkdir, symlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
@@ -40,7 +40,7 @@ async function pageFor(bundle, seat, { hold = 0, initialGrant = true } = {}) {
     current = await server.participants.issueAccess(space.id, episode.id, seat.id, { participantGeneration: current.subject.participant_generation, currentMediaToken: current.media.token }, { replaceMediaConnection: request.replaceMediaConnection ?? false });
     grants.push({ at, status: 201, participant_hash: hash(seat.id) });
     if (hold) await delay(hold);
-    return current;
+    return request.preparation ? { kind: "ready", access: current, space: space.slug, displayName: "Synthetic", spaceName: "Synthetic", diagnosticReference: "synthetic", attendanceMode: "tracked", leaveCleanup: { endpoint: origin, token: "synthetic" } } : current;
   });
   await page.route(`${origin}/w29`, (route) => route.fulfill({ contentType: "text/html", body: '<div id="root"></div><script type="module" src="/w29-bundle.js"></script>' }));
   await page.route(`${origin}/w29-bundle.js`, (route) => route.fulfill({ contentType: "text/javascript", path: bundle }));
@@ -50,6 +50,24 @@ async function pageFor(bundle, seat, { hold = 0, initialGrant = true } = {}) {
 }
 try {
   const oldRoot = resolve(out, "sdk520");
+  const thSource = resolve(repository, "artifacts/w29-th-source.tsx");
+  const thHash = hash(await readFile(thSource, "utf8"));
+  const adapters = resolve(out, "th-adapters.jsx");
+  await writeFile(adapters, `import React from "react";
+export const api = { chalkActions: { getClassroomAccess: "access", handoffClassroom: "handoff", markOperationsEnded: "end", restartClassroom: "restart" } };
+export class ConvexError extends Error {}
+export function useSafeAction(name) { return React.useMemo(() => (args) => window.access({ ...args, preparation: true }), [name]); }
+export function Chalk() { window.audit.push({ event: "unexpected_prepared_mount" }); return null; }
+export function createSpaceClient() { window.audit.push({ event: "unexpected_prepared_client" }); throw Error("Unexpected prepared SDK client"); }
+export const getUserErrorMessage = () => "Synthetic action failed";
+export const chalkClientFailureMessage = () => "Synthetic client failed";
+export const isChalkDeviceWarning = () => false;
+export const chalkJoinFailure = (failure) => failure;
+export const createChalkLeaveCleanupController = () => ({ handlePageHide() {} });
+export const retainChalkClient = () => () => {};
+export const superviseChalkWhiteboardController = (controller) => ({ controller, dispose() {} });
+export const synchronizeChalkStaffDisplayName = () => {};
+`);
   await mkdir(oldRoot, { recursive: true });
   const archive = execFileSync("git", ["archive", "a8cc69bb7", "sdks/typescript/client"]);
   execFileSync("tar", ["-x", "-C", oldRoot], { input: archive });
@@ -57,7 +75,7 @@ try {
   for (const version of ["5.2.0", "775c0b991"]) {
     const bundle = resolve(out, `${version}.js`);
     const sdk = version === "5.2.0" ? resolve(oldRoot, "sdks/typescript/client/src/space-client/space-client.ts") : resolve(repository, "sdks/typescript/client/src/space-client/space-client.ts");
-    await build({ absWorkingDir: resolve(repository, "apps/web"), entryPoints: ["tests/dashboard/w29-entry.jsx"], bundle: true, format: "esm", platform: "browser", outfile: bundle, alias: { "w29-sdk": sdk }, define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent" });
+    await build({ absWorkingDir: resolve(repository, "apps/web"), entryPoints: ["tests/dashboard/w29-entry.jsx"], bundle: true, format: "esm", platform: "browser", outfile: bundle, nodePaths: [resolve(repository, "apps/web/node_modules")], alias: { "w29-sdk": sdk, "w29-th": thSource }, plugins: [{ name: "synthetic-th-boundaries", setup(build) { build.onResolve({ filter: /^(?:@shared-portal-ui\/|@convex\/|convex\/values$|@q9labsai\/chalk-(?:client|react)$)/u }, () => ({ path: adapters })); } }], define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent" });
     for (const mode of ["live", "reset", "stall", "slow_cpu"]) {
       const seat = await participant();
       const { page, grants } = await pageFor(bundle, seat);
@@ -86,9 +104,9 @@ try {
     await delay(4600);
     const audit = await page.evaluate(() => window.audit);
     assert.equal(grants.length, 7);
-    assert.equal(audit.filter((row) => row.event === "prepared").length, 0);
+    assert.equal(audit.filter((row) => row.event.startsWith("unexpected_prepared")).length, 0);
     assert.equal(audit.filter((row) => row.event === "socket_construct").length, 0);
-    const result = { version, mode: "preparation_dependency_churn_delayed_response", grant_offsets_ms: grants.map((row) => row.at - grants[0].at), grants, audit, participant_hash: hash(seat.id), seat_before: sql(`select state from participant_join_seats where participant_id='${seat.id}'`) };
+    const result = { version, mode: "preparation_dependency_churn_delayed_response", th_source_sha256: thHash, grant_offsets_ms: grants.map((row) => row.at - grants[0].at), grants, audit, participant_hash: hash(seat.id), seat_before: sql(`select state from participant_join_seats where participant_id='${seat.id}'`) };
     if (version === "775c0b991") {
       await delay(Math.max(0, seat.created + 122000 - Date.now()));
       result.seat_after_122_seconds = sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`);
