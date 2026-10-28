@@ -378,7 +378,7 @@ function relaySignal(actor, message) {
 
 function updatePublications(actor, message) {
   if (!Array.isArray(message.publications)) return;
-  clearPublications(actor);
+  clearPublications(actor, { projected: !faults.get(actor)?.projection });
   for (const item of message.publications) updatePublication(actor, item);
   revision += 1;
   broadcastState();
@@ -457,9 +457,9 @@ function replaceSocket(collection, participantId, socket) {
   collection.set(participantId, socket);
 }
 
-function clearPublications(participantId) {
+function clearPublications(participantId, { projected = true } = {}) {
   for (const key of publications.keys()) if (key.startsWith(`${participantId}:`)) publications.delete(key);
-  for (const key of projectedPublications.keys()) if (key.startsWith(`${participantId}:`)) projectedPublications.delete(key);
+  if (projected) for (const key of projectedPublications.keys()) if (key.startsWith(`${participantId}:`)) projectedPublications.delete(key);
 }
 
 function token(audience, subject) {

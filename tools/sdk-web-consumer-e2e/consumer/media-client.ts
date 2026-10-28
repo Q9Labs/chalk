@@ -82,7 +82,6 @@ export class FixtureMediaClient {
     for (const peer of this.#peers.values()) {
       const sender = peer.senders.get(source);
       if (sender) await sender.replaceTrack(null);
-      peer.senders.delete(source);
     }
   }
 
@@ -131,7 +130,7 @@ export class FixtureMediaClient {
     local.enabled = target.enabled;
     local.track.enabled = target.enabled;
     if (!target.enabled) return;
-    for (const peer of this.#peers.values()) this.#addSender(peer, target.source, local.track);
+    for (const peer of this.#peers.values()) await this.#addSender(peer, target.source, local.track);
     await this.#renegotiateAll();
   }
 
@@ -228,7 +227,7 @@ export class FixtureMediaClient {
     const connection = registerPeer(new RTCPeerConnection());
     const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), makingOffer: false };
     this.#peers.set(remote, peer);
-    for (const [source, local] of this.#local) if (local.enabled) this.#addSender(peer, source, local.track);
+    for (const [source, local] of this.#local) if (local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
     connection.addEventListener("icecandidate", (event) => this.#sendSignal(remote, { candidate: event.candidate?.toJSON() ?? null }));
     connection.addEventListener("track", (event) => {
       const mid = event.transceiver.mid;
@@ -239,9 +238,10 @@ export class FixtureMediaClient {
     return peer;
   }
 
-  #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): void {
-    if (peer.senders.has(source)) return;
-    peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
+  async #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): Promise<void> {
+    const sender = peer.senders.get(source);
+    if (sender) await sender.replaceTrack(track);
+    else peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
   }
 
   async #renegotiateAll(): Promise<void> {
