@@ -18,6 +18,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         contexts.push(context);
         await context.addInitScript(installAgreementProbe);
         const page = await context.newPage();
+        page.on("pageerror", (error) => process.stdout.write(`[agreement fixture ${participant}] ${error.message}\n`));
         await page.goto(`${baseURL}/?fixtureUser=${participant}`);
         await page.waitForFunction(() => Boolean(window.__chalk));
         await page.mouse.click(5, 5);
@@ -40,6 +41,12 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     } catch (error) {
       failures.push(new Error(`${name}: ${error.message}`, { cause: error }));
       process.stdout.write(`[agreement] ${name}: FAILED ${Date.now() - start}ms: ${error.message}\n`);
+      for (const context of contexts) {
+        for (const page of context.pages()) {
+          const peers = await page.evaluate(() => window.__chalk?.peerStates()).catch(() => null);
+          process.stdout.write(`[agreement peers] ${JSON.stringify(peers)}\n`);
+        }
+      }
     } finally {
       // Each scenario has fresh identities and clients; never carry a poisoned
       // socket, permission, track or local media intent into the next case.
