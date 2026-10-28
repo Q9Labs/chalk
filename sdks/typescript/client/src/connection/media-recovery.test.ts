@@ -111,10 +111,11 @@ describe("media recovery deadline", () => {
     });
   });
 
-  it.each(["server", "response"] as const)("requires explicit rejoin when current media reports a %s replacement conflict", async (source) => {
+  it.each(["server", "response", "direct"] as const)("requires explicit rejoin when current media reports a %s replacement conflict", async (source) => {
     const test = mediaRecoveryFixture();
     await test.run(async (lifecycle) => {
-      const conflict = source === "server" ? new ConnectionAccessFailure({ code: "access.invalid", cause: new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false }) }) : new AccessGrantError(undefined, "connection_superseded");
+      const serverConflict = new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false });
+      const conflict = source === "server" ? new ConnectionAccessFailure({ code: "access.invalid", cause: serverConflict }) : source === "direct" ? serverConflict : new AccessGrantError(undefined, "connection_superseded");
       test.failMedia(conflict, test.getBinding());
       await test.advanceTo(1000);
       expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Another tab or device may be using it") } });

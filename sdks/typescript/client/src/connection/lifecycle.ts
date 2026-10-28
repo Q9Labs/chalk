@@ -967,7 +967,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
-        if (active(model) && (sfuAccessRejected(cause) || accessRejected(cause))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+        if (active(model) && (sfuAccessRejected(cause) || connectionSuperseded(cause))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
@@ -1164,10 +1164,12 @@ function toFailure(value: ConnectionLifecycleFailure): ConnectionFailure {
   return Object.freeze({ code: value.code, action: null, recoverable: value.recoverable, message: value.message, ...(value.sync ? { sync: value.sync } : {}) });
 }
 function accessFailure(value: ConnectionAccessFailure): ConnectionLifecycleFailure {
-  const cause = value.cause;
-  const superseded = cause instanceof AccessGrantError ? cause.reason === "connection_superseded" : typeof cause === "object" && cause !== null && "code" in cause && cause.code === "participant.connection_superseded";
-  const rejectedMessage = superseded ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Access was rejected";
+  const rejectedMessage = connectionSuperseded(value) ? "Access was rejected. Another tab or device may be using it. Rejoin explicitly to continue." : "Access was rejected";
   return lifecycleFailure(value.code === "access.invalid" ? "invalid_access" : "access_unavailable", value.code === "access.unavailable", value.code === "access.invalid" ? rejectedMessage : "Could not reach the Space. Check your network and try again.", value.cause);
+}
+function connectionSuperseded(failure: unknown): boolean {
+  const cause = failure instanceof ConnectionAccessFailure ? failure.cause : failure;
+  return cause instanceof AccessGrantError ? cause.reason === "connection_superseded" : typeof cause === "object" && cause !== null && "code" in cause && cause.code === "participant.connection_superseded";
 }
 function captureFailure(cause: unknown): ConnectionLifecycleFailure {
   if (cause instanceof ConnectionError && cause.cause === undefined) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
@@ -1247,7 +1249,7 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   if (sfuAccessRejected(cause)) return lifecycleFailure("invalid_access", false, "Media access was rejected. Rejoin explicitly to continue.", cause);
   if (cause instanceof ConnectionLifecycleFailure) return cause;
   if (cause instanceof ConnectionAccessFailure) return accessFailure(cause);
-  if (cause instanceof AccessGrantError) return accessFailure(new ConnectionAccessFailure({ code: "access.invalid", cause }));
+  if (cause instanceof AccessGrantError || connectionSuperseded(cause)) return accessFailure(new ConnectionAccessFailure({ code: "access.invalid", cause }));
   if (cause instanceof ConnectionError) return lifecycleFailure(cause.code, cause.recoverable, cause.message, cause);
   if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
   return lifecycleFailure(code, true, message, cause);

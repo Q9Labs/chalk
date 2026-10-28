@@ -1141,6 +1141,69 @@ it("counts nested retries against a fast-failing SFU for sixty seconds", async (
   }
 });
 
+it.each([401, 403])("reports a current %s after an inner replacement within the same poll", async (status) => {
+  const onError = vi.fn();
+  const harness = createHarness({ onError, replaceMediaConnection: async () => bootstrap("connection-2") });
+  const rejected = new CloudflareSFUError("Current binding rejected", "signaling_failed", { status });
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    if (input.connectionId === "connection-1") throw new CloudflareSFUError("Unavailable", "signaling_failed", { status: 503, retryableConnection: true });
+    throw rejected;
+  });
+  try {
+    await harness.client.start(fakeStream());
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
+    await expect(harness.client.refreshRemotePublications()).rejects.toBe(rejected);
+    expect(onError).toHaveBeenCalledWith(rejected, "connection-2");
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("does not attribute an old publication rejection to an inner replacement in the same generation", async () => {
+  const onError = vi.fn();
+  let finishReplacement: (value: CloudflareSFUBootstrap) => void = () => {};
+  const replacement = new Promise<CloudflareSFUBootstrap>((resolve) => {
+    finishReplacement = resolve;
+  });
+  const replaceMediaConnection = vi.fn(() => replacement);
+  const harness = createHarness({ onError, replaceMediaConnection });
+  let rejectOld: (cause: unknown) => void = () => {};
+  const oldPublication = new Promise<CloudflareSFUTracksResponse>((_resolve, reject) => {
+    rejectOld = reject;
+  });
+  const addTracks = harness.transport.addTracks.bind(harness.transport);
+  const rejection = new CloudflareSFUError("Obsolete publication rejected", "signaling_failed", { status: 403 });
+  const publishing = vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    if (input.connectionId === "connection-1") {
+      if (input.tracks.some((track) => track.location === "remote")) throw new CloudflareSFUError("Unavailable", "signaling_failed", { status: 503, retryableConnection: true });
+      return oldPublication;
+    }
+    return addTracks(input);
+  });
+  let poll: Promise<unknown> | undefined;
+  let local: Promise<unknown> | undefined;
+  try {
+    await harness.client.start(fakeStream());
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
+    poll = harness.client.refreshRemotePublications().catch((cause: unknown) => cause);
+    await vi.waitFor(() => expect(replaceMediaConnection).toHaveBeenCalledTimes(1));
+    harness.client.prepareLocalTrack("microphone", fakeStream(new FakeTrack("mic", "audio")).getTracks()[0]!);
+    local = harness.client.setLocalPublicationTarget({ operationId: "old-on", participantId: "participant-1", source: "microphone", enabled: true });
+    await vi.waitFor(() => expect(publishing).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "connection-1", tracks: expect.arrayContaining([expect.objectContaining({ location: "local" })]) })));
+    finishReplacement(bootstrap("connection-2"));
+    await vi.waitFor(() => expect(harness.peers).toHaveLength(2));
+    rejectOld(rejection);
+    await local;
+    await poll;
+    expect(onError).not.toHaveBeenCalledWith(rejection, expect.any(String));
+  } finally {
+    rejectOld(new Error("Test cleanup"));
+    finishReplacement(bootstrap("connection-2"));
+    await Promise.allSettled([local, poll]);
+    harness.client.stop();
+  }
+});
+
 it("ignores obsolete 403 even when the replacement peer has failed", async () => {
   const platform = createCoreTestPlatform();
   let foreground = () => {};
