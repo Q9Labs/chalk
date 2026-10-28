@@ -25,9 +25,10 @@ type SourceWorker = {
   pause: Promise<void> | null;
   serverSequence: number;
   forcedRevision: number | null;
+  pausedPublicationId: string | null;
 };
 function sourceWorker(enabled: boolean): SourceWorker {
-  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null };
+  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null };
 }
 type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
 type CaptureAction = "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare";
@@ -676,7 +677,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
-    const pause = Effect.runPromise(this.#localTarget(ports, source, false));
+    this.#sources[source].pausedPublicationId = ports.media.getSnapshot().localTracks.find((item) => item.source === source)?.publicationId ?? null;
+    const pause = ports.media.closeForcedLocalPublication ? Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source)) : Effect.runPromise(this.#localTarget(ports, source, false));
     // The command gate awaits and propagates this error; observe it meanwhile.
     void pause.catch(() => undefined);
     return pause;
@@ -1028,11 +1030,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     state.localEnabled = false;
     this.#pauseTracks(source);
     ports.media.setLocalSourceIntent?.(source, false);
-    if (ports.media.closeForcedLocalPublication)
-      this.#retainPause(
-        state,
-        Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source)),
-      );
+    this.#retainPause(state, this.#beginLocalPause(ports, source));
     this.#publish();
   }
   #bind(ports: ConnectionPorts | null): void {
@@ -1191,9 +1189,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #enforcePause(ports: ConnectionPorts, source: "microphone" | "camera"): void {
     const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
-    if (!this.#hasConsent(source) && livePublication(publication)) {
+    const state = this.#sources[source];
+    if (!this.#hasConsent(source) && publication?.enabled && state.pausedPublicationId !== publication.publicationId) {
       this.#pauseTracks(source);
       ports.media.setLocalSourceIntent?.(source, false);
+      this.#retainPause(state, this.#beginLocalPause(ports, source));
     }
   }
   #observeProjection(ports: ConnectionPorts, source: "microphone" | "camera"): void {
