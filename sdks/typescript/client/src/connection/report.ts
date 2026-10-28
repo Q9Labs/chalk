@@ -61,6 +61,11 @@ export class ConnectionReporter {
       duration_ms: optionalMilliseconds(diagnostic.sync?.durationMs ?? diagnostic.durationMs),
       close_code: diagnostic.sync?.closeCode ?? undefined,
       heartbeat_gap_ms: optionalMilliseconds(diagnostic.recovery?.lastHeartbeatReplyAgoMs),
+      media_error_kind: diagnostic.media?.media_error_kind,
+      media_error_step: diagnostic.media?.media_error_step,
+      granted_audio: diagnostic.media?.granted_audio,
+      granted_video: diagnostic.media?.granted_video,
+      http_status: diagnostic.media?.http_status,
     });
     if (diagnostic.event === "recovery_exhausted") this.#report("recovery_exhausted");
     else if (diagnostic.event === "connection_failed") this.#report(diagnostic.state === "joining" ? "join_failed" : "connection_lost");

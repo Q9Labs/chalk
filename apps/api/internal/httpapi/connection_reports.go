@@ -48,12 +48,22 @@ type connectionReportEvent struct {
 	HeartbeatGapMS *int64 `json:"heartbeat_gap_ms,omitempty"`
 	CloseCode      *int64 `json:"close_code,omitempty"`
 	HTTPStatus     *int64 `json:"http_status,omitempty"`
+	MediaErrorKind string `json:"media_error_kind,omitempty"`
+	MediaErrorStep string `json:"media_error_step,omitempty"`
+	GrantedAudio   string `json:"granted_audio,omitempty"`
+	GrantedVideo   string `json:"granted_video,omitempty"`
 }
 
 // These are also the OpenAPI enums. No peer text, URLs, payloads or identities
 // can pass the boundary, even if a caller bypasses the SDK's projection.
 func ConnectionReportFieldEnum(field string) []string {
 	switch field {
+	case "media_error_kind":
+		return []string{"NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"}
+	case "media_error_step":
+		return []string{"local_capture", "peer_connection", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"}
+	case "granted_audio", "granted_video":
+		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":
 		return []string{"join_failed", "connection_lost", "recovery_exhausted"}
 	case "event":
@@ -105,7 +115,7 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
-		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase} {
+		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
 			}

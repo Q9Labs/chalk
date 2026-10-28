@@ -36,9 +36,11 @@ export type ConnectionJoinTraceEnd = {
   readonly epoch: number;
   readonly outcome: Exclude<ConnectionJoinTraceOutcome, "started">;
   readonly code?: ConnectionErrorCode;
+  readonly media?: import("../media/failure-diagnostics").MediaFailureDiagnostic & import("../media/failure-diagnostics").GrantedMedia;
 };
 
 export type ConnectionDiagnostic = {
+  readonly media?: import("../media/failure-diagnostics").MediaFailureDiagnostic & import("../media/failure-diagnostics").GrantedMedia;
   readonly timestamp: number;
   readonly event: ConnectionDiagnosticEventName;
   readonly state: ConnectionState;
@@ -84,13 +86,21 @@ export class ConnectionDiagnostics {
     }
   }
 
-  recordRecoveryExhausted(input: { readonly state: ConnectionState; readonly epoch: number; readonly code: "sync_recovery_exhausted" | "media_recovery_exhausted"; readonly attempts: number; readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null }): void {
+  recordRecoveryExhausted(input: {
+    readonly state: ConnectionState;
+    readonly epoch: number;
+    readonly code: "sync_recovery_exhausted" | "media_recovery_exhausted";
+    readonly attempts: number;
+    readonly transport: import("../sync/connect-diagnostics").SyncRecoveryDiagnostic | null;
+    readonly media?: ConnectionDiagnostic["media"];
+  }): void {
     const { state, epoch, code, attempts, transport } = input;
     this.record({
       event: "recovery_exhausted",
       state,
       epoch,
       code,
+      ...(input.media ? { media: input.media } : {}),
       recovery: {
         reference: `connection.${code}`,
         attempts,
@@ -126,6 +136,7 @@ export class ConnectionDiagnostics {
           outcome: end.outcome,
           durationMs: Math.max(0, this.#now() - startedAt),
           ...(end.code ? { code: end.code } : {}),
+          ...(end.media ? { media: end.media } : {}),
         });
       },
     };
