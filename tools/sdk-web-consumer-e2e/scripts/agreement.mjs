@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { setTimeout as wait } from "node:timers/promises";
 import { assertAgreement, installAgreementProbe, sampleAgreement, truthIssues } from "../../../scripts/web-proof/agreement.mjs";
+import { recoveryBudgets } from "../../../scripts/web-proof/recovery-budgets.mjs";
+
+const recoveryTimeoutMs = recoveryBudgets().timeoutMs;
 
 export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false }) {
   const failures = [];
@@ -93,7 +96,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     await fault({ syncReconnect: true });
     const unmute = invoke(pages[0], "setMicrophoneEnabled", true).catch((error) => error);
     await unmute;
-    await waitForState(pages[0], "live");
+    await waitForState(pages[0], "live", recoveryTimeoutMs);
     await assertAgreement(pages);
   });
   for (const event of ["mute", "ended"])
@@ -113,8 +116,9 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       const message = await invoke(pages[0], "sendChatMessage", { text: `Sync alive during SFU ${status}` });
       await pages[1].waitForFunction((id) => window.__chalk.snapshot().chat.messages.some((item) => item.clientMessageId === id), message.clientMessageId);
       await truth(pages);
-      await waitForState(pages[0], "live");
-      await assertAgreement(pages, { timeoutMs: 25_000 });
+      await waitForState(pages[0], "live", recoveryTimeoutMs);
+      await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
+      assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
     });
   await scenario("same participant takes over during media recovery", async (pages, open) => {
     await fault({ status: 503, durationMs: 12_000 });
@@ -122,10 +126,10 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     await wait(500);
     await fault({ clear: true });
     const replacement = await open("agreementalice");
-    await assertAgreement([replacement, pages[1]], { timeoutMs: 25_000 });
+    await assertAgreement([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
     // The superseded tab must not regain publication authority in the background.
-    await wait(11_000);
-    assert.notEqual((await pages[0].evaluate(() => window.__chalk.snapshot())).state, "live");
+    await waitForState(pages[0], "failed", recoveryTimeoutMs);
+    assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
     await assertAgreement([replacement, pages[1]]);
   });
   if (failures.length) throw new AggregateError(failures, `${failures.length} media agreement scenarios failed`);

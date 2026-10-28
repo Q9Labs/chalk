@@ -1,4 +1,5 @@
 import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
+import { CloudflareSFUError } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -148,7 +149,7 @@ export class FixtureMediaClient {
 
   async #connect(): Promise<void> {
     const status = await fetch(`/test/media-recovery?participant=${encodeURIComponent(this.#participantId)}`);
-    if (!status.ok) throw Object.assign(new Error(`Fixture SFU HTTP ${status.status}`), { status: status.status, code: "media_control_unavailable" });
+    if (!status.ok) throw new CloudflareSFUError(`Fixture SFU HTTP ${status.status}`, "signaling_failed", { status: status.status, retryableConnection: status.status >= 500 });
     const token = await this.#credential();
     await new Promise<void>((resolve, reject) => {
       const socket = registerSocket(new WebSocket(`${this.#signalingURL}?token=${encodeURIComponent(token)}&connection=${encodeURIComponent(this.#bootstrap.connectionId)}`));
@@ -331,6 +332,7 @@ function projectFixtureRemoteTracks(remotePublications: readonly MediaPublicatio
   // receiver owned by its peer; stopping it here permanently silences a reused
   // transceiver. Only expose tracks with a current physical publication.
   return remotePublications.flatMap((publication) => {
+    if (!publication.enabled || !publication.publicationId) return [];
     const remote = received.get(`${publication.participantId}:${publication.source}`);
     return remote ? [{ ...remote, publicationId: publication.publicationId }] : [];
   });
