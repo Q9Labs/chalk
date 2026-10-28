@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { budgetFailures, summarize, trustedInteractionMs } from "../../apps/web/scripts/call-performance-metrics.mjs";
+import { readFileSync } from "node:fs";
+import { budgetFailures, summarize, trustedInteractionMs, validateScenarioBudgets } from "../../apps/web/scripts/call-performance-metrics.mjs";
+import { scenarios } from "../../apps/web/scripts/call-performance-scenarios.mjs";
+
+test("every budgeted scenario runs on each device, and every runner has a budget", () => {
+  const budgets = JSON.parse(readFileSync(new URL("../../apps/web/perf-budgets.json", import.meta.url), "utf8"));
+  assert.doesNotThrow(() => validateScenarioBudgets(budgets, scenarios));
+  assert.throws(
+    () =>
+      validateScenarioBudgets(
+        budgets,
+        scenarios.filter(({ id }) => id !== "board"),
+      ),
+    /Scenario budget has no runner: laptop\/board/,
+  );
+  const missing = structuredClone(budgets);
+  delete missing.scenarios.phone.board;
+  assert.throws(() => validateScenarioBudgets(missing, scenarios), /Missing explicit scenario budget: phone\/board/);
+});
 
 test("a sustained click regression fails the same median budget used by the gate", () => {
   const limits = { interactionMs: 120 };
