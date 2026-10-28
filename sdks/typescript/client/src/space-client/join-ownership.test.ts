@@ -54,11 +54,16 @@ it("cancels the owned admission and all join waiters on explicit leave", async (
           const first = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }));
           yield* Effect.promise(() => vi.waitFor(() => expect(getAccess).toHaveBeenCalledOnce()));
           const second = yield* Effect.forkScoped(client.join({ microphone: false, camera: false }), { startImmediately: true });
+          console.info("leave regression: requesting leave");
           yield* client.leave();
+          console.info("leave regression: leave completed");
           expect(Exit.isFailure(yield* Fiber.await(first))).toBe(true);
+          console.info("leave regression: first waiter completed");
           expect(Exit.isFailure(yield* Fiber.await(second))).toBe(true);
+          console.info("leave regression: second waiter completed");
           release();
           yield* client.join({ microphone: false, camera: false });
+          console.info("leave regression: fresh join completed");
           expect(getAccess).toHaveBeenCalledTimes(2);
           expect(client.getSnapshot().connection.status).toBe("live");
         }),
