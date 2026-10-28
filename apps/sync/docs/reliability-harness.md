@@ -67,7 +67,7 @@ event, webhook Event, and queued delivery. The test then redelivers the same
 intent and compares the durable rows. This checks join and webhook production,
 not provider-side leave or end operations, or HTTP delivery by the API worker.
 
-The source rules are `AGENTS.md` (Postgres authority), `README.md` (Durable
+The source rules are the root `AGENTS.md` (Postgres authority), `README.md` (Durable
 architecture and Lifecycle), and `../../../theory.md` (Sync authority).
 `Stateholder.Postgres.decide_command/2` places the acceptance and post-commit
 hooks around `run_decision_transaction/2`; `CommandPersistence.commit/5` puts
