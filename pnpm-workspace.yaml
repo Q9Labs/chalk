@@ -72,6 +72,7 @@ blockExoticSubdeps: false
 
 # Preserve the dependency scripts skipped by pnpm 10; keep strict build checks.
 allowBuilds:
+  "@ast-grep/cli": true
   tsc-rs: true
   "@parcel/watcher": false
   esbuild: false
