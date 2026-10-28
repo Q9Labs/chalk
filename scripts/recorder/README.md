@@ -182,6 +182,29 @@ Provider sessions, paid compute, buckets, and deployments are separate external
 effects. The qualification flag authorizes only the bounded non-production
 provider-connection case; it does not authorize provisioning or deployment.
 
+## Live audio recovery proof
+
+This proof exercises a missing-publication retry with two synthetic speakers
+through the real Cloudflare SFU and local test ports. It is not a deployed
+recording-pipeline proof. Use a disposable Linux checkout with FFmpeg, espeak-ng,
+Node, pnpm, and Go. Supply `CHALK_CLOUDFLARE_REALTIME_APP_ID`,
+`CHALK_CLOUDFLARE_REALTIME_APP_SECRET`, and `CHALK_RECORDING_AUDIO_FIXTURE_TENANT`
+for the dedicated non-production fixture without printing or committing them.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --filter @chalk/recording-renderer build
+export CHALK_RUN_LIVE_RECORDING_AUDIO_PROOF=1
+export CHALK_RECORDING_AUDIO_REPO="$PWD"
+export CHALK_RECORDING_AUDIO_PROOF_DIR="$(mktemp -d)"
+python3 scripts/recorder/audio-recovery-proof.py fixtures "$CHALK_RECORDING_AUDIO_PROOF_DIR"
+GOTOOLCHAIN=auto GOMAXPROCS=2 go -C apps/api test ./internal/recorderworker -run '^TestLiveRecordingAudioRecoversMissingPublication$' -count=1 -v
+python3 scripts/recorder/audio-recovery-proof.py measure "$CHALK_RECORDING_AUDIO_PROOF_DIR"
+```
+
+The measurement distinguishes both speakers' identifier tones in the final
+mixed audio. Remove the temporary proof directory after reviewing its output.
+
 ## Managed image release
 
 [Release, Nightly and Promote](../../docs/managed-release.md) own builds, pin

@@ -80,8 +80,7 @@ Replay that unchanged request to recover an Episode whose creation response
 was lost before your backend saved its ID.
 
 An active Episode with open admission accepts a collaborator before an owner
-joins. The absence of an owner is not an access-preparation error. See the
-[student-before-owner proof](proofs/student-first/README.md).
+joins. The absence of an owner is not an access-preparation error.
 
 ## Expose an access endpoint
 

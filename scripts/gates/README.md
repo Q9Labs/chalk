@@ -149,8 +149,8 @@ limits on the new runner without re-measuring them.
 
 `node scripts/gates/doclint.mjs` checks maintained Markdown/MDX for missing local
 links and literal repository paths, undeclared package scripts in package-manager commands, and retired runner
-guidance. Frozen proof directories, fixture/testdata documents, changesets, and
-changelogs are historical evidence, not maintained runbooks. Paths resolve from
+guidance. Fixture/testdata documents, changesets, and changelogs are not
+maintained runbooks. Paths resolve from
 the document or repository root. Examples must have an exact document/path entry
 and a reason in `doclint-examples.json`; do not allow whole directories.
 

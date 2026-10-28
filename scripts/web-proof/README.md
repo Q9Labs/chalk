@@ -43,3 +43,19 @@ failure screenshots and assertion details.
 The runner always attempts cleanup; the hosted workflow repeats cleanup after
 failure or cancellation with `pnpm prod:proof cleanup <run-id>`. Existing product
 retention keeps archived Space/Episode history. No recording starts in this test.
+
+## Student before owner
+
+`node scripts/web-proof/student-first.mjs` checks that a collaborator can join an
+active Episode before an owner, then receive the owner's video without a reload.
+It also checks Episode-creation idempotency using the server SDK. It does not
+cover application access preparation, account sign-in, or recordings.
+
+Run it on Instabox with the local stack ready, Chromium installed, and the server
+SDK built. Supply a local Tenant's key and ID through `CHALK_PROOF_API_KEY` and
+`CHALK_PROOF_TENANT_ID` without printing them. `CHALK_PROOF_API_URL`,
+`CHALK_PROOF_SYNC_URL`, and `CHALK_PROOF_WEB_URL` can override the local URLs;
+the script rejects non-loopback hosts. Results go to
+`.private/web-proof/student-first`, or `CHALK_STUDENT_FIRST_DIRECTORY` if set.
+The script closes its browsers, ends the Episode, and archives the Space; a
+cleanup failure fails the proof.
