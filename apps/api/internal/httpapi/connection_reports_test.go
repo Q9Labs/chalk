@@ -51,7 +51,8 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 	if got := send(connectionReportFixture, false); got != http.StatusUnauthorized {
 		t.Fatalf("anonymous: %d", got)
 	}
-	if got := send(connectionReportFixture, true); got != http.StatusNoContent {
+	mediaReport := strings.Replace(connectionReportFixture, `"code":"sync_start_failed"`, `"code":"media_start_failed","media_error_kind":"CloudflareSFUError","media_error_step":"sfu_tracks","http_status":503,"granted_audio":"granted","granted_video":"not_granted"`, 1)
+	if got := send(mediaReport, true); got != http.StatusNoContent {
 		t.Fatalf("report: %d", got)
 	}
 	participantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(verifier.subject.ParticipantID.String())))
@@ -74,6 +75,10 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 		if report.Events[1].CloseCode == nil || *report.Events[1].CloseCode != 1006 {
 			t.Fatal("missing close code")
 		}
+		failure := report.Events[2]
+		if failure.MediaErrorKind != "CloudflareSFUError" || failure.MediaErrorStep != "sfu_tracks" || failure.GrantedAudio != "granted" || failure.GrantedVideo != "not_granted" || failure.HTTPStatus == nil || *failure.HTTPStatus != 503 {
+			t.Fatal("missing bounded media cause in production log projection")
+		}
 		for _, expected := range []string{participantHash, verifier.subject.EpisodeID.String(), "0af7651916cd43dd8448eb211c80319c", `"trigger":"join_failed"`} {
 			if !strings.Contains(line, expected) {
 				t.Errorf("missing %s in %s", expected, line)
@@ -95,6 +100,10 @@ func TestConnectionReportRejectsUnboundedOrPrivateInput(t *testing.T) {
 	}{
 		{"unknown field", strings.Replace(connectionReportFixture, `"version":1`, `"version":1,"token":"private"`, 1), 400},
 		{"untrusted text", strings.Replace(connectionReportFixture, "sync_start_failed", "private@example.test", 1), 400},
+		{"private media kind", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","media_error_kind":"private@example.test"`, 1), 400},
+		{"private media step", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","media_error_step":"https://private.test/token"`, 1), 400},
+		{"private granted audio", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","granted_audio":"device label"`, 1), 400},
+		{"private granted video", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","granted_video":"device id"`, 1), 400},
 		{"unknown event", strings.Replace(connectionReportFixture, "sync_socket_close", "192.0.2.1", 1), 400},
 		{"version", strings.Replace(connectionReportFixture, `"version":1`, `"version":2`, 1), 400},
 		{"empty", `{"version":1,"trigger":"join_failed","events":[]}`, 400},

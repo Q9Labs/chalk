@@ -1,4 +1,5 @@
 import type { MediaPublicationSource } from "./plane";
+import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
 const SIGNALING_TIMEOUT_MS = 8000;
@@ -11,28 +12,37 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-    const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
-    if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
-    return withDeadline(timeoutMs, async (signal) => {
-      const startedAt = performance.now();
-      const response = await fetch(`${mediaPath}/${path}`, {
-        ...init,
-        signal,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}), ...init?.headers },
-      });
-      if (!response.ok) {
-        try {
-          options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
-        } catch {
-          /* Observers cannot interrupt signaling. */
-        }
-        throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
-          status: response.status,
-          retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
+    try {
+      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+      if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+      return await withDeadline(timeoutMs, async (signal) => {
+        const startedAt = performance.now();
+        const response = await fetch(`${mediaPath}/${path}`, {
+          ...init,
+          signal,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}), ...init?.headers },
+        }).catch((error: unknown) => {
+          markMediaFetchFailure(error);
+          throw error;
         });
-      }
-      return (await response.json()) as T;
-    });
+        if (!response.ok) {
+          try {
+            options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
+          } catch {
+            /* Observers cannot interrupt signaling. */
+          }
+          throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
+            status: response.status,
+            retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
+          });
+        }
+        return (await response.json()) as T;
+      });
+    } catch (error) {
+      const step = path === "publications" ? "sfu_publications" : path === "tracks/close" ? "sfu_close_tracks" : path === "renegotiate" ? "sfu_renegotiate" : "sfu_tracks";
+      markMediaFailure(error, step);
+      throw error;
+    }
   };
   return {
     addTracks: async (input) => {

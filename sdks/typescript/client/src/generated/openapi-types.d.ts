@@ -1358,8 +1358,16 @@ export interface components {
           | "sync_heartbeat_gap"
           | "media_state"
           | "media_http_error";
+        /** @enum {string} */
+        granted_audio?: "granted" | "not_granted" | "unknown";
+        /** @enum {string} */
+        granted_video?: "granted" | "not_granted" | "unknown";
         heartbeat_gap_ms?: number | null;
         http_status?: number | null;
+        /** @enum {string} */
+        media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
+        /** @enum {string} */
+        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications";
         /** @enum {string} */
         outcome?: "started" | "succeeded" | "failed" | "cancelled";
         /** @enum {string} */

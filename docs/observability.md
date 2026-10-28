@@ -171,6 +171,21 @@ the API can deploy before the SDK. A lifecycle attempt uses its fresh binding
 without an additional inner replacement; fast failures produce at most twelve
 replacement grants and track requests in the default foreground minute.
 
+Failed media acquisition/start spans and media recovery reports include
+`media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
+`network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
+`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`, or
+`sfu_publications`). SFU HTTP failures also carry `http_status` (400–599).
+`network` identifies a fetch rejection or browser NetworkError, not an arbitrary
+TypeError. `granted_audio` and `granted_video` are `granted`, `not_granted`, or
+`unknown`: live tracks returned by acquisition, regardless of mute state, not
+the requested intent. Fallback capture can grant only one kind. Before
+acquisition completes these fields are `unknown`. Recovery retains the original
+acquisition result, not a new permission query. Unclassified failures stay
+`unknown`; no raw error text is serialized.
+Deploy the API allowlist before shipping an SDK that emits these fields; older
+APIs reject unknown report fields.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync

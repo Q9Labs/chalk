@@ -10,6 +10,7 @@ import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTr
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
 import { stopStream, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
+import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
 import { ConnectionError, type ConnectionConnectionPhase, type ConnectionFailure, type ConnectionState } from "./types";
 // SFU negotiation can take 35s; the lifecycle waiting budget must not cancel its ownership.
@@ -171,6 +172,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const context = yield* Effect.context<ConnectionAccessService | ConnectionPlatformService | Clock.Clock>();
       const serviceScope = yield* Effect.scope;
       const reporter = platform.createConnectionReporter?.(access.currentUnsafe);
+      let grantedMedia: GrantedMedia = { granted_audio: "unknown", granted_video: "unknown" };
+      let mediaFailure: ConnectionDiagnostic["media"];
       const diagnostics = new ConnectionDiagnostics({
         now: () => clock.currentTimeMillisUnsafe(),
         ...options.diagnostics,
@@ -447,7 +450,13 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         const span = diagnostics.startSpan({ step, state: model.state, epoch: model.epoch });
         return effect.pipe(
           Effect.tap(() => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "succeeded" }))),
-          Effect.tapError((cause) => Effect.sync(() => span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failureFromCause(cause, "internal_error", "Connection step failed").code }))),
+          Effect.tapError((cause) =>
+            Effect.sync(() => {
+              const media = step === "acquire_initial_media" || step === "create_media_client" || step === "start_media" ? { ...classifyMediaFailure(cause, step === "acquire_initial_media" ? "local_capture" : "peer_connection"), ...grantedMedia } : undefined;
+              if (media) mediaFailure = media;
+              span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failureFromCause(cause, "internal_error", "Connection step failed").code, ...(media ? { media } : {}) });
+            }),
+          ),
         );
       };
       const confirmSyncEntry = (sync: ConnectionSyncClient): Effect.Effect<void, ConnectionLifecycleFailure> => {
@@ -459,6 +468,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (model.state === "live") return;
           if (model.state === "leaving" || model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Cannot join an inactive Connection"));
           model.epoch += 1;
+          grantedMedia = { granted_audio: "unknown", granted_video: "unknown" };
+          mediaFailure = undefined;
           model.failure = null;
           model.episodeEndConfirmed = false;
           model.episodeEndReason = undefined;
@@ -473,6 +484,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent));
             stream = captured.stream;
+            grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
@@ -698,7 +710,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     }
                     const code = plan.kind === "media" ? "media_recovery_exhausted" : "sync_recovery_exhausted";
                     const transport = model.sync?.getSnapshot().connection.recoveryDiagnostic ?? null;
-                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport });
+                    diagnostics.recordRecoveryExhausted({ state: model.state, epoch, code, attempts, transport, media: mediaFailure, grantedMedia });
                     if (plan.kind === "sync") {
                       yield* failForSnapshot(lifecycleFailure(code, true, "Connection lost. Rejoin to continue."));
                       return;
@@ -763,6 +775,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const finishRecovery = (attempt: number, epoch: number): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (model.epoch !== epoch || !active(model)) return;
+          mediaFailure = undefined;
           model.recoveryQueued = null;
           model.syncSnapshot = model.sync?.getSnapshot() ?? null;
           model.mediaSnapshot = model.media?.getSnapshot() ?? null;
@@ -825,7 +838,20 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           attempt.expiresAt = (yield* Clock.currentTimeMillis) + MEDIA_RECOVERY_TIMEOUT_MS;
           yield* foreign(() => media.restart(restartInput), "media_start_failed", "Media transport could not restart");
           yield* waitForMediaLive(media);
-        });
+        }).pipe(
+          Effect.tapError((cause) =>
+            Effect.sync(() => {
+              const step = cause.code === "access_unavailable" || cause.code === "invalid_access" ? "access_refresh" : "peer_connection";
+              const snapshotDiagnostic = cause.cause === undefined && step === "peer_connection" ? model.media?.getSnapshot().failure?.diagnostic : undefined;
+              mediaFailure = { ...(snapshotDiagnostic ?? classifyMediaFailure(cause, step)), ...grantedMedia };
+            }),
+          ),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              mediaFailure = undefined;
+            }),
+          ),
+        );
       const syncAttemptExpired = (attempt: SyncRecoveryAttempt, sync: ConnectionSyncClient, now: number): boolean => {
         if (attempt.client !== sync) {
           attempt.client = sync;
@@ -946,7 +972,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const mediaNeedsRecovery = (snapshot: ConnectionMediaSnapshot): boolean => active(model) && (snapshot.connection.phase === "recovering" || (snapshot.connection.phase === "failed" && snapshot.failure?.recoverable === true));
       const recordFailure = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.sync(() => {
-          diagnostics.record({ event: "connection_failed", state: model.state, epoch: model.epoch, code: failure.code, ...(failure.sync ? { sync: failure.sync } : {}) });
+          diagnostics.record({ event: "connection_failed", state: model.state, epoch: model.epoch, code: failure.code, ...(failure.sync ? { sync: failure.sync } : {}), ...(mediaFailure ? { media: mediaFailure } : {}) });
         });
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* failForSnapshotEffect() {
@@ -987,7 +1013,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               "media_start_failed",
               "The media client could not apply a replacement access grant",
             ).pipe(
-              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish")),
+              (effect) => withinForegroundBudget(effect, MEDIA_RECOVERY_TIMEOUT_MS, lifecycleFailure("media_start_failed", true, "Automatic media replacement did not finish", new CloudflareSFUError("Automatic media replacement deadline expired", "negotiation_timeout"))),
+              Effect.tapError((cause) =>
+                Effect.sync(() => {
+                  mediaFailure = { ...classifyMediaFailure(cause, "peer_connection"), ...grantedMedia };
+                }),
+              ),
               Effect.match({ onSuccess: () => true, onFailure: () => false }),
               Effect.flatMap((restarted) =>
                 enqueue(

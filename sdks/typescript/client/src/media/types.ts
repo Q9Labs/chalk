@@ -77,6 +77,7 @@ export type CloudflareSFUSnapshot = {
   readonly failure: {
     readonly code: CloudflareSFUFailureCode;
     readonly recoverable: boolean;
+    readonly diagnostic?: import("./failure-diagnostics").MediaFailureDiagnostic;
   } | null;
 };
 export type CloudflareSFUClientOptions = {

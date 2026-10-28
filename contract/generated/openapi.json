@@ -12877,6 +12877,14 @@
                   ],
                   "type": "string"
                 },
+                "granted_audio": {
+                  "enum": ["granted", "not_granted", "unknown"],
+                  "type": "string"
+                },
+                "granted_video": {
+                  "enum": ["granted", "not_granted", "unknown"],
+                  "type": "string"
+                },
                 "heartbeat_gap_ms": {
                   "maximum": 2147483647,
                   "minimum": 0,
@@ -12886,6 +12894,14 @@
                   "maximum": 599,
                   "minimum": 400,
                   "type": ["integer", "null"]
+                },
+                "media_error_kind": {
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"],
+                  "type": "string"
+                },
+                "media_error_step": {
+                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"],
+                  "type": "string"
                 },
                 "outcome": {
                   "enum": ["started", "succeeded", "failed", "cancelled"],
