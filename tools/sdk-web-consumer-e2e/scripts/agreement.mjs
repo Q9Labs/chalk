@@ -133,6 +133,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await wait(10_500);
       const snapshot = await pages[0].evaluate(() => window.__chalk.snapshot());
       assert.notEqual(snapshot.state, "failed", "Healthy Sync must not become terminal after the media retry budget");
+      assert.notEqual(snapshot.failure?.code, "connection.media_recovery_exhausted", "Media recovery gave up before the foreground recovery budget");
       // A successful collaboration roundtrip proves Sync was not dropped too.
       const message = await invoke(pages[0], "sendChatMessage", { text: "Sync alive during media recovery" });
       await pages[1].waitForFunction((id) => window.__chalk.snapshot().chat.messages.some((item) => item.clientMessageId === id), message.clientMessageId);
@@ -141,6 +142,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await enabledCapture(pages);
       await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
       assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
+      assert.equal((await pages[0].evaluate(() => window.__chalk.connectionErrorHistory())).includes("connection.media_recovery_exhausted"), false, "Media recovery exhausted early, even if a later background attempt succeeded");
     });
   for (const status of [401, 403])
     await scenario(`Current SFU ${status} during recovery is terminal and truthful`, async (pages, open) => {
@@ -148,7 +150,7 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await dropMedia();
       await waitForState(pages[0], "failed", recoveryTimeoutMs);
       const failed = await pages[0].evaluate(() => window.__chalk.snapshot());
-      assert.equal(failed.failure?.code, "invalid_access");
+      assert.equal(failed.failure?.code, "access.invalid");
       for (const source of ["microphone", "camera"]) assert.notEqual(failed.localMedia[source].state, "enabled");
       await pages[0].getByRole("heading", { name: "Connection lost", exact: true }).waitFor();
       assert.equal(await pages[0].getByRole("button", { name: "Mute microphone", exact: true }).count(), 0);
