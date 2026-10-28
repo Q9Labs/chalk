@@ -18,6 +18,12 @@ const children = [], servers = [], browsers = [];
 const rows = [], events = [];
 let active, asset;
 function emit(event) { events.push({ at: new Date().toISOString(), ...event }); console.log(JSON.stringify(event)); }
+for(const [signal,code]of [['SIGINT',130],['SIGTERM',143]])process.once(signal,()=>{
+  emit({interrupted:signal});
+  for(const proc of children){try{process.kill(-proc.pid,'SIGTERM');}catch{}}
+  setTimeout(()=>process.exit(code),5000).unref();
+  void Promise.allSettled(browsers.map(browser=>browser.close())).then(()=>process.exit(code));
+});
 async function request(path, body, method = 'POST') {
   const response = await fetch(apiURL + path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await response.text();
