@@ -89,15 +89,16 @@ function mediaQueries() {
   const matchMedia = vi.fn((query: string): MediaQueryList => {
     const existing = lists.get(query);
     if (existing) return existing;
-    const list: MediaQueryList = Object.assign(new EventTarget(), {
-      media: query,
+    class QueryList extends EventTarget implements MediaQueryList {
+      readonly media = query;
+      onchange: MediaQueryList["onchange"] = null;
       get matches() {
         return values.get(query) ?? false;
-      },
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-    });
+      }
+      addListener() {}
+      removeListener() {}
+    }
+    const list = new QueryList();
     lists.set(query, list);
     return list;
   });
