@@ -79,7 +79,7 @@ the app deployed.
 git diff --check
 ```
 
-9. Stage only the release diff with `git add -p`, then run the selected gate once:
+8. Stage the release changes, then run the selected gate once:
 
 ```bash
 pnpm run gate
@@ -91,8 +91,8 @@ always use the automatic command because they change both platform lanes,
 release tooling, and lock data. They never infer a web target. If target
 validation refuses the change, run the command in its `Run instead:` line.
 
-10. Commit the passing staged diff. Fetch `origin/master` again and stop if it moved. Rebase the release on the new revision and rerun the gate only if the release inputs changed.
-11. Push the exact release commit to `master`, then store its full SHA:
+9. Commit the passing staged diff. Fetch `origin/master` again and stop if it moved. Rebase the release on the new revision and rerun the gate only if the release inputs changed.
+10. Push the exact release commit to `master`, then store its full SHA:
 
 ```bash
 RELEASE_SHA="$(git rev-parse HEAD)"

@@ -6,6 +6,8 @@ out
 dist
 *.tgz
 /artifacts/
+/docs/proofs/
+/apps/api/tests/proofs/
 
 # Code coverage
 coverage

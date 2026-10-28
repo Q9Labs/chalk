@@ -45,7 +45,7 @@ const pnpmCommands = new Set([
 ]);
 const examples = JSON.parse(readFileSync(path.join(root, "scripts/gates/doclint-examples.json"), "utf8"));
 // Frozen evidence and release notes are history, not maintained runbooks.
-const docs = files.filter((file) => /\.(md|mdx)$/.test(file) && !/^(?:scratchpad\/|docs\/proofs\/|\.changeset\/)|(?:^|\/)(?:CHANGELOG\.md|testdata\/|fixtures\/)/.test(file));
+const docs = files.filter((file) => /\.(md|mdx)$/.test(file) && !/^(?:scratchpad\/|\.changeset\/)|(?:^|\/)(?:CHANGELOG\.md|testdata\/|fixtures\/)/.test(file));
 let errors = 0;
 function fail(file, line, message) {
   console.error(`${file}:${line}: ${message}`);
