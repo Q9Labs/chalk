@@ -54,7 +54,7 @@ const pages = [];
 const report = { stack: "local API + Sync, dedicated development Cloudflare SFU", assertions: [] };
 const browserBundle = await build({
   stdin: {
-    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: () => window.proofAccess()}, {syncUrl}); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
+    contents: `import { createSpaceClientForPlatform } from './sdks/typescript/client/src/effect.ts'; window.joinProof = async (space, baseUrl, syncUrl, name) => { window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: context => window.proofAccess(context)}, {syncUrl}); await window.client.join({displayName:name, microphone:true, camera:false}); };`,
     resolveDir: root,
     sourcefile: "slow-link-proof.ts",
   },
@@ -82,7 +82,7 @@ try {
   await once(server, "listening");
   report.stage = "join two development participants";
   for (let index = 0; index < 2; index++) {
-    const admission = await chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" });
+    let admission = await chalk.participants.admit(space.id, episode.id, { name: `Slow link ${index}`, role: "owner" });
     let grant = admission.access;
     let first = true;
     let accessQueue = Promise.resolve();
@@ -134,13 +134,18 @@ try {
         }
       });
     });
-    await page.exposeFunction("proofAccess", () => {
+    await page.exposeFunction("proofAccess", request => {
       const next = accessQueue.then(async () => {
         if (first) {
           first = false;
           return grant;
         }
-        grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant));
+        if (request.reason === "join") {
+          admission = await chalk.participants.admit(space.id, episode.id, {name:`Slow link ${index}`,role:"owner"});
+          grant = admission.access;
+        } else {
+          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), request);
+        }
         return grant;
       });
       accessQueue = next.catch(() => undefined);
@@ -218,7 +223,12 @@ try {
   report.result = failures.length === 0 && final.every(s => s.connection.status === "live" && !s.connection.failure) ? "passed" : "failed";
   await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
   assert.equal(report.result,"passed");
+} catch (error) {
+  report.result = "failed";
+  report.error = error.message;
+  throw error;
 } finally {
+  await writeFile(`${output}/report.json`, JSON.stringify(report,null,2));
   for (const dev of tcDevices) execFileSync("sudo", ["tc","qdisc","del","dev",dev,"root"], {stdio:"ignore"});
   for (const browser of browsers) await browser.close();
   if (episode && chalk) await chalk.episodes.end(space.id, episode.id).catch(error => console.error(error.message));
