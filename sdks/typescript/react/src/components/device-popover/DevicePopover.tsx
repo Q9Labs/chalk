@@ -223,7 +223,7 @@ export function DevicePopover({
       {warning ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
-          <span className="sr-only">{mic ? "Microphone" : "Camera"} unavailable. Try turning it on again.</span>
+          <span className="sr-only">{mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.</span>
         </span>
       ) : null}
       {busy ? (

@@ -230,6 +230,7 @@ export function useControlBarSurfaceBehavior({
 interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
+  readonly mediaNotice?: string;
   readonly commandSource?: MediaCommandSource;
   readonly commandAction?: MediaCommandAction;
 }
@@ -400,5 +401,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  return { surfaceProps, commandError, commandSource, commandAction };
+  return { surfaceProps, commandError, commandSource, commandAction, mediaNotice: failedMediaNotice(media.local) };
+}
+
+function failedMediaNotice(media: ReturnType<typeof useMedia>["local"]): string | undefined {
+  if (media.microphone.state === "failed") return "Microphone didn’t reach the call. Turn it on to try again.";
+  if (media.camera.state === "failed") return "Camera didn’t reach the call. Turn it on to try again.";
+  return undefined;
 }
