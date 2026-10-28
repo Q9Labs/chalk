@@ -7,11 +7,10 @@ env vars, span names, stack names. Vendored standard terms (WebRTC "track",
 CallKit, Cloudflare SFU vocabulary) stay foreign and are translated at adapter
 seams.
 
-Provenance: the rulings behind every entry, with reasoning and rejected
-candidates, are in git history:
-`git show 3f6d94f9:scratchpad/history/2026-W32.md`. The
-superseded SDK vocabulary document (sdks/ubiquitous-language.md) is deleted; its UI shape catalog
-remains in git history as input for the React-wave design sheet. Space and Episode remain the names used in code, API contracts and UI.
+Vocabulary decisions and their rationale are in git history:
+`git show 3f6d94f9:scratchpad/history/2026-W32.md`.
+
+Space and Episode are the names used in code, API contracts, and UI.
 Everyday words such as call, meeting, host, room, lobby and session are allowed
 in user-facing copy when they help people understand the product. There is no
 CI word ban or banned-term baseline.
@@ -46,8 +45,8 @@ dashboard context is unambiguous.
 **Tenant access** is a Dashboard Account's assignment to a Tenant, including its
 control-plane Role. It is not Space membership and never makes the Account a
 Space Member or Episode Participant. The existing `memberships` persistence and
-route names are legacy implementation vocabulary; customer-facing contracts use
-Tenant access until that storage rename wave lands.
+route names are implementation vocabulary; customer-facing contracts use
+Tenant access.
 
 ### Space
 
@@ -248,7 +247,7 @@ The React Native SDK retains its device-preparation Entrance.
 The public client SDK entry: flat lifecycle (`join`/`leave`/`subscribe`/
 `getSnapshot`, `endEpisode`/`extendEpisode`) plus namespaced controllers
 `media`, `chat`, `participants`, `reactions`, `whiteboard` (chat files
-under `chat.files`). Replaces ChalkSession. Internally a `Connection`
+under `chat.files`). Internally a `Connection`
 coordinator owns the state machine, recovery, and access refresh; one
 `SpaceSnapshot` store feeds every UI layer. Framework-agnostic; React and
 React Native bind to the store, never to Effect internals.
@@ -257,7 +256,7 @@ React Native bind to the store, never to Effect internals.
 
 The opaque signed envelope the customer's backend receives from the
 server SDK and forwards to the client verbatim: sync token, media token,
-participant identity, expirations. Replaces ParticipantAccess. Customers
+participant identity, expirations. Customers
 never construct or inspect it; the client's `getAccess` callback returns
 it and Connection manages its refresh.
 
@@ -302,22 +301,10 @@ adapter (`CloudflareMediaPlaneAdapter`), reached through the HTTPS API at
 - The `CHALK_CLOUDFLARE_REALTIME_*` environment variables hold Cloudflare SFU
   app credentials despite the family name.
 
-## The internal "sessions", resolved
+## Episode control stream
 
-These internal abstractions have distinct names so their responsibilities stay clear:
-
-| Old name                      | True name                                                                  |
-| ----------------------------- | -------------------------------------------------------------------------- |
-| Go `sessionlifecycle`         | Episode-named lifecycle package                                            |
-| RN `ClientSession`            | Dies, no successor — its duties are Connection's access loop + AccessGrant |
-| Elixir `Live.Session`         | `Live.Episode`                                                             |
-| Elixir `Sessions.Coordinator` | `Episodes.Coordinator`                                                     |
-
-The Elixir rename is Episode-rooted throughout: `Sessions.Reducer` →
-`Episodes.Reducer`, `Sessions.CommandAdmission` → `Episodes.CommandIntake`
-(ending the collision with participant admission), `Stateholder.SessionKey`
-→ `Stateholder.EpisodeKey`. The control stream is per-Episode: fresh each
-run, continued across a blip-rejoin within the linger window.
+The control stream is per Episode. It starts fresh for each Episode and
+continues across a blip-rejoin within the linger window.
 
 ## Laws
 
@@ -355,9 +342,7 @@ Every name is a domain root crossed with a layer shape:
   states the shape; the prefix states the subject.
 - No `Chalk` prefix on symbols anywhere: the package is the namespace.
   Case-by-case exception only for Go/Elixir internals with real collisions.
-- Protocol versioning restarts honestly: the sync protocol is v1 (the former
-  v3 renumbered; legacy v1 and the never-shipped "v2" are deleted), and
-  `state_schema_version` is 1.
+- The sync protocol is v1, and `state_schema_version` is 1.
 
 ## Legacy domain names
 
@@ -369,8 +354,6 @@ Every name is a domain root crossed with a layer shape:
 | VideoConference           | Replaced by `<Chalk />`                            |
 | breakout, huddle          | Banned; the branch-off concept is a Spinoff        |
 | ring (as a summons)       | Banned as a domain word; the summons is a Buzz     |
-| ParticipantAccess         | Replaced by AccessGrant                            |
-| ChalkSession              | Replaced by SpaceClient                            |
 
 These mappings describe domain concepts, not forbidden words in user-facing
 copy. Product-layer features may carry their own names.
