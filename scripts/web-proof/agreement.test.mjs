@@ -17,6 +17,16 @@ test("a ready but frozen camera is not received video proof", () => {
   assert.equal(agreementIssues(pair({ stale: true }), pair({ stale: true })).filter((issue) => issue.includes("frames")).length, 2);
 });
 
+test("the Linux WebKit frame exception preserves microphone, camera projection, badge and control checks", () => {
+  const before = pair({ stale: true });
+  const after = pair({ stale: true, silent: true });
+  after[0].controls = { microphone: false, camera: true };
+  after[1].participants[0].camera = false;
+  after[1].participants[0].badgeCamera = false;
+  assert.deepEqual(agreementIssues(before, after, { checkCameraFrames: false }), ["a microphone: own button disagrees with SDK state", "a microphone: b playback energy 0", "a camera: local enabled, b projection false", "a camera: b badge disagrees"]);
+  assert.equal(agreementIssues(before, pair({ stale: true })).filter((issue) => issue.includes("frames")).length, 2, "Frame checks remain the default for macOS WebKit and Chromium");
+});
+
 test("SFU On and muted Sync badges reproduce the split authority failure", () => {
   const split = pair({ badge: false });
   assert.equal(truthIssues(split).length, 2);
