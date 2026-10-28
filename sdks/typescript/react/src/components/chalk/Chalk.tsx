@@ -230,7 +230,20 @@ function SpaceExperience(
   if (connection.status === "failed" && connection.lastError?.code === "episode.ended")
     return <StatusSurface phase="episode-ended" callName={callName} episodeEndReason={connection.episodeEndReason} endAction={props.timeLimit?.endAction} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
   if (connection.status === "failed") {
-    return <StatusSurface phase="failed" callName={callName} errorCode={connection.lastError?.code} sync={connection.lastError?.sync} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} onRetry={retryAutomaticJoin} retryPending={retryPending} />;
+    return (
+      <StatusSurface
+        phase="failed"
+        callName={callName}
+        errorCode={connection.lastError?.code}
+        reason={connection.lastError?.code === "access.invalid" ? connection.lastError.message : undefined}
+        sync={connection.lastError?.sync}
+        theme={statusTheme}
+        onHome={props.onHome}
+        onReportProblem={props.onOpenReport}
+        onRetry={retryAutomaticJoin}
+        retryPending={retryPending}
+      />
+    );
   }
   if (connection.status === "leaving" || connection.status === "left")
     return (

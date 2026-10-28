@@ -6,6 +6,7 @@ import { opaqueAccessGrant } from "../../../../client/src/space-client/core.test
 import { createSpaceClientForPlatform } from "../../../../client/src/space-client/space-client";
 import { control, terminalTestPlatform } from "../../../../client/src/space-client/terminal.test.helpers";
 import { Chalk } from "./Chalk";
+import { CloudflareSFUError } from "../../../../client/src/media";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -16,6 +17,46 @@ vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialo
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("Chalk terminal callbacks with a real SpaceClient", () => {
+  it("displays explicit-rejoin guidance for rejected startup media without refreshing access", async () => {
+    const platform = terminalTestPlatform();
+    const getAccess = vi.fn(async () => opaqueAccessGrant(1));
+    const client = createSpaceClientForPlatform(
+      { space: "test", getAccess },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          createMediaClient: (input) => ({
+            ...platform.dependencies.createMediaClient(input),
+            start: async () => {
+              throw new CloudflareSFUError("startup access rejected", "signaling_failed", { status: 403 });
+            },
+          }),
+        },
+      },
+    );
+    const onError = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onError={onError} />));
+      await act(async () => {
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("failed"));
+      });
+      expect(client.getSnapshot().connection.lastError).toMatchObject({ code: "access.invalid", recoverable: false });
+      expect(getAccess).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith({ error: expect.objectContaining({ code: "access.invalid", recoverable: false }) });
+      expect(container.textContent).toContain("Rejoin explicitly to request access again.");
+      expect(container.textContent).toContain("Reference: access.invalid");
+      expect(container.textContent).not.toContain("Audio and video could not connect");
+    } finally {
+      await act(async () => root.unmount());
+      client.dispose();
+      container.remove();
+    }
+  });
+
   it("offers terminal reporting only after leave settles, so cleanup cannot discard an opened form", async () => {
     const platform = terminalTestPlatform();
     const departure = Promise.withResolvers<void>();

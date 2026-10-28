@@ -1,7 +1,7 @@
 import { formatSyncConnectDiagnostic, syncConnectFailureCode } from "../sync/connect-diagnostics";
 import { scheduleForegroundDeadline } from "../foreground-deadline";
 import { Clock, Context, Data, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, SubscriptionRef } from "effect";
-import type { ConnectionMediaSnapshot } from "../media";
+import { CloudflareSFUError, type ConnectionMediaSnapshot } from "../media";
 import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
@@ -513,7 +513,15 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               [
                 trace(
                   "start_media",
-                  model.startInitialMedia ? model.startInitialMedia(media, stream!).pipe(Effect.mapError((cause) => lifecycleFailure("media_start_failed", true, "The media layer could not start", cause))) : foreign(() => media.start(stream!), "media_start_failed", "The media layer could not start"),
+                  (model.startInitialMedia ? model.startInitialMedia(media, stream!) : Effect.tryPromise({ try: () => media.start(stream!), catch: (cause) => cause })).pipe(
+                    Effect.mapError((cause) =>
+                      sfuAccessRejected(cause)
+                        ? lifecycleFailure("invalid_access", false, "Media access was rejected. Another tab or device may be using it. Rejoin explicitly to request access again.", cause)
+                        : model.startInitialMedia
+                          ? lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)
+                          : failureFromCause(cause, "media_start_failed", "The media layer could not start"),
+                    ),
+                  ),
                 ),
                 trace(
                   "start_sync",
@@ -539,7 +547,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
                   }
                   span.end({ state: model.state, epoch: model.epoch, outcome: "failed", code: failure.code });
-                  const retry = !retried && failure.code === "invalid_access";
+                  const retry = !retried && failure.code === "invalid_access" && !sfuAccessRejected(failure.cause);
                   if (!retry) yield* recordFailure(failure);
                   model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
@@ -1236,6 +1244,9 @@ function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: s
   if (cause instanceof DOMException && cause.name === "NotAllowedError") return lifecycleFailure("permission_denied", true, "Media permission was denied", cause);
   return lifecycleFailure(code, true, message, cause);
 }
+function sfuAccessRejected(cause: unknown): boolean {
+  return cause instanceof CloudflareSFUError && (cause.options.status === 401 || cause.options.status === 403);
+}
 function accessRejected(cause: unknown): boolean {
   return cause instanceof ConnectionError
     ? cause.code === "invalid_access"
@@ -1277,6 +1288,7 @@ function syncTerminalFailure(snapshot: V1EpisodeSnapshot): ConnectionLifecycleFa
   const reason = snapshot.connection.terminalReason;
   if (reason === "state_digest_recovery_failed") return lifecycleFailure("state_digest_recovery_failed", false, "The Episode state could not be recovered from an authoritative snapshot");
   if (reason === "episode_ended") return lifecycleFailure("episode_ended", false, "The Episode has ended");
+  if (reason === "stale_participant_generation") return lifecycleFailure("invalid_access", false, "Call access was replaced. Another tab or device may be using it. Rejoin explicitly to request access again.");
   if (reason === "participant_inactive" || reason === "participant_removed" || reason === "stale_participant_generation" || reason === "access_rejected") return lifecycleFailure("invalid_access", false, "Participant access is no longer valid");
   if (reason === "entry_timeout") return lifecycleFailure("sync_start_failed", true, "Call entry was not confirmed in time");
   return lifecycleFailure("sync_start_failed", true, "The Sync transport needs recovery");

@@ -6,6 +6,8 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
+import { createCloudflareSFUHTTPTransport } from "../media";
+import { streamFromTracks } from "./media-devices";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -258,6 +260,99 @@ function rejectFirstAccess(platform: ReturnType<typeof createCoreTestPlatform>) 
 }
 
 describe("failed join admission cleanup", () => {
+  it.each([
+    { status: 401, initialStarter: false },
+    { status: 403, initialStarter: false },
+    { status: 401, initialStarter: true },
+    { status: 403, initialStarter: true },
+  ])("requires explicit rejoin after rejected media access ($status, initialStarter=$initialStarter)", async ({ status, initialStarter }) => {
+    const platform = createCoreTestPlatform();
+    const requests: string[] = [];
+    let mediaRequests = 0;
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "http://localhost:8080",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      episodeId: "episode-1",
+      participantId: "participant-1",
+      credential: async () => "fixture",
+      fetch: async () => (++mediaRequests === 1 ? new Response(null, { status }) : Response.json({ incarnation: 1, sequence: 0, publications: [] })),
+    });
+    const layer = admissionLayer({
+      access: async ({ reason }) => {
+        requests.push(reason);
+        return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async () => false,
+        createMediaClient: (input) => {
+          const media = platform.dependencies.createMediaClient(input);
+          return {
+            ...media,
+            start: async (stream) => {
+              await transport.listPublications();
+              await media.start(stream);
+            },
+          };
+        },
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        if (initialStarter)
+          yield* lifecycle.setInitialMedia(
+            () => Effect.succeed(streamFromTracks([])),
+            undefined,
+            (media, stream) => Effect.tryPromise({ try: () => media.start(stream), catch: (cause) => cause }),
+          );
+        const result = yield* Effect.exit(lifecycle.join());
+        expect(result._tag).toBe("Failure");
+        expect(requests).toEqual(["join"]);
+        expect(mediaRequests).toBe(1);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Rejoin explicitly") } });
+      }),
+    );
+  });
+
+  it.each([401, 403, 503])("does not refresh rejected media access and preserves other startup failures (HTTP %s)", async (status) => {
+    const platform = createCoreTestPlatform();
+    const requests: string[] = [];
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "http://localhost:8080",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      episodeId: "episode-1",
+      participantId: "participant-1",
+      credential: async () => "fixture",
+      fetch: async () => new Response(null, { status }),
+    });
+    const layer = admissionLayer({
+      access: async ({ reason }) => {
+        requests.push(reason);
+        return parseParsedAccessGrant(opaqueAccessGrant(requests.length));
+      },
+      dependencies: {
+        ...platform.dependencies,
+        cancelPendingAdmission: async () => false,
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          start: async () => {
+            await transport.listPublications();
+          },
+        }),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.exit(lifecycle.join());
+        expect(result._tag).toBe("Failure");
+        expect(requests).toEqual(["join"]);
+        expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: status === 503 ? "media_start_failed" : "invalid_access", recoverable: status === 503 } });
+      }),
+    );
+  });
+
   it("re-admits a cancelled seat instead of trying to refresh it after access rejection", async () => {
     const platform = createCoreTestPlatform();
     const grant = parseParsedAccessGrant(opaqueAccessGrant(1));

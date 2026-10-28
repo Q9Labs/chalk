@@ -63,6 +63,49 @@ afterEach(() => {
 });
 
 describe("public client startup failure contract", () => {
+  it("starts a fresh join after unconfirmed Leave while the old join is blocked in Sync persistence", async () => {
+    await liveBrowser();
+    let release: () => void = () => {};
+    const persistence = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const store = new InMemoryV1PendingTargetStore();
+    const put = vi.spyOn(store, "put").mockImplementation(async () => {
+      await persistence;
+    });
+    const getAccess = vi.fn(async () => accessGrant());
+    const client = createSpaceClientForPlatform(
+      { space: "test", baseUrl: "http://localhost:8080", getAccess },
+      {
+        dependencies: {
+          cancelPendingAdmission: async () => false,
+          createSyncClient: (input) => {
+            const sync = createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: store });
+            vi.spyOn(sync, "leave").mockRejectedValue(new Error("lost Leave acknowledgement"));
+            return sync;
+          },
+        },
+      },
+    );
+    const first = client.join({ microphone: false, camera: false, displayName: "First" }).catch((cause: unknown) => cause);
+    let second: Promise<unknown> | undefined;
+    try {
+      await vi.waitFor(() => expect(put).toHaveBeenCalledOnce());
+      expect(client.getSnapshot().connection.status).toBe("live");
+      await expect(client.leave()).rejects.toMatchObject({ code: "connection.leave_unconfirmed" });
+      expect(client.getSnapshot().connection.status).toBe("left");
+      second = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(2));
+      expect(await second).toBeUndefined();
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      release();
+      await first;
+      await second;
+    }
+  });
+
   it("joins after a stalled upgrade and a slow replacement without a manual retry", async () => {
     const sockets = await liveBrowser(false, { stallFirstUpgrade: true, upgradeDelayMs: 8000 });
     vi.useFakeTimers();
