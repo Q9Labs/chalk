@@ -134,8 +134,10 @@ Capture terminal failure does not establish that all source is unrecoverable:
 the completion recovery path can retain source. Therefore no complete video is
 promised; an engineer checks recoverability immediately. Export and transcript
 messages require checking the actual source expiry, not an invented deadline.
-These changes have not been sent to production Discord; receipt and Axiom's
-runtime template rendering require the lead's staged delivery proof.
+As of 2026-10-11, these template changes had not been sent to production Discord;
+receipt and Axiom's runtime rendering required staged delivery proof. See the
+[tracker](../../../tracker.yaml) for current alert-delivery work; this note does
+not establish the current production state.
 
 ## Tenant attribution (separate commit)
 
