@@ -11,7 +11,7 @@ These packages are public. Keep their APIs, compatibility, and examples understa
 
 ## React and styling
 
-- Avoid effects when rendering, event handling, or an external-store subscription is the better fit. The SDK Semgrep rule requires a reasoned exception for each `useEffect`.
+- Avoid effects when rendering, event handling, or an external-store subscription is the better fit. The SDK Semgrep rule flags `useEffect`; justify any suppression.
 - Preserve accessible names, keyboard behavior, and visible focus. Use the existing theme tokens; the React and React Native package lint scripts check their token rules.
 
 ## Verification
