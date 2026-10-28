@@ -35,7 +35,11 @@ call. The student is muted with its camera off during background; another tab
 in its own window hides it. CDP `noDefaults` avoids forcing it visible. This
 tests real background behaviour, not a synthetic freeze or an accelerated
 clock. It does not claim an active WebRTC connection enters intensive timer
-throttling. C4/C5 use Chromium network-offline emulation, not a physical Wi-Fi
-adapter or a particular ISP. C6 uses distinguishable tones rather than speech
+throttling. C4 uses Chromium network-offline emulation. C5 additionally drops
+the student's non-loopback traffic and local stack TCP traffic with a Linux
+process-group firewall rule, including SFU/UDP traffic that DevTools does not
+block. It needs root, `setpriv` and `iptables`; rules are removed in `finally`.
+Neither test exercises a physical Wi-Fi adapter or a particular ISP.
+C6 uses distinguishable tones rather than speech
 recognition; it checks audio received both ways and advancing decoded video
 and restarted-share frames. C8/PC/ISP comparisons remain outside this suite.

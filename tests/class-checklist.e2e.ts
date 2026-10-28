@@ -2,7 +2,8 @@ import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import { join as joinPath } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -10,6 +11,7 @@ import { webMediaFixture, incomingAudioLevel } from "../scripts/web-proof/media.
 
 const output = process.env.CHALK_CLASS_OUTPUT ?? ".private/class-checklist";
 const names = ["Teacher", "Student", "Admin"];
+const command = promisify(execFile);
 const tiles = (page: Page) => page.getByRole("button", { name: /^Video tile for / });
 const tile = (page: Page, name: string) => page.getByRole("button", { name: `Video tile for ${name}`, exact: true });
 
@@ -57,7 +59,11 @@ async function classroom(check: (pages: Page[], contexts: BrowserContext[]) => P
       // so CDP never forces a hidden student visible or disables timer throttling.
       const profile = await mkdtemp(joinPath(tmpdir(), "chalk-class-"));
       profiles.push(profile);
-      const process = spawn(chromium.executablePath(), ["--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--window-size=1440,960", "--autoplay-policy=no-user-gesture-required", "about:blank"], { stdio: ["ignore", "ignore", "pipe"] });
+      const process = spawn(
+        "setpriv",
+        [`--rgid=${20000 + index}`, `--egid=${20000 + index}`, "--clear-groups", chromium.executablePath(), "--no-sandbox", "--disable-dev-shm-usage", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--window-size=1440,960", "--autoplay-policy=no-user-gesture-required", "about:blank"],
+        { stdio: ["ignore", "ignore", "pipe"] },
+      );
       processes.push(process);
       const endpoint = await new Promise<string>((resolve, reject) => {
         let stderr = "";
@@ -151,13 +157,29 @@ async function drop(student: Page, context: BrowserContext, duration: number, pa
   await student.bringToFront();
   expect(await student.evaluate(() => document.visibilityState)).toBe("visible");
   await context.setOffline(true);
+  // C5 models Wi-Fi loss, including established SFU/UDP traffic. Chromium's
+  // DevTools offline mode alone does not cut WebRTC. Restrict only this role's
+  // process group, retaining loopback CDP so the visible tab remains controllable.
+  const rules =
+    duration === 140_000
+      ? [
+          ["-m", "owner", "--gid-owner", "20001", "!", "-d", "127.0.0.0/8", "-j", "DROP"],
+          ["-m", "owner", "--gid-owner", "20001", "-p", "tcp", "-m", "multiport", "--dports", "3070,8080,4100", "-j", "DROP"],
+        ]
+      : [];
+  const installed: string[][] = [];
   try {
+    for (const rule of rules) {
+      await command("iptables", ["-I", "OUTPUT", ...rule]);
+      installed.push(rule);
+    }
     await wait(duration);
     await student.getByRole("heading", { name: "Connection lost", exact: true }).waitFor({ timeout: 1000 });
     expect(await student.getByRole("button", { name: "Rejoin", exact: true }).count()).toBe(1);
     expect(await tiles(student).count()).toBe(0);
     await student.screenshot({ path: `${output}/offline-${duration}.png` });
   } finally {
+    for (const rule of installed.reverse()) await command("iptables", ["-D", "OUTPUT", ...rule]);
     await context.setOffline(false);
   }
   await rejoin(student, pages);
