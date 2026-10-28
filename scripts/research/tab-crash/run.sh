@@ -19,7 +19,7 @@ pnpm install --frozen-lockfile > "$task_dir/install.log" 2>&1
 pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium > "$task_dir/browser-install.log" 2>&1
 mkdir -p "$task_dir/published"
 printf '{"private":true,"type":"module"}\n' > "$task_dir/published/package.json"
-pnpm --dir "$task_dir/published" --ignore-workspace add @q9labsai/chalk-react@5.2.0 @q9labsai/chalk-client@5.2.0 @q9labsai/chalk-whiteboard@5.2.0 react@19.2.7 react-dom@19.2.7 > "$task_dir/published-install.log" 2>&1
+pnpm --dir "$task_dir/published" --ignore-workspace add --ignore-scripts @q9labsai/chalk-react@5.2.0 @q9labsai/chalk-client@5.2.0 @q9labsai/chalk-whiteboard@5.2.0 react@19.2.7 react-dom@19.2.7 > "$task_dir/published-install.log" 2>&1
 docker run -d --name chalk-tab-crash-pg -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chalk_crash postgres:18 > /dev/null
 docker run -d --name chalk-tab-crash-redis -p 6379:6379 redis:7-alpine > /dev/null
 export CHALK_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/chalk_crash?sslmode=disable'
