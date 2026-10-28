@@ -17,6 +17,7 @@ describe("local and observer media agreement", () => {
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
       await vi.waitFor(() => expect(client.getSnapshot().media.local[source].track).toBe(track));
       const unconfirmed = client.getSnapshot();
+      expect(unconfirmed.participants.roster).toHaveLength(1);
       expect(unconfirmed.participants.roster[0]?.media[source]).not.toBe("active");
       expect(unconfirmed.media.local[source].state).not.toBe("enabled");
       // A stale publication cannot acknowledge this generation's capture.

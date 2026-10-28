@@ -104,6 +104,7 @@ export class FixtureMediaClient {
       const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
       this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: status !== 401 && status !== 403 });
       this.#emit();
+      this.#onFailure(cause);
       throw cause;
     }
     this.#sendPublications();
