@@ -4,6 +4,10 @@ import { assertAgreement, installAgreementProbe, sampleAgreement, truthIssues } 
 import { recoveryBudgets } from "../../../scripts/web-proof/recovery-budgets.mjs";
 
 const recoveryTimeoutMs = recoveryBudgets().timeoutMs;
+const mediaControls = [
+  { source: "microphone", title: "Microphone", action: "setMicrophoneEnabled", command: "set_microphone_enabled", onLabel: "Unmute microphone", shortcut: "Control+d" },
+  { source: "camera", title: "Camera", action: "setCameraEnabled", command: "set_camera_enabled", onLabel: "Turn on camera", shortcut: "Control+e" },
+];
 
 export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device, fast = false }) {
   const failures = [];
@@ -109,11 +113,9 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     if (failures.length) throw new AggregateError(failures, "Fast media agreement failed");
     return;
   }
-  for (const source of ["microphone", "camera"])
+  for (const { source, title, action, command, onLabel } of mediaControls)
     for (const projection of ["drop", "delay", "reject"])
       await scenario(`Sync ${source} update ${projection}: fail closed and one-tap recovery`, async (pages, _open, evidence) => {
-        const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
-        const command = source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled";
         const { commands, reports } = evidence.get(pages[0]);
         await invoke(pages[0], action, false);
         await assertAgreement(pages);
@@ -128,32 +130,38 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         } catch (error) {
           failure = error;
         }
-        await unmute;
-        await pages[0].waitForFunction((source) => window.__chalk.snapshot().localMedia[source].state === "failed", source, { timeout: 15_000 });
+        const outcome = await unmute;
+        if (projection === "reject") {
+          // An explicit command rejection already revokes capture. The monitor
+          // only reports capture that remains live without confirmation.
+          assert.ok(outcome instanceof Error, "Sync rejection must reach the caller");
+        } else {
+          await pages[0].waitForFunction((source) => window.__chalk.snapshot().localMedia[source].state === "failed", source, { timeout: 15_000 });
+          await pages[0].getByText(`${title} didn’t reach the call. Turn it on to try again.`, { exact: true }).waitFor();
+        }
         assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false, "Failed capture must be physically paused");
         await assertAgreement(pages);
-        await pages[0].getByText(`${source === "microphone" ? "Microphone" : "Camera"} didn’t reach the call. Turn it on to try again.`, { exact: true }).waitFor();
         await wait(2000);
         const mismatch = reports.filter((report) => report.trigger === "media_projection_mismatch");
-        assert.equal(mismatch.length, 1, "Persistent drift sends one report");
+        const expectedReports = projection === "reject" ? [] : [{ source, attempt: 0, outcome: "failed" }];
+        assert.equal(mismatch.length, expectedReports.length, "Only persistent live drift sends a report");
         assert.deepEqual(
-          mismatch[0].events.filter((event) => event.event === "media_projection_mismatch").map(({ source, attempt, outcome }) => ({ source, attempt, outcome })),
-          [{ source, attempt: 0, outcome: "failed" }],
+          mismatch.flatMap((report) => report.events.filter((event) => event.event === "media_projection_mismatch").map(({ source, attempt, outcome }) => ({ source, attempt, outcome }))),
+          expectedReports,
         );
         assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 1, "The monitor must not send automatic repair targets");
         await fault({ clear: true });
         await assertAgreement(pages);
         // Use the person's actual control, not a second SDK enable that could
         // hide a toggle which merely cancels an already failed action.
-        await clickControl(pages[0], source === "microphone" ? "Unmute microphone" : "Turn on camera");
+        await clickControl(pages[0], onLabel);
         await enabledCapture(pages);
         await assertAgreement(pages);
         assert.equal(commands.slice(initialCommands).filter((message) => message.name === command).length, 2, "One fresh tap sends exactly one enable");
-        assert.equal(reports.filter((report) => report.trigger === "media_projection_mismatch").length, 1);
+        assert.equal(reports.filter((report) => report.trigger === "media_projection_mismatch").length, expectedReports.length);
         if (failure) throw failure;
       });
-  for (const source of ["microphone", "camera"]) {
-    const action = source === "microphone" ? "setMicrophoneEnabled" : "setCameraEnabled";
+  for (const { source, action, onLabel, shortcut } of mediaControls) {
     await scenario(`Sync ${source} confirms within grace`, async (pages, _open, evidence) => {
       await invoke(pages[0], action, false);
       await assertAgreement(pages);
@@ -172,11 +180,11 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await fault({ projection: "drop", durationMs: 12_000 });
       await invoke(pages[0], action, true);
       await pages[0].getByRole("button", { name: `Cancel connecting ${source}`, exact: true }).waitFor();
-      await pages[0].keyboard.press(source === "microphone" ? "Control+d" : "Control+e");
+      await pages[0].keyboard.press(shortcut);
       await assertAgreement(pages);
       assert.equal(await pages[0].evaluate((source) => window.__chalk.agreementSnapshot().media.local[source].track?.enabled ?? false, source), false);
       await fault({ clear: true });
-      await clickControl(pages[0], source === "microphone" ? "Unmute microphone" : "Turn on camera");
+      await clickControl(pages[0], onLabel);
       await enabledCapture(pages);
       await assertAgreement(pages);
       assert.equal(evidence.get(pages[0]).reports.length, 0);
