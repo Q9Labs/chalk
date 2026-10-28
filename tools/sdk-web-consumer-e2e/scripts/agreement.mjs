@@ -117,21 +117,40 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await assertAgreement(pages);
       assert.notEqual((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia.microphone.state, "enabled", "Interrupted capture must not remain normal On");
     });
-  for (const status of [503, 401, 403])
-    await scenario(`SFU ${status} recovery beyond ten seconds; Sync healthy`, async (pages) => {
-      await fault({ status, durationMs: 12_000 });
+  for (const hold of [true, false])
+    await scenario(`${hold ? "Held media transport" : "SFU 503"} recovery beyond ten seconds; Sync healthy`, async (pages) => {
+      await pages[0].bringToFront();
+      assert.equal(await pages[0].evaluate(() => document.visibilityState), "visible");
+      await fault({ status: 503, hold, durationMs: 12_000 });
       await dropMedia();
       await wait(10_500);
       const snapshot = await pages[0].evaluate(() => window.__chalk.snapshot());
       assert.notEqual(snapshot.state, "failed", "Healthy Sync must not become terminal after the media retry budget");
       // A successful collaboration roundtrip proves Sync was not dropped too.
-      const message = await invoke(pages[0], "sendChatMessage", { text: `Sync alive during SFU ${status}` });
+      const message = await invoke(pages[0], "sendChatMessage", { text: "Sync alive during media recovery" });
       await pages[1].waitForFunction((id) => window.__chalk.snapshot().chat.messages.some((item) => item.clientMessageId === id), message.clientMessageId);
       await truth(pages);
       await waitForState(pages[0], "live", recoveryTimeoutMs);
       await enabledCapture(pages);
       await assertAgreement(pages, { timeoutMs: recoveryTimeoutMs });
       assert.equal((await pages[0].evaluate(() => window.__chalk.connectionHistory())).includes("failed"), false, "Media loss became terminal while Sync was healthy");
+    });
+  for (const status of [401, 403])
+    await scenario(`Current SFU ${status} during recovery is terminal and truthful`, async (pages, open) => {
+      await fault({ status, durationMs: 12_000 });
+      await dropMedia();
+      await waitForState(pages[0], "failed", recoveryTimeoutMs);
+      const failed = await pages[0].evaluate(() => window.__chalk.snapshot());
+      assert.equal(failed.failure?.code, "invalid_access");
+      for (const source of ["microphone", "camera"]) assert.notEqual(failed.localMedia[source].state, "enabled");
+      await pages[0].getByRole("heading", { name: "Connection lost", exact: true }).waitFor();
+      assert.equal(await pages[0].getByRole("button", { name: "Mute microphone", exact: true }).count(), 0);
+      assert.equal(await pages[0].getByRole("button", { name: "Turn off camera", exact: true }).count(), 0);
+      assert.deepEqual(await pages[0].evaluate(() => window.__chalk.resources()), { tracks: 0, sockets: 0, peers: 0, timers: 0 });
+      await fault({ clear: true });
+      const replacement = await open("agreementalice");
+      await enabledCapture([replacement, pages[1]]);
+      await assertAgreement([replacement, pages[1]], { timeoutMs: recoveryTimeoutMs });
     });
   await scenario("same participant takes over during media recovery", async (pages, open) => {
     await fault({ status: 503, durationMs: 12_000 });
