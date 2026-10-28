@@ -53,6 +53,8 @@ async function bundle(version) {
     '@q9labsai/chalk-ui/reactions': 'packages/ui/src/reactions.ts',
     '@q9labsai/chalk-ui/assets': 'packages/ui/src/assets.ts',
     '@q9labsai/recording-presentation': 'packages/recording-presentation/src/index.ts',
+    '@q9labsai/facehash': 'packages/facehash/src/index.ts',
+    '@q9labsai/facehash/react': 'packages/facehash/src/react.ts',
   };
   const published = join(task,'published');
   const entry = join(version === '5.2.0' ? published : root, 'crash-entry.jsx');
@@ -123,7 +125,7 @@ async function run(version, constrained) {
   // One full-duration incident: seven real grants over ~13 s, actual 120 s seat,
   // stale refresh and retries until seven minutes have elapsed.
   await fixture(); await navigate(); await join();
-  for(let n=1;n<7;n++) {await page.evaluate(()=>window.__unmount()); await page.evaluate(()=>window.__mount()); await join();await delay(1400);}
+  for(let n=1;n<7;n++) {await delay(2100);await page.evaluate(async()=>{ const response=await fetch('/access',{method:'POST'}); if(response.status!==201)throw new Error(`burst grant ${response.status}`);await response.json(); });}
   await sample(page,cdp,browserCDP,'soak-burst',runName,0);
   const remaining=125000-(Date.now()-runStart); if(remaining>0) await delay(remaining);
   expire(true);
