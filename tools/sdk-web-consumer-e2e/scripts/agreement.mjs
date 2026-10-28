@@ -21,6 +21,12 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
         await page.goto(`${baseURL}/?fixtureUser=${participant}`);
         await page.waitForFunction(() => Boolean(window.__chalk));
         await page.mouse.click(5, 5);
+        // WebKit exposes host ICE candidates only after capture permission is
+        // exercised. The SDK still uses our deterministic tone/canvas tracks.
+        await page.evaluate(async () => {
+          const capture = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+          for (const track of capture.getTracks()) track.stop();
+        });
         await invoke(page, "join");
         await waitForState(page, "live");
         return page;
