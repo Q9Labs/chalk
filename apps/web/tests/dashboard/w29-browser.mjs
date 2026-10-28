@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, symlink } from "node:fs/promises";
 import { resolve } from "node:path";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 import { build } from "../../../../tools/sdk-web-consumer-e2e/node_modules/esbuild/lib/main.js";
@@ -19,7 +19,20 @@ const episode = await server.episodes.create(space.id, {}, { idempotencyKey: cry
 const results = [];
 const sockets = new Set();
 let fault = "reset";
-const network = createServer((socket) => { sockets.add(socket); socket.once("close", () => sockets.delete(socket)); if (fault === "reset") socket.destroy(); });
+let dial = 0;
+const network = createServer((socket) => {
+  sockets.add(socket);
+  socket.once("close", () => sockets.delete(socket));
+  if (fault === "reset") socket.destroy();
+  if (fault === "stall_first" && ++dial > 1) {
+    const upstream = createConnection({ host: "127.0.0.1", port: Number(new URL(syncOrigin).port) });
+    sockets.add(upstream);
+    upstream.once("close", () => sockets.delete(upstream));
+    upstream.on("error", () => socket.destroy());
+    socket.on("error", () => upstream.destroy());
+    socket.pipe(upstream).pipe(socket);
+  }
+});
 await new Promise((accept) => network.listen(0, "127.0.0.1", accept));
 const faultURL = `ws://127.0.0.1:${network.address().port}/v1/sync`;
 const sql = (query) => execFileSync("psql", [process.env.CHALK_DATABASE_URL, "-Atc", query], { encoding: "utf8" }).trim();
@@ -29,8 +42,9 @@ async function participant() {
   assert(admitted.access);
   return { id: admitted.participant.id, access: admitted.access, created: Date.now() };
 }
-async function pageFor(bundle, seat, { hold = 0, initialGrant = true } = {}) {
+async function pageFor(bundle, seat, { hold = 0, initialGrant = true, clockAhead = false } = {}) {
   const page = await context.newPage();
+  if (clockAhead) await page.addInitScript(() => { const actualNow = Date.now; Date.now = () => actualNow() + 360000; });
   const grants = [];
   let current = seat.access;
   let initial = initialGrant;
@@ -76,14 +90,15 @@ export const synchronizeChalkStaffDisplayName = () => {};
     const bundle = resolve(out, `${version}.js`);
     const sdk = version === "5.2.0" ? resolve(oldRoot, "sdks/typescript/client/src/space-client/space-client.ts") : resolve(repository, "sdks/typescript/client/src/space-client/space-client.ts");
     await build({ absWorkingDir: resolve(repository, "apps/web"), entryPoints: ["tests/dashboard/w29-entry.jsx"], bundle: true, format: "esm", platform: "browser", outfile: bundle, nodePaths: [resolve(repository, "apps/web/node_modules")], alias: { "w29-sdk": sdk, "w29-th": thSource }, plugins: [{ name: "synthetic-th-boundaries", setup(build) { build.onResolve({ filter: /^(?:@shared-portal-ui\/|@convex\/|convex\/values$|@q9labsai\/chalk-(?:client|react)$)/u }, () => ({ path: adapters })); } }], define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent" });
-    for (const mode of ["live", "reset", "stall", "slow_cpu"]) {
+    for (const mode of ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"]) {
       const seat = await participant();
-      const { page, grants } = await pageFor(bundle, seat);
+      const { page, grants } = await pageFor(bundle, seat, { clockAhead: mode === "clock_ahead" });
       fault = mode;
+      dial = 0;
       const cdp = await context.newCDPSession(page);
       if (mode === "slow_cpu") await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
       const began = Date.now();
-      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: mode === "live" || mode === "slow_cpu" ? syncOrigin : faultURL });
+      await page.evaluate((options) => window.startClient(options), { space: space.slug, api: apiOrigin, sync: ["live", "slow_cpu", "clock_ahead"].includes(mode) ? syncOrigin : faultURL });
       await page.waitForFunction(() => window.audit.some((row) => row.event === "join_ok" || row.event === "join_failed"), null, { timeout: 45000 });
       const audit = await page.evaluate(() => window.audit);
       const result = { version, mode, elapsed_ms: Date.now() - began, grants, audit, seat: sql(`select p.status||':'||s.state||':'||(p.first_joined_at is not null)::text from participants p join participant_join_seats s on s.participant_id=p.id where p.id='${seat.id}'`) };
