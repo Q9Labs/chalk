@@ -147,7 +147,7 @@ try {
       }));
     if (!browsers.includes(browser)) browsers.push(browser);
     const context = await browser.newContext({ permissions: ["microphone", "camera"] });
-    await context.addInitScript(() => {
+    await context.addInitScript((participantIndex) => {
       window.peers = [];
       window.audioSinks = [];
       window.captureSources = [];
@@ -188,7 +188,7 @@ try {
       navigator.mediaDevices.getUserMedia = async () => {
         const context = new AudioContext();
         const oscillator = context.createOscillator();
-        oscillator.frequency.value = 439;
+        oscillator.frequency.value = [439, 733][participantIndex];
         const destination = context.createMediaStreamDestination();
         const analyser = context.createAnalyser();
         oscillator.connect(analyser);
@@ -198,7 +198,7 @@ try {
         await context.resume();
         return destination.stream;
       };
-    });
+    }, index);
     const page = await context.newPage();
     pages.push(page);
     const network = [];

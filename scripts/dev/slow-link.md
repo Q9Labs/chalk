@@ -33,7 +33,8 @@ The generated JSON report records the SDK checkout revision, connection
 transitions, audio RTP statistics, kernel drop counters and per-outage recovery
 times. Override the directory with `CHALK_SLOW_LINK_OUTPUT`.
 
-Two Chromium contexts send microphone tones through the real SFU. After a
+Two Chromium contexts send distinct 439 Hz and 733 Hz microphone tones through the
+real SFU. Each received recording should contain the other participant’s tone. After a
 45-second slow-link phase, the driver interrupts browser networking and drops
 non-DNS UDP plus HTTPS TCP packets in both IP families for 5, 15 and 30 seconds.
 SSH remains available. Each outage must stop incoming audio RTP and increment
