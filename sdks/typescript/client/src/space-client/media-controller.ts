@@ -1168,14 +1168,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
       return;
     }
     const sync = ports.sync.getSnapshot();
+    const state = this.#sources[source];
     const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
-    const projection = sync.media?.items.find((item) => item.participantId === sync.participantId && item.source === source);
+    const projection = sync.media?.items.find((item) => item.participantId === sync.participantId && item.source === source) ?? { enabled: false, publicationId: null };
     this.#projection.observe(source, {
-      revision: this.#sources[source].desired.revision,
+      revision: state.desired.revision,
       publicationId: publication?.publicationId ?? null,
-      enabled: this.#sources[source].localEnabled && livePublication(publication),
-      projectedEnabled: projection?.enabled ?? false,
-      projectedPublicationId: projection?.publicationId ?? null,
+      enabled: state.desired.enabled && state.forcedRevision !== state.desired.revision && livePublication(publication),
+      projectedEnabled: projection.enabled,
+      projectedPublicationId: projection.publicationId,
     });
   }
   #confirmedLocal(source: "microphone" | "camera"): MediaSlice["local"][MediaSource] {
@@ -1216,6 +1217,7 @@ function livePublication(publication: ConnectionMediaSnapshot["localTracks"][num
 }
 function confirmedLocalMedia(media: MediaSlice["local"][MediaSource], desired: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource] {
   if (!desired) return { ...media, state: convergence === "failed" ? "failed" : "disabled" };
+  if (media.state === "requesting") return media;
   if (media.track && !liveTrack(media.track)) return { ...media, state: "disabled" };
   if (convergence) return { ...media, state: convergence };
   if (media.state === "enabled" && !live) return { ...media, state: "requesting" };
