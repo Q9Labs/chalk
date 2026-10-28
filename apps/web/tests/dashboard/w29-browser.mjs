@@ -83,12 +83,21 @@ export const superviseChalkWhiteboardController = (controller) => ({ controller,
 export const synchronizeChalkStaffDisplayName = () => {};
 `);
   await mkdir(oldRoot, { recursive: true });
-  const archive = execFileSync("git", ["archive", "a8cc69bb7", "sdks/typescript/client"]);
-  execFileSync("tar", ["-x", "-C", oldRoot], { input: archive });
-  await symlink(resolve(repository, "sdks/typescript/client/node_modules"), resolve(oldRoot, "sdks/typescript/client/node_modules"));
+  const npmResponse = await fetch("https://registry.npmjs.org/@q9labsai/chalk-client/5.2.0");
+  assert(npmResponse.ok);
+  const npm = await npmResponse.json();
+  const packageResponse = await fetch(npm.dist.tarball);
+  assert(packageResponse.ok);
+  const archive = Buffer.from(await packageResponse.arrayBuffer());
+  const integrity = "sha512-" + createHash("sha512").update(archive).digest("base64");
+  assert.equal(integrity, npm.dist.integrity);
+  const tarball = resolve(out, "sdk520.tgz");
+  await writeFile(tarball, archive);
+  execFileSync("tar", ["-xzf", tarball, "-C", oldRoot]);
+  await symlink(resolve(repository, "sdks/typescript/client/node_modules"), resolve(oldRoot, "package/node_modules"));
   for (const version of ["5.2.0", "775c0b991"]) {
     const bundle = resolve(out, `${version}.js`);
-    const sdk = version === "5.2.0" ? resolve(oldRoot, "sdks/typescript/client/src/space-client/space-client.ts") : resolve(repository, "sdks/typescript/client/src/space-client/space-client.ts");
+    const sdk = version === "5.2.0" ? resolve(oldRoot, "package/dist/effect.js") : resolve(repository, "sdks/typescript/client/src/space-client/space-client.ts");
     await build({ absWorkingDir: resolve(repository, "apps/web"), entryPoints: ["tests/dashboard/w29-entry.jsx"], bundle: true, format: "esm", platform: "browser", outfile: bundle, nodePaths: [resolve(repository, "apps/web/node_modules")], alias: { "w29-sdk": sdk, "w29-th": thSource }, plugins: [{ name: "synthetic-th-boundaries", setup(build) { build.onResolve({ filter: /^(?:@shared-portal-ui\/|@convex\/|convex\/values$|@q9labsai\/chalk-(?:client|react)$)/u }, () => ({ path: adapters })); } }], define: { "process.env.NODE_ENV": '"production"' }, logLevel: "silent" });
     for (const mode of ["live", "reset", "stall", "stall_first", "slow_cpu", "clock_ahead"]) {
       const seat = await participant();
@@ -134,7 +143,7 @@ export const synchronizeChalkStaffDisplayName = () => {};
   }
   const syncCounts = {};
   for (const line of syncLog.join("").split("\n")) { const match = line.match(/sync\.websocket\.(handshake|authenticated|closed)/u); if (match) syncCounts[match[0]] = (syncCounts[match[0]] ?? 0) + 1; }
-  const report = { browser: fixture.browser.version(), server_revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), sdk520_source: execFileSync("git", ["rev-parse", "a8cc69bb7"], { encoding: "utf8" }).trim(), syncCounts, results };
+  const report = { browser: fixture.browser.version(), server_revision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), sdk520_package: { version: npm.version, integrity, verified: true }, syncCounts, results };
   await writeFile(resolve(out, "results.json"), JSON.stringify(report, null, 2));
   console.log("W29_FINAL " + JSON.stringify(report));
 } finally {
