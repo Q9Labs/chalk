@@ -101,7 +101,10 @@ try {
             if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
             else await runLaunchSmoke(browser, browserName, baseURL);
           }
-          if (browserName !== "firefox") await proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device: browserName === "webkit" ? devices["iPad Pro 11"] : undefined, fast: arguments_.has("--agreement-fast") });
+          if (browserName !== "firefox") {
+            process.stdout.write(`[agreement] browser=${browserName}${browserName === "webkit" ? " profile=iPad Pro 11" : ""}\n`);
+            await proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device: browserName === "webkit" ? devices["iPad Pro 11"] : undefined, fast: arguments_.has("--agreement-fast") });
+          }
         } finally {
           await browser.close();
         }
