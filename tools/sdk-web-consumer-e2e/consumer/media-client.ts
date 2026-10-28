@@ -178,7 +178,7 @@ export class FixtureMediaClient {
   #handleStateOrFailure(message: Exclude<ServerMessage, { readonly type: "signal" | "peers" }>): void {
     if (message.type === "state") {
       this.#remotePublications = message.state.publications.filter((item) => item.participantId !== this.#participantId && item.enabled);
-      this.#reconcileRemoteSnapshot();
+      this.#publish();
       for (const listener of this.#remoteListeners) listener(this.#remotePublications);
       return;
     }
@@ -280,11 +280,6 @@ export class FixtureMediaClient {
     return [...this.#local].map(([source, local]) => ({ participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null }));
   }
 
-  #reconcileRemoteSnapshot(): void {
-    reconcileFixtureRemoteTracks(this.#remotePublications, this.#received);
-    this.#publish();
-  }
-
   #removePeer(remote: string): void {
     const peer = this.#peers.get(remote);
     if (peer) releasePeer(peer.connection);
@@ -327,22 +322,18 @@ function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): C
   return input.clientPayload;
 }
 
-function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {
-  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
-  for (const [key, remote] of received) {
-    if (wanted.has(key)) continue;
-    releaseTrack(remote.track);
-    received.delete(key);
-  }
-}
-
 function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
   received.set(`${remote.participantId}:${remote.source}`, remote);
 }
 
 function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
-  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
-  return [...received].filter(([key]) => wanted.has(key)).map(([, remote]) => remote);
+  // Projection can arrive after ontrack or disappear during a mute. Keep the
+  // receiver owned by its peer; stopping it here permanently silences a reused
+  // transceiver. Only expose tracks with a current physical publication.
+  return remotePublications.flatMap((publication) => {
+    const remote = received.get(`${publication.participantId}:${publication.source}`);
+    return remote ? [{ ...remote, publicationId: publication.publicationId }] : [];
+  });
 }
 
 export function bindFixtureMediaClient(client: FixtureMediaClient) {
