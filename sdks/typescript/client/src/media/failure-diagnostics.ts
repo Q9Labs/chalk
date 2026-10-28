@@ -9,6 +9,10 @@ const steps = new WeakMap<object, MediaFailureStep>();
 const fetchFailures = new WeakSet<object>();
 const domErrorKinds = ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError"] as const;
 
+function domErrorKind(name: string): MediaFailureDiagnostic["media_error_kind"] {
+  return domErrorKinds.find((kind) => kind === name) ?? (name === "TimeoutError" ? "timeout" : name === "NetworkError" ? "network" : "unknown");
+}
+
 export function grantedMediaFromStream(stream: MediaStream): GrantedMedia {
   const liveTracks = stream.getTracks().filter((track) => track.readyState === "live");
   return {
@@ -48,9 +52,7 @@ export function classifyMediaFailure(cause: unknown, fallbackStep: MediaFailureS
     };
   }
   if (typeof DOMException !== "undefined" && error instanceof DOMException) {
-    const name = error.name;
-    const kind = domErrorKinds.find((kind) => kind === name) ?? (name === "TimeoutError" ? "timeout" : name === "NetworkError" ? "network" : "unknown");
-    return { media_error_kind: kind, media_error_step: step };
+    return { media_error_kind: domErrorKind(error.name), media_error_step: step };
   }
   // Fetch rejects with TypeError; a TypeError elsewhere is not proof of a network failure.
   return { media_error_kind: error instanceof TypeError && fetchFailures.has(error) ? "network" : "unknown", media_error_step: step };
