@@ -62,9 +62,12 @@ async function requireSuccessfulResponse(response: Response): Promise<void> {
   if (status === 408 || status === 425 || status === 429 || status >= 500) throw new AccessUnavailableError(status);
   if (status === 409) {
     const body: unknown = await response.json().catch(() => null);
-    if (typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "code" in body.error && body.error.code === "participant.connection_superseded") throw new AccessGrantError(undefined, "connection_superseded");
+    if (isSupersededResponse(body)) throw new AccessGrantError(undefined, "connection_superseded");
   }
   throw new AccessGrantError(`Access grant request failed with HTTP ${status}`);
+}
+function isSupersededResponse(body: unknown): boolean {
+  return typeof body === "object" && body !== null && "error" in body && typeof body.error === "object" && body.error !== null && "code" in body.error && body.error.code === "participant.connection_superseded";
 }
 export function parseParsedAccessGrant(value: unknown): ParsedAccessGrant {
   if (!isRecord(value)) throw new AccessGrantError();

@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
-import { parseParsedAccessGrant, requireParsedAccessGrant } from "../access/grant";
+import { AccessGrantError, parseParsedAccessGrant, requireParsedAccessGrant } from "../access/grant";
+import { ConnectionAccessFailure } from "../access/manager";
 import { ChalkAPIError } from "../server/errors";
 import { CloudflareSFUError } from "../media";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
@@ -107,6 +108,18 @@ describe("media recovery deadline", () => {
       test.failMedia(new CloudflareSFUError("Old binding rejected", "signaling_failed", { status: 403 }), "connection-1");
       await test.advanceTo(1500);
       expect(lifecycle.getSnapshot()).toMatchObject({ state: "reconnecting", failure: null });
+    });
+  });
+
+  it.each(["server", "response"] as const)("requires explicit rejoin when current media reports a %s replacement conflict", async (source) => {
+    const test = mediaRecoveryFixture();
+    await test.run(async (lifecycle) => {
+      const conflict = source === "server" ? new ConnectionAccessFailure({ code: "access.invalid", cause: new ChalkAPIError({ code: "participant.connection_superseded", status: 409, retryable: false }) }) : new AccessGrantError(undefined, "connection_superseded");
+      test.failMedia(conflict, test.getBinding());
+      await test.advanceTo(1000);
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false, message: expect.stringContaining("Another tab or device may be using it") } });
+      expect(test.access).toHaveBeenCalledTimes(1);
+      expect(test.restart).not.toHaveBeenCalled();
     });
   });
 
