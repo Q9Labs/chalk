@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { compareBaseline, findExplicitAny } from "./explicit-any.mjs";
 import { implicitAnyIsForbidden } from "./implicit-any.mjs";
@@ -27,6 +28,39 @@ test("the baseline rejects added, duplicated, moved, changed, and stale exceptio
     assert.deepEqual(compareBaseline(changed, baseline), { added: changed, removed: 1 });
   }
   assert.deepEqual(compareBaseline(findExplicitAny("example.ts", "\n  type Unsafe = any;\n"), baseline), { added: [], removed: 0 });
+});
+
+test("the CLI scans Git-visible TypeScript variants and keeps only the generated exclusions", async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "chalk-any-cli-")));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const gates = join(root, "scripts/gates");
+  await mkdir(gates, { recursive: true });
+  await mkdir(join(root, "node_modules"));
+  const require = createRequire(import.meta.url);
+  await symlink(dirname(require.resolve("typescript/package.json")), join(root, "node_modules/typescript"), "dir");
+  await copyFile(new URL("./explicit-any.mjs", import.meta.url), join(gates, "explicit-any.mjs"));
+  await writeFile(join(gates, "explicit-any-baseline.json"), "[]\n");
+  await writeFile(join(root, ".gitignore"), "node_modules\nignored.ts\n");
+  assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+  for (const folder of ["generated", "openapi-generated"]) {
+    await mkdir(join(root, folder));
+    await writeFile(join(root, folder, "schema.ts"), "type Generated = any;\n");
+  }
+  await writeFile(join(root, "routeTree.gen.ts"), "type Routes = any;\n");
+  await writeFile(join(root, "ignored.ts"), "type Ignored = any;\n");
+  const run = () => spawnSync(process.execPath, [join(gates, "explicit-any.mjs")], { cwd: root, encoding: "utf8" });
+  for (const file of ["source.ts", "view.tsx", "module.mts", "module.cts", "types.d.ts"]) {
+    const path = join(root, file);
+    await writeFile(path, "// oxlint-disable\ntype Unsafe = any;\n");
+    const result = run();
+    assert.equal(result.status, 1, `${file}: ${result.stdout}\n${result.stderr}`);
+    assert.ok(result.stderr.includes(`${file}:2`), result.stderr);
+    await rm(path);
+  }
+  await writeFile(join(root, "safe.ts"), "export const value: unknown = 1;\n");
+  const safe = run();
+  assert.equal(safe.status, 0, safe.stderr);
+  assert.match(safe.stdout, /0 existing violations remain across 1 scanned files/u);
 });
 
 test("the shared TypeScript config rejects implicit any", async (t) => {
