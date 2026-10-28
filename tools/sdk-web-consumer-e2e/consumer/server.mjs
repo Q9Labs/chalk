@@ -240,6 +240,11 @@ function handleDirectedRequestMessage(socket, actor, message) {
 function handleCommandMessage(socket, actor, message) {
   if (typeof message.id !== "string") return;
   const fault = faults.get(actor);
+  if (fault?.syncReconnect && message.payload?.enabled === true) {
+    faults.set(actor, { ...fault, syncReconnect: false });
+    socket.close(4101, "fixture_sync_reconnect_during_unmute");
+    return;
+  }
   if (fault?.projection === "reject" && message.name.startsWith("set_") && message.payload?.enabled === true) {
     socket.send(JSON.stringify({ type: "ack", id: message.id, error: "media_update_rejected" }));
     return;

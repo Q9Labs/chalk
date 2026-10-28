@@ -88,6 +88,7 @@ try {
       stdio: ["ignore", "pipe", "inherit"],
     });
     const baseURL = await listeningURL(serverProcess);
+    const browserFailures = [];
     for (const browserName of requestedBrowsers) {
       const browserType = { chromium, firefox, webkit }[browserName];
       if (!browserType) throw new TypeError(`Unknown browser: ${browserName}`);
@@ -110,9 +111,10 @@ try {
           process.stdout.write(`[packed-e2e] ${browserName}: skipped because its local Playwright binary is not installed\n`);
           continue;
         }
-        throw error;
+        browserFailures.push(new Error(`${browserName}: ${error.message}`, { cause: error }));
       }
     }
+    if (browserFailures.length) throw new AggregateError(browserFailures, "Packed browser proofs failed");
   }
 } finally {
   serverProcess?.kill("SIGTERM");

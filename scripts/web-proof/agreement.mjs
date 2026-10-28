@@ -51,7 +51,7 @@ export async function sampleAgreement() {
       await context.close();
     }
     const frames = video && !video.paused && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
-    received.push({ id: participant.id, energy, frames });
+    received.push({ id: participant.id, energy, frames, audio: audio ? { paused: audio.paused, muted: audio.muted, contextTracks: audio.srcObject.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) } : null });
     if (tile && snapshot) {
       participant.badgeMicrophone = !tile.querySelector('[aria-label="Muted"]');
       participant.badgeCamera = Boolean(tile.querySelector("video"));
@@ -62,6 +62,7 @@ export async function sampleAgreement() {
 
 export function agreementIssues(before, after, { advancing = true } = {}) {
   const issues = [];
+  if (after.length < 2 || new Set(after.map((sample) => sample.self)).size !== after.length) issues.push("agreement requires at least two distinct participant identities");
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
     for (const observer of after.filter((observer) => observer.self !== owner.self)) {
@@ -73,7 +74,7 @@ export function agreementIssues(before, after, { advancing = true } = {}) {
         if (!participant || participant[source] !== on) issues.push(`${owner.self} ${source}: local ${owner.local[source]}, ${observer.self} projection ${participant?.[source]}`);
         const badge = participant?.[source === "microphone" ? "badgeMicrophone" : "badgeCamera"];
         if (badge !== undefined && badge !== on) issues.push(`${owner.self} ${source}: ${observer.self} badge disagrees`);
-        if (source === "microphone" && Boolean(received?.energy > 0.00001) !== on) issues.push(`${owner.self} microphone: ${observer.self} playback energy ${received?.energy}`);
+        if (source === "microphone" && Boolean(received?.energy > 0.00001) !== on) issues.push(`${owner.self} microphone: ${observer.self} playback energy ${received?.energy}${received?.audio === undefined ? "" : ` ${JSON.stringify(received.audio)}`}`);
         if (source === "camera" && advancing && Boolean(received && previous && received.frames > previous.frames + 1) !== on) issues.push(`${owner.self} camera: ${observer.self} frames ${previous?.frames} -> ${received?.frames}`);
       }
     }
@@ -111,9 +112,11 @@ export function truthIssues(samples) {
 // SDK release guests have no React UI. Play the SDK's gated received tracks.
 export async function playProofMedia() {
   for (const remote of window.proofClient.getSnapshot().media.remote) {
-    const element = remote.track.kind === "audio" ? new Audio() : document.createElement("video");
+    const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
+    const element = existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
     element.dataset.participantId = remote.participantId;
-    element.srcObject = new MediaStream([remote.track]);
+    element.dataset.proofSource = remote.source;
+    if (element.srcObject?.getTracks()[0] !== remote.track) element.srcObject = new MediaStream([remote.track]);
     if (element instanceof HTMLVideoElement) element.muted = true;
     document.body.append(element);
     await element.play();

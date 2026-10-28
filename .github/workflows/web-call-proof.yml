@@ -66,7 +66,7 @@ jobs:
           import { createRequire } from "node:module";
           const requireEngine = createRequire(import.meta.resolve("@e2e-dev/web"));
           const version = requireEngine("playwright-core/package.json").version;
-          console.log(`key=e2e-web-playwright-${version}-chromium-${process.env.ImageOS}-${process.env.RUNNER_ARCH}`);
+          console.log(`key=e2e-web-playwright-${version}-chromium-webkit-${process.env.ImageOS}-${process.env.RUNNER_ARCH}`);
           JS
       - name: Restore web engine browser cache
         id: web-browser-cache
@@ -74,7 +74,7 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.web-browser-key.outputs.key }}
-      - name: Install web engine Chromium before the proof
+      - name: Install web engine Chromium and WebKit before the proof
         run: pnpm exec e2e-web install chromium webkit --with-deps
       - uses: ./.github/actions/setup-playwright
         with:
