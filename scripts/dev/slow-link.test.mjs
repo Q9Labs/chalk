@@ -17,6 +17,8 @@ const { build } = requireClient("esbuild");
 const root = process.cwd();
 const fixtureMarker = createHash("sha256").update(root).digest("hex").slice(0, 12);
 const output = resolve(process.env.CHALK_SLOW_LINK_OUTPUT ?? "artifacts/slow-link");
+const outageSeconds = process.env.CHALK_SLOW_LINK_OUTAGES?.split(",").map(Number) ?? [5, 15, 30];
+assert.ok(outageSeconds.length > 0 && outageSeconds.every((seconds) => [5, 15, 30].includes(seconds)), "outages must be selected from 5,15,30 seconds");
 await mkdir(output, { recursive: true });
 // The caller supplies this private file over SSH stdin, outside the source snapshot.
 const nightly = process.env.CHALK_SLOW_LINK_TARGET === "nightly";
@@ -147,11 +149,29 @@ try {
     const context = await browser.newContext({ permissions: ["microphone", "camera"] });
     await context.addInitScript(() => {
       window.peers = [];
+      window.audioSinks = [];
+      window.captureSources = [];
       const NativePeer = RTCPeerConnection;
       globalThis.RTCPeerConnection = class extends NativePeer {
         constructor(...args) {
           super(...args);
           window.peers.push(this);
+          this.addEventListener("track", async ({ track }) => {
+            if (track.kind !== "audio") return;
+            const context = new AudioContext();
+            const stream = new MediaStream([track]);
+            const audio = document.createElement("audio");
+            audio.srcObject = stream;
+            audio.autoplay = true;
+            document.body.append(audio);
+            const source = context.createMediaStreamSource(stream);
+            const analyser = context.createAnalyser();
+            source.connect(analyser);
+            analyser.connect(context.destination);
+            window.audioSinks.push({ context, analyser, track, audio });
+            await context.resume();
+            await audio.play();
+          });
         }
       };
       const NativeSocket = WebSocket;
@@ -170,7 +190,10 @@ try {
         const oscillator = context.createOscillator();
         oscillator.frequency.value = 439;
         const destination = context.createMediaStreamDestination();
-        oscillator.connect(destination);
+        const analyser = context.createAnalyser();
+        oscillator.connect(analyser);
+        analyser.connect(destination);
+        window.captureSources.push({ context, analyser, track: destination.stream.getAudioTracks()[0] });
         oscillator.start();
         await context.resume();
         return destination.stream;
@@ -280,9 +303,30 @@ try {
           for (const peer of window.peers)
             for (const stat of (await peer.getStats()).values()) {
               if (stat.kind === "audio" && (stat.type === "inbound-rtp" || stat.type === "outbound-rtp"))
-                rtp.push({ id: stat.id, type: stat.type, bytes: stat.bytesReceived ?? stat.bytesSent, packets: stat.packetsReceived ?? stat.packetsSent, energy: stat.totalAudioEnergy ?? 0, samples: stat.totalSamplesReceived ?? 0, concealed: stat.concealedSamples ?? 0 });
+                rtp.push({
+                  id: stat.id,
+                  type: stat.type,
+                  bytes: stat.bytesReceived ?? stat.bytesSent,
+                  packets: stat.packetsReceived ?? stat.packetsSent,
+                  energy: stat.totalAudioEnergy ?? 0,
+                  samples: stat.totalSamplesReceived ?? 0,
+                  concealed: stat.concealedSamples ?? 0,
+                  jitterBufferEmittedCount: stat.jitterBufferEmittedCount,
+                  jitterBufferDelay: stat.jitterBufferDelay,
+                  packetsLost: stat.packetsLost,
+                });
             }
-          return { connection: client.getSnapshot().connection, states: window.states, rtp };
+          const audioRms = window.audioSinks.map(({ analyser }) => {
+            const samples = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(samples);
+            return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+          });
+          const describeAudio = ({ context, track, analyser }) => {
+            const samples = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(samples);
+            return { contextState: context.state, contextTime: context.currentTime, trackEnabled: track.enabled, trackMuted: track.muted, trackState: track.readyState, rms: Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length) };
+          };
+          return { connection: client.getSnapshot().connection, states: window.states, rtp, audioRms, captureAudio: window.captureSources.map(describeAudio), receivedAudio: window.audioSinks.map(describeAudio) };
         }),
       ),
     );
@@ -319,11 +363,40 @@ try {
           return bytes(after[index]) > 0 && sameStreamAdvanced;
         }),
       );
-      if (flowing) return { at: Date.now(), snapshots: after };
+      if (flowing && after.every((snapshot) => snapshot.audioRms.some((rms) => rms > 0.005))) return { at: Date.now(), snapshots: after };
       if (after.some((snapshot) => snapshot.connection.status === "failed")) break;
     }
     assert.fail(`${label}: every participant must send and receive fresh RTP within 30 seconds`);
   };
+  const recordReceivedAudio = async (seconds) =>
+    Promise.all(
+      pages.map(async (page, index) => {
+        const encoded = await page.evaluate(async () => {
+          const sink = window.audioSinks.findLast(({ track, analyser }) => {
+            const samples = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(samples);
+            return track.readyState === "live" && samples.some((value) => Math.abs(value) > 0.005);
+          });
+          if (!sink) throw new Error("no audible remote track to record");
+          const recorder = new MediaRecorder(new MediaStream([sink.track]), { mimeType: "audio/webm;codecs=opus" });
+          const chunks = [];
+          recorder.addEventListener("dataavailable", ({ data }) => chunks.push(data));
+          const stopped = new Promise((resolve, reject) => {
+            recorder.addEventListener("stop", resolve, { once: true });
+            recorder.addEventListener("error", reject, { once: true });
+          });
+          recorder.start();
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          recorder.stop();
+          await stopped;
+          const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+          return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
+        });
+        const filename = `after-${seconds}s-received-${index}.webm`;
+        await writeFile(`${output}/${filename}`, Buffer.from(encoded, "base64"));
+        return filename;
+      }),
+    );
   await proveMediaFlow("baseline");
   report.stage = "slow working link";
   // Burst loss also exercises existing media peers; CDP alone leaves their RTP flowing.
@@ -342,7 +415,7 @@ try {
   setPacketLoss(false);
   await setLink({});
   await wait(10000);
-  for (const seconds of [5, 15, 30]) {
+  for (const seconds of outageSeconds) {
     report.stage = `outage ${seconds}s`;
     const outage = { seconds, startedAt: Date.now(), droppedPacketsBefore: droppedPackets() };
     report.outages.push(outage);
@@ -368,6 +441,7 @@ try {
     outage.measuredInterruptionMs = restoredAt - outage.startedAt;
     await Promise.all(pages.map((page) => page.waitForFunction(() => client.getSnapshot().connection.status === "live" || client.getSnapshot().connection.status === "failed", undefined, { timeout: 65000 })));
     const snapshots = await sample(`after ${seconds}s outage`);
+    outage.terminalStates = snapshots.flatMap((snapshot) => snapshot.states.filter((state) => ["failed", "ended"].includes(state.connection.status)));
     assert.ok(
       snapshots.every((snapshot) => snapshot.connection.status === "live" && !snapshot.connection.lastError),
       "automatic recovery must return every participant to live without an error",
@@ -376,7 +450,7 @@ try {
     assert.ok(outage.liveAfterRestoreMs.every(Number.isFinite), "both participants must have a fresh live transition after restoration");
     const media = await proveMediaFlow(`after ${seconds}s outage`);
     outage.bidirectionalAudioAfterRestoreMs = media.at - restoredAt;
-    outage.terminalStates = snapshots.flatMap((snapshot) => snapshot.states.filter((state) => ["failed", "ended"].includes(state.connection.status)));
+    outage.receivedAudioFiles = await recordReceivedAudio(seconds);
     assert.equal(outage.terminalStates.length, 0, "no terminal state or manual retry is allowed");
   }
   const final = await sample("final");

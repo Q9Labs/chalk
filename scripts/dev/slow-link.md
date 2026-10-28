@@ -39,8 +39,13 @@ non-DNS UDP plus HTTPS TCP packets in both IP families for 5, 15 and 30 seconds.
 SSH remains available. Each outage must stop incoming audio RTP and increment
 kernel drop counters. On restoration, both participants must automatically
 transition to `live`, with no terminal state or error, and resume fresh inbound
-and outbound audio RTP. Incoming decoded audio energy must also increase.
-There is no manual retry path.
+and outbound audio RTP. Receiving Web Audio sinks must report nonzero samples, and decoded audio energy
+must also increase.
+Two-second local browser recordings preserve each participant’s received audio
+after restoration. There is no manual retry path.
+
+Set `CHALK_SLOW_LINK_OUTAGES=30` to rerun a single outage, or supply a comma-separated
+selection from 5,15,30. The default runs all three.
 
 Times are milliseconds from the start of network restoration. Audio times include
 the three-second sampling window. Keep raw evidence private and out of Git.
