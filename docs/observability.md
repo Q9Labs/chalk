@@ -151,6 +151,15 @@ and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
 
+Both transports default to a 60-second foreground recovery budget. Recoverable
+media failures retry throughout that budget, with delays bounded to 100 ms–5 s;
+the Sync attempt cap does not shorten media recovery. Only then does media emit
+`media_recovery_exhausted` and continue retrying in the background while Sync
+stays connected. Rejected media access requires an explicit rejoin rather than
+automatically replacing another connection's seat. The timing and rejection
+regressions are covered in
+`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync

@@ -25,9 +25,7 @@ type MediaRecoveryAttempt = {
 // A 10s dial can fail and retry before the overall join gives up.
 const START_TIMEOUT_MS = 30000;
 const LEAVE_TIMEOUT_MS = 5000;
-const RECOVERY_BUDGET_MS = 10000;
-// Sync owns a 60-second recovery attempt; do not stop both ports before it finishes.
-const SYNC_RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
+const RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5000;
 const RECONNECT_GRACE_MS = 250;
@@ -37,7 +35,7 @@ type EpisodeControl = NonNullable<V1EpisodeSnapshot["control"]>;
 type RecoveryPlan = {
   readonly kind: RecoveryKind;
   readonly deadline: number;
-  readonly attempts: number;
+  readonly attempts: number | null;
   readonly delays: readonly number[];
 };
 type InitialMedia = (
@@ -225,7 +223,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       };
       const mediaAttempt: MediaRecoveryAttempt = { expiresAt: null };
       const foreign = <A>(operation: () => Promise<A>, code: LifecycleFailureCode = "internal_error", message = "A browser transport operation failed"): Effect.Effect<A, ConnectionLifecycleFailure> =>
-        Effect.tryPromise({ try: operation, catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure(code, true, message, cause)) });
+        Effect.tryPromise({ try: operation, catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : sfuAccessRejected(cause) ? failureFromCause(cause, code, message) : lifecycleFailure(code, true, message, cause)) });
       const withinForegroundBudget = <A, E>(effect: Effect.Effect<A, E>, milliseconds: number, failure: ConnectionLifecycleFailure | (() => ConnectionLifecycleFailure)): Effect.Effect<A, E | ConnectionLifecycleFailure> =>
         Effect.raceFirst(
           effect,
@@ -493,7 +491,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                       }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
-                    onFailure: () => enqueueBackground(handleMediaFailure()),
+                    onFailure: (cause) => enqueueBackground(handleMediaFailure(cause)),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
                   }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("media_start_failed", true, "The media layer could not start", cause)),
@@ -722,14 +720,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Clock.currentTimeMillis.pipe(
           Effect.map((now) => ({
             kind,
-            deadline: now + boundedInteger(options.recovery?.budgetMs, kind === "sync" ? SYNC_RECOVERY_BUDGET_MS : RECOVERY_BUDGET_MS, 1, 60000),
-            attempts: boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10),
-            delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : [100, 250, 500],
+            deadline: now + boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000),
+            attempts: kind === "sync" ? boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10) : null,
+            delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : kind === "media" ? [250, 500, 1000, 2000, 5000] : [100, 250, 500],
           })),
         );
       const attemptRecovery = (plan: RecoveryPlan, mediaAttempt: MediaRecoveryAttempt, syncAttempt: SyncRecoveryAttempt, onAttempt: () => void): Effect.Effect<number | null, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
-          for (let attempt = 1; attempt <= plan.attempts; attempt += 1) {
+          for (let attempt = 1; plan.attempts === null || attempt <= plan.attempts; attempt += 1) {
             const remaining = plan.deadline - (yield* Clock.currentTimeMillis);
             if (remaining <= 0) return null;
             onAttempt();
@@ -740,7 +738,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             );
             if (failure === null) return attempt;
             if (!failure.recoverable) return yield* Effect.fail(failure);
-            if (attempt < plan.attempts) {
+            if (plan.attempts === null || attempt < plan.attempts) {
               const remaining = Math.max(0, plan.deadline - (yield* Clock.currentTimeMillis));
               yield* Effect.sleep(Math.min(recoveryDelay(plan, attempt), remaining));
             }
@@ -758,7 +756,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const recoveryDelay = (plan: RecoveryPlan, attempt: number): number => {
         const delay = plan.delays[Math.min(attempt - 1, plan.delays.length - 1)] ?? 0;
-        return Number.isFinite(delay) ? Math.max(0, delay) : 0;
+        const finiteDelay = Number.isFinite(delay) ? Math.max(0, delay) : 0;
+        return plan.kind === "media" ? Math.min(5000, Math.max(100, finiteDelay)) : finiteDelay;
       };
       const finishRecovery = (attempt: number, epoch: number): Effect.Effect<void> =>
         Effect.gen(function* () {
@@ -856,7 +855,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
           // V1 Sync owns reconnect and durable receipts; only custom terminal or
           // unsuccessful replacement transports need a new client.
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, SYNC_RECOVERY_BUDGET_MS, 1, 60000));
+          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
         });
       const restartSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
@@ -888,7 +887,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               else if (attempt.client === sync) attempt.started = true;
             }),
           ).pipe(
-            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, SYNC_RECOVERY_BUDGET_MS, 1, 60000))),
+            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000))),
             Effect.andThen(Effect.suspend(() => (sync === model.sync && model.epoch === epoch && active(model) ? confirmSyncEntry(sync) : Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery was superseded"))))),
             Effect.tapError(() =>
               enqueue(
@@ -965,7 +964,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if (mediaNeedsRecovery(snapshot)) yield* recover("media");
           yield* publish();
         });
-      const handleMediaFailure = (): Effect.Effect<void> => (model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void);
+      const handleMediaFailure = (cause: unknown): Effect.Effect<void> => {
+        if (active(model) && sfuAccessRejected(cause)) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+        return model.media ? handleMediaSnapshot(model.media, model.media.getSnapshot()) : Effect.void;
+      };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>
         Effect.gen(function* () {
           const media = model.media;
@@ -1237,6 +1239,7 @@ function initialCaptureWarning(
   return lifecycleFailure(first.failure.code, true, message, first.failure.cause);
 }
 function failureFromCause(cause: unknown, code: LifecycleFailureCode, message: string): ConnectionLifecycleFailure {
+  if (sfuAccessRejected(cause)) return lifecycleFailure("invalid_access", false, "Media access was rejected. Rejoin explicitly to continue.", cause);
   if (cause instanceof ConnectionLifecycleFailure) return cause;
   if (cause instanceof ConnectionAccessFailure) return accessFailure(cause);
   if (cause instanceof AccessGrantError) return lifecycleFailure("invalid_access", false, "Access was rejected", cause);
