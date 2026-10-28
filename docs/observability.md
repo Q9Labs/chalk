@@ -219,6 +219,16 @@ from that verified credential. The `sdk.connection_report` warning includes
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.
+An own microphone/camera publication that disagrees with the Sync projection for
+over two seconds, or exhausts reconciliation, triggers `media_projection_mismatch`.
+Its event includes allowlisted `source` (`microphone`/`camera`), `publication_state`
+and `projection_state` (`on`/`off`), mismatch `duration_ms`, retry count in `attempt`,
+and `outcome` (`started`/`failed`). Publication IDs and device labels are excluded.
+The sender waits 750 ms before repair, makes at most three self-media target
+attempts, and stops after eight seconds even if a target hangs. Reconnect or a
+new user intent/publication starts a fresh budget. The existing report cooldown
+also applies to these reports; it can suppress a subsequent exhaustion upload.
+Receiver projection gating remains unchanged: bypassing it would defeat moderation.
 Rejected reports emit `sdk.connection_report.rejected` with the same trace ID
 and verified participant hash, plus a bounded `reason` identifying the failed
 schema, label, ordering, size, or range check. Rejected values, bodies, and decoder

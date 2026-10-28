@@ -56,6 +56,14 @@ const settled = async () => {
 };
 
 describe("automatic connection reports", () => {
+  it("automatically uploads bounded media mismatch facts without device text", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "media_projection_mismatch", source: "microphone", publication_state: "on", projection_state: "off", duration_ms: 2750, attempt: 2, outcome: "started" });
+    await settled();
+    expect(test.sent).toEqual([{ version: 1, trigger: "media_projection_mismatch", events: [{ event: "media_projection_mismatch", elapsed_ms: 0, source: "microphone", publication_state: "on", projection_state: "off", duration_ms: 2750, attempt: 2, outcome: "started" }] }]);
+    reporter.dispose();
+  });
   it("sends nothing for successful joins; failures send only a bounded numeric/enum projection", async () => {
     const test = fixture();
     const reporter = test.create();

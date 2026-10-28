@@ -13032,7 +13032,8 @@
                     "sync_socket_close",
                     "sync_heartbeat_gap",
                     "media_state",
-                    "media_http_error"
+                    "media_http_error",
+                    "media_projection_mismatch"
                   ],
                   "type": "string"
                 },
@@ -13070,6 +13071,18 @@
                   "enum": ["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"],
                   "type": "string"
                 },
+                "projection_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "publication_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "source": {
+                  "enum": ["microphone", "camera"],
+                  "type": "string"
+                },
                 "state": {
                   "enum": ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"],
                   "type": "string"
@@ -13087,7 +13100,7 @@
             "type": "array"
           },
           "trigger": {
-            "enum": ["join_failed", "connection_lost", "recovery_exhausted"],
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"],
             "type": "string"
           },
           "version": {
