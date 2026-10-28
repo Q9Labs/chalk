@@ -1,19 +1,19 @@
 # Chalk Glossary
 
-The canonical vocabulary for every Chalk surface: database, API, sync wire,
-SDKs, UI, infrastructure, observability, docs, and marketing copy. One concept
-has one name, and the name goes all the way down: wire frames, table names,
-env vars, span names, stack names. Vendored standard terms (WebRTC "track",
-CallKit, Cloudflare SFU vocabulary) stay foreign and are translated at adapter
-seams.
+The canonical vocabulary for Chalk's domain and contracts: database, API,
+sync wire, SDKs, infrastructure, and observability. Keep those names consistent
+in code. Vendored standard terms (WebRTC "track", CallKit, Cloudflare SFU
+vocabulary) stay foreign and are translated at adapter seams.
 
 Vocabulary decisions and their rationale are in git history:
 `git show 3f6d94f9:scratchpad/history/2026-W32.md`.
 
-Space and Episode are the names used in code, API contracts, and UI.
-Everyday words such as call, meeting, host, room, lobby and session are allowed
-in user-facing copy when they help people understand the product. There is no
-CI word ban or banned-term baseline.
+Space and Episode are the names used in the model and API contracts. In the
+dashboard, a **call** is presented as a reusable link backed by a Space;
+**Past sessions** lists that Space's ended Episodes. A call can also mean the
+live activity in ordinary conversation, so use the context. These are
+user-facing words for the same concepts, not additional domain resources.
+There is no CI word ban or banned-term baseline.
 
 ## The model
 
@@ -50,7 +50,7 @@ Tenant access.
 
 ### Space
 
-The durable place where collaboration happens. Its canonical product name is Space.
+The durable place where collaboration happens. The dashboard presents it as a call.
 
 - Identity: Chalk-minted id plus a slug unique per tenant. Join links target
   the Space and never an Episode: member links use the slug, and public invite
@@ -61,7 +61,7 @@ The durable place where collaboration happens. Its canonical product name is Spa
   dormant Space is readable data; nobody is "in" it.
 - Relations: has at most one live Episode at any time. Parallel tracks are
   separate Spaces, never parallel Episodes.
-- Space is the durable resource; a call or meeting describes activity inside it.
+- Space is the durable resource; its call link can be reused across sessions.
 
 ### Invite code
 
@@ -75,7 +75,7 @@ invite rotates.
 
 ### Episode
 
-One bounded run of live activity inside a Space. Its canonical product name is Episode.
+One bounded run of live activity inside a Space. The dashboard calls it a session.
 
 - Identity: Chalk-minted id, belongs to exactly one Space. Never a join
   target: joining targets the Space, and "join an episode" is never uttered.
@@ -91,7 +91,7 @@ One bounded run of live activity inside a Space. Its canonical product name is E
   (Space-configured default duration, capability-gated live extensions, hard
   tenant ceiling). Strictness is Space configuration, not platform dogma.
 - After end: frozen forever. Nothing on an ended Episode changes.
-- Not: a snapshot of the Space, a session, a call, a meeting.
+- Not a snapshot of the Space itself; an Episode contains its own config snapshot.
 
 ### Participant
 

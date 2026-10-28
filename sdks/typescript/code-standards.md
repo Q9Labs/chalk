@@ -122,15 +122,15 @@ The client package is **Effect-native inside, Promise-simple outside**.
 
 - Function components only; never define a component inside another component.
 - React 19: `ref` is a normal prop — no `forwardRef`.
-- **We do not use `useEffect`.** What looks like an effect is always one of:
+- Avoid `useEffect` when a simpler pattern fits. SDK lint requires an explicit,
+  reasoned exception for each effect. Prefer:
   - _External state_ (SyncClient snapshots, telemetry health, media devices):
     subscribe with `useSyncExternalStore(subscribe, getSnapshot)` — our clients
     already expose `subscribe`/`getSnapshot` for exactly this.
   - _A response to user action_: do the work in the event handler.
   - _Derived data_: compute during render (memoize only if measured as hot).
   - _DOM/native node access_: a `ref` callback, which can return a cleanup.
-    If none of these fit, the logic belongs in the framework-free client layer,
-    not in a component.
+    Keep framework-free logic in the client layer when practical.
 - Hooks at top level with correct dependency arrays; shared logic becomes a
   custom hook, not a copy.
 - `React.memo` for leaf components in render-heavy trees (video tiles, grids);
