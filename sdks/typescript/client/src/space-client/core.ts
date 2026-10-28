@@ -132,7 +132,10 @@ export class SpaceClientCore {
           ),
         );
       }),
-    ).pipe(Effect.flatMap(Fiber.join));
+    ).pipe(
+      Effect.flatMap(Fiber.await),
+      Effect.flatMap((exit) => exit),
+    );
   }
   #join(options: JoinOptions): ClientEffect<void> {
     return Effect.sync(() => this.#requireActive()).pipe(
