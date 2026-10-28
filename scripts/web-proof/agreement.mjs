@@ -17,6 +17,7 @@ export function installAgreementProbe() {
 // Self-contained for serialization by both Playwright and the e2e runner.
 export async function sampleAgreement() {
   await window.proofPlayMedia?.();
+  const cameraShown = (video) => Boolean(video?.srcObject && getComputedStyle(video.parentElement).opacity !== "0");
   const snapshot = window.__chalk?.agreementSnapshot?.() ?? window.proofClient?.getSnapshot();
   const tiles = [...document.querySelectorAll('[data-part="stage-tile"][data-participant-id]')];
   const localTile = tiles.find((tile) => tile.dataset.tour === "local-video");
@@ -35,7 +36,7 @@ export async function sampleAgreement() {
       };
   const participants = snapshot
     ? snapshot.participants.roster.map((participant) => ({ id: participant.participantId, microphone: participant.media.microphone === "active", camera: participant.media.camera === "active" }))
-    : tiles.map((tile) => ({ id: tile.dataset.participantId, microphone: !tile.querySelector('[aria-label="Muted"]'), camera: Boolean(tile.querySelector("video")) }));
+    : tiles.map((tile) => ({ id: tile.dataset.participantId, microphone: !tile.querySelector('[aria-label="Muted"]'), camera: cameraShown(tile.querySelector("video")) }));
   const received = [];
   for (const participant of participants.filter((participant) => participant.id !== self)) {
     const tile = tiles.find((tile) => tile.dataset.participantId === participant.id);
@@ -58,11 +59,11 @@ export async function sampleAgreement() {
       source.disconnect();
       await context.close();
     }
-    const frames = video && !video.paused && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
+    const frames = cameraShown(video) && !video.paused && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
     received.push({ id: participant.id, energy, frames, audio: audio ? { paused: audio.paused, muted: audio.muted, contextTracks: audio.srcObject?.getAudioTracks().map((track) => ({ enabled: track.enabled, muted: track.muted, readyState: track.readyState })) ?? [] } : null });
     if (tile && snapshot) {
       participant.badgeMicrophone = !tile.querySelector('[aria-label="Muted"]');
-      participant.badgeCamera = Boolean(tile.querySelector("video"));
+      participant.badgeCamera = cameraShown(tile.querySelector("video"));
     }
   }
   return { self, local, controls, participants, received };
