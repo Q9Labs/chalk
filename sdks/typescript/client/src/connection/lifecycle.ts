@@ -26,6 +26,8 @@ type MediaRecoveryAttempt = {
 const START_TIMEOUT_MS = 30000;
 const LEAVE_TIMEOUT_MS = 5000;
 const RECOVERY_BUDGET_MS = 10000;
+// Sync owns a 60-second recovery attempt; do not stop both ports before it finishes.
+const SYNC_RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5000;
 const RECONNECT_GRACE_MS = 250;
@@ -712,7 +714,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Clock.currentTimeMillis.pipe(
           Effect.map((now) => ({
             kind,
-            deadline: now + boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000),
+            deadline: now + boundedInteger(options.recovery?.budgetMs, kind === "sync" ? SYNC_RECOVERY_BUDGET_MS : RECOVERY_BUDGET_MS, 1, 60000),
             attempts: boundedInteger(options.recovery?.maxAttempts, MAX_RECOVERY_ATTEMPTS, 1, 10),
             delays: options.recovery?.backoffMs?.length ? options.recovery.backoffMs : [100, 250, 500],
           })),
@@ -846,7 +848,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           if ((attempt.started || snapshot.connection.phase !== "idle") && (yield* syncNeedsReplacement(snapshot))) return yield* restartSync(attempt);
           // V1 Sync owns reconnect and durable receipts; only custom terminal or
           // unsuccessful replacement transports need a new client.
-          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000));
+          yield* waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, SYNC_RECOVERY_BUDGET_MS, 1, 60000));
         });
       const restartSync = (attempt: SyncRecoveryAttempt): Effect.Effect<void, ConnectionLifecycleFailure> =>
         Effect.gen(function* () {
@@ -878,7 +880,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               else if (attempt.client === sync) attempt.started = true;
             }),
           ).pipe(
-            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, RECOVERY_BUDGET_MS, 1, 60000))),
+            Effect.andThen(waitForSyncLive(sync, boundedInteger(options.recovery?.budgetMs, SYNC_RECOVERY_BUDGET_MS, 1, 60000))),
             Effect.andThen(Effect.suspend(() => (sync === model.sync && model.epoch === epoch && active(model) ? confirmSyncEntry(sync) : Effect.fail(lifecycleFailure("invalid_state", false, "Sync recovery was superseded"))))),
             Effect.tapError(() =>
               enqueue(
