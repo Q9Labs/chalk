@@ -201,6 +201,15 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
       await invoke(pages[0], "interruptMicrophone", event);
       await assertAgreement(pages);
       assert.notEqual((await pages[0].evaluate(() => window.__chalk.snapshot())).localMedia.microphone.state, "enabled", "Interrupted capture must not remain normal On");
+      if (event === "mute") {
+        // The OS returns the device, but that event is not fresh consent.
+        await pages[0].evaluate(() => {
+          const track = window.__chalk.agreementSnapshot().media.local.microphone.track;
+          Object.defineProperty(track, "muted", { configurable: true, value: false });
+          track.dispatchEvent(new Event("unmute"));
+        });
+        await assertAgreement(pages);
+      }
       await clickControl(pages[0], "Unmute microphone");
       await enabledCapture(pages);
       await assertAgreement(pages);
