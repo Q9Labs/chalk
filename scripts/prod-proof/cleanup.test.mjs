@@ -138,15 +138,21 @@ test("cleanup reconciles an end accepted after its Episode listing", async (t) =
   const runId = "ending-run";
   let reads = 0;
   let archived = false;
+  const routes = {
+    spaces: () => ({ spaces: [{ id: "space", name: `chalk-proof:${runId}`, metadata: { proof_run_id: runId }, archived }], pagination: {} }),
+    episodes: () => ({ episodes: [{ id: "episode", status: "active", metadata: { proof_run_id: runId } }], pagination: {} }),
+    end: () => ({ error: { code: "episode.not_active", message: "Episode is not active" } }),
+    episode: () => ({ status: ++reads === 1 ? "ending" : "ended" }),
+    transcripts: () => ({ transcripts: [], pagination: {} }),
+    archive: () => {
+      archived = true;
+      return {};
+    },
+    space: () => ({ archived }),
+  };
   const config = await fixture(t, (req, res) => {
-    const path = new URL(req.url, "http://local").pathname;
-    if (path.endsWith("/spaces")) return res.end(JSON.stringify({ spaces: [{ id: "space", name: `chalk-proof:${runId}`, metadata: { proof_run_id: runId }, archived }], pagination: {} }));
-    if (path.endsWith("/episodes")) return res.end(JSON.stringify({ episodes: [{ id: "episode", status: "active", metadata: { proof_run_id: runId } }], pagination: {} }));
-    if (path.endsWith("/episode/end")) return res.writeHead(409).end(JSON.stringify({ error: { code: "episode.not_active", message: "Episode is not active" } }));
-    if (path.endsWith("/episode")) return res.end(JSON.stringify({ status: ++reads === 1 ? "ending" : "ended" }));
-    if (path.endsWith("/transcripts")) return res.end(JSON.stringify({ transcripts: [], pagination: {} }));
-    if (path.endsWith("/archive")) archived = true;
-    return res.end(JSON.stringify({ archived }));
+    const route = new URL(req.url, "http://local").pathname.split("/").at(-1);
+    res.writeHead(route === "end" ? 409 : 200).end(JSON.stringify(routes[route]()));
   });
   const directory = await mkdtemp(join(tmpdir(), "proof-ending-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -161,19 +167,25 @@ test("cleanup fails without archiving when an accepted end never completes", asy
   let reads = 0;
   const polling = Promise.withResolvers();
   let archived = false;
-  t.mock.method(globalThis, "fetch", async (url) => {
-    const path = url.pathname;
-    if (path.endsWith("/spaces")) return Response.json({ spaces: [{ id: "space", name: "chalk-proof:stuck-end", metadata: { proof_run_id: "stuck-end" } }], pagination: {} });
-    if (path.endsWith("/episodes")) return Response.json({ episodes: [{ id: "episode", status: "ending", metadata: { proof_run_id: "stuck-end" } }], pagination: {} });
-    if (path.endsWith("/episode/end")) return Response.json({ error: { code: "episode.not_active" } }, { status: 409 });
-    if (path.endsWith("/episode")) {
+  const routes = {
+    spaces: () => ({ spaces: [{ id: "space", name: "chalk-proof:stuck-end", metadata: { proof_run_id: "stuck-end" } }], pagination: {} }),
+    episodes: () => ({ episodes: [{ id: "episode", status: "ending", metadata: { proof_run_id: "stuck-end" } }], pagination: {} }),
+    end: () => ({ error: { code: "episode.not_active" } }),
+    episode: () => {
       reads++;
       if (reads === 2) polling.resolve();
-      return Response.json({ status: "ending" });
-    }
-    if (path.endsWith("/transcripts")) return Response.json({ transcripts: [], pagination: {} });
-    if (path.endsWith("/archive")) archived = true;
-    return Response.json({ archived });
+      return { status: "ending" };
+    },
+    transcripts: () => ({ transcripts: [], pagination: {} }),
+    archive: () => {
+      archived = true;
+      return {};
+    },
+    space: () => ({ archived }),
+  };
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const route = url.pathname.split("/").at(-1);
+    return Response.json(routes[route](), { status: route === "end" ? 409 : 200 });
   });
   const directory = await mkdtemp(join(tmpdir(), "proof-stuck-end-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

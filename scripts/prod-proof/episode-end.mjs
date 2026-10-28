@@ -1,9 +1,7 @@
-export async function requestEpisodeEnd(call, path) {
-  try {
-    await call("POST", `${path}/end`, {});
-  } catch (error) {
+export function requestEpisodeEnd(call, path) {
+  return call("POST", `${path}/end`, {}).catch(async (error) => {
     if (error.status !== 409 || error.apiCode !== "episode.not_active") throw error;
     const episode = await call("GET", path);
-    if (episode.status !== "ending" && episode.status !== "ended") throw error;
-  }
+    if (!["ending", "ended"].includes(episode.status)) throw error;
+  });
 }
