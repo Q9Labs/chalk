@@ -235,7 +235,16 @@ export class FixtureMediaClient {
     const connection = registerPeer(new RTCPeerConnection());
     const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), makingOffer: false };
     this.#peers.set(remote, peer);
-    for (const [source, local] of this.#local) if (local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
+    // Reserve both directions before the first offer. An answering participant
+    // may finish capture after that offer; replaceTrack must not require it to
+    // win a second negotiation just to send its initial microphone/camera.
+    for (const source of ["microphone", "camera"] as const) {
+      const local = this.#local.get(source);
+      const track = local?.enabled ? local.track : null;
+      const transceiver = connection.addTransceiver(track ?? (source === "microphone" ? "audio" : "video"), { direction: "sendrecv", streams: track ? [new MediaStream([track])] : [] });
+      peer.senders.set(source, transceiver.sender);
+    }
+    for (const [source, local] of this.#local) if (source !== "microphone" && source !== "camera" && local.enabled) peer.senders.set(source, connection.addTrack(local.track, new MediaStream([local.track])));
     connection.addEventListener("icecandidate", (event) => this.#sendSignal(remote, { candidate: event.candidate?.toJSON() ?? null }));
     connection.addEventListener("track", (event) => {
       const mid = event.transceiver.mid;
