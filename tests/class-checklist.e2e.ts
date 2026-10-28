@@ -1,6 +1,6 @@
 import { expect } from "e2e";
 import { test } from "@e2e-dev/web";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type BrowserContext, type Locator, type Page } from "playwright";
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
@@ -47,70 +47,106 @@ async function shot(pages: Page[], label: string) {
   for (const [index, page] of pages.entries()) if (!page.isClosed()) await page.screenshot({ path: `${output}/${label}-${names[index]}.png` });
 }
 
-async function classroom(scenario: string, check: (pages: Page[], contexts: BrowserContext[]) => Promise<void>) {
-  await mkdir(output, { recursive: true });
+function cdpEndpoint(child: ReturnType<typeof spawn>) {
+  return new Promise<string>((resolve, reject) => {
+    let stderr = "";
+    const timer = setTimeout(() => reject(new Error("Chromium did not expose CDP within 15 seconds")), 15_000);
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(new Error(`Chromium exited ${code}`));
+    });
+    child.stderr?.on("data", (data: Buffer) => {
+      stderr += data.toString();
+      const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(stderr);
+      if (match) {
+        clearTimeout(timer);
+        resolve(match[1]);
+      }
+    });
+  });
+}
+
+async function stopChrome(child: ReturnType<typeof spawn>, profile: string) {
+  if (child.exitCode === null) {
+    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    child.kill("SIGTERM");
+    const kill = setTimeout(() => child.kill("SIGKILL"), 5000);
+    await exited;
+    clearTimeout(kill);
+  }
+  await rm(profile, { recursive: true, force: true });
+}
+
+async function nativeRole(index: number) {
   const uid = process.getuid?.();
   if (uid === undefined) throw new Error("The class checklist requires disposable Linux/Instabox");
-  const browsers: Browser[] = [];
-  const processes: ReturnType<typeof spawn>[] = [];
-  const profiles: string[] = [];
+  // noDefaults applies only to the default context. Use one process per role
+  // so CDP never forces a hidden student visible or disables timer throttling.
+  const profile = await mkdtemp(joinPath(tmpdir(), "chalk-class-"));
+  const child = spawn(
+    "sudo",
+    [
+      "-n",
+      "setpriv",
+      `--reuid=${uid}`,
+      `--rgid=${20000 + index}`,
+      `--egid=${20000 + index}`,
+      "--clear-groups",
+      chromium.executablePath(),
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--remote-debugging-port=0",
+      `--user-data-dir=${profile}`,
+      "--window-size=1440,960",
+      "--autoplay-policy=no-user-gesture-required",
+      "about:blank",
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  try {
+    const browser = await chromium.connectOverCDP(await cdpEndpoint(child), { noDefaults: true });
+    const context = browser.contexts()[0];
+    context.setDefaultTimeout(15_000);
+    await context.addInitScript({ content: webMediaFixture(index % 2) });
+    const page = context.pages()[0];
+    await page.setViewportSize({ width: 1440, height: 960 });
+    return {
+      page,
+      context,
+      async close() {
+        try {
+          await browser.close();
+        } finally {
+          await stopChrome(child, profile);
+        }
+      },
+    };
+  } catch (error) {
+    await stopChrome(child, profile);
+    throw error;
+  }
+}
+
+async function failureProof(pages: Page[], scenario: string) {
+  if (scenario === "C5-C6" || scenario === "media-control") {
+    const evidence = await Promise.all(pages.map(async (page, index) => ({ role: names[index], ...(await page.evaluate(audioEvidence).catch((cause: unknown) => ({ error: String(cause) }))) })));
+    await writeFile(`${output}/${scenario}-audio.json`, JSON.stringify(evidence, null, 2));
+  }
+  await shot(pages, `${scenario}-failure`);
+}
+
+async function classroom(scenario: string, check: (pages: Page[], contexts: BrowserContext[]) => Promise<void>) {
+  await mkdir(output, { recursive: true });
+  const roles: Awaited<ReturnType<typeof nativeRole>>[] = [];
   const pages: Page[] = [];
   try {
-    const contexts: BrowserContext[] = [];
     for (let index = 0; index < names.length; index++) {
-      // noDefaults applies only to the default context. Use one process per role
-      // so CDP never forces a hidden student visible or disables timer throttling.
-      const profile = await mkdtemp(joinPath(tmpdir(), "chalk-class-"));
-      profiles.push(profile);
-      const process = spawn(
-        "sudo",
-        [
-          "-n",
-          "setpriv",
-          `--reuid=${uid}`,
-          `--rgid=${20000 + index}`,
-          `--egid=${20000 + index}`,
-          "--clear-groups",
-          chromium.executablePath(),
-          "--no-first-run",
-          "--no-default-browser-check",
-          "--no-sandbox",
-          "--disable-dev-shm-usage",
-          "--remote-debugging-port=0",
-          `--user-data-dir=${profile}`,
-          "--window-size=1440,960",
-          "--autoplay-policy=no-user-gesture-required",
-          "about:blank",
-        ],
-        { stdio: ["ignore", "ignore", "pipe"] },
-      );
-      processes.push(process);
-      const endpoint = await new Promise<string>((resolve, reject) => {
-        let stderr = "";
-        const timer = setTimeout(() => reject(new Error("Chromium did not expose CDP within 15 seconds")), 15_000);
-        process.once("error", reject);
-        process.once("exit", (code) => {
-          clearTimeout(timer);
-          reject(new Error(`Chromium exited ${code}`));
-        });
-        process.stderr?.on("data", (data: Buffer) => {
-          stderr += data.toString();
-          const match = /DevTools listening on (ws:\/\/[^\s]+)/.exec(stderr);
-          if (match) {
-            clearTimeout(timer);
-            resolve(match[1]);
-          }
-        });
-      });
-      const browser = await chromium.connectOverCDP(endpoint, { noDefaults: true });
-      browsers.push(browser);
-      const context = browser.contexts()[0];
-      context.setDefaultTimeout(15_000);
-      await context.addInitScript({ content: webMediaFixture(index % 2) });
-      contexts.push(context);
-      const page = context.pages()[0];
-      await page.setViewportSize({ width: 1440, height: 960 });
-      pages.push(page);
+      const role = await nativeRole(index);
+      roles.push(role);
+      pages.push(role.page);
     }
     await join(pages[0], "Teacher", `${process.env.CHALK_PROOF_WEB_URL}/space/`);
     const closeLink = pages[0].getByRole("button", { name: "Close call link", exact: true });
@@ -120,26 +156,15 @@ async function classroom(scenario: string, check: (pages: Page[], contexts: Brow
     await join(pages[2], "Admin", url);
     await roster(pages);
     await shot(pages, `${scenario}-joined`);
-    await check(pages, contexts);
+    await check(
+      pages,
+      roles.map((role) => role.context),
+    );
   } catch (error) {
-    if (scenario === "C5-C6" || scenario === "media-control") {
-      const evidence = await Promise.all(pages.map(async (page, index) => ({ role: names[index], ...(await page.evaluate(audioEvidence).catch((cause: unknown) => ({ error: String(cause) }))) })));
-      await writeFile(`${output}/${scenario}-audio.json`, JSON.stringify(evidence, null, 2));
-    }
-    await shot(pages, `${scenario}-failure`);
+    await failureProof(pages, scenario);
     throw error;
   } finally {
-    await Promise.all(browsers.map((browser) => browser.close()));
-    for (const process of processes) {
-      if (process.exitCode === null) {
-        const exited = new Promise<void>((resolve) => process.once("exit", () => resolve()));
-        process.kill("SIGTERM");
-        const kill = setTimeout(() => process.kill("SIGKILL"), 5000);
-        await exited;
-        clearTimeout(kill);
-      }
-    }
-    for (const profile of profiles) await rm(profile, { recursive: true, force: true });
+    await Promise.all(roles.map((role) => role.close()));
   }
 }
 
@@ -244,14 +269,18 @@ test("C1: five consecutive joins reach the live call within ten seconds", async 
   );
 });
 
+async function muteStudent(student: Page) {
+  await student.bringToFront();
+  const mute = student.getByRole("button", { name: "Mute microphone", exact: true });
+  if (await mute.count()) await mute.click();
+  const camera = student.getByRole("button", { name: "Turn off camera", exact: true });
+  if (await camera.count()) await camera.click();
+}
+
 test("C2/C7 slow: eight minutes hidden, roster retained, board and chat catch up", async () => {
   await classroom("C2-C7", async (pages, contexts) => {
     const [teacher, student] = pages;
-    await student.bringToFront();
-    const mute = student.getByRole("button", { name: "Mute microphone", exact: true });
-    if (await mute.count()) await mute.click();
-    const camera = student.getByRole("button", { name: "Turn off camera", exact: true });
-    if (await camera.count()) await camera.click();
+    await muteStudent(student);
     await teacher.bringToFront();
     await teacher.getByRole("button", { name: "Board", exact: true }).click();
     await teacher.locator(".chalk-board[data-ready]").waitFor();
@@ -339,12 +368,22 @@ test("C4 slow: sixty seconds offline then one Rejoin", async () => {
   });
 });
 
-async function recoveredMedia(pages: Page[]) {
+async function enableMedia(pages: Page[]) {
   for (const page of pages.slice(0, 2)) {
     await page.bringToFront();
     await page.getByRole("button", { name: "Unmute microphone", exact: true }).click();
     await page.getByRole("button", { name: "Turn on camera", exact: true }).click();
   }
+}
+
+async function advancingFrames(video: Locator) {
+  const frames = () => video.evaluate((element: HTMLVideoElement) => element.getVideoPlaybackQuality().totalVideoFrames);
+  await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
+  const before = await frames();
+  await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
+}
+
+async function receivedMedia(pages: Page[]) {
   for (const [page, remote] of [
     [pages[0], "Student"],
     [pages[1], "Teacher"],
@@ -355,11 +394,13 @@ async function recoveredMedia(pages: Page[]) {
       .locator('[data-part="stage-tile"]')
       .filter({ has: tile(page, remote) })
       .locator("video");
-    const frames = () => video.evaluate((video: HTMLVideoElement) => video.getVideoPlaybackQuality().totalVideoFrames);
-    await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
-    const before = await frames();
-    await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
+    await advancingFrames(video);
   }
+}
+
+async function recoveredMedia(pages: Page[]) {
+  await enableMedia(pages);
+  await receivedMedia(pages);
   // Deterministic moving display source, captured and transported by the real SDK/SFU.
   await pages[0].evaluate(() => {
     navigator.mediaDevices.getDisplayMedia = async () => {
@@ -386,10 +427,7 @@ async function recoveredMedia(pages: Page[]) {
       await page.bringToFront();
       const video = page.locator('[data-stage-item^="screen"] video');
       await video.waitFor({ timeout: 10_000 });
-      const frames = () => video.evaluate((element: HTMLVideoElement) => element.getVideoPlaybackQuality().totalVideoFrames);
-      await expect.poll(frames, { timeout: 10_000 }).toBeGreaterThan(5);
-      const before = await frames();
-      await expect.poll(frames, { timeout: 5000 }).toBeGreaterThan(before + 5);
+      await advancingFrames(video);
     }
     expect(Date.now() - start).toBeLessThan(10_000);
     await shot(pages, `C6-share-${attempt}`);
