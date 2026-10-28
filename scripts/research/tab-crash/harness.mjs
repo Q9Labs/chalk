@@ -58,12 +58,13 @@ async function bundle(version) {
     '@q9labsai/facehash/react': 'packages/facehash/src/react.ts',
   };
   const published = join(task,'published');
+  const hostPlugin={name:'host-integration',setup(plugin){plugin.onResolve({filter:/^crash-host-whiteboard$/},()=>({path:process.env.CRASH_HOST_WHITEBOARD ?? join(root,'.private/crash-host-whiteboard.ts')}));}};
   const entry = join(version === '5.2.0' ? published : root, 'crash-entry.jsx');
   await writeFile(entry, await readFile(join(root,'scripts/research/tab-crash/page.jsx')));
   const result = await build({ entryPoints: [entry], bundle: true, write: false, format: 'esm', target: 'chrome120', minify: true, sourcemap: 'inline',
     outdir: out, define: { 'process.env.NODE_ENV': '"production"' }, jsx: 'automatic',
     loader: { '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl', '.svg': 'dataurl' },
-    plugins: version === '5.2.0' ? [] : [{ name:'workspace-source', setup(plugin) { plugin.onResolve({filter:/^@q9labsai\//}, args => paths[args.path] ? {path:join(root,paths[args.path])} : undefined); } }],
+    plugins: [hostPlugin,...(version === '5.2.0' ? [] : [{ name:'workspace-source', setup(plugin) { plugin.onResolve({filter:/^@q9labsai\//}, args => paths[args.path] ? {path:join(root,paths[args.path])} : undefined); } }])],
   });
   asset = result.outputFiles.find(file => file.path.endsWith('.js')).text;
   const css = result.outputFiles.find(file => file.path.endsWith('.css'))?.text ?? '';
@@ -93,7 +94,7 @@ async function run(version, constrained) {
   const css = await bundle(version);
   const args = ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream','--autoplay-policy=no-user-gesture-required','--disable-dev-shm-usage'];
   if (constrained) args.push('--js-flags=--max-old-space-size=256','--renderer-process-limit=1');
-  let executablePath;
+  let executablePath=chromium.executablePath();
   if (constrained) {
     execFileSync('sudo',['mkdir','-p','/sys/fs/cgroup/chalk-crash-browser']);
     execFileSync('sudo',['tee','/sys/fs/cgroup/chalk-crash-browser/memory.max'],{input:'1073741824',stdio:['pipe','ignore','inherit']});
