@@ -67,6 +67,13 @@ const cases = [
     ...mix("test/chalk_sync/transport/ended_reconnect_postgres_test.exs:50"),
   },
   {
+    name: "provider-bridge-readiness",
+    file: "apps/sync/lib/chalk_sync/operations/probe.ex",
+    from: "{:error, _reason} -> {:error, :provider_bridge_unavailable}",
+    to: '{:error, _reason} -> {:ok, %{status: "ready"}}',
+    command: ["apps/sync/scripts/provider-bridge-readiness-test"],
+  },
+  {
     name: "webhook-authentication",
     file: "sdks/typescript/client/src/webhooks/verify.ts",
     from: 'if (!matched) throw new WebhookVerificationError("invalid_signature");',

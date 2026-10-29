@@ -65,15 +65,14 @@ or `GATE_FILES` (comma/newline-separated) for an explicit changed-file list.
 Those worktree files are scanned for secrets in addition to the staged diff.
 Gate-definition or unknown files fail closed to the full plan. q9gate counts
 every path as source, so Chalk's planner alone decides which paths are unknown;
-a self-test checks that every tracked path that makes q9gate run in full also
-makes Chalk's plan run in full, which keeps the CI job selection exact. The Chalk custom lanes reuse the affected-workspace
+the Chalk custom lanes reuse the affected-workspace
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 
-Documentation-only changes keep routing self-tests, hygiene, diff-scoped secrets,
+Documentation-only changes keep the network-isolation self-test, hygiene, diff-scoped secrets,
 generated-output checks, and formatting. They do not
 force unrelated service or workspace checks. The package-boundary check still
-runs its own test and q9gate's built-in Dependency Cruiser lane with Chalk's
+runs q9gate's built-in Dependency Cruiser lane with Chalk's
 `.dependency-cruiser.cjs` configuration and a TypeScript analysis guard.
 
 Use `pnpm gate -- --target web|mobile` for a shipment-scoped gate; the
@@ -89,7 +88,7 @@ shipment target from branch, release mode, or directory.
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
-- Formatting, Fallow, structural checks, workspace type checks, coverage tests, and
+- Formatting, Fallow, structural checks, workspace type checks, selected runtime regressions, and
   builds follow affected source files and workspace dependents.
 - The boundary gate covers cross-workspace dependency direction under `apps`,
   `packages`, and `sdks/typescript`. Use named package entrypoints or configured
@@ -101,14 +100,13 @@ shipment target from branch, release mode, or directory.
   closure, using the existing `^build` task graph before building each consumer.
   The gate forces rebuilds rather than trusting cached build artifacts. Type
   checks and tests keep their affected-workspace scope.
-- Tests run once with coverage; lint aliases do not repeat formatting or type
+- Selected runtime regressions run without coverage instrumentation; lint aliases do not repeat formatting or type
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the
-  shared correctness profile: the full zero-skip PostgreSQL suite, Credo, the
-  replayed v1 breaker, and focused Sync and whiteboard SDK tests. Both use a
+  correctness command: the zero-skip PostgreSQL regressions, Credo, API bridge
+  readiness, selected SDK tests, and real-browser reconnection. Both use a
   disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
-- The patched image-size parser fixture runs when its patch or guard changes.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
