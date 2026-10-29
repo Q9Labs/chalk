@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { assetFiles, treeDigest } from "./vendor-asset-files";
 import { EXCALIDRAW_ASSET_DIGEST, EXCALIDRAW_ASSET_ROOT, EXCALIDRAW_ASSET_VERSION, MATHJAX_ASSET_DIGEST, MATHJAX_ASSET_ROOT, MATHJAX_ASSET_VERSION } from "./whiteboard-asset-versions";

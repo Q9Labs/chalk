@@ -34,3 +34,9 @@ reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, wh
 id = "GHSA-9qmh-m7c6-f92p"
 ignoreUntil = 2026-11-22
 reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, whose unstable/cli Primitive.fileParse is the sole importer. Chalk never imports effect/unstable/cli or toml, so no Chalk service, SDK or browser bundle parses TOML; the advisories are parser DoS and need attacker-supplied TOML. The fix is toml 5.0.1, a major version effect does not yet accept. Revisit when effect moves to toml 5, or if Chalk starts using effect's CLI or parsing TOML."
+
+# Follows the unchanged Go dependency set into the root module.
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-11-24
+reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. Call analysis with govulncheck -scan=symbol -show=verbose ./... on 2026-10-24 reports no vulnerable calls or imported vulnerable packages; Chalk does not import openpgp. Revisit if openpgp usage is added or OSV publishes a fix path."
