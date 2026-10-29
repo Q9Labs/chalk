@@ -181,27 +181,26 @@ for (const defect of ["URL lifetime", "null headers", "montage font", "cold rend
       return new Response(bytes);
     });
     const signedHeaders = defect === "null headers" ? null : { "x-proof": "signed" };
+    const exportStatus = (method) => {
+      if (method !== "GET" || !pending) return { export: { status: "ready" } };
+      // Replay a successful export whose cold worker was still warming
+      // when the old four-minute proof deadline expired.
+      now = 246_610;
+      pending = false;
+      return { export: { status: "pending" } };
+    };
+    const downloadUrl = (body) => {
+      if (defect === "URL lifetime") {
+        assert.ok(body.expires_in_seconds > 0);
+        assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
+      }
+      return { url: "https://example.invalid/export", signed_headers: signedHeaders };
+    };
     const run = {
       directory,
       tenantPath: "/tenant",
       recordingId: "recording",
-      apiRequest: async (_method, path, body) => {
-        if (!path.endsWith("/download-url")) {
-          if (_method === "GET" && pending) {
-            // Replay a successful export whose cold worker was still warming
-            // when the old four-minute proof deadline expired.
-            now = 246_610;
-            pending = false;
-            return { export: { status: "pending" } };
-          }
-          return { export: { status: "ready" } };
-        }
-        if (defect === "URL lifetime") {
-          assert.ok(body.expires_in_seconds > 0);
-          assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
-        }
-        return { url: "https://example.invalid/export", signed_headers: signedHeaders };
-      },
+      apiRequest: async (method, path, body) => (path.endsWith("/download-url") ? downloadUrl(body) : exportStatus(method)),
     };
     let montage = false;
     const outputs = {
