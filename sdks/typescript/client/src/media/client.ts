@@ -331,15 +331,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           await this.#serializeSDP(() => this.#closeOwnedPublication(publication), true);
         } catch (error) {
           errors.push(error);
+          if (!this.#stopped) this.#reportError(error);
         }
       }
       if (this.#stopped && this.#ownedPublications.size === 0) this.#transport = undefined;
       if (errors.length) throw new AggregateError(errors, "Media retirement failed");
     })();
     // Observe shutdown and intent callers even when they do not await cleanup.
-    void retirement.catch((error: unknown) => {
-      if (!this.#stopped) this.#reportError(error);
-    });
+    void retirement.catch(() => {});
     return (this.#retirement = retirement);
   }
   #markPublicationRetiring(publication: OwnedLocalPublication): void {
@@ -358,7 +357,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       phase.detached = true;
       const sessionDescription = closed ? undefined : await createLocalOffer(connection);
-      const response = await this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...phase.handle, source: state.source }], force: closed });
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...phase.handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);

@@ -1875,6 +1875,7 @@ it.each([
       ...guestPlatform,
       dependencies: {
         ...guestPlatform.dependencies,
+        mediaDevices: { ...guestPlatform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(new FakeTrack("mic", "audio")) },
         createConnectionReporter: () => undefined,
         getEpisodeStatus: async () => episodeStatus,
         createMediaClient: (input) => {
@@ -1900,10 +1901,9 @@ it.each([
   let ending: Promise<void> | undefined;
   try {
     await host.join({ microphone: false, camera: false });
-    await guest.join({ microphone: false, camera: false });
+    await guest.join({ microphone: operation === "close_tracks", camera: false });
     if (operation === "close_tracks") {
-      harness.client.prepareLocalTrack("microphone", new FakeTrack("mic", "audio") as unknown as MediaStreamTrack);
-      await harness.client.setLocalPublicationTarget({ operationId: "on", participantId: "participant-1", source: "microphone", enabled: true });
+      expect(harness.transport.localPublications.size).toBe(1);
     }
     ending = host.endEpisode();
     await vi.waitFor(() => expect(episodeStatus).toBe("ending"));
@@ -1912,7 +1912,7 @@ it.each([
       await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ options: { status } });
     } else {
       vi.spyOn(harness.transport, "closeTracks").mockImplementation((input) => http.closeTracks(input));
-      await expect(harness.client.closeForcedLocalPublication("microphone")).rejects.toMatchObject({ options: { status } });
+      await expect(harness.client.closeForcedLocalPublication("microphone")).rejects.toMatchObject({ errors: [expect.objectContaining({ options: expect.objectContaining({ status }) })] });
     }
     await vi.waitFor(() => expect(guest.getSnapshot().connection.status).toBe("left"));
     expect(ended).toHaveBeenCalledOnce();
