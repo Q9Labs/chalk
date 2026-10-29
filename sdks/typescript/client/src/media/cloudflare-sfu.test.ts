@@ -1793,6 +1793,11 @@ class FakeTrack extends EventTarget {
     return {};
   }
   async applyConstraints(): Promise<void> {}
+  clone(): FakeTrack {
+    const track = new FakeTrack(`${this.id}-clone`, this.kind);
+    track.enabled = this.enabled;
+    return track;
+  }
   stop(): void {
     this.stopCalls++;
     this.readyState = "ended";
@@ -2386,6 +2391,7 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
     captured.push(...tracks);
     return reviewStream(...tracks);
   });
+  const enumerate = vi.fn(async (): Promise<readonly MediaDeviceInfo[]> => []);
   const screenCapture = vi.fn(async () => {
     const tracks = [new FakeTrack(`screen-${captured.length}`, "video"), new FakeTrack(`screen-audio-${captured.length}`, "audio")];
     captured.push(...tracks);
@@ -2408,7 +2414,7 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
           foreground = listener;
           return () => {};
         },
-        mediaDevices: { getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: async () => [] },
+        mediaDevices: { getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: enumerate },
         getEpisodeStatus: status,
         createMediaClient: (input) => {
           failure = input.onFailure;
@@ -2429,6 +2435,7 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
     captured,
     capture,
     screenCapture,
+    enumerate,
     reject: (code = 403) => {
       paused = true;
       failure(new CloudflareSFUError("Current binding rejected", "signaling_failed", { status: code }), "connection-1");
@@ -2582,6 +2589,123 @@ it.each(["microphone", "camera", "screen"] as const)("late %s capture stops ever
     expect(t.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
   } finally {
     capture.resolve(reviewStream(...tracks));
+    await t.cleanup();
+    await action;
+  }
+});
+
+it.each(["microphone", "camera"] as const)("quarantine sweep: stops %s capture while device enumeration is pending", async (source) => {
+  const t = reviewFixture();
+  const enumeration = Promise.withResolvers<readonly MediaDeviceInfo[]>();
+  const track = new FakeTrack("enumeration-pending", source === "microphone" ? "audio" : "video");
+  const extra = new FakeTrack("extra", source === "microphone" ? "video" : "audio");
+  let action: Promise<unknown> = Promise.resolve();
+  let settled = false;
+  try {
+    await t.client.join({ microphone: false, camera: false });
+    t.capture.mockImplementationOnce(async () => reviewStream(track, extra));
+    t.enumerate.mockImplementationOnce(() => enumeration.promise);
+    const before = t.enumerate.mock.calls.length;
+    action = (source === "microphone" ? t.client.media.setMicrophoneEnabled(true) : t.client.media.setCameraEnabled(true)).then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      (cause) => {
+        settled = true;
+        return cause;
+      },
+    );
+    await vi.waitFor(() => expect(t.enumerate.mock.calls.length).toBe(before + 1));
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    await t.settle();
+    const immediate = { track: track.readyState, extra: extra.readyState, enabled: track.enabled, settled, projection: t.client.getSnapshot().media.local[source], connection: t.client.getSnapshot().connection.status };
+    await t.advance(10000);
+    const at10s = { track: track.readyState, extra: extra.readyState, settled };
+    enumeration.resolve([]);
+    await t.settle();
+    const result = await action;
+    expect(immediate).toMatchObject({ track: "ended", extra: "ended", settled: true, connection: "reconnecting", projection: { state: "unavailable", track: null } });
+    expect(at10s).toEqual({ track: "ended", extra: "ended", settled: true });
+    expect(result).toMatchObject({ code: "connection.invalid_state" });
+  } finally {
+    enumeration.resolve([]);
+    await t.cleanup();
+    await action;
+  }
+});
+
+it("quarantine sweep: existing private camera preview stops on quarantine", async () => {
+  const t = reviewFixture();
+  let preview: Awaited<ReturnType<typeof t.client.media.captureCameraPreview>> | undefined;
+  try {
+    await t.client.join({ microphone: false, camera: false });
+    preview = await t.client.media.captureCameraPreview();
+    expect(preview.track.readyState).toBe("live");
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    await t.settle();
+    expect({ readyState: preview.track.readyState, connection: t.client.getSnapshot().connection.status }).toEqual({ readyState: "ended", connection: "reconnecting" });
+  } finally {
+    preview?.release();
+    await t.cleanup();
+  }
+});
+
+it("quarantine sweep: borrowed clone of a muted camera stops on quarantine", async () => {
+  const t = reviewFixture();
+  let preview: Awaited<ReturnType<typeof t.client.media.captureCameraPreview>> | undefined;
+  try {
+    await t.client.join({ microphone: false, camera: true });
+    await t.client.media.setCameraEnabled(false);
+    const original = t.captured.find((track) => track.kind === "video");
+    preview = await t.client.media.captureCameraPreview();
+    expect(preview.track).not.toBe(original);
+    expect(preview.track.readyState).toBe("live");
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    await t.settle();
+    expect(preview.track.readyState).toBe("ended");
+  } finally {
+    preview?.release();
+    await t.cleanup();
+  }
+});
+
+it("quarantine sweep: screen re-acquire stream stops while previous screen cleanup is awaiting a transport response", async () => {
+  const t = reviewFixture();
+  const cleanup = Promise.withResolvers<CloudflareSFUTracksResponse>();
+  const track = new FakeTrack("new-screen", "video");
+  const audio = new FakeTrack("new-screen-audio", "audio");
+  let action: Promise<unknown> = Promise.resolve();
+  let outcome: unknown = "pending";
+  try {
+    await t.client.join({ microphone: false, camera: false });
+    await t.client.media.setScreenShareEnabled(true, { audio: true });
+    t.screenCapture.mockImplementationOnce(async () => reviewStream(track, audio));
+    const close = vi.spyOn(t.harness.transport, "closeTracks").mockImplementationOnce(() => cleanup.promise);
+    const before = close.mock.calls.length;
+    action = t.client.media.setScreenShareEnabled(true, { audio: true }).then(
+      () => {
+        outcome = "fulfilled";
+      },
+      (cause) => {
+        outcome = cause;
+      },
+    );
+    await vi.waitFor(() => expect(close.mock.calls.length).toBeGreaterThan(before));
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    await t.settle();
+    const immediate = { video: track.readyState, audio: audio.readyState, enabled: track.enabled, pending: outcome === "pending", projection: t.client.getSnapshot().media.local.screen };
+    cleanup.resolve({ sessionDescription: { type: "answer", sdp: "close-answer" } });
+    await t.settle();
+    await action;
+    expect(immediate).toMatchObject({ video: "ended", audio: "ended", pending: false, projection: { state: "unavailable", track: null } });
+    expect(outcome).toMatchObject({ code: "connection.invalid_state" });
+  } finally {
+    cleanup.resolve({ sessionDescription: { type: "answer", sdp: "close-answer" } });
     await t.cleanup();
     await action;
   }
