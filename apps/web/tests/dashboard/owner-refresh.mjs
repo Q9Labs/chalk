@@ -5,8 +5,11 @@ import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./o
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
+const pendingResponses = [];
 function callResponse(page, action) {
-  return page.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === action, { timeout: 330000 });
+  const response = page.waitForResponse((response) => response.url() === `${origin}/dashboard-api/call` && response.request().method() === "POST" && response.request().postDataJSON()?.action === action, { timeout: 330000 });
+  pendingResponses.push(response);
+  return response;
 }
 async function access(response) {
   assert.equal(response.status(), 200, `Owner call returned HTTP ${response.status()}`);
@@ -36,6 +39,7 @@ try {
   await leaving.getByRole("button", { name: "Join call", exact: true }).click();
   await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const leaveCleanup = leaving.waitForResponse(`${origin}/auth/clear-owner-seats`);
+  pendingResponses.push(leaveCleanup);
   const leave = leaving.getByRole("button", { name: "Leave call", exact: true });
   const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
   await leave.click();
@@ -55,6 +59,7 @@ try {
   await first.bringToFront();
   await first.mouse.move(200, 200);
   const endCleanup = first.waitForResponse(`${origin}/auth/clear-owner-seats`);
+  pendingResponses.push(endCleanup);
   await first.getByRole("button", { name: "Leave call", exact: true }).click();
   await first.getByRole("menuitem", { name: "End call for everyone", exact: true }).click();
   for (const page of [first, second]) await page.getByRole("heading", { name: "The call ended", exact: true }).waitFor({ timeout: 30000 });
@@ -63,5 +68,9 @@ try {
   console.log("PASS: shared-browser owner tabs independently refresh, survive original five-minute credential expiry, and end for everyone through real Sync");
   await proveSignOutCleanup(context, origin);
 } finally {
+  // A failed independent assertion cancels response waiters during browser teardown.
+  // Attach handlers before closing so those cancellations cannot mask its error.
+  const settled = Promise.allSettled(pendingResponses);
   await cleanup();
+  await settled;
 }
