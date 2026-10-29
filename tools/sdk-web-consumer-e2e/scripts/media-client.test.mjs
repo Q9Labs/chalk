@@ -100,6 +100,42 @@ test("clearing an ended camera preserves its advertised publication until explic
   }
 });
 
+test("clearing a screen track withdraws its publication before an absent-source Off target", async (t) => {
+  const socket = installSignaling(t);
+  const client = fixtureClient();
+  const screen = new EventTarget();
+  Object.assign(screen, {
+    enabled: true,
+    readyState: "live",
+    kind: "video",
+    stop() {
+      this.readyState = "ended";
+    },
+  });
+  const target = { operationId: "screen", participantId: "self", source: "screen", enabled: true };
+  try {
+    await client.start({ getTracks: () => [] });
+    client.prepareLocalTrack("screen", screen);
+    await client.setLocalPublicationTarget(target);
+    const original = socket.publications()[0];
+    assert.equal(original.source, "screen");
+    assert.equal(original.enabled, true);
+    await client.clearPreparedLocalTrack("screen");
+    assert.equal(screen.readyState, "ended");
+    assert.deepEqual(client.getSnapshot().localTracks, []);
+    assert.deepEqual(socket.publications(), [], "Observers must lose the screen publication when capture is cleared");
+    assert.deepEqual(await client.setLocalPublicationTarget({ ...target, enabled: false }), { outcome: "satisfied", errorCode: null });
+    assert.deepEqual(socket.publications(), []);
+    const replacement = new EventTarget();
+    Object.assign(replacement, { enabled: true, readyState: "live", kind: "video", stop() {} });
+    client.prepareLocalTrack("screen", replacement);
+    await client.setLocalPublicationTarget(target);
+    assert.notEqual(socket.publications()[0].publicationId, original.publicationId, "A new share must get a fresh publication");
+  } finally {
+    client.stop();
+  }
+});
+
 function installSignaling(t) {
   const messages = [];
   class Socket extends EventTarget {

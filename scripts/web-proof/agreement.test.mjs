@@ -1,6 +1,94 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { agreementIssues, truthIssues } from "./agreement.mjs";
+import { createContext, runInContext } from "node:vm";
+import { agreementIssues, playProofMedia, sampleAgreement, truthIssues } from "./agreement.mjs";
+
+// Exercise the serialized browser sampler against media elements whose wrapper
+// stays mounted, just as ParticipantTileSurface does when playback stops.
+function sampler({ snapshot = false, opacity = "1", stream = true } = {}) {
+  const video = {
+    dataset: { participantId: "b" },
+    parentElement: { opacity },
+    srcObject: stream ? {} : null,
+    paused: false,
+    readyState: 2,
+    videoWidth: 640,
+    getVideoPlaybackQuality: () => ({ totalVideoFrames: 12 }),
+  };
+  const tile = { dataset: { participantId: "b" }, querySelector: (selector) => (selector === "video" ? video : null) };
+  const document = {
+    querySelector: () => null,
+    querySelectorAll: (selector) => (selector.startsWith('[data-part="stage-tile"]') ? [tile] : [video]),
+  };
+  const window = snapshot
+    ? { __chalk: { agreementSnapshot: () => ({ self: { participantId: "a" }, media: { local: { microphone: { state: "disabled" }, camera: { state: "disabled" } } }, participants: { roster: [{ participantId: "b", media: { microphone: "active", camera: "inactive" } }] } }) } }
+    : {};
+  const context = createContext({ window, document, getComputedStyle: (element) => element });
+  return { context, window, sample: () => runInContext(`(${sampleAgreement.toString()})()`, context) };
+}
+
+for (const snapshot of [false, true]) {
+  for (const [name, options, expected] of [
+    ["a mounted video hidden behind the avatar", { opacity: "0" }, false],
+    ["a mounted video without a playback stream", { stream: false }, false],
+    ["a visible video with a playback stream", {}, true],
+  ]) {
+    test(`${snapshot ? "snapshot badge" : "DOM projection"}: camera reflects ${name}`, async () => {
+      const result = await sampler({ snapshot, ...options }).sample();
+      const participant = result.participants[0];
+      assert.equal(snapshot ? participant.badgeCamera : participant.camera, expected);
+      assert.equal(result.received[0].frames, expected ? 12 : 0);
+    });
+  }
+}
+
+test("guest samples attach late remote tracks and refresh replacement tracks without duplicating sinks", async () => {
+  const { context, window, sample } = sampler();
+  const elements = [];
+  class Video {
+    dataset = {};
+    plays = 0;
+    async play() {
+      this.plays++;
+    }
+  }
+  class Stream {
+    constructor(tracks) {
+      this.tracks = tracks;
+    }
+    getTracks() {
+      return this.tracks;
+    }
+  }
+  const snapshot = { self: { participantId: "a" }, media: { local: { microphone: { state: "disabled" }, camera: { state: "disabled" } }, remote: [] }, participants: { roster: [] } };
+  context.document = {
+    querySelectorAll: (selector) => (selector === "[data-proof-source]" ? elements : []),
+    createElement: () => new Video(),
+    body: {
+      append(element) {
+        if (!elements.includes(element)) elements.push(element);
+      },
+    },
+  };
+  context.HTMLVideoElement = Video;
+  context.MediaStream = Stream;
+  window.proofClient = { getSnapshot: () => snapshot };
+  runInContext(`window.proofPlayMedia = (${playProofMedia.toString()})`, context);
+  await sample();
+  assert.equal(elements.length, 0, "Joining before subscription needs no sink yet");
+  const first = { kind: "video", id: "first" };
+  snapshot.media.remote = [{ participantId: "b", source: "camera", track: first }];
+  await sample();
+  assert.equal(elements.length, 1);
+  assert.equal(elements[0].srcObject.getTracks()[0], first);
+  assert.equal(elements[0].plays, 1);
+  const replacement = { kind: "video", id: "replacement" };
+  snapshot.media.remote[0].track = replacement;
+  await sample();
+  assert.equal(elements.length, 1);
+  assert.equal(elements[0].srcObject.getTracks()[0], replacement);
+  assert.equal(elements[0].plays, 2);
+});
 
 function pair({ silent = false, stale = false, badge = true } = {}) {
   const otherId = (self) => (self === "a" ? "b" : "a");
