@@ -1,3 +1,4 @@
+import { inviteCredential } from "./invite-credential.mjs";
 import { stopFixturePages } from "./oauth-test-support.mjs";
 import { strict as assert } from "node:assert";
 import { createServer, request as httpRequest } from "node:http";
@@ -16,11 +17,7 @@ const requests = [];
 const engineReads = [];
 const engineRequests = [];
 const unsupportedBodies = [];
-const inviteCredential = (raw) => {
-  const invite = new URL(raw);
-  const code = invite.pathname.slice(1);
-  return /^[a-z]+(?:-[a-z]+){2,3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
-};
+
 let rateLimitPath;
 const engine = createServer(async (request, response) => {
   requests.push(request.url);

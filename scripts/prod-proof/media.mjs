@@ -41,7 +41,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
-    const refresh = { count: 0, initialExpiry: Date.parse(grant.media.expiresAt ?? grant.media.expires_at), latestExpiry: 0 };
+    const refresh = { count: 0, initialExpiry: Date.parse(grant.media.expiresAt), latestExpiry: 0 };
     refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
@@ -82,20 +82,24 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
           }
         });
       });
+      const issueRefresh = async (request) => {
+        const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
+        grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
+        maskCredentials(grant);
+        if (!replaceMediaConnection) {
+          refresh.count++;
+          refresh.latestExpiry = Date.parse(grant.media.expiresAt);
+        }
+        replaceOnNextAccess = false;
+        return grant;
+      };
       await page.exposeFunction("proofAccess", (request) => {
         const next = queue.then(async () => {
           if (first) {
             first = false;
             return grant;
           }
-          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
-          maskCredentials(grant);
-          if (!replaceOnNextAccess && !request.replaceMediaConnection) {
-            refresh.count++;
-            refresh.latestExpiry = Date.parse(grant.media.expiresAt ?? grant.media.expires_at);
-          }
-          replaceOnNextAccess = false;
-          return grant;
+          return issueRefresh(request);
         });
         queue = next.catch(() => {}); // The caller receives errors; a failed refresh must not poison later calls.
         return next;
@@ -266,18 +270,22 @@ export async function proveLayers(run, { before, after, limited = false, receive
   return moving;
 }
 
+function receivedStreamMoved(rows, current) {
+  const previous = rows.find((row) => row.id === current.id && row.connection === current.connection);
+  if (!previous) return false;
+  if (!(current.bytesReceived > previous.bytesReceived)) return false;
+  return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
+}
 export function checkMediaProgress(before, after) {
   check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
   for (let guest = 0; guest < after.length; guest++) {
     for (const kind of ["audio", "video"]) {
-      const advancing = after[guest].some(
-        (current) =>
-          current.type === "inbound-rtp" &&
-          current.kind === kind &&
-          (kind !== "video" || current.source === "camera") &&
-          before[guest].some((previous) => previous.id === current.id && previous.connection === current.connection && current.bytesReceived > previous.bytesReceived && (kind !== "video" || current.framesDecoded > previous.framesDecoded)),
+      const source = { audio: "microphone", video: "camera" }[kind];
+      const receivers = after[guest].filter((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source);
+      check(
+        receivers.some((current) => receivedStreamMoved(before[guest], current)),
+        `Client ${guest + 1} stopped receiving ${kind} after credential refresh`,
       );
-      check(advancing, `Client ${guest + 1} stopped receiving ${kind} after credential refresh`);
     }
   }
 }
