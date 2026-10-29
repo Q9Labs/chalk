@@ -27,7 +27,9 @@ async function ownerParticipantId(tenantId: string, userId: string, spaceId: str
 export async function ownerAccess(request: Request, env: DashboardEnvironment, engine: Engine, person: Identity, action: Extract<CallAction, { action: "join" | "refresh-access" }>): Promise<Response> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   if (action.action === "refresh-access") {
-    const encoded = readCookie(request, env, `seat_${action.spaceId}_${action.joinKey}`);
+    // Already-loaded bundles keep their signed single-seat path until reload.
+    // A supplied but unknown join key must never fall back to another tab.
+    const encoded = readCookie(request, env, action.joinKey ? `seat_${action.spaceId}_${action.joinKey}` : `seat_${action.spaceId}`);
     if (!encoded) throw new DashboardError(401, "join_required");
     const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
     if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");

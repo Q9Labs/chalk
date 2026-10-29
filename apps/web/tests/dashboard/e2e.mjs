@@ -340,7 +340,8 @@ try {
       sql(
         `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
       );
-      const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, joinKey: join.idempotencyKey }, session.csrfToken);
+      const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
+      // Already-loaded bundles without a join key retain their signed single-seat path.
       // An admitted joining seat can refresh before Sync confirms entry.
       assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
       const refreshedGrant = (await refreshedAccess.json()).access;

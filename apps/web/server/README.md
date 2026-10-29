@@ -360,6 +360,11 @@ worker's redirect mode and must fail its first successful Google callback with
 zero token exchanges. Run without the flag for the passing workerd suite. Both
 runs own and clean up their Pages process, local HTTP server and sandbox.
 
+Already-loaded dashboard bundles without a join key retain the previous signed
+single-seat refresh path. New bundles always send a join key; an unknown key
+never falls back to the latest seat. Existing multi-tab calls need a reload to
+acquire separate per-join cookies.
+
 The required `dashboard-engine` Gate lane also runs `apps/web/tests/dashboard/owner-refresh.mjs`: two
 owner tabs share one signed-in browser and keep separate seats through the real
 four-minute refresh and original five-minute expiry, then end for everyone over

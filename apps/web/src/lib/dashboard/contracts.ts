@@ -39,7 +39,7 @@ export const homeAction = z.discriminatedUnion("action", [
 ]);
 export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("join"), spaceId: id, idempotencyKey }),
-  z.strictObject({ action: z.literal("refresh-access"), spaceId: id, joinKey: idempotencyKey, currentMediaToken: z.string().min(1).max(8192).optional() }),
+  z.strictObject({ action: z.literal("refresh-access"), spaceId: id, joinKey: idempotencyKey.optional(), currentMediaToken: z.string().min(1).max(8192).optional() }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
   z.strictObject({ action: z.literal("rotate-link"), spaceId: id, idempotencyKey }),
