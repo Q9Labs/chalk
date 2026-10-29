@@ -6,11 +6,11 @@ manifest enforcement, and relocated per-app deploys remain unproven.
 
 ## Result
 
-| Claim | Result | Evidence |
-| --- | --- | --- |
-| (a) A root Go module supports the relocated whiteboard package and the API binary | Failed after relocation; the root-module-only API build passed | Real package move rejects an API-private import; the API also loses the old whiteboard import path |
-| (b) External Mix source paths compile Sync and pass its tests | Not run | Stopped after (a), as required |
-| (c) Workspace discovery, TypeScript paths, dependency-cruiser, gates, and per-app deploys work after relocation | Not run | Stopped after (a), as required |
+| Claim                                                                                                           | Result                                                         | Evidence                                                                                           |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| (a) A root Go module supports the relocated whiteboard package and the API binary                               | Failed after relocation; the root-module-only API build passed | Real package move rejects an API-private import; the API also loses the old whiteboard import path |
+| (b) External Mix source paths compile Sync and pass its tests                                                   | Not run                                                        | Stopped after (a), as required                                                                     |
+| (c) Workspace discovery, TypeScript paths, dependency-cruiser, gates, and per-app deploys work after relocation | Not run                                                        | Stopped after (a), as required                                                                     |
 
 The [ownership map](FEATURE.md), [154-path inventory](inventory.md), and
 [dependency manifest](dependencies.json) describe the existing feature. The
