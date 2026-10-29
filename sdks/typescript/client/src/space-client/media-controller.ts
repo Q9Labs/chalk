@@ -290,10 +290,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const check = (failure?: SpaceClientError) => {
           if (failure) return resume(Effect.fail(failure));
           if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
-          if (ports && (this.#ports?.sync !== ports.sync || this.#ports.media !== ports.media)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
+          if (ports && !this.#canUsePorts(ports)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
           const state = this.#connection.getSnapshot().state;
           if (state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live" && this.#store.getSnapshot().connection.status === "live") return resume(Effect.void);
-          if (state !== "joining" && state !== "reconnecting" && state !== "live") resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
+          if (!["joining", "reconnecting", "live"].includes(state)) resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
         };
         this.#readinessChecks.add(check);
         const unsubscribe = this.#connection.subscribe(() => check());
@@ -861,7 +861,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const stream = await operation();
         captured = stream;
         // Browser capture cannot be aborted; this owner must dispose its late result.
-        if (cancelled) {
+        if (cancelled || this.#ports?.media.getSnapshot().connection.phase === "stopped") {
           stopStream(stream);
           throw cancelledCaptureError();
         }
@@ -941,8 +941,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const failure = isPermissionDenied(input.cause) || captureWasUnavailable ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;
     return rollback.pipe(Effect.andThen(Effect.sync(() => this.#publish())), Effect.andThen(Effect.fail(failure)));
   }
+  #canUsePorts(ports: ConnectionPorts): boolean {
+    return this.#ports?.sync === ports.sync && this.#ports.media === ports.media && ports.media.getSnapshot().connection.phase !== "stopped";
+  }
   #assertActivePorts(ports: ConnectionPorts, action: "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare" | "stopScreenShare"): void {
-    if (this.#connection.getSnapshot().state === "live" && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
+    if (this.#connection.getSnapshot().state === "live" && this.#canUsePorts(ports)) return;
     throw new ConnectionError({ code: "invalid_state", action, recoverable: false, message: `${action} belongs to an inactive connection` });
   }
   #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {

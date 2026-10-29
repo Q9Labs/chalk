@@ -1666,3 +1666,52 @@ it.each([401, 403].flatMap((code) => ["unknown", "active", "ending"].map((answer
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 });
+
+it.each(["microphone", "camera", "screen"] as const)("late %s capture stops every track before use after media rejection", async (source) => {
+  const t = reviewFixture();
+  const capture = Promise.withResolvers<MediaStream>();
+  const track = new FakeTrack("late-capture", source === "microphone" ? "audio" : "video");
+  const tracks = source === "screen" ? [track, new FakeTrack("late-screen-audio", "audio")] : [track];
+  let action: Promise<unknown> = Promise.resolve();
+  let settled = false;
+  try {
+    await t.client.join({ microphone: false, camera: false });
+    const acquire = source === "screen" ? t.screenCapture : t.capture;
+    acquire.mockImplementationOnce(() => capture.promise);
+    const before = acquire.mock.calls.length;
+    const prepare = vi.spyOn(t.harness.client, "prepareLocalTrack");
+    const publish = vi.spyOn(t.harness.transport, "addTracks");
+    action = (source === "microphone" ? t.client.media.setMicrophoneEnabled(true) : source === "camera" ? t.client.media.setCameraEnabled(true) : t.client.media.setScreenShareEnabled(true)).then(
+      () => {
+        settled = true;
+        return undefined;
+      },
+      (cause) => {
+        settled = true;
+        return cause;
+      },
+    );
+    await vi.waitFor(() => expect(acquire.mock.calls.length).toBe(before + 1));
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    capture.resolve(reviewStream(...tracks));
+    await t.settle();
+    const immediate = { readyState: track.readyState, enabled: track.enabled, settled, projection: t.client.getSnapshot().media.local[source], connection: t.client.getSnapshot().connection.status };
+    await t.advance(9999);
+    await t.advance(10000);
+    await action;
+    expect(immediate.readyState).toBe("ended");
+    expect(immediate.settled).toBe(true);
+    expect(immediate.projection).toMatchObject({ state: "unavailable", track: null });
+    expect(tracks.every((track) => track.readyState === "ended")).toBe(true);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(publish).not.toHaveBeenCalled();
+    expect(t.harness.peers[0].closed).toBe(true);
+    expect(acquire.mock.calls.length).toBe(before + 1);
+    expect(t.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+  } finally {
+    capture.resolve(reviewStream(...tracks));
+    await t.cleanup();
+    await action;
+  }
+});
