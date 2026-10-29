@@ -914,7 +914,12 @@ with completion_eligibility as materialized (
         due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
         updated_at = now()
 )
-select * from completed;
+-- Read pipeline's RETURNING row so publication follows its completion update.
+-- Failure rolls back the completion and lease release along with the outbox.
+select completed.*
+from completed
+join pipeline on pipeline.recording_id = completed.recording_id
+where recording_publish_completed_capture_stop(pipeline.recording_id, sqlc.narg(trace_id)::text, sqlc.narg(span_id)::text);
 
 -- name: FailRecordingJob :one
 with failure_policy as (

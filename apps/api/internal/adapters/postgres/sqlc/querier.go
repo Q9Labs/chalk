@@ -52,6 +52,8 @@ type Querier interface {
 	CommitRecordingBundleAllocation(ctx context.Context, arg CommitRecordingBundleAllocationParams) (CommitRecordingBundleAllocationRow, error)
 	CommitRecordingRenderObject(ctx context.Context, arg CommitRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	CompleteArtifactJob(ctx context.Context, arg CompleteArtifactJobParams) (ArtifactJob, error)
+	// Read pipeline's RETURNING row so publication follows its completion update.
+	// Failure rolls back the completion and lease release along with the outbox.
 	CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error)
 	CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error)
 	CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error)

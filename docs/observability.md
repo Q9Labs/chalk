@@ -39,13 +39,21 @@ as the journey ID. Its attributes contain only the recording ID, capture epoch,
 `reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
 emit this event, and replaying a completed lease cannot emit it twice.
 
-Pipeline maintenance also repairs a missing capture-stopped callback after durable
-capture completion. It queues the existing `recording_capture_stopped` operation
+Durable capture completion queues a missing capture-stopped callback in the same
+transaction that releases the capture lease. Pipeline maintenance retains the
+same repair as a safety net for older completions. Both queue the existing
+`recording_capture_stopped` operation
 under the original applied manual-stop authority and capture epoch, carrying that
-stop's journey and parent-event IDs. Sync validates and commits its normal
-`recording_status_changed` event; retries do not add another terminal event.
+stop's journey and parent-event IDs. Immediate publication also carries the
+completion span's trace and span IDs. Both paths share one request key per
+recording and epoch, and skip an existing pending or applied callback for that
+stop authority. Sync validates and commits its normal `recording_status_changed`
+event; retries do not add another terminal event.
 Episode end may adopt that same stop without replacing its authority. Neither
 path commits an export or changes the successful capture job. The regression in
+`apps/api/internal/adapters/postgres/recording_capture_stop_completion_integration_test.go`
+proves immediate publication, completion replay and maintenance deduplication
+after manual stop and failed provider close. The regression in
 `apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
 callback recovery, and duplicate delivery against the Go controller and maintenance
 commands.

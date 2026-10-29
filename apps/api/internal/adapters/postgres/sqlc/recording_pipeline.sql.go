@@ -465,7 +465,7 @@ with completion_eligibility as materialized (
         recording_capture_completion_available(jobs.recording_id) as completion_available,
         recording_capture_stop_confirmed(jobs.recording_id) as stop_confirmed
     from recording_jobs jobs
-    where jobs.id = $1 and jobs.kind = 'capture'
+    where jobs.id = $3 and jobs.kind = 'capture'
 ), completed as (
     update recording_jobs
     set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_at = null,
@@ -474,10 +474,10 @@ with completion_eligibility as materialized (
     where recording_jobs.id = eligibility.id
       and kind = 'capture'
       and state = 'leased'
-      and recording_jobs.attempt_count = $2
-      and recording_jobs.fencing_generation = $3
-      and recording_jobs.lease_token = $4
-      and recording_jobs.lease_owner = $5
+      and recording_jobs.attempt_count = $4
+      and recording_jobs.fencing_generation = $5
+      and recording_jobs.lease_token = $6
+      and recording_jobs.lease_owner = $7
       and recording_jobs.lease_expires_at > now()
       and exists (
           select 1 from recording_job_attempt_authorities authority
@@ -485,12 +485,12 @@ with completion_eligibility as materialized (
             and authority.kind = recording_jobs.kind
             and ((convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is not true
                  or eligibility.completion_available)
-            and authority.attempt_count = $2
-            and authority.fencing_generation = $3
-            and authority.capture_epoch = $6
-            and authority.envelope_digest = $7
-            and authority.lease_token = $4
-            and authority.lease_owner = $5
+            and authority.attempt_count = $4
+            and authority.fencing_generation = $5
+            and authority.capture_epoch = $8
+            and authority.envelope_digest = $9
+            and authority.lease_token = $6
+            and authority.lease_owner = $7
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), pipeline as (
@@ -510,8 +510,8 @@ with completion_eligibility as materialized (
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce(start_operation.journey_id, completed.recording_id)), 0),
         now(), 'recording.capture.salvaged', 'capture_completion', 'succeeded', 'server', 'api', 'visible',
-        start_operation.parent_journey_event_id, $8, $9,
-        jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $6::bigint,
+        start_operation.parent_journey_event_id, $1, $2,
+        jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $8::bigint,
                            'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
     from completed
     join completion_eligibility eligibility on eligibility.id = completed.id
@@ -565,7 +565,7 @@ with completion_eligibility as materialized (
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce($13::uuid, render_job.recording_id)), 0),
         now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
-        $8::text, $9::text,
+        $1::text, $2::text,
         jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
             'recording_id', render_job.recording_id, 'capture_job_id', completed.id,
             'render_job_id', render_job.id, 'trigger', 'automatic')
@@ -622,10 +622,15 @@ with completion_eligibility as materialized (
         due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
         updated_at = now()
 )
-select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata from completed
+select completed.id, completed.tenant_id, completed.episode_id, completed.recording_id, completed.kind, completed.idempotency_key, completed.payload_schema_version, completed.state, completed.priority, completed.available_at, completed.attempt_count, completed.attempt_limit, completed.lease_token, completed.lease_owner, completed.lease_expires_at, completed.fencing_generation, completed.error_code, completed.error_detail, completed.terminal_at, completed.updated_at, completed.created_at, completed.result_metadata
+from completed
+join pipeline on pipeline.recording_id = completed.recording_id
+where recording_publish_completed_capture_stop(pipeline.recording_id, $1::text, $2::text)
 `
 
 type CompleteCaptureRecordingJobParams struct {
+	TraceID              pgtype.Text `json:"trace_id"`
+	SpanID               pgtype.Text `json:"span_id"`
 	ID                   pgtype.UUID `json:"id"`
 	AttemptCount         int32       `json:"attempt_count"`
 	FencingGeneration    int64       `json:"fencing_generation"`
@@ -633,8 +638,6 @@ type CompleteCaptureRecordingJobParams struct {
 	LeaseOwner           pgtype.Text `json:"lease_owner"`
 	CaptureEpoch         int64       `json:"capture_epoch"`
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
-	TraceID              pgtype.Text `json:"trace_id"`
-	SpanID               pgtype.Text `json:"span_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
@@ -668,8 +671,12 @@ type CompleteCaptureRecordingJobRow struct {
 	ResultMetadata       []byte             `json:"result_metadata"`
 }
 
+// Read pipeline's RETURNING row so publication follows its completion update.
+// Failure rolls back the completion and lease release along with the outbox.
 func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, completeCaptureRecordingJob,
+		arg.TraceID,
+		arg.SpanID,
 		arg.ID,
 		arg.AttemptCount,
 		arg.FencingGeneration,
@@ -677,8 +684,6 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.LeaseOwner,
 		arg.CaptureEpoch,
 		arg.EnvelopeDigest,
-		arg.TraceID,
-		arg.SpanID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,
