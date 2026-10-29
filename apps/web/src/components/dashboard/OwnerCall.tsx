@@ -3,7 +3,7 @@ import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { z } from "zod";
+import { z } from "../../lib/zod-mini";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";

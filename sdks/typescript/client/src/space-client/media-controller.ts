@@ -287,9 +287,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribePorts = null;
     this.#ports = null;
     this.#resetObservations();
-    this.#screenAudioTrack?.stop();
-    this.#screenAudioTrack = null;
-    for (const track of this.#tracks.values()) track.stop();
     this.#clearTracks();
     this.#clearRequests();
     this.#publish();
@@ -927,9 +924,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return Effect.suspend(() => {
       let cancelled = false;
       let captured: MediaStream | null = null;
+      const cancellation = Deferred.makeUnsafe<never, ConnectionError>();
       const cancel = () => {
         cancelled = true;
         stopStream(captured);
+        Deferred.doneUnsafe(cancellation, Effect.fail(cancelledCaptureError()));
       };
       this.#pendingCaptures.add(cancel);
       signal?.addEventListener("abort", cancel, { once: true });
@@ -947,6 +946,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }).pipe(
         Effect.mapError(onCaptureError),
         Effect.flatMap(use),
+        Effect.raceFirst(Deferred.await(cancellation)),
         Effect.tap(() => (cancelled ? Effect.fail(cancelledCaptureError()) : Effect.void)),
         Effect.onExit((exit) =>
           Effect.sync(() => {
@@ -962,6 +962,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#transitionCamera({ status: "ended" });
     for (const cancel of this.#pendingCaptures) cancel();
     this.#pendingCaptures.clear();
+    this.#screenAudioTrack?.stop();
+    this.#screenAudioTrack = null;
+    for (const track of this.#tracks.values()) track.stop();
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
@@ -1037,6 +1040,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#publish();
   }
   #bind(ports: ConnectionPorts | null): void {
+    if (ports?.media.getSnapshot().connection.phase === "stopped") this.#cancelCaptures();
     if (ports && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
     this.#rememberRecoveryIntents();
     for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
@@ -1051,15 +1055,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!ports) {
       this.#resetObservations();
       this.#cancelCaptures();
-      this.#screenAudioTrack?.stop();
-      this.#screenAudioTrack = null;
-      for (const track of this.#tracks.values()) track.stop();
       this.#clearTracks();
       this.#clearRequests();
       this.#publish();
       return;
     }
     this.#unsubscribeMedia = ports.media.subscribe(() => {
+      if (ports.media.getSnapshot().connection.phase === "stopped") this.#cancelCaptures();
       this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
       this.#publish();
     });
