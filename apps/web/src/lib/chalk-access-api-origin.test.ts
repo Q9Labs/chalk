@@ -54,7 +54,8 @@ it("notifies report subscribers of renewed access and stops after unsubscribe", 
 
 it.each(["not-date", "2026-02-30T01:00:00Z", "2026-10-29T01:00:00+04:00"])("preserves the report-expiry validation error for %s", (expires_at) => {
   const access = opaqueAccessGrant(1);
-  const arrival: PublicSpaceArrival = { state: "admitted", arrival_handle: "arrival-1", space: { admission_mode: "open", name: "Test call", slug: "test-call" }, access: { ...access, media: { ...access.media, expires_at } } };
+  Object.assign(access, { media: { token: reloadRejoinAccess(access).mediaProof, expires_at } });
+  const arrival: PublicSpaceArrival = { state: "admitted", arrival_handle: "arrival-1", space: { admission_mode: "open", name: "Test call", slug: "test-call" }, access };
   const prepared = createPreparedPublicSpace(createPublicInviteClient(), arrival);
   expect(() => prepared.reportCredentialExpiresAt()).toThrow(ZodError);
 });
