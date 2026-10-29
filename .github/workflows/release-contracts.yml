@@ -7,6 +7,7 @@ on:
       - .github/workflows/ci.yml
       - .github/workflows/nightly.yml
       - .github/workflows/promote.yml
+      - .github/workflows/npm-publish.yml
       - .github/workflows/real-call-proof.yml
       - .github/workflows/web-call-proof.yml
       - .github/workflows/media-cleanup.yml
