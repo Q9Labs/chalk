@@ -1016,5 +1016,7 @@ func sfuStatusError(operation string, statusCode int, payload []byte) error {
 	if statusCode == http.StatusTooEarly && code == "session_error" && providerMessageCode(message) == "connection_not_connected" {
 		code = "session_not_connected"
 	}
-	return newProviderResponseFailure(operation, failureStageHTTPStatus, statusCode, code, message, 0, 0)
+	failure := newProviderFailure(operation, failureStageHTTPStatus, statusCode, providerRejectionCode(code, message))
+	failure.details.rawCode = observableHTTPProviderCode(payload)
+	return failure
 }
