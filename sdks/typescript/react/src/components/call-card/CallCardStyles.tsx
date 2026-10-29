@@ -556,26 +556,6 @@ const styles = `.call-card-tabs {
   color: var(--chalk-warning);
   font-size: 12px;
 }
-.call-raised-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-height: 52px;
-  padding: 0 4px 0 8px;
-  border-radius: 12px;
-}
-.call-hand-number {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #dcb740;
-  color: #16140c;
-  font-size: 12px;
-  font-weight: 700;
-}
 .call-chat-messages {
   min-height: 0;
 }
