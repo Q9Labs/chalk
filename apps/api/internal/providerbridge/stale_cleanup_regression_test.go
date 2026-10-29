@@ -58,6 +58,8 @@ func TestObservedInternalCleanupReconcilesDispatchingReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			repository.receipt.State = observed.Receipt.State
+			repository.receipt.ParticipantID = input.ParticipantID
+			repository.receipt.ParticipantGeneration = input.ParticipantGeneration
 			repository.receipt.Reason = &observed.Receipt.Reason
 			repository.receipt.LastErrorCode = &observed.Receipt.LastErrorCode
 			registry := &executorPublicationRegistry{publication: publication}
@@ -69,7 +71,7 @@ func TestObservedInternalCleanupReconcilesDispatchingReceipts(t *testing.T) {
 			service := NewService(repository, NewSFUExecutor(registry, adapter))
 			result, err := service.Execute(context.Background(), input)
 			if err != nil || result.Outcome != provideroperations.OutcomeSatisfied || repository.receipt.State != provideroperations.ReceiptCompleted || repository.receipt.LastErrorCode != nil || registry.publication.PublicationID != "" {
-				t.Fatalf("observed cleanup did not recover: result=%+v err=%v receipt=%+v", result, err, repository.receipt)
+				t.Fatalf("observed cleanup did not recover: result=%+v err=%v receipt_state=%s", result, err, repository.receipt.State)
 			}
 			calls := client.calls
 			result, err = service.Execute(context.Background(), input)
