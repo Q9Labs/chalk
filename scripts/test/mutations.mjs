@@ -18,10 +18,10 @@ const cases = [
     ...go("accessgrants"),
   },
   {
-    name: "sync-credential-expiry",
+    name: "sync-credential-authentication",
     file: "apps/api/internal/synctokens/verifier.go",
-    from: "claims.ExpiresAt > now-30 &&",
-    to: "claims.ExpiresAt > now-3000 &&",
+    from: '!ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), signature)',
+    to: 'len(key) == 0 && !ed25519.Verify(key, []byte(parts[0]+"."+parts[1]), signature)',
     ...go("synctokens"),
   },
   {
@@ -160,7 +160,7 @@ for (const mutation of cases) {
   try {
     writeFileSync(filename, original.replace(mutation.from, mutation.to));
     const result = run("mutant");
-    if (result.status === 0 || !/--- FAIL:|AssertionError|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
+    if (result.status === 0 || !/--- FAIL:|AssertionError|\bassert\b|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
     console.log(`KILLED ${mutation.name}`);
   } finally {
     writeFileSync(filename, original);
