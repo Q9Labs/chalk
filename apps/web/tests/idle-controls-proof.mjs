@@ -34,7 +34,10 @@ if (kind === "follow-pin") {
       const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
       try {
         const [a, b] = await Promise.all([context.newPage(), context.newPage()]);
-        for (const [page, self] of [[a, "a"], [b, "b"]]) {
+        for (const [page, self] of [
+          [a, "a"],
+          [b, "b"],
+        ]) {
           await page.goto(`${origin}/call-states.html?state=integration-call`);
           await page.clock.install();
           await page.addScriptTag({ type: "module", url: `${origin}/src/call-states/follow-pin-fixture.tsx` });
@@ -59,11 +62,11 @@ if (kind === "follow-pin") {
     for (let run = 0; run < iterations; run++) {
       const page = await context.newPage();
       try {
+        await page.clock.install();
         await page.goto(`${origin}/dashboard`);
         await page.getByRole("button", { name: "Start a call", exact: true }).click();
         await page.getByRole("button", { name: "Join call", exact: true }).click();
         await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
-        await page.clock.install();
         const leave = page.getByRole("button", { name: "Leave call", exact: true });
         const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
         console.log(`OWNER_STATE run=${run} menu=${opensMenu}`);
