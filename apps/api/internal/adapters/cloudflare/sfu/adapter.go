@@ -828,6 +828,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		"cloudflare_sfu.provider_failure",
 		trace.WithAttributes(
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
+			attribute.String("chalk.provider.message", failure.details.message),
 			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
 			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
 			attribute.String("chalk.provider.response_snapshot", failure.details.responseSnapshot),
