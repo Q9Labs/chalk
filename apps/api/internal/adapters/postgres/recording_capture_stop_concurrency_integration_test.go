@@ -86,70 +86,77 @@ func stoppedCompletionPool(t *testing.T) *pgxpool.Pool {
 }
 
 func TestCaptureStopPublicationRollsBackAndRetriesBeyondMediaBudget(t *testing.T) {
-	pool := stoppedCompletionPool(t)
-	tx, f, lease := newStoppedCompletionFixture(t)
-	if err := tx.Commit(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
-	ctx := t.Context()
-	// Inject at the real outbox boundary, after completion's job/pipeline and
-	// reservation updates have run. The wrapper must roll the entire statement back.
-	_, err := pool.Exec(ctx, `create function reject_capture_stop() returns trigger language plpgsql as $$
- begin if new.operation_name='recording_capture_stopped' then raise exception 'injected publisher outage'; end if; return new; end $$;
+	for _, fault := range []struct{ name, sqlState string }{{"outage", "P0001"}, {"server cancellation", "57014"}} {
+		t.Run(fault.name, func(t *testing.T) {
+			pool := stoppedCompletionPool(t)
+			tx, f, lease := newStoppedCompletionFixture(t)
+			if err := tx.Commit(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			repository := postgres.NewRecordingPipelineRepositoryWithPool(pool)
+			ctx := t.Context()
+			// Inject at the real outbox boundary, after completion's job/pipeline and
+			// reservation updates have run. The wrapper must roll the entire statement back.
+			_, err := pool.Exec(ctx, `create function reject_capture_stop() returns trigger language plpgsql as $$
+ begin if new.operation_name='recording_capture_stopped' then raise exception using errcode = '`+fault.sqlState+`', message = 'injected publisher failure'; end if; return new; end $$;
  create trigger reject_capture_stop before insert on sync_external_operations for each row execute function reject_capture_stop()`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var before string
-	snapshot := `select jsonb_build_object('job',to_jsonb(j),'pipeline',to_jsonb(p),'reservation',to_jsonb(r),'capacity',to_jsonb(c))::text
+			if err != nil {
+				t.Fatal(err)
+			}
+			var before string
+			snapshot := `select jsonb_build_object('job',to_jsonb(j),'pipeline',to_jsonb(p),'reservation',to_jsonb(r),'capacity',to_jsonb(c))::text
  from recording_jobs j join recording_pipelines p using(recording_id)
  join recording_reservations r on r.id=p.reservation_id cross join recording_capacity c where j.id=$1`
-	for range 4 {
-		if err := pool.QueryRow(ctx, snapshot, f.jobID.Bytes()).Scan(&before); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := repository.CompleteCapture(ctx, lease, f.recordingID); !errors.Is(err, recordingpipeline.ErrCaptureStopPublication) {
-			t.Fatalf("want publication failure, got %v", err)
-		}
-		var after string
-		if err := pool.QueryRow(ctx, snapshot, f.jobID.Bytes()).Scan(&after); err != nil || after != before {
-			t.Fatalf("publisher failure changed completion, lease, pipeline, reservation or capacity: err=%v\nbefore=%s\nafter=%s", err, before, after)
-		}
-		assertStoppedCallbackCount(t, pool, f, 0)
-		failure := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_stop_publication_failed", ErrorDetail: "injected publication outage"}
-		failed, err := repository.Fail(ctx, failure)
-		if err != nil || failed.State != recordingpipeline.JobStatePending {
-			t.Fatalf("publication must not exhaust media budget: state=%s err=%v", failed.State, err)
-		}
-		if _, err := sqlc.New(pool).RecoverExpiredRecordingJobs(ctx, 7200); err != nil {
-			t.Fatal(err)
-		}
-		claim, err := sqlc.New(pool).ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{Kind: "capture", MaximumRenderSeconds: 7200, SupportsCompletionOnly: true, LeaseOwner: pgtype.Text{String: "retry-worker", Valid: true}, LeaseToken: pgtype.Text{String: "retry-token", Valid: true}, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
-		if err != nil || !claim.CompletionOnly || claim.CaptureEpoch != lease.CaptureEpoch {
-			t.Fatalf("claim publication retry: %+v %v", claim, err)
-		}
-		_, err = pool.Exec(ctx, `insert into recording_job_attempt_authorities(job_id,attempt_count,fencing_generation,capture_epoch,claim_request_id,kind,lease_owner,lease_token,lease_expires_at,envelope_bytes,envelope_digest)
+			// Cross the schema's media attempt_limit ceiling of 20. Completion-only
+			// retries must keep that budget fixed rather than raising it with total claims.
+			for range 21 {
+				if err := pool.QueryRow(ctx, snapshot, f.jobID.Bytes()).Scan(&before); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := repository.CompleteCapture(ctx, lease, f.recordingID); !errors.Is(err, recordingpipeline.ErrCaptureStopPublication) {
+					t.Fatalf("want publication failure, got %v", err)
+				}
+				var after string
+				if err := pool.QueryRow(ctx, snapshot, f.jobID.Bytes()).Scan(&after); err != nil || after != before {
+					t.Fatalf("publisher failure changed completion, lease, pipeline, reservation or capacity: err=%v\nbefore=%s\nafter=%s", err, before, after)
+				}
+				assertStoppedCallbackCount(t, pool, f, 0)
+				failure := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: time.Now().Add(-time.Second), ErrorCode: "capture_stop_publication_failed", ErrorDetail: "injected publication outage"}
+				failed, err := repository.Fail(ctx, failure)
+				if err != nil || failed.State != recordingpipeline.JobStatePending {
+					t.Fatalf("publication must not exhaust media budget: state=%s err=%v", failed.State, err)
+				}
+				if _, err := sqlc.New(pool).RecoverExpiredRecordingJobs(ctx, 7200); err != nil {
+					t.Fatal(err)
+				}
+				claim, err := sqlc.New(pool).ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{Kind: "capture", MaximumRenderSeconds: 7200, SupportsCompletionOnly: true, LeaseOwner: pgtype.Text{String: "retry-worker", Valid: true}, LeaseToken: pgtype.Text{String: "retry-token", Valid: true}, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true}})
+				if err != nil || !claim.CompletionOnly || claim.CaptureEpoch != lease.CaptureEpoch || claim.AttemptLimit != 1 {
+					t.Fatalf("claim publication retry: %+v %v", claim, err)
+				}
+				_, err = pool.Exec(ctx, `insert into recording_job_attempt_authorities(job_id,attempt_count,fencing_generation,capture_epoch,claim_request_id,kind,lease_owner,lease_token,lease_expires_at,envelope_bytes,envelope_digest)
   select id,attempt_count,fencing_generation,$2,gen_random_uuid(),kind,lease_owner,lease_token,lease_expires_at,'{"completion_only":true}',$3 from recording_jobs where id=$1`, f.jobID.Bytes(), f.captureEpoch, f.digest)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lease.AttemptCount = int(claim.AttemptCount)
-		lease.FencingGeneration = claim.FencingGeneration
-		lease.LeaseOwner = claim.LeaseOwner.String
-		lease.LeaseToken = claim.LeaseToken.String
+				if err != nil {
+					t.Fatal(err)
+				}
+				lease.AttemptCount = int(claim.AttemptCount)
+				lease.FencingGeneration = claim.FencingGeneration
+				lease.LeaseOwner = claim.LeaseOwner.String
+				lease.LeaseToken = claim.LeaseToken.String
+			}
+			if _, err := pool.Exec(ctx, `drop trigger reject_capture_stop on sync_external_operations`); err != nil {
+				t.Fatal(err)
+			}
+			if completed, err := repository.CompleteCapture(ctx, lease, f.recordingID); err != nil || completed.State != recordingpipeline.JobStateSucceeded || completed.AttemptCount <= 20 || completed.AttemptLimit != 1 {
+				t.Fatalf("restored publication must finish automatically: %s %v", completed.State, err)
+			}
+			assertStoppedCallbackCount(t, pool, f, 1)
+			if _, err := sqlc.New(pool).RecoverExpiredRecordingJobs(ctx, 7200); err != nil {
+				t.Fatal(err)
+			}
+			assertStoppedCallbackCount(t, pool, f, 1)
+
+		})
 	}
-	if _, err := pool.Exec(ctx, `drop trigger reject_capture_stop on sync_external_operations`); err != nil {
-		t.Fatal(err)
-	}
-	if completed, err := repository.CompleteCapture(ctx, lease, f.recordingID); err != nil || completed.State != recordingpipeline.JobStateSucceeded {
-		t.Fatalf("restored publication must finish automatically: %s %v", completed.State, err)
-	}
-	assertStoppedCallbackCount(t, pool, f, 1)
-	if _, err := sqlc.New(pool).RecoverExpiredRecordingJobs(ctx, 7200); err != nil {
-		t.Fatal(err)
-	}
-	assertStoppedCallbackCount(t, pool, f, 1)
 }
 
 func assertStoppedCallbackCount(t *testing.T, pool *pgxpool.Pool, f transcriptionAllocationCleanupFixture, want int) {

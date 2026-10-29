@@ -54,7 +54,7 @@ The API returns `recording.capture_stop_publication_failed`; the worker reports
 `capture_stop_publication_failed` with its existing bounded completion detail.
 Only a lease-fenced failure report records that attempt as a publication failure.
 Claim and maintenance exclude those attempts from the media-completion retry
-budget, while retaining the existing source-expiry deadline. Restoring publication
+budget. Unconfirmed stops retain their existing source-expiry deadline. Restoring publication
 therefore lets the ordinary completion-only worker finish without operator repair.
 Episode end may adopt that same stop without replacing its authority. Neither
 path commits an export or changes the successful capture job. The regression in
@@ -63,7 +63,8 @@ proves immediate publication, completion replay and maintenance deduplication
 after manual stop and failed provider close. The two-connection regressions in
 `apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go`
 prove both worker/completion lock orders, concurrent completion, atomic rollback
-on publisher failure, and automatic recovery after four publication failures.
+on publisher failure, and automatic recovery beyond 20 publication failures, including server-side
+query cancellation.
 The regression in
 `apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
 callback recovery, and duplicate delivery against the Go controller and maintenance

@@ -125,7 +125,6 @@ with candidate as (
                 candidate.recovery_expires_at, recording_capture_salvage_deadline(recording_jobs.recording_id))
             else least($7::timestamptz, candidate.recovery_expires_at) end,
         fencing_generation = fencing_generation + 1,
-        attempt_limit = case when candidate.completion_only then greatest(recording_jobs.attempt_limit, recording_jobs.attempt_count + 1) else recording_jobs.attempt_limit end,
         updated_at = now()
     from candidate
     where recording_jobs.id = candidate.id

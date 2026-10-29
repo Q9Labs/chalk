@@ -4813,7 +4813,7 @@ begin
     -- Maintenance uses this same key, including when it races publication.
     on conflict (tenant_id, episode_id, operation_name, request_key) do nothing;
     return true;
-exception when others then
+exception when query_canceled or others then
     -- Keep the failure stage across the API boundary without exposing SQL details.
     raise exception using errcode = 'PC001', message = 'capture stopped publication failed';
 end;
