@@ -758,10 +758,14 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const state = this.#camera;
     if (!("owner" in state)) throw cancelledCaptureError();
     if (state.status === "live" && state.track !== track) throw cancelledCaptureError();
-    const onEnded = () => {
-      if (this.#camera.status === "live" && this.#camera.track === track) this.#transitionCamera({ status: "ended" });
-    };
+    const onEnded = () => this.#handleCameraEnded(track);
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
+  }
+  #handleCameraEnded(track: MediaStreamTrack): void {
+    const state = this.#camera;
+    if (state.status !== "live" || state.track !== track) return;
+    if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision);
+    this.#transitionCamera({ status: "ended" });
   }
   #watchMicrophone(track: MediaStreamTrack | null): void {
     if (this.#microphoneWatch?.track === track) return;
@@ -867,9 +871,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 track.stop();
                 throw cancelledCaptureError();
               }
-              const onEnded = () => {
-                if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
-              };
+              const onEnded = () => this.#handleCameraEnded(track);
               this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded });
               if (track.readyState !== "live") {
                 this.#transitionCamera({ status: "ended" });
@@ -1266,31 +1268,22 @@ function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
 }
 function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
-  const microphone = initialTrackFor(tracks, intent.microphone, "audio");
-  const camera = initialTrackFor(tracks, intent.camera, "video");
-  const selected = new Set(initialTracks(microphone, camera));
-  for (const track of tracks) if (!selected.has(track)) track.stop();
-  if (missingInitialTrack(intent, microphone, camera)) {
-    for (const track of selected) track.stop();
+  const selected = new Map<"microphone" | "camera", MediaStreamTrack>();
+  for (const [source, kind] of [
+    ["microphone", "audio"],
+    ["camera", "video"],
+  ] as const) {
+    if (!intent[source]) continue;
+    const track = tracks.find((track) => track.kind === kind);
+    if (track) selected.set(source, track);
+  }
+  const retained = new Set(selected.values());
+  for (const track of tracks) if (!retained.has(track)) track.stop();
+  if (selected.size !== Number(intent.microphone) + Number(intent.camera)) {
+    for (const track of retained) track.stop();
     throw new TypeError("Media capture did not return every requested track");
   }
-  return new Map(initialTrackEntries(microphone, camera));
-}
-function initialTrackFor(tracks: readonly MediaStreamTrack[], enabled: boolean, kind: MediaStreamTrack["kind"]): MediaStreamTrack | undefined {
-  if (!enabled) return undefined;
-  return tracks.find((track) => track.kind === kind);
-}
-function initialTracks(microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): readonly MediaStreamTrack[] {
-  return [microphone, camera].filter((track): track is MediaStreamTrack => track !== undefined);
-}
-function missingInitialTrack(intent: Readonly<Record<"microphone" | "camera", boolean>>, microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): boolean {
-  return (intent.microphone && !microphone) || (intent.camera && !camera);
-}
-function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): readonly (readonly ["microphone" | "camera", MediaStreamTrack])[] {
-  const entries: ["microphone" | "camera", MediaStreamTrack][] = [];
-  if (microphone) entries.push(["microphone", microphone]);
-  if (camera) entries.push(["camera", camera]);
-  return entries;
+  return selected;
 }
 function screenLocalMedia(track: MediaStreamTrack | null, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
   if (snapshot?.connection.phase === "stopped") return Object.freeze({ source: "screen", state: "unavailable", track: null });
