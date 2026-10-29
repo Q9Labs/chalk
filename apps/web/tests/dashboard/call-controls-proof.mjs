@@ -61,18 +61,19 @@ if (kind === "follow-pin") {
   const { leaveOwnerCall } = await import("./owner-controls.mjs");
   const { context, origin, cleanup } = await createDashboardProofFixture({ devicesMissing: true });
   try {
-    const setup = await context.newPage();
-    await setup.goto(`${origin}/dashboard`);
-    await setup.getByRole("button", { name: "Start a call", exact: true }).click();
-    await setup.getByRole("button", { name: "Join call", exact: true }).waitFor();
-    const joinURL = setup.url();
-    await setup.close();
+    const { csrfToken } = await (await context.request.get(`${origin}/auth/session`)).json();
+    const created = await context.request.post(`${origin}/dashboard-api/home`, {
+      headers: { Origin: origin, "X-CSRF-Token": csrfToken },
+      data: { action: "create-call", admission: "anyone", idempotencyKey: crypto.randomUUID() },
+    });
+    assert.equal(created.status(), 200);
+    const { call } = await created.json();
+    const joinURL = `${origin}/dashboard/call/${call.id}/join`;
     // Re-enter the same call with a fresh tab and seat after each real UI Leave.
     for (let run = 0; run < iterations; run++) {
       const page = await context.newPage();
       try {
         await page.goto(joinURL);
-        await page.getByRole("button", { name: "Join call", exact: true }).click();
         await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
         const leave = page.getByRole("button", { name: "Leave call", exact: true });
         const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
