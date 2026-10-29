@@ -528,8 +528,58 @@ class BootCheckTests(unittest.TestCase):
 
     def test_controller_pending_is_typed_not_any_conflict(self):
         self.assertTrue(host.bootstrap_pending({'status': 409, 'body': {'error': {'code': 'recorder_fleet.bootstrap_pending'}}}))
+        self.assertTrue(host.bootstrap_pending({'status': 409, 'body': {'error': {'code': 'recorder_fleet.inventory_not_ready'}}}))
         for result in ({'status': 409, 'body': None}, {'status': 409, 'body': {'error': {'code': 'drift'}}}, {'status': 503}):
             self.assertFalse(host.bootstrap_pending(result))
+
+    def run_registration(self, responses, timeout=12):
+        now = [0]
+
+        def sleep(seconds):
+            now[0] += seconds
+
+        def evidence(*_):
+            return {'record': {'certificates': ['certificate'] if response['status'] == 200 else []}}
+
+        response = {}
+
+        def control(*_):
+            nonlocal response
+            response = responses.pop(0)
+            return response
+
+        with patch.object(host, 'runtime', return_value=({}, {'CHALK_RECORDER_FLEET_RECONCILE_INTERVAL': '5s'}, '/root')), \
+                patch.object(host, 'control', side_effect=control) as register, \
+                patch.object(host, 'registration', side_effect=evidence), \
+                patch.object(host.time, 'monotonic', side_effect=lambda: now[0]), \
+                patch.object(host.time, 'sleep', side_effect=sleep) as wait:
+            result = host.execute({'role': 'capture', 'user_id': 1, 'action': 'register',
+                                   'timeout': timeout, 'bootstrap': {'provider_id': '1'}})
+        return result, register.call_count, [call.args[0] for call in wait.call_args_list]
+
+    def test_inventory_then_bootstrap_pending_reaches_certified_success(self):
+        result, calls, waits = self.run_registration([
+            {'status': 409, 'body': {'error': {'code': 'recorder_fleet.inventory_not_ready'}}},
+            {'status': 409, 'body': {'error': {'code': 'recorder_fleet.bootstrap_pending'}}},
+            {'status': 200},
+        ])
+        self.assertEqual(calls, 3)
+        self.assertEqual(waits, [5, 5])
+        self.assertEqual(result['controller_response']['status'], 200)
+        self.assertEqual(result['record']['certificates'], ['certificate'])
+
+    def test_registration_terminal_rejection_does_not_retry(self):
+        rejection = {'status': 409, 'body': {'error': {'code': 'recorder_fleet.bootstrap_rejected'}}}
+        result, calls, waits = self.run_registration([rejection])
+        self.assertEqual((calls, waits), (1, []))
+        self.assertEqual(result['controller_response'], rejection)
+
+    def test_inventory_pending_stops_at_existing_deadline(self):
+        pending = {'status': 409, 'body': {'error': {'code': 'recorder_fleet.inventory_not_ready'}}}
+        result, calls, waits = self.run_registration([pending] * 3)
+        self.assertEqual((calls, waits), (3, [5, 5, 2]))
+        self.assertEqual(len(result['history']), 3)
+        self.assertNotIn('controller_response', result)
 
     def test_fleet_duration_formats_and_deadline_bound(self):
         for value, expected in (('5s', 5), ('500ms', .5), ('1m0s', 60), ('1h2m3s', 3723), ('.5s', .5), ('+5s', 5), (' 5s ', 5), ('1.s', 1)):
