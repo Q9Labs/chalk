@@ -4,6 +4,7 @@ FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /src
+COPY --from=api_source go.mod go.sum ./
 COPY --from=api_source apps/api ./apps/api
 COPY --from=api_source features/whiteboard/api ./features/whiteboard/api
 COPY --from=api_source platform ./platform

@@ -3,9 +3,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 revision="$(git rev-parse HEAD)"
-for component in api sync; do
+for component in api sync recorder-control; do
+  source_context=api_source
+  if [[ "$component" == sync ]]; then source_context=sync_source; fi
   docker buildx build --load --platform linux/amd64 \
-    --build-context "${component}_source=." \
+    --build-context "${source_context}=." \
     --build-arg "SOURCE_REVISION=${revision}" \
     --build-arg RELEASE_ID=whiteboard-colocation-proof \
     --file "infrastructure/managed-episode/images/${component}.Dockerfile" \

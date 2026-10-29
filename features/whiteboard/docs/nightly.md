@@ -46,7 +46,7 @@ The bootstrap helper defaults to the full Gate when no command follows
 `--browser`. Each invocation fetches the caller's pushed HEAD and deletes its
 machine after completion. Pin the checkout to the reviewed SHA for each day and
 save each command's output under that SHA. An external scheduled task can repeat
-these runs. No schedule was created by this spike.
+these runs. No schedule was created by this migration.
 
 For results inside Actions during a billing block, use a branch-only verification
 workflow with the existing job bodies and `runs-on: [self-hosted, linux, x64,
