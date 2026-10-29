@@ -13,7 +13,7 @@ import { uploadVendorAssets } from "../../web/upload-vendor-assets.ts";
 
 const require = createRequire(import.meta.url);
 const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");
-const workerPath = resolve(import.meta.dirname, "../../server/vendor-assets.ts");
+const workerPath = resolve(import.meta.dirname, "../../../../apps/web/server/vendor-assets.ts");
 const script = ts.transpileModule(await readFile(workerPath, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 
 async function fixture(t) {
@@ -109,7 +109,7 @@ test("uploads only missing objects and rejects corrupt bytes before any R2 reque
 });
 
 test("release preparation deploys the Worker before probes and rejects missing routes, bad MIME and cached 404s", async (t) => {
-  const { prepareVendorStore } = await import("../../scripts/prepare-vendor-store.ts");
+  const { prepareVendorStore } = await import("../../../../apps/web/scripts/prepare-vendor-store.ts");
   const assets = await fixture(t);
   const a = await assets.build(1);
   const activated = join(assets.base, "activated");

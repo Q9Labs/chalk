@@ -33,8 +33,8 @@ export default defineConfig({
       async closeBundle() {
         const fonts = source("dist/node/fonts");
         await mkdir(join(fonts, "Figtree"), { recursive: true });
-        for (const file of await readdir(source("src/compose/font-assets"))) {
-          if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
+        for (const file of await readdir(source("../../platform/rendering/font-assets"))) {
+          if (file.endsWith(".woff2")) await cp(join(source("../../platform/rendering/font-assets"), file), join(fonts, "Figtree", file));
         }
         for (const folder of ["Excalifont", "Virgil", "Cascadia", "Nunito", "Lilita", "ComicShanns", "Liberation", "Assistant"]) {
           await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });

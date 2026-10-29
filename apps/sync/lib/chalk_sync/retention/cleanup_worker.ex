@@ -361,14 +361,7 @@ defmodule ChalkSync.Retention.CleanupWorker do
     _measurement =
       delete_space_measurement(transaction, SQL.delete_chat_streams(), candidate)
 
-    collaboration_deletions = [
-      SQL.delete_whiteboard_operation_receipts(),
-      SQL.delete_whiteboard_permissions(),
-      SQL.delete_whiteboard_draw_policies(),
-      SQL.delete_whiteboard_draw_policy_receipts(),
-      SQL.delete_whiteboard_elements(),
-      SQL.delete_whiteboard_scenes()
-    ]
+    collaboration_deletions = ChalkSync.WhiteboardV1.SQL.retention_deletions()
 
     Enum.each(collaboration_deletions, fn query ->
       _measurement = delete_measurement(transaction, query, candidate)

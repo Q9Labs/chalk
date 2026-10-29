@@ -78,6 +78,12 @@ module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
   forbidden: [
     {
+      name: "whiteboard-resolves-imports",
+      severity: "error",
+      from: { path: "^features/whiteboard/" },
+      to: { couldNotResolve: true },
+    },
+    {
       name: "whiteboard-declared-dependencies",
       severity: "error",
       from: { path: "^features/whiteboard/" },
@@ -92,7 +98,7 @@ module.exports = {
   ],
   options: {
     ...canonicalConfiguration.options,
-    includeOnly: { path: "^(?:apps|features|platform|packages|sdks/typescript)(?:/|$)" },
+    includeOnly: { path: "^(?:apps|features|platform|packages|sdks/typescript|scripts|tools)(?:/|$)" },
     tsConfig: { fileName: "tsconfig.json" },
   },
 };

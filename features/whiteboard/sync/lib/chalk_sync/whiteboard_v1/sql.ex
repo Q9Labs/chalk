@@ -1,6 +1,29 @@
 defmodule ChalkSync.WhiteboardV1.SQL do
   @moduledoc false
 
+  def retention_deletions do
+    Enum.map(
+      [
+        "sync_whiteboard_operation_receipts",
+        "sync_whiteboard_permissions",
+        "sync_whiteboard_draw_policies",
+        "sync_whiteboard_draw_policy_receipts",
+        "sync_whiteboard_elements",
+        "sync_whiteboard_scenes"
+      ],
+      fn table ->
+        """
+        with deleted as (
+          delete from #{table}
+          where tenant_id = $1 and episode_id = $2
+          returning pg_column_size(#{table})::bigint as encoded_bytes
+        )
+        select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
+        """
+      end
+    )
+  end
+
   def transaction_settings do
     """
     select

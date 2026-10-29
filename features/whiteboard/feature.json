@@ -19,7 +19,9 @@
       "packages/facehash",
       "platform/rendering",
       "scripts/rewrite-declaration-specifiers.mjs",
-      "sdks/typescript/react/src/headless.ts"
+      "sdks/typescript/react/src/headless.ts",
+      "tools/contract-fixture-proof/src/emitters/elixir-layout.mjs",
+      "apps/web/scripts/prepare-vendor-store.ts"
     ],
     "elixir": [
       "apps/sync/lib/chalk_sync/auth",

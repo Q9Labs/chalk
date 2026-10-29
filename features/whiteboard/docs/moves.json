@@ -182,5 +182,9 @@
   "tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs": "features/whiteboard/tools/emitters/whiteboard-contract.mjs",
   "tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs": "features/whiteboard/tools/emitters/whiteboard-elixir.mjs",
   "tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs": "features/whiteboard/tools/emitters/whiteboard-typescript.mjs",
-  "docs/whiteboard-colocation/inventory.md": "features/whiteboard/docs/baseline-inventory.md"
+  "docs/whiteboard-colocation/inventory.md": "features/whiteboard/docs/baseline-inventory.md",
+  "apps/recording-renderer/src/compose/font-assets/README.md": "platform/rendering/font-assets/README.md",
+  "apps/recording-renderer/src/compose/font-assets/Figtree-latin.woff2": "platform/rendering/font-assets/Figtree-latin.woff2",
+  "apps/recording-renderer/src/compose/font-assets/OFL.txt": "platform/rendering/font-assets/OFL.txt",
+  "apps/recording-renderer/src/compose/font-assets/Figtree-latin-ext.woff2": "platform/rendering/font-assets/Figtree-latin-ext.woff2"
 }
