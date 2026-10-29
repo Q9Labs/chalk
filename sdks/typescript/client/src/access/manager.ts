@@ -1,4 +1,4 @@
-import { Clock, Context, Data, Effect, Layer, SynchronizedRef } from "effect";
+import { Clock, Context, Data, Deferred, Effect, Layer, SynchronizedRef } from "effect";
 import type { ParsedAccessGrant, ParticipantMediaCredential, ParticipantSyncCredential } from "./grant";
 import type { ConnectionAccessReason, ConnectionAccessRequest } from "../connection/dependencies";
 const DEFAULT_REFRESH_WINDOW_MS = 60000;
@@ -7,6 +7,7 @@ export class ConnectionAccessFailure extends Data.TaggedError("ConnectionAccessF
   readonly code: "access.invalid" | "access.unavailable";
   readonly cause: unknown;
 }> {}
+class MediaReplacementPending extends Data.TaggedError("MediaReplacementPending")<{ readonly done: Deferred.Deferred<void, ConnectionAccessFailure> }> {}
 export type ConnectionAccessEffectProvider = (request: ConnectionAccessRequest) => Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure>;
 export type AutomaticMediaReplacementListener = (access: ParsedAccessGrant) => void;
 export type ConnectionAccessEffectService = {
@@ -21,6 +22,7 @@ export type ConnectionAccessEffectService = {
   readonly subscribeAutomaticMediaReplacement: (listener: AutomaticMediaReplacementListener) => Effect.Effect<() => void>;
   readonly requiresRefresh: Effect.Effect<boolean>;
   readonly millisecondsUntilRefresh: Effect.Effect<number | null>;
+  readonly holdMediaBinding: (binding: string) => Effect.Effect<Effect.Effect<void>>;
   readonly clear: Effect.Effect<void>;
 };
 export class ConnectionAccessService extends Context.Service<ConnectionAccessService, ConnectionAccessEffectService>()("@chalk/client/ConnectionAccess") {}
@@ -37,6 +39,7 @@ type FetchInput = {
   readonly replaceMediaConnection: boolean;
   readonly force: boolean;
   readonly refreshWindowMs: number;
+  readonly replacementGate: () => Deferred.Deferred<void, ConnectionAccessFailure> | undefined;
 };
 /**
  * The sole R1 owner. SynchronizedRef keeps a refresh and its state commit
@@ -47,9 +50,31 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
     ConnectionAccessService,
     Effect.gen(function* () {
       const state = yield* SynchronizedRef.make<AccessState>({ access: null });
+      const holds = new Map<string, { count: number; done: Deferred.Deferred<void, ConnectionAccessFailure> }>();
+      const replacementGate = () => {
+        const binding = SynchronizedRef.getUnsafe(state).access?.media.clientPayload.connectionId;
+        return binding ? holds.get(binding)?.done : undefined;
+      };
+      const holdMediaBinding = (binding: string) =>
+        Effect.gen(function* () {
+          const hold = holds.get(binding) ?? { count: 0, done: yield* Deferred.make<void, ConnectionAccessFailure>() };
+          hold.count++;
+          holds.set(binding, hold);
+          return Effect.gen(function* () {
+            if (--hold.count !== 0) return;
+            holds.delete(binding);
+            yield* Deferred.succeed(hold.done, undefined);
+          });
+        });
       const automaticMediaReplacementListeners = new Set<AutomaticMediaReplacementListener>();
       const fetch = (reason: ConnectionAccessReason, replaceMediaConnection: boolean, force: boolean): Effect.Effect<ParsedAccessGrant, ConnectionAccessFailure> =>
-        SynchronizedRef.modifyEffect(state, (current) => fetchAccessGrant(provider, { current, reason, replaceMediaConnection, force, refreshWindowMs })).pipe(
+        SynchronizedRef.modifyEffect(state, (current) => fetchAccessGrant(provider, { current, reason, replaceMediaConnection, force, refreshWindowMs, replacementGate })).pipe(
+          Effect.catchTag("MediaReplacementPending", ({ done }) =>
+            Deferred.await(done).pipe(
+              Effect.flatMap(() => fetch(reason, replaceMediaConnection, force)),
+              Effect.map((access) => ({ access, automaticMediaReplacement: false })),
+            ),
+          ),
           Effect.tap((result: FetchResult) => Effect.sync(() => notifyAutomaticMediaReplacement(automaticMediaReplacementListeners, result))),
           Effect.map((result: FetchResult) => result.access),
         );
@@ -77,7 +102,12 @@ export const makeConnectionAccessLayer = (provider: ConnectionAccessEffectProvid
           }),
         requiresRefresh: millisecondsUntilRefresh.pipe(Effect.map((milliseconds) => milliseconds === null || milliseconds === 0)),
         millisecondsUntilRefresh,
-        clear: SynchronizedRef.set(state, { access: null }),
+        holdMediaBinding,
+        clear: Effect.gen(function* () {
+          yield* SynchronizedRef.set(state, { access: null });
+          for (const hold of holds.values()) yield* Deferred.fail(hold.done, new ConnectionAccessFailure({ code: "access.unavailable", cause: "Connection closed during media rejection classification" }));
+          holds.clear();
+        }),
       } satisfies ConnectionAccessEffectService;
     }),
   );
@@ -86,17 +116,21 @@ function fetchAccessGrant(provider: ConnectionAccessEffectProvider, input: Fetch
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
     const currentAccess = input.current.access;
-    if (!input.force && currentAccess && millisecondsUntil(currentAccess, now, input.refreshWindowMs) > 0) {
+    if (canReuseAccess(input, now) && currentAccess) {
       return [{ access: currentAccess, automaticMediaReplacement: false }, input.current] as const;
     }
-    const mediaExpired = currentAccess !== null && expiresAt(currentAccess.media.expiresAt) <= now;
-    const shouldReplaceMediaConnection = input.replaceMediaConnection || mediaExpired;
+    const gate = input.replacementGate();
+    const shouldReplaceMediaConnection = mediaReplacementRequested(input, now, Boolean(gate));
+    if (shouldReplaceMediaConnection && gate) return yield* Effect.fail(new MediaReplacementPending({ done: gate }));
     const next = yield* provider(connectionAccessRequest(input, shouldReplaceMediaConnection)).pipe(
       Effect.timeout(ACCESS_PROVIDER_TIMEOUT_MS),
       Effect.mapError((cause) => (cause instanceof ConnectionAccessFailure ? cause : new ConnectionAccessFailure({ code: "access.unavailable", cause }))),
     );
     yield* Effect.try({
-      try: () => validateFetchedAccess(currentAccess, next, now, shouldReplaceMediaConnection),
+      try: () => {
+        validateFetchedAccess(currentAccess, next, now, shouldReplaceMediaConnection);
+        validateHeldBinding(input, next);
+      },
       catch: (cause) => new ConnectionAccessFailure({ code: "access.invalid", cause }),
     });
     return [{ access: next, automaticMediaReplacement: currentAccess !== null && !input.replaceMediaConnection && !hasSameMediaConnection(currentAccess, next) }, { access: next }] as const;
@@ -157,4 +191,18 @@ function expiresAt(value: string): number {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) throw new TypeError("Access grant expiration is invalid");
   return timestamp;
+}
+
+function canReuseAccess(input: FetchInput, now: number): boolean {
+  return !input.force && input.current.access !== null && millisecondsUntil(input.current.access, now, input.refreshWindowMs) > 0;
+}
+
+function mediaReplacementRequested(input: FetchInput, now: number, held: boolean): boolean {
+  const current = input.current.access;
+  return input.replaceMediaConnection || (current !== null && expiresAt(current.media.expiresAt) <= now && !held);
+}
+
+function validateHeldBinding(input: FetchInput, next: ParsedAccessGrant): void {
+  const previous = input.current.access;
+  if (input.replacementGate() && previous && !hasSameMediaConnection(previous, next)) throw new TypeError("Cannot replace a rejected media binding before classification");
 }

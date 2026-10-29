@@ -3,7 +3,7 @@ import { connectionErrorCode } from "./errors";
 import type { ConnectionLifecycleSnapshot } from "../connection";
 import type { ChatSlice, ConnectionSlice, MediaSlice, ParticipantsSlice, ReactionsSlice, RecordingSlice, OfflineSlice, SelfSlice, SpaceSnapshot, WhiteboardSlice } from "./types";
 
-const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["connection"]["sync"]>(["unresponsive", "connecting", "recovering"]);
+const INTERRUPTED_CONNECTION_PHASES = new Set<ConnectionLifecycleSnapshot["connection"]["sync"]>(["unresponsive", "connecting", "recovering", "stopped"]);
 
 const empty = <T>(value: T): T => Object.freeze(value);
 const EMPTY = empty({

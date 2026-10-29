@@ -164,7 +164,15 @@ then 6 seconds (custom delays cannot shorten that ramp or exceed 6 seconds);
 the Sync attempt cap does not shorten media recovery. Only then does media emit
 `media_recovery_exhausted` and continue retrying in the background while Sync
 stays connected. Rejected media access requires an explicit rejoin rather than
-automatically replacing another connection's seat. The timing and rejection
+automatically replacing another connection's seat. Before declaring rejection
+terminal, the SDK checks the primary Episode lifecycle through a participant's
+signed, route-bound status read. `ending` or `ended` takes the normal ended
+path even when SFU 401/403 or close-tracks 410 precedes the Sync end event;
+an active Episode keeps current-binding revocation terminal. A local End in
+flight settles first. Unavailable status reads keep Sync running and retry
+without requesting a replacement binding; a late read cannot fail a newer binding.
+Normal end emits no `connection_failed` report. End/rejection races are covered
+in `sdks/typescript/client/src/connection/episode-end-race.test.ts`. The timing and rejection
 regressions are covered in
 `sdks/typescript/client/src/connection/media-recovery.test.ts`.
 

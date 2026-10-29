@@ -322,6 +322,7 @@
     ],
     "body": "{}"
   },
+  { "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/episode-status", "operation": "getParticipantEpisodeStatus", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
   { "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "operation": "cancelEpisodeParticipantJoin", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
   {
     "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
