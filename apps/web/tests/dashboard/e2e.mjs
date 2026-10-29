@@ -343,7 +343,20 @@ try {
       const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
       // An admitted joining seat can refresh before Sync confirms entry.
       assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
-      assert.equal((await refreshedAccess.json()).access.subject.participant_id, grant.subject.participant_id);
+      const refreshedGrant = (await refreshedAccess.json()).access;
+      assert.equal(refreshedGrant.subject.participant_id, grant.subject.participant_id);
+      // Tabs in one signed-in browser share cookies, but own different seats.
+      // Production returned 403 media_token.subject_mismatch here, surfaced as 502.
+      const otherJoin = { ...join, idempotencyKey: crypto.randomUUID() };
+      const otherJoined = await post(ada, "/dashboard-api/call", otherJoin, session.csrfToken);
+      assert.equal(otherJoined.status, 200, await otherJoined.clone().text());
+      const otherGrant = (await otherJoined.json()).access;
+      assert.notEqual(otherGrant.subject.participant_id, grant.subject.participant_id);
+      for (const access of [refreshedGrant, otherGrant]) {
+        const refreshed = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, currentMediaToken: access.media.token }, session.csrfToken);
+        assert.equal(refreshed.status, 200, `A sibling tab must not replace this tab's owner seat: ${await refreshed.clone().text()}`);
+        assert.equal((await refreshed.json()).access.subject.participant_id, access.subject.participant_id);
+      }
       if (admission === "knock") {
         const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
           method: "POST",
