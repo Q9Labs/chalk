@@ -78,7 +78,7 @@ the Space ID, the tab's join key and an optional current media token. The join
 key selects a session-bound, purpose-sealed HttpOnly seat cookie; it supplies no
 Participant identity or generation. Separate joins in one browser keep separate
 refresh cookies, so another tab cannot replace this tab's seat. A latest-seat
-cookie is used only for the past-session "You" marker.
+cookie supports older loaded bundles and the past-session "You" marker.
 Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
 The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
