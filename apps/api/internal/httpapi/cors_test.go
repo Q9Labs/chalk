@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const corsTestTenantID = "11111111-1111-4111-8111-111111111111"

@@ -1,8 +1,9 @@
 package httpapi
 
 import (
-	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"log/slog"
+
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
 // Limit log size and do not log source, participant, Recording or Episode IDs.

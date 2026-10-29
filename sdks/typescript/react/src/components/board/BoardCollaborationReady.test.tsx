@@ -13,7 +13,7 @@ const gate = vi.hoisted(() => {
   });
   return { pending, release };
 });
-vi.mock("../../../../../../packages/whiteboard/src/collab/engine", async (original) => {
+vi.mock("../../../../../../features/whiteboard/packages/canvas/src/collab/engine", async (original) => {
   await gate.pending;
   return original();
 });

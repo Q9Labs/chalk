@@ -1,4 +1,4 @@
-import "../lib/whiteboard-assets";
+import "../../../../features/whiteboard/web/whiteboard-assets";
 import { createRoot } from "react-dom/client";
 import "../styles.css";
 import { installFakeDevices } from "./media";

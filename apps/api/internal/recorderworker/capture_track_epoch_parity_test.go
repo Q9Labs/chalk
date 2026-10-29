@@ -12,10 +12,10 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 func TestCaptureBindWatcherKeepsFirstPlanEpochForLateTrack(t *testing.T) {

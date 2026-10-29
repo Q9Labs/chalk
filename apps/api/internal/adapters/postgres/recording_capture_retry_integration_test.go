@@ -25,7 +25,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderworker"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // The fake repeats the observed timeout/internal_error failures through the old

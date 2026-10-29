@@ -13,9 +13,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var (
@@ -27,8 +27,8 @@ var (
 		Scope:       authentication.ScopeTenantsWrite,
 		MinimumRole: memberships.RoleCollaborator,
 	}
-	apiErrorInvalidTenantArtifactPolicy  = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_artifact_policy", Message: "Invalid Tenant Artifact policy"}
-	apiErrorTenantArtifactPolicyConflict = APIError{Status: http.StatusConflict, Code: "tenant.artifact_policy_conflict", Message: "Tenant Artifact policy conflicts with its ceiling"}
+	apiErrorInvalidTenantArtifactPolicy  = httpcontract.APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_artifact_policy", Message: "Invalid Tenant Artifact policy"}
+	apiErrorTenantArtifactPolicyConflict = httpcontract.APIError{Status: http.StatusConflict, Code: "tenant.artifact_policy_conflict", Message: "Tenant Artifact policy conflicts with its ceiling"}
 )
 
 type TenantService interface {
@@ -145,7 +145,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 
 		return newTenantResponse(tenant), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("CreateTenantRequest", createTenantRequest{}).
 		Responds(http.StatusCreated, "Tenant", tenantResponse{}).
@@ -190,11 +190,11 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 
 		return response, nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(
-			APIParameterContract{Name: "page_size", In: "query", Type: "integer", Required: false},
-			APIParameterContract{Name: "cursor", In: "query", Type: "string", Required: false},
+			httpcontract.APIParameterContract{Name: "page_size", In: "query", Type: "integer", Required: false},
+			httpcontract.APIParameterContract{Name: "cursor", In: "query", Type: "string", Required: false},
 		).
 		Responds(http.StatusOK, "TenantList", tenantListResponse{}).
 		Errors(
@@ -226,9 +226,9 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 
 		return newTenantResponse(tenant), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
-		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
+		Parameters(httpcontract.APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
@@ -259,9 +259,9 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 
 		return newTenantResponse(tenant), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
+		Parameters(httpcontract.APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
 		RequestBody("UpdateTenantRequest", updateTenantRequest{}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(
@@ -350,7 +350,7 @@ func tenantIDFromRequest(r *http.Request) (utilities.ID, error) {
 	return id, nil
 }
 
-func tenantEndpointAPIError(err error) (APIError, bool) {
+func tenantEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := errorAsAPIError(err); ok {
 		return apiErr, true
 	}
@@ -360,7 +360,7 @@ func tenantEndpointAPIError(err error) (APIError, bool) {
 	return authorizationAPIError(err), true
 }
 
-func tenantServiceAPIError(err error) (APIError, bool) {
+func tenantServiceAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case errors.Is(err, tenants.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true
@@ -382,7 +382,7 @@ func tenantServiceAPIError(err error) (APIError, bool) {
 	case errors.Is(err, tenants.ErrTenantNotFound):
 		return apiErrorTenantNotFound, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }
 
@@ -502,10 +502,10 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 			return tenantResponse{}, err
 		}
 		return newTenantResponse(tenant), nil
-	}).Auth(APIAuthSessionOrBearer).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).
 		Description("The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.").
 		RateLimit(authenticatedReadRateLimit).
-		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512, CodePointLength: true}).
+		Parameters(httpcontract.APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512, CodePointLength: true}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(apiErrorRateLimited, apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
 		MapErrors(tenantEndpointAPIError)

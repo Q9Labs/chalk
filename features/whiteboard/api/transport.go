@@ -1,4 +1,4 @@
-package httpapi
+package whiteboardfiles
 
 import (
 	"context"
@@ -8,23 +8,23 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
-	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 var (
-	apiErrorWhiteboardInvalidFile        = APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
-	apiErrorWhiteboardFileNotFound       = APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
-	apiErrorWhiteboardFileTransfer       = APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
-	apiErrorWhiteboardStorageUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "whiteboard.storage_unavailable", Message: "Whiteboard file storage unavailable"}
+	apiErrorWhiteboardInvalidFile        = httpcontract.APIError{Status: http.StatusBadRequest, Code: "whiteboard.invalid_file", Message: "Invalid whiteboard file request"}
+	apiErrorWhiteboardFileNotFound       = httpcontract.APIError{Status: http.StatusNotFound, Code: "whiteboard.file_not_found", Message: "Whiteboard file not found"}
+	apiErrorWhiteboardFileTransfer       = httpcontract.APIError{Status: http.StatusBadGateway, Code: "whiteboard.file_transfer_failed", Message: "Whiteboard file transfer failed"}
+	apiErrorWhiteboardStorageUnavailable = httpcontract.APIError{Status: http.StatusServiceUnavailable, Code: "whiteboard.storage_unavailable", Message: "Whiteboard file storage unavailable"}
 )
 
 type WhiteboardFileService interface {
-	Download(context.Context, whiteboardfiles.Subject, string) (whiteboardfiles.Download, error)
+	Download(context.Context, Subject, string) (Download, error)
 }
 
 type WhiteboardParticipantVerifier interface {
-	VerifyWhiteboardParticipant(context.Context, string) (whiteboardfiles.Subject, bool, error)
+	VerifyWhiteboardParticipant(context.Context, string) (Subject, bool, error)
 }
 
 type downloadWhiteboardFileRequest struct {
@@ -38,69 +38,53 @@ type whiteboardFileDownloadResponse struct {
 
 type whiteboardSubjectContextKey struct{}
 
-func mountWhiteboardFileRoutes(r chi.Router, service WhiteboardFileService, verifier WhiteboardParticipantVerifier, limits RateLimitOptions) {
-	for _, endpoint := range whiteboardFileEndpoints(service, verifier) {
-		endpoint.Mount(r, limits)
-	}
-}
-
-func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) []RouteEndpoint {
-	auth := requireWhiteboardParticipant(verifier)
-	return []RouteEndpoint{
-		downloadWhiteboardFileEndpoint(service).Middleware(auth),
-	}
-}
-
-func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[downloadWhiteboardFileRequest, whiteboardFileDownloadResponse] {
-	return Get(
-		"/v1/whiteboard/files/{fileId}/download",
-		"/whiteboard/files/{fileId}/download",
-		"getWhiteboardFileDownload",
-		decodeDownloadWhiteboardFileRequest,
-		func(ctx context.Context, request downloadWhiteboardFileRequest) (whiteboardFileDownloadResponse, error) {
+func FileEndpoint(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) httpcontract.EndpointSpec[downloadWhiteboardFileRequest, whiteboardFileDownloadResponse] {
+	return httpcontract.EndpointSpec[downloadWhiteboardFileRequest, whiteboardFileDownloadResponse]{
+		Contract: httpcontract.APIRouteContract{
+			Method: http.MethodGet, Path: "/v1/whiteboard/files/{fileId}/download", MountPath: "/whiteboard/files/{fileId}/download", OperationID: "getWhiteboardFileDownload",
+			Auth: httpcontract.APIAuthParticipantSync, Parameters: []httpcontract.APIParameterContract{whiteboardFileIDParameter()},
+			Responses: []httpcontract.APIResponseContract{{Status: http.StatusOK, Schema: &httpcontract.APISchemaRef{Name: "WhiteboardFileDownload", Type: whiteboardFileDownloadResponse{}}}},
+			Errors:    whiteboardFileErrors(),
+		},
+		Decode: decodeDownloadWhiteboardFileRequest,
+		Handle: func(ctx context.Context, request downloadWhiteboardFileRequest) (whiteboardFileDownloadResponse, error) {
 			subject, ok := whiteboardSubject(ctx)
 			if !ok {
-				return whiteboardFileDownloadResponse{}, apiErrorUnauthenticated
+				return whiteboardFileDownloadResponse{}, httpcontract.ErrorUnauthenticated
 			}
 			if service == nil {
-				return whiteboardFileDownloadResponse{}, apiErrorServiceUnavailable
+				return whiteboardFileDownloadResponse{}, httpcontract.ErrorServiceUnavailable
 			}
 			result, err := service.Download(ctx, subject, request.FileID)
 			if err != nil {
 				return whiteboardFileDownloadResponse{}, err
 			}
-			return whiteboardFileDownloadResponse{
-				DownloadURL: result.URL,
-				ExpiresAt:   result.ExpiresAt.UTC().Format(time.RFC3339),
-			}, nil
+			return whiteboardFileDownloadResponse{DownloadURL: result.URL, ExpiresAt: result.ExpiresAt.UTC().Format(time.RFC3339)}, nil
 		},
-	).
-		Auth(APIAuthParticipantSync).
-		Parameters(whiteboardFileIDParameter()).
-		Responds(http.StatusOK, "WhiteboardFileDownload", whiteboardFileDownloadResponse{}).
-		Errors(whiteboardFileErrors()...).
-		MapErrors(whiteboardFileAPIError)
+		MapErrors:   whiteboardFileAPIError,
+		Middlewares: []func(http.Handler) http.Handler{requireWhiteboardParticipant(verifier)},
+	}
 }
 
 func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 			if verifier == nil {
-				writeServiceUnavailable(response)
+				httpcontract.WriteAPIError(response, httpcontract.ErrorServiceUnavailable)
 				return
 			}
-			token, ok := bearerToken(request.Header.Get("Authorization"))
+			token, ok := httpcontract.BearerToken(request.Header.Get("Authorization"))
 			if !ok {
-				writeUnauthenticated(response)
+				httpcontract.WriteAPIError(response, httpcontract.ErrorUnauthenticated)
 				return
 			}
 			subject, valid, err := verifier.VerifyWhiteboardParticipant(request.Context(), token)
 			if err != nil {
-				writeServiceUnavailable(response)
+				httpcontract.WriteAPIError(response, httpcontract.ErrorServiceUnavailable)
 				return
 			}
 			if !valid {
-				writeUnauthenticated(response)
+				httpcontract.WriteAPIError(response, httpcontract.ErrorUnauthenticated)
 				return
 			}
 			ctx := context.WithValue(request.Context(), whiteboardSubjectContextKey{}, subject)
@@ -117,37 +101,37 @@ func decodeDownloadWhiteboardFileRequest(request *http.Request) (downloadWhitebo
 	return downloadWhiteboardFileRequest{FileID: fileID}, nil
 }
 
-func whiteboardSubject(ctx context.Context) (whiteboardfiles.Subject, bool) {
-	subject, ok := ctx.Value(whiteboardSubjectContextKey{}).(whiteboardfiles.Subject)
+func whiteboardSubject(ctx context.Context) (Subject, bool) {
+	subject, ok := ctx.Value(whiteboardSubjectContextKey{}).(Subject)
 	return subject, ok
 }
 
-func whiteboardFileIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "fileId", In: "path", Type: "string", Required: true, MinLength: 1, MaxLength: 128}
+func whiteboardFileIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "fileId", In: "path", Type: "string", Required: true, MinLength: 1, MaxLength: 128}
 }
 
-func whiteboardFileErrors() []APIError {
-	return []APIError{
-		apiErrorUnauthenticated, apiErrorForbidden, apiErrorWhiteboardInvalidFile,
+func whiteboardFileErrors() []httpcontract.APIError {
+	return []httpcontract.APIError{
+		httpcontract.ErrorUnauthenticated, httpcontract.ErrorForbidden, apiErrorWhiteboardInvalidFile,
 		apiErrorWhiteboardFileNotFound,
 		apiErrorWhiteboardFileTransfer, apiErrorWhiteboardStorageUnavailable,
-		apiErrorRateLimited, apiErrorServiceUnavailable,
+		httpcontract.ErrorRateLimited, httpcontract.ErrorServiceUnavailable,
 	}
 }
 
-func whiteboardFileAPIError(err error) (APIError, bool) {
+func whiteboardFileAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
-	case errors.Is(err, whiteboardfiles.ErrInvalidInput):
+	case errors.Is(err, ErrInvalidInput):
 		return apiErrorWhiteboardInvalidFile, true
-	case errors.Is(err, whiteboardfiles.ErrPermissionDenied):
-		return apiErrorForbidden, true
-	case errors.Is(err, whiteboardfiles.ErrFileNotFound):
+	case errors.Is(err, ErrPermissionDenied):
+		return httpcontract.ErrorForbidden, true
+	case errors.Is(err, ErrFileNotFound):
 		return apiErrorWhiteboardFileNotFound, true
-	case errors.Is(err, whiteboardfiles.ErrFileTransferFailed), errors.Is(err, objectstorage.ErrObjectNotFound), errors.Is(err, objectstorage.ErrObjectAlreadyExists):
+	case errors.Is(err, ErrFileTransferFailed), errors.Is(err, objectstorage.ErrObjectNotFound), errors.Is(err, objectstorage.ErrObjectAlreadyExists):
 		return apiErrorWhiteboardFileTransfer, true
 	case errors.Is(err, objectstorage.ErrStoreUnavailable), errors.Is(err, objectstorage.ErrProviderFailed):
 		return apiErrorWhiteboardStorageUnavailable, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/apitest"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 // Bodyless writes still have an explicit request contract: the path parameters.
@@ -47,7 +48,7 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contracts := make(map[string]APIRouteContract)
+	contracts := make(map[string]httpcontract.APIRouteContract)
 	operations := make(map[string]bool)
 	pathParameter := regexp.MustCompile(`\{([^}]+)\}`)
 	for _, contract := range PreviewRouteContracts() {
@@ -68,7 +69,7 @@ func TestMountedRouteContractCompleteness(t *testing.T) {
 			t.Errorf("%s: auth requirement disagrees with explicit public allowlist", key)
 		}
 		switch contract.Auth {
-		case "", APIAuthSessionOrBearer, APIAuthParticipantMedia, APIAuthParticipantSync:
+		case "", httpcontract.APIAuthSessionOrBearer, httpcontract.APIAuthParticipantMedia, httpcontract.APIAuthParticipantSync:
 		default:
 			t.Errorf("%s: unknown auth requirement %q", key, contract.Auth)
 		}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 type ParticipantJoinService interface {
@@ -49,7 +50,7 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.CloudflareConnectionID,
 			})
 			return cancelParticipantJoinResponse{Cancelled: cancelled}, err
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
+		}).Auth(httpcontract.APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantJoinCancellation", cancelParticipantJoinResponse{}).
 		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,

@@ -6,7 +6,8 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID utilities.ID, permission authorization.TenantPermission) error {
@@ -22,7 +23,7 @@ func authorizeTenant(ctx context.Context, authorizer TenantAuthorizer, tenantID 
 	return authorizer.AuthorizeTenant(ctx, principal, tenantID, permission)
 }
 
-func authorizationAPIError(err error) APIError {
+func authorizationAPIError(err error) httpcontract.APIError {
 	if apiErr, ok := errorAsAPIError(err); ok {
 		return apiErr
 	}

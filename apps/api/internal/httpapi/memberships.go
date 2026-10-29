@@ -10,7 +10,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var (
@@ -104,7 +105,7 @@ func createMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 		}
 		return newMembershipResponse(membership), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter()).
 		RequestBody("CreateMembershipRequest", createMembershipRequest{}).
@@ -138,8 +139,8 @@ func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthori
 		}
 		return newMembershipListResponse(list)
 	}).
-		Auth(APIAuthSessionOrBearer).
-		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Auth(httpcontract.APIAuthSessionOrBearer).
+		Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "MembershipList", membershipListResponse{}).
 		Errors(
 			apiErrorUnauthenticated,
@@ -168,7 +169,7 @@ func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 		}
 		return newMembershipResponse(membership), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), membershipIDParameter()).
 		RequestBody("UpdateMembershipRequest", updateMembershipRequest{}).
@@ -229,17 +230,17 @@ func decodeUpdateMembershipRequest(r *http.Request) (updateMembershipEndpointReq
 	return updateMembershipEndpointRequest{TenantID: tenantID, MembershipID: membershipID, Body: body}, nil
 }
 
-func membershipEndpointAPIError(err error) (APIError, bool) {
+func membershipEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := membershipServiceAPIError(err); ok {
 		return apiErr, true
 	}
 	return authorizationAPIError(err), true
 }
 
-func membershipServiceAPIError(err error) (APIError, bool) {
+func membershipServiceAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case err == nil:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	case errors.Is(err, memberships.ErrInvalidMembershipID):
 		return apiErrorInvalidMembershipID, true
 	case errors.Is(err, memberships.ErrInvalidMembershipRole):
@@ -253,7 +254,7 @@ func membershipServiceAPIError(err error) (APIError, bool) {
 	case errors.Is(err, memberships.ErrMembershipNotFound):
 		return apiErrorMembershipNotFound, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }
 
@@ -306,4 +307,4 @@ func (r updateMembershipRequest) input() memberships.UpdateMembershipInput {
 	}
 }
 
-var apiErrorLastOwner = APIError{Status: 409, Code: "membership.last_owner", Message: memberships.ErrLastOwner.Error()}
+var apiErrorLastOwner = httpcontract.APIError{Status: 409, Code: "membership.last_owner", Message: memberships.ErrLastOwner.Error()}

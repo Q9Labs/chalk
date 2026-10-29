@@ -24,8 +24,8 @@ from dispatcher_binding import dispatcher_root, binding_target, verify_dispatche
 from github_release import GitHub, payload
 
 INPUTS = {
-    'capture': ('apps/api/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'render': ('apps/api/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
+    'capture': ('apps/api/', 'features/whiteboard/', 'platform/', 'go.mod', 'go.sum', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
+    'render': ('apps/api/', 'features/whiteboard/', 'platform/', 'go.mod', 'go.sum', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
     'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
     'dispatcher_configuration': ('infrastructure/nightly/transcription/',),
 }

@@ -13,7 +13,7 @@ const run = (args, cwd) => execFileSync("node", [script, ...args], { cwd, encodi
 test("a pull request analyses only the languages whose files it changes", () => {
   assert.deepEqual(codeqlLanguages(["docs/managed-release.md", "apps/web/public/logo.png"]), []);
   assert.deepEqual(codeqlLanguages(["apps/web/src/app.tsx", "packages/ui/package.json"]), ["javascript-typescript"]);
-  assert.deepEqual(codeqlLanguages(["apps/api/internal/rooms/rooms.go", "apps/api/go.sum"]), ["go"]);
+  assert.deepEqual(codeqlLanguages(["apps/api/internal/rooms/rooms.go", "go.sum"]), ["go"]);
   assert.deepEqual(codeqlLanguages(["scripts/releases/release.py"]), ["python"]);
   assert.deepEqual(codeqlLanguages([".github/workflows/gate.yml", ".github/actions/setup-scanners/action.yml"]), ["actions", "javascript-typescript"]);
   assert.deepEqual(codeqlLanguages(["infrastructure/nightly/host-cloud-init.yaml"]), ["javascript-typescript"]);

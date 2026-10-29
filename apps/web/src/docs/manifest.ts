@@ -16,7 +16,7 @@ const CustomUI = lazy(() => import("./content/custom-ui.mdx"));
 const Media = lazy(() => import("./content/media.mdx"));
 const ScreenSharing = lazy(() => import("./content/screen-sharing.mdx"));
 const Chat = lazy(() => import("./content/chat.mdx"));
-const Whiteboard = lazy(() => import("./content/whiteboard.mdx"));
+const Whiteboard = lazy(() => import("../../../../features/whiteboard/docs/whiteboard.mdx"));
 const EntranceAndAdmission = lazy(() => import("./content/entrance-and-admission.mdx"));
 const Authentication = lazy(() => import("./content/authentication.mdx"));
 const Webhooks = lazy(() => import("./content/webhooks.mdx"));

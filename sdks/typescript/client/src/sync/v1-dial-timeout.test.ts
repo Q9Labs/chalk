@@ -6,7 +6,7 @@ import { createBrowserWebSocketFactory } from "./browser";
 import { V1SyncClient } from "./v1-client";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
 import { ManualClock } from "../../tests/helpers/manual-clock";
-import { ChalkWhiteboardV1Client } from "../whiteboard/v1-client";
+import { ChalkWhiteboardV1Client } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/v1-client";
 
 it.each([
   ["sync", 10_000],

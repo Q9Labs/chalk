@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-
 	"errors"
 	"net/http"
 	"strings"
@@ -10,12 +9,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var (
@@ -31,19 +30,19 @@ var (
 		Scope:       authentication.ScopeAPIKeysDelete,
 		MinimumRole: memberships.RoleCollaborator,
 	}
-	apiErrorInvalidAPIKeyID = APIError{
+	apiErrorInvalidAPIKeyID = httpcontract.APIError{
 		Status: http.StatusBadRequest, Code: "api_key.invalid_id", Message: "Invalid API key id",
 	}
-	apiErrorInvalidAPIKeyExpiry = APIError{
+	apiErrorInvalidAPIKeyExpiry = httpcontract.APIError{
 		Status: http.StatusBadRequest, Code: "api_key.invalid_expiry", Message: "API key expiry must be in the future and no more than 365 days from now.",
 	}
-	apiErrorAPIKeyNotFound = APIError{
+	apiErrorAPIKeyNotFound = httpcontract.APIError{
 		Status: http.StatusNotFound, Code: "api_key.not_found", Message: "API key not found",
 	}
-	apiErrorAPIKeyInactive = APIError{
+	apiErrorAPIKeyInactive = httpcontract.APIError{
 		Status: http.StatusConflict, Code: "api_key.inactive", Message: "API key is not active",
 	}
-	apiErrorAPIKeySecretNotReplayable = APIError{
+	apiErrorAPIKeySecretNotReplayable = httpcontract.APIError{
 		Status: http.StatusConflict, Code: "api_key.secret_not_replayable", Message: "This request already created the key; its secret cannot be shown again. Rotate the key to recover access.",
 	}
 )
@@ -158,7 +157,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
@@ -183,8 +182,8 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 		}
 		return newAPIKeyListResponse(list)
 	}).
-		Auth(APIAuthSessionOrBearer).
-		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
+		Auth(httpcontract.APIAuthSessionOrBearer).
+		Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Middleware(noStoreAPIKeyResponse).
 		Responds(http.StatusOK, "APIKeyList", apiKeyListResponse{}).
 		Errors(apiKeyReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
@@ -214,7 +213,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
 		Parameters(tenantIDParameter(), apiKeyIDParameter(), idempotencyKeyParameter()).
@@ -239,7 +238,7 @@ func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		}
 		return noResponse{}, service.Revoke(ctx, request.TenantID, request.APIKeyID)
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
 		Parameters(tenantIDParameter(), apiKeyIDParameter()).
@@ -330,8 +329,8 @@ func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.S
 	return nil
 }
 
-func apiKeyIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "api_key_id", In: "path", Type: "string", Required: true}
+func apiKeyIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "api_key_id", In: "path", Type: "string", Required: true}
 }
 
 func noStoreAPIKeyResponse(next http.Handler) http.Handler {
@@ -342,15 +341,15 @@ func noStoreAPIKeyResponse(next http.Handler) http.Handler {
 	})
 }
 
-func apiKeyReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
+func apiKeyReadErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
 }
 
-func apiKeyWriteErrors(extra ...APIError) []APIError {
+func apiKeyWriteErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
 	return append(apiKeyReadErrors(apiErrorRateLimited), extra...)
 }
 
-func apiKeyAPIError(err error) (APIError, bool) {
+func apiKeyAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case errors.Is(err, apikeys.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true

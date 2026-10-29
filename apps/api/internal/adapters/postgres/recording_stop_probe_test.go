@@ -12,7 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingorchestrator"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // Sync invokes this probe against committed fixtures to exercise the actual Go

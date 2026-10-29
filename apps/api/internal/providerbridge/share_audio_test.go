@@ -1,9 +1,10 @@
 package providerbridge
 
 import (
-	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestScreenRevocationIncludesAudioButNotMicrophone(t *testing.T) {

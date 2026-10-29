@@ -1,6 +1,6 @@
 import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
-import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
+import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 import type { AccessGrant } from "../access/grant";
 import type { V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
@@ -9,7 +9,7 @@ import type { OfflineActionsControllerEffects } from "./offline-actions";
 import type { ParticipantsControllerEffects } from "./participants-controller";
 import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
-import type { WhiteboardControllerEffects } from "./whiteboard-controller";
+import type { WhiteboardControllerEffects } from "../../../../../features/whiteboard/sdk/client/src/space-client/whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
 export type AccessReason = "join" | "refresh" | "retry";
 export type AccessContext = {

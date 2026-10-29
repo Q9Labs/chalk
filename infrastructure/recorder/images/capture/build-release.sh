@@ -17,7 +17,7 @@ while (($# > 0)); do
     *) usage ;;
   esac
 done
-[[ "$source_root" == /* && -f "$source_root/apps/api/go.mod" ]] || usage
+[[ "$source_root" == /* && -f "$source_root/go.mod" ]] || usage
 [[ "$output_path" == /* && ! -e "$output_path" ]] || usage
 [[ "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || usage
 

@@ -14,8 +14,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -250,7 +251,7 @@ func remoteIP(remoteAddr string) string {
 	return remoteAddr
 }
 
-func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) APIError {
+func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) httpcontract.APIError {
 	if decision.State != ratelimit.Exhausted {
 		recordRateLimiterUnavailable(ctx, policy.Name)
 		w.Header().Del(ratelimit.HeaderLimit)

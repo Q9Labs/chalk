@@ -8,20 +8,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var (
-	apiErrorChatAttachmentInvalid       = APIError{Status: http.StatusBadRequest, Code: "chat.invalid_attachment", Message: "Invalid chat attachment request"}
-	apiErrorChatAttachmentIDConflict    = APIError{Status: http.StatusConflict, Code: "chat.attachment_id_conflict", Message: "Client attachment id conflicts with an earlier upload"}
-	apiErrorChatAttachmentQuota         = APIError{Status: http.StatusConflict, Code: "chat.attachment_quota_exceeded", Message: "Chat attachment quota exceeded"}
-	apiErrorChatAttachmentUploadMissing = APIError{Status: http.StatusNotFound, Code: "chat.upload_not_found", Message: "Chat attachment upload not found"}
-	apiErrorChatAttachmentUploadExpired = APIError{Status: http.StatusGone, Code: "chat.upload_expired", Message: "Chat attachment upload expired"}
-	apiErrorChatAttachmentUploadPending = APIError{Status: http.StatusConflict, Code: "chat.upload_not_ready", Message: "Chat attachment upload is not ready"}
-	apiErrorChatAttachmentMissing       = APIError{Status: http.StatusNotFound, Code: "chat.attachment_not_found", Message: "Chat attachment not found"}
-	apiErrorChatAttachmentTransfer      = APIError{Status: http.StatusBadGateway, Code: "chat.attachment_transfer_failed", Message: "Chat attachment transfer failed"}
-	apiErrorChatAttachmentStorage       = APIError{Status: http.StatusServiceUnavailable, Code: "chat.storage_unavailable", Message: "Chat attachment storage unavailable"}
+	apiErrorChatAttachmentInvalid       = httpcontract.APIError{Status: http.StatusBadRequest, Code: "chat.invalid_attachment", Message: "Invalid chat attachment request"}
+	apiErrorChatAttachmentIDConflict    = httpcontract.APIError{Status: http.StatusConflict, Code: "chat.attachment_id_conflict", Message: "Client attachment id conflicts with an earlier upload"}
+	apiErrorChatAttachmentQuota         = httpcontract.APIError{Status: http.StatusConflict, Code: "chat.attachment_quota_exceeded", Message: "Chat attachment quota exceeded"}
+	apiErrorChatAttachmentUploadMissing = httpcontract.APIError{Status: http.StatusNotFound, Code: "chat.upload_not_found", Message: "Chat attachment upload not found"}
+	apiErrorChatAttachmentUploadExpired = httpcontract.APIError{Status: http.StatusGone, Code: "chat.upload_expired", Message: "Chat attachment upload expired"}
+	apiErrorChatAttachmentUploadPending = httpcontract.APIError{Status: http.StatusConflict, Code: "chat.upload_not_ready", Message: "Chat attachment upload is not ready"}
+	apiErrorChatAttachmentMissing       = httpcontract.APIError{Status: http.StatusNotFound, Code: "chat.attachment_not_found", Message: "Chat attachment not found"}
+	apiErrorChatAttachmentTransfer      = httpcontract.APIError{Status: http.StatusBadGateway, Code: "chat.attachment_transfer_failed", Message: "Chat attachment transfer failed"}
+	apiErrorChatAttachmentStorage       = httpcontract.APIError{Status: http.StatusServiceUnavailable, Code: "chat.storage_unavailable", Message: "Chat attachment storage unavailable"}
 )
 
 type ChatAttachmentService interface {
@@ -121,7 +122,7 @@ func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[init
 			}, nil
 		},
 	).
-		Auth(APIAuthParticipantSync).
+		Auth(httpcontract.APIAuthParticipantSync).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("InitiateChatAttachmentUploadRequest", initiateChatAttachmentBody{}).
 		Responds(http.StatusCreated, "ChatAttachmentUpload", chatAttachmentUploadResponse{}).
@@ -150,7 +151,7 @@ func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[fina
 			return newChatAttachmentResponse(attachment), nil
 		},
 	).
-		Auth(APIAuthParticipantSync).
+		Auth(httpcontract.APIAuthParticipantSync).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(chatUploadIDParameter()).
 		Responds(http.StatusOK, "ChatAttachment", chatAttachmentResponse{}).
@@ -182,7 +183,7 @@ func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[down
 			}, nil
 		},
 	).
-		Auth(APIAuthParticipantSync).
+		Auth(httpcontract.APIAuthParticipantSync).
 		Parameters(chatAttachmentIDParameter()).
 		Responds(http.StatusOK, "ChatAttachmentDownload", chatAttachmentDownloadResponse{}).
 		Errors(chatAttachmentErrors()...).
@@ -249,16 +250,16 @@ func newChatAttachmentResponse(attachment chatattachments.Attachment) chatAttach
 	}
 }
 
-func chatUploadIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "uploadId", In: "path", Type: "string", Required: true}
+func chatUploadIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "uploadId", In: "path", Type: "string", Required: true}
 }
 
-func chatAttachmentIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "attachmentId", In: "path", Type: "string", Required: true}
+func chatAttachmentIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "attachmentId", In: "path", Type: "string", Required: true}
 }
 
-func chatAttachmentErrors() []APIError {
-	return []APIError{
+func chatAttachmentErrors() []httpcontract.APIError {
+	return []httpcontract.APIError{
 		apiErrorUnauthenticated, apiErrorForbidden, apiErrorChatAttachmentInvalid,
 		apiErrorChatAttachmentIDConflict, apiErrorChatAttachmentQuota,
 		apiErrorChatAttachmentUploadMissing, apiErrorChatAttachmentUploadExpired,
@@ -268,7 +269,7 @@ func chatAttachmentErrors() []APIError {
 	}
 }
 
-func chatAttachmentAPIError(err error) (APIError, bool) {
+func chatAttachmentAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case errors.Is(err, chatattachments.ErrInvalidInput):
 		return apiErrorChatAttachmentInvalid, true
@@ -294,6 +295,6 @@ func chatAttachmentAPIError(err error) (APIError, bool) {
 		errors.Is(err, objectstorage.ErrProviderFailed):
 		return apiErrorChatAttachmentStorage, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }

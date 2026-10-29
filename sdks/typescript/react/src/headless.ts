@@ -5,6 +5,6 @@ export type { StageBox, StageFrame, StageGeometry, StageRole } from "./component
 export { choosePrimary, gridOrder, screenShareItemId, WHITEBOARD_ITEM_ID } from "./components/stage/stage-items";
 export type { StageItem, StageLayout } from "./components/stage/stage-items";
 export type { Participant } from "./components/participant-grid/ParticipantGrid";
-export { createRecordingWhiteboardCursor, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardSceneAppState } from "./components/whiteboard-view/recording-whiteboard-state";
-export type { RecordingWhiteboardCursor } from "./components/whiteboard-view/recording-whiteboard-state";
-export type { RecordingWhiteboardStateV1 } from "./components/whiteboard-view/recording-whiteboard-state";
+export { createRecordingWhiteboardCursor, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardSceneAppState } from "../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/recording-whiteboard-state";
+export type { RecordingWhiteboardCursor } from "../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/recording-whiteboard-state";
+export type { RecordingWhiteboardStateV1 } from "../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/recording-whiteboard-state";

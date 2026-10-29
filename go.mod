@@ -1,4 +1,4 @@
-module github.com/q9labs/chalk/apps/api
+module github.com/q9labs/chalk
 
 go 1.26.10
 

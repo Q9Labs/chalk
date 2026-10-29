@@ -36,7 +36,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
+          go-version-file: go.mod
           cache: false
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile

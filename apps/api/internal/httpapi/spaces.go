@@ -14,7 +14,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var (
@@ -26,7 +27,7 @@ var (
 		Scope:       authentication.ScopeSpacesWrite,
 		MinimumRole: memberships.RoleCollaborator,
 	}
-	apiErrorInvalidSpaceArtifactPolicy = APIError{Status: http.StatusBadRequest, Code: "space.invalid_artifact_policy", Message: "Invalid Space Artifact policy"}
+	apiErrorInvalidSpaceArtifactPolicy = httpcontract.APIError{Status: http.StatusBadRequest, Code: "space.invalid_artifact_policy", Message: "Invalid Space Artifact policy"}
 )
 
 type SpaceService interface {
@@ -165,7 +166,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		}
 		return newSpaceResponse(space), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
@@ -199,9 +200,9 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 		}
 		return newSpaceListResponse(list)
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
+		Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
 		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
 		MapErrors(spaceEndpointAPIError)
 }
@@ -221,7 +222,7 @@ func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoin
 		}
 		return newSpaceResponse(space), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound)...).
@@ -247,7 +248,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		}
 		return newSpaceResponse(space), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
@@ -270,7 +271,7 @@ func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 			return spaceResponse{}, err
 		}
 		return newSpaceResponse(space), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
 }
@@ -289,7 +290,7 @@ func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 			return spaceResponse{}, err
 		}
 		return newSpaceResponse(space), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
 }
@@ -370,8 +371,8 @@ func tenantSpaceIDsRequest(r *http.Request) (utilities.ID, utilities.ID, error) 
 	return tenantID, spaceID, nil
 }
 
-func spaceReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{
+func spaceReadErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,
 		apiErrorServiceUnavailable,
@@ -380,8 +381,8 @@ func spaceReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func spaceWriteErrors(extra ...APIError) []APIError {
-	return append([]APIError{
+func spaceWriteErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,
 		apiErrorServiceUnavailable,
@@ -390,17 +391,17 @@ func spaceWriteErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func spaceEndpointAPIError(err error) (APIError, bool) {
+func spaceEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := spaceServiceAPIError(err); ok {
 		return apiErr, true
 	}
 	return authorizationAPIError(err), true
 }
 
-func spaceServiceAPIError(err error) (APIError, bool) {
+func spaceServiceAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case err == nil:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	case errors.Is(err, spaces.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, spaces.ErrInvalidSpaceID):
@@ -429,7 +430,7 @@ func spaceServiceAPIError(err error) (APIError, bool) {
 	case errors.Is(err, spaces.ErrIdempotencyConflict):
 		return apiErrorIdempotencyConflict, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }
 

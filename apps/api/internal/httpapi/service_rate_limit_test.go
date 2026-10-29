@@ -19,9 +19,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 	goredis "github.com/redis/go-redis/v9"
 )
 

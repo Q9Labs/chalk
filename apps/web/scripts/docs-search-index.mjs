@@ -28,12 +28,10 @@ const excerptOf = (blocks) => {
 };
 
 const sections = [];
-for (const file of readdirSync(contentDir)
-  .filter((name) => name.endsWith(".mdx"))
-  .sort()) {
+for (const file of [...readdirSync(contentDir), "whiteboard.mdx"].filter((name) => name.endsWith(".mdx")).sort()) {
   const stem = file.replace(/\.mdx$/, "");
   const slug = stem === "why-chalk" ? "" : stem;
-  const source = readFileSync(path.join(contentDir, file), "utf8").replace(/^```[\s\S]*?^```$/gm, (fence) => fence.replace(/\n/g, "\u0000"));
+  const source = readFileSync(file === "whiteboard.mdx" ? path.resolve(web, "../../features/whiteboard/docs/whiteboard.mdx") : path.join(contentDir, file), "utf8").replace(/^```[\s\S]*?^```$/gm, (fence) => fence.replace(/\n/g, "\u0000"));
   const slugger = new GithubSlugger();
   for (const part of source.split(/^(?=#{2,3} )/m)) {
     const heading = part.match(/^(#{2,3}) (.+)\n/);

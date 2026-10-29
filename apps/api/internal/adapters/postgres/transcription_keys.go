@@ -3,7 +3,7 @@ package postgres
 import (
 	"fmt"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // chunkResultKey is API-owned and attempt-qualified. The source chunk key is

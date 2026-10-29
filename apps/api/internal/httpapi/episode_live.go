@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type presentParticipantResponse struct {
@@ -35,7 +36,7 @@ type listSpaceLiveEpisodesRequest struct {
 	SpaceIDs []utilities.ID
 }
 
-var apiErrorInvalidSpaceIDs = APIError{Status: http.StatusBadRequest, Code: "episode.invalid_space_ids", Message: "Provide 1 to 30 distinct comma-separated Space IDs"}
+var apiErrorInvalidSpaceIDs = httpcontract.APIError{Status: http.StatusBadRequest, Code: "episode.invalid_space_ids", Message: "Provide 1 to 30 distinct comma-separated Space IDs"}
 
 func decodeListSpaceLiveEpisodesRequest(r *http.Request) (listSpaceLiveEpisodesRequest, error) {
 	tenantID, err := tenantIDRequest(r)
@@ -84,10 +85,10 @@ func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer T
 			result.Spaces = append(result.Spaces, item)
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
-		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+		Parameters(tenantIDParameter(), httpcontract.APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceLiveEpisodeList", spaceLiveEpisodeListResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (APIError, bool) {
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (httpcontract.APIError, bool) {
 		if errors.Is(err, episodes.ErrInvalidSpaceIDs) {
 			return apiErrorInvalidSpaceIDs, true
 		}

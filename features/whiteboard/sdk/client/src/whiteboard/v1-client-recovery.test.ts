@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { Schema } from "effect";
 
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
-import type { SyncSocket } from "../sync/types";
+import type { SyncSocket } from "../../../../../../sdks/typescript/client/src/sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
-import { ManualClock } from "../../tests/helpers/manual-clock";
+import { ManualClock } from "../../../../../../sdks/typescript/client/tests/helpers/manual-clock";
 import type { ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";

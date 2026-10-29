@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/platform/objectstorage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )

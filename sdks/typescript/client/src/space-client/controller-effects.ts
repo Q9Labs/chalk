@@ -13,7 +13,7 @@ import { makeReactionsController, type ReactionsControllerEffects } from "./reac
 import { makeRecordingController, type RecordingControllerEffects } from "./recording-controller";
 import { SpaceStore } from "./store";
 import type { ActiveReaction, ChatAttachment, ChatMessage, ChatReadReceipt, ChatSendInput, ChatUploadFile, MediaRequestKind, Reaction } from "./types";
-import { makeWhiteboardController, type WhiteboardControllerEffects } from "./whiteboard-controller";
+import { makeWhiteboardController, type WhiteboardControllerEffects } from "../../../../../features/whiteboard/sdk/client/src/space-client/whiteboard-controller";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ControllerEffects = {
   readonly media: MediaControllerEffects;

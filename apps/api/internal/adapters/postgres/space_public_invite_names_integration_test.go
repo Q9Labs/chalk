@@ -28,8 +28,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/platform/synctokens"
 )
 
 const spaceInviteTestOrigin = "https://invite.chalk.test"

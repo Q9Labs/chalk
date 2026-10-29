@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,7 +27,6 @@ import (
 	postgressqlc "github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
-
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureproviders"
@@ -37,12 +35,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
-
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
@@ -61,16 +57,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-
 	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
-	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/features/whiteboard/api"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/synctokens"
+	"github.com/q9labs/chalk/platform/utilities"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -322,8 +317,8 @@ func run() error {
 	var chatParticipantVerifier httpapi.ChatParticipantVerifier
 	var chatCleanupScheduler *chatattachments.CleanupScheduler
 	var recordingSourceCleanupScheduler *transcripts.LocalCleanupScheduler
-	var whiteboardFileService httpapi.WhiteboardFileService
-	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
+	var whiteboardFileService whiteboardfiles.WhiteboardFileService
+	var whiteboardParticipantVerifier whiteboardfiles.WhiteboardParticipantVerifier
 	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
@@ -345,7 +340,7 @@ func run() error {
 			chatParticipantVerifier = chatVerifier
 		}
 		if cfg.Capabilities.WhiteboardFiles {
-			whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
+			whiteboardRepository := whiteboardfiles.NewWhiteboardFileRepository(pool)
 			whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, storage)
 			whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
 			if syncParticipantVerifierConfigured {

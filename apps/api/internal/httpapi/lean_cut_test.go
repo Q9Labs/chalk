@@ -10,7 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type leanCutKeyService struct {

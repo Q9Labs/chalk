@@ -9,14 +9,17 @@ const sources = [
   ["@q9labsai/chalk-ui/button", "../../../packages/ui/src/button.tsx"],
   ["@q9labsai/chalk-ui", "../../../packages/ui/src/index.ts"],
   ["@q9labsai/chalk-assets", "../../../packages/assets/src/index.ts"],
-  ["@q9labsai/chalk-whiteboard/react", "../../../packages/whiteboard/src/react/index.ts"],
-  ["@q9labsai/chalk-whiteboard", "../../../packages/whiteboard/src/index.ts"],
+  ["@q9labsai/chalk-whiteboard/react", "../../../features/whiteboard/packages/canvas/src/react/index.ts"],
+  ["@q9labsai/chalk-whiteboard", "../../../features/whiteboard/packages/canvas/src/index.ts"],
   ["@q9labsai/facehash/react", "../../../packages/facehash/src/react.ts"],
   ["@q9labsai/facehash", "../../../packages/facehash/src/index.ts"],
 ] as const;
 export default defineConfig({
-  test: { setupFiles: ["./tests/setup.ts"], server: { deps: { inline: true } } },
+  test: { include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}", "../../../features/whiteboard/sdk/react/src/**/*.test.{ts,tsx}"], setupFiles: ["./tests/setup.ts"], server: { deps: { inline: true } } },
   resolve: {
-    alias: [...sources.map(([find, source]) => ({ find, replacement: fileURLToPath(new URL(source, import.meta.url)) })), { find: "@excalidraw/excalidraw", replacement: createRequire(new URL("../../../packages/whiteboard/package.json", import.meta.url)).resolve("@excalidraw/excalidraw") }],
+    alias: [
+      ...sources.map(([find, source]) => ({ find, replacement: fileURLToPath(new URL(source, import.meta.url)) })),
+      { find: "@excalidraw/excalidraw", replacement: createRequire(new URL("../../../features/whiteboard/packages/canvas/package.json", import.meta.url)).resolve("@excalidraw/excalidraw") },
+    ],
   },
 });

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // Exercise the real TLS claim client, two-slot daemon, and readiness wrapper.

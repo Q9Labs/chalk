@@ -55,7 +55,7 @@ await Promise.all([
   cp(join(excalidrawProd, "index.css"), join(outputRoot, "index.css")),
   cp(join(mathJaxRoot, "tex-svg.js"), join(outputRoot, "mathjax", "tex-svg.js")),
   cp(compatibilityManifestPath, join(outputRoot, "compatibility-manifest.json")),
-  cp(join(packageRoot, "../../apps/mobile/assets/fonts/OFL.txt"), join(outputRoot, "licenses", "Figtree.txt")),
+  cp(join(packageRoot, "../../../../apps/mobile/assets/fonts/OFL.txt"), join(outputRoot, "licenses", "Figtree.txt")),
   copyWhenPresent(join(mathJaxRoot, "LICENSE"), join(outputRoot, "licenses", "MathJax.txt")),
 ]);
 
@@ -85,12 +85,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 `,
 );
-const callStyles = await readFile(join(packageRoot, "../ui/src/styles/index.css"), "utf8");
+const callStyles = await readFile(join(packageRoot, "../../../../packages/ui/src/styles/index.css"), "utf8");
 const menuStart = callStyles.indexOf(".chalk-menu {");
 const menuEnd = callStyles.indexOf(".chalk-tooltip {", menuStart);
 if (menuStart < 0 || menuEnd < 0) throw new Error("Chalk menu style source is missing");
-await cp(join(packageRoot, "../../apps/mobile/assets/fonts/Figtree-Regular.ttf"), join(outputRoot, "Figtree-Regular.ttf"));
-await cp(join(packageRoot, "../../apps/mobile/assets/fonts/Figtree-SemiBold.ttf"), join(outputRoot, "Figtree-SemiBold.ttf"));
+await cp(join(packageRoot, "../../../../apps/mobile/assets/fonts/Figtree-Regular.ttf"), join(outputRoot, "Figtree-Regular.ttf"));
+await cp(join(packageRoot, "../../../../apps/mobile/assets/fonts/Figtree-SemiBold.ttf"), join(outputRoot, "Figtree-SemiBold.ttf"));
 await writeFile(
   join(outputRoot, "chalk.css"),
   [
@@ -130,7 +130,7 @@ await writeFile(
 );
 
 const notices = {
-  generatedBy: "packages/whiteboard/scripts/build-embedded.mjs",
+  generatedBy: "features/whiteboard/packages/canvas/scripts/build-embedded.mjs",
   artifacts: [
     {
       name: "@excalidraw/excalidraw",

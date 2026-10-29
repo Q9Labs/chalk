@@ -7,15 +7,17 @@ const migrationsDirectory = path.join(repositoryRoot, "apps/api/db/migrations");
 const embedPath = path.join(migrationsDirectory, "embed.go");
 const latestVersionPattern = /^(const LatestVersion int64 = )(\d+)$/m;
 
-export async function latestMigrationVersion(directory = migrationsDirectory) {
-  const versions = (await readdir(directory))
+export async function latestMigrationVersion(directory) {
+  const directories = directory ? [directory] : [migrationsDirectory, path.join(repositoryRoot, "features/whiteboard/api/db/migrations")];
+  const versions = (await Promise.all(directories.map((directory) => readdir(directory))))
+    .flat()
     .filter((name) => name.endsWith(".sql"))
     .map((name) => {
       const prefix = name.split("_")[0];
       if (!/^\d+$/.test(prefix)) throw new Error(`Migration ${name} has no numeric version prefix`);
       return prefix;
     });
-  if (versions.length === 0) throw new Error(`No migrations found in ${directory}`);
+  if (versions.length === 0) throw new Error(`No migrations found in ${directories.join(", ")}`);
   return versions.reduce((latest, version) => (BigInt(version) > BigInt(latest) ? version : latest));
 }
 

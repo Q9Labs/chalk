@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 const (

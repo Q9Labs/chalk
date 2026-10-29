@@ -152,7 +152,7 @@ if [[ "${paths_present}" == true ]]; then
       continue
     # The deployed renderer includes chalk-react and its chalk-client dependency,
     # not the React Native SDK. Keep whole package inputs, including manifests.
-    elif [[ "${path}" == apps/api/go.mod || "${path}" == apps/api/go.sum || "${path}" == package.json || "${path}" == pnpm-lock.yaml || "${path}" == pnpm-workspace.yaml || "${path}" == apps/recording-renderer/* || "${path}" == infrastructure/recorder/images/cpu/* || "${path}" == packages/* || "${path}" == sdks/typescript/client/* || "${path}" == sdks/typescript/react/* ]]; then
+    elif [[ "${path}" == go.mod || "${path}" == go.sum || "${path}" == package.json || "${path}" == pnpm-lock.yaml || "${path}" == pnpm-workspace.yaml || "${path}" == apps/recording-renderer/* || "${path}" == infrastructure/recorder/images/cpu/* || "${path}" == packages/* || "${path}" == sdks/typescript/client/* || "${path}" == sdks/typescript/react/* ]]; then
       recorder_image_affected=true
     else
       for directory in "${recorder_package_dirs[@]}"; do

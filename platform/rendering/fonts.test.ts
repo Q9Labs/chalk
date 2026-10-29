@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { expandFontFamilies, registerSubsetFamily, registerTextFallback } from "./fonts.js";
+import { expandFontFamilies, registerSubsetFamily, registerTextFallback } from "./fonts";
 
 describe("font families", () => {
   it("expands registered family names without changing unrelated families", async () => {

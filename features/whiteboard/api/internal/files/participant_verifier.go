@@ -3,7 +3,7 @@ package whiteboardfiles
 import (
 	"context"
 
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/platform/synctokens"
 )
 
 type SyncParticipantVerifier interface {

@@ -8,7 +8,7 @@ import { SpaceView } from "../space-view/SpaceView";
 
 vi.mock("../stage/SpaceStage", async () => {
   const { useContext, createElement } = await import("react");
-  const { BoardToastContext } = await import("../../../../../../packages/whiteboard/src/react/board/board-toasts");
+  const { BoardToastContext } = await import("../../../../../../features/whiteboard/packages/canvas/src/react/board/board-toasts");
   return {
     SpaceStage: () => {
       const toast = useContext(BoardToastContext);

@@ -131,7 +131,7 @@ try {
       origin,
       budgets: budgets.leaks,
       directory: resolve(root, "artifacts/call-leaks"),
-      boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
+      boardCss: resolve(root, "features/whiteboard/packages/canvas/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
       selfTest: values["self-test"] && (!shard || shard.selfTest),
       repeats,
       journeys: shard?.journeys ?? (values["leak-journey"] ? [values["leak-journey"]] : undefined),
@@ -231,7 +231,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     if (response.status() >= 400 && ["script", "stylesheet"].includes(response.request().resourceType())) errors.push(`${response.status()} ${response.url()}`);
     if (["script", "stylesheet"].includes(response.request().resourceType())) resources.set(response.url(), response);
   });
-  const boardCss = resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css");
+  const boardCss = resolve(root, "features/whiteboard/packages/canvas/node_modules/@excalidraw/excalidraw/dist/prod/index.css");
   await routeCallFixtureAssets(page, boardCss);
   try {
     await stat(boardCss);

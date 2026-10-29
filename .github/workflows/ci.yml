@@ -204,8 +204,8 @@ jobs:
       - name: Set up Go for recorder dependency planning
         uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''
@@ -334,8 +334,8 @@ jobs:
       - name: Set up Go for release contracts
         uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Validate release source and pre-deploy contracts
         env:
@@ -392,12 +392,12 @@ jobs:
         run: |
           case "$COMPONENT" in
             api)
-              source_context="api_source=apps/api"
+              source_context="api_source=."
               dockerfile="infrastructure/managed-episode/images/api.Dockerfile"
               repository="chalk-api"
               ;;
             sync)
-              source_context="sync_source=apps/sync"
+              source_context="sync_source=."
               dockerfile="infrastructure/managed-episode/images/sync.Dockerfile"
               repository="chalk-sync"
               ;;
@@ -430,7 +430,7 @@ jobs:
             control_metadata="${RUNNER_TEMP}/recorder-control-metadata.json"
             docker buildx build \
               --platform linux/arm64 --provenance=mode=max \
-              --build-context api_source=apps/api \
+              --build-context api_source=. \
               --cache-from type=gha,scope=chalk-recorder-control \
               --cache-to type=gha,scope=chalk-recorder-control,mode=max \
               --file infrastructure/managed-episode/images/recorder-control.Dockerfile \
@@ -494,8 +494,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: pnpm/action-setup@v4
         with:
           version: 12.8.1
@@ -787,8 +787,8 @@ jobs:
       - uses: actions/setup-go@v5
         if: inputs.managed_environment == 'nightly'
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
 
       - name: Deploy, health-check, and prove release
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')

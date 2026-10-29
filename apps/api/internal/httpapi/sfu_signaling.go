@@ -12,7 +12,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type sfuTracksRequest struct {
@@ -119,9 +120,9 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 			return signalSFUTracks(ctx, request, spaces, episodeLookup, tenants, media, publications)
 		},
 	).
-		Auth(APIAuthParticipantMedia).
+		Auth(httpcontract.APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(append(tenantSpaceEpisodeParticipantParameters(), APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"})...).
+		Parameters(append(tenantSpaceEpisodeParticipantParameters(), httpcontract.APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"})...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
@@ -350,7 +351,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			return response, nil
 		},
 	).
-		Auth(APIAuthParticipantMedia).
+		Auth(httpcontract.APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		RequestBody("CloudflareSFUCloseTracksRequest", sfuCloseTracksRequest{}).
@@ -416,7 +417,7 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 			return response, nil
 		},
 	).
-		Auth(APIAuthParticipantMedia).
+		Auth(httpcontract.APIAuthParticipantMedia).
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		Responds(http.StatusOK, "CloudflareSFUPublicationsResponse", sfuPublicationsResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
@@ -444,7 +445,7 @@ func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			return sfuRenegotiateResponse{Accepted: err == nil}, err
 		},
 	).
-		Auth(APIAuthParticipantMedia).
+		Auth(httpcontract.APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		RequestBody("CloudflareSFURenegotiateRequest", sfuRenegotiateRequest{}).
@@ -506,8 +507,8 @@ func tenantSpaceEpisodeParticipantIDsRequest(request *http.Request) (utilities.I
 	return tenantID, spaceID, episodeID, participantID, err
 }
 
-func tenantSpaceEpisodeParticipantParameters() []APIParameterContract {
-	return []APIParameterContract{tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()}
+func tenantSpaceEpisodeParticipantParameters() []httpcontract.APIParameterContract {
+	return []httpcontract.APIParameterContract{tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()}
 }
 
 func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, participantID utilities.ID, connectionID string) error {

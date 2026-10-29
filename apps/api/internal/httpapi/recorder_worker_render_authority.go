@@ -10,12 +10,12 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingrender"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type RecorderRenderAuthorityService interface {

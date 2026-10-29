@@ -8,7 +8,7 @@ import { dump, loadAll } from "js-yaml";
 import { govulncheckFindings, newFindings, osvFindings } from "./new-vulnerabilities.mjs";
 
 const osvReport = (version) => ({
-  results: [{ source: { path: "/repo/apps/api/go.mod" }, packages: [{ package: { name: "golang.org/x/text", version, ecosystem: "Go" }, vulnerabilities: [{ id: "GO-2021-0113" }] }] }],
+  results: [{ source: { path: "/repo/go.mod" }, packages: [{ package: { name: "golang.org/x/text", version, ecosystem: "Go" }, vulnerabilities: [{ id: "GO-2021-0113" }] }] }],
 });
 
 // The shape of `govulncheck -format json`: pretty-printed objects, one after another.

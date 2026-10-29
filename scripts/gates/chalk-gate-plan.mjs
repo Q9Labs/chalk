@@ -7,15 +7,15 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
+const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools", "features", "platform"];
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
-const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
+const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml", "features/whiteboard/feature.json"]);
 // q9gate matches these by basename and directory anywhere in the tree; matching at least as much keeps the CI job
 // selection from skipping a job that q9gate would run in full mode.
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
-const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
+const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/", "scripts/features/"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -84,8 +84,8 @@ function isGateDefinition(file) {
 
 function isSyncReliabilityInput(file) {
   return (
-    startsWithAny(file, ["apps/sync", "apps/api/db/migrations", "packages/whiteboard", "sdks/typescript/client/src/sync", "sdks/typescript/client/src/whiteboard"]) ||
-    ["sdks/typescript/client/src/generated/sync.ts", "sdks/typescript/client/src/generated/whiteboard-v1.ts", "sdks/typescript/client/scripts/real-browser-sync.mjs", "contract/schema/sync-v1.json", "contract/schema/whiteboard-v1.json"].includes(file) ||
+    startsWithAny(file, ["apps/sync", "features/whiteboard/sync", "features/whiteboard/tests/sync", "features/whiteboard/api/db/migrations", "apps/api/db/migrations", "features/whiteboard/packages/canvas", "sdks/typescript/client/src/sync", "features/whiteboard/sdk/client/src/whiteboard"]) ||
+    ["sdks/typescript/client/src/generated/sync.ts", "features/whiteboard/sdk/client/src/generated/whiteboard-v1.ts", "sdks/typescript/client/scripts/real-browser-sync.mjs", "contract/schema/sync-v1.json", "features/whiteboard/contract/whiteboard-v1.json"].includes(file) ||
     file.startsWith("contract/schema/fixtures/sync-v1/")
   );
 }
@@ -93,7 +93,7 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
+  if (startsWithAny(file, ["features", "platform", "apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
@@ -192,6 +192,13 @@ export function discoverWorkspaces(root = repositoryRoot, options = {}) {
 }
 
 function affectedWorkspaces(files, workspaces, selectAll) {
+  // These are source roots of the existing SDK packages, not separate public SDKs.
+  files = [...files];
+  for (const sdk of ["client", "react", "react-native"]) {
+    if (files.some((file) => startsWithAny(file, [`features/whiteboard/sdk/${sdk}`]))) files.push(`sdks/typescript/${sdk}/src`);
+  }
+  if (files.some((file) => startsWithAny(file, ["features/whiteboard/web/recording"]))) files.push("apps/recording-renderer/src/compose");
+  if (files.some((file) => startsWithAny(file, ["features/whiteboard/web", "features/whiteboard/tests/web"]))) files.push("apps/web/src");
   const selected = new Set(selectAll ? workspaces.map((workspace) => workspace.name) : workspaces.filter((workspace) => files.some((file) => startsWithAny(file, [workspace.directory]) && !isDocumentation(file))).map((workspace) => workspace.name));
 
   let changed = true;
@@ -344,15 +351,15 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", ...deploymentRoots]));
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/whiteboard/api", "platform", "go.mod", "go.sum", ...deploymentRoots]));
   const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
-  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
+  const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "features/whiteboard/contract", "features/whiteboard/tools", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
-  const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript"]));
+  const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript", "features/whiteboard/packages"]));
   // CI runs the API and Sync gates as their own jobs and passes services: "external".
   const servicesExternal = options.services === "external";
   const serviceGates = servicesExternal ? [] : [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
@@ -363,8 +370,8 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
-  const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
-  const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
+  const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "features/whiteboard/sdk/react", "packages/ui/src/styles"]));
+  const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native", "features/whiteboard/sdk/react-native"]));
   const tasks = [
     task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
       "node",
@@ -425,21 +432,28 @@ export function createGatePlan(files, options = {}) {
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
-    task("call-performance", "Call performance budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call rendering inputs or full gate", [
-      "node",
-      "apps/web/scripts/check-call-performance.mjs",
-      "--gate",
-      "--timing-only",
-    ]),
-    task("call-leaks", "Call lifecycle leak budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call lifecycle inputs or full gate", [
-      "node",
-      "apps/web/scripts/check-call-performance.mjs",
-      "--gate",
-      "--leaks-only",
-      "--out",
-      process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? `artifacts/${process.env.GATE_LANE_GROUP}.json` : "artifacts/call-leaks.json",
-      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
-    ]),
+    task(
+      "call-performance",
+      "Call performance budgets",
+      full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "features/whiteboard/sdk/react", "packages/ui", "features/whiteboard/packages/canvas"])),
+      "call rendering inputs or full gate",
+      ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--timing-only"],
+    ),
+    task(
+      "call-leaks",
+      "Call lifecycle leak budgets",
+      full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "features/whiteboard/sdk/react", "packages/ui", "features/whiteboard/packages/canvas"])),
+      "call lifecycle inputs or full gate",
+      [
+        "node",
+        "apps/web/scripts/check-call-performance.mjs",
+        "--gate",
+        "--leaks-only",
+        "--out",
+        process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? `artifacts/${process.env.GATE_LANE_GROUP}.json` : "artifacts/call-leaks.json",
+        ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
+      ],
+    ),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task(
       "publint",

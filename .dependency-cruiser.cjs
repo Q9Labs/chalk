@@ -1,3 +1,4 @@
+const feature = require("./features/whiteboard/feature.json");
 const { makeHexagonalRules } = require("@q9labsai/config-depcruise");
 
 const PACKAGE_ALIAS_DEPENDENCY_TYPES = ["aliased", "aliased-workspace"];
@@ -75,10 +76,23 @@ const workspaceSourceCannotReachAppSource = {
 
 module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
-  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource],
+  forbidden: [
+    {
+      name: "whiteboard-declared-dependencies",
+      severity: "error",
+      from: { path: "^features/whiteboard/" },
+      to: { path: "^(?:apps|features|platform|packages|sdks|scripts|tools)/", pathNot: ["^features/whiteboard/", ...feature.dependencies.typescript.map((prefix) => `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:/|$)`)] },
+    },
+    packageSourceCannotReachOtherPackageSource,
+    packageSourceCannotReachSdkSource,
+    sdkSourceCannotReachPackageSource,
+    sdkSourceCannotReachOtherSdkSource,
+    appSourceCannotReachWorkspaceSource,
+    workspaceSourceCannotReachAppSource,
+  ],
   options: {
     ...canonicalConfiguration.options,
-    includeOnly: { path: "^(?:apps|packages|sdks/typescript)(?:/|$)" },
+    includeOnly: { path: "^(?:apps|features|platform|packages|sdks/typescript)(?:/|$)" },
     tsConfig: { fileName: "tsconfig.json" },
   },
 };

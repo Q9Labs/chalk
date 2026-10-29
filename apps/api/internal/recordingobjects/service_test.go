@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 func TestAllocateGeneratesServerOwnedObjectAndOpaqueToken(t *testing.T) {

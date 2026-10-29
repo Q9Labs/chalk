@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import { assetFiles, treeDigest } from "../../scripts/vendor-asset-files.ts";
-import { uploadVendorAssets } from "../../scripts/upload-vendor-assets.ts";
+import { assetFiles, treeDigest } from "../../web/vendor-asset-files.ts";
+import { uploadVendorAssets } from "../../web/upload-vendor-assets.ts";
 
 const require = createRequire(import.meta.url);
 const { Miniflare } = createRequire(require.resolve("wrangler/package.json"))("miniflare");

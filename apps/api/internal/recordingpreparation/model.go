@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const (

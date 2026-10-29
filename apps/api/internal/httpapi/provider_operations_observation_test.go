@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const observationTenantID = "33333333-3333-4333-8333-333333333333"

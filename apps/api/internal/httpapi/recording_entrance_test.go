@@ -14,7 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -28,7 +29,7 @@ type entranceHTTPStub struct {
 func TestEntranceErrorContracts(t *testing.T) {
 	for _, endpoint := range recordingEntranceEndpoints(nil, nil, nil, nil) {
 		contract := endpoint.RouteContract()
-		for _, required := range []APIError{apiErrorRateLimited, apiErrorInternal, apiErrorSpaceNotFound} {
+		for _, required := range []httpcontract.APIError{apiErrorRateLimited, apiErrorInternal, apiErrorSpaceNotFound} {
 			found := false
 			for _, declared := range contract.Errors {
 				if declared.Code == required.Code {

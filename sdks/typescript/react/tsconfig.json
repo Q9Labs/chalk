@@ -2,12 +2,12 @@
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../../..",
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
     "noEmit": false,
-    "composite": true,
+    "composite": false,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
@@ -19,7 +19,11 @@
       "@q9labsai/chalk-ui/assets": ["../../../packages/ui/dist/assets.d.ts"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../../features/whiteboard/sdk/react/src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
-  "references": [{ "path": "../../../packages/facehash" }]
+  "references": [
+    {
+      "path": "../../../packages/facehash"
+    }
+  ]
 }

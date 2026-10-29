@@ -131,6 +131,28 @@ test("service gate selection follows the plan inputs", () => {
   assert.deepEqual(services(["gate.config.ts"]), { api: true, sync: true });
 });
 
+test("colocated whiteboard sources select their owning toolchains without a full fallback", () => {
+  const cases = [
+    ["features/whiteboard/api/transport.go", { api: true, sync: false }],
+    ["features/whiteboard/sync/lib/chalk_sync/whiteboard_v1/protocol.ex", { api: false, sync: true }],
+    ["features/whiteboard/api/db/migrations/20261028120000_example.sql", { api: true, sync: true }],
+    ["features/whiteboard/packages/canvas/src/index.ts", { api: false, sync: true }],
+    ["apps/api/internal/chat/service.go", { api: true, sync: false }],
+    ["docs/features.md", { api: false, sync: false }],
+  ];
+  for (const [file, services] of cases) {
+    const plan = createGatePlan([file]);
+    assert.equal(plan.full, false, file);
+    assert.deepEqual(plan.services, services, file);
+  }
+  const client = createGatePlan(["features/whiteboard/sdk/client/src/whiteboard/store.ts"]);
+  assert.match(client.tasks.find((task) => task.id === "tests").reason, /@q9labsai\/chalk-client/);
+  assert(ciJobs(["features/whiteboard/sdk/client/src/whiteboard/store.ts"]).rootGroups.includes("browser-tests"));
+  const canvas = createGatePlan(["features/whiteboard/packages/canvas/src/index.ts"]);
+  assert.match(canvas.tasks.find((task) => task.id === "publint").reason, /@q9labsai\/chalk-whiteboard/);
+  assert.equal(createGatePlan(["features/whiteboard/feature.json"]).full, true);
+});
+
 test("gate target resolution prefers the environment and rejects a mismatch", () => {
   assert.equal(resolveGateTarget(undefined, "web"), "web");
   assert.equal(resolveGateTarget("web", undefined), "web");
@@ -214,7 +236,7 @@ test("scoped builds include workspace dependencies without widening other lanes"
 });
 
 test("separate call timing and leak budgets follow call renderers and full gates", () => {
-  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
+  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "features/whiteboard/packages/canvas/src/index.ts", "pnpm-lock.yaml"]) {
     const lane = createGatePlan([file]).tasks.find((task) => task.id === "call-performance");
     assert.equal(lane.selected, true, file);
     assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--timing-only"]);

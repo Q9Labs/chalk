@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func nullableUUID(id utilities.ID) pgtype.UUID {

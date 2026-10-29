@@ -7,5 +7,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/compose-cli.ts", "src/compose-fixture.ts", "src/compose/**/*.ts"]
+  "include": ["src/compose-cli.ts", "src/compose-fixture.ts", "src/compose/**/*.ts", "../../features/whiteboard/web/recording/**/*.ts", "../../platform/rendering/**/*.ts"]
 }

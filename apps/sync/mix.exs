@@ -7,6 +7,7 @@ defmodule ChalkSync.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_paths: ["test", "../../features/whiteboard/tests/sync"],
       start_permanent: Mix.env() == :prod,
       releases: [
         chalk_sync: [
@@ -24,8 +25,8 @@ defmodule ChalkSync.MixProject do
     ]
   end
 
-  defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(:test), do: ["lib", "test/support", "../../features/whiteboard/sync/lib"]
+  defp elixirc_paths(_), do: ["lib", "../../features/whiteboard/sync/lib"]
 
   defp deps do
     [

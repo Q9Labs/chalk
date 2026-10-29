@@ -4,7 +4,7 @@ import test from "node:test";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { rewriteDeclarationFiles, rewriteDeclarationSpecifiers } from "../../../scripts/rewrite-declaration-specifiers.mjs";
+import { rewriteDeclarationFiles, rewriteDeclarationSpecifiers } from "../../../../../scripts/rewrite-declaration-specifiers.mjs";
 
 test("rewrites only extensionless static relative declaration specifiers", () => {
   const source = [

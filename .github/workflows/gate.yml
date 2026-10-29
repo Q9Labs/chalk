@@ -143,7 +143,7 @@ jobs:
         if: matrix.group == 'checks' || matrix.group == 'browser-tests'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
+          go-version-file: go.mod
           cache: false
 
       - name: Set up Erlang and Elixir for the dashboard engine proof
@@ -166,7 +166,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-root-checks-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}
           restore-keys: go-root-checks-${{ runner.os }}-
 
       - name: Install JavaScript dependencies
@@ -237,7 +237,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-root-checks-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}
 
   root:
     name: Root gate
@@ -310,7 +310,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
+          go-version-file: go.mod
           cache: false
 
       - name: Restore Go caches
@@ -319,7 +319,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-api-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}
           restore-keys: go-api-${{ runner.os }}-
 
       # The migration proofs run mix deps.get in apps/sync.
@@ -344,7 +344,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-api-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}
 
   sync:
     name: Sync gate
@@ -375,7 +375,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
+          go-version-file: go.mod
           cache: false
 
       - name: Restore Go caches
@@ -384,7 +384,7 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-sync-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}
           restore-keys: go-sync-${{ runner.os }}-
 
       - name: Set up Erlang and Elixir
@@ -420,4 +420,4 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          key: go-sync-${{ runner.os }}-${{ hashFiles('go.sum', 'apps/api/**/*.go', 'features/whiteboard/api/**/*.go', 'platform/**/*.go') }}

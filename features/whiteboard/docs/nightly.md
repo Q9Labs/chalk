@@ -2,19 +2,19 @@
 
 ## The release nightly accepts only master
 
-[Cut nightly](../../.github/workflows/nightly.yml) runs hourly at minute 17 and
+[Cut nightly](../../../.github/workflows/nightly.yml) runs hourly at minute 17 and
 supports manual dispatch. Its first step rejects every ref except
 `refs/heads/master`, before checkout. It has no branch or target-SHA input.
 
-The plan in [release.py](../../scripts/releases/release.py) reads the current
+The plan in [release.py](../../../scripts/releases/release.py) reads the current
 master tip from GitHub. It refuses a stale workflow revision and selects that
-master commit. [The GitHub release client](../../scripts/releases/github_release.py)
+master commit. [The GitHub release client](../../../scripts/releases/github_release.py)
 accepts Gate evidence only when its head SHA matches and its branch is master.
 Scheduled cuts require a push Gate. Manual cuts can also accept master schedule
 or dispatch Gate evidence. A green PR run does not qualify.
 
 Dispatching this workflow with a feature-branch ref cannot test the branch. The
-underlying [release workflow](../../.github/workflows/ci.yml) also validates master
+underlying [release workflow](../../../.github/workflows/ci.yml) also validates master
 Gate evidence. Removing only the first ref guard does not enable branch releases.
 
 ## Use branch verification for a short observation period
@@ -24,8 +24,8 @@ Sync topology profile for two or three days. These exercise checked-out branch
 code without replacing the shared nightly deployment or weakening release trust.
 They are verification runs, not proof that a branch was deployed to nightly.
 
-Both [Gate](../../.github/workflows/gate.yml) and
-[Sync reliability](../../.github/workflows/sync-reliability.yml) support dispatch
+Both [Gate](../../../.github/workflows/gate.yml) and
+[Sync reliability](../../../.github/workflows/sync-reliability.yml) support dispatch
 on a branch. Gate dispatch selects every job in full mode. The topology profile
 uses a disposable local cluster. From a checkout of the desired branch:
 

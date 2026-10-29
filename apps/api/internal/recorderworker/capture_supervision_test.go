@@ -19,7 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // The judge's probes, asserting safety past both shutdown and lease expiry.

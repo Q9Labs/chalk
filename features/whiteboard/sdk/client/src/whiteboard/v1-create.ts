@@ -1,4 +1,4 @@
-import { createBrowserSyncLifecycle, createBrowserWebSocketFactory } from "../sync/browser";
+import { createBrowserSyncLifecycle, createBrowserWebSocketFactory } from "../../../../../../sdks/typescript/client/src/sync/browser";
 import { ChalkWhiteboardV1Client } from "./v1-client";
 import type { ChalkWhiteboardV1ClientOptions } from "./types";
 

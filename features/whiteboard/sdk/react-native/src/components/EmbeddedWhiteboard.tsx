@@ -2,7 +2,7 @@ import { ChalkWhiteboardController, type ChalkEmbeddedWhiteboardTransport, type 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, useWindowDimensions, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { exportBoardImage } from "../whiteboard/export-board-image";
-import { useToasts } from "../primitives/toast/ToastStack";
+import { useToasts } from "../../../../../../sdks/typescript/react-native/src/primitives/toast/ToastStack";
 import WebView, { type WebViewMessageEvent, type WebViewNavigation } from "react-native-webview";
 
 import { isEmbeddedWhiteboardNavigationAllowed, rendererURLWithContext, resolveEmbeddedWhiteboardRendererURL } from "../whiteboard/embedded-whiteboard-assets";

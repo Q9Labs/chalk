@@ -1,7 +1,7 @@
 "use client";
 export { MediaRequestDialog } from "../components/media-request-dialog/MediaRequestDialog";
 export { ToastStack } from "../components/toast-stack/ToastStack";
-export { WhiteboardView } from "../components/whiteboard-view/WhiteboardView";
+export { WhiteboardView } from "../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/WhiteboardView";
 export { createPreviewClient, createSnapshot } from "./preview-client";
 export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "./preview-devices";
 export { CommandErrorAlert, PreviewSpaceView } from "./preview-fixtures";
@@ -9,7 +9,7 @@ export type { Participant } from "../components/participant-grid/ParticipantGrid
 export type { ReconnectingOverlayProps } from "../components/reconnecting-overlay/ReconnectingOverlay";
 export type { SpaceViewFeatures, SpaceViewWhiteboard } from "../components/space-view/SpaceView";
 export type { Toast } from "../components/toast-stack/ToastStack";
-export type { WhiteboardViewProps } from "../components/whiteboard-view/WhiteboardView";
+export type { WhiteboardViewProps } from "../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/WhiteboardView";
 export type { PreviewClientCommand } from "./preview-client";
 export type { PreviewMediaDevices } from "./preview-devices";
 export type { SpaceLayout, SpacePanel } from "./preview-fixtures";

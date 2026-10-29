@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestArrivalStatusCannotInvalidateWithExhaustedWrites(t *testing.T) {

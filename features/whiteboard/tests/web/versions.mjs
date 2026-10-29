@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import { setupAssetScripts } from "./fixture.mjs";
 
-const webRoot = resolve(import.meta.dirname, "../..");
+const webRoot = resolve(import.meta.dirname, "../../../../apps/web");
 const repoRoot = resolve(webRoot, "../..");
 
 for (const changed of ["@excalidraw/excalidraw", "mathjax", "@mathjax/mathjax-newcm-font"]) {

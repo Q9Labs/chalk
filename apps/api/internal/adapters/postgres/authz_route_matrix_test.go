@@ -25,19 +25,19 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
-	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
+	"github.com/q9labs/chalk/features/whiteboard/api"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/synctokens"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestAuthorizationRouteMatrix(t *testing.T) {
@@ -266,7 +266,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		RecordingObjects:      storage, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
 		Webhooks:        webhooks.NewService(NewWebhookRepository(nil), nil),
 		ChatAttachments: chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
-		WhiteboardFiles: whiteboardfiles.NewService(NewWhiteboardFileRepository(tx), storage), WhiteboardParticipants: whiteboardfiles.NewParticipantVerifier(syncVerifier),
+		WhiteboardFiles: whiteboardfiles.NewService(whiteboardfiles.NewWhiteboardFileRepository(tx), storage), WhiteboardParticipants: whiteboardfiles.NewParticipantVerifier(syncVerifier),
 	}
 	matrixMountWorkers(&fixture.options, transcriptService)
 	return fixture

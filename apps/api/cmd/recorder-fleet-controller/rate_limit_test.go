@@ -17,8 +17,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderworker"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestProviderBackoffDoesNotDelayCaptureClaimRequest(t *testing.T) {

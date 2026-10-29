@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
+	"github.com/q9labs/chalk/features/whiteboard/api/internal/files"
+	"github.com/q9labs/chalk/features/whiteboard/api/internal/sqlc"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type WhiteboardFileRepository struct {
@@ -116,3 +116,10 @@ func mapWhiteboardUpload(
 
 var _ whiteboardfiles.Repository = WhiteboardFileRepository{}
 var _ whiteboardfiles.CleanupRepository = WhiteboardFileRepository{}
+
+func uuid(id utilities.ID) pgtype.UUID {
+	if id.IsZero() {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id.Bytes(), Valid: true}
+}

@@ -10,6 +10,19 @@ const script = fileURLToPath(new URL("./check-additive-migrations.mjs", import.m
 const migrations = "apps/api/db/migrations";
 const approval = "-- chalk:removed-in #248";
 
+test("historical feature migrations can move but new destructive feature SQL is checked", (t) => {
+  const repo = repository(t);
+  const feature = "features/whiteboard/api/db/migrations";
+  mkdirSync(join(repo.root, feature), { recursive: true });
+  repo.git("mv", `${migrations}/001_existing.sql`, `${feature}/001_existing.sql`);
+  assert.equal(repo.run().status, 0);
+  writeFileSync(join(repo.root, feature, "002_new.sql"), "-- +goose Up\nDROP TABLE spaces;\n");
+  repo.git("add", ".");
+  const result = repo.run();
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /features\/whiteboard.*DROP/);
+});
+
 function repository(t) {
   const root = mkdtempSync(join(tmpdir(), "chalk-migration-check-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

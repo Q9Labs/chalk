@@ -1,7 +1,7 @@
 import { ChalkWhiteboardViewBounds, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { EmbeddedWhiteboard } from "../components/EmbeddedWhiteboard";
+import { EmbeddedWhiteboard } from "../../../../../features/whiteboard/sdk/react-native/src/components/EmbeddedWhiteboard";
 import { RtcVideoView } from "../components/RtcVideoView";
 import { useSpaceClient } from "../context/space-client-context";
 import { useDeviceLayout } from "../frame/device-layout";

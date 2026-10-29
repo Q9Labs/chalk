@@ -8,7 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestStartMaterializesExactRecordingIdentityAndReservation(t *testing.T) {

@@ -8,7 +8,8 @@ const sourceRoot = join(process.cwd(), "src");
 const callbackPattern = /\b(useAnimatedStyle|useDerivedValue|useAnimatedReaction|useAnimatedProps|onBegin|onStart|onUpdate|onChange|onEnd|onFinalize)\(\s*\([^()]*\)\s*=>\s*(\{\s*"worklet"|.)/gu;
 
 const violations = [];
-for (const filePath of await sourceFiles(sourceRoot)) {
+const sourceRoots = [sourceRoot, join(process.cwd(), "../../../features/whiteboard/sdk/react-native/src")];
+for (const filePath of (await Promise.all(sourceRoots.map(sourceFiles))).flat()) {
   const source = await readFile(filePath, "utf8");
   if (!source.includes("react-native-reanimated") && !source.includes("react-native-gesture-handler")) continue;
   for (const match of source.matchAll(callbackPattern)) {

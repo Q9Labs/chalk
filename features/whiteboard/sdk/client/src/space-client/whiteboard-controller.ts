@@ -1,9 +1,9 @@
 import { Context, Effect, Layer } from "effect";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
-import type { ConnectionWhiteboardFactoryInput } from "../connection/dependencies";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../../../../../../sdks/typescript/client/src/connection";
+import type { ConnectionWhiteboardFactoryInput } from "../../../../../../sdks/typescript/client/src/connection/dependencies";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
-import { SpaceStore } from "./store";
-import type { WhiteboardSlice } from "./types";
+import { SpaceStore } from "../../../../../../sdks/typescript/client/src/space-client/store";
+import type { WhiteboardSlice } from "../../../../../../sdks/typescript/client/src/space-client/types";
 
 const EMPTY_SUMMARY: ChalkWhiteboardSummary = Object.freeze({ status: "unsubscribed", sceneId: null, revision: null, capabilities: Object.freeze([]), canDraw: false, canClear: false, drawPolicy: null, drawPermissions: Object.freeze([]), presenting: false, error: null });
 

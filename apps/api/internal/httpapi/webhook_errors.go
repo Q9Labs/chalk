@@ -4,16 +4,17 @@ import (
 	"errors"
 
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
-func webhookReadErrors() []APIError {
-	return []APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInvalidWebhookEndpointID, apiErrorInvalidWebhookDeliveryID, apiErrorWebhookEndpointNotFound, apiErrorWebhookDeliveryNotFound, apiErrorWebhookEventErased, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorRateLimited, apiErrorInternal}
+func webhookReadErrors() []httpcontract.APIError {
+	return []httpcontract.APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInvalidWebhookEndpointID, apiErrorInvalidWebhookDeliveryID, apiErrorWebhookEndpointNotFound, apiErrorWebhookDeliveryNotFound, apiErrorWebhookEventErased, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorRateLimited, apiErrorInternal}
 }
-func webhookWriteErrors() []APIError {
+func webhookWriteErrors() []httpcontract.APIError {
 	return append(webhookReadErrors(), apiErrorInvalidRequest, apiErrorInvalidWebhookURL, apiErrorUnsafeWebhookURL, apiErrorInvalidWebhookEventType, apiErrorWebhookEventTypeUnavailable, apiErrorInvalidWebhookAPIVersion, apiErrorWebhookEndpointLimit, apiErrorWebhookDeliveryNotRedeliverable, apiErrorWebhookRevisionConflict, apiErrorWebhookIdempotencyRequired, apiErrorWebhookIdempotencyConflict, apiErrorWebhookIdempotencyExpired)
 }
 
-func webhookAPIError(err error) (APIError, bool) {
+func webhookAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case errors.Is(err, webhooks.ErrInvalidEndpointID):
 		return apiErrorInvalidWebhookEndpointID, true

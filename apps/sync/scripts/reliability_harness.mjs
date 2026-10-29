@@ -31,8 +31,8 @@ export function createProfilePlan(profile, runDirectory) {
     step("sync_full_gate", ["apps/sync/scripts/gate.sh", "run"]),
     step("sync_v1_breaker", ["mix", "sync.breaker.v1", "--output", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
     step("sync_v1_replay", ["mix", "sync.breaker.v1", "--replay", path.join(runDirectory, "sync-breaker-v1.json")], { cwd: syncDirectory, env: { MIX_ENV: "test", TSX_TSCONFIG_PATH: diagnosticsContractsTsconfig } }),
-    step("typescript_sync_and_whiteboard", ["pnpm", "--dir", "sdks/typescript/client", "exec", "vitest", "run", "src/sync", "src/whiteboard"]),
-    step("whiteboard_collaboration", ["pnpm", "--dir", "packages/whiteboard", "exec", "vitest", "run", "src/collab", "src/embedded"]),
+    step("typescript_sync_and_whiteboard", ["pnpm", "--dir", "sdks/typescript/client", "exec", "vitest", "run", "src/sync", "../../../features/whiteboard/sdk/client/src/whiteboard"]),
+    step("whiteboard_collaboration", ["pnpm", "--dir", "features/whiteboard/packages/canvas", "exec", "vitest", "run", "src/collab", "src/embedded"]),
     step("browser_reconnection", ["pnpm", "--dir", "sdks/typescript/client", "run", "test:sync-browser"]),
   ];
 
@@ -73,7 +73,7 @@ function relevantWorkingTreeFingerprint() {
     "apps/api/scripts/db-migrate.sh",
     "apps/sync",
     "package.json",
-    "packages/whiteboard",
+    "features/whiteboard/packages/canvas",
     "pnpm-lock.yaml",
     "scripts/gates",
     "sdks/typescript/client/package.json",

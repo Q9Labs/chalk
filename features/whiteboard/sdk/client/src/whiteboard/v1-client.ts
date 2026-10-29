@@ -1,7 +1,7 @@
 import { ChalkWhiteboardViewVersions } from "./view-versions";
-import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
+import { scheduleSyncDialDeadline } from "../../../../../../sdks/typescript/client/src/sync/dial-deadline";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
-import type { SyncSocket } from "../sync/types";
+import type { SyncSocket } from "../../../../../../sdks/typescript/client/src/sync/types";
 import {
   ChalkWhiteboardV1Error,
   type ChalkSharedWhiteboardAppState,

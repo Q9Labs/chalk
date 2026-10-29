@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 type fixtureStore struct {

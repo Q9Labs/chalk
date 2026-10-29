@@ -7,15 +7,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestSpaceNameValidationErrorsAreClientErrors(t *testing.T) {
 	err := fmt.Errorf("create public Space: %w", spaces.ErrInvalidSpaceName)
 	for _, tc := range []struct {
 		name     string
-		mapError func(error) (APIError, bool)
-		want     APIError
+		mapError func(error) (httpcontract.APIError, bool)
+		want     httpcontract.APIError
 	}{
 		{"public start", publicInviteEndpointAPIError, apiErrorInvalidRequest},
 		{"dashboard create and rename", spaceEndpointAPIError, apiErrorInvalidSpaceName},
@@ -43,7 +44,7 @@ func TestPublicInviteEndpointMapsMediaProofFailures(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		err  error
-		want APIError
+		want httpcontract.APIError
 	}{
 		{name: "expired", err: publicinvites.ErrMediaProofExpired, want: apiErrorMediaProofExpired},
 		{name: "rejected", err: publicinvites.ErrMediaProofRejected, want: apiErrorMediaProofRejected},

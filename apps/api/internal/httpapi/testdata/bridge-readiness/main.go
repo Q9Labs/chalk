@@ -32,7 +32,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
 	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type episode struct{ Tenant, Episode, Participant string }

@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
-	"github.com/q9labs/chalk/apps/api/internal/recordingdecode"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
+	"github.com/q9labs/chalk/apps/api/internal/recordingdecode"
 )
 
 const storedFixture = "../../internal/recordingbundle/testdata/bundle-v1.encrypted.json"

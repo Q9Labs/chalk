@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const publicationParticipantEligible = `(participants.status = 'active' or

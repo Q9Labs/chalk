@@ -10,7 +10,10 @@
     "apps/recording-renderer",
     "apps/mobile",
     "apps/web",
-    "infrastructure/uptime-worker"
+    "infrastructure/uptime-worker",
+    "features/*",
+    "features/*/packages/*",
+    "platform/*"
   ],
   "type": "module",
   "scripts": {

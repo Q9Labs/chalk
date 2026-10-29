@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // EraseUserWebhookEvents destroys user-linked payloads and terminally fences

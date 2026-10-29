@@ -1,11 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/**/*", "type-tests/**/*.ts"],
+  "include": ["src/**/*", "type-tests/**/*.ts", "../../../features/whiteboard/sdk/react/src/**/*"],
   "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test.tsx"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
-    "rootDir": "../../../",
+    "rootDir": "../../..",
     "paths": {
       "@q9labsai/recording-presentation": ["../../../packages/recording-presentation/src/index.ts"],
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
@@ -16,8 +16,8 @@
       "@q9labsai/chalk-ui/assets": ["../../../packages/ui/src/assets.ts"],
       "@q9labsai/chalk-ui/button": ["../../../packages/ui/src/button.tsx"],
       "@q9labsai/chalk-ui/reactions": ["../../../packages/ui/src/reactions.ts"],
-      "@q9labsai/chalk-whiteboard": ["../../../packages/whiteboard/src/index.ts"],
-      "@q9labsai/chalk-whiteboard/react": ["../../../packages/whiteboard/src/react/index.ts"]
+      "@q9labsai/chalk-whiteboard": ["../../../features/whiteboard/packages/canvas/src/index.ts"],
+      "@q9labsai/chalk-whiteboard/react": ["../../../features/whiteboard/packages/canvas/src/react/index.ts"]
     }
   }
 }

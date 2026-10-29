@@ -7,7 +7,7 @@ const workspaceNodeModules = path.resolve(__dirname, "../../node_modules");
 const chalkClientRoot = path.resolve(__dirname, "../../sdks/typescript/client");
 const sdkReactNativeRoot = path.resolve(__dirname, "../../sdks/typescript/react-native");
 const facehashRoot = path.resolve(__dirname, "../../packages/facehash");
-const whiteboardRoot = path.resolve(__dirname, "../../packages/whiteboard");
+const whiteboardRoot = path.resolve(__dirname, "../../features/whiteboard/packages/canvas");
 const sdkNodeModules = path.resolve(__dirname, "../../sdks/typescript/react-native/node_modules");
 const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

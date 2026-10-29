@@ -1,6 +1,6 @@
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import type { ChalkChatPageResult, ChalkDirectedRequestResult } from "../collaboration/types";
-import type { ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { ChalkWhiteboardV1Transport } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 import type { ControllerEffects } from "./controller-effects";
 import { SpaceClientCore, SpaceClientCoreService, makeSpaceClientCoreLayer, type SpaceClientPlatform } from "./core";
 import type { SpaceClientError } from "./errors";

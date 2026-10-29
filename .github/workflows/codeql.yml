@@ -69,7 +69,7 @@ jobs:
         if: matrix.language == 'go'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
+          go-version-file: go.mod
           cache: false
 
       # Same languages, build modes, default queries and categories as the default setup this replaces, so existing

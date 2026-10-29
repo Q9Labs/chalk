@@ -36,5 +36,6 @@
     "clean": {
       "cache": false
     }
-  }
+  },
+  "globalDependencies": ["features/whiteboard/sdk/**", "features/whiteboard/web/**", "features/whiteboard/tests/**", "features/whiteboard/docs/whiteboard.mdx", "features/whiteboard/feature.json"]
 }

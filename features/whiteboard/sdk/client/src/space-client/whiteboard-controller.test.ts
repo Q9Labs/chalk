@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
-import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
+import type { ConnectionLifecycleCapability, ConnectionPorts } from "../../../../../../sdks/typescript/client/src/connection";
 import type { ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import { makeWhiteboardController } from "./whiteboard-controller";
-import { SpaceStore } from "./store";
-import type { Participant } from "./types";
+import { SpaceStore } from "../../../../../../sdks/typescript/client/src/space-client/store";
+import type { Participant } from "../../../../../../sdks/typescript/client/src/space-client/types";
 
 it("clears departed participants but retains view history through temporary socket loss", async () => {
   const store = new SpaceStore();
@@ -48,7 +48,7 @@ it("clears departed participants but retains view history through temporary sock
 });
 
 it("does not turn a temporarily unavailable control replica into participant departures", async () => {
-  const { makeParticipantsController } = await import("./participants-controller");
+  const { makeParticipantsController } = await import("../../../../../../sdks/typescript/client/src/space-client/participants-controller");
   const person = { participantId: "owner", displayName: "Owner", role: "host", eligibleRoles: [], capabilities: [], handRaised: false };
   let snapshot: { participantId: string; control: { participants: (typeof person)[]; admissionRequests: [] } | null; optimisticControl: null; media: null; presence: null } = {
     participantId: "owner",

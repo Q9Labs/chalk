@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
-func routeID(r *http.Request, parameter string, invalid APIError) (utilities.ID, error) {
+func routeID(r *http.Request, parameter string, invalid httpcontract.APIError) (utilities.ID, error) {
 	id, err := utilities.ParseID(chi.URLParam(r, parameter))
 	if err != nil {
 		return utilities.ID{}, invalid
@@ -66,47 +67,47 @@ func transcriptIDRequest(r *http.Request) (utilities.ID, error) {
 	return routeID(r, "transcript_id", apiErrorInvalidTranscriptID)
 }
 
-func paginationParameters() []APIParameterContract {
-	return []APIParameterContract{
+func paginationParameters() []httpcontract.APIParameterContract {
+	return []httpcontract.APIParameterContract{
 		{Name: "page_size", In: "query", Type: "integer", Required: false},
 		{Name: "cursor", In: "query", Type: "string", Required: false},
 	}
 }
 
-func tenantIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}
+func tenantIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}
 }
 
-func membershipIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "membership_id", In: "path", Type: "string", Required: true}
+func membershipIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "membership_id", In: "path", Type: "string", Required: true}
 }
 
-func spaceIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "space_id", In: "path", Type: "string", Required: true}
+func spaceIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "space_id", In: "path", Type: "string", Required: true}
 }
 
-func episodeIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "episode_id", In: "path", Type: "string", Required: true}
+func episodeIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "episode_id", In: "path", Type: "string", Required: true}
 }
 
-func recordingIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "recording_id", In: "path", Type: "string", Required: true}
+func recordingIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "recording_id", In: "path", Type: "string", Required: true}
 }
 
-func transcriptIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "transcript_id", In: "path", Type: "string", Required: true}
+func transcriptIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "transcript_id", In: "path", Type: "string", Required: true}
 }
 
-func recordingIDQueryParameter() APIParameterContract {
-	return APIParameterContract{Name: "recording_id", In: "query", Type: "string", Required: false}
+func recordingIDQueryParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "recording_id", In: "query", Type: "string", Required: false}
 }
 
-func episodeIDQueryParameter() APIParameterContract {
-	return APIParameterContract{Name: "episode_id", In: "query", Type: "string", Required: false}
+func episodeIDQueryParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "episode_id", In: "query", Type: "string", Required: false}
 }
 
-func spaceIDQueryParameter() APIParameterContract {
-	return APIParameterContract{Name: "space_id", In: "query", Type: "string", Required: false}
+func spaceIDQueryParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "space_id", In: "query", Type: "string", Required: false}
 }
 
 func optionalRecordingIDQuery(r *http.Request) (utilities.ID, error) {

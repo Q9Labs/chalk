@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilities.ID, key string, metadata webhooks.EventMetadata) (webhooks.DeliveryResult, error) {

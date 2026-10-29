@@ -20,8 +20,8 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/recorderbootstrapprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestBootstrapPersistsExactIdentityCertificateAndRevocation(t *testing.T) {

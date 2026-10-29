@@ -3,7 +3,7 @@
 import { fromWireElement, type BinaryFiles, type ExcalidrawImperativeAPI } from "@q9labsai/chalk-whiteboard";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { cn } from "../../utils/cn";
+import { cn } from "../../../../../../../sdks/typescript/react/src/utils/cn";
 import { WhiteboardView } from "./WhiteboardView";
 import { createRecordingWhiteboardCursor, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds, recordingWhiteboardSceneAppState, type RecordingWhiteboardStateV1 } from "./recording-whiteboard-state";
 

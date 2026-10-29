@@ -9,7 +9,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../.
 /** @typedef {Record<string, any>} WhiteboardContract */
 
 export function whiteboardContractPath() {
-  return resolve(process.env.CODEGEN_WHITEBOARD_CONTRACT_PATH ?? resolve(repositoryRoot, "contract/schema/whiteboard-v1.json"));
+  return resolve(process.env.CODEGEN_WHITEBOARD_CONTRACT_PATH ?? resolve(repositoryRoot, "features/whiteboard/contract/whiteboard-v1.json"));
 }
 
 export async function loadWhiteboardContract(inputPath = whiteboardContractPath()) {

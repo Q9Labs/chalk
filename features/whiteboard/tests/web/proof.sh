@@ -11,7 +11,7 @@ for label in before after; do
   rm -f "$proof_dir/$label-sizes.json" "$proof_dir/$label-web.log" "$proof_dir/$label-call.log"
 done
 saved="$(mktemp -d)"
-files=(apps/web/src/lib/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html packages/whiteboard/src/react/WhiteboardCanvas.tsx packages/whiteboard/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts apps/web/src/components/legal/LegalPage.tsx)
+files=(features/whiteboard/web/whiteboard-assets.ts apps/web/src/routes/__root.tsx apps/web/src/routes/dashboard.sign-in.tsx apps/web/call-states.html features/whiteboard/packages/canvas/src/react/WhiteboardCanvas.tsx features/whiteboard/packages/canvas/src/react/mathjax-renderer.ts apps/web/scripts/sync-public-assets.ts apps/web/vite.config.ts apps/web/vite.call-states.config.ts apps/web/src/components/legal/LegalPage.tsx)
 restore() {
   for index in "${!files[@]}"; do cp "$saved/$index" "${files[$index]}"; done
 }
@@ -27,7 +27,7 @@ for file in "${files[@]}"; do
   if git cat-file -e "origin/master:$file" 2>/dev/null; then git show "origin/master:$file" > "$file"; else : > "$file"; fi
 done
 measure() {
-  node apps/web/tests/selfhost-assets/sizes.mjs "$1" "$proof_dir"
+  node features/whiteboard/tests/web/sizes.mjs "$1" "$proof_dir"
 }
 for label in before after; do
   if [[ "$label" == after ]]; then restore; mv "$saved/fonts" apps/web/public/fonts; fi

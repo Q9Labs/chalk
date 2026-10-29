@@ -6,6 +6,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 type participantEpisodeStatusResponse struct {
@@ -39,7 +40,7 @@ func participantEpisodeStatusEndpoint(service EpisodeLookup, verifier Participan
 			default:
 				return participantEpisodeStatusResponse{}, apiErrorServiceUnavailable
 			}
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier), noStoreParticipantEpisodeStatus).RateLimit(authenticatedReadRateLimit).
+		}).Auth(httpcontract.APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier), noStoreParticipantEpisodeStatus).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantEpisodeStatus", participantEpisodeStatusResponse{}).
 		Errors(lifecycleReadErrors(apiErrorRateLimited, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound)...).

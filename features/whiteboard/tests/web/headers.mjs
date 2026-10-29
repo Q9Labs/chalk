@@ -19,7 +19,7 @@ test("Pages serves a single cache policy for fonts, vendor assets and HTML", asy
       ["/assets/app.js", "public, max-age=31536000, immutable"],
       ["/", "public, max-age=0, s-maxage=0, must-revalidate"],
     ];
-    await writeFile(resolve(directory, "_headers"), await readFile(resolve(import.meta.dirname, "../../public/_headers")));
+    await writeFile(resolve(directory, "_headers"), await readFile(resolve(import.meta.dirname, "../../../../apps/web/public/_headers")));
     for (const [path] of cases) {
       const file = resolve(directory, path === "/" ? "index.html" : path.slice(1));
       await mkdir(resolve(file, ".."), { recursive: true });

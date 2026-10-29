@@ -15,7 +15,7 @@ import (
 	redisadapter "github.com/q9labs/chalk/apps/api/internal/adapters/redis"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/ratelimit"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"

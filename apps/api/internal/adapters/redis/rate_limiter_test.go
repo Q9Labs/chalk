@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/ratelimit"
 	goredis "github.com/redis/go-redis/v9"
 )
 

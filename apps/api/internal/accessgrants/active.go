@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/platform/synctokens"
 )
 
 // ActiveAuthorizer binds a verified media subject to the authoritative live

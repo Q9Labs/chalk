@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/chatattachments"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/synctokens"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestChatAttachmentCORSUsesVerifiedParticipantTenant(t *testing.T) {

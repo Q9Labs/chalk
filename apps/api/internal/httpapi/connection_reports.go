@@ -13,8 +13,9 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -194,7 +195,7 @@ func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connec
 				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
 				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
 			return struct{}{}, nil
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(connectionReportParticipantLimit).
+		}).Auth(httpcontract.APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(connectionReportParticipantLimit).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("ConnectionReportRequest", connectionReport{}, ConnectionReportBodyLimit).
 		RespondsNoBody(http.StatusNoContent).

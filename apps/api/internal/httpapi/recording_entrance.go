@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type RecordingEntrancePreparer interface {
@@ -37,7 +38,7 @@ func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer Te
 			return entrancePreparationResponse{}, err
 		}
 		return prepareEntrance(ctx, preparer, request.TenantID, request.SpaceID)
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError).
 		Middleware(noStoreResponses)

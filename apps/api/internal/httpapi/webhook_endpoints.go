@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 type noResponse struct{}
@@ -22,7 +23,7 @@ func createWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 			return webhookEndpointWithSecretResponse{}, err
 		}
 		return newWebhookEndpointWithSecretResponse(result.Endpoint, result.Secret), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), idempotencyKeyParameter()).RequestBody("CreateWebhookEndpointRequest", createWebhookContractBody{}).Responds(http.StatusCreated, "WebhookEndpointWithSecret", webhookEndpointWithSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), idempotencyKeyParameter()).RequestBody("CreateWebhookEndpointRequest", createWebhookContractBody{}).Responds(http.StatusCreated, "WebhookEndpointWithSecret", webhookEndpointWithSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }
 
 func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhooksRequest, webhookEndpointListResponse] {
@@ -46,7 +47,7 @@ func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) E
 			response.Endpoints = append(response.Endpoints, newWebhookEndpointResponse(endpoint))
 		}
 		return response, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "WebhookEndpointList", webhookEndpointListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "WebhookEndpointList", webhookEndpointListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
 }
 
 func getWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookIDsRequest, webhookEndpointResponse] {
@@ -59,7 +60,7 @@ func getWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) End
 		}
 		value, err := service.Get(ctx, request.TenantID, request.EndpointID)
 		return newWebhookEndpointResponse(value), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter()).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter()).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
 }
 
 func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[patchWebhookRequest, webhookEndpointResponse] {
@@ -72,7 +73,7 @@ func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) E
 		}
 		value, err := service.Patch(ctx, request.TenantID, request.EndpointID, request.Body.toInput(request.Revision, request.Key))
 		return newWebhookEndpointResponse(value), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RequestBody("UpdateWebhookEndpointRequest", patchWebhookContractBody{}).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RequestBody("UpdateWebhookEndpointRequest", patchWebhookContractBody{}).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }
 
 func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[deleteWebhookRequest, noResponse] {
@@ -84,7 +85,7 @@ func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 			return noResponse{}, err
 		}
 		return noResponse{}, service.Delete(ctx, request.TenantID, request.EndpointID, request.Revision, request.Key)
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RespondsNoBody(http.StatusNoContent).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RespondsNoBody(http.StatusNoContent).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }
 
 func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[rotateWebhookRequest, rotateWebhookSecretResponse] {
@@ -97,7 +98,7 @@ func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthor
 		}
 		value, err := service.RotateSecret(ctx, request.TenantID, request.EndpointID, *request.Body.RevokePreviousImmediately.Value, request.Key)
 		return rotateWebhookSecretResponse{EndpointID: value.EndpointID.String(), Revision: value.Revision, Secret: value.Secret, PreviousSecretExpiresAt: responseTime(value.PreviousSecretExpiresAt)}, err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).RequestBody("RotateWebhookSecretRequest", rotateWebhookContractBody{}).Responds(http.StatusOK, "RotateWebhookSecretResponse", rotateWebhookSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).RequestBody("RotateWebhookSecretRequest", rotateWebhookContractBody{}).Responds(http.StatusOK, "RotateWebhookSecretResponse", rotateWebhookSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }
 
 func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookActionRequest, webhookDeliveryCreatedResponse] {
@@ -110,7 +111,7 @@ func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) En
 		}
 		value, err := service.Test(ctx, request.TenantID, request.EndpointID, request.Key, webhooks.EventMetadata{})
 		return newWebhookDeliveryCreatedResponse(value), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }
 
 func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhookDeliveriesRequest, webhookDeliveryListResponse] {
@@ -134,7 +135,7 @@ func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuth
 			response.Deliveries = append(response.Deliveries, newWebhookDeliveryResponse(delivery))
 		}
 		return response, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append(append([]APIParameterContract{tenantIDParameter(), webhookEndpointIDParameter()}, webhookDeliveryFilterParameters()...), paginationParameters()...)...).Responds(http.StatusOK, "WebhookDeliveryList", webhookDeliveryListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append(append([]httpcontract.APIParameterContract{tenantIDParameter(), webhookEndpointIDParameter()}, webhookDeliveryFilterParameters()...), paginationParameters()...)...).Responds(http.StatusOK, "WebhookDeliveryList", webhookDeliveryListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
 }
 
 func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryIDsRequest, webhookDeliveryDetailResponse] {
@@ -150,7 +151,7 @@ func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthori
 			return webhookDeliveryDetailResponse{}, err
 		}
 		return newWebhookDeliveryDetailResponse(detail), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter()).Responds(http.StatusOK, "WebhookDeliveryDetail", webhookDeliveryDetailResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter()).Responds(http.StatusOK, "WebhookDeliveryDetail", webhookDeliveryDetailResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
 }
 
 func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryActionRequest, webhookDeliveryCreatedResponse] {
@@ -163,5 +164,5 @@ func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorize
 		}
 		value, err := service.Redeliver(ctx, request.TenantID, request.EndpointID, request.DeliveryID, request.Key)
 		return newWebhookDeliveryCreatedResponse(value), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
 }

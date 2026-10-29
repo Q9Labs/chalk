@@ -17,7 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel/trace"
 )
 

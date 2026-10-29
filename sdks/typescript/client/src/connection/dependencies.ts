@@ -4,7 +4,7 @@ import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot 
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult, V1MediaPause } from "../sync/v1-types";
-import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
 import { Context, Layer } from "effect";
 export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";

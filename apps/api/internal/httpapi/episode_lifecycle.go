@@ -17,10 +17,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/synctokens"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const idempotencyKeyHeader = "Idempotency-Key"
@@ -253,7 +254,7 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 			return episodeResponse{}, err
 		}
 		return newEpisodeResponse(created), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateEpisodeRequest", createEpisodeRequest{}).Responds(http.StatusCreated, "Episode", episodeResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
@@ -280,8 +281,8 @@ func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuth
 			result.Episodes = append(result.Episodes, newEpisodeResponse(episode))
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), spaceIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "EpisodeList", episodeListResponse{}).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+		Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter(), spaceIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "EpisodeList", episodeListResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorSpaceNotFound, apiErrorEpisodeNotFound)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
@@ -298,7 +299,7 @@ func getEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 			return episodeResponse{}, err
 		}
 		return newEpisodeResponse(episode), nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "Episode", episodeResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorSpaceNotFound, apiErrorEpisodeNotFound)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -316,7 +317,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 			return syncTokenResponse{}, err
 		}
 		return syncTokenResponse{SyncToken: token.Value, ExpiresAt: token.ExpiresAt.UTC().Format(time.RFC3339)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).Responds(http.StatusCreated, "SyncToken", syncTokenResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -386,7 +387,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 			}
 		}
 		return response, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
@@ -413,7 +414,7 @@ func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer Tenan
 			return participantRemovalResponse{}, err
 		}
 		return participantRemovalResponse{Participant: newParticipantResponse(removal.Participant), Operation: newExternalOperationResponseFromIntent(removal.Intent)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter(), idempotencyKeyParameter()).RequestBody("RemoveEpisodeParticipantRequest", removeParticipantRequest{}).
 		Responds(http.StatusAccepted, "ParticipantRemoval", participantRemovalResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotFound, apiErrorParticipantNotActive, apiErrorParticipantGenerationMismatch, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
@@ -432,7 +433,7 @@ func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 			return episodeControlResponse{}, err
 		}
 		return episodeControlResponse{EpisodeID: end.Episode.ID.String(), Status: end.Episode.Status, Operation: newExternalOperationResponseFromIntent(end.Intent)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).Responds(http.StatusAccepted, "EpisodeEnd", episodeControlResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorEpisodeCapacityExceeded, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -450,7 +451,7 @@ func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAutho
 			return episodeControlResponse{}, err
 		}
 		return episodeControlResponse{EpisodeID: control.Episode.ID.String(), Status: control.Episode.Status, Operation: newExternalOperationResponse(control.Operation)}, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).RequestBody("SetEpisodeDeadlineRequest", setDeadlineRequest{}).Responds(http.StatusAccepted, "EpisodeDeadline", episodeControlResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -529,15 +530,15 @@ func newExternalOperationResponseFromIntent(intent episodes.Intent) externalOper
 	return newExternalOperationResponse(episodes.ExternalOperation{ID: intent.ID, RequestKey: intent.RequestKey, OperationName: intent.IntentName, TargetParticipantID: intent.ParticipantID, TargetGeneration: intent.ParticipantGeneration, Status: intent.Status, CreatedAt: intent.CreatedAt})
 }
 
-func lifecycleWriteErrors(extra ...APIError) []APIError {
-	return append([]APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
+func lifecycleWriteErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
 }
 
-func lifecycleReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
+func lifecycleReadErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantID, apiErrorInternal}, extra...)
 }
 
-func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
+func episodeLifecycleEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if errors.Is(err, tenantlimits.ErrLiveEpisodeLimitReached) {
 		return apiErrorTenantLiveEpisodeLimit, true
 	}

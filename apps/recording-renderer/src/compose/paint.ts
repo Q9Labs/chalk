@@ -1,6 +1,7 @@
+import type { Rect } from "@chalk/rendering/geometry";
 import { ComputerScreenShareIcon, MicOff01Icon, WavingHand01Icon } from "@hugeicons/core-free-icons";
 import { createCanvas, Path2D, type Canvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
-import type { Rect, Scene, SceneParticipant, SceneTile } from "./scene.js";
+import type { Scene, SceneParticipant, SceneTile } from "./scene.js";
 
 /** The painter's colors, from design.md: Chalk Light and its dark counterpart. */
 interface Theme {

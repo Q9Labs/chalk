@@ -35,7 +35,7 @@ import { SpaceStage } from "../stage/SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
-import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+import type { WhiteboardViewProps } from "../../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/WhiteboardView";
 
 export type SpacePanel = "chat" | "participants" | "admission";
 

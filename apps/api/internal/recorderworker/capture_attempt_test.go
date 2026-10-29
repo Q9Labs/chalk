@@ -19,12 +19,12 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestRTPSequenceExtenderHandlesWrapAndLatePacket(t *testing.T) {

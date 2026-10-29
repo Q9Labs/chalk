@@ -69,7 +69,7 @@ outcomes:
     theory: theory.md#product-memory
     code:
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react-native/src/components/EmbeddedWhiteboard.tsx
+      - features/whiteboard/sdk/react-native/src/components/EmbeddedWhiteboard.tsx
   - id: collaboration.whiteboard_connection_stability
     title: Keep whiteboard connections steady
     area: collaboration
@@ -85,8 +85,8 @@ outcomes:
     theory: theory.md#sync-correctness
     code:
       - sdks/typescript/client/src/connection/lifecycle.ts
-      - sdks/typescript/client/src/whiteboard/v1-client.ts
-      - sdks/typescript/react/src/internal/useWhiteboardSceneSubscription.ts
+      - features/whiteboard/sdk/client/src/whiteboard/v1-client.ts
+      - features/whiteboard/sdk/react/src/internal/useWhiteboardSceneSubscription.ts
   - id: collaboration.attachment_retention
     title: Chat attachments stay isolated and get deleted
     area: collaboration

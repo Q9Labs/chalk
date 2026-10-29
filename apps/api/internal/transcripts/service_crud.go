@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func (s Service) Create(ctx context.Context, input CreateInput) (Transcript, error) {

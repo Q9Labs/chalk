@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type RecordingPreparationService interface {
@@ -17,10 +18,10 @@ type RecordingPreparationService interface {
 }
 
 var (
-	apiErrorInvalidPreparation  = APIError{Status: http.StatusBadRequest, Code: "recording_preparation.invalid", Message: "Invalid recording preparation"}
-	apiErrorPreparationNotFound = APIError{Status: http.StatusNotFound, Code: "recording_preparation.not_found", Message: "Recording preparation not found"}
-	apiErrorPreparationConflict = APIError{Status: http.StatusConflict, Code: "recording_preparation.conflict", Message: "Recording preparation changed; read its current revision before updating"}
-	apiErrorPreparationPolicy   = APIError{Status: http.StatusForbidden, Code: "recording_preparation.policy_denied", Message: "Space does not permit recording preparation"}
+	apiErrorInvalidPreparation  = httpcontract.APIError{Status: http.StatusBadRequest, Code: "recording_preparation.invalid", Message: "Invalid recording preparation"}
+	apiErrorPreparationNotFound = httpcontract.APIError{Status: http.StatusNotFound, Code: "recording_preparation.not_found", Message: "Recording preparation not found"}
+	apiErrorPreparationConflict = httpcontract.APIError{Status: http.StatusConflict, Code: "recording_preparation.conflict", Message: "Recording preparation changed; read its current revision before updating"}
+	apiErrorPreparationPolicy   = httpcontract.APIError{Status: http.StatusForbidden, Code: "recording_preparation.policy_denied", Message: "Space does not permit recording preparation"}
 )
 
 type preparationBody struct {
@@ -62,7 +63,7 @@ func getRecordingPreparationEndpoint(service RecordingPreparationService, author
 		}
 		preparation, err := service.Get(ctx, request.TenantID, request.SpaceID)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).
+	}).Auth(httpcontract.APIAuthCookieOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorPreparationNotFound, apiErrorInvalidPreparation)...).
@@ -79,7 +80,7 @@ func prepareRecordingEndpoint(service RecordingPreparationService, authorizer Te
 		}
 		preparation, err := service.Prepare(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("PrepareRecordingRequest", preparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationConflict, apiErrorPreparationPolicy)...).
@@ -96,7 +97,7 @@ func cancelRecordingPreparationEndpoint(service RecordingPreparationService, aut
 		}
 		preparation, err := service.Cancel(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(httpcontract.APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("CancelRecordingPreparationRequest", cancelPreparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationNotFound, apiErrorPreparationConflict)...).
@@ -141,7 +142,7 @@ func newPreparationResponse(p recordingpreparation.Preparation) preparationRespo
 	}
 }
 
-func preparationAPIError(err error) (APIError, bool) {
+func preparationAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case errors.Is(err, recordingpreparation.ErrInvalidInput):
 		return apiErrorInvalidPreparation, true

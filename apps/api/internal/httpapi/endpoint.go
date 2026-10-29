@@ -7,21 +7,22 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/ratelimit"
 )
 
 type RouteEndpoint interface {
 	Mount(r chi.Router, limits RateLimitOptions)
-	RouteContract() APIRouteContract
+	RouteContract() httpcontract.APIRouteContract
 }
 
 type EndpointDecoder[Request any] func(r *http.Request) (Request, error)
 type EndpointHandler[Request any, Response any] func(ctx context.Context, request Request) (Response, error)
-type EndpointErrorMapper func(err error) (APIError, bool)
+type EndpointErrorMapper func(err error) (httpcontract.APIError, bool)
 type EndpointWriter[Response any] func(w http.ResponseWriter, r *http.Request, status int, response Response)
 
 type Endpoint[Request any, Response any] struct {
-	contract       APIRouteContract
+	contract       httpcontract.APIRouteContract
 	decode         EndpointDecoder[Request]
 	handle         EndpointHandler[Request, Response]
 	mapError       EndpointErrorMapper
@@ -52,7 +53,7 @@ func Delete[Request any, Response any](path string, mountPath string, operationI
 
 func newEndpoint[Request any, Response any](method string, path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return Endpoint[Request, Response]{
-		contract: APIRouteContract{
+		contract: httpcontract.APIRouteContract{
 			OperationID: operationID,
 			Method:      method,
 			Path:        path,
@@ -68,13 +69,13 @@ func (e Endpoint[Request, Response]) Description(description string) Endpoint[Re
 	return e
 }
 
-func (e Endpoint[Request, Response]) Auth(auth APIAuth) Endpoint[Request, Response] {
+func (e Endpoint[Request, Response]) Auth(auth httpcontract.APIAuth) Endpoint[Request, Response] {
 	e.contract.Auth = auth
 	return e
 }
 
 func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
-	return e.Auth(APIAuthSessionOrBearer)
+	return e.Auth(httpcontract.APIAuthSessionOrBearer)
 }
 
 func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint[Request, Response] {
@@ -87,28 +88,28 @@ func (e Endpoint[Request, Response]) RequestBody(name string, sample any) Endpoi
 }
 
 func (e Endpoint[Request, Response]) RequestBodyWithLimit(name string, sample any, limit int64) Endpoint[Request, Response] {
-	e.contract.Request = &APISchemaRef{Name: name, Type: sample}
+	e.contract.Request = &httpcontract.APISchemaRef{Name: name, Type: sample}
 	e.contract.BodyLimitBytes = limit
 	e.contract.Errors = appendAPIError(e.contract.Errors, apiErrorPayloadTooLarge)
 	return e
 }
 
 func (e Endpoint[Request, Response]) Responds(status int, name string, sample any) Endpoint[Request, Response] {
-	e.contract.Responses = []APIResponseContract{
+	e.contract.Responses = []httpcontract.APIResponseContract{
 		{
 			Status: status,
-			Schema: &APISchemaRef{Name: name, Type: sample},
+			Schema: &httpcontract.APISchemaRef{Name: name, Type: sample},
 		},
 	}
 	return e
 }
 
 func (e Endpoint[Request, Response]) RespondsNoBody(status int) Endpoint[Request, Response] {
-	e.contract.Responses = []APIResponseContract{{Status: status}}
+	e.contract.Responses = []httpcontract.APIResponseContract{{Status: status}}
 	return e
 }
 
-func (e Endpoint[Request, Response]) ResponseHeaders(headers ...APIHeaderContract) Endpoint[Request, Response] {
+func (e Endpoint[Request, Response]) ResponseHeaders(headers ...httpcontract.APIHeaderContract) Endpoint[Request, Response] {
 	if len(e.contract.Responses) == 0 {
 		return e
 	}
@@ -116,12 +117,12 @@ func (e Endpoint[Request, Response]) ResponseHeaders(headers ...APIHeaderContrac
 	return e
 }
 
-func (e Endpoint[Request, Response]) Parameters(parameters ...APIParameterContract) Endpoint[Request, Response] {
+func (e Endpoint[Request, Response]) Parameters(parameters ...httpcontract.APIParameterContract) Endpoint[Request, Response] {
 	e.contract.Parameters = append(e.contract.Parameters, parameters...)
 	return e
 }
 
-func (e Endpoint[Request, Response]) Errors(errors ...APIError) Endpoint[Request, Response] {
+func (e Endpoint[Request, Response]) Errors(errors ...httpcontract.APIError) Endpoint[Request, Response] {
 	for _, apiError := range errors {
 		e.contract.Errors = appendAPIError(e.contract.Errors, apiError)
 	}
@@ -163,7 +164,7 @@ func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions
 	r.Method(e.contract.Method, e.contract.MountPath, handler)
 }
 
-func (e Endpoint[Request, Response]) RouteContract() APIRouteContract {
+func (e Endpoint[Request, Response]) RouteContract() httpcontract.APIRouteContract {
 	return e.contract
 }
 
@@ -191,7 +192,7 @@ func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http
 	writeAPIError(w, apiErr)
 }
 
-func (e Endpoint[Request, Response]) apiError(err error) APIError {
+func (e Endpoint[Request, Response]) apiError(err error) httpcontract.APIError {
 	if apiErr, ok := errorAsAPIError(err); ok {
 		return apiErr
 	}
@@ -223,12 +224,12 @@ func (e Endpoint[Request, Response]) writeResponse(w http.ResponseWriter, r *htt
 	writeJSON(w, e.successStatus(), response)
 }
 
-func errorAsAPIError(err error) (APIError, bool) {
-	var apiErr APIError
+func errorAsAPIError(err error) (httpcontract.APIError, bool) {
+	var apiErr httpcontract.APIError
 	if errors.As(err, &apiErr) {
 		return apiErr, true
 	}
-	return APIError{}, false
+	return httpcontract.APIError{}, false
 }
 
 type noRequest struct{}
@@ -254,11 +255,15 @@ func decodeJSONBodyWithLimit[Request any](r *http.Request, limit int64) (Request
 	return request, nil
 }
 
-func appendAPIError(errors []APIError, apiError APIError) []APIError {
+func appendAPIError(errors []httpcontract.APIError, apiError httpcontract.APIError) []httpcontract.APIError {
 	for _, existing := range errors {
 		if existing.Status == apiError.Status && existing.Code == apiError.Code {
 			return errors
 		}
 	}
 	return append(errors, apiError)
+}
+
+func FromSpec[Request any, Response any](spec httpcontract.EndpointSpec[Request, Response]) Endpoint[Request, Response] {
+	return Endpoint[Request, Response]{contract: spec.Contract, decode: spec.Decode, handle: spec.Handle, mapError: spec.MapErrors, middlewares: spec.Middlewares}
 }

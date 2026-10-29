@@ -5,7 +5,7 @@
     %{
       name: "default",
       files: %{
-        included: ["lib/", "test/"],
+        included: ["lib/", "test/", "../../features/whiteboard/sync/", "../../features/whiteboard/tests/sync/"],
         excluded: [
           ~r"/_build/",
           ~r"/deps/",

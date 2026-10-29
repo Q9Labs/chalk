@@ -39,7 +39,7 @@ const stroke = (count: number, withPressure = false) => {
 };
 
 it("keeps the engine's element size at the whiteboard-v1 limit less the margin for the server's encoder", () => {
-  const contract = readFileSync(resolve(__dirname, "../../../../contract/schema/whiteboard-v1.json"), "utf8");
+  const contract = readFileSync(resolve(__dirname, "../../../../contract/whiteboard-v1.json"), "utf8");
   const contractLimit = Number(/"elementPayloadEncodedBytes":\s*(\d+)/.exec(contract)?.[1]);
   expect(limit).toBe(contractLimit - 64);
 });

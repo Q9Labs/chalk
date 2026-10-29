@@ -185,7 +185,7 @@ export type ChalkWhiteboardSummary = {
   readonly error: ChalkWhiteboardV1Failure | null;
 };
 import type { WhiteboardV1ClientFrame, WhiteboardV1DrawPolicy } from "../generated/whiteboard-v1";
-import type { ChalkWhiteboardV1Capability } from "../collaboration/types";
-import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncWebSocketFactory } from "../sync/types";
+import type { ChalkWhiteboardV1Capability } from "../../../../../../sdks/typescript/client/src/collaboration/types";
+import type { SyncClock, SyncIdGenerator, SyncLifecycle, SyncWebSocketFactory } from "../../../../../../sdks/typescript/client/src/sync/types";
 
-export type { ChalkWhiteboardV1Capability } from "../collaboration/types";
+export type { ChalkWhiteboardV1Capability } from "../../../../../../sdks/typescript/client/src/collaboration/types";

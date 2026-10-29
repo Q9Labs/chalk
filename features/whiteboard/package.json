@@ -1,0 +1,28 @@
+{
+  "name": "@chalk/whiteboard-feature",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@chalk/rendering": "workspace:*",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@napi-rs/canvas": "1.0.9",
+    "@q9labsai/chalk-client": "workspace:^5.2.5",
+    "@q9labsai/chalk-react": "workspace:^5.2.5",
+    "@q9labsai/chalk-whiteboard": "workspace:^5.2.5",
+    "@q9labsai/facehash": "workspace:^5.2.5",
+    "aws4fetch": "1.0.20",
+    "effect": "4.0.0-beta.102",
+    "esbuild": "0.28.2",
+    "expo-clipboard": "~55.0.9",
+    "expo-file-system": "~55.0.24",
+    "expo-sharing": "55.0.11",
+    "happy-dom": "^21.0.4",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-native": "0.83.2",
+    "react-native-webview": "13.16.1",
+    "vite": "8.1.6",
+    "vitest": "^4.1.12"
+  }
+}

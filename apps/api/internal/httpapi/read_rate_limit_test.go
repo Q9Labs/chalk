@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/ratelimit"
 )
 
 func TestGETRoutesNeverUseWriteBudget(t *testing.T) {

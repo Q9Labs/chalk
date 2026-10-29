@@ -8,16 +8,18 @@ ARG TARGETOS
 WORKDIR /src
 
 COPY --from=api_source go.mod go.sum ./
-COPY --from=api_source . ./
+COPY --from=api_source apps/api ./apps/api
+COPY --from=api_source features/whiteboard/api ./features/whiteboard/api
+COPY --from=api_source platform ./platform
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
-    go build -trimpath -ldflags='-s -w' -o /out/chalk-api ./cmd
+    go build -trimpath -ldflags='-s -w' -o /out/chalk-api ./apps/api/cmd
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
-    go build -trimpath -ldflags='-s -w' -o /out/chalk-migrate ./cmd/migrate
+    go build -trimpath -ldflags='-s -w' -o /out/chalk-migrate ./apps/api/cmd/migrate
 
 COPY images/healthcheck/main.go /healthcheck/main.go
 RUN CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \

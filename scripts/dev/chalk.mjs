@@ -149,7 +149,7 @@ function defaultServiceSpecs(config) {
     { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${config.root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` }, watchRoots: [`${config.root}/apps/api`] },
     { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${config.root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` }, watchRoots: [`${config.root}/apps/sync`] },
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
-    { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
+    { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "features/whiteboard/packages/canvas/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
     { id: "web", command: "pnpm", args: ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", String(config.ports.web)], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];

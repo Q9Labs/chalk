@@ -20,8 +20,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestServicePrincipalChildResourceIsolation(t *testing.T) {

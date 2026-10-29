@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createDefaultConnectionDependencies, bindConnectionMediaClient } from "./production";
 
 const whiteboard = vi.hoisted(() => vi.fn());
-vi.mock("../whiteboard", async (original) => ({ ...(await original<typeof import("../whiteboard")>()), createChalkWhiteboardV1Client: whiteboard }));
+vi.mock("../../../../../features/whiteboard/sdk/client/src/whiteboard", async (original) => ({ ...(await original<typeof import("../../../../../features/whiteboard/sdk/client/src/whiteboard")>()), createChalkWhiteboardV1Client: whiteboard }));
 
 describe("production whiteboard adapter", () => {
   it("forwards the shared core's watchdog recorder", () => {

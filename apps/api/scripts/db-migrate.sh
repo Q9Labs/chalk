@@ -39,4 +39,7 @@ case "${command}" in
     ;;
 esac
 
-go tool goose -dir db/migrations postgres "${database_url}" "${command}" "$@"
+migration_bundle="$(mktemp -d)"
+trap 'rm -rf -- "$migration_bundle"' EXIT
+cp db/migrations/*.sql ../../features/whiteboard/api/db/migrations/*.sql "$migration_bundle/"
+go tool goose -dir "$migration_bundle" postgres "${database_url}" "${command}" "$@"

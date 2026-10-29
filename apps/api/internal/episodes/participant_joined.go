@@ -3,7 +3,7 @@ package episodes
 import (
 	"encoding/json"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func ParticipantJoinedPayload(participantID utilities.ID, displayName, role string) json.RawMessage {

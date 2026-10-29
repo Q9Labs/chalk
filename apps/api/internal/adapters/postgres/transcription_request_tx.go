@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func admitTranscriptionTx(ctx context.Context, queries sqlc.Querier, input transcripts.RequestInput, source transcripts.SourceInput, chunks []transcripts.ChunkInput, allowAutomaticReplay bool) (transcripts.Transcript, []transcripts.Job, error) {

@@ -2,15 +2,15 @@
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../../..",
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
     "noEmit": false,
-    "composite": true,
+    "composite": false,
     "paths": {},
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../../../features/whiteboard/sdk/client/src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
 }

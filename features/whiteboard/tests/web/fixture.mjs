@@ -3,19 +3,21 @@ import { once } from "node:events";
 import { cp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
-const webRoot = resolve(import.meta.dirname, "../..");
+const webRoot = resolve(import.meta.dirname, "../../../../apps/web");
 
 export async function setupAssetScripts(fixture) {
   const script = join(fixture, "apps/web/scripts/sync-public-assets.ts");
-  const versions = join(fixture, "apps/web/src/lib/whiteboard-asset-versions.ts");
+  const versions = join(fixture, "features/whiteboard/web/whiteboard-asset-versions.ts");
   await mkdir(dirname(script), { recursive: true });
   await mkdir(dirname(versions), { recursive: true });
   await cp(join(webRoot, "scripts/sync-public-assets.ts"), script);
-  await cp(join(webRoot, "scripts/vendor-asset-files.ts"), join(dirname(script), "vendor-asset-files.ts"));
+  for (const name of ["sync-assets.ts", "vendor-asset-files.ts"]) {
+    await cp(resolve(webRoot, "../../features/whiteboard/web", name), join(dirname(versions), name));
+  }
   await symlink(join(webRoot, "node_modules"), join(fixture, "apps/web/node_modules"), "dir");
-  await cp(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), versions);
+  await cp(resolve(webRoot, "../../features/whiteboard/web/whiteboard-asset-versions.ts"), versions);
   await writeFile(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
-  const packageRoot = join(fixture, "packages/whiteboard");
+  const packageRoot = join(fixture, "features/whiteboard/packages/canvas");
   await mkdir(packageRoot, { recursive: true });
   await writeFile(join(packageRoot, "package.json"), "{}");
   return { script, versions, packageRoot };

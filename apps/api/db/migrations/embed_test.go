@@ -1,10 +1,33 @@
 package migrations
 
 import (
+	"io/fs"
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
+
+func TestMigrationFilesMergeInOrderAndRejectDuplicateVersions(t *testing.T) {
+	files := migrationFiles{
+		fstest.MapFS{"002_app.sql": &fstest.MapFile{Data: []byte("app")}},
+		fstest.MapFS{"001_feature.sql": &fstest.MapFile{Data: []byte("feature")}},
+	}
+	entries, err := fs.ReadDir(files, ".")
+	if err != nil || len(entries) != 2 || entries[0].Name() != "001_feature.sql" || entries[1].Name() != "002_app.sql" {
+		t.Fatalf("migration order = %v, %v", entries, err)
+	}
+	for _, name := range []string{"001_feature.sql", "002_app.sql"} {
+		contents, err := fs.ReadFile(files, name)
+		if err != nil || len(contents) == 0 {
+			t.Fatalf("read migration %s: %q, %v", name, contents, err)
+		}
+	}
+	files = append(files, fstest.MapFS{"001_feature.sql": &fstest.MapFile{}})
+	if _, err := fs.ReadDir(files, "."); err == nil {
+		t.Fatal("duplicate migration name must fail")
+	}
+}
 
 func TestLatestVersionMatchesEmbeddedMigrations(t *testing.T) {
 	entries, err := Files.ReadDir(".")

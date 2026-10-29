@@ -3,10 +3,9 @@ package httpapi
 import (
 	"context"
 	"errors"
-
-	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 

@@ -2,8 +2,8 @@ import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { createCanvas, Image, Path2D, type Canvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { createRecordingWhiteboardCursor, loadRecordingWhiteboardFiles, recordingWhiteboardSceneAppState, type RecordingWhiteboardCursor } from "@q9labsai/chalk-react/headless";
-import { expandFontFamilies, registerSubsetFamily } from "./fonts.js";
-import type { Rect } from "./scene.js";
+import { expandFontFamilies, registerSubsetFamily } from "@chalk/rendering/fonts";
+import type { Rect } from "@chalk/rendering/geometry";
 
 export interface WhiteboardAsset {
   readonly bytes: Buffer;

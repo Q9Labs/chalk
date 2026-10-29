@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { WhiteboardCanvas, type WhiteboardCanvasProps, type WhiteboardCollaborationOptions } from "@q9labsai/chalk-whiteboard/react";
 
-import { Cancel01Icon, CheckmarkCircle02Icon, Loading01Icon } from "../../utils/icons";
+import { Cancel01Icon, CheckmarkCircle02Icon, Loading01Icon } from "../../../../../../../sdks/typescript/react/src/utils/icons";
 
 export type WhiteboardCollabOptions = WhiteboardCollaborationOptions;
 export type WhiteboardViewProps = Omit<WhiteboardCanvasProps, "classNames" | "icons">;

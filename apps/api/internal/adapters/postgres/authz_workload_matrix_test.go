@@ -20,7 +20,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/apitest"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var globalClaimReasons = map[string]string{

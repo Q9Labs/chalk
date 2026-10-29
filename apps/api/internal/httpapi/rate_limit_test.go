@@ -8,7 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/config"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/ratelimit"
 )
 
 func TestLocalRateLimitsSwitch(t *testing.T) {

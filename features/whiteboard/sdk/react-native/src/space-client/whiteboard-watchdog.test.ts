@@ -5,7 +5,7 @@ vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventLis
 vi.mock("@cloudflare/react-native-webrtc", () => ({ RTCPeerConnection: vi.fn(), mediaDevices: {} }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.platform }));
 vi.mock("@q9labsai/chalk-client", async (original) => ({ ...(await original<typeof import("@q9labsai/chalk-client")>()), createChalkWhiteboardV1Client: mocks.whiteboard }));
-import { createNativeSpaceClient } from "./create-native-space-client";
+import { createNativeSpaceClient } from "../../../../../../sdks/typescript/react-native/src/space-client/create-native-space-client";
 describe("native whiteboard watchdog adapter", () => {
   it("passes the shared core's replacement recorder without a journey option", () => {
     createNativeSpaceClient({
