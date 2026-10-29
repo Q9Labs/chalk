@@ -159,7 +159,7 @@ for (const mutation of cases) {
   try {
     writeFileSync(filename, original.replace(mutation.from, mutation.to));
     const result = run("mutant");
-    if (result.status === 0 || !/FAIL|AssertionError|assertion|Expected|Assertion with/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
+    if (result.status === 0 || !/--- FAIL:|AssertionError|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
     console.log(`KILLED ${mutation.name}`);
   } finally {
     writeFileSync(filename, original);
