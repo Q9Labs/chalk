@@ -113,6 +113,21 @@ the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
 The PostgreSQL fixture in `infrastructure/observability/production-alerts/collector_test.go` checks stranded,
 recent, incomplete, healthy, and cross-Tenant rows and clearing after repair.
+The same collector independently samples Sync `/readyz` every minute, including
+when its SQL snapshot fails. The grouped state monitor alerts when at least four
+distinct minute samples in the last five minutes are unready and the latest
+sample is unready and newer than 90 seconds. Duplicate samples in a minute count
+once. This ignores a 24-second blip but catches the roughly five-minute readiness
+outage observed on 28 October; Sync's internal one-second probes already apply
+failure/recovery hysteresis, so paging on each probe would be too noisy.
+The next healthy sample clears the condition on the next minute evaluation.
+Messages include the latest allowlisted readiness reason, such as
+`database_unavailable`, or an HTTP/transport fallback, without response bodies.
+Missing samples do not establish continued unreadiness; the freshness monitor
+expects this sixth rule and detects stopped collection within five minutes.
+Collector/Discord tests cover safe reasons, database failure and recovery;
+read-only synthetic Axiom query tests replay the blip and sustained window,
+recovery, duplicate/missing samples and a change of reason.
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
 
