@@ -603,7 +603,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const { state, transceiver, lifecycle } = publication;
       if (lifecycle.kind === "retired") continue;
       const authoritative = tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
-      if (!authoritative?.publicationId) throw new CloudflareSFUError("SFU response missing publication ID", "invalid_publication");
+      if (!authoritative?.publicationId) throw new CloudflareSFUError("Missing publication ID", "invalid_publication");
       const handle = { publicationId: authoritative.publicationId, mid: requireTransceiverMid(transceiver) };
       publication.lifecycle = lifecycle.kind === "retiring" ? { ...lifecycle, handle } : { kind: "confirmed", handle };
     }
