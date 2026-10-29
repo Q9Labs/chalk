@@ -91,8 +91,9 @@ reports pending, due, and retrying counts, plus the oldest lag-eligible intent's
 count and allowlisted error code (`other` for unknown codes; `null` before a failure).
 Unattempted participant joins age from `next_attempt_at`, when their held seat is
 due to expire, not from creation. Before that time they count as pending but do
-not contribute lag. Other intents and attempted joins still age from creation,
-including scheduled retries, so retry backoff cannot hide stuck work. The legacy
+not contribute lag. Intentionally unscheduled joins use `infinity`; they remain
+pending but contribute neither lag nor due work. Other intents and attempted joins
+still age from creation, including scheduled retries, so retry backoff cannot hide stuck work. The legacy
 `oldest_pending_lifecycle_intent_ms` field reports this lag age; the oldest intent's
 diagnostics use the same ordering and are null when no pending work is lag-eligible.
 Use these fields to distinguish undiscovered backlog from repeated delivery failures;
@@ -106,6 +107,11 @@ line. It records the check and reason, measured database values and limits or
 consumer freshness/failure counters where available; unavailable dependencies
 report `observed=false`. Exceptions and exits record only their category, never
 the raw error text. These are probe observations, before readiness hysteresis.
+
+Database query failures also record `query_stage` (`role`, `migration`, `pending_age`,
+or `replication`), `error_class`, and SQLSTATE when available. SQL text, parameters,
+connection details, and database error messages are not recorded. Query errors
+still report the public reason `database_unavailable`.
 
 For lifecycle lag, the journal and trace also contain the oldest currently due
 intent's ID, kind, ISO-8601 due time and attempt count from the same database
