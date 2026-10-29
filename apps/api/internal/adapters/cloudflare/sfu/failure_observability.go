@@ -3,6 +3,7 @@ package sfu
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -137,6 +138,23 @@ func observableProviderCode(rawCode string, normalizedCode string) string {
 		return ""
 	}
 	return rawCode
+}
+
+func observableHTTPProviderCode(payload []byte) string {
+	var response struct {
+		ErrorCode string `json:"errorCode"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil || strings.TrimSpace(response.ErrorCode) == "" {
+		return "unparsed_body"
+	}
+	switch response.ErrorCode {
+	case "unauthorized", "not_found", "decoding_error", "invalid_params", "payload_too_large",
+		"session_error", "invalid_session_description", "not_found_track_error", "empty_track_error",
+		"repeated_local_track_error", "update_track_error", "close_track_error", "internal_error":
+		return response.ErrorCode
+	default:
+		return "unlisted"
+	}
 }
 
 func observableProviderMessage(message string) string {
