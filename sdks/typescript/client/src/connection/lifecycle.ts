@@ -1076,7 +1076,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   Effect.suspend(() => {
                     if (model.epoch !== epoch || !active(model)) return Effect.void;
                     const finalFailure = resolved === failure ? check.failure : resolved;
-                    if (finalFailure === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410) return recover("media");
+                    if (finalFailure === failure && failure.cause instanceof CloudflareSFUError && failure.cause.options.status === 410) {
+                      rejectionCheck = null;
+                      return recover("media");
+                    }
                     return commitSnapshotFailure(finalFailure);
                   }),
                 ),

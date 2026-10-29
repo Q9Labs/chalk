@@ -275,3 +275,34 @@ it.each(["active", "ending", "ended"] as const)("does not treat refresh access.f
     expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
   });
 });
+
+it.each([401, 403])("REVIEW stronger %s during the 410 decision commit is not lost", async (status) => {
+  const test = mediaRecoveryFixture();
+  let answer: (status: "active") => void = () => {
+    throw new Error("missing read");
+  };
+  test.status
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    )
+    .mockResolvedValue("active");
+  await test.run(async (lifecycle) => {
+    test.mediaPhase("failed");
+    test.failMedia(new CloudflareSFUError("gone", "signaling_failed", { status: 410 }));
+    await test.advanceTo(500);
+    let sent = false;
+    const unsubscribe = lifecycle.subscribe(() => {
+      if (sent) return;
+      sent = true;
+      test.failMedia(new CloudflareSFUError("revoked while committing recovery", "signaling_failed", { status }));
+    });
+    answer("active");
+    await test.advanceTo(1500);
+    unsubscribe();
+    expect(sent).toBe(true);
+    expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
+  });
+});
