@@ -1,6 +1,11 @@
 # Real-call proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
+Every real-call plan keeps both clients through scheduled credential refresh and
+their original five-minute expiry, then checks received audio/video progress and
+requires SDK end-for-everyone without a cleanup fallback. The dashboard-specific
+shared-browser owner flow is independently required by the `dashboard-engine` Gate lane.
+
 It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse an operator-provisioned
 Tenant dedicated to release proofs.
 

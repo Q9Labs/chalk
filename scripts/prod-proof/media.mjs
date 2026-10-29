@@ -265,3 +265,19 @@ export async function proveLayers(run, { before, after, limited = false, receive
   }
   return moving;
 }
+
+export function checkMediaProgress(before, after) {
+  check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
+  for (let guest = 0; guest < after.length; guest++) {
+    for (const kind of ["audio", "video"]) {
+      const advancing = after[guest].some(
+        (current) =>
+          current.type === "inbound-rtp" &&
+          current.kind === kind &&
+          (kind !== "video" || current.source === "camera") &&
+          before[guest].some((previous) => previous.id === current.id && previous.connection === current.connection && current.bytesReceived > previous.bytesReceived && (kind !== "video" || current.framesDecoded > previous.framesDecoded)),
+      );
+      check(advancing, `Client ${guest + 1} stopped receiving ${kind} after credential refresh`);
+    }
+  }
+}

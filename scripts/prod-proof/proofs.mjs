@@ -4,7 +4,7 @@ import { requestEpisodeEnd } from "./episode-end.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
-import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
+import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
@@ -235,6 +235,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   const refreshedBefore = await sample("refreshed-start");
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
+  checkMediaProgress(refreshedBefore, refreshedAfter);
   await proveLayers(run, { before: refreshedBefore, after: refreshedAfter });
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { movingLayers, proveLayers } from "./media.mjs";
+import { movingLayers, proveLayers, checkMediaProgress } from "./media.mjs";
 import { cleanupRun } from "./cleanup.mjs";
 import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
@@ -255,4 +255,20 @@ test("normal real-call proof cannot hide SDK end failure behind owner cleanup", 
   );
   await assert.rejects(ending.end(), /access refresh failed/);
   assert.equal(ownerCalls, 0);
+});
+
+test("post-refresh proof requires advancing received audio and decoded camera frames for both clients", () => {
+  const received = (kind, value, connection = 0) => ({ id: kind, connection, kind, type: "inbound-rtp", source: kind === "video" ? "camera" : "microphone", bytesReceived: value, framesDecoded: value });
+  const before = [
+    [received("audio", 10), received("video", 10)],
+    [received("audio", 10), received("video", 10)],
+  ];
+  const after = [
+    [received("audio", 20), received("video", 20)],
+    [received("audio", 20), received("video", 20)],
+  ];
+  checkMediaProgress(before, after);
+  assert.throws(() => checkMediaProgress(before, [after[0], before[1]]), /stopped receiving audio/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20), received("video", 10)]]), /stopped receiving video/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20, 1), received("video", 20)]]), /stopped receiving audio/);
 });
