@@ -21,7 +21,6 @@
     "scripts/web-proof/student-first.mjs",
     "apps/api/scripts/smoke-lifecycle.mjs",
     "apps/api/tests/recording-sdk-compatibility/published-clients.mjs",
-    "sdks/typescript/client/test/fixtures/entry-interleaving-client.mjs",
     "packages/whiteboard/src/embedded/renderer-entry.ts",
     "packages/whiteboard/tests/font-export.fixture.ts",
     "sdks/typescript/client/src/generated/http-api.ts",
@@ -48,7 +47,6 @@
     "apps/web/scripts/prepare-vendor-store.ts",
     "apps/web/tests/dashboard-ui/*.mjs",
     "apps/web/tests/landing/*.mjs",
-    "apps/web/tests/selfhost-assets/*.mjs",
     "apps/web/public/fonts/*.css",
     "apps/web/functions/**/*.ts",
     "apps/web/server/vendor-assets.ts",
@@ -61,15 +59,7 @@
     "apps/mobile/plugins/with-worklets-legacy-output.js",
     "apps/mobile/plugins/with-ios-scene-lifecycle.js"
   ],
-  "publicPackages": [
-    "@q9labsai/chalk-assets",
-    "@q9labsai/chalk-client",
-    "@q9labsai/chalk-react",
-    "@q9labsai/chalk-react-native",
-    "@q9labsai/chalk-ui",
-    "@q9labsai/chalk-whiteboard",
-    "@q9labsai/facehash"
-  ],
+  "publicPackages": ["@q9labsai/chalk-assets", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/facehash"],
   "ignorePatterns": [],
   "ignoreUnresolvedImports": [
     "/fonts/site.css",
@@ -119,9 +109,7 @@
   "ignoreExports": [
     {
       "file": "sdks/typescript/client/src/server/types.ts",
-      "exports": [
-        "Recording"
-      ]
+      "exports": ["Recording"]
     }
   ],
   "duplicates": {
@@ -152,16 +140,11 @@
       "apps/transcription-dispatcher/**"
     ]
   },
-  "dynamicallyLoaded": [
-    "sdks/typescript/client/scripts/node-restart-sync-worker.mjs",
-    "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs"
-  ],
+  "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs"],
   "health": {
     "ignore": [
       "**/dist/**",
-      "**/__tests__/**",
       "**/*.test.ts",
-      "**/*.test.tsx",
       "scripts/gates/**",
       "scripts/dev/**",
       "scripts/open-mobile-dev-simulators.mjs",

@@ -74,7 +74,8 @@
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
     "web:proof": "node scripts/web-proof/run.mjs",
     "test:e2e": "e2e run",
-    "test:class-checklist": "node scripts/web-proof/class-checklist-run.mjs"
+    "test:class-checklist": "node scripts/web-proof/class-checklist-run.mjs",
+    "test:mutations": "bash scripts/gates/with-postgres.sh -- node scripts/test/mutations.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

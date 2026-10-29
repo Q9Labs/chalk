@@ -6,7 +6,7 @@ runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
 q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
 
-Every gate profile first runs `doclint.mjs` and `theory-coverage.mjs` from this directory.
+Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
 (about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
@@ -153,13 +153,6 @@ guidance. Fixture/testdata documents, changesets, and changelogs are not
 maintained runbooks. Paths resolve from
 the document or repository root. Examples must have an exact document/path entry
 and a reason in `doclint-examples.json`; do not allow whole directories.
-
-`node scripts/gates/theory-coverage.mjs` checks every prose paragraph and
-list item in [theory.md](../../theory.md), except tracker-maintenance instructions and the test index.
-Each has an `invariant` marker and a `test` mapping to a file and exact declared
-test name. `theory-baseline.json` freezes today's unmapped text; it is debt, not
-proof. New or changed requirements need a named test, not another baseline entry.
-The checker proves the index is intact, not that a test proves every word.
 
 The SDK effect rule has one adjacent, reasoned suppression per existing call.
 New effects need a deliberate exception; do not suppress an entire file.

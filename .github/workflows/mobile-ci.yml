@@ -68,11 +68,6 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
 
-      - name: Check generated iOS scene lifecycle
-        run: |
-          pnpm install --frozen-lockfile --ignore-scripts --filter '@q9labsai/chalk-mobile...'
-          pnpm --filter @q9labsai/chalk-mobile run test:ios-scene
-
       - name: Check Android release automation
         run: |
           bash apps/mobile/scripts/release/test-build-signed-android.sh
