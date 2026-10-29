@@ -4882,12 +4882,13 @@ begin
             and source.external_operation_id = obligation.stop_operation_id and source.status = 'pending'
     ) then
         update recording_capture_stop_publications
-        set attempt_count = attempt_count + 1, last_error_code = 'source_pending',
+        set attempt_count = least(attempt_count, 9223372036854775806) + 1, last_error_code = 'source_pending',
             next_attempt_at = observed_at + least(300, 5 * power(2, least(attempt_count, 6))::integer) * interval '1 second'
         where recording_id = target_recording_id;
         return;
     end if;
 
+    -- Retry counters saturate at bigint max; publication has no attempt budget.
     -- Only the outbox insert is a subtransaction. Its failure cannot undo the
     -- completed capture, released reservation, or durable retry obligation.
     begin
@@ -4915,13 +4916,13 @@ begin
         on conflict (tenant_id, episode_id, operation_name, request_key) do nothing;
     exception when query_canceled or others then
         update recording_capture_stop_publications
-        set attempt_count = attempt_count + 1, last_error_code = SQLSTATE,
+        set attempt_count = least(attempt_count, 9223372036854775806) + 1, last_error_code = SQLSTATE,
             next_attempt_at = observed_at + least(300, 5 * power(2, least(attempt_count, 6))::integer) * interval '1 second'
         where recording_id = target_recording_id;
         return;
     end;
     update recording_capture_stop_publications
-    set attempt_count = attempt_count + 1, resolved_at = observed_at, last_error_code = null
+    set attempt_count = least(attempt_count, 9223372036854775806) + 1, resolved_at = observed_at, last_error_code = null
     where recording_id = target_recording_id;
 end;
 $$;
@@ -4936,6 +4937,7 @@ begin
         and source.recording_id = pipeline.recording_id and source.external_operation_id = pipeline.stop_operation_id
         and source.operation_name = 'stop_recording' and source.status in ('pending', 'applied')
     where pipeline.recording_id = source_recording_id and pipeline.capture_completed_at is not null
+        and pipeline.capture_epoch > 0
     on conflict (recording_id) do nothing;
     perform recording_try_publish_capture_stop(source_recording_id, clock_timestamp());
     return true;

@@ -18,6 +18,14 @@ func TestCapturePublicationMigrationUpDownUpPreservesRecovery(t *testing.T) {
 	if err := tx.Commit(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	// Include pre-authority completed media across the migration cycle. It must
+	// not prevent the current completion from rebuilding its lost obligation.
+	if _, err := pool.Exec(t.Context(), seedCompletedCaptureSQL); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), `select seed_completed_capture(0)`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := pool.Exec(t.Context(), `create function reject_capture_publication() returns trigger language plpgsql as $$ begin raise exception 'outbox down'; end $$;
 create trigger reject_capture_publication before insert on sync_external_operations for each statement execute function reject_capture_publication()`); err != nil {
 		t.Fatal(err)

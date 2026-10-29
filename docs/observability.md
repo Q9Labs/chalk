@@ -53,6 +53,8 @@ to five minutes. Publication has no absolute deadline and never reacquires captu
 capacity or reopens media completion. Existing media-completion retry and source
 retention limits remain unchanged. The previous publication-failure journal and
 API error classification remain compatible with older API/worker images.
+Legacy epoch-zero completions have no current recorder authority. Ordinary recovery
+skips them; the `recording-stop` alert keeps them visible for explicit repair.
 
 Immediate publication and the drainer use the original applied manual-stop
 operation, capture epoch, journey and parent-event IDs. Immediate completion also
