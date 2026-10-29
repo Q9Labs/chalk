@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
-import { waitForCredentialRefresh } from "./credential-refresh.mjs";
+import { credentialExpiries, waitForCredentialRefresh } from "./credential-refresh.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -13,7 +13,7 @@ async function sdkBundle() {
     stdin: {
       contents: `import {createSpaceClient} from './sdks/typescript/client/src/index.ts';
 window.proofJoin=async(space,baseUrl,displayName)=>{
- const client=createSpaceClient({space,baseUrl,getAccess:({replaceMediaConnection})=>window.proofAccess({replaceMediaConnection})});
+ const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
 };`,
       resolveDir: process.cwd(),
@@ -38,11 +38,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const close = [];
   const participants = [];
   const refreshes = [];
+  const networks = [];
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
-    const refresh = { guest: guest + 1, count: 0, initialExpiry: Date.parse(grant.media.expiresAt), initialSyncExpiry: Date.parse(grant.sync.expiresAt), latestExpiry: 0, requests: [] };
+    const initial = credentialExpiries(grant);
+    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
     refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
@@ -71,6 +73,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await context.addInitScript(installFixture, { speech, guest, tones });
       const page = await context.newPage();
       const network = [];
+      networks[guest] = network;
       page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
       page.on("websocket", (socket) => {
         socket.on("socketerror", (error) => network.push({ type: "websocket-error", error }));
@@ -85,15 +88,16 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       const issueRefresh = async (request) => {
         const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
-        const attempt = { startedAt: new Date().toISOString(), replaceMediaConnection };
+        const attempt = { startedAt: new Date().toISOString(), reason: request.reason, replaceMediaConnection };
         refresh.requests.push(attempt);
         try {
           grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
           maskCredentials(grant);
-          Object.assign(attempt, { status: 201, mediaExpiry: Date.parse(grant.media.expiresAt), syncExpiry: Date.parse(grant.sync.expiresAt) });
+          const expiry = credentialExpiries(grant);
+          Object.assign(attempt, { status: 201, ...expiry });
           if (!replaceMediaConnection) {
             refresh.count++;
-            refresh.latestExpiry = Date.parse(grant.media.expiresAt);
+            refresh.latestExpiry = expiry.mediaExpiry;
           }
           replaceOnNextAccess = false;
           return grant;
@@ -146,7 +150,11 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     pages,
     participants,
     waitForRefresh: async () => {
-      await waitForCredentialRefresh(run, refreshes, ready);
+      try {
+        await waitForCredentialRefresh(run, refreshes, ready);
+      } finally {
+        await Promise.all(networks.map((network, guest) => save(`${run.directory}/guest-${guest + 1}-network.json`, network)));
+      }
     },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.

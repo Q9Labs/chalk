@@ -1,4 +1,11 @@
-import { save, waitFor } from "./runtime.mjs";
+import { check, save, waitFor } from "./runtime.mjs";
+
+export function credentialExpiries(grant) {
+  const mediaExpiry = Date.parse(grant.media.expires_at);
+  const syncExpiry = Date.parse(grant.sync.expires_at);
+  check(Number.isFinite(mediaExpiry) && Number.isFinite(syncExpiry), "Proof access grant is missing credential expiry timestamps");
+  return { mediaExpiry, syncExpiry };
+}
 
 export async function waitForCredentialRefresh(run, refreshes, ready) {
   try {
