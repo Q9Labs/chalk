@@ -1049,24 +1049,24 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* stopPorts();
           yield* transition("failed");
         });
-      const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          if (!needsEpisodeCheck(failure)) return yield* commitSnapshotFailure(failure);
-          if (failure.code === "invalid_access") {
-            stopRejectedMedia();
-            yield* publish();
-          }
-          const scope = model.activeScope;
-          const epoch = model.epoch;
-          const binding = access.currentUnsafe()?.media.clientPayload.connectionId;
-          if (!scope) return;
-          if (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding) {
-            if (failure.code === "invalid_access") rejectionCheck.failure = failure;
-            return;
-          }
-          const check = { epoch, binding, failure };
-          rejectionCheck = check;
-          const releaseBinding = binding ? yield* access.holdMediaBinding(binding) : Effect.void;
+      const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> => {
+        if (!needsEpisodeCheck(failure)) return commitSnapshotFailure(failure);
+        if (failure.code === "invalid_access") stopRejectedMedia();
+        const scope = model.activeScope;
+        const epoch = model.epoch;
+        const binding = access.currentUnsafe()?.media.clientPayload.connectionId;
+        if (!scope) return Effect.void;
+        if (rejectionCheck?.epoch === epoch && rejectionCheck.binding === binding) {
+          if (failure.code === "invalid_access") rejectionCheck.failure = failure;
+          return publish();
+        }
+        const check = { epoch, binding, failure };
+        rejectionCheck = check;
+        // The callback can run while join owns the queue. Fence replacement now.
+        const releaseBinding = binding ? Effect.runSync(access.holdMediaBinding(binding)) : Effect.void;
+        return Effect.gen(function* () {
+          if (model.epoch !== epoch || model.activeScope !== scope) return;
+          yield* publish();
           // Keep the lifecycle queue free: Sync's end and local Leave must still
           // run while the authoritative read (or the local End) is in flight.
           yield* Effect.forkIn(
@@ -1091,6 +1091,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             scope,
           );
         });
+      };
       const handleMediaSnapshot = (media: ConnectionMediaClient, snapshot: ConnectionMediaSnapshot): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (media !== model.media || media.getSnapshot() !== snapshot) return;
@@ -1104,7 +1105,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
         if (sfuAccessRejected(cause)) stopRejectedMedia();
-        if (active(model) && (sfuAccessRejected(cause) || connectionSuperseded(cause) || (cause instanceof CloudflareSFUError && cause.options.status === 410))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+        if (sfuAccessRejected(cause) || (cause instanceof CloudflareSFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>

@@ -354,6 +354,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
     return Effect.suspend(() => {
+      if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
       const ready =
         enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
@@ -1163,6 +1164,7 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
   return entries;
 }
 function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean) {
+  if (snapshot?.connection.phase === "stopped") return Object.freeze({ source, state: "unavailable" as const, track: null });
   const track = tracks.get(source) ?? null;
   const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
   if (pending) return Object.freeze({ source, state: "requesting" as const, track });

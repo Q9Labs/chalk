@@ -1,3 +1,6 @@
+import { EpisodeStatusError } from "../connection/episode-status";
+import { ChalkAPIError } from "../server/errors";
+import { ManualClock } from "../../tests/helpers/manual-clock";
 import { describe, expect, it, vi } from "vitest";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
@@ -81,7 +84,7 @@ it("does not end an automatic replacement when an obsolete local publication get
   }
 });
 
-it("preserves callback-only startup poll rejection behavior while Sync is still joining", async () => {
+it("keeps startup poll rejection interrupted while Sync commands remain available", async () => {
   const platform = createCoreTestPlatform();
   let onFailure: (cause: unknown, binding?: string) => void = () => {};
   const reported = vi.fn((cause: unknown, binding: string) => onFailure(cause, binding));
@@ -98,6 +101,9 @@ it("preserves callback-only startup poll rejection behavior while Sync is still 
       ...platform,
       dependencies: {
         ...platform.dependencies,
+        getEpisodeStatus: async () => {
+          throw new EpisodeStatusError(503);
+        },
         createMediaClient: (input) => {
           onFailure = input.onFailure;
           return harness.client;
@@ -121,7 +127,8 @@ it("preserves callback-only startup poll rejection behavior while Sync is still 
     await joining;
     // A command crosses the lifecycle queue after the pending failure callback.
     await client.extendEpisode(1);
-    expect(client.getSnapshot().connection.status).toBe("live");
+    expect(client.getSnapshot().connection.status).toBe("reconnecting");
+    expect(harness.peers[0].closed).toBe(true);
     expect(getAccess.mock.calls.map(([request]) => request.reason)).toEqual(["join"]);
     expect(harness.peers).toHaveLength(1);
   } finally {
@@ -911,6 +918,10 @@ class FakeTrack extends EventTarget {
     this.kind = kind;
     this.#throwOnStop = throwOnStop;
   }
+  getSettings(): MediaTrackSettings {
+    return {};
+  }
+  async applyConstraints(): Promise<void> {}
   stop(): void {
     this.stopCalls++;
     this.readyState = "ended";
@@ -1471,5 +1482,187 @@ it.each(
   } finally {
     client.dispose();
     harness.client.stop();
+  }
+});
+
+type ReviewSource = "microphone" | "camera" | "screen";
+function reviewStream(...tracks: FakeTrack[]): MediaStream {
+  return { getTracks: () => tracks, getAudioTracks: () => tracks.filter((t) => t.kind === "audio"), getVideoTracks: () => tracks.filter((t) => t.kind === "video") } as unknown as MediaStream;
+}
+function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
+  const platform = createCoreTestPlatform();
+  const manual = new ManualClock();
+  const started = Date.now();
+  let foreground = () => {};
+  let failure: (cause: unknown, binding?: string) => void = () => {};
+  let token = "original";
+  let paused = false;
+  const captured: FakeTrack[] = [];
+  const harness = createHarness({ onError: (cause, binding) => failure(cause, binding) });
+  const stopMedia = vi.spyOn(harness.client, "stop");
+  const stopSync = vi.spyOn(platform.sync, "stop");
+  const status = vi.fn(async () => {
+    throw new EpisodeStatusError(statusCode);
+  });
+  const access = vi.fn<SpaceClientOptions["getAccess"]>(async (request) => {
+    if (forbidden && paused && request.reason !== "join") throw new ChalkAPIError({ code: "access.forbidden", status: 403, retryable: false });
+    const grant = opaqueAccessGrant("review", token, "connection-1");
+    const expires = new Date(started + manual.now() + lifetime).toISOString();
+    return { ...grant, sync: { ...grant.sync, expires_at: expires }, media: { ...grant.media, expires_at: expires } };
+  });
+  const capture = vi.fn(async (constraints: MediaStreamConstraints) => {
+    const tracks = [constraints.audio ? new FakeTrack(`mic-${captured.length}`, "audio") : null, constraints.video ? new FakeTrack(`cam-${captured.length}`, "video") : null].filter((t): t is FakeTrack => t !== null);
+    captured.push(...tracks);
+    return reviewStream(...tracks);
+  });
+  const screenCapture = vi.fn(async () => {
+    const tracks = [new FakeTrack(`screen-${captured.length}`, "video"), new FakeTrack(`screen-audio-${captured.length}`, "audio")];
+    captured.push(...tracks);
+    return reviewStream(...tracks);
+  });
+  const send = async (source: ReviewSource, enabled: boolean) => {
+    const result = await harness.client.setLocalPublicationTarget({ operationId: `review-${source}-${enabled}`, participantId: "participant-1", source, enabled });
+    if (result.outcome !== "confirmed" && result.outcome !== "satisfied") throw new Error(result.errorCode ?? result.outcome);
+    return { operationId: `review-${source}-${enabled}`, name: source === "microphone" ? "set_microphone_enabled" : source === "camera" ? "set_camera_enabled" : "set_screen_share_enabled", serverOutcome: "confirmed", mediaPlaneOutcome: "confirmed" };
+  };
+  const client = createSpaceClientForPlatform(
+    { space: "test", getAccess: access },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createConnectionReporter: () => undefined,
+        clock: { now: () => started + manual.now(), setTimeout: manual.setTimeout.bind(manual), clearTimeout: manual.clearTimeout.bind(manual) },
+        subscribeForeground: (listener) => {
+          foreground = listener;
+          return () => {};
+        },
+        mediaDevices: { getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: async () => [] },
+        getEpisodeStatus: status,
+        createMediaClient: (input) => {
+          failure = input.onFailure;
+          return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
+        },
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: (enabled) => send("microphone", enabled), setCameraEnabled: (enabled) => send("camera", enabled), setScreenShareEnabled: (enabled) => send("screen", enabled) }),
+      },
+    },
+  );
+  return {
+    platform,
+    harness,
+    stopMedia,
+    stopSync,
+    status,
+    access,
+    client,
+    captured,
+    capture,
+    screenCapture,
+    reject: (code = 403) => {
+      paused = true;
+      failure(new CloudflareSFUError("Current binding rejected", "signaling_failed", { status: code }), "connection-1");
+    },
+    rotate: () => {
+      token = "rotated";
+      foreground();
+    },
+    settle: async () => {
+      for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    end: () => platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "episode_ended" } }),
+    cleanup: async () => {
+      client.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    },
+    advance: async (to: number) => {
+      manual.advance(to - manual.now());
+      for (let i = 0; i < 20; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+  };
+}
+
+it("CA public connection must not advertise live media during status auth pause", async () => {
+  const t = reviewFixture();
+  try {
+    await t.client.join({ microphone: false, camera: false });
+    await t.client.media.setMicrophoneEnabled(true);
+    await t.client.media.setCameraEnabled(true);
+    await t.client.media.setScreenShareEnabled(true);
+    t.reject();
+    await vi.waitFor(() => expect(t.status).toHaveBeenCalledOnce());
+    await t.advance(59999);
+    expect(t.stopSync).not.toHaveBeenCalled();
+    expect(t.status).toHaveBeenCalledOnce();
+    expect(t.client.getSnapshot().connection.status).toBe("reconnecting");
+    for (const source of Object.values(t.client.getSnapshot().media.local)) expect(source).toMatchObject({ state: "unavailable", track: null });
+    const captured = t.capture.mock.calls.length;
+    const screens = t.screenCapture.mock.calls.length;
+    await Promise.allSettled([t.client.media.setMicrophoneEnabled(true), t.client.media.setCameraEnabled(true), t.client.media.setScreenShareEnabled(true)]);
+    await t.settle();
+    expect(t.capture).toHaveBeenCalledTimes(captured);
+    expect(t.screenCapture).toHaveBeenCalledTimes(screens);
+    for (const source of Object.values(t.client.getSnapshot().media.local)) expect(source.state).toBe("unavailable");
+  } finally {
+    await t.cleanup();
+  }
+});
+
+it.each([401, 403].flatMap((code) => ["unknown", "active", "ending"].map((answer) => ({ code, answer }))))("startup poll $code holds its binding through $answer classification", async ({ code, answer }) => {
+  const platform = createCoreTestPlatform();
+  let failure: (cause: unknown, binding?: string) => void = () => {};
+  const reported = vi.fn((cause: unknown, binding: string) => failure(cause, binding));
+  const harness = createHarness({ onError: reported });
+  const microphone = new FakeTrack("startup-poll-mic", "audio");
+  let enter = () => {};
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const access = vi.fn<SpaceClientOptions["getAccess"]>(async (request) => opaqueAccessGrant("review", "same-token", request.replaceMediaConnection ? "connection-2" : "connection-1"));
+  const status = vi.fn(async () => {
+    if (answer === "active" || answer === "ending") return answer;
+    throw new EpisodeStatusError(401);
+  });
+  vi.spyOn(harness.transport, "listPublications").mockRejectedValueOnce(new CloudflareSFUError("Current startup poll rejected", "signaling_failed", { status: code }));
+  const client = createSpaceClientForPlatform(
+    { space: "test", getAccess: access },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createConnectionReporter: () => undefined,
+        mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => reviewStream(microphone) },
+        getEpisodeStatus: status,
+        createMediaClient: (input) => {
+          failure = input.onFailure;
+          return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
+        },
+        createSyncClient: () => ({
+          ...platform.sync,
+          start: async () => {
+            await entered;
+            await platform.sync.start();
+          },
+        }),
+      },
+    },
+  );
+  let joining: Promise<unknown> = Promise.resolve();
+  try {
+    joining = client.join({ microphone: true, camera: false }).catch((cause) => cause);
+    await vi.waitFor(() => expect(reported).toHaveBeenCalled());
+    expect(harness.peers[0].closed).toBe(true);
+    expect(microphone.readyState).toBe("ended");
+    enter();
+    await joining;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+    expect(status).toHaveBeenCalledOnce();
+    expect(client.getSnapshot().connection.status).toBe(answer === "active" ? "failed" : answer === "ending" ? "left" : "reconnecting");
+    expect(harness.peers).toHaveLength(1);
+  } finally {
+    enter();
+    client.dispose();
+    await joining;
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
 });
