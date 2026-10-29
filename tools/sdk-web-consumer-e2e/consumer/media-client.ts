@@ -87,8 +87,9 @@ export class FixtureMediaClient {
     await this.#detachLocalTrack(source);
     if (options.stopTrack !== false) releaseTrack(local.track);
     this.#local.delete(source);
-    // Production detaches capture but keeps the provider publication for reuse.
-    // Clearing a prepared track must not silently repair a stale Sync On.
+    // Screen cleanup ends the publication; microphone/camera advertisements
+    // stay reusable so clearing capture cannot silently repair a stale Sync On.
+    if (source === "screen") this.#advertised.delete(source);
     this.#sendPublications();
     this.#publish();
   }
