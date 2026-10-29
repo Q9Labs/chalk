@@ -1,7 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 import { opaqueAccessGrant } from "../../../../sdks/typescript/client/src/space-client/core.test.helpers";
 import { reloadRejoinAccess, type PublicSpaceArrival } from "@q9labsai/chalk-client";
-import { createPreparedPublicSpace, type PublicInviteClient, publicAPIBaseURL } from "./chalk-access";
+import { createPreparedPublicSpace, createPublicInviteClient, type PublicInviteClient, publicAPIBaseURL } from "./chalk-access";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,4 +50,11 @@ it("notifies report subscribers of renewed access and stops after unsubscribe", 
   unsubscribe();
   await prepared.getAccess({ space: "test-call", reason: "refresh", replaceMediaConnection: false });
   expect(changed).toHaveBeenCalledTimes(1);
+});
+
+it.each(["not-date", "2026-02-30T01:00:00Z", "2026-10-29T01:00:00+04:00"])("preserves the report-expiry validation error for %s", (expires_at) => {
+  const access = opaqueAccessGrant(1);
+  const arrival: PublicSpaceArrival = { state: "admitted", arrival_handle: "arrival-1", space: { admission_mode: "open", name: "Test call", slug: "test-call" }, access: { ...access, media: { ...access.media, expires_at } } };
+  const prepared = createPreparedPublicSpace(createPublicInviteClient(), arrival);
+  expect(() => prepared.reportCredentialExpiresAt()).toThrow(ZodError);
 });
