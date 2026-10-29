@@ -24,7 +24,50 @@ pnpm prod:proof transcript
 Install `op` (local configuration only), FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
 Signed webhook proofs use a temporary Webhook.site receiver. Voice generation uses macOS `say` (Samantha), or Linux `espeak`.
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
-client SDK workspace. Run from the repository root. Headless Chromium only.
+client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
+
+## Manual hosted integrator proof
+
+Run the integrator proof alone. Finish and clean it up before starting any other
+browser proof. Do not run it in parallel with hosted join-fault, shared-browser
+owner, network-recovery, or automated real-call proofs.
+
+With the same configuration as `pnpm prod:proof`, start the local harness:
+
+```sh
+node scripts/prod-proof/integrator.mjs
+```
+
+1. Open the printed `/guest1` and `/guest2` URLs in separate browser profiles or
+   contexts. Allow microphone and camera access in both. Use an HTTP `127.0.0.1`
+   proof origin with an explicit port.
+2. Prepare both clients before Join. The buttons stay disabled until both pages
+   have granted media permissions and installed the SDK, media fixture, and access
+   callback. Click both Join
+   buttons promptly once enabled. The server rejects early access and creates
+   one shared Episode lazily on the first `getAccess`; browser setup creates only
+   the proof key and Space. The empty-Episode linger can otherwise expire while
+   browsers are being prepared.
+3. Keep both clients live for more than seven minutes. In each page, inspect
+   `window.proofHistory`, `window.proofAccessCalls`, and
+   `window.proofClient.getSnapshot()`. Require live media and Sync after both
+   original grants expire, successful scheduled refresh of both grants,
+   increasing bidirectional audio/video RTP counters from
+   `window.proofConnections`, bidirectional chat, and zero automatic connection
+   reports. Save sanitized evidence in the printed private directory. Creation
+   and admission times are saved there; record `window.proofJoinedAt` too.
+4. End for everyone through an original client with
+   `await window.proofClient.endEpisode()`. Require both clients to observe the
+   ended Episode and confirm durable backend completion. Cleanup is not proof
+   that SDK end-for-everyone worked.
+5. Press Ctrl-C to end any remaining owned Episode, archive the owned Space,
+   revoke the proof key, and stop the server. Close both browser contexts before
+   starting the next proof. If interrupted, use the run-ID cleanup command below.
+
+The offline ordering regression runs with `node --test
+scripts/prod-proof/integrator-session.test.mjs`, in `pnpm test`, and in Gate's
+required `self-test` lane. It covers setup longer than the three-minute empty
+linger, early access, simultaneous Join, and refresh serialization.
 
 ## Configuration and ownership
 
