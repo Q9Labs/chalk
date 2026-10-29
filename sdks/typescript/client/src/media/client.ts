@@ -323,7 +323,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitLocal();
   }
   #retireOwnedPublications(): Promise<void> {
-    if (this.#stopped && this.#ownedPublications.size === 0) this.#transport = undefined;
     const publications = [...this.#ownedPublications].filter((item) => item.lifecycle.kind === "retiring" && item.lifecycle.handle);
     const retirement = (async () => {
       const errors: unknown[] = [];
@@ -458,32 +457,24 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#snapshotListeners.clear();
   }
   async #enablePreparedTrack(state: LocalTrackState, operationId?: string): Promise<void> {
-    if (state.providerPublicationId && state.transceiver) {
-      state.desiredEnabled = true;
-      state.track.enabled = true;
-      try {
-        await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
-      } catch (error) {
-        this.#pauseLocalSource(state.source);
-        await this.#retireOwnedPublications();
-        throw error;
-      }
-      state.enabled = !this.#locallyPausedSources.has(state.source);
-      state.desiredEnabled = state.enabled;
-      state.track.enabled = state.enabled;
-      if (!state.enabled) {
-        this.#pauseLocalSource(state.source);
-        await this.#retireOwnedPublications();
-      }
-      this.#publishSnapshot();
-      this.#emitLocal();
-      return;
-    }
-    if (operationId) state.pendingOperationId = operationId;
+    const generation = this.#generation;
     state.desiredEnabled = true;
     state.track.enabled = true;
-    const generation = this.#generation;
     try {
+      if (state.providerPublicationId && state.transceiver) {
+        await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
+        state.enabled = !this.#locallyPausedSources.has(state.source);
+        state.desiredEnabled = state.enabled;
+        state.track.enabled = state.enabled;
+        if (!state.enabled) {
+          this.#pauseLocalSource(state.source);
+          await this.#retireOwnedPublications();
+        }
+        this.#publishSnapshot();
+        this.#emitLocal();
+        return;
+      }
+      if (operationId) state.pendingOperationId = operationId;
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
       // recovery that spent it is still unresolved: restoring it then lets every
