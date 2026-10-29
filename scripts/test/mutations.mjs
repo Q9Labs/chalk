@@ -144,7 +144,7 @@ for (const mutation of cases) {
       maxBuffer: 8 * 1024 * 1024,
       env: { ...process.env, GOMAXPROCS: "1", VITEST_MAX_WORKERS: "1", ERL_FLAGS: "+S 1:1", MIX_ENV: "test", GOFLAGS: "-buildvcs=false" },
     });
-    const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+    const output = [result.stdout, result.stderr].join("\n");
     const log = path.join(logs, `${mutation.name}-${kind}.log`);
     writeFileSync(log, output);
     if (result.error || result.signal || /build failed|syntax error|undefined:|Cannot find module|No test files found|Compilation error|--- SKIP:/i.test(output)) throw new Error(`${mutation.name}: invalid ${kind} run; see ${log}`);
