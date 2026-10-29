@@ -455,6 +455,45 @@ it("reuses an already enabled camera publication for a fresh enable", async () =
   }
 });
 
+it("retires an OS-ended camera advertisement even when prepared-track clearing preserves it for reuse", async () => {
+  const platform = createCoreTestPlatform();
+  const camera = track("video");
+  const advertised = new Set<string>();
+  const client = captureClient(platform, {
+    mediaDevices: { getUserMedia: async () => stream([camera]), getDisplayMedia: noCaptureDevices, enumerateDevices: async () => [] },
+    createMediaClient: (input) => {
+      const media = platform.dependencies.createMediaClient(input);
+      return {
+        ...media,
+        start: async (capture) => {
+          await media.start(capture);
+          advertised.add("camera-publication");
+          platform.media.emit({ ...media.getSnapshot(), localTracks: [{ source: "camera", enabled: true, publicationId: "camera-publication", track: camera }] });
+        },
+        clearPreparedLocalTrack: async () => {
+          platform.media.emit({ ...media.getSnapshot(), localTracks: [] });
+        },
+        closeForcedLocalPublication: async () => {
+          advertised.clear();
+          platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "camera", sequence: 2, items: [] } });
+        },
+      };
+    },
+  });
+  try {
+    await client.join({ microphone: false, camera: true });
+    platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "camera", sequence: 1, items: [{ participantId: "participant-1", source: "camera", enabled: true, publicationId: "camera-publication" }] } });
+    expect(client.getSnapshot().media.local.camera.state).toBe("enabled");
+    camera.stop();
+    camera.dispatchEvent(new Event("ended"));
+    await vi.waitFor(() => expect(advertised.size).toBe(0));
+    expect(client.getSnapshot().media.local.camera.state).not.toBe("enabled");
+    expect(platform.sync.getSnapshot().media?.items).toEqual([]);
+  } finally {
+    client.dispose();
+  }
+});
+
 it.each(["device selection", "ended event", "stopped track", "leave", "failed clear", "failed clear with preview"])("clears the SFU camera slot after %s before enabling a replacement", async (retirement) => {
   const platform = createCoreTestPlatform();
   const first = track("video");

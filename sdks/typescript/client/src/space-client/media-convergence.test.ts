@@ -34,7 +34,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused and reconciles it after recovery", async (source) => {
+  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused through recovery", async (source) => {
     const localTargets: boolean[] = [];
     const { platform, command, client, setEnabled, track } = createConvergenceScenario(source, {
       media: {
@@ -53,7 +53,12 @@ describe("SpaceClient media convergence", () => {
       expect(localTargets).toEqual([false]);
       await enterRecovery({ platform, client });
       command.mockClear();
-      await resumeWithOff({ platform, command });
+      if (source === "screen") await resumeWithOff({ platform, command });
+      else {
+        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+        expect(command).not.toHaveBeenCalled();
+      }
       expect(localTargets).not.toContain(true);
       expect(track.enabled).toBe(false);
       command.mockClear();
@@ -164,7 +169,7 @@ describe("SpaceClient media convergence", () => {
       if (!newerStop) for (const result of results) expect(result).toMatchObject({ code: "connection.invalid_state" });
       expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
       command.mockClear();
-      await resumeWithOff({ platform, command });
+      await resumeWithOff({ platform, command }, source === "screen" || newerStop);
     } finally {
       finishPause();
       client.dispose();
@@ -181,7 +186,7 @@ describe("SpaceClient media convergence", () => {
       await expect(setEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
       await enterRecovery({ platform, client });
       command.mockReset().mockResolvedValue({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
-      await resumeWithOff({ platform, command });
+      await resumeWithOff({ platform, command }, source === "screen");
     } finally {
       client.dispose();
     }
@@ -373,7 +378,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each([false, true])("ignores untagged off projections (fresh publication: %s)", async (fresh) => {
+  it.each([false, true])("keeps healthy tracks but waits for an off projection to converge (fresh publication: %s)", async (fresh) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     const close = vi.fn(async () => {
@@ -387,7 +392,7 @@ describe("SpaceClient media convergence", () => {
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [{ ...active, enabled: false, publicationId: null }] } });
       expect(close).not.toHaveBeenCalled();
       expect(track.enabled).toBe(true);
-      expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+      expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
     } finally {
       client.dispose();
     }
@@ -484,6 +489,8 @@ describe("SpaceClient media convergence", () => {
       if (decision === "accept") {
         await client.media.acceptRequest("request-1");
         expect(capture).toHaveBeenCalledOnce();
+        expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
+        observeMicrophonePublication(platform, track);
         expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
       } else if (decision === "decline") {
         await client.media.declineRequest("request-1");
@@ -803,7 +810,7 @@ describe("SpaceClient media convergence", () => {
     try {
       await client.join({ microphone: true, camera: false });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
-      expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+      expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: false, publicationId: null, track }] });
       expect(client.getSnapshot().media.local.microphone.state).toBe("disabled");
     } finally {
@@ -848,7 +855,11 @@ async function joinWithSharedAudio(client: ReturnType<typeof createSpaceClientFo
   await client.media.setScreenShareEnabled(true, { audio: true });
 }
 
-async function resumeWithOff({ platform, command }: Pick<ReturnType<typeof createConvergenceScenario>, "platform" | "command">) {
+async function resumeWithOff({ platform, command }: Pick<ReturnType<typeof createConvergenceScenario>, "platform" | "command">, expectOff = true) {
   platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-  await vi.waitFor(() => expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([false]));
+  if (expectOff) await vi.waitFor(() => expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([false]));
+  else {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(command).not.toHaveBeenCalled();
+  }
 }

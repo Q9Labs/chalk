@@ -50,6 +50,30 @@ describe("compact screen sharing", () => {
 });
 
 describe("media command failures", () => {
+  it.each(["microphone", "camera"] as const)("shows an asynchronous %s failure notice even with an external command-error handler", async (source) => {
+    const snapshot = createSnapshot(["publishAudio", "publishVideo"]);
+    const client = createPreviewClient({ ...snapshot, media: { ...snapshot.media, local: { ...snapshot.media.local, [source]: { ...snapshot.media.local[source], state: "failed" } } } });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          <ChalkProvider client={client}>
+            <ControlBar buttons={["mic", "video"]} onCommandError={vi.fn()} />
+          </ChalkProvider>,
+        ),
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(`${source === "microphone" ? "Microphone" : "Camera"} didn’t reach the call. Turn it on to try again.`);
+      await act(async () => client.setSnapshot(snapshot));
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      client.dispose();
+    }
+  });
+
   it("preserves public codes and reports the originating media source", async () => {
     const preview = createPreviewClient(createSnapshot(["publishAudio", "publishVideo", "publishScreen"]));
     const onCommandError = vi.fn();

@@ -86,7 +86,10 @@ describe("join with unavailable capture devices", () => {
       if (constraints.video && videoError) throw new DOMException("Video capture failed", videoError);
       return stream([...(constraints.audio ? [audio] : []), ...(constraints.video ? [video] : [])]);
     });
-    const start = vi.fn(async (_stream: MediaStream) => undefined);
+    const start = vi.fn(async (stream: MediaStream) => {
+      // The working device has a publication, but no authoritative Sync projection yet.
+      platform.media.emit({ ...platform.media.getSnapshot(), localTracks: stream.getTracks().map((track) => ({ source: track.kind === "audio" ? ("microphone" as const) : ("camera" as const), enabled: true, publicationId: `working-${track.kind}`, track })) });
+    });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
       { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },

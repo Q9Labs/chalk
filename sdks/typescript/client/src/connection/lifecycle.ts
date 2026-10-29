@@ -88,6 +88,7 @@ export type ConnectionLifecycleCapability = {
   readonly scheduleUnsafe: (callback: () => void, milliseconds: number) => unknown;
   readonly cancelScheduleUnsafe: (handle: unknown) => void;
   readonly createId: () => string;
+  readonly recordTransportDiagnostic: (event: import("./report").ConnectionReportTransportEvent) => void;
 };
 export class ConnectionLifecycleService extends Context.Service<ConnectionLifecycleService, ConnectionLifecycleCapability>()("@chalk/client/ConnectionLifecycle") {}
 type Model = {
@@ -1285,6 +1286,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         scheduleUnsafe: (callback, milliseconds) => platform.clock.setTimeout(callback, milliseconds),
         cancelScheduleUnsafe: (handle) => platform.clock.clearTimeout(handle),
         createId: () => platform.createId?.() ?? `local-${++fallbackIdentifier}`,
+        recordTransportDiagnostic: onTransportDiagnostic,
       } satisfies ConnectionLifecycleCapability;
     }),
   );

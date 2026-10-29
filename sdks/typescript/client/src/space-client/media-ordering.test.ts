@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConnectionSyncClient } from "../connection/dependencies";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
+import { control } from "./terminal.test.helpers";
 
 const sources = ["microphone", "camera", "screen"] as const;
 const receipt = { operationId: "r7", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" } as const;
@@ -222,7 +223,7 @@ describe("independent r7 ordering", () => {
     }
   });
 
-  it.each(sources)("scopes an explicit host pause to the sent %s generation", async (source) => {
+  it.each(sources)("scopes an explicit host pause to the current %s action", async (source) => {
     const close = vi.fn(async () => undefined);
     const { platform, client, command, track, setEnabled } = createConvergenceScenario(source, { media: { closeForcedLocalPublication: close } });
     try {
@@ -247,23 +248,25 @@ describe("independent r7 ordering", () => {
 
   it.each(sources)("does not apply an old host pause to a queued %s action", async (source) => {
     const pause = barrier();
-    const close = vi.fn(async () => undefined);
-    const local = vi.fn(async () => {
+    const close = vi.fn(async () => {
       await pause.promise;
-      return { outcome: "confirmed" as const, errorCode: null };
     });
+    const local = vi.fn(async () => ({ outcome: "confirmed" as const, errorCode: null }));
     const { platform, client, command, setEnabled } = createConvergenceScenario(source, { media: { setLocalPublicationTarget: local, closeForcedLocalPublication: close } });
     try {
       await client.join({ microphone: false, camera: false });
       await setEnabled(true);
       const off = setEnabled(false);
-      await vi.waitFor(() => expect(local).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
+      // The committed control head is the evidence that this stop predates On.
+      platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, revision: 2 } });
       const on = setEnabled(true);
       await drain();
       platform.emitMediaPause({ source, revision: 2 });
       pause.release();
       await Promise.all([off, on]);
-      expect(close).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalledExactlyOnceWith(source);
+      expect(local).not.toHaveBeenCalled();
       expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
     } finally {
       pause.release();

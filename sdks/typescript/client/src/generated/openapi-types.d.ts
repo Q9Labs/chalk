@@ -1374,7 +1374,8 @@ export interface components {
           | "sync_socket_close"
           | "sync_heartbeat_gap"
           | "media_state"
-          | "media_http_error";
+          | "media_http_error"
+          | "media_projection_mismatch";
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -1390,12 +1391,18 @@ export interface components {
         /** @enum {string} */
         phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
         /** @enum {string} */
+        projection_state?: "on" | "off";
+        /** @enum {string} */
+        publication_state?: "on" | "off";
+        /** @enum {string} */
+        source?: "microphone" | "camera";
+        /** @enum {string} */
         state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
         /** @enum {string} */
         step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
       }[];
       /** @enum {string} */
-      trigger: "join_failed" | "connection_lost" | "recovery_exhausted";
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch";
       /** @enum {integer} */
       version: 1;
     };
