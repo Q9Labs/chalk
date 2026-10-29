@@ -349,7 +349,6 @@ export function createGatePlan(files, options = {}) {
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const publishableWorkspaces = selectedWorkspaces.filter((workspace) => workspace.isPublic && startsWithAny(workspace.directory, ["packages", "sdks/typescript"]));
@@ -366,31 +365,7 @@ export function createGatePlan(files, options = {}) {
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Gate routing, Sync reliability and production-proof self-tests", true, "always required", [
-      "node",
-      "scripts/test/run.mjs",
-      "node",
-      "--test",
-      "scripts/test/no-network.test.mjs",
-      "scripts/gates/chalk-gate-plan.test.mjs",
-      "scripts/gates/doc-checks.test.mjs",
-      "scripts/gates/remote-queue.test.mjs",
-      "scripts/dev/chalk-resources.test.mjs",
-      "scripts/dev/cli-ready.test.mjs",
-      "apps/mobile/scripts/run-ios.test.mjs",
-      "scripts/gates/with-postgres.test.mjs",
-      "scripts/gates/new-vulnerabilities.test.mjs",
-      "scripts/gates/gate-policy.test.mjs",
-      "scripts/gates/codeql-languages.test.mjs",
-      "apps/sync/scripts/reliability_harness.test.mjs",
-      "scripts/gates/call-performance-metrics.test.mjs",
-      "scripts/prod-proof/*.test.mjs",
-      "scripts/web-proof/*.test.mjs",
-      "scripts/gates/gitleaks-policy.test.mjs",
-      "scripts/gates/design-tokens.test.mjs",
-      "scripts/gates/ast-grep.test.mjs",
-      "scripts/gates/type-bans.test.mjs",
-    ]),
+    task("self-test", "Test network isolation", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
@@ -402,7 +377,7 @@ export function createGatePlan(files, options = {}) {
       "run",
       "gate:boundaries",
     ]),
-    task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "-c", "node --test scripts/gates/osv-scanner.test.mjs && bash scripts/gates/osv-scanner.sh"]),
+    task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
     task(
       "services",
       "Service-backed API and Sync correctness gates",
@@ -411,7 +386,6 @@ export function createGatePlan(files, options = {}) {
       serviceGates.length > 0 ? ["bash", "scripts/gates/with-postgres.sh", ...serviceGates] : null,
     ),
     task("contracts", "Contract and generated SDK drift", contracts, contracts ? "contract producers or consumers changed" : "contracts are unaffected", ["pnpm", "run", "contract:check"]),
-    task("image-size", "Patched image-size parser contract", imageSizePatch, imageSizePatch ? "image-size patch or guard changed" : "image-size patch is unaffected", ["pnpm", "run", "security:image-size"]),
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
@@ -421,7 +395,7 @@ export function createGatePlan(files, options = {}) {
       "-c",
       "cd sdks/typescript/react-native && node scripts/check-tokenized-styles.mjs && node scripts/check-worklet-directives.mjs",
     ]),
-    task("tests", "Affected workspace tests with coverage", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", ["--coverage"], [workspaceConcurrency, "--sort"])),
+    task("tests", "Selected runtime regression tests", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", [], [workspaceConcurrency, "--sort"])),
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),

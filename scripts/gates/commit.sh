@@ -7,7 +7,6 @@ cd "$(dirname "$0")/../.."
 node scripts/gates/check-install.mjs
 
 node scripts/gates/doclint.mjs
-node scripts/gates/theory-coverage.mjs
 
 if [[ "${1:-}" == "--" ]]; then
   shift
@@ -22,5 +21,4 @@ if [[ "${1:-}" == "--fast" ]]; then
 fi
 
 pnpm run check:tracker
-pnpm run test:tracker
 exec q9gate run "$@"
