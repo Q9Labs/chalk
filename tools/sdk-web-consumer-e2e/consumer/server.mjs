@@ -64,9 +64,19 @@ server.on("upgrade", handleUpgrade);
 
 async function dispatchHTTP(request, response) {
   const url = new URL(request.url ?? "/", "http://localhost");
+  const episodeStatus = /^\/v1\/tenants\/fixture-tenant\/spaces\/fixture-space\/episodes\/fixture-episode\/participants\/([a-z]+)\/episode-status$/u.exec(url.pathname);
+  if (request.method === "GET" && episodeStatus) return serveEpisodeStatus(request, response, episodeStatus[1]);
   const handler = httpRoutes.get(`${request.method ?? "GET"} ${url.pathname}`);
   if (!handler) return sendJSON(response, 404, { error: "not_found" });
   await handler(request, response, url);
+}
+
+function serveEpisodeStatus(request, response, participantId) {
+  const credential = tokenForAudience(request.headers.authorization?.replace(/^Bearer /u, ""), "chalk-media");
+  if (!credential || credential.sub !== participantId) return sendJSON(response, 401, { error: "access_denied" });
+  // Provider rejection does not end the Episode. Let the production lifecycle
+  // confirm that authority before reporting terminal media access rejection.
+  return sendJSON(response, 200, { status: "active" });
 }
 
 function serveHTML(_request, response) {

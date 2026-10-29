@@ -210,7 +210,11 @@ export async function proveAgreementMatrix(browser, baseURL, { invoke, waitForSt
     for (const status of [401, 403])
       await scenario(`Current SFU ${status} during recovery is terminal and truthful`, async (pages, open) => {
         await fault({ status, durationMs: 12_000 });
+        const episodeStatus = pages[0].waitForResponse((response) => response.request().method() === "GET" && response.url().endsWith("/participants/agreementalice/episode-status"));
         await dropMedia();
+        const confirmed = await episodeStatus;
+        assert.equal(confirmed.status(), 200, "The fixture must serve the authoritative Episode status after SFU rejection");
+        assert.deepEqual(await confirmed.json(), { status: "active" });
         await waitForState(pages[0], "failed", recoveryTimeoutMs);
         const failed = await pages[0].evaluate(() => window.__chalk.snapshot());
         assert.equal(failed.failure?.code, "access.invalid");
