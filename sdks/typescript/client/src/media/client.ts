@@ -157,8 +157,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       track.addEventListener("ended", state.endedListener);
     }
     this.#localTracks.set(source, state);
-    this.#publishSnapshot();
-    this.#emitLocal();
+    this.#publishLocalState();
   }
   async clearPreparedLocalTrack(source: MediaPublicationSource, options: { readonly stopTrack?: boolean } = {}): Promise<void> {
     const state = this.#localTracks.get(source);
@@ -179,8 +178,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       } finally {
         this.#removeOwnedLocalTrack(state, stopTrack);
         if (this.#localTracks.get(source) === state) this.#localTracks.delete(source);
-        this.#publishSnapshot();
-        this.#emitLocal();
+        this.#publishLocalState();
       }
       return;
     }
@@ -188,8 +186,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#localTracks.get(source) !== state) return;
     this.#removeOwnedLocalTrack(state, stopTrack);
     this.#localTracks.delete(source);
-    this.#publishSnapshot();
-    this.#emitLocal();
+    this.#publishLocalState();
   }
   async start(localMedia: MediaStream): Promise<void> {
     if (this.#started) return;
@@ -304,8 +301,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.desiredEnabled = false;
       this.#clearLocalPublication(state);
     }
-    this.#publishSnapshot();
-    this.#emitLocal();
+    this.#publishLocalState();
     if (publications.length === 0) return;
     this.#retiredLocalConnection = this.#connection;
     // A pending response completes its own retirement inside the SDP owner.
@@ -429,8 +425,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#transport = undefined;
     this.#started = false;
     this.#cursor = null;
-    this.#publishSnapshot("stopped", null);
-    this.#emitLocal();
+    this.#publishLocalState("stopped", null);
     this.#emitRemote();
     this.#localListeners.clear();
     this.#remoteListeners.clear();
@@ -455,8 +450,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.desiredEnabled = state.enabled;
       state.track.enabled = state.enabled;
       if (!state.enabled) await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(null));
-      this.#publishSnapshot();
-      this.#emitLocal();
+      this.#publishLocalState();
       return;
     }
     if (operationId) state.pendingOperationId = operationId;
@@ -484,8 +478,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
     state.enabled = false;
     state.pendingOperationId = null;
-    this.#publishSnapshot();
-    this.#emitLocal();
+    this.#publishLocalState();
     await detach;
   }
   async #publishPreparedTracks(states: readonly LocalTrackState[], generation: number): Promise<void> {
@@ -540,8 +533,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       await this.#confirmLocalPublications(publications);
-      this.#publishSnapshot();
-      this.#emitLocal();
+      this.#publishLocalState();
     } catch (error) {
       if (generation === this.#generation) {
         await this.#rollbackLocalOffer(connection);
@@ -1193,7 +1185,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot("failed", { code, recoverable: code !== "invalid_bootstrap" && code !== "invalid_target" && code !== "invalid_publication", diagnostic: classifyMediaFailure(error, "peer_connection") });
     this.#reportError(error);
   }
-  #emitLocal(): void {
+  #publishLocalState(phase?: CloudflareSFUSnapshot["connection"]["phase"], failure?: CloudflareSFUSnapshot["failure"]): void {
+    this.#publishSnapshot(phase, failure);
     const publications = this.#projectLocalPublications();
     for (const listener of this.#localListeners) this.#invokeListener(() => listener(publications));
   }
