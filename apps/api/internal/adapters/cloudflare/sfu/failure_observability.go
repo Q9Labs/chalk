@@ -54,6 +54,9 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 		responseTrackCount: responseTrackCount,
 		failedTrackCount:   failedTrackCount,
 	}
+	if operation == "close_tracks" && stage == failureStageTrack {
+		failure.details.rawCode = observableProviderMessage(rawCode)
+	}
 	return failure
 }
 

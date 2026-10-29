@@ -50,6 +50,20 @@ path commits an export or changes the successful capture job. The regression in
 callback recovery, and duplicate delivery against the Go controller and maintenance
 commands.
 
+Capture close-track rejections inside HTTP 200 responses emit
+`cloudflare_sfu.request_failed` in API logs before conversion to the worker's
+failure code. `provider_raw_code` and `provider_message` retain the rejected
+code and message with the existing diagnostic-word allowlist. URLs, identifiers,
+numbers, token-like strings and unknown words are redacted. Each field is capped
+at 240 characters plus a truncation marker. The active API span receives the same
+values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
+`cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
+retained. Both capture track-close and connection-close use this path. Retry and
+HTTP 200 acceptance rules are unchanged. The regression in
+`apps/api/internal/adapters/cloudflare/sfu/capture_close_observability_test.go`
+checks the recorded logs and span events against provider responses with
+credential-shaped fields.
+
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
 provider-failure span event carries `chalk.provider.response_snapshot`. This is

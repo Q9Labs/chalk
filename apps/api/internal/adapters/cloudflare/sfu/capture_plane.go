@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // providerDescription is kept separate from the media-plane envelope so
@@ -865,7 +866,7 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 		return captureplane.CloseCaptureTracksResult{}, captureProviderError(requestErr)
 	}
 	if requestErr == nil {
-		if err := validateCaptureCloseResponse(response, closeTracks); err != nil {
+		if err := validateCaptureCloseResponse(ctx, response, closeTracks); err != nil {
 			return captureplane.CloseCaptureTracksResult{}, err
 		}
 	}
@@ -880,7 +881,7 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 	return result, nil
 }
 
-func validateCaptureCloseResponse(response captureCloseTracksResponse, requested []captureCloseTrack) error {
+func validateCaptureCloseResponse(ctx context.Context, response captureCloseTracksResponse, requested []captureCloseTrack) error {
 	wanted := make(map[string]struct{}, len(requested))
 	for _, track := range requested {
 		wanted[track.Mid] = struct{}{}
@@ -896,7 +897,9 @@ func validateCaptureCloseResponse(response captureCloseTracksResponse, requested
 		}
 		seen[mid] = struct{}{}
 		if (strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "") && !closedTrackAbsent(track.ErrorCode) {
-			return captureProviderError(newProviderResponseFailure("close_tracks", failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(response.Tracks), captureCloseTrackFailureCount(response.Tracks)))
+			failure := newProviderResponseFailure("close_tracks", failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(response.Tracks), captureCloseTrackFailureCount(response.Tracks))
+			recordProviderFailure(ctx, trace.SpanFromContext(ctx), failure)
+			return captureProviderError(failure)
 		}
 	}
 	if len(seen) != len(wanted) {
@@ -962,7 +965,7 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 			return captureplane.CloseCaptureConnectionResult{}, captureProviderError(requestErr)
 		}
 		if requestErr == nil {
-			if err := validateCaptureCloseResponse(closeResponse, closeTracks); err != nil {
+			if err := validateCaptureCloseResponse(ctx, closeResponse, closeTracks); err != nil {
 				return captureplane.CloseCaptureConnectionResult{}, err
 			}
 		}
