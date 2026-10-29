@@ -62,4 +62,4 @@ func (sources migrationFiles) ReadDir(name string) ([]fs.DirEntry, error) {
 	return entries, nil
 }
 
-const LatestVersion int64 = 20261029160000
+const LatestVersion int64 = 20261029183000
