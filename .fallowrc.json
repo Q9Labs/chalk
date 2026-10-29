@@ -134,7 +134,6 @@
       "sdks/typescript/client/src/generated/**",
       "sdks/typescript/client/scripts/**",
       "sdks/typescript/client/src/sync/browser.ts",
-      "sdks/typescript/client/src/sync/integration.test.ts",
       "sdks/typescript/client/src/sync/react-native.ts",
       "sdks/typescript/client/src/sync/v1-client.ts",
       "apps/transcription-dispatcher/**"
