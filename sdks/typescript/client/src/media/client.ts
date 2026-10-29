@@ -311,7 +311,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // A pending response completes its own retirement inside the SDP owner.
     if (publications.every((item) => item.lifecycle.kind === "retiring" && item.lifecycle.handle === null)) return;
     await this.#serializeSDP(async () => {
-      for (const publication of publications) await this.#closeOwnedPublication(publication);
+      const errors: unknown[] = [];
+      for (const publication of publications) {
+        try {
+          await this.#closeOwnedPublication(publication);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length) throw errors[0];
     });
   }
   #markPublicationRetiring(publication: OwnedLocalPublication): void {
@@ -322,21 +330,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring") return;
     const { connection, connectionId, generation, transceiver, state } = publication;
+    const closed = connection.connectionState === "closed";
     try {
-      if (!phase.detached) {
+      if (!phase.detached && !closed) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
         transceiver.stop();
-        phase.detached = true;
       }
+      phase.detached = true;
       if (!phase.handle) return;
       const { mid, publicationId } = phase.handle;
-      const offer = await connection.createOffer();
-      await connection.setLocalDescription(offer);
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks: [{ mid, source: state.source, publicationId }], force: false }), { generation, connectionId });
+      // A closed peer cannot negotiate. Its owned handle can still be force-closed.
+      const offer = closed ? null : await connection.createOffer();
+      if (offer) await connection.setLocalDescription(offer);
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, ...(offer ? providerDescription(requireDescription(offer)) : {}), tracks: [{ mid, source: state.source, publicationId }], force: closed }), { generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      await this.#applyProviderDescription(response, connection);
+      if (!closed) await this.#applyProviderDescription(response, connection);
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       if (connection === this.#connection && !this.#stopped) this.#reportError(error);

@@ -11,6 +11,58 @@ import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
+describe.each(["microphone", "camera"] as const)("same-binding restart %s retirement", (source) => {
+  it.each([false, true])("retires every owned publication even when the first close fails: %s", async (failFirstClose) => {
+    const harness = createHarness();
+    const track = new FakeTrack("same-binding", source === "microphone" ? "audio" : "video");
+    try {
+      await harness.client.start(fakeStream(track));
+      const oldPeer = harness.peers[0]!;
+      const oldId = harness.client.getSnapshot().localTracks[0]!.publicationId;
+      const createOffer = oldPeer.createOffer.bind(oldPeer);
+      const offer = vi.spyOn(oldPeer, "createOffer").mockImplementation(async () => {
+        if (oldPeer.closed) throw new DOMException("RTCPeerConnection is closed", "InvalidStateError");
+        return createOffer();
+      });
+      const sender = oldPeer.getSenders()[0]!;
+      const replaceTrack = sender.replaceTrack.bind(sender);
+      vi.spyOn(sender, "replaceTrack").mockImplementation(async (replacement) => {
+        if (oldPeer.closed) throw new DOMException("RTCPeerConnection is closed", "InvalidStateError");
+        return replaceTrack(replacement);
+      });
+      await harness.client.restart(bootstrap("connection-1"));
+      expect(oldPeer.closed).toBe(true);
+      const currentId = harness.client.getSnapshot().localTracks[0]!.publicationId;
+      expect(currentId).not.toBe(oldId);
+      expect(harness.transport.localPublications.size).toBe(2);
+      offer.mockClear();
+      const failure = new CloudflareSFUError("interrupted close", "signaling_failed");
+      if (failFirstClose) vi.spyOn(harness.transport, "closeTracks").mockRejectedValueOnce(failure);
+      const pause = harness.client.closeForcedLocalPublication(source);
+      if (failFirstClose) {
+        await expect(pause).rejects.toBe(failure);
+        expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+      } else {
+        await expect(pause).resolves.toBeUndefined();
+      }
+      expect(harness.transport.localPublications.has(currentId!)).toBe(false);
+      expect(track.enabled).toBe(false);
+      await expect(harness.client.closeForcedLocalPublication(source)).resolves.toBeUndefined();
+      expect(harness.transport.localPublications.size).toBe(0);
+      expect(offer).not.toHaveBeenCalled();
+      expect(harness.transport.closeInputs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ connectionId: "connection-1", force: true, tracks: [expect.objectContaining({ publicationId: oldId })] }),
+          expect.objectContaining({ connectionId: "connection-1", force: false, tracks: [expect.objectContaining({ publicationId: currentId })] }),
+        ]),
+      );
+      expect(harness.transport.closeInputs.find((input) => input.force)?.sessionDescription).toBeUndefined();
+    } finally {
+      harness.client.stop();
+    }
+  });
+});
+
 it("does not end an automatic replacement when an obsolete local publication gets HTTP 403", async () => {
   const platform = createCoreTestPlatform();
   let foreground = () => {};
