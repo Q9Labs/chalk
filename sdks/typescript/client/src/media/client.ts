@@ -539,11 +539,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
-    const reusedTransceiver = state.transceiver !== null;
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
     const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${state.pendingOperationId ?? globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, generation, lifecycle: { kind: "pending" } };
     this.#ownedPublications.add(publication);
-    if (reusedTransceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
+    if (state.transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
     state.transceiver = transceiver;
     return publication;
@@ -604,7 +603,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const { state, transceiver, lifecycle } = publication;
       if (lifecycle.kind === "retired") continue;
       const authoritative = tracks?.find((track) => track.location === "local" && track.mid === transceiver.mid && track.source === state.source);
-      if (!authoritative?.publicationId) throw new CloudflareSFUError("Chalk did not return an authoritative local publication ID", "invalid_publication");
+      if (!authoritative?.publicationId) throw new CloudflareSFUError("SFU response missing publication ID", "invalid_publication");
       const handle = { publicationId: authoritative.publicationId, mid: requireTransceiverMid(transceiver) };
       publication.lifecycle = lifecycle.kind === "retiring" ? { ...lifecycle, handle } : { kind: "confirmed", handle };
     }

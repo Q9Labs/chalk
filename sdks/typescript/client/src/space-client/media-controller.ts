@@ -1229,7 +1229,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const local = Object.freeze({
       microphone: this.#confirmedLocal("microphone"),
       camera: this.#confirmedLocal("camera"),
-      screen: screenLocalMedia(this.#localTracks(), snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
+      screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({
@@ -1292,9 +1292,8 @@ function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: M
   if (camera) entries.push(["camera", camera]);
   return entries;
 }
-function screenLocalMedia(tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
+function screenLocalMedia(track: MediaStreamTrack | null, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
   if (snapshot?.connection.phase === "stopped") return Object.freeze({ source: "screen", state: "unavailable", track: null });
-  const track = tracks.get("screen") ?? null;
   const publication = snapshot?.localTracks.find((candidate) => candidate.source === "screen");
   return Object.freeze({ source: "screen", state: pending ? "requesting" : screenLocalMediaState(track, publication?.enabled, connectionState), track });
 }
