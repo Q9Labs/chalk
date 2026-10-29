@@ -26,7 +26,6 @@ type LocalTrackState = {
   readonly track: MediaStreamTrack;
   transceiver: RTCRtpTransceiver | null;
   providerPublicationId: string | null;
-  pendingOperationId: string | null;
   desiredEnabled: boolean;
   enabled: boolean;
   endedListener: (() => void) | null;
@@ -144,7 +143,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       track,
       transceiver: reusable?.transceiver ?? null,
       providerPublicationId: reusable?.lifecycle.kind === "confirmed" ? reusable.lifecycle.handle.publicationId : null,
-      pendingOperationId: null,
       desiredEnabled: false,
       enabled: false,
       endedListener: null,
@@ -259,7 +257,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.#retireUnavailableLocalPublication(state);
       if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       if (state.enabled) return { outcome: "satisfied", errorCode: null };
-      await this.#enablePreparedTrack(state, target.operationId);
+      await this.#enablePreparedTrack(state);
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
@@ -395,6 +393,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#remotePullRetryAfter.clear();
     this.#disposeConnection(false);
+    for (const publication of this.#ownedPublications) this.#markPublicationRetiring(publication);
     void this.#retireOwnedPublications();
     this.#clearRemoteTracks();
     this.#cursor = null;
@@ -457,7 +456,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteListeners.clear();
     this.#snapshotListeners.clear();
   }
-  async #enablePreparedTrack(state: LocalTrackState, operationId?: string): Promise<void> {
+  async #enablePreparedTrack(state: LocalTrackState): Promise<void> {
     const generation = this.#generation;
     state.desiredEnabled = true;
     state.track.enabled = true;
@@ -475,7 +474,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#emitLocal();
         return;
       }
-      if (operationId) state.pendingOperationId = operationId;
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
       // recovery that spent it is still unresolved: restoring it then lets every
@@ -496,7 +494,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // Queue the detach before notifying consumers, but never wait to expose off.
     const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
     state.enabled = false;
-    state.pendingOperationId = null;
     this.#publishSnapshot();
     this.#emitLocal();
     await detach;
@@ -571,7 +568,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
-    const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${state.pendingOperationId ?? globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, lifecycle: { kind: "pending" } };
+    const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, lifecycle: { kind: "pending" } };
     this.#ownedPublications.add(publication);
     if (state.transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);
@@ -646,7 +643,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         state.desiredEnabled = true;
         state.track.enabled = true;
         state.providerPublicationId = lifecycle.handle.publicationId;
-        state.pendingOperationId = null;
         continue;
       }
       this.#markPublicationRetiring(publication);
@@ -1112,7 +1108,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.desiredEnabled = false;
     state.transceiver = null;
     state.providerPublicationId = null;
-    state.pendingOperationId = null;
     state.endedListener = null;
   }
   #clearRemoteTracks(): void {

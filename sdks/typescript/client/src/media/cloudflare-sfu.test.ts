@@ -82,7 +82,7 @@ it.each(["signaling_failed", "invalid_publication"] as const)("attempts screen a
     harness.client.prepareLocalTrack("screen_audio", audio as unknown as MediaStreamTrack);
     await setScreenTarget(harness.client, "share", true);
     const oldId = harness.client.getSnapshot().localTracks.find((item) => item.source === "screen")!.publicationId;
-    await harness.client.restart(bootstrap("connection-1"));
+    await restartWithRetainedPublications(harness);
     const failure = new CloudflareSFUError("owned video close rejected", code);
     const close = harness.transport.closeTracks.bind(harness.transport);
     const attempted: string[] = [];
@@ -182,7 +182,7 @@ it("returns all video-close failures together after attempting both screen-audio
     harness.client.prepareLocalTrack("screen", new FakeTrack("video", "video") as unknown as MediaStreamTrack);
     harness.client.prepareLocalTrack("screen_audio", new FakeTrack("audio", "audio") as unknown as MediaStreamTrack);
     await setScreenTarget(harness.client, "share", true);
-    await harness.client.restart(bootstrap("connection-1"));
+    await restartWithRetainedPublications(harness);
     const close = harness.transport.closeTracks.bind(harness.transport);
     const failures: Error[] = [];
     const failing = vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
@@ -236,7 +236,7 @@ it("a timed-out owned close does not suppress the remaining handles or its late 
     harness.client.prepareLocalTrack("screen", new FakeTrack("video", "video") as unknown as MediaStreamTrack);
     harness.client.prepareLocalTrack("screen_audio", new FakeTrack("audio", "audio") as unknown as MediaStreamTrack);
     await setScreenTarget(harness.client, "share", true);
-    await harness.client.restart(bootstrap("connection-1"));
+    await restartWithRetainedPublications(harness);
     const close = harness.transport.closeTracks.bind(harness.transport);
     const attempts: string[] = [];
     vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
@@ -261,9 +261,45 @@ it("a timed-out owned close does not suppress the remaining handles or its late 
   }
 });
 
-it("retires every off-owned handle across seeded add/pause/restart/response/failure/retry interleavings", async () => {
+it.each(["microphone", "camera", "screen", "screen_audio", "screen-with-audio"] as const)("preserves the current %s publication when a held add completes after same-binding restart", async (source) => {
+  const harness = createHarness();
+  const gate = Promise.withResolvers<void>();
+  const add = harness.transport.addTracks.bind(harness.transport);
+  let held = false;
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    const result = await add(input);
+    if (!held && input.tracks.some((track) => track.source === (source === "screen-with-audio" ? "screen_audio" : source))) {
+      held = true;
+      await gate.promise;
+    }
+    return result;
+  });
+  const sources = source === "screen-with-audio" ? (["screen", "screen_audio"] as const) : [source];
+  try {
+    await harness.client.start(fakeStream());
+    for (const item of sources) harness.client.prepareLocalTrack(item, new FakeTrack(item, item === "microphone" || item === "screen_audio" ? "audio" : "video") as unknown as MediaStreamTrack);
+    const enabling = source === "screen-with-audio" ? setScreenTarget(harness.client, "user-on", true) : harness.client.setLocalPublicationTarget({ operationId: "user-on", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(sources.length));
+    const restarting = harness.client.restart(bootstrap("connection-1"));
+    gate.resolve();
+    await Promise.all([enabling, restarting]);
+    await vi.waitFor(() => {
+      for (const item of sources) {
+        const current = harness.client.getSnapshot().localTracks.find((track) => track.source === item);
+        expect(current?.enabled).toBe(true);
+        expect([...harness.transport.localPublications.values()].filter((publication) => publication.source === item).map((publication) => publication.publicationId)).toEqual([current?.publicationId]);
+      }
+    });
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
+it("preserves on publications and retires off handles across seeded add/pause/restart/response/failure/retry interleavings", async () => {
   const sources = ["microphone", "camera", "screen"] as const;
   const publishedSources = new Set<string>();
+  const checkedOnSources = new Set<string>();
   let totalFailures = 0;
   for (let seed = 1; seed <= 32; seed++) {
     let random = seed;
@@ -309,7 +345,7 @@ it("retires every off-owned handle across seeded add/pause/restart/response/fail
       harness.transport.localPublications.set(foreign, { participantId: "participant-1", source: "microphone", publicationId: foreign });
       const actions = ["add", "pause", "response", "restart", "failure", "retry"] as const;
       for (let step = 0; step < 48; step++) {
-        const action = step < actions.length ? actions[step]! : actions[next() % actions.length]!;
+        const action = step < actions.length ? actions[step]! : actions[(next() >>> 16) % actions.length]!;
         const source = sources[(next() >>> 8) % sources.length]!;
         trace.push(`${action}:${source}`);
         switch (action) {
@@ -333,8 +369,25 @@ it("retires every off-owned handle across seeded add/pause/restart/response/fail
         }
         for (let turn = 0; turn < 8; turn++) await Promise.resolve();
       }
-      // End with off consent before releasing late responses, not another repair
-      // after them. A successful off must clean up without a second user action.
+      holding = false;
+      for (const response of responses.splice(0)) response.resolve();
+      await Promise.all(operations);
+      closeFailures = 0;
+      for (const [index, source] of sources.entries()) if (!tracks[index]!.enabled) await harness.client.closeForcedLocalPublication(source);
+      // Interrupted enables may fail closed; settled capture and advertising must agree.
+      await vi.waitFor(() => {
+        for (const [index, source] of [...sources, "screen_audio" as const].entries()) {
+          const current = harness.client.getSnapshot().localTracks.find((item) => item.source === source)!;
+          const enabled = tracks[index]!.enabled;
+          if (enabled) checkedOnSources.add(source);
+          const advertised = [...harness.transport.localPublications.values()].filter((item) => item.source === current.source && ownedIds.has(item.publicationId));
+          expect(
+            advertised.map((item) => item.publicationId),
+            `seed=${seed}, source=${current.source}: ${trace.join(",")}`,
+          ).toEqual(enabled ? [current.publicationId] : []);
+          expect(current.enabled).toBe(enabled);
+        }
+      });
       const off = sources.map((source) => harness.client.closeForcedLocalPublication(source));
       for (const operation of off) observe(operation);
       holding = false;
@@ -356,6 +409,7 @@ it("retires every off-owned handle across seeded add/pause/restart/response/fail
     }
   }
   expect([...publishedSources].sort()).toEqual(["camera", "microphone", "screen", "screen_audio"]);
+  expect([...checkedOnSources].sort()).toEqual(["camera", "microphone", "screen", "screen_audio"]);
   expect(totalFailures).toBeGreaterThan(0);
 });
 
@@ -378,7 +432,7 @@ describe.each(["microphone", "camera"] as const)("same-binding restart %s retire
         if (oldPeer.closed) throw new DOMException("RTCPeerConnection is closed", "InvalidStateError");
         return replaceTrack(replacement);
       });
-      await harness.client.restart(bootstrap("connection-1"));
+      await restartWithRetainedPublications(harness);
       expect(oldPeer.closed).toBe(true);
       const currentId = harness.client.getSnapshot().localTracks[0]!.publicationId;
       expect(currentId).not.toBe(oldId);
@@ -1579,6 +1633,15 @@ async function startScreenPublication(harness: ReturnType<typeof createHarness>,
   await expect(setScreenTarget(harness.client, operationId, true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
   expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: true });
 }
+async function restartWithRetainedPublications(harness: ReturnType<typeof createHarness>): Promise<void> {
+  const close = vi.spyOn(harness.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("old peer close interrupted", "signaling_failed"));
+  try {
+    await harness.client.restart(bootstrap("connection-1"));
+  } finally {
+    close.mockRestore();
+  }
+}
+
 function createHarness(
   options: {
     readonly autoConnect?: boolean;
