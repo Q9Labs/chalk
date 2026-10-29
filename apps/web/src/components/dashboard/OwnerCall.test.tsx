@@ -164,8 +164,8 @@ it("offers a page reload instead of retrying when hosted access requires joining
   try {
     await act(async () => render(<OwnerCall spaceId="space-1" />));
     await act(async () => vi.waitFor(() => expect(screen.getByText("Access to this call was rejected. Refresh the page to rejoin.")).toBeDefined()));
-    expect(screen.getByRole("button", { name: "Reload page", exact: true })).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Try again", exact: true })).toBeNull();
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   } finally {
     await act(async () => cleanup());
     vi.clearAllMocks();
