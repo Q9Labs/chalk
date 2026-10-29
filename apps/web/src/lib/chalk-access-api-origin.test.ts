@@ -57,5 +57,13 @@ it.each(["not-date", "2026-02-30T01:00:00Z", "2026-10-29T01:00:00+04:00"])("pres
   Object.assign(access, { media: { token: reloadRejoinAccess(access).mediaProof, expires_at } });
   const arrival: PublicSpaceArrival = { state: "admitted", arrival_handle: "arrival-1", space: { admission_mode: "open", name: "Test call", slug: "test-call" }, access };
   const prepared = createPreparedPublicSpace(createPublicInviteClient(), arrival);
-  expect(() => prepared.reportCredentialExpiresAt()).toThrow(ZodError);
+  let error: unknown;
+  try {
+    prepared.reportCredentialExpiresAt();
+  } catch (caught) {
+    error = caught;
+  }
+  expect(error).toBeInstanceOf(ZodError);
+  expect(error).toBeInstanceOf(Error);
+  expect(error).toMatchObject({ stack: expect.any(String), issues: [expect.objectContaining({ message: "Invalid ISO datetime" })] });
 });
