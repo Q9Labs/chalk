@@ -31,8 +31,8 @@ if (language === "elixir") compile();
 assert.equal(run(command).status, 0, "real tree must pass before the violation");
 const [relative, content] = fixtures[language];
 const fixture = path.join(root, relative);
+writeFileSync(fixture, content, { flag: "wx" });
 try {
-  writeFileSync(fixture, content, { flag: "wx" });
   if (language === "elixir") compile();
   const rejected = run(command);
   assert.equal(rejected.status, 1, "deliberate dependency must fail the policy");
@@ -45,8 +45,8 @@ assert.equal(run(command).status, 0, "real tree must pass after fixture removal"
 console.log(`${language}: violation rejected; clean tree passed before and after`);
 if (language === "go") {
   const privateImport = path.join(root, "apps/api/cmd/private_import_violation.go");
+  writeFileSync(privateImport, 'package main\nimport _ "github.com/q9labs/chalk/features/whiteboard/api/internal/files"\n', { flag: "wx" });
   try {
-    writeFileSync(privateImport, 'package main\nimport _ "github.com/q9labs/chalk/features/whiteboard/api/internal/files"\n', { flag: "wx" });
     const rejected = run(["go", "list", "./apps/api/cmd"]);
     assert.equal(rejected.status, 1);
     assert.match(rejected.output, /use of internal package .* not allowed/);
