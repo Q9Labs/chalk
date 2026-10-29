@@ -1,3 +1,4 @@
+import { EpisodeStatusError } from "./episode-status";
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
@@ -26,7 +27,9 @@ describe("media rejection classification regressions", () => {
     await test.run(async (lifecycle) => {
       test.failMedia(new CloudflareSFUError("Expired/revoked credential", "signaling_failed", { status: 403 }));
       await test.advanceTo(60000);
-      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
+      // A rejected status credential does not prove the Episode is active.
+      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "access_unavailable", recoverable: true } });
+      expect(test.status.mock.calls.length).toBeLessThanOrEqual(3);
     });
   });
 
@@ -203,6 +206,33 @@ it.each([
     await test.advanceTo(500);
     if (status === "active") expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
     else expect(lifecycle.getSnapshot()).toMatchObject({ state: "left", failure: null, episodeEnded: true });
+    expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+  });
+});
+
+it("resumes status reads when a rejected credential is later refreshed on the same binding", async () => {
+  const test = mediaRecoveryFixture();
+  const original = test.access.getMockImplementation()!;
+  let refreshes = 0;
+  let freshToken = "";
+  test.access.mockImplementation(async (request) => {
+    const value = await original(request);
+    if (request.reason === "join") return value;
+    if (++refreshes === 1) throw new Error("Credential refresh temporarily unavailable");
+    const fresh = opaqueAccessGrant(1, "fresh-after-auth-rejection", value.media.clientPayload.connectionId);
+    const next = parseParsedAccessGrant({ ...fresh, sync: { ...fresh.sync, expires_at: value.sync.expiresAt }, media: { ...fresh.media, expires_at: value.media.expiresAt } });
+    freshToken = next.media.token;
+    return next;
+  });
+  test.status.mockImplementation(async (grant) => {
+    if (freshToken && grant.media.token === freshToken) return "active";
+    throw new EpisodeStatusError(401);
+  });
+  await test.run(async (lifecycle) => {
+    test.failMedia(new CloudflareSFUError("Rejected", "signaling_failed", { status: 403 }));
+    await test.advanceTo(30000);
+    expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
+    expect(test.status.mock.calls.some(([grant]) => grant.media.token === freshToken)).toBe(true);
     expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
   });
 });

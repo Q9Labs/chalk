@@ -1010,21 +1010,24 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         Effect.gen(function* () {
           let attempt = 0;
           let refreshedAfterAuthRejection = false;
+          let rejectedToken: string | null = null;
           while (model.epoch === epoch) {
             yield* waitForPendingEpisodeEnd;
             if (episodeHasEnded()) return lifecycleFailure("episode_ended", false, "The Episode has ended");
             const current = access.currentUnsafe();
             const grant = sameBindingCredential(current, original);
-            const result = yield* readEpisodeStatus(platform.getEpisodeStatus, grant);
+            const result = yield* readEpisodeStatus(platform.getEpisodeStatus, grant, rejectedToken);
             yield* waitForPendingEpisodeEnd;
             if (episodeHasEnded() || statusIsEnded(result.status)) return lifecycleFailure("episode_ended", false, "The Episode has ended");
             if (result.status === "active") return failure;
             const error = result.cause;
             if (statusCredentialsRejected(error)) {
-              if (refreshedAfterAuthRejection) return lifecycleFailure("invalid_access", false, "Episode status credentials were rejected");
-              refreshedAfterAuthRejection = true;
-              yield* access.refresh("scheduled_refresh", false).pipe(Effect.catch(() => Effect.succeed(null)));
-              continue;
+              if (refreshedAfterAuthRejection) rejectedToken = grant.media.token;
+              else {
+                refreshedAfterAuthRejection = true;
+                yield* access.refresh("scheduled_refresh", false).pipe(Effect.catch(() => Effect.succeed(null)));
+                continue;
+              }
             }
             yield* Effect.sleep(episodeStatusRetryDelay(attempt++, error));
           }
@@ -1462,7 +1465,8 @@ function statusIsEnded(status: string | null): boolean {
 function statusCredentialsRejected(error: unknown): error is EpisodeStatusError {
   return error instanceof EpisodeStatusError && (error.status === 401 || error.status === 403);
 }
-function readEpisodeStatus(read: ConnectionDependencies["getEpisodeStatus"], grant: ParsedAccessGrant) {
+function readEpisodeStatus(read: ConnectionDependencies["getEpisodeStatus"], grant: ParsedAccessGrant, rejectedToken: string | null) {
+  if (grant.media.token === rejectedToken) return Effect.succeed({ status: null, cause: null });
   return Effect.tryPromise({
     try: (signal) => (read ? read(grant, signal) : Promise.reject(new Error("Episode status lookup unavailable"))),
     catch: (cause) => cause,

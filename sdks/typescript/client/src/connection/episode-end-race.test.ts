@@ -1,3 +1,4 @@
+import { EpisodeStatusError } from "./episode-status";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CloudflareSFUError } from "../media";
 import { ChalkAPIError } from "../server/errors";
@@ -184,3 +185,20 @@ function fixture(mediaOverrides: { start?: () => Promise<void> } = {}) {
   };
   return { platform, status, ...terminalTestClient(platform), reject: (cause: unknown) => onFailure(cause), endEvent: () => platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", participants: [] } }) };
 }
+
+it.each([401, 403])("keeps Sync alive after status credential HTTP %s so delayed End wins", async (status) => {
+  const test = fixture();
+  test.status.mockRejectedValue(new EpisodeStatusError(status));
+  try {
+    await joinWithTerminalControl(test.client, test.platform);
+    test.reject(new CloudflareSFUError("End teardown denied", "signaling_failed", { status: 403 }));
+    await vi.waitFor(() => expect(test.status.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(test.platform.syncStopped).not.toHaveBeenCalled();
+    test.endEvent();
+    await vi.waitFor(() => expect(test.ended).toHaveBeenCalledOnce());
+    expect(test.error).not.toHaveBeenCalled();
+  } finally {
+    test.client.dispose();
+  }
+});
