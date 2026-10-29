@@ -310,7 +310,7 @@ function OwnerCallSurface({
         <div className="dash">
           <div className="wrap">
             <ErrorPanel title="Refresh to rejoin the call" detail="Access to this call was rejected. Refresh the page to rejoin." />
-            <button type="button" className="btn primary" onClick={() => window.location.reload()}>
+            <button type="button" className="btn pri" onClick={() => window.location.reload()}>
               Reload page
             </button>
             <button type="button" className="btn sec" onClick={props.onHome}>
