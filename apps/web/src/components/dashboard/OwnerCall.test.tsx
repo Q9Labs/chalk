@@ -156,3 +156,18 @@ it.each([
     vi.clearAllMocks();
   }
 });
+
+it("offers a page reload instead of retrying when hosted access requires joining again", async () => {
+  window.sessionStorage.clear();
+  mocks.dashboardAction.mockRejectedValue(new DashboardRequestError(401, "join_required"));
+  mocks.createClient.mockImplementation((options) => createSpaceClientForPlatform(options, terminalTestPlatform()));
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(screen.getByText("Access to this call was rejected. Refresh the page to rejoin.")).toBeDefined()));
+    expect(screen.getByRole("button", { name: "Reload page", exact: true })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Try again", exact: true })).toBeNull();
+  } finally {
+    await act(async () => cleanup());
+    vi.clearAllMocks();
+  }
+});

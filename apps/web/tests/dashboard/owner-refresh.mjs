@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { setTimeout as delay } from "node:timers/promises";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./owner-cookie-budget.mjs";
+import { proveEvictionReload } from "./owner-eviction.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
@@ -32,6 +33,7 @@ try {
   assert.notEqual(original.subject.participant_id, sibling.subject.participant_id);
   await second.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const secondRefreshed = callResponse(second, "refresh-access");
+  await proveEvictionReload(context, origin);
   await proveCookieBudget(context, origin);
   const leaving = await context.newPage();
   await leaving.goto(`${origin}/dashboard`);

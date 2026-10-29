@@ -304,6 +304,22 @@ function OwnerCallSurface({
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
+  if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
+    return (
+      <SiteRoot>
+        <div className="dash">
+          <div className="wrap">
+            <ErrorPanel title="Refresh to rejoin the call" detail="Access to this call was rejected. Refresh the page to rejoin." />
+            <button type="button" className="btn primary" onClick={() => window.location.reload()}>
+              Reload page
+            </button>
+            <button type="button" className="btn sec" onClick={props.onHome}>
+              Home
+            </button>
+          </div>
+        </div>
+      </SiteRoot>
+    );
   return (
     <Chalk
       {...props}
