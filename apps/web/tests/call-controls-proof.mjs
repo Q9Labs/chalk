@@ -2,14 +2,13 @@ import { strict as assert } from "node:assert";
 import { chromium } from "playwright";
 import { showCallControls } from "./call-controls.mjs";
 
-// The failure's logged state was data-idle=true. Advance only the browser clock
-// past the SDK's three-second idle threshold; API/Sync credential clocks stay real.
 const [kind, mode = "fixed", count = "50"] = process.argv.slice(2);
-assert(["follow-pin", "owner-leave"].includes(kind));
+assert(["follow-pin", "owner-menu"].includes(kind));
 assert(["baseline", "fixed"].includes(mode));
 const iterations = Number(count);
 assert(Number.isInteger(iterations) && iterations > 0);
 let failures = 0;
+let samplesWithoutMenu = 0;
 
 async function clickAfterIdle(page, name) {
   await page.clock.fastForward(3100);
@@ -19,6 +18,8 @@ async function clickAfterIdle(page, name) {
     await page.getByRole("button", { name, exact: true }).click({ timeout: 1000 });
     return true;
   } catch (error) {
+    assert.equal(await page.locator('[data-part="call-frame"]').getAttribute("data-idle"), "true");
+    assert.match(error.message, /call-frame.*intercepts pointer events/);
     failures++;
     if (failures === 1) console.log(`FIRST_FAILURE ${error.message}`);
     return false;
@@ -57,26 +58,42 @@ if (kind === "follow-pin") {
 } else {
   const { createDashboardProofFixture } = await import("./dashboard/browser-fixture.mjs");
   const { assertNoSeatCookies } = await import("./dashboard/owner-cookie-budget.mjs");
+  const { leaveOwnerCall } = await import("./dashboard/owner-controls.mjs");
   const { context, origin, cleanup } = await createDashboardProofFixture({ devicesMissing: true });
   try {
     for (let run = 0; run < iterations; run++) {
       const page = await context.newPage();
       try {
-        await page.clock.install();
         await page.goto(`${origin}/dashboard`);
         await page.getByRole("button", { name: "Start a call", exact: true }).click();
         await page.getByRole("button", { name: "Join call", exact: true }).click();
         await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
         const leave = page.getByRole("button", { name: "Leave call", exact: true });
         const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
-        console.log(`OWNER_STATE run=${run} menu=${opensMenu}`);
-        if (!(await clickAfterIdle(page, "Leave call"))) {
-          // Restore the failed baseline's UI so each iteration releases its real seat.
+        if (!opensMenu) samplesWithoutMenu++;
+        if (mode === "fixed") await leaveOwnerCall(page, origin);
+        else {
+          // Expose the observed race: capabilities arrive after the attribute
+          // sample, while a browser action is still waiting to click the button.
+          await page.locator('button[aria-label="Leave call"][aria-haspopup="menu"]').waitFor();
           await showCallControls(page);
-          await leave.click();
+          const [cleaned, clicked] = await Promise.allSettled([
+            page.waitForResponse(`${origin}/auth/clear-owner-seats`, { timeout: 1000 }),
+            (async () => {
+              await leave.click();
+              if (opensMenu) await page.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+            })(),
+          ]);
+          if (clicked.status === "rejected") throw clicked.reason;
+          if (cleaned.status === "rejected") {
+            assert.equal(opensMenu, false);
+            assert.match(cleaned.reason.message, /Timeout 1000ms/);
+            await page.getByRole("menuitem", { name: "Leave call", exact: true }).waitFor();
+            failures++;
+            // Release the real seat after recording the baseline's missed action.
+            await Promise.all([page.waitForResponse(`${origin}/auth/clear-owner-seats`).then((response) => assert.equal(response.status(), 200)), page.getByRole("menuitem", { name: "Leave call", exact: true }).click()]);
+          } else assert.equal(cleaned.value.status(), 200);
         }
-        const response = page.waitForResponse(`${origin}/auth/clear-owner-seats`);
-        await Promise.all([response.then((value) => assert.equal(value.status(), 200)), page.getByRole("menuitem", { name: "Leave call", exact: true }).click()]);
         await assertNoSeatCookies(context);
       } finally {
         await page.close();
@@ -86,5 +103,7 @@ if (kind === "follow-pin") {
     await cleanup();
   }
 }
-console.log(`IDLE_CONTROLS_PROOF ${JSON.stringify({ kind, mode, iterations, failures })}`);
-assert.equal(failures, mode === "baseline" ? iterations : 0);
+console.log(`CALL_CONTROLS_PROOF ${JSON.stringify({ kind, mode, iterations, failures, samplesWithoutMenu })}`);
+if (mode === "fixed") assert.equal(failures, 0);
+else if (kind === "follow-pin") assert.equal(failures, iterations);
+else assert(failures > 0, "The baseline must reproduce a menu capability update between sampling and clicking");

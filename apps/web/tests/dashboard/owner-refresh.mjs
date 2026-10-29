@@ -4,6 +4,7 @@ import { createDashboardProofFixture } from "./browser-fixture.mjs";
 import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./owner-cookie-budget.mjs";
 import { proveEvictionReload } from "./owner-eviction.mjs";
 import { showCallControls } from "../call-controls.mjs";
+import { leaveOwnerCall } from "./owner-controls.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
@@ -41,14 +42,7 @@ try {
   await leaving.getByRole("button", { name: "Start a call", exact: true }).click();
   await leaving.getByRole("button", { name: "Join call", exact: true }).click();
   await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
-  await showCallControls(leaving);
-  const leaveCleanup = leaving.waitForResponse(`${origin}/auth/clear-owner-seats`);
-  pendingResponses.push(leaveCleanup);
-  const leave = leaving.getByRole("button", { name: "Leave call", exact: true });
-  const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
-  await leave.click();
-  if (opensMenu) await leaving.getByRole("menuitem", { name: "Leave call", exact: true }).click();
-  assert.equal((await leaveCleanup).status(), 200);
+  await leaveOwnerCall(leaving, origin);
   await assertNoSeatCookies(context);
   await leaving.close();
   console.log("PASS: real UI Leave clears the bounded cache without disrupting sibling tabs");
