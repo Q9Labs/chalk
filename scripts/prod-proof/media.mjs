@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
+import { waitForCredentialRefresh } from "./credential-refresh.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -41,7 +42,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
-    const refresh = { count: 0, initialExpiry: Date.parse(grant.media.expiresAt), latestExpiry: 0 };
+    const refresh = { guest: guest + 1, count: 0, initialExpiry: Date.parse(grant.media.expiresAt), initialSyncExpiry: Date.parse(grant.sync.expiresAt), latestExpiry: 0, requests: [] };
     refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
@@ -84,14 +85,25 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       const issueRefresh = async (request) => {
         const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
-        grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
-        maskCredentials(grant);
-        if (!replaceMediaConnection) {
-          refresh.count++;
-          refresh.latestExpiry = Date.parse(grant.media.expiresAt);
+        const attempt = { startedAt: new Date().toISOString(), replaceMediaConnection };
+        refresh.requests.push(attempt);
+        try {
+          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
+          maskCredentials(grant);
+          Object.assign(attempt, { status: 201, mediaExpiry: Date.parse(grant.media.expiresAt), syncExpiry: Date.parse(grant.sync.expiresAt) });
+          if (!replaceMediaConnection) {
+            refresh.count++;
+            refresh.latestExpiry = Date.parse(grant.media.expiresAt);
+          }
+          replaceOnNextAccess = false;
+          return grant;
+        } catch (error) {
+          Object.assign(attempt, { status: error.status ?? null, code: error.code ?? null });
+          throw error;
+        } finally {
+          attempt.completedAt = new Date().toISOString();
+          await save(`${run.directory}/credential-refresh.json`, refreshes);
         }
-        replaceOnNextAccess = false;
-        return grant;
       };
       await page.exposeFunction("proofAccess", (request) => {
         const next = queue.then(async () => {
@@ -134,10 +146,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     pages,
     participants,
     waitForRefresh: async () => {
-      await waitFor("both clients' scheduled credential refresh", async () => refreshes.every((refresh) => refresh.count > 0 && refresh.latestExpiry > refresh.initialExpiry), 360_000, 1000, run.signal);
-      await run.wait(Math.max(0, Math.max(...refreshes.map((refresh) => refresh.initialExpiry)) + 5000 - Date.now()));
-      await ready();
-      await save(`${run.directory}/credential-refresh.json`, refreshes);
+      await waitForCredentialRefresh(run, refreshes, ready);
     },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
