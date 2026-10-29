@@ -39,6 +39,17 @@ as the journey ID. Its attributes contain only the recording ID, capture epoch,
 `reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
 emit this event, and replaying a completed lease cannot emit it twice.
 
+Pipeline maintenance also repairs a missing capture-stopped callback after durable
+capture completion. It queues the existing `recording_capture_stopped` operation
+under the original applied manual-stop authority and capture epoch, carrying that
+stop's journey and parent-event IDs. Sync validates and commits its normal
+`recording_status_changed` event; retries do not add another terminal event.
+Episode end may adopt that same stop without replacing its authority. Neither
+path commits an export or changes the successful capture job. The regression in
+`apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
+callback recovery, and duplicate delivery against the Go controller and maintenance
+commands.
+
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
 provider-failure span event carries `chalk.provider.response_snapshot`. This is

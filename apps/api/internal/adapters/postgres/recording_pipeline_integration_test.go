@@ -1708,6 +1708,30 @@ func TestRecordingPipelinePostgresCASAndReplay(t *testing.T) {
 	if _, err := postgres.NewRecordingPipelineRepositoryWithPool(pool).CompleteCapture(ctx, oldLease, mustID(t, "6a9b6a12-7457-4fe9-a58b-8b234d0be056")); !errors.Is(err, recordingpipeline.ErrJobNotFound) {
 		t.Fatalf("stale completion fence = %v", err)
 	}
+	// Episode shutdown adopts the existing stop while completion-only work is
+	// still leased. It must not invalidate that lease or replace stop authority.
+	originalStop, err := repository.GetPipeline(ctx, tenantID, retry.RecordingID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, operationName := range []string{"end_episode", "tenant_end_episode", "maximum_episode_duration_expired"} {
+		endID, err := utilities.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fingerprint := sha256.Sum256([]byte(endID.String()))
+		if _, err := pool.Exec(ctx, `insert into sync_external_operations(tenant_id,space_id,episode_id,external_operation_id,request_key,request_fingerprint,operation_name,recording_id,payload,deadline_generation)
+			values($1,$2,$3,$4,$5,$6,$7,$8,'{}',case when $7='maximum_episode_duration_expired' then 1 else null end)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), endID.Bytes(), "adopt-leased-"+endID.String(), fingerprint[:], operationName, retry.RecordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		adopted, err := repository.RequestStop(ctx, tenantID, episodeID, retry.RecordingID, endID)
+		if err != nil {
+			t.Fatalf("%s did not adopt in-progress stop: %v", operationName, err)
+		}
+		if adopted.StopOperationID == nil || *adopted.StopOperationID != *originalStop.StopOperationID {
+			t.Fatalf("%s replaced stop authority: %+v", operationName, adopted)
+		}
+	}
 	completionSpans := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(completionSpans))
 	previousProvider := otel.GetTracerProvider()

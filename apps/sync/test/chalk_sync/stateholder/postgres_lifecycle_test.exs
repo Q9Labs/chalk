@@ -35,6 +35,170 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
     end
   end
 
+  @tag timeout: 240_000
+  test "Episode end adopts a completed capture stop and recovery finalizes it once", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    probe = Path.join(System.tmp_dir!(), "chalk-recording-stop-probe-#{UUID.generate()}")
+    on_exit(fn -> File.rm(probe) end)
+
+    {output, status} =
+      System.cmd("go", ["test", "-c", "-o", probe, "./internal/adapters/postgres"],
+        cd: Path.expand("../../../../api", __DIR__),
+        env: [{"GOTOOLCHAIN", System.get_env("CHALK_API_GOTOOLCHAIN", "go1.26.10+auto")}],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+
+    for recover_before_end <- [false, true] do
+      fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+
+      on_exit(fn ->
+        for table <- [
+              "recording_jobs",
+              "recording_pipelines",
+              "recording_reservations",
+              "recordings"
+            ] do
+          Postgrex.query!(connection, "delete from #{table} where tenant_id=$1", [
+            UUID.dump!(fixture.episode.tenant_id)
+          ])
+        end
+
+        SyncPostgres.cleanup(connection, fixture.episode)
+      end)
+
+      recording_id = activate_recording(connection, fixture, "adopt_stop", 2)
+
+      {:ok, stop} =
+        Operation.new("adopt_stop_original_a", :stop_recording, %{"recordingId" => recording_id})
+
+      assert {:ok, %{external_operation_id: stop_id}} =
+               Postgres.begin_operation(hd(fixture.identities), stop)
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(fixture.episode, stop_id, {:confirmed, :recording})
+
+      run_probe = fn action, operation_id ->
+        {output, status} =
+          System.cmd(probe, ["-test.run=^TestRecordingStopLifecycleProbe$", "-test.v"],
+            env: [
+              {"CHALK_SYNC_TEST_DATABASE_URL", @database_url},
+              {"CHALK_RECORDING_STOP_PROBE_ACTION", action},
+              {"CHALK_STOP_TENANT_ID", fixture.episode.tenant_id},
+              {"CHALK_STOP_SPACE_ID", fixture.episode.space_id},
+              {"CHALK_STOP_EPISODE_ID", fixture.episode.episode_id},
+              {"CHALK_STOP_RECORDING_ID", recording_id},
+              {"CHALK_STOP_OPERATION_ID", operation_id}
+            ],
+            stderr_to_stdout: true
+          )
+
+        assert status == 0, output
+      end
+
+      run_probe.("seed", stop_id)
+      # An unrelated command is still fenced, even for a completed capture.
+      run_probe.("conflict", UUID.generate())
+
+      if recover_before_end do
+        run_probe.("reconcile", stop_id)
+        run_probe.("reconcile", stop_id)
+
+        assert [[recovery_id]] =
+                 query_rows(
+                   fixture,
+                   """
+                   select external_operation_id::text from sync_external_operations
+                   where tenant_id=$1 and episode_id=$2
+                     and operation_name='recording_capture_stopped'
+                   """,
+                   []
+                 )
+
+        assert {:ok, %{result: :applied}} =
+                 Postgres.finalize_operation(fixture.episode, recovery_id, {:confirmed, :local})
+
+        assert {:ok, %{result: :applied}} =
+                 Postgres.finalize_operation(fixture.episode, recovery_id, {:confirmed, :local})
+      end
+
+      {:ok, ending} = Operation.new("adopt_stop_episode_b", :tenant_end_episode, %{})
+
+      assert {:ok, %{external_operation_id: end_id}} =
+               Postgres.begin_internal_operation(fixture.episode, ending)
+
+      refute stop_id == end_id
+
+      unless recover_before_end do
+        run_probe.("stop", end_id)
+        run_probe.("stop", end_id)
+      end
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(fixture.episode, end_id, {:confirmed, :provider})
+
+      before_replay =
+        query_rows(
+          fixture,
+          """
+          select recording.status, recording.completed_at, episode.status,
+            pipeline.state, pipeline.stop_operation_id::text, pipeline.committed_at,
+            (select count(*) from recording_jobs job where job.recording_id=recording.recording_id and job.kind='capture' and job.state='succeeded'),
+            (select count(*) from sync_control_events event where event.tenant_id=$1 and event.episode_id=$2 and event.event_name='recording_status_changed' and event.payload->>'status'='stopped')
+          from sync_recordings recording
+          join episodes episode on episode.id=recording.episode_id
+          join recording_pipelines pipeline on pipeline.recording_id=recording.recording_id
+          where recording.tenant_id=$1 and recording.episode_id=$2
+          """,
+          []
+        )
+
+      event_count = if recover_before_end, do: 1, else: 0
+
+      assert [
+               [
+                 "stopped",
+                 completed_at,
+                 "ended",
+                 "capture_complete",
+                 ^stop_id,
+                 nil,
+                 1,
+                 ^event_count
+               ]
+             ] = before_replay
+
+      refute is_nil(completed_at)
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(fixture.episode, end_id, {:confirmed, :provider})
+
+      run_probe.("reconcile", stop_id)
+
+      assert [[^event_count]] =
+               query_rows(
+                 fixture,
+                 """
+                 select count(*) from sync_control_events
+                 where tenant_id=$1 and episode_id=$2 and event_name='recording_status_changed' and payload->>'status'='stopped'
+                 """,
+                 []
+               )
+
+      assert [[^completed_at]] =
+               query_rows(
+                 fixture,
+                 """
+                 select completed_at from sync_recordings where tenant_id=$1 and episode_id=$2
+                 """,
+                 []
+               )
+    end
+  end
+
   for joined <- [true, false] do
     @joined joined
     test "final replay requires an admitted participant (joined=#{joined})", %{
