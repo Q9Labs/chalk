@@ -1,11 +1,12 @@
 # Whiteboard file inventory
 
-Baseline: `79661e765`, before this spike.
+Baseline: `79661e765`, before this migration.
 
 These 154 tracked paths contain `whiteboard`, case-insensitively. This is a
 discovery inventory, not a claim that every file belongs to whiteboard. Recording
-consumers and old migrations keep their existing owners. Shared integration files
-also refer to whiteboard without naming it in their paths.
+consumers keep their existing owners. Whiteboard migrations move unchanged into
+the feature; the shared schema projection stays with the API assembly. Shared
+integration files also refer to whiteboard without naming it in their paths.
 
 Regenerate the candidate list with:
 

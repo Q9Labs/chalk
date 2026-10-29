@@ -337,6 +337,9 @@ jobs:
       - name: Run the API gate
         run: apps/api/scripts/gate.sh
 
+      - name: Prove the whiteboard Go dependency and privacy guards
+        run: node scripts/features/demo.mjs go
+
       - name: Save Go caches
         if: github.event_name == 'push'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -412,6 +415,9 @@ jobs:
       # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
       - name: Run the Sync gate and correctness harness
         run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
+
+      - name: Prove the whiteboard Elixir dependency guard
+        run: node scripts/features/demo.mjs elixir
 
       - name: Save Go caches
         if: github.event_name == 'push'

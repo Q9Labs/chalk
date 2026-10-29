@@ -60,7 +60,10 @@ Go checks resolved imports, including test imports. Elixir checks the compiled
 xref graph's direct source edges. Dependency-cruiser checks resolved TypeScript
 edges against the same manifest. The API and Sync gates run their language checks;
 the root gate runs dependency-cruiser. Deliberate violation demos live with the
-feature verification scripts.
+feature verification scripts; the API and Sync CI jobs replay their respective
+demos after the service gate succeeds. Elixir xref covers compiled module edges,
+not dynamic dispatch or `.exs` test-file imports. Feature tests use Sync's existing
+shared ExUnit setup.
 
 ## Build and deploy
 
