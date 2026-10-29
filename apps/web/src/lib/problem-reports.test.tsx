@@ -9,6 +9,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it.each([null, [], {}, { available: "true" }, { available: 1 }])("rejects malformed availability payload %j and recovers", async (payload) => {
+  vi.useFakeTimers();
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json(payload))
+    .mockResolvedValue(Response.json({ available: true, ignored: "field" }));
+  vi.stubGlobal("fetch", fetch);
+  const { result } = renderHook(() => useProblemReports("https://api.chalk.test", "tenant-1"));
+  await act(async () => {});
+  expect(result.current).toBe(false);
+  await act(async () => vi.advanceTimersByTimeAsync(1000));
+  expect(result.current).toBe(true);
+});
+
 it.each(["network", "status", "json"])("recovers report availability after a transient %s failure", async (failure) => {
   vi.useFakeTimers();
   const fetch = vi.fn();
