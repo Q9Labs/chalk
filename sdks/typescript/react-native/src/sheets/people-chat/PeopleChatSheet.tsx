@@ -81,7 +81,7 @@ function useMarkChatRead(reading: boolean): void {
   const client = useSpaceClient();
   const { messages, unreadCount } = useChat();
   const last = messages[messages.length - 1]?.messageId;
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native read-receipt synchronization.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native read-receipt synchronization.
   useEffect(() => {
     if (!reading || !last || unreadCount === 0) return;
     // A lost read receipt only leaves the unread dot up; the next message marks it again.

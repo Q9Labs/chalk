@@ -67,7 +67,7 @@ function AudioOutputButton({ output, size, captioned }: { readonly output: Audio
   const ref = useRef<View>(null);
   const [open, setOpen] = useState(false);
   const devScenario = useDevScenario();
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native dock motion and event subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native dock motion and event subscriptions.
   useEffect(() => {
     if (devScenario.sheet === "route" || devScenario.menu === "route") setOpen(true);
   }, [devScenario]);

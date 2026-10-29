@@ -187,7 +187,7 @@ export function useControlBarSurfaceBehavior({
   const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
   const buttonsToRender = buttons ?? DEFAULT_CONTROL_BAR_BUTTONS;
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing device enumeration and device-change cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing device enumeration and device-change cleanup.
   useEffect(() => {
     if (!detectDevices || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
     let cancelled = false;

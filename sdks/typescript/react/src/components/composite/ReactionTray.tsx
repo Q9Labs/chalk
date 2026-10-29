@@ -60,7 +60,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     };
   }, [position]);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing reaction-tray timer and interaction cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing reaction-tray timer and interaction cleanup.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();

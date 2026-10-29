@@ -43,7 +43,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
 
   useBackHandler(open, onClose);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native menu focus, viewport, and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native menu focus, viewport, and keyboard cleanup.
   useEffect(() => {
     if (!open) {
       firstItem.current = null;
@@ -58,14 +58,14 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
   // Like iOS menus, an open menu closes when the screen rotates or resizes, because its trigger moved.
   const viewport = `${layout.width}x${layout.height}`;
   const openedIn = useRef(viewport);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native menu focus, viewport, and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native menu focus, viewport, and keyboard cleanup.
   useEffect(() => {
     if (!open) openedIn.current = viewport;
     else if (viewport !== openedIn.current) onClose();
   }, [onClose, open, viewport]);
 
   const wasOpen = useRef(open);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native menu focus, viewport, and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native menu focus, viewport, and keyboard cleanup.
   useEffect(() => {
     const closed = wasOpen.current && !open;
     wasOpen.current = open;
@@ -84,7 +84,7 @@ export function Menu({ open, onClose, anchorRef, accessibilityLabel, children, m
     [keyboardHeight, layout, placement, reduceMotion, shown, trigger],
   );
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native menu focus, viewport, and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native menu focus, viewport, and keyboard cleanup.
   useEffect(() => {
     if (!placement || !firstItem.current) return;
     const node = findNodeHandle(firstItem.current);
@@ -194,7 +194,7 @@ export function MenuSeparator(): React.JSX.Element {
 
 function useKeyboardHeight(): number {
   const [height, setHeight] = useState(0);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native menu focus, viewport, and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native menu focus, viewport, and keyboard cleanup.
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (event) => setHeight(event.endCoordinates.height));
     const hide = Keyboard.addListener("keyboardDidHide", () => setHeight(0));

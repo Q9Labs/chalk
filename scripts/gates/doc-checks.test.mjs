@@ -15,7 +15,7 @@ function sandbox(t) {
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     writeFileSync(path.join(dir, file), text);
   };
-  for (const file of ["scripts/script-entry.mjs", "scripts/gates/doclint.mjs", "scripts/gates/doclint-examples.json", "scripts/gates/theory-coverage.mjs", "scripts/gates/semgrep.sh", ".semgrep/chalk-quality.yml"]) {
+  for (const file of ["scripts/script-entry.mjs", "scripts/gates/doclint.mjs", "scripts/gates/doclint-examples.json", "scripts/gates/theory-coverage.mjs"]) {
     mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
     copyFileSync(path.join(root, file), path.join(dir, file));
   }
@@ -114,16 +114,4 @@ test("theory rejects declarations inside comments", (t) => {
     write(file, `const example = "/* not a comment */ //";\n${declaration}\n`);
     assert.equal(run("theory-coverage").status, 0);
   }
-});
-test("SDK effect rule rejects named, namespace, and aliased calls in both SDKs", (t) => {
-  const { dir, write } = sandbox(t);
-  const source = 'import React, { useEffect, useEffect as effect } from "react";\nuseEffect(() => {}, []);\nReact.useEffect(() => {}, []);\neffect(() => {}, []);\n// nosemgrep: chalk.forbid-sdk-use-effect -- Existing fixture cleanup proves a per-call exception.\nuseEffect(() => {}, []);\n';
-  for (const sdk of ["react", "react-native"]) write(`sdks/typescript/${sdk}/src/effect.ts`, source);
-  write("apps/web/src/effect.ts", source);
-  const result = spawnSync("bash", ["scripts/gates/semgrep.sh", "--json", "--quiet", "."], { cwd: dir, encoding: "utf8", timeout: 60_000, env: { ...process.env, SEMGREP_SEND_METRICS: "off" } });
-  assert.equal(result.status, 1, result.stderr);
-  const matches = JSON.parse(result.stdout).results.filter((finding) => finding.check_id.endsWith("chalk.forbid-sdk-use-effect"));
-  assert.equal(matches.length, 6, result.stdout);
-  assert.deepEqual(matches.map((finding) => finding.start.line).sort(), [2, 2, 3, 3, 4, 4]);
-  for (const finding of matches) console.log(`${finding.path}:${finding.start.line}: rejected SDK useEffect`);
 });

@@ -94,7 +94,7 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   }, [height, layout.height, offset, reduceMotion, shown]);
 
   const wasOpen = useRef(open);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native sheet presentation and focus restoration.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native sheet presentation and focus restoration.
   useEffect(() => {
     if (open === wasOpen.current) return;
     wasOpen.current = open;
@@ -104,7 +104,7 @@ export function BottomSheet({ open, onClose, accessibilityLabel, children, title
   }, [height, hide, open, show]);
 
   const wasMounted = useRef(mounted);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native sheet presentation and focus restoration.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native sheet presentation and focus restoration.
   useEffect(() => {
     const closed = wasMounted.current && !mounted;
     wasMounted.current = mounted;

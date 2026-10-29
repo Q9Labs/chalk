@@ -28,7 +28,7 @@ function playFlip(previous: readonly { element: HTMLElement; box: DOMRect }[]): 
 }
 /** Bridge the current stage fitter to FLIP; the stage lane can call captureFlip directly around its own commits. */
 export function useStageRefit(root: RefObject<HTMLElement | null>): void {
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing browser motion preference and animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing browser motion preference and animation cleanup.
   useEffect(() => {
     const container = root.current;
     if (!container) return;
@@ -53,7 +53,7 @@ const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-p
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);
   const fine = useMediaQuery("(pointer:fine) and (min-width:641px)");
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing browser motion preference and animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing browser motion preference and animation cleanup.
   useEffect(() => {
     const element = root.current;
     if (!element || !enabled || !fine) return;

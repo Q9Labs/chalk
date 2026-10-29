@@ -38,7 +38,7 @@ export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, on
   // Notices belong to the live call; a status page or a fresh join starts without them.
   const { clear } = useToasts();
   const clearsNotices = screen.kind === "status" || screen.kind === "joining";
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native terminal-notice cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native terminal-notice cleanup.
   useEffect(() => {
     if (clearsNotices) clear();
   }, [clear, clearsNotices]);

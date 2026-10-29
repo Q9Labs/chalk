@@ -1,0 +1,62 @@
+[
+  {
+    "file": "apps/web/src/lib/chunkReload.ts",
+    "fingerprint": "0ef2edbc537c9b71125566c340934a038a1f2da9230f344125133aacf862c8ba",
+    "count": 2
+  },
+  {
+    "file": "apps/web/src/lib/chunkReload.ts",
+    "fingerprint": "ae610e8551b44c28f13a3bf51a4040d8b8c5ee4ce1af56c56c3763130bcf24e9",
+    "count": 2
+  },
+  {
+    "file": "apps/web/vite.config.ts",
+    "fingerprint": "74da8c0362d4693fd9f1ae3709e2f44b52f33cfe4a58dfd5da054794992ca49c",
+    "count": 1
+  },
+  {
+    "file": "apps/web/vite.config.ts",
+    "fingerprint": "aecd6a32da0048794fc8d5d7a68687241cc2c84ac48ab5c7a1920c906eac6551",
+    "count": 1
+  },
+  {
+    "file": "apps/web/vite.config.ts",
+    "fingerprint": "eab6b8327f01e0ac241363d6d50773ef29c6ded382ef87a569c7a04c8c1ab003",
+    "count": 1
+  },
+  {
+    "file": "sdks/typescript/client/src/space-client/promise-facade.ts",
+    "fingerprint": "849334ad1c1576c35398791249823d423d9bca17144525266957178079453dd5",
+    "count": 2
+  },
+  {
+    "file": "sdks/typescript/client/src/space-client/promise-facade.ts",
+    "fingerprint": "c5713c405a36dde37f2e64edb4e28f8a8c8ba797c361b8800a3ae491f47ece6b",
+    "count": 1
+  },
+  {
+    "file": "sdks/typescript/client/src/space-client/promise-facade.ts",
+    "fingerprint": "e85f8a3d68f256f6a5361996584d612378f3f7a8dc75ea95a5af77570447598b",
+    "count": 4
+  },
+  {
+    "file": "sdks/typescript/react-native/src/utils/ios-simulator.ts",
+    "fingerprint": "1a6c670b74d76b573cfb268b3b0b690e69934f3dc504bb7d8d816afeb0d23fff",
+    "count": 1
+  },
+  {
+    "file": "sdks/typescript/react-native/src/utils/ios-simulator.ts",
+    "fingerprint": "61d9aa9f089364f20db0701e48b7bb1e5d814ffa3d7ccde7677bac95169403c9",
+    "count": 1
+  },
+  {
+    "file": "sdks/typescript/react-native/src/utils/ios-simulator.ts",
+    "fingerprint": "b5a965cc47ad69ea4cb303dcec91c8de24e532507d2a619ac26e7f66aed2ba46",
+    "count": 1
+  },
+  {
+    "file": "sdks/typescript/react/src/components/audio-output/AudioOutput.tsx",
+    "fingerprint": "c48b25a3f54f1554825d5229e6c22ca2549ad19babdf42e61e704ea35e692f0f",
+    "count": 1
+  }
+]

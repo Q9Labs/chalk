@@ -25,11 +25,11 @@ export const CopyButton = memo(function CopyButton({ onCopy, accessibilityLabel,
   const done = useSharedValue(0);
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native copy animation and feedback timer cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native copy animation and feedback timer cleanup.
   useEffect(() => {
     done.value = withTiming(copied ? 1 : 0, timings.copyMorph);
   }, [copied, done]);
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native copy animation and feedback timer cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native copy animation and feedback timer cleanup.
   useEffect(() => () => clearReset(reset), []);
 
   const copy = useCallback(async () => {

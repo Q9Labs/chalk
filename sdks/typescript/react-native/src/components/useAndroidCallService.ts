@@ -16,7 +16,7 @@ export function useAndroidCallService(): void {
   const microphoneOn = media.local.microphone.state === "enabled";
   const cameraOn = media.local.camera.state === "enabled";
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing Android call-service ownership and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing Android call-service ownership and cleanup.
   useEffect(() => {
     if (!inCall) return;
     const start = () => {
@@ -31,7 +31,7 @@ export function useAndroidCallService(): void {
     return () => subscription.remove();
   }, [inCall, microphoneOn, cameraOn]);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing Android call-service ownership and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing Android call-service ownership and cleanup.
   useEffect(() => {
     if (!inCall) return;
     return () => {

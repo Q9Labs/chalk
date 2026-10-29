@@ -60,7 +60,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
       setPending(false);
     }
   };
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing picture-in-picture event listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing picture-in-picture event listener cleanup.
   useEffect(() => {
     const video = root.current?.querySelector("video");
     if (!video) return;

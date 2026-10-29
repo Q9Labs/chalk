@@ -34,7 +34,7 @@ export function StageViewProvider({ children }: { readonly children: ReactNode }
   const [mirror, setMirror] = useState(true);
 
   const dev = useDevScenario();
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native development-layout reconciliation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native development-layout reconciliation.
   useEffect(() => {
     if (dev.layout) setLayout(dev.layout);
     if (dev.pinned) setPinned(dev.pinned);

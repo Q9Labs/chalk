@@ -87,7 +87,7 @@ function Board({ mini, onShowInSpotlight }: { readonly mini: boolean; readonly o
   const toasts = useToasts();
   const transport = useMemo(() => client.whiteboard.transport(), [client, status]);
   const [capabilities, setCapabilities] = useState({ canDraw: false, canClear: false, viewsAvailable: false });
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing native board-summary subscription cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native board-summary subscription cleanup.
   useEffect(() => transport?.subscribeSummary?.((summary) => setCapabilities({ canDraw: summary.canDraw, canClear: summary.canClear, viewsAvailable: transport.supportsViews === true })), [transport]);
   const board = useMemo(
     () => ({

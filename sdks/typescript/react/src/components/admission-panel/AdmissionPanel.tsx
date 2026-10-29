@@ -47,7 +47,7 @@ function getWaitingLabel(joinedAt?: Date): string {
 const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdmitAll, onDenyAll, loading = false, className, onClose, inline = false }: AdmissionPanelSurfaceProps) => {
   const [, setTick] = useState(0);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Keep existing admission-age clock cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing admission-age clock cleanup.
   useEffect(() => {
     const timer = window.setInterval(() => setTick((t) => t + 1), 60_000);
     return () => window.clearInterval(timer);

@@ -129,7 +129,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
 
   const unlockEvents = useMemo(() => ["pointerdown", "touchend", "click", "keydown"] as const, []);
 
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     if (!needsAutoplayUnlock) return;
     if (typeof window === "undefined") return;
@@ -189,7 +189,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   }, [needsAutoplayUnlock, unlockEvents]);
 
   // Attach/update audio elements - NO cleanup on re-render to prevent audio breaks
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     const audioElements = audioElementsRef.current;
 
@@ -250,7 +250,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   }, [remoteWithAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for mic audio
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     const audioElements = audioElementsRef.current;
     return () => {
@@ -264,7 +264,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   }, []);
 
   // Handle track ended events
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     const handlers = new Map<string, { track: MediaStreamTrack; handler: () => void }>();
 
@@ -302,7 +302,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   }, [remoteWithAudio]);
 
   // Handle screen share audio tracks - NO cleanup on re-render
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     const audioElements = screenShareAudioRef.current;
 
@@ -355,7 +355,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   }, [remoteWithScreenShareAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for screen share audio
-  // nosemgrep: chalk.forbid-sdk-use-effect -- Own existing audio elements, autoplay listeners, and media-track cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
   useEffect(() => {
     const audioElements = screenShareAudioRef.current;
     return () => {
