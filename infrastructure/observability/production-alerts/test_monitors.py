@@ -41,6 +41,16 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(monitors[1]["triggerAfterNPositiveResults"], 5)
         self.assertTrue(monitors[2]["alertOnNoData"])
 
+    def test_stranded_stop_uses_fresh_latest_snapshot_and_nonzero_threshold(self):
+        failures, _, freshness = monitor_definitions(VARIABLES)
+        query = failures["aplQuery"]
+        self.assertLess(query.index("arg_max(_time"), query.index("where _time > ago(5m)"))
+        self.assertEqual(failures["operator"], "Above")
+        self.assertEqual(failures["threshold"], 0)
+        self.assertEqual(failures["intervalMinutes"], 1)
+        self.assertIn("'recording-stop'", freshness["aplQuery"])
+        self.assertEqual(freshness["threshold"], 5)
+
     def test_selective_undo_preserves_all_previous_queries_and_notifier_route(self):
         definitions = json.loads(Path(__file__).with_name("monitors.json").read_text())
         rollback = monitor_definitions(VARIABLES, without_connection_reports=True)

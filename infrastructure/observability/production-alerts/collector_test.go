@@ -159,14 +159,15 @@ func TestStateSQLSeparatesFailuresAndClearsTenantGroups(t *testing.T) {
 	fixture := `
  CREATE TABLE tenants(id uuid, name text);
  CREATE TABLE episodes(id uuid, config_snapshot jsonb);
- CREATE TABLE recording_pipelines(recording_id uuid, capture_completed_at timestamptz);
+ CREATE TABLE recording_pipelines(recording_id uuid, capture_completed_at timestamptz, tenant_id uuid);
+ CREATE TABLE sync_recordings(tenant_id uuid, recording_id uuid, status text);
  CREATE TABLE recording_jobs(tenant_id uuid, recording_id uuid, episode_id uuid, kind text, state text, terminal_at timestamptz, created_at timestamptz);
  CREATE TABLE transcriptions(tenant_id uuid, recording_id uuid, status text, source_expires_at timestamptz, updated_at timestamptz, created_at timestamptz);
  CREATE TABLE webhook_deliveries(id uuid, tenant_id uuid, state text, terminal_at timestamptz);
  CREATE FUNCTION recording_deferred_retention_seconds(config_snapshot jsonb) RETURNS bigint LANGUAGE sql IMMUTABLE STRICT AS $$SELECT coalesce(nullif((config_snapshot -> 'artifact_policy' -> 'recording' ->> 'retention_seconds')::bigint, 0), 2592000)$$;
  INSERT INTO tenants VALUES ('00000000-0000-4000-8000-000000000001','Example school'),('00000000-0000-4000-8000-000000000002','Internal test school');
  INSERT INTO episodes VALUES ('00000000-0000-4000-8000-000000000003','{"artifact_policy":{"recording":{"retention_seconds":86400}}}');
- INSERT INTO recording_pipelines VALUES ('00000000-0000-4000-8000-000000000004',now()-interval '1 hour');
+ INSERT INTO recording_pipelines VALUES ('00000000-0000-4000-8000-000000000004',now()-interval '1 hour','00000000-0000-4000-8000-000000000001');
  INSERT INTO recording_jobs VALUES
  ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003','render','terminal_failure',now(),now()),
  ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000003','capture','terminal_failure',now(),now());`
@@ -213,8 +214,8 @@ func TestStateSQLSeparatesFailuresAndClearsTenantGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("collector fixture query: %s; %d snapshots", time.Since(start), len(items))
-	if len(items) != 12 {
-		t.Fatalf("got %d snapshots; want four per Tenant plus four heartbeat rows", len(items))
+	if len(items) != 15 {
+		t.Fatalf("got %d snapshots; want five per Tenant plus five heartbeat rows", len(items))
 	}
 	for _, item := range items {
 		if item.TenantName == "Example school" && item.Rule == "recording" && item.Value != 0 {
@@ -254,6 +255,52 @@ func TestStateSQLSeparatesFailuresAndClearsTenantGroups(t *testing.T) {
 	for _, item := range items {
 		if item.Value != 0 {
 			t.Fatal("cleared failure must emit zero")
+		}
+	}
+	// Capture succeeded, but Sync never received the stopped callback. Other
+	// rows are recent, incomplete, healthy, or belong to a different Tenant.
+	if _, err := conn.Exec(ctx, `
+ INSERT INTO sync_recordings VALUES
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000004','stopping'),
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000010','stopping'),
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000011','stopping'),
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000012','stopped'),
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000013','recording'),
+ ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000004','stopping');
+ INSERT INTO recording_pipelines VALUES
+ ('00000000-0000-4000-8000-000000000010',now()-interval '1 minute','00000000-0000-4000-8000-000000000001'),
+ ('00000000-0000-4000-8000-000000000011',NULL,'00000000-0000-4000-8000-000000000001'),
+ ('00000000-0000-4000-8000-000000000012',now()-interval '1 hour','00000000-0000-4000-8000-000000000001'),
+ ('00000000-0000-4000-8000-000000000013',now()-interval '1 hour','00000000-0000-4000-8000-000000000001');
+ INSERT INTO recording_jobs VALUES
+ ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003','capture','succeeded',now(),now());`); err != nil {
+		t.Fatal(err)
+	}
+	items, err = collect(ctx, parsed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stranded int64
+	for _, item := range items {
+		if item.Rule == "recording-stop" && item.Tenant == "00000000-0000-4000-8000-000000000001" {
+			stranded += item.Value
+		} else if item.Value != 0 {
+			t.Fatalf("healthy row counted: %+v", item)
+		}
+	}
+	if stranded != 1 {
+		t.Fatalf("succeeded capture with missing stop callback: got %d; want 1", stranded)
+	}
+	if _, err := conn.Exec(ctx, "UPDATE sync_recordings SET status='stopped'"); err != nil {
+		t.Fatal(err)
+	}
+	items, err = collect(ctx, parsed.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Value != 0 {
+			t.Fatal("repaired stop must emit zero")
 		}
 	}
 }
