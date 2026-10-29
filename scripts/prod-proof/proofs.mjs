@@ -4,7 +4,7 @@ import { requestEpisodeEnd } from "./episode-end.mjs";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
-import { launchGuests, stats, limitCamera, restoreCamera, proveLayers } from "./media.mjs";
+import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
@@ -61,14 +61,7 @@ export function episodeEnd(run, path) {
   return {
     end,
     useSDK: (page) => {
-      endRequest = async () => {
-        try {
-          await page.evaluate(() => window.proofClient.endEpisode());
-        } catch {
-          // A dead guest must not prevent owner-authorized lifecycle cleanup.
-          await ownerEnd();
-        }
-      };
+      endRequest = () => page.evaluate(() => window.proofClient.endEpisode());
     },
   };
 }
@@ -229,6 +222,12 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   let share = { seconds: 0 };
   if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
   else await shortRecordingWindow(run, guests, rejoin);
+  console.log("Holding the real call through scheduled credential refresh and original expiry");
+  await guests.waitForRefresh();
+  const refreshedBefore = await sample("refreshed-start");
+  await run.wait(5000);
+  const refreshedAfter = await sample("refreshed-end");
+  checkMediaProgress(refreshedBefore, refreshedAfter);
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
   await end();

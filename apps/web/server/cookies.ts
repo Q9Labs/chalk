@@ -3,7 +3,7 @@ import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import { DashboardError } from "./http";
 
-type CookiePurpose = "session" | "tenant" | "login_google" | "login_apple" | "binding" | `seat_${string}`;
+type CookiePurpose = "session" | "tenant" | "login_google" | "login_apple" | "binding" | "seats" | `seat_${string}`;
 const encoder = new TextEncoder();
 function base64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -71,8 +71,21 @@ export async function setSession(response: Response, env: DashboardEnvironment, 
   writeCookie(response, env, "session", sealedSession, Math.max(0, Math.floor((identity.expiresAt - Date.now()) / 1000)));
   writeCookie(response, env, "binding", await seal({ userId: identity.userId, sessionId: identity.sessionId, expiresAt: identity.expiresAt }, env.SESSION_SECRET, "binding"));
 }
-export function clearSession(response: Response, env: DashboardEnvironment): void {
+export function clearSeatCookies(response: Response, request: Request, env: DashboardEnvironment): void {
+  writeCookie(response, env, "seats", "", 0);
+  clearLegacySeatCookies(response, request, env);
+}
+export function clearLegacySeatCookies(response: Response, request: Request, env: DashboardEnvironment): void {
+  const prefix = cookieName(env, "seat_");
+  for (const pair of request.headers.get("Cookie")?.split(";") ?? []) {
+    const name = pair.trim().split("=")[0] ?? "";
+    const suffix = name.slice(prefix.length);
+    if (name.startsWith(prefix) && /^[a-zA-Z0-9_-]+$/.test(suffix)) writeCookie(response, env, `seat_${suffix}`, "", 0);
+  }
+}
+export function clearSession(response: Response, env: DashboardEnvironment, request: Request): void {
   writeCookie(response, env, "session", "", 0);
   writeCookie(response, env, "tenant", "", 0);
   writeCookie(response, env, "binding", "", 0);
+  clearSeatCookies(response, request, env);
 }
