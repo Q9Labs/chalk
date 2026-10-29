@@ -161,6 +161,11 @@ the summary. A verified recovery also leaves the promotion red. No nightly rollb
 
 ## Manual Release and setup
 
+Run the [manual hosted integrator proof](../scripts/prod-proof/README.md#manual-hosted-integrator-proof)
+alone. Prepare both browser clients before Join and create the Episode only on
+the first access request. Complete SDK end-for-everyone and owned-resource cleanup
+before starting the other browser proofs; never run these phases in parallel.
+
 `deploy_web=true` builds and uploads web without any extra build switch, including
 web-only releases with `release_managed=false`. Tooling stays at the workflow
 revision; an explicit source root holds the requested full SHA and must match it.
