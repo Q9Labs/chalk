@@ -134,11 +134,12 @@ const cases = [
 const baselines = new Set();
 for (const mutation of cases) {
   const filename = path.join(root, mutation.file);
+  const cwd = path.join(root, mutation.cwd ?? ".");
   const original = readFileSync(filename, "utf8");
   if (original.split(mutation.from).length !== 2) throw new Error(`${mutation.name}: mutation must match exactly once`);
   const run = (kind) => {
     const result = spawnSync(mutation.command[0], mutation.command.slice(1), {
-      cwd: path.join(root, mutation.cwd ?? "."),
+      cwd,
       encoding: "utf8",
       timeout: 240_000,
       maxBuffer: 8 * 1024 * 1024,
