@@ -17,7 +17,10 @@ defmodule ChalkSync.Operations.ProbePostgresTest do
       end)
 
     {:ok, options} = Database.connection_options(@database_url)
-    connection = start_supervised!({Postgrex, options})
+
+    connection =
+      start_supervised!(Supervisor.child_spec({Postgrex, options}, id: :probe_database))
+
     Application.put_env(:chalk_sync, :stateholder, Postgres)
     Application.put_env(:chalk_sync, :database_connections, [connection])
 
@@ -73,7 +76,7 @@ defmodule ChalkSync.Operations.ProbePostgresTest do
   end
 
   test "logs the role query stage when its connection exits", %{connection: connection} do
-    stop_supervised!(Postgrex)
+    stop_supervised!(:probe_database)
     refute Process.alive?(connection)
 
     log =
