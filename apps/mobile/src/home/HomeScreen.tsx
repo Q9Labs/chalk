@@ -1,4 +1,4 @@
-import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, radii, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
 import { setStringAsync } from "expo-clipboard";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -81,16 +81,28 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
       <View style={styles.top}>
         <YouButton name={name} onPress={() => setSheet("you")} pressableRef={youRef} />
       </View>
-      <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} style={styles.body}>
-        <ChalkText accessibilityRole="header" style={styles.section} tone="textMuted" variant="button">
-          Recent calls
-        </ChalkText>
+      <ScrollView contentContainerStyle={[styles.bodyContent, recentCalls.calls.length === 0 ? styles.bodyEmpty : null]} showsVerticalScrollIndicator={false} style={styles.body}>
         {recentCalls.calls.length > 0 ? (
-          recentCalls.calls.map((call) => <RecentCallRow call={call} key={call.link} menuOpen={menu?.call.link === call.link} onJoin={onJoinRecent} onOpenMenu={openMenu} />)
+          <>
+            <ChalkText accessibilityRole="header" style={styles.section} tone="textMuted" variant="button">
+              Recent calls
+            </ChalkText>
+            {recentCalls.calls.map((call) => (
+              <RecentCallRow call={call} key={call.link} menuOpen={menu?.call.link === call.link} onJoin={onJoinRecent} onOpenMenu={openMenu} />
+            ))}
+          </>
         ) : (
-          <ChalkText style={styles.empty} tone="textMuted">
-            Calls you join show up here.
-          </ChalkText>
+          <View style={styles.empty} testID="home.recent.empty">
+            <View style={[styles.emptyTile, { backgroundColor: colors.raised }]}>
+              <Icon color={colors.textMuted} name="cam" size={24} />
+            </View>
+            <ChalkText accessibilityRole="header" variant="sheetTitle">
+              No recent calls
+            </ChalkText>
+            <ChalkText style={styles.emptyText} tone="textMuted" variant="meta">
+              Calls you join show up here so you can rejoin in one tap.
+            </ChalkText>
+          </View>
         )}
       </ScrollView>
       <View onLayout={(event) => setToastBottom(FOOT_BOTTOM + event.nativeEvent.layout.height + TOAST_GAP)} style={styles.foot}>
@@ -197,7 +209,10 @@ const styles = StyleSheet.create({
   body: { flex: 1, marginHorizontal: -8 },
   bodyContent: { paddingHorizontal: 8 },
   section: { paddingTop: 14, paddingHorizontal: 4, paddingBottom: 6 },
-  empty: { paddingVertical: 8, paddingHorizontal: 4 },
+  bodyEmpty: { flexGrow: 1, justifyContent: "center" },
+  empty: { alignItems: "center", gap: 8, paddingHorizontal: 24, paddingBottom: 40 },
+  emptyTile: { width: 56, height: 56, borderRadius: radii.card, alignItems: "center", justifyContent: "center", marginBottom: 8 },
+  emptyText: { textAlign: "center" },
   row: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 16 },
   rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 8, borderRadius: 16 },
   faces: { width: 52, flexDirection: "row" },
