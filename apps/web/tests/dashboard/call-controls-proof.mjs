@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { chromium } from "playwright";
-import { showCallControls } from "./call-controls.mjs";
+import { showCallControls } from "../call-controls.mjs";
 
 const [kind, mode = "fixed", count = "50"] = process.argv.slice(2);
 assert(["follow-pin", "owner-menu"].includes(kind));
@@ -27,7 +27,7 @@ async function clickAfterIdle(page, name) {
 }
 
 if (kind === "follow-pin") {
-  const { startCallHarness } = await import("../src/call-states/browser-harness.ts");
+  const { startCallHarness } = await import("../../src/call-states/browser-harness.ts");
   const { origin, stop } = await startCallHarness();
   const browser = await chromium.launch({ headless: true });
   try {
@@ -56,16 +56,22 @@ if (kind === "follow-pin") {
     await stop();
   }
 } else {
-  const { createDashboardProofFixture } = await import("./dashboard/browser-fixture.mjs");
-  const { assertNoSeatCookies } = await import("./dashboard/owner-cookie-budget.mjs");
-  const { leaveOwnerCall } = await import("./dashboard/owner-controls.mjs");
+  const { createDashboardProofFixture } = await import("./browser-fixture.mjs");
+  const { assertNoSeatCookies } = await import("./owner-cookie-budget.mjs");
+  const { leaveOwnerCall } = await import("./owner-controls.mjs");
   const { context, origin, cleanup } = await createDashboardProofFixture({ devicesMissing: true });
   try {
+    const setup = await context.newPage();
+    await setup.goto(`${origin}/dashboard`);
+    await setup.getByRole("button", { name: "Start a call", exact: true }).click();
+    await setup.getByRole("button", { name: "Join call", exact: true }).waitFor();
+    const joinURL = setup.url();
+    await setup.close();
+    // Re-enter the same call with a fresh tab and seat after each real UI Leave.
     for (let run = 0; run < iterations; run++) {
       const page = await context.newPage();
       try {
-        await page.goto(`${origin}/dashboard`);
-        await page.getByRole("button", { name: "Start a call", exact: true }).click();
+        await page.goto(joinURL);
         await page.getByRole("button", { name: "Join call", exact: true }).click();
         await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
         const leave = page.getByRole("button", { name: "Leave call", exact: true });
