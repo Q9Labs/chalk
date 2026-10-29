@@ -192,7 +192,7 @@ it.each([401, 403])("keeps Sync alive after status credential HTTP %s so delayed
   try {
     await joinWithTerminalControl(test.client, test.platform);
     test.reject(new CloudflareSFUError("End teardown denied", "signaling_failed", { status: 403 }));
-    await vi.waitFor(() => expect(test.status.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await vi.waitFor(() => expect(test.status).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(test.platform.syncStopped).not.toHaveBeenCalled();
     test.endEvent();

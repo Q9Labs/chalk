@@ -1407,3 +1407,69 @@ it("real SFU rejection must not replace its binding while status is unavailable"
     harness.client.stop();
   }
 });
+
+it.each(
+  [401, 403].flatMap((mediaStatus) => [
+    { mediaStatus, status: 401, refreshRejected: false },
+    { mediaStatus, status: 403, refreshRejected: false },
+    { mediaStatus, status: 401, refreshRejected: true },
+    { mediaStatus, status: 403, refreshRejected: true },
+  ]),
+)("stops RTP on SFU $mediaStatus before status HTTP $status (refresh forbidden=$refreshRejected)", async ({ mediaStatus, status, refreshRejected }) => {
+  const platform = createCoreTestPlatform();
+  let onFailure: (cause: unknown, binding?: string) => void = () => {};
+  const harness = createHarness({ onError: (cause, binding) => onFailure(cause, binding) });
+  const { ChalkAPIError } = await import("../server/errors");
+  const getAccess = vi.fn<SpaceClientOptions["getAccess"]>(async (request) => {
+    if (refreshRejected && request.reason !== "join") throw new ChalkAPIError({ code: "access.forbidden", status: 403, retryable: false });
+    return opaqueAccessGrant(1, "same-token", "connection-1");
+  });
+  const { EpisodeStatusError } = await import("../connection/episode-status");
+  const statusRead = vi.fn(async () => {
+    expect(harness.peers[0].closed).toBe(true);
+    expect(microphone.readyState).toBe("ended");
+    throw new EpisodeStatusError(status);
+  });
+  const stopSync = vi.spyOn(platform.sync, "stop");
+  const client = createSpaceClientForPlatform(
+    { space: "test", getAccess },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createConnectionReporter: () => undefined,
+        getEpisodeStatus: statusRead,
+        createMediaClient: (input) => {
+          onFailure = input.onFailure;
+          return bindConnectionMediaClient(harness.client, (grant) => harness.client.restart("provider" in grant ? grant.clientPayload : grant));
+        },
+      },
+    },
+  );
+  const microphone = new FakeTrack("live-mic", "audio");
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.client.prepareLocalTrack("microphone", microphone as unknown as MediaStreamTrack);
+    await harness.client.setLocalPublicationTarget({ operationId: "mic-on", participantId: "participant-1", source: "microphone", enabled: true });
+    expect(harness.peers[0].connectionState).toBe("connected");
+    const rejection = new CloudflareSFUError("Current SFU publication poll denied", "signaling_failed", { status: mediaStatus });
+    vi.spyOn(harness.transport, "listPublications").mockRejectedValue(rejection);
+    await expect(harness.client.refreshRemotePublications()).rejects.toBe(rejection);
+    await vi.waitFor(() => expect(statusRead).toHaveBeenCalledOnce());
+    expect(stopSync).not.toHaveBeenCalled();
+    expect(getAccess.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+    expect(harness.peers[0].closed).toBe(true);
+    expect(microphone.readyState).toBe("ended");
+    expect(harness.client.getSnapshot().connection.phase).toBe("stopped");
+    await expect(harness.client.restart(bootstrap("connection-1"))).rejects.toThrow();
+    expect(harness.peers).toHaveLength(1);
+    const snapshot = platform.sync.getSnapshot();
+    platform.emitSync({ ...snapshot, connection: { phase: "terminal", terminalReason: "episode_ended" } });
+    await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
+    expect(client.getSnapshot().connection.lastError).toBeNull();
+    expect(microphone.readyState).toBe("ended");
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});

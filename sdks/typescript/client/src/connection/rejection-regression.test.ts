@@ -29,7 +29,7 @@ describe("media rejection classification regressions", () => {
       await test.advanceTo(60000);
       // A rejected status credential does not prove the Episode is active.
       expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "access_unavailable", recoverable: true } });
-      expect(test.status.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(test.status).toHaveBeenCalledOnce();
     });
   });
 
@@ -233,6 +233,45 @@ it("resumes status reads when a rejected credential is later refreshed on the sa
     await test.advanceTo(30000);
     expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
     expect(test.status.mock.calls.some(([grant]) => grant.media.token === freshToken)).toBe(true);
+    expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+  });
+});
+
+it.each([
+  { status: 401, refresh: "unchanged" },
+  { status: 401, refresh: "failed" },
+  { status: 403, refresh: "unchanged" },
+  { status: 403, refresh: "failed" },
+] as const)("does not reuse a credential after status $status and $refresh refresh", async ({ status, refresh }) => {
+  const test = mediaRecoveryFixture();
+  if (refresh === "failed") {
+    const original = test.access.getMockImplementation()!;
+    test.access.mockImplementation((request) => (request.reason === "join" ? original(request) : Promise.reject(new Error("Refresh unavailable"))));
+  }
+  test.status.mockRejectedValue(new EpisodeStatusError(status));
+  await test.run(async () => {
+    test.failMedia(new CloudflareSFUError("Rejected", "signaling_failed", { status: 403 }));
+    await test.advanceTo(2500);
+    expect(test.status).toHaveBeenCalledOnce();
+    expect(test.stopSync).not.toHaveBeenCalled();
+    expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
+  });
+});
+
+it.each(["active", "ending", "ended"] as const)("does not treat refresh access.forbidden as proof of revocation when Episode is %s", async (status) => {
+  const test = mediaRecoveryFixture();
+  const original = test.access.getMockImplementation()!;
+  test.access.mockImplementation((request) => (request.reason === "join" ? original(request) : Promise.reject(new ChalkAPIError({ code: "access.forbidden", status: 403, retryable: false }))));
+  test.status.mockResolvedValue(status);
+  await test.run(async (lifecycle) => {
+    await test.advanceTo(11000);
+    expect(test.access.mock.calls.some(([request]) => request.reason === "scheduled_refresh")).toBe(true);
+    expect(lifecycle.getSnapshot().state).toBe("live");
+    test.failMedia(new CloudflareSFUError("Denied", "signaling_failed", { status: 403 }));
+    await test.advanceTo(11200);
+    if (status === "active") expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "invalid_access", recoverable: false } });
+    else expect(lifecycle.getSnapshot()).toMatchObject({ state: "left", failure: null, episodeEnded: true });
+    expect(test.stopMedia).toHaveBeenCalledOnce();
     expect(test.access.mock.calls.filter(([request]) => request.replaceMediaConnection)).toHaveLength(0);
   });
 });

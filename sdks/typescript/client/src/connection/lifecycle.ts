@@ -998,9 +998,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         const snapshot = model.sync?.getSnapshot();
         return model.episodeEndConfirmed || snapshot?.control?.status === "ended" || snapshot?.connection.terminalReason === "episode_ended";
       };
+      const stopRejectedMedia = () => {
+        model.mediaBindingCleanup?.();
+        model.mediaSnapshot = model.media?.getSnapshot() ?? null;
+      };
       const waitForPendingEpisodeEnd = Effect.suspend(() => (pendingEpisodeEnd ? Deferred.await(pendingEpisodeEnd) : Effect.void));
       const resolveMediaRejection = (failure: ConnectionLifecycleFailure): Effect.Effect<ConnectionLifecycleFailure> => {
         if (!needsEpisodeCheck(failure)) return Effect.succeed(failure);
+        if (failure.code === "invalid_access") stopRejectedMedia();
         const epoch = model.epoch;
         const original = access.currentUnsafe();
         if (!original) return Effect.succeed(failure);
@@ -1022,8 +1027,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (result.status === "active") return failure;
             const error = result.cause;
             if (statusCredentialsRejected(error)) {
-              if (refreshedAfterAuthRejection) rejectedToken = grant.media.token;
-              else {
+              rejectedToken = grant.media.token;
+              if (!refreshedAfterAuthRejection) {
                 refreshedAfterAuthRejection = true;
                 yield* access.refresh("scheduled_refresh", false).pipe(Effect.catch(() => Effect.succeed(null)));
                 continue;
@@ -1047,6 +1052,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       const failForSnapshot = (failure: ConnectionLifecycleFailure): Effect.Effect<void> =>
         Effect.gen(function* () {
           if (!needsEpisodeCheck(failure)) return yield* commitSnapshotFailure(failure);
+          if (failure.code === "invalid_access") {
+            stopRejectedMedia();
+            yield* publish();
+          }
           const scope = model.activeScope;
           const epoch = model.epoch;
           const binding = access.currentUnsafe()?.media.clientPayload.connectionId;
@@ -1094,6 +1103,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
+        if (sfuAccessRejected(cause)) stopRejectedMedia();
         if (active(model) && (sfuAccessRejected(cause) || connectionSuperseded(cause) || (cause instanceof CloudflareSFUError && cause.options.status === 410))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
         return handleMediaSnapshot(media, media.getSnapshot());
       };
