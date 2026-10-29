@@ -29,7 +29,7 @@ export function ChatNotices({ chatVisible, sheetOpen, onOpenChat }: ChatNoticesP
   const latest = useRef({ chatVisible, sheetOpen, onOpenChat, soundsEnabled });
   latest.current = { chatVisible, sheetOpen, onOpenChat, soundsEnabled };
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native chat-notice observation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Announce and toast newly committed remote messages once; preserve message history across visibility changes.
   useEffect(() => {
     if (status !== "ready") return;
     const previous = seen.current;

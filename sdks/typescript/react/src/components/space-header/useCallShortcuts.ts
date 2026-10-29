@@ -3,7 +3,7 @@ import type { SpaceHeaderProps } from "./space-header-contract";
 export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: () => void) {
   const latest = useRef(actions);
   latest.current = actions;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing global call-keyboard listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Own global call shortcuts and push-to-talk release; remove listeners and release any held press on cleanup.
   useEffect(() => {
     let talking = false;
     const restore = () => {

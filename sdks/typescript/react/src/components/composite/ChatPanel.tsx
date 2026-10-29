@@ -87,7 +87,7 @@ export const ChatPanelSurface = React.memo(
     const [failedUploads, setFailedUploads] = useState<ReadonlySet<ChatUploadFile>>(new Set());
     const [uploading, setUploading] = useState<ReadonlySet<ChatUploadFile>>(new Set());
     const [previews, setPreviews] = useState<ReadonlyMap<ChatUploadFile, string>>(new Map());
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing chat focus, scrolling, and media-query subscriptions.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Create object URLs for staged image files; revoke exactly those URLs when files change or the composer unmounts.
     useEffect(() => {
       const urls = new Map(stagedFiles.flatMap((file) => (file instanceof File && file.type.startsWith("image/") ? [[file, URL.createObjectURL(file)] as const] : [])));
       setPreviews(urls);
@@ -126,7 +126,7 @@ export const ChatPanelSurface = React.memo(
       scroller.scrollTo({ top: scroller.scrollHeight, behavior: autoScrollBehavior ?? "auto" });
       if (latestSequence) markChatSequenceRead(latestSequence, lastMarkedSequenceRef, onMarkRead);
     }, [autoScrollBehavior, latestSequence, messages.length, onMarkRead, pendingMessages.length]);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing chat focus, scrolling, and media-query subscriptions.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Advance the committed read-sequence watermark monotonically without letting an abandoned render suppress a receipt.
     useEffect(() => {
       if (!localReadThroughSequence) return;
       const previous = lastMarkedSequenceRef.current;
@@ -134,7 +134,7 @@ export const ChatPanelSurface = React.memo(
         lastMarkedSequenceRef.current = localReadThroughSequence;
       }
     }, [localReadThroughSequence]);
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing chat focus, scrolling, and media-query subscriptions.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Resize the mounted textarea to its measured scrollHeight when the draft changes.
     useEffect(() => {
       const textarea = textareaRef.current;
       if (!textarea) return;
@@ -272,7 +272,7 @@ export const ChatPanelSurface = React.memo(
         }),
       [messages, onMarkRead],
     );
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing chat focus, scrolling, and media-query subscriptions.
+    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Dispose queued scroll work when this composer unmounts.
     useEffect(() => () => scrollWork.dispose(), [scrollWork]);
     const handleScroll = scrollWork.onScroll;
     return (

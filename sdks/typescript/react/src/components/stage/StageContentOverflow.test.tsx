@@ -174,7 +174,6 @@ it("does not mount a second caller content tree when folded content opens", asyn
   const items: StageItem[] = [person, { kind: "screen-share", id: "share", participant: person.participant }, { kind: "whiteboard", id: "whiteboard" }];
   const active = new Map<string, number>();
   function Content({ id }: { id: string }) {
-    // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Measure the committed stage DOM in the existing layout test.
     useEffect(() => {
       active.set(id, (active.get(id) ?? 0) + 1);
       return () => {

@@ -38,14 +38,15 @@ export function useMediaRequestDialogState({ request, onDecline, onAllow, onActi
   const [pendingAction, setPendingAction] = useState<MediaRequestAction | null>(null);
   const [errorMessageState, setErrorMessage] = useState<string | null>(null);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing request reset and expiry-clock cleanup.
-  useEffect(() => {
+  const [previousRequestId, setPreviousRequestId] = useState(request.requestId);
+  if (previousRequestId !== request.requestId) {
+    setPreviousRequestId(request.requestId);
     setNow(Date.now());
     setPendingAction(null);
     setErrorMessage(null);
-  }, [request.requestId]);
+  }
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing request reset and expiry-clock cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [timer] Refresh request expiry each second until replacement or unmount; clear the interval on cleanup.
   useEffect(() => {
     if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) return;
     const interval = window.setInterval(() => setNow(Date.now()), 1000);

@@ -11,7 +11,7 @@ const recoveryDelayMs = (attempt: number): number => 250 * 2 ** attempt;
 export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Transport | null, active: boolean): WhiteboardSceneSubscription {
   const [subscription, setSubscription] = useState<WhiteboardSceneSubscription>({ status: "closed" });
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing board scene subscription lifetime.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Own scene subscription startup and bounded recovery; cancel recovery, unsubscribe summaries and stop the scene on cleanup.
   useEffect(() => {
     if (!active || !transport) {
       setSubscription({ status: "closed" });

@@ -37,7 +37,7 @@ export function ParticipantRow({
   const hasVolumeControl = !!participantVolumes && !!onParticipantVolumeChange;
   const showMenuButton = canManageParticipants || hasVolumeControl || (participant.isLocal && !!onUpdateDisplayName);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing participant editing focus and keyboard cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Focus and select the mounted participant-name input when editing starts.
   useEffect(() => {
     if (isEditing) {
       inputRef.current?.focus();

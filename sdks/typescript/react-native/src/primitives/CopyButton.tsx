@@ -25,11 +25,11 @@ export const CopyButton = memo(function CopyButton({ onCopy, accessibilityLabel,
   const done = useSharedValue(0);
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native copy animation and feedback timer cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate the native copy/check morph when copied state commits.
   useEffect(() => {
     done.value = withTiming(copied ? 1 : 0, timings.copyMorph);
   }, [copied, done]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native copy animation and feedback timer cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Cancel the event-created copied-feedback timeout on unmount.
   useEffect(() => () => clearReset(reset), []);
 
   const copy = useCallback(async () => {

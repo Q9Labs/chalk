@@ -33,12 +33,13 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
 
   // Focus search input when opened
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing picker focus and keyboard listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Reset the opened picker and focus its mounted search field after entry; cancel delayed focus on close or unmount.
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 50);
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
       setSearchQuery("");
       setActiveCategory("smileys");
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -52,7 +53,7 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
   );
 
   // Handle escape key
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing picker focus and keyboard listener cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Listen for Escape only while the picker is open; remove the document listener on cleanup.
   useEffect(() => {
     if (!isOpen || typeof window === "undefined") return;
     const handleKeyDown = (e: KeyboardEvent) => {

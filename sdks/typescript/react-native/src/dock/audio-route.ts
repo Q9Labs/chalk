@@ -44,7 +44,7 @@ export function useAudioOutput(): AudioOutput | null {
   const [state, setState] = useState<AudioRoutes | null>(null);
   // In the harness, picking a route moves the check like a real switch would.
   const [scenarioSelected, setScenarioSelected] = useState<string | null>(null);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing native audio-route subscription cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Read native audio routes and observe route changes; remove the emitter subscription and ignore a late initial read on cleanup.
   useEffect(() => {
     if (!nativeModule || !emitter) return;
     let live = true;

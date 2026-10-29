@@ -66,3 +66,28 @@ it("keeps rejected text editable and shows safe retry guidance", async () => {
     container.remove();
   }
 });
+
+it("starts a fresh report session on reopening without retaining the old draft", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const focusScope = createRef<HTMLElement>();
+  const render = (open: boolean) => act(async () => root.render(<CallDialog kind="report" open={open} onClose={() => {}} onReportProblem={async () => {}} diagnostics="" focusScope={focusScope} />));
+  try {
+    await render(true);
+    const textarea = document.querySelector("textarea");
+    if (!textarea) throw new Error("Report form missing");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(textarea, "Old draft");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(textarea.value).toBe("Old draft");
+    await render(false);
+    await render(true);
+    expect(document.querySelector("textarea")?.value).toBe("");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});

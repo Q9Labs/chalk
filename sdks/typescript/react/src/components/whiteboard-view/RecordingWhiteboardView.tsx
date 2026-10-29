@@ -46,7 +46,7 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
     if (!Object.hasOwn(files ?? {}, fileId)) throw new TypeError(`recording whiteboard file is missing: ${recordingWhiteboardFileAssetId(fileId)}`);
   }
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing recording-board subscription cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Install the recording scene into the canvas and fit it over two frames; cancel pending frames on replacement.
   useEffect(() => {
     if (!ready) return;
     setPresentedState(null);
@@ -70,7 +70,7 @@ export function RecordingWhiteboardView({ state: stateValue, files, expectedScen
     };
   }, [elements, files, ready, state]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing recording-board subscription cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Notify the recording host only after the requested scene has actually been presented.
   useEffect(() => {
     if (presentedState !== state || onPresented === undefined) return;
     onPresented(state);

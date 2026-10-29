@@ -16,7 +16,7 @@ export type SwitchProps = {
 export const Switch = memo(function Switch({ value, onValueChange, accessibilityLabel, testID }: SwitchProps): React.JSX.Element {
   const { colors } = useTheme();
   const on = useSharedValue(value ? 1 : 0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native switch animation.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Animate the native switch shared value when its controlled value commits.
   useEffect(() => {
     on.value = withTiming(value ? 1 : 0, timings.switch);
   }, [on, value]);

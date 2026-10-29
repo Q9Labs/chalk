@@ -22,13 +22,13 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
   const [lifetime, setLifetime] = useState({ identity, exiting: false });
   if (lifetime.identity !== identity) setLifetime({ identity, exiting: false });
   const exiting = lifetime.identity === identity && lifetime.exiting;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing toast lifetime and exit animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Start the toast lifetime for this identity; cancel it when duration or identity changes.
   useEffect(() => {
     if (duration === Infinity) return;
     const timer = setTimeout(() => setLifetime({ identity, exiting: true }), duration);
     return () => clearTimeout(timer);
   }, [duration, identity]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing toast lifetime and exit animation cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Dismiss after the exit transition; cancel the timeout if the toast is reused or unmounted.
   useEffect(() => {
     if (!exiting) return;
     const timer = setTimeout(() => dismissRef.current(), 160);

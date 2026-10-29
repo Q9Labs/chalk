@@ -1,23 +1,17 @@
-import { useEffect, useState } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
+
+const serverSnapshot = () => false;
 
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(query).matches : false));
-
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing matchMedia subscription and cleanup.
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const handleChange = () => setMatches(mediaQuery.matches);
-    handleChange();
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [query]);
-
-  return matches;
+  const mediaQuery = useMemo(() => (typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(query) : undefined), [query]);
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      mediaQuery?.addEventListener("change", notify);
+      return () => mediaQuery?.removeEventListener("change", notify);
+    },
+    [mediaQuery],
+  );
+  return useSyncExternalStore(subscribe, () => mediaQuery?.matches ?? false, serverSnapshot);
 }
 
 export function useIsMobile(): boolean {

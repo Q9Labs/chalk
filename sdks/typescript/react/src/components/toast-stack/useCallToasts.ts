@@ -7,7 +7,7 @@ export function useCallToasts() {
   const client = useSpaceClient();
   const [toasts, setToasts] = useState<readonly (Toast & { readonly failureCode?: string })[]>([]);
   const sequence = useRef(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing client notice subscriptions and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Diff committed client snapshots into bounded toasts and media errors; unsubscribe and invalidate queued errors on cleanup.
   useEffect(() => {
     setToasts([]);
     let previous = client.getSnapshot();

@@ -7,7 +7,7 @@ export function useEpisodeDuration(): number {
   const episodeStart = connection.episode?.startedAt ? Date.parse(connection.episode.startedAt) : null;
   const [now, setNow] = useState(() => Date.now());
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing elapsed-call clock cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [timer] Refresh elapsed Episode time each second; clear the interval when its start time changes.
   useEffect(() => {
     if (episodeStart === null || Number.isNaN(episodeStart)) return;
 

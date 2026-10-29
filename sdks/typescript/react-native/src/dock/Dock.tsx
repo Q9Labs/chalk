@@ -67,7 +67,7 @@ function AudioOutputButton({ output, size, captioned }: { readonly output: Audio
   const ref = useRef<View>(null);
   const [open, setOpen] = useState(false);
   const devScenario = useDevScenario();
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native dock motion and event subscriptions.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [development] Apply externally selected route-sheet scenarios after commit without continuously overriding user dismissal.
   useEffect(() => {
     if (devScenario.sheet === "route" || devScenario.menu === "route") setOpen(true);
   }, [devScenario]);

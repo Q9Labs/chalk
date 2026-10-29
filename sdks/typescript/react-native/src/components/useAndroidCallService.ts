@@ -16,7 +16,7 @@ export function useAndroidCallService(): void {
   const microphoneOn = media.local.microphone.state === "enabled";
   const cameraOn = media.local.camera.state === "enabled";
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing Android call-service ownership and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Start or refresh the Android call service while in-call and on foregrounding; remove the AppState subscription on cleanup.
   useEffect(() => {
     if (!inCall) return;
     const start = () => {
@@ -31,7 +31,7 @@ export function useAndroidCallService(): void {
     return () => subscription.remove();
   }, [inCall, microphoneOn, cameraOn]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- Keep existing Android call-service ownership and cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Stop the Android call service only when the in-call lifetime ends, not when microphone or camera toggles.
   useEffect(() => {
     if (!inCall) return;
     return () => {

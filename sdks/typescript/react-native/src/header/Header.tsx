@@ -68,7 +68,7 @@ function CallTimer(): React.JSX.Element | null {
   const { episode } = useConnection();
   const startedAt = episode?.startedAt ? Date.parse(episode.startedAt) : null;
   const [now, setNow] = useState(Date.now);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Keep existing native elapsed-call clock cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Refresh elapsed call time once a second; clear the interval when the Episode start changes.
   useEffect(() => {
     if (startedAt === null) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
