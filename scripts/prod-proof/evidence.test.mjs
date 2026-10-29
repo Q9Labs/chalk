@@ -160,8 +160,11 @@ test("cleanup continues after a failed local resource and reports the failure", 
   }
 });
 
-for (const defect of ["URL lifetime", "null headers", "montage font"]) {
+for (const defect of ["URL lifetime", "null headers", "montage font", "cold render fleet"]) {
   test(`Export proof handles ${defect}`, async (t) => {
+    let now = 0;
+    let pending = defect === "cold render fleet";
+    if (pending) t.mock.method(Date, "now", () => now);
     const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-export-"));
     const bytes = Buffer.alloc(2048);
     bytes.write("ftyp", 4);
@@ -172,18 +175,26 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
       return new Response(bytes);
     });
     const signedHeaders = defect === "null headers" ? null : { "x-proof": "signed" };
+    const exportStatus = (method) => {
+      if (method !== "GET" || !pending) return { export: { status: "ready" } };
+      // Replay a successful export whose cold worker was still warming
+      // when the old four-minute proof deadline expired.
+      now = 246_610;
+      pending = false;
+      return { export: { status: "pending" } };
+    };
+    const downloadUrl = (body) => {
+      if (defect === "URL lifetime") {
+        assert.ok(body.expires_in_seconds > 0);
+        assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
+      }
+      return { url: "https://example.invalid/export", signed_headers: signedHeaders };
+    };
     const run = {
       directory,
       tenantPath: "/tenant",
       recordingId: "recording",
-      apiRequest: async (_method, path, body) => {
-        if (!path.endsWith("/download-url")) return { export: { status: "ready" } };
-        if (defect === "URL lifetime") {
-          assert.ok(body.expires_in_seconds > 0);
-          assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
-        }
-        return { url: "https://example.invalid/export", signed_headers: signedHeaders };
-      },
+      apiRequest: async (method, path, body) => (path.endsWith("/download-url") ? downloadUrl(body) : exportStatus(method)),
     };
     let montage = false;
     const outputs = {
@@ -204,6 +215,7 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
     try {
       const result = await exportProof(run, execute);
       assert.equal(result.bytes, 2048);
+      if (defect === "cold render fleet") assert.equal(result.wallSeconds, 246.61);
       assert.ok(montage);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -218,13 +230,35 @@ test("macOS montage uses a system font when ImageMagick lists none", () => {
   assert.throws(() => contactSheetFont("", "linux"), /no installed font/);
 });
 
-for (const name of ["export", "transcript"]) {
-  test(`${name} stops a processing wait before five minutes`, { timeout: 1000 }, async (t) => {
+for (const [name, seconds] of [
+  ["export", 840],
+  ["transcript", 240],
+]) {
+  test(`${name} stops a pending job after its bounded allowance`, { timeout: 1000 }, async (t) => {
     const { transcriptProof } = await import("./proofs.mjs");
     let now = 0;
-    t.mock.method(Date, "now", () => (now += 300_000));
+    t.mock.method(Date, "now", () => (now += 900_000));
     const run = { tenantPath: "/tenant", recordingId: "recording", apiRequest: async () => ({ export: { id: "export" } }) };
-    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
+    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), new RegExp(`timed out after ${seconds}s`));
+  });
+}
+
+for (const status of ["failed", "unavailable"]) {
+  test(`Export proof rejects ${status} without spending the cold-start allowance`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-export-failure-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    let polls = 0;
+    const run = {
+      directory,
+      tenantPath: "/tenant",
+      recordingId: "recording",
+      apiRequest: async (method) => {
+        if (method === "GET") polls++;
+        return { export: { status, failure_code: "render_failed" } };
+      },
+    };
+    await assert.rejects(exportProof(run), new RegExp(`Export ${status}: render_failed`));
+    assert.equal(polls, 1);
   });
 }
 

@@ -247,7 +247,9 @@ export async function exportProof(run, execute = command) {
       check(!["failed", "unavailable"].includes(value.export.status), `Export ${value.export.status}: ${value.export.failure_code ?? "unknown"}`);
       return value.export.status === "ready";
     },
-    240_000,
+    // A scale-to-zero render worker may spend ten minutes starting before the
+    // existing four-minute processing allowance (fleet --startup-timeout).
+    14 * 60_000,
     5000,
     run.signal,
   );
