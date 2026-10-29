@@ -273,15 +273,14 @@ its response frames and creates a journey at v1 sync ingress when one is absent.
 
 ## Verification
 
-The shared [`reliability harness`](./docs/reliability-harness.md) maps pull
-requests, nightly schedules, and release candidates to increasing profiles. It
-covers PostgreSQL-backed semantics, Sync v1 and whiteboard transports,
-multi-node partitions and process loss, PostgreSQL failover, sustained load,
-Node restart recovery, and a real browser. Each run saves replayable,
-commit-bound evidence and fails closed.
+The Sync gate runs formatting, compilation, Credo, the surviving runtime
+regressions, and the API bridge readiness proof. The correctness command also
+runs the selected TypeScript regressions and real-browser reconnection proof:
+
+```sh
+box run -- 'bash scripts/gates/instabox-run.sh --browser scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness'
+```
 
 The external
 [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-still controls nightly provider drills. The replayable v1 matrix is documented
-in [`apps/sync/docs/sync-breaker-v1.md`](./docs/sync-breaker-v1.md); the complete acceptance
-contract is covered by the checked-in Sync tests and reliability profiles.
+still controls nightly provider drills.

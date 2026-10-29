@@ -6,6 +6,6 @@ pnpm --filter web run check-types:dashboard
 pnpm --filter web exec tsx tests/dashboard/owner-call-strictmode.mjs
 node apps/web/tests/dashboard/production-bundle.mjs
 node apps/web/tests/dashboard/service-worker.mjs
-pnpm --filter web exec vitest run --config vitest.oauth.config.ts
+pnpm --filter web exec vitest run --config vitest.config.ts
 node apps/web/tests/dashboard/oauth-runtime.mjs
 bash apps/web/tests/dashboard/real-engine.sh

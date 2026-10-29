@@ -57,18 +57,7 @@ Claim and maintenance exclude those attempts from the media-completion retry
 budget. Unconfirmed stops retain their existing source-expiry deadline. Restoring publication
 therefore lets the ordinary completion-only worker finish without operator repair.
 Episode end may adopt that same stop without replacing its authority. Neither
-path commits an export or changes the successful capture job. The regression in
-`apps/api/internal/adapters/postgres/recording_capture_stop_completion_integration_test.go`
-proves immediate publication, completion replay and maintenance deduplication
-after manual stop and failed provider close. The two-connection regressions in
-`apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go`
-prove both worker/completion lock orders, concurrent completion, atomic rollback
-on publisher failure, and automatic recovery beyond 20 publication failures, including server-side
-query cancellation.
-The regression in
-`apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
-callback recovery, and duplicate delivery against the Go controller and maintenance
-commands.
+path commits an export or changes the successful capture job.
 
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
@@ -79,10 +68,7 @@ at 240 characters plus a truncation marker. The active API span receives the sam
 values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
 `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
-HTTP 200 acceptance rules are unchanged. The regression in
-`apps/api/internal/adapters/cloudflare/sfu/capture_close_observability_test.go`
-checks the recorded logs and span events against provider responses with
-credential-shaped fields.
+HTTP 200 acceptance rules are unchanged.
 
 HTTP-stage SFU failures record the provider's top-level `errorCode` in
 `provider_raw_code` and the `chalk.provider.raw_error_code` span-event field.
@@ -91,8 +77,7 @@ are retained, including `session_error` and `not_found`. Other codes become
 `unlisted`; invalid JSON or a missing, empty, or non-string `errorCode` becomes
 `unparsed_body`. These HTTP failures retain no response descriptions, message
 fingerprints, or bodies. Actual HTTP status and existing normalized errors remain
-available; cleanup acceptance and retry rules are unchanged. The boundary tests
-are in `apps/api/internal/adapters/cloudflare/sfu/http_failure_observability_test.go`.
+available; cleanup acceptance and retry rules are unchanged.
 
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
@@ -141,8 +126,7 @@ completion. Successful capture jobs still count. Any nonzero latest snapshot
 newer than five minutes alerts on the next evaluation. A zero snapshot clears
 the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
-The PostgreSQL fixture in `infrastructure/observability/production-alerts/collector_test.go` checks stranded,
-recent, incomplete, healthy, and cross-Tenant rows and clearing after repair.
+
 The same collector independently samples Sync `/readyz` every minute, including
 when its SQL snapshot fails. The grouped state monitor alerts when at least four
 distinct minute samples in the last five minutes are unready and the latest
@@ -256,9 +240,7 @@ an active Episode keeps current-binding revocation terminal. A local End in
 flight settles first. Unavailable status reads keep Sync running and retry
 without requesting a replacement binding; a late read cannot fail a newer binding.
 Normal end emits no `connection_failed` report. End/rejection races are covered
-in `sdks/typescript/client/src/connection/episode-end-race.test.ts`. The timing and rejection
-regressions are covered in
-`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+in `sdks/typescript/client/src/connection/episode-end-race.test.ts`.
 
 Automatic replacement forwards `expectedMediaConnectionId` through the browser
 access context and the server SDK's refresh request. The API compares the

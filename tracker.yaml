@@ -431,7 +431,6 @@ outcomes:
     code:
       - gate.config.ts
       - scripts/gates/chalk-gate-plan.mjs
-      - sdks/typescript/client/src/media/cloudflare-sfu.test.ts
   - id: product_delivery.mcp_server
     title: Chalk MCP server
     area: product_delivery

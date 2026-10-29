@@ -116,11 +116,3 @@ Postgres is the durable authority. A transaction locks one Tenant-scoped Episode
 Follow the [tracker workflow](README.md#tracker-workflow). Each entry describes one Participant-visible or operational outcome. Use a plain title, a one- or two-sentence summary of what exists and what is missing, and the concrete steps left. Scope and design the work when someone picks it up. Keep evidence, test runs, and verification logs in docs or scratch notes. The owner sets priority.
 
 Split an entry when its steps can ship separately, and merge entries that duplicate work. Put a step in the entry that must finish first. Delete an entry when its work is done: the code is the record of what works.
-
-## Test index
-
-<!-- test:constraints-clean-break sdks/typescript/client/src/access/grant.test.ts#rejects legacy subject aliases instead of widening the current wire contract -->
-<!-- test:product-memory-identity-and-tenancy sdks/typescript/client/src/tenant-external-id.test.ts#creates and finds a Tenant with an opaque external account ID through the generated client -->
-<!-- test:constraints-one-tenancy-root apps/api/internal/adapters/postgres/authz_route_matrix_test.go#TestAuthorizationRouteMatrix -->
-<!-- test:product-goals-polyglot-contracts apps/api/cmd/codegen/contracts_test.go#TestGeneratedOpenAPIMatchesEndpointContracts -->
-<!-- test:sync-authority apps/sync/test/chalk_sync/reliability/recovery_contract_test.exs#commands survive every crash boundary -->

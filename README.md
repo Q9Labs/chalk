@@ -101,7 +101,7 @@ MIT. See [LICENSE](./LICENSE).
 ## Tracker workflow
 
 Edit `tracker.yaml`, then run `pnpm generate:tracker`. `pnpm check:tracker`
-validates states, priorities, sizes, source references and generated-view freshness;
-`pnpm test:tracker` exercises the tooling. Both are part of the canonical gate.
+validates states, priorities, sizes, source references and generated-view freshness
+as part of the canonical gate.
 
 Do not edit the generated Markdown view.

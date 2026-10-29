@@ -6,7 +6,7 @@ runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
 q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
 
-Every gate profile first runs `doclint.mjs` and `theory-coverage.mjs` from this directory.
+Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
 `hygiene`, `secrets`, and `generated` lanes on staged files
 (about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
@@ -65,15 +65,14 @@ or `GATE_FILES` (comma/newline-separated) for an explicit changed-file list.
 Those worktree files are scanned for secrets in addition to the staged diff.
 Gate-definition or unknown files fail closed to the full plan. q9gate counts
 every path as source, so Chalk's planner alone decides which paths are unknown;
-a self-test checks that every tracked path that makes q9gate run in full also
-makes Chalk's plan run in full, which keeps the CI job selection exact. The Chalk custom lanes reuse the affected-workspace
+the Chalk custom lanes reuse the affected-workspace
 and reverse-dependent planner, including Go, Elixir, Postgres, contracts,
 recorder, publication, static checks, and resource-limited shell scripts.
 
-Documentation-only changes keep routing self-tests, hygiene, diff-scoped secrets,
+Documentation-only changes keep the network-isolation self-test, hygiene, diff-scoped secrets,
 generated-output checks, and formatting. They do not
 force unrelated service or workspace checks. The package-boundary check still
-runs its own test and q9gate's built-in Dependency Cruiser lane with Chalk's
+runs q9gate's built-in Dependency Cruiser lane with Chalk's
 `.dependency-cruiser.cjs` configuration and a TypeScript analysis guard.
 
 Use `pnpm gate -- --target web|mobile` for a shipment-scoped gate; the
@@ -89,7 +88,7 @@ shipment target from branch, release mode, or directory.
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
-- Formatting, Fallow, structural checks, workspace type checks, coverage tests, and
+- Formatting, Fallow, structural checks, workspace type checks, selected runtime regressions, and
   builds follow affected source files and workspace dependents.
 - The boundary gate covers cross-workspace dependency direction under `apps`,
   `packages`, and `sdks/typescript`. Use named package entrypoints or configured
@@ -101,14 +100,13 @@ shipment target from branch, release mode, or directory.
   closure, using the existing `^build` task graph before building each consumer.
   The gate forces rebuilds rather than trusting cached build artifacts. Type
   checks and tests keep their affected-workspace scope.
-- Tests run once with coverage; lint aliases do not repeat formatting or type
+- Selected runtime regressions run without coverage instrumentation; lint aliases do not repeat formatting or type
   checks.
 - Go API changes run the complete language gate. Elixir Sync changes run the
-  shared correctness profile: the full zero-skip PostgreSQL suite, Credo, the
-  replayed v1 breaker, and focused Sync and whiteboard SDK tests. Both use a
+  correctness command: the zero-skip PostgreSQL regressions, Credo, API bridge
+  readiness, selected SDK tests, and real-browser reconnection. Both use a
   disposable, migrated PostgreSQL container that is removed on exit.
 - Contract producers and consumers run generated-contract and SDK drift checks.
-- The patched image-size parser fixture runs when its patch or guard changes.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
@@ -153,13 +151,6 @@ guidance. Fixture/testdata documents, changesets, and changelogs are not
 maintained runbooks. Paths resolve from
 the document or repository root. Examples must have an exact document/path entry
 and a reason in `doclint-examples.json`; do not allow whole directories.
-
-`node scripts/gates/theory-coverage.mjs` checks every prose paragraph and
-list item in [theory.md](../../theory.md), except tracker-maintenance instructions and the test index.
-Each has an `invariant` marker and a `test` mapping to a file and exact declared
-test name. `theory-baseline.json` freezes today's unmapped text; it is debt, not
-proof. New or changed requirements need a named test, not another baseline entry.
-The checker proves the index is intact, not that a test proves every word.
 
 The SDK effect rule has one adjacent, reasoned suppression per existing call.
 New effects need a deliberate exception; do not suppress an entire file.

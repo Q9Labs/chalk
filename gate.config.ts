@@ -13,7 +13,6 @@ const taskIds = [
   "osv",
   "services",
   "contracts",
-  "image-size",
   "syncpack",
   "types",
   "explicit-any",

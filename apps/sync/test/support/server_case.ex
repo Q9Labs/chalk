@@ -1,17 +1,7 @@
 defmodule ChalkSync.ServerCase do
-  @moduledoc """
-  Boots a real Bandit listener on an ephemeral port for end-to-end tests.
-  Tests stay `async: true` by using unique space ids instead of resetting the
-  shared stateholder.
-  """
+  @moduledoc "Boots a real Bandit listener on an ephemeral port for end-to-end tests."
 
   use ExUnit.CaseTemplate
-
-  using do
-    quote do
-      import ChalkSync.ServerCase, only: [unique_space_id: 0]
-    end
-  end
 
   setup do
     pid =
@@ -20,6 +10,4 @@ defmodule ChalkSync.ServerCase do
     {:ok, {_ip, port}} = ThousandIsland.listener_info(pid)
     %{port: port}
   end
-
-  def unique_space_id, do: "space-#{System.unique_integer([:positive])}"
 end
