@@ -74,9 +74,10 @@ if (kind === "follow-pin") {
       const page = await context.newPage();
       try {
         await page.goto(joinURL);
-        await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
         const leave = page.getByRole("button", { name: "Leave call", exact: true });
+        // Capture the first mounted button, before waiting for other call UI.
         const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
+        await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
         if (!opensMenu) samplesWithoutMenu++;
         if (mode === "fixed") await leaveOwnerCall(page, origin);
         else {
@@ -111,6 +112,7 @@ if (kind === "follow-pin") {
   }
 }
 console.log(`CALL_CONTROLS_PROOF ${JSON.stringify({ kind, mode, iterations, failures, samplesWithoutMenu })}`);
+if (kind === "owner-menu") assert(samplesWithoutMenu > 0, "Both modes must exercise a button mounted before its owner menu is ready");
 if (mode === "fixed") assert.equal(failures, 0);
 else if (kind === "follow-pin") assert.equal(failures, iterations);
 else assert(failures > 0, "The baseline must reproduce a menu capability update between sampling and clicking");
