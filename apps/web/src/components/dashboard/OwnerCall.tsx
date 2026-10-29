@@ -95,7 +95,7 @@ function ownerAccess(spaceId: string, userId: string) {
             return join();
           })
         : // Without the current token the server replaces the media connection.
-          await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
+          await act("call", { action: "refresh-access", spaceId, joinKey, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
     deadlineCeiling = ceiling;
     try {

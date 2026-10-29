@@ -74,8 +74,11 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 Joined-only bookmarks use the public invite/call client. Owner `join` prepares
 an Entrance, creates/reuses a live Episode and admits an owner Guest.
 `refresh-access` is media reconnection, not an identity-session refresh: it takes
-only a Space ID and optional current media token. Participant identity and
-generation come from a session-bound, purpose-sealed HttpOnly seat cookie.
+the Space ID, the tab's join key and an optional current media token. The join
+key selects a session-bound, purpose-sealed HttpOnly seat cookie; it supplies no
+Participant identity or generation. Separate joins in one browser keep separate
+refresh cookies, so another tab cannot replace this tab's seat. A latest-seat
+cookie is used only for the past-session "You" marker.
 Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
 The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
@@ -228,6 +231,12 @@ legacy keys containing `tenants:write`.
 
 ## Verification
 
+The Gate's `dashboard-engine` lane runs `tests/dashboard/check-engine.sh` for
+dashboard, SDK dependency and API changes, including when API and Sync gates run
+in separate CI jobs. It builds the SDK and drives the real API and named Pages
+Functions with an isolated database. The shared-cookie owner regression joins
+two seats in one signed-in browser and refreshes both with their own media tokens.
+
 Run heavy checks on the M4 (never a paid timing box):
 
 ```sh
@@ -350,3 +359,11 @@ after building the client SDK. It deliberately changes only the copied test
 worker's redirect mode and must fail its first successful Google callback with
 zero token exchanges. Run without the flag for the passing workerd suite. Both
 runs own and clean up their Pages process, local HTTP server and sandbox.
+
+The required `dashboard-engine` Gate lane also runs `apps/web/tests/dashboard/owner-refresh.mjs`: two
+owner tabs share one signed-in browser and keep separate seats through the real
+four-minute refresh and original five-minute expiry, then end for everyone over
+real Sync. It uses the real API, database and Pages runtime, with vendor media
+stubbed. The promote/nightly real-SFU `prod:proof` separately waits for both
+clients' scheduled refresh, checks post-refresh media, and requires the normal
+SDK end to succeed without an owner-API fallback.

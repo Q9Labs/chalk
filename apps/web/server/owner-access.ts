@@ -27,7 +27,7 @@ async function ownerParticipantId(tenantId: string, userId: string, spaceId: str
 export async function ownerAccess(request: Request, env: DashboardEnvironment, engine: Engine, person: Identity, action: Extract<CallAction, { action: "join" | "refresh-access" }>): Promise<Response> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   if (action.action === "refresh-access") {
-    const encoded = readCookie(request, env, `seat_${action.spaceId}`);
+    const encoded = readCookie(request, env, `seat_${action.spaceId}_${action.joinKey}`);
     if (!encoded) throw new DashboardError(401, "join_required");
     const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
     if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");
@@ -72,13 +72,11 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   if (!result.access) throw new DashboardError(409, "admission_pending");
   const episode = await run(engine.api.episodes.getEpisode({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) } }));
   const response = json({ access: result.access, deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
-  writeCookie(
-    response,
-    env,
-    `seat_${action.spaceId}`,
-    await seal({ userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, expiresAt: Date.now() + 86400000 }, env.SESSION_SECRET, "owner-seat"),
-    86400,
-  );
+  const seat = await seal({ userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, expiresAt: Date.now() + 86400000 }, env.SESSION_SECRET, "owner-seat");
+  // Refresh authority belongs to a join, not the browser's latest tab in this Space.
+  writeCookie(response, env, `seat_${action.spaceId}_${action.idempotencyKey}`, seat, 86400);
+  // The past-session view still uses the most recently joined seat for its "You" marker.
+  writeCookie(response, env, `seat_${action.spaceId}`, seat, 86400);
   return response;
 }
 

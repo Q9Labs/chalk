@@ -108,6 +108,11 @@ it("re-enables an expired owner draft after a quiet access-only refresh", async 
     expect(screen.getByLabelText("What went wrong?")).toBe(input);
     expect(input.value).toBe("Keep my draft during renewal");
     expect(screen.queryByRole("alert")).toBeNull();
+    const join = mocks.dashboardAction.mock.calls.find(([, input]) => input.action === "join")?.[1];
+    expect(join).toBeDefined();
+    const renewals = mocks.dashboardAction.mock.calls.filter(([, input]) => input.action === "refresh-access");
+    expect(renewals.length).toBeGreaterThan(0);
+    for (const [, input] of renewals) expect(input.joinKey).toBe(join?.idempotencyKey);
   } finally {
     await act(async () => cleanup());
     vi.useRealTimers();

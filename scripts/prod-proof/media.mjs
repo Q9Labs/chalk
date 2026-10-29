@@ -36,10 +36,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const reopen = [];
   const close = [];
   const participants = [];
+  const refreshes = [];
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
+    const refresh = { count: 0, initialExpiry: Date.parse(grant.media.expiresAt ?? grant.media.expires_at), latestExpiry: 0 };
+    refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
     const open = async (replacing = false) => {
@@ -87,6 +90,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
           }
           grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
           maskCredentials(grant);
+          if (!replaceOnNextAccess && !request.replaceMediaConnection) {
+            refresh.count++;
+            refresh.latestExpiry = Date.parse(grant.media.expiresAt ?? grant.media.expires_at);
+          }
           replaceOnNextAccess = false;
           return grant;
         });
@@ -122,6 +129,12 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   return {
     pages,
     participants,
+    waitForRefresh: async () => {
+      await waitFor("both clients' scheduled credential refresh", async () => refreshes.every((refresh) => refresh.count > 0 && refresh.latestExpiry > refresh.initialExpiry), 360_000, 1000, run.signal);
+      await run.wait(Math.max(0, Math.max(...refreshes.map((refresh) => refresh.initialExpiry)) + 5000 - Date.now()));
+      await ready();
+      await save(`${run.directory}/credential-refresh.json`, refreshes);
+    },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
       await close[guest]();

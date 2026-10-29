@@ -60,11 +60,12 @@ export function episodeEnd(run, path) {
   };
   return {
     end,
-    useSDK: (page) => {
+    useSDK: (page, { strict = false } = {}) => {
       endRequest = async () => {
         try {
           await page.evaluate(() => window.proofClient.endEpisode());
-        } catch {
+        } catch (error) {
+          if (strict) throw error;
           // A dead guest must not prevent owner-authorized lifecycle cleanup.
           await ownerEnd();
         }
@@ -222,13 +223,19 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   console.log("Joining two synthetic camera/voice guests");
   const guests = await launchGuests(run, space, episode, rejoin ? null : await generateVoice(run.directory, run.signal), receiver.origin, rejoin);
   const { pages } = guests;
-  useSDK(pages[0]);
+  useSDK(pages[0], { strict: true });
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
   if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
   else await shortRecordingWindow(run, guests, rejoin);
+  console.log("Holding the real call through scheduled credential refresh and original expiry");
+  await guests.waitForRefresh();
+  const refreshedBefore = await sample("refreshed-start");
+  await run.wait(5000);
+  const refreshedAfter = await sample("refreshed-end");
+  await proveLayers(run, { before: refreshedBefore, after: refreshedAfter });
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
   await end();

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Effect, Schema } from "effect";
-import { AdmitEpisodeParticipantPathParamsSchema, createChalkEffectClient, TenantIdSchema, DateTimeStringSchema } from "@q9labsai/chalk-client/effect";
+import { AdmitEpisodeParticipantPathParamsSchema, IssueAccessGrantPathParamsSchema, createChalkEffectClient, TenantIdSchema, DateTimeStringSchema } from "@q9labsai/chalk-client/effect";
 import { run, withSessionEngine } from "./engine";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
@@ -89,6 +89,14 @@ it("rejects a modified tenant cache and renews an expired one", async () => {
 });
 
 describe("engine failure diagnostics through the real SDK decoder", () => {
+  it("does not turn the observed owner media-token subject rejection into a gateway failure", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://engine.example.test", fetch: async () => Response.json({ error: { code: "media_token.subject_mismatch", message: privateDetail } }, { status: 403 }) }));
+    const params = Schema.decodeUnknownSync(IssueAccessGrantPathParamsSchema)({ tenant_id: tenantId, space_id: "22222222-2222-4222-8222-222222222222", episode_id: "33333333-3333-4333-8333-333333333333", participant_id: "44444444-4444-4444-8444-444444444444" });
+    await expect(run(api.default.issueAccessGrant({ params, payload: { participant_generation: 1, replace_media_connection: false, current_media_token: privateDetail } }))).rejects.toMatchObject({ status: 409, code: "engine_conflict" });
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({ event: "dashboard.engine_failed", engine_code: "media_token.subject_mismatch" });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateDetail);
+  });
   it.each([
     { code: "api_key.invalid_expiry", expected: { status: 400, code: "api_key_invalid_expiry" } },
     { code: "request.invalid", expected: { status: 400, code: "invalid_request" } },

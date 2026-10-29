@@ -233,3 +233,26 @@ for (const name of ["export", "transcript"]) {
     await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
   });
 }
+
+test("normal real-call proof cannot hide SDK end failure behind owner cleanup", async () => {
+  let ownerCalls = 0;
+  const ending = episodeEnd(
+    {
+      ownerRequest: async () => {
+        ownerCalls++;
+        return { status: "ended" };
+      },
+    },
+    "/episode",
+  );
+  ending.useSDK(
+    {
+      evaluate: async () => {
+        throw new Error("access refresh failed");
+      },
+    },
+    { strict: true },
+  );
+  await assert.rejects(ending.end(), /access refresh failed/);
+  assert.equal(ownerCalls, 0);
+});
