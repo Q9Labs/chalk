@@ -6511,7 +6511,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch"]
+            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch", "participant.media_replacement_pending"]
           },
           "413": {
             "content": {
@@ -6736,6 +6736,165 @@
         "x-chalk-rate-limit": {
           "limit": 60,
           "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/episode-status": {
+      "get": {
+        "operationId": "getParticipantEpisodeStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ParticipantId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipantEpisodeStatus"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "participant.invalid_id", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Get participant episode status",
+        "x-chalk-rate-limit": {
+          "limit": 300,
+          "name": "v1.authenticated.read",
           "window_seconds": 60
         }
       }
@@ -12873,8 +13032,17 @@
                     "sync_socket_close",
                     "sync_heartbeat_gap",
                     "media_state",
-                    "media_http_error"
+                    "media_http_error",
+                    "media_projection_mismatch"
                   ],
+                  "type": "string"
+                },
+                "granted_audio": {
+                  "enum": ["granted", "not_granted", "unknown"],
+                  "type": "string"
+                },
+                "granted_video": {
+                  "enum": ["granted", "not_granted", "unknown"],
                   "type": "string"
                 },
                 "heartbeat_gap_ms": {
@@ -12887,12 +13055,32 @@
                   "minimum": 400,
                   "type": ["integer", "null"]
                 },
+                "media_error_kind": {
+                  "enum": ["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"],
+                  "type": "string"
+                },
+                "media_error_step": {
+                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"],
+                  "type": "string"
+                },
                 "outcome": {
                   "enum": ["started", "succeeded", "failed", "cancelled"],
                   "type": "string"
                 },
                 "phase": {
                   "enum": ["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"],
+                  "type": "string"
+                },
+                "projection_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "publication_state": {
+                  "enum": ["on", "off"],
+                  "type": "string"
+                },
+                "source": {
+                  "enum": ["microphone", "camera"],
                   "type": "string"
                 },
                 "state": {
@@ -12912,7 +13100,7 @@
             "type": "array"
           },
           "trigger": {
-            "enum": ["join_failed", "connection_lost", "recovery_exhausted"],
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"],
             "type": "string"
           },
           "version": {
@@ -13452,6 +13640,10 @@
             "minLength": 1,
             "type": "string"
           },
+          "expected_media_connection_id": {
+            "minLength": 1,
+            "type": ["string", "null"]
+          },
           "participant_generation": {
             "type": "integer"
           },
@@ -13549,6 +13741,17 @@
           }
         },
         "required": ["has_more", "next_cursor", "page_size"],
+        "type": "object"
+      },
+      "ParticipantEpisodeStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": ["active", "ending", "ended"],
+            "type": "string"
+          }
+        },
+        "required": ["status"],
         "type": "object"
       },
       "ParticipantId": {

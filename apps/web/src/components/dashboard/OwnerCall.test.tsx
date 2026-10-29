@@ -6,6 +6,8 @@ import { opaqueAccessGrant } from "../../../../../sdks/typescript/client/src/spa
 import { createSpaceClientForPlatform } from "../../../../../sdks/typescript/client/src/space-client/space-client";
 import { terminalTestPlatform } from "../../../../../sdks/typescript/client/src/space-client/terminal.test.helpers";
 import { OwnerCall } from "./OwnerCall";
+import { DashboardRequestError } from "../../lib/dashboard/client";
+import { requireParsedAccessGrant } from "../../../../../sdks/typescript/client/src/access/grant";
 
 const mocks = vi.hoisted(() => ({ createClient: vi.fn(), dashboardAction: vi.fn() }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.createClient }));
@@ -108,9 +110,64 @@ it("re-enables an expired owner draft after a quiet access-only refresh", async 
     expect(screen.getByLabelText("What went wrong?")).toBe(input);
     expect(input.value).toBe("Keep my draft during renewal");
     expect(screen.queryByRole("alert")).toBeNull();
+    const join = mocks.dashboardAction.mock.calls.find(([, input]) => input.action === "join")?.[1];
+    expect(join).toBeDefined();
+    const renewals = mocks.dashboardAction.mock.calls.filter(([, input]) => input.action === "refresh-access");
+    expect(renewals.length).toBeGreaterThan(0);
+    for (const [, input] of renewals) expect(input.joinKey).toBe(join?.idempotencyKey);
   } finally {
     await act(async () => cleanup());
     vi.useRealTimers();
+    vi.clearAllMocks();
+  }
+});
+
+it.each([
+  { label: "denial", error: new DashboardRequestError(401, "join_required"), terminal: true },
+  { label: "forbidden", error: new DashboardRequestError(403, "csrf_rejected"), terminal: true },
+  { label: "conflict", error: new DashboardRequestError(409, "engine_conflict"), terminal: true },
+  { label: "5xx", error: new DashboardRequestError(502, "engine_unavailable"), terminal: false },
+  { label: "network", error: new TypeError("Failed to fetch"), terminal: false },
+  { label: "rate limit", error: new DashboardRequestError(429, "engine_rate_limited"), terminal: false },
+])("passes dashboard $label refresh failures through the SDK access contract", async ({ error, terminal }) => {
+  window.sessionStorage.clear();
+  const platform = terminalTestPlatform();
+  let refresh: import("@q9labsai/chalk-client").GetAccess | undefined;
+  mocks.dashboardAction.mockImplementation(async (_page, input) => {
+    if (input.action === "refresh-access") throw error;
+    return { access: opaqueAccessGrant(1) };
+  });
+  mocks.createClient.mockImplementation((options) => {
+    refresh = options.getAccess;
+    return createSpaceClientForPlatform(options, { ...platform, fetch: async () => new Response(null, { status: 204 }) });
+  });
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Call details" })).toBeDefined()));
+    if (!refresh) throw new Error("Owner access callback missing");
+    const result = refresh({ space: "space-1", reason: "refresh", replaceMediaConnection: false, signal: new AbortController().signal });
+    if (terminal) {
+      const response = await result;
+      expect(response).toBeInstanceOf(Response);
+      await expect(requireParsedAccessGrant(response)).rejects.toMatchObject({ code: "access.invalid" });
+    } else await expect(result).rejects.toBe(error);
+  } finally {
+    await act(async () => cleanup());
+    vi.clearAllMocks();
+  }
+});
+
+it("offers a page reload instead of retrying when hosted access requires joining again", async () => {
+  window.sessionStorage.clear();
+  mocks.dashboardAction.mockRejectedValue(new DashboardRequestError(401, "join_required"));
+  mocks.createClient.mockImplementation((options) => createSpaceClientForPlatform(options, terminalTestPlatform()));
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(screen.getByText("Access to this call was rejected. Refresh the page to rejoin.")).toBeDefined()));
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  } finally {
+    await act(async () => cleanup());
     vi.clearAllMocks();
   }
 });

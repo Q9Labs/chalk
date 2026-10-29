@@ -2,12 +2,13 @@ import { z } from "zod";
 import type { DashboardBindings, DashboardEnvironment } from "./config";
 import { configuration } from "./config";
 import type { Authentication, Identity, IdentityProvider } from "./identity";
-import { binding, checkCsrf, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
+import { binding, checkCsrf, clearSeatCookies, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
 import { sealSession } from "./session";
 import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
 import { withSessionEngine, resolveTenant } from "./engine";
 import { homeMutation, homePage, homeStatus } from "./home";
-import { ownerAccess, viewerSeat } from "./owner-access";
+import { ownerAccess } from "./owner-access";
+import { viewerSeat } from "./owner-seats";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { pastMutation, pastSessionPage } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
@@ -83,13 +84,14 @@ async function auth(request: Request, env: DashboardEnvironment, provider: Ident
   if (request.method === "GET" && path === "/auth/session") {
     return json(await sessionDTO(await current(request, env, provider), env));
   }
-  if (request.method === "POST" && path === "/auth/sign-out") {
+  if (request.method === "POST" && (path === "/auth/sign-out" || path === "/auth/clear-owner-seats")) {
     exactOrigin(request, env.DASHBOARD_ORIGIN);
     emptyBody.parse(await body(request));
     const bound = await binding(request, env);
     await checkCsrf(request, bound, env);
-    const response = json({ ok: true, clearLocalBookmarks: true });
-    clearSession(response, env);
+    const response = json(path === "/auth/sign-out" ? { ok: true, clearLocalBookmarks: true } : { ok: true });
+    if (path === "/auth/sign-out") clearSession(response, env, request);
+    else clearSeatCookies(response, request, env);
     return response;
   }
   throw new DashboardError(405, "method_not_allowed");
@@ -135,7 +137,9 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
       case "/dashboard-api/call": {
         const action = callAction.parse(input);
         if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
-        return json(await callMutation(client, action));
+        const response = json(await callMutation(client, action));
+        if (action.action === "end-for-everyone") clearSeatCookies(response, request, env);
+        return response;
       }
       case "/dashboard-api/past-session": {
         const action = pastAction.parse(input);

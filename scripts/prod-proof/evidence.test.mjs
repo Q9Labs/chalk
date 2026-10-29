@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { movingLayers, proveLayers } from "./media.mjs";
+import { movingLayers, proveLayers, checkMediaProgress } from "./media.mjs";
 import { cleanupRun } from "./cleanup.mjs";
 import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
@@ -33,7 +33,7 @@ test("a frozen screen share cannot pass on a lone decoded frame", () => {
   assert.throws(() => checkShareProgress(screen(100), screen(200, 1)), /decoding stalled/);
   checkShareProgress(screen(100), screen(200));
 });
-test("a crashed guest falls back to the owner end endpoint and waits for durability", async () => {
+test("a crashed guest fails the normal end proof instead of falling back to owner cleanup", async () => {
   const calls = [];
   const ending = episodeEnd(
     {
@@ -49,13 +49,65 @@ test("a crashed guest falls back to the owner end endpoint and waits for durabil
       throw new Error("page closed");
     },
   });
+  await assert.rejects(ending.end(), /page closed/);
+  assert.deepEqual(calls, []);
+});
+test("SDK end waits for durability without invoking the owner end endpoint", async () => {
+  let reads = 0;
+  const ending = episodeEnd(
+    {
+      ownerRequest: async (method) => {
+        assert.equal(method, "GET");
+        return { status: ++reads === 1 ? "ending" : "ended" };
+      },
+    },
+    "/episode",
+  );
+  ending.useSDK({
+    evaluate: async () => {
+      return undefined;
+    },
+  });
   await ending.end();
-  await ending.end();
-  assert.deepEqual(calls, [
-    ["POST", "/episode/end"],
-    ["GET", "/episode"],
-    ["GET", "/episode"],
-  ]);
+  assert.ok(reads >= 2, "SDK acknowledgement alone must not count as durable completion");
+});
+test("owner end still times out when an accepted end never completes", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
+  let reads = 0;
+  const ending = episodeEnd(
+    {
+      ownerRequest: async (method) => {
+        if (method === "POST") throw conflict;
+        reads++;
+        return { status: "ending" };
+      },
+    },
+    "/episode",
+  );
+  const result = assert.rejects(ending.end(), /timed out/);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(120_001);
+  await result;
+  assert.ok(reads > 0);
+});
+test("owner end preserves unrelated conflicts and an Episode still active", async () => {
+  for (const [apiCode, status] of [
+    ["participant.connection_superseded", "ending"],
+    ["episode.not_active", "active"],
+  ]) {
+    const conflict = Object.assign(new Error("conflict"), { status: 409, apiCode });
+    const ending = episodeEnd(
+      {
+        ownerRequest: async (method) => {
+          if (method === "POST") throw conflict;
+          return { status };
+        },
+      },
+      "/episode",
+    );
+    await assert.rejects(ending.end(), (error) => error === conflict);
+  }
 });
 test("fixture server preserves a localhost origin for exact-match CORS", async () => {
   const portProbe = createServer().listen(0, "127.0.0.1");
@@ -108,8 +160,11 @@ test("cleanup continues after a failed local resource and reports the failure", 
   }
 });
 
-for (const defect of ["URL lifetime", "null headers", "montage font"]) {
+for (const defect of ["URL lifetime", "null headers", "montage font", "cold render fleet"]) {
   test(`Export proof handles ${defect}`, async (t) => {
+    let now = 0;
+    let pending = defect === "cold render fleet";
+    if (pending) t.mock.method(Date, "now", () => now);
     const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-export-"));
     const bytes = Buffer.alloc(2048);
     bytes.write("ftyp", 4);
@@ -120,18 +175,26 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
       return new Response(bytes);
     });
     const signedHeaders = defect === "null headers" ? null : { "x-proof": "signed" };
+    const exportStatus = (method) => {
+      if (method !== "GET" || !pending) return { export: { status: "ready" } };
+      // Replay a successful export whose cold worker was still warming
+      // when the old four-minute proof deadline expired.
+      now = 246_610;
+      pending = false;
+      return { export: { status: "pending" } };
+    };
+    const downloadUrl = (body) => {
+      if (defect === "URL lifetime") {
+        assert.ok(body.expires_in_seconds > 0);
+        assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
+      }
+      return { url: "https://example.invalid/export", signed_headers: signedHeaders };
+    };
     const run = {
       directory,
       tenantPath: "/tenant",
       recordingId: "recording",
-      apiRequest: async (_method, path, body) => {
-        if (!path.endsWith("/download-url")) return { export: { status: "ready" } };
-        if (defect === "URL lifetime") {
-          assert.ok(body.expires_in_seconds > 0);
-          assert.ok(body.expires_in_seconds <= 300, "API rejects URL lifetimes above 300 seconds");
-        }
-        return { url: "https://example.invalid/export", signed_headers: signedHeaders };
-      },
+      apiRequest: async (method, path, body) => (path.endsWith("/download-url") ? downloadUrl(body) : exportStatus(method)),
     };
     let montage = false;
     const outputs = {
@@ -152,6 +215,7 @@ for (const defect of ["URL lifetime", "null headers", "montage font"]) {
     try {
       const result = await exportProof(run, execute);
       assert.equal(result.bytes, 2048);
+      if (defect === "cold render fleet") assert.equal(result.wallSeconds, 246.61);
       assert.ok(montage);
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -166,12 +230,50 @@ test("macOS montage uses a system font when ImageMagick lists none", () => {
   assert.throws(() => contactSheetFont("", "linux"), /no installed font/);
 });
 
-for (const name of ["export", "transcript"]) {
-  test(`${name} stops a processing wait before five minutes`, { timeout: 1000 }, async (t) => {
+for (const [name, seconds] of [
+  ["export", 840],
+  ["transcript", 240],
+]) {
+  test(`${name} stops a pending job after its bounded allowance`, { timeout: 1000 }, async (t) => {
     const { transcriptProof } = await import("./proofs.mjs");
     let now = 0;
-    t.mock.method(Date, "now", () => (now += 300_000));
+    t.mock.method(Date, "now", () => (now += 900_000));
     const run = { tenantPath: "/tenant", recordingId: "recording", apiRequest: async () => ({ export: { id: "export" } }) };
-    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
+    await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), new RegExp(`timed out after ${seconds}s`));
   });
 }
+
+for (const status of ["failed", "unavailable"]) {
+  test(`Export proof rejects ${status} without spending the cold-start allowance`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "chalk-proofkit-export-failure-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    let polls = 0;
+    const run = {
+      directory,
+      tenantPath: "/tenant",
+      recordingId: "recording",
+      apiRequest: async (method) => {
+        if (method === "GET") polls++;
+        return { export: { status, failure_code: "render_failed" } };
+      },
+    };
+    await assert.rejects(exportProof(run), new RegExp(`Export ${status}: render_failed`));
+    assert.equal(polls, 1);
+  });
+}
+
+test("post-refresh proof requires advancing received audio and decoded camera frames for both clients", () => {
+  const received = (kind, value, connection = 0) => ({ id: kind, connection, kind, type: "inbound-rtp", source: kind === "video" ? "camera" : "microphone", bytesReceived: value, framesDecoded: value });
+  const before = [
+    [received("audio", 10), received("video", 10)],
+    [received("audio", 10), received("video", 10)],
+  ];
+  const after = [
+    [received("audio", 20), received("video", 20)],
+    [received("audio", 20), received("video", 20)],
+  ];
+  checkMediaProgress(before, after);
+  assert.throws(() => checkMediaProgress(before, [after[0], before[1]]), /stopped receiving audio/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20), received("video", 10)]]), /stopped receiving video/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20, 1), received("video", 20)]]), /stopped receiving audio/);
+});

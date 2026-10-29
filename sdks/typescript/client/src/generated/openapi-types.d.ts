@@ -661,6 +661,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/episode-status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get participant episode status */
+    get: operations["getParticipantEpisodeStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications": {
     parameters: {
       query?: never;
@@ -1357,20 +1374,35 @@ export interface components {
           | "sync_socket_close"
           | "sync_heartbeat_gap"
           | "media_state"
-          | "media_http_error";
+          | "media_http_error"
+          | "media_projection_mismatch";
+        /** @enum {string} */
+        granted_audio?: "granted" | "not_granted" | "unknown";
+        /** @enum {string} */
+        granted_video?: "granted" | "not_granted" | "unknown";
         heartbeat_gap_ms?: number | null;
         http_status?: number | null;
+        /** @enum {string} */
+        media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
+        /** @enum {string} */
+        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications";
         /** @enum {string} */
         outcome?: "started" | "succeeded" | "failed" | "cancelled";
         /** @enum {string} */
         phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
+        /** @enum {string} */
+        projection_state?: "on" | "off";
+        /** @enum {string} */
+        publication_state?: "on" | "off";
+        /** @enum {string} */
+        source?: "microphone" | "camera";
         /** @enum {string} */
         state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
         /** @enum {string} */
         step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
       }[];
       /** @enum {string} */
-      trigger: "join_failed" | "connection_lost" | "recovery_exhausted";
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch";
       /** @enum {integer} */
       version: 1;
     };
@@ -1568,6 +1600,7 @@ export interface components {
     IntegrationServiceId: string;
     IssueAccessGrantRequest: {
       current_media_token?: string;
+      expected_media_connection_id?: string | null;
       participant_generation: number;
       replace_media_connection: boolean;
     };
@@ -1602,6 +1635,10 @@ export interface components {
       has_more: boolean;
       next_cursor: string | null;
       page_size: number;
+    };
+    ParticipantEpisodeStatus: {
+      /** @enum {string} */
+      status: "active" | "ending" | "ended";
     };
     /** Format: uuid */
     ParticipantId: string;
@@ -6496,6 +6533,97 @@ export interface operations {
       };
       /** @description Forbidden */
       403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getParticipantEpisodeStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ParticipantEpisodeStatus"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

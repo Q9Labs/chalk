@@ -349,16 +349,24 @@ export const ConnectionReportRequestSchema = Schema.Struct({
         "sync_heartbeat_gap",
         "media_state",
         "media_http_error",
+        "media_projection_mismatch",
       ]),
+      granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
+      granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
       heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
       http_status: Schema.optional(Schema.NullOr(Schema.Number)),
+      media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
+      media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"])),
       outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
       phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
+      projection_state: Schema.optional(Schema.Literals(["on", "off"])),
+      publication_state: Schema.optional(Schema.Literals(["on", "off"])),
+      source: Schema.optional(Schema.Literals(["microphone", "camera"])),
       state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
       step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
     }),
   ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted"]),
+  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"]),
   version: Schema.Literal(1),
 });
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;
@@ -578,6 +586,7 @@ export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
 
 export const IssueAccessGrantRequestSchema = Schema.Struct({
   current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   participant_generation: Schema.Number,
   replace_media_connection: Schema.Boolean,
 });
@@ -603,6 +612,11 @@ export const MembershipListSchema = Schema.Struct({
   pagination: PaginationSchema,
 });
 export type MembershipList = typeof MembershipListSchema.Type;
+
+export const ParticipantEpisodeStatusSchema = Schema.Struct({
+  status: Schema.Literals(["active", "ending", "ended"]),
+});
+export type ParticipantEpisodeStatus = typeof ParticipantEpisodeStatusSchema.Type;
 
 export const ParticipantJoinCancellationSchema = Schema.Struct({
   cancelled: Schema.Boolean,
@@ -1805,6 +1819,24 @@ export const GetEpisodeAttendance429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetParticipantEpisodeStatusPathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participant_id: ParticipantIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type GetParticipantEpisodeStatusPathParams = typeof GetParticipantEpisodeStatusPathParamsSchema.Type;
+
+export const GetParticipantEpisodeStatusResponseSchema = ParticipantEpisodeStatusSchema;
+export type GetParticipantEpisodeStatusResponse = typeof GetParticipantEpisodeStatusResponseSchema.Type;
+
+export const GetParticipantEpisodeStatus429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
 
 export const GetProblemReportAvailabilityPathParamsSchema = Schema.Struct({
   tenant_id: TenantIdSchema,
@@ -3666,6 +3698,25 @@ export const ParticipantInvalidIdErrorSchema = ParticipantInvalidIdErrorWireSche
   }),
 );
 
+export class ParticipantMediaReplacementPendingError extends Schema.TaggedErrorClass<ParticipantMediaReplacementPendingError>()("ParticipantMediaReplacementPendingError", {
+  error: Schema.Struct({
+    code: Schema.Literal("participant.media_replacement_pending"),
+    message: Schema.String,
+  }),
+}) {}
+export const ParticipantMediaReplacementPendingErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("participant.media_replacement_pending"),
+    message: Schema.String,
+  }),
+});
+export const ParticipantMediaReplacementPendingErrorSchema = ParticipantMediaReplacementPendingErrorWireSchema.pipe(
+  Schema.decodeTo(ParticipantMediaReplacementPendingError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "ParticipantMediaReplacementPendingError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class ParticipantNotActiveError extends Schema.TaggedErrorClass<ParticipantNotActiveError>()("ParticipantNotActiveError", {
   error: Schema.Struct({
     code: Schema.Literal("participant.not_active"),
@@ -5319,6 +5370,20 @@ export const GetEpisodeErrorSchema = Schema.Union([
 ]);
 export type GetEpisodeError = typeof GetEpisodeErrorSchema.Type;
 
+export const GetParticipantEpisodeStatusErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatusErrorSchema.Type;
+
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
 
@@ -5476,6 +5541,7 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   ParticipantConnectionSupersededErrorSchema,
   ParticipantGenerationMismatchErrorSchema,
   ParticipantInvalidIdErrorSchema,
+  ParticipantMediaReplacementPendingErrorSchema,
   ParticipantNotFoundErrorSchema,
   RequestInvalidErrorSchema,
   RequestPayloadTooLargeErrorSchema,
@@ -6081,6 +6147,7 @@ export const ChalkOperationPolicies = {
   findTenantByExternalID: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisode: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getEpisodeAttendance: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  getParticipantEpisodeStatus: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInvite: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getSpacePublicInviteArrival: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   getTenant: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },

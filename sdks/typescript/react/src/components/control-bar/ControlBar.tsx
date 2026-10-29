@@ -62,6 +62,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="mic"
           isActive={!props.isMuted}
           busy={props.microphonePending}
+          onCancelPending={props.onCancelMicrophonePending}
           toggleDisabled={props.mediaEnableDisabled && props.isMuted}
           onToggle={props.onToggleMute ?? (() => {})}
           devices={effectiveAudioInputDevices}
@@ -83,6 +84,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="video"
           isActive={props.isVideoEnabled ?? true}
           busy={props.cameraPending}
+          onCancelPending={props.onCancelCameraPending}
           toggleDisabled={props.mediaEnableDisabled && !props.isVideoEnabled}
           onToggle={props.onToggleVideo ?? (() => {})}
           devices={effectiveVideoInputDevices}
@@ -180,11 +182,11 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice } = useConnectedControlBarBehavior(props);
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      {!props.onCommandError ? <CommandErrorAlert message={commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined} /> : null}
+      <CommandErrorAlert message={mediaNotice ?? (!props.onCommandError && commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined)} />
     </>
   );
 }

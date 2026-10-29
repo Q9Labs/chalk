@@ -9,28 +9,28 @@ import { V1SyncError } from "../sync/v1-error";
 import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
+import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
-type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
+type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly controlRevision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
 type SourceResult = { readonly revision: number; readonly status: "confirmed" } | { readonly revision: number; readonly status: "failed"; readonly cause: unknown; cleanup: boolean };
 type SourceWorker = {
   desired: MediaIntent;
   result: SourceResult;
-  sentRevision: number;
   initialRevision: number;
   localEnabled: boolean;
   pause: Promise<void> | null;
   serverSequence: number;
   forcedRevision: number | null;
+  pausedPublicationId: string | null;
 };
 function sourceWorker(enabled: boolean): SourceWorker {
-  return { desired: { enabled, revision: 0, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, sentRevision: 0, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null };
+  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null };
 }
 type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
-type RecoveryPublication = { readonly revision: number; readonly publicationId: string };
 type CaptureAction = "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare";
 type CaptureRollback = {
   readonly action: CaptureAction;
@@ -113,6 +113,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
+  #recovering: ReadonlyMap<MediaSource, number> | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -128,6 +129,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribeConnection: (() => void) | null = null;
   #unsubscribeScreenEnded: (() => void) | null = null;
   #unsubscribePorts: (() => void) | null = null;
+  #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
+  readonly #projection: MediaProjectionMonitor;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
@@ -135,6 +138,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#gates = gates;
     this.#now = now;
     this.#fork = fork;
+    this.#projection = new MediaProjectionMonitor({
+      now,
+      schedule: connection.scheduleUnsafe,
+      cancel: connection.cancelScheduleUnsafe,
+      changed: () => this.#publish(),
+      report: (event) => connection.recordTransportDiagnostic(event),
+      pause: (source, revision) => {
+        if (this.#ports) this.#pausePublication(this.#ports, source, revision);
+      },
+    });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
     this.#unsubscribeScreenEnded = connection.subscribeScreenEnded(() => this.#handleScreenEnded());
     this.#unsubscribePorts = connection.subscribePorts((ports) => this.#bind(ports));
@@ -193,7 +206,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     microphone: boolean;
     camera: boolean;
   }> {
-    return { microphone: this.#sources.microphone.desired.enabled, camera: this.#sources.camera.desired.enabled };
+    return { microphone: this.#hasConsent("microphone"), camera: this.#hasConsent("camera") };
   }
   captureInitial(intent: Readonly<{ microphone: boolean; camera: boolean }>): Effect.Effect<MediaStream, unknown> {
     for (const source of ["microphone", "camera"] as const) this.#sources[source].initialRevision = this.#sources[source].desired.revision;
@@ -258,6 +271,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#fork(this.#refreshDevices().pipe(Effect.ignore));
   }
   dispose(): void {
+    this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(cancelledCaptureError()));
     this.#cancelCaptures();
     for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
@@ -273,9 +287,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribePorts = null;
     this.#ports = null;
     this.#resetObservations();
-    this.#screenAudioTrack?.stop();
-    this.#screenAudioTrack = null;
-    for (const track of this.#tracks.values()) track.stop();
     this.#clearTracks();
     this.#clearRequests();
     this.#publish();
@@ -290,10 +301,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const check = (failure?: SpaceClientError) => {
           if (failure) return resume(Effect.fail(failure));
           if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
-          if (ports && (this.#ports?.sync !== ports.sync || this.#ports.media !== ports.media)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
+          if (ports && !this.#canUsePorts(ports)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
           const state = this.#connection.getSnapshot().state;
-          if (state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live" && this.#store.getSnapshot().connection.status === "live") return resume(Effect.void);
-          if (state !== "joining" && state !== "reconnecting" && state !== "live") resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
+          const phases = [state, this.#ports?.sync.getSnapshot().connection.phase, this.#store.getSnapshot().connection.status];
+          if (phases.every((phase) => phase === "live")) return resume(Effect.void);
+          if (!["joining", "reconnecting", "live"].includes(state)) resume(Effect.fail(normalizeMediaError(new V1SyncError("Media enable requires a live call", "not_live"))));
         };
         this.#readinessChecks.add(check);
         const unsubscribe = this.#connection.subscribe(() => check());
@@ -323,11 +335,22 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #pauseTracks(source: MediaSource): void {
     const track = this.#track(source);
     if (track) track.enabled = false;
+    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) publication.track.enabled = false;
     if (source === "screen" && this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
+  }
+  #retainPause(state: SourceWorker, next: Promise<void>): void {
+    const previous = state.pause;
+    state.pause = previous
+      ? Promise.allSettled([previous, next]).then((results) => {
+          for (const result of results) if (result.status === "rejected") throw result.reason;
+        })
+      : next;
+    void state.pause.catch(() => undefined);
   }
   #recordIntent(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): MediaIntent {
     const state = this.#sources[source];
-    const desired = { enabled, revision: state.desired.revision + 1, options, previousEnabled: state.localEnabled };
+    const controlRevision = Math.max(state.serverSequence, this.#ports?.sync.getSnapshot().control?.revision ?? -1);
+    const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
     if (!enabled) {
       state.localEnabled = false;
@@ -339,14 +362,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const ports = this.#ports;
       if (ports) {
         ports.media.setLocalSourceIntent?.(source, false);
-        const previous = state.pause;
-        const next = this.#beginLocalPause(ports, source);
-        state.pause = previous
-          ? Promise.allSettled([previous, next]).then((results) => {
-              for (const result of results) if (result.status === "rejected") throw result.reason;
-            })
-          : next;
-        void state.pause.catch(() => undefined);
+        this.#retainPause(state, this.#beginLocalPause(ports, source));
       }
     }
     for (const check of this.#readinessChecks) check();
@@ -354,6 +370,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
     return Effect.suspend(() => {
+      if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
       const ready =
         enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
@@ -444,7 +461,16 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const previous = intent.previousEnabled;
       // This is the result of this operation, never an inference from a projection.
       // An Off failure cannot undo the user's local pause; its remote cleanup remains pending.
-      if (state.desired.revision === intent.revision) state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
+      if (state.desired.revision !== intent.revision) return;
+      state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
+      if (state.result.cleanup) {
+        if (intent.enabled && source !== "screen") this.#pausePublication(ports, source, intent.revision);
+        else {
+          state.localEnabled = false;
+          this.#pauseTracks(source);
+          ports.media.setLocalSourceIntent?.(source, false);
+        }
+      }
     });
   }
   #prepareDevice(ports: ConnectionPorts, source: "microphone" | "camera", intent: MediaIntent): Effect.Effect<void, unknown> {
@@ -555,21 +581,27 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }),
     );
   }
-  #assertCurrentIntent(source: MediaSource, revision: number): void {
-    if (this.#sources[source].desired.revision !== revision) throw cancelledCaptureError();
+  #assertCurrentIntent(source: MediaSource, revision: number, enabling = true): void {
+    const state = this.#sources[source];
+    if (state.desired.revision !== revision || (enabling && state.forcedRevision === revision)) throw cancelledCaptureError();
+  }
+  #hasConsent(source: MediaSource): boolean {
+    const state = this.#sources[source];
+    return state.desired.enabled && state.forcedRevision !== state.desired.revision;
   }
   #resetObservations(): void {
+    if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
       state.result = { revision: state.desired.revision, status: "confirmed" };
       state.pause = null;
       state.serverSequence = -1;
-      state.forcedRevision = null;
+      // Revocation belongs to the action, not a disposable connection or Sync client.
     }
   }
   #pauseInitialTracks(): void {
     for (const source of ["microphone", "camera"] as const) {
-      const enabled = this.#sources[source].desired.enabled;
+      const enabled = this.#hasConsent(source);
       const track = this.#track(source);
       if (track && !enabled) track.enabled = false;
       this.#sources[source].localEnabled = !!track && enabled;
@@ -581,16 +613,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = stream.getTracks().filter((track) => {
         const source = track.kind === "audio" ? "microphone" : "camera";
-        const state = this.#sources[source];
-        track.enabled = state.desired.enabled;
-        if (!state.desired.enabled) {
+        const enabled = this.#hasConsent(source);
+        track.enabled = enabled;
+        if (!enabled) {
           // An omitted source was never prepared in the media plane. Release its publication ownership.
           this.#deleteTrack(source);
           if (source === "microphone") track.stop();
         }
-        return state.desired.enabled;
+        return enabled;
       });
-      for (const source of ["microphone", "camera"] as const) this.#sources[source].sentRevision = revisions[source];
       await media.start(streamFromTracks(tracks));
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
@@ -604,11 +635,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       enabled,
       foreign(async () => {
         // Revision check and transport invocation are one synchronous turn, owned by the source worker.
-        this.#assertCurrentIntent(source, intent.revision);
+        this.#assertCurrentIntent(source, intent.revision, enabled);
         this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled");
-        const state = this.#sources[source];
-        state.sentRevision = intent.revision;
-        await (source === "microphone" ? ports.sync.setMicrophoneEnabled(enabled) : source === "camera" ? ports.sync.setCameraEnabled(enabled) : ports.sync.setScreenShareEnabled(enabled));
+        const send = source === "microphone" ? ports.sync.setMicrophoneEnabled : source === "camera" ? ports.sync.setCameraEnabled : ports.sync.setScreenShareEnabled;
+        await send.call(ports.sync, enabled);
       }).pipe(
         Effect.andThen(enabled && source !== "screen" ? this.#waitForLive(source, intent.revision, ports) : Effect.void),
         Effect.tap(() => Effect.try({ try: () => this.#assertActivePorts(ports, source === "screen" ? "startScreenShare" : source === "camera" ? "setCameraEnabled" : "setMicrophoneEnabled"), catch: (cause) => cause })),
@@ -618,10 +648,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
+    if (this.#syncLive && !live) this.#rememberRecoveryIntents();
     const resumed = live && !this.#syncLive;
     this.#syncLive = live;
     if (!resumed) return;
-    for (const source of MEDIA_SOURCES) this.#fork(this.#serialize(source, this.#work(source)).pipe(Effect.ignore));
+    if (this.#ports) this.#pauseRecoveredIntents(this.#ports, this.#ports.sync.getSnapshot());
+    this.#resumePendingActions();
+  }
+  #resumePendingActions(): void {
+    for (const source of MEDIA_SOURCES) {
+      const state = this.#sources[source];
+      // Pending user enables own their readiness wait. Recovery never replays one
+      // or sends participant-wide cleanup for a failed enable on another client.
+      if (source !== "screen" && (state.desired.enabled || state.result.revision === state.desired.revision)) continue;
+      this.#fork(this.#serialize(source, this.#work(source)).pipe(Effect.ignore));
+    }
   }
   #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(
@@ -634,7 +675,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
-    const pause = Effect.runPromise(this.#localTarget(ports, source, false));
+    this.#sources[source].pausedPublicationId = ports.media.getSnapshot().localTracks.find((item) => item.source === source)?.publicationId ?? null;
+    const pause = ports.media.closeForcedLocalPublication ? Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source)) : Effect.runPromise(this.#localTarget(ports, source, false));
     // The command gate awaits and propagates this error; observe it meanwhile.
     void pause.catch(() => undefined);
     return pause;
@@ -707,18 +749,53 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #setTrack(source: MediaSource, track: MediaStreamTrack): void {
     if (source !== "camera") {
       this.#tracks.set(source, track);
+      if (source === "microphone") this.#watchMicrophone(track);
       return;
     }
     const state = this.#camera;
     if (!("owner" in state)) throw cancelledCaptureError();
     if (state.status === "live" && state.track !== track) throw cancelledCaptureError();
-    const onEnded = () => {
-      if (this.#camera.status === "live" && this.#camera.track === track) this.#transitionCamera({ status: "ended" });
-    };
+    const onEnded = () => this.#handleCameraEnded(track);
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
+  }
+  #handleCameraEnded(track: MediaStreamTrack): void {
+    const state = this.#camera;
+    if (state.status !== "live" || state.track !== track) return;
+    if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision);
+    this.#transitionCamera({ status: "ended" });
+  }
+  #watchMicrophone(track: MediaStreamTrack | null): void {
+    if (this.#microphoneWatch?.track === track) return;
+    this.#microphoneWatch?.unsubscribe();
+    this.#microphoneWatch = null;
+    if (!track) return;
+    const changed = () => {
+      if (this.#microphoneWatch?.track !== track) return;
+      if (track.muted || track.readyState === "ended") {
+        track.enabled = false;
+        const state = this.#sources.microphone;
+        if (this.#ports) this.#pausePublication(this.#ports, "microphone", state.desired.revision);
+        else {
+          state.forcedRevision = state.desired.revision;
+          state.localEnabled = false;
+        }
+      }
+      this.#publish();
+    };
+    for (const event of ["mute", "unmute", "ended"]) track.addEventListener(event, changed);
+    this.#microphoneWatch = {
+      track,
+      unsubscribe: () => {
+        for (const event of ["mute", "unmute", "ended"]) track.removeEventListener(event, changed);
+      },
+    };
+    if (track.muted || track.readyState === "ended") changed();
   }
   #deleteTrack(source: MediaSource): void {
     if (source !== "camera") {
+      if (source === "microphone") {
+        this.#watchMicrophone(null);
+      }
       this.#tracks.delete(source);
       return;
     }
@@ -729,6 +806,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     } else this.#transitionCamera({ status: "ended" });
   }
   #clearTracks(): void {
+    this.#watchMicrophone(null);
     this.#tracks.clear();
     this.#transitionCamera({ status: "idle" });
   }
@@ -790,9 +868,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
                 track.stop();
                 throw cancelledCaptureError();
               }
-              const onEnded = () => {
-                if (this.#camera.status === "live" && this.#camera.owner === owner) this.#transitionCamera({ status: "ended" });
-              };
+              const onEnded = () => this.#handleCameraEnded(track);
               this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded });
               if (track.readyState !== "live") {
                 this.#transitionCamera({ status: "ended" });
@@ -848,9 +924,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return Effect.suspend(() => {
       let cancelled = false;
       let captured: MediaStream | null = null;
+      const cancellation = Deferred.makeUnsafe<never, ConnectionError>();
       const cancel = () => {
         cancelled = true;
         stopStream(captured);
+        Deferred.doneUnsafe(cancellation, Effect.fail(cancelledCaptureError()));
       };
       this.#pendingCaptures.add(cancel);
       signal?.addEventListener("abort", cancel, { once: true });
@@ -860,7 +938,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const stream = await operation();
         captured = stream;
         // Browser capture cannot be aborted; this owner must dispose its late result.
-        if (cancelled) {
+        if (cancelled || this.#ports?.media.getSnapshot().connection.phase === "stopped") {
           stopStream(stream);
           throw cancelledCaptureError();
         }
@@ -868,6 +946,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }).pipe(
         Effect.mapError(onCaptureError),
         Effect.flatMap(use),
+        Effect.raceFirst(Deferred.await(cancellation)),
         Effect.tap(() => (cancelled ? Effect.fail(cancelledCaptureError()) : Effect.void)),
         Effect.onExit((exit) =>
           Effect.sync(() => {
@@ -883,6 +962,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#transitionCamera({ status: "ended" });
     for (const cancel of this.#pendingCaptures) cancel();
     this.#pendingCaptures.clear();
+    this.#screenAudioTrack?.stop();
+    this.#screenAudioTrack = null;
+    for (const track of this.#tracks.values()) track.stop();
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
@@ -940,42 +1022,46 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const failure = isPermissionDenied(input.cause) || captureWasUnavailable ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;
     return rollback.pipe(Effect.andThen(Effect.sync(() => this.#publish())), Effect.andThen(Effect.fail(failure)));
   }
+  #canUsePorts(ports: ConnectionPorts): boolean {
+    return this.#ports?.sync === ports.sync && this.#ports.media === ports.media && ports.media.getSnapshot().connection.phase !== "stopped";
+  }
   #assertActivePorts(ports: ConnectionPorts, action: "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare" | "stopScreenShare"): void {
-    if (this.#connection.getSnapshot().state === "live" && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
+    if (this.#connection.getSnapshot().state === "live" && this.#canUsePorts(ports)) return;
     throw new ConnectionError({ code: "invalid_state", action, recoverable: false, message: `${action} belongs to an inactive connection` });
   }
   #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {
     const state = this.#sources[source];
-    if (state.desired.revision !== revision || ports.sync.getSnapshot().control?.status === "ended") return;
+    if (state.desired.revision !== revision || state.forcedRevision === revision || ports.sync.getSnapshot().control?.status === "ended") return;
     state.forcedRevision = revision;
     state.localEnabled = false;
     this.#pauseTracks(source);
     ports.media.setLocalSourceIntent?.(source, false);
-    if (ports.media.closeForcedLocalPublication) this.#fork(foreign(() => ports.media.closeForcedLocalPublication!(source)).pipe(Effect.ignore));
+    this.#retainPause(state, this.#beginLocalPause(ports, source));
     this.#publish();
   }
   #bind(ports: ConnectionPorts | null): void {
+    if (ports?.media.getSnapshot().connection.phase === "stopped") this.#cancelCaptures();
     if (ports && this.#ports?.sync === ports.sync && this.#ports.media === ports.media) return;
+    this.#rememberRecoveryIntents();
     for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
     this.#unsubscribeMedia = null;
     this.#unsubscribeRequests = null;
     this.#unsubscribePause = null;
     this.#unsubscribeSync = null;
     this.#ports = ports;
+    this.#projection.reset();
     this.#syncLive = false;
     this.#bindCamera(ports);
     if (!ports) {
       this.#resetObservations();
       this.#cancelCaptures();
-      this.#screenAudioTrack?.stop();
-      this.#screenAudioTrack = null;
-      for (const track of this.#tracks.values()) track.stop();
       this.#clearTracks();
       this.#clearRequests();
       this.#publish();
       return;
     }
     this.#unsubscribeMedia = ports.media.subscribe(() => {
+      if (ports.media.getSnapshot().connection.phase === "stopped") this.#cancelCaptures();
       this.#applyRemoteMediaState(ports, ports.sync.getSnapshot());
       this.#publish();
     });
@@ -991,45 +1077,31 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const state = this.#sources[pause.source];
         if (pause.revision <= state.serverSequence) return;
         state.serverSequence = pause.revision;
-        // Control events carry no self-media generation: scope the pause to the sent op at arrival.
-        this.#pausePublication(ports, pause.source, state.sentRevision);
+        // Revision evidence orders moderation against user consent, including unsent capture.
+        if (pause.revision > state.desired.controlRevision) this.#pausePublication(ports, pause.source, state.desired.revision);
       }) ?? null
     );
   }
-  #rememberPublications(snapshot: SyncSnapshot): Map<MediaSource, RecoveryPublication> {
-    const publications = new Map<MediaSource, RecoveryPublication>();
-    const own = (snapshot.media?.items ?? []).filter((item) => item.participantId === snapshot.participantId && item.enabled && item.publicationId !== null);
-    for (const item of own) {
-      if (item.source === "screen_audio" || item.publicationId === null) continue;
-      const state = this.#sources[item.source];
-      if (state.localEnabled && state.sentRevision === state.desired.revision) publications.set(item.source, { revision: state.sentRevision, publicationId: item.publicationId });
-    }
-    return publications;
+  #rememberRecoveryIntents(): void {
+    if (!this.#ports) return;
+    // Consent belongs to the user action, not a disposable Sync subscription or
+    // a projection that may never have confirmed the publication before loss.
+    this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
-  #pauseLostPublications(ports: ConnectionPorts, snapshot: SyncSnapshot, publications: ReadonlyMap<MediaSource, RecoveryPublication>): void {
-    for (const [source, previous] of publications) {
+  #pauseRecoveredIntents(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
+    const recovering = this.#recovering;
+    this.#recovering = null;
+    for (const [source, revision] of recovering ?? []) {
       const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
-      if (!current || (!current.enabled && (current.publicationId === previous.publicationId || current.publicationId === null))) this.#pausePublication(ports, source, previous.revision);
+      if (!current?.enabled) this.#pausePublication(ports, source, revision);
     }
   }
   #subscribeSync(ports: ConnectionPorts): () => void {
-    let recovering = new Map<MediaSource, RecoveryPublication>();
-    let lastLive = ports.sync.getSnapshot();
-    let wasLive = lastLive.connection.phase === "live";
-    // Live projections cannot settle local work. Recovery replacement can revoke only the
-    // publication known before disconnect, scoped to its user revision (never a newer action).
     return ports.sync.subscribe((snapshot) => {
-      const live = snapshot.connection.phase === "live";
-      if (wasLive && !live) recovering = this.#rememberPublications(lastLive);
-      if (live && !wasLive) {
-        this.#pauseLostPublications(ports, snapshot, recovering);
-        recovering.clear();
-      }
-      if (live) lastLive = snapshot;
-      wasLive = live;
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
+      this.#publish();
     });
   }
   #bindCamera(ports: ConnectionPorts | null): void {
@@ -1104,14 +1176,64 @@ class MediaControllerRuntime implements MediaControllerEffects {
     // The browser Stop sharing button is a user action, just like our Stop control.
     this.#fork(this.#stopScreen().pipe(Effect.ignore));
   }
+  #observeProjections(): void {
+    const ports = this.#ports;
+    this.#watchMicrophone(ports?.media.getSnapshot().localTracks.find((item) => item.source === "microphone")?.track ?? this.#track("microphone") ?? null);
+    if (!ports) {
+      this.#projection.reset();
+      return;
+    }
+    this.#enforcePause(ports, "microphone");
+    this.#enforcePause(ports, "camera");
+    if (!this.#syncLive) {
+      this.#projection.reset();
+      return;
+    }
+    this.#observeProjection(ports, "microphone");
+    this.#observeProjection(ports, "camera");
+  }
+  #enforcePause(ports: ConnectionPorts, source: "microphone" | "camera"): void {
+    const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
+    const state = this.#sources[source];
+    if (!this.#hasConsent(source) && publication?.enabled && state.pausedPublicationId !== publication.publicationId) {
+      this.#pauseTracks(source);
+      ports.media.setLocalSourceIntent?.(source, false);
+      this.#retainPause(state, this.#beginLocalPause(ports, source));
+    }
+  }
+  #observeProjection(ports: ConnectionPorts, source: "microphone" | "camera"): void {
+    const sync = ports.sync.getSnapshot();
+    const state = this.#sources[source];
+    const publication = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
+    const projection = sync.media?.items.find((item) => item.participantId === sync.participantId && item.source === source) ?? { enabled: false, publicationId: null };
+    this.#projection.observe(source, {
+      revision: state.desired.revision,
+      publicationId: publication?.publicationId ?? null,
+      enabled: livePublication(publication),
+      projectedEnabled: projection.enabled,
+      projectedPublicationId: projection.publicationId,
+    });
+  }
+  #confirmedLocal(source: "microphone" | "camera"): MediaSlice["local"][MediaSource] {
+    const snapshot = this.#ports?.media.getSnapshot();
+    if (snapshot?.connection.phase === "stopped") return { source, state: "unavailable", track: null };
+    const publication = snapshot?.localTracks.find((item) => item.source === source);
+    const sync = this.#ports?.sync.getSnapshot();
+    const projected = sync?.media?.items.some((item) => item.participantId === sync.participantId && item.source === source && item.enabled && item.publicationId === publication?.publicationId) ?? false;
+    const confirmed = this.#syncLive && livePublication(publication) && projected;
+    const pending = this.#pendingSources.has(source) || this.#connection.getSnapshot().state === "joining";
+    const track = publication?.track ?? this.#track(source) ?? null;
+    return { source, track, state: confirmedLocalMediaState(track, this.#hasConsent(source), pending, confirmed, this.#syncLive, this.#projection.state(source)) };
+  }
   #publish(): void {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
     const state = this.#connection.getSnapshot().state;
+    this.#observeProjections();
     const local = Object.freeze({
-      microphone: localMedia("microphone", this.#localTracks(), snapshot, this.#sources.microphone.localEnabled, state, this.#pendingSources.has("microphone") && this.#sources.microphone.desired.enabled),
-      camera: localMedia("camera", this.#localTracks(), snapshot, this.#sources.camera.localEnabled, state, this.#pendingSources.has("camera") && this.#sources.camera.desired.enabled),
-      screen: localMedia("screen", this.#localTracks(), snapshot, false, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
+      microphone: this.#confirmedLocal("microphone"),
+      camera: this.#confirmedLocal("camera"),
+      screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({
@@ -1128,6 +1250,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
 }
+function liveTrack(track: MediaStreamTrack): boolean {
+  return track.enabled && track.readyState === "live" && !track.muted;
+}
+function livePublication(publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
+  return !!publication?.enabled && liveTrack(publication.track);
+}
+function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boolean, pending: boolean, confirmed: boolean, live: boolean, convergence: "requesting" | "failed" | null): MediaSlice["local"][MediaSource]["state"] {
+  if (!desired) return convergence === "failed" ? "failed" : "disabled";
+  if (convergence) return convergence;
+  if (!live && track && liveTrack(track)) return "requesting";
+  return confirmed ? "enabled" : pending ? "requesting" : "disabled";
+}
 function cancelledCaptureError(): ConnectionError {
   return new ConnectionError({ code: "invalid_state", action: null, recoverable: false, message: "Media capture was cancelled before its result could be used" });
 }
@@ -1136,57 +1270,35 @@ function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
 }
 function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
-  const microphone = initialTrackFor(tracks, intent.microphone, "audio");
-  const camera = initialTrackFor(tracks, intent.camera, "video");
-  const selected = new Set(initialTracks(microphone, camera));
-  for (const track of tracks) if (!selected.has(track)) track.stop();
-  if (missingInitialTrack(intent, microphone, camera)) {
-    for (const track of selected) track.stop();
+  const selected = new Map<"microphone" | "camera", MediaStreamTrack>();
+  for (const [source, kind] of [
+    ["microphone", "audio"],
+    ["camera", "video"],
+  ] as const) {
+    if (!intent[source]) continue;
+    const track = tracks.find((track) => track.kind === kind);
+    if (track) selected.set(source, track);
+  }
+  const retained = new Set(selected.values());
+  for (const track of tracks) if (!retained.has(track)) track.stop();
+  if (selected.size !== Number(intent.microphone) + Number(intent.camera)) {
+    for (const track of retained) track.stop();
     throw new TypeError("Media capture did not return every requested track");
   }
-  return new Map(initialTrackEntries(microphone, camera));
+  return selected;
 }
-function initialTrackFor(tracks: readonly MediaStreamTrack[], enabled: boolean, kind: MediaStreamTrack["kind"]): MediaStreamTrack | undefined {
-  if (!enabled) return undefined;
-  return tracks.find((track) => track.kind === kind);
+function screenLocalMedia(track: MediaStreamTrack | null, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {
+  if (snapshot?.connection.phase === "stopped") return Object.freeze({ source: "screen", state: "unavailable", track: null });
+  const publication = snapshot?.localTracks.find((candidate) => candidate.source === "screen");
+  return Object.freeze({ source: "screen", state: pending ? "requesting" : screenLocalMediaState(track, publication?.enabled, connectionState), track });
 }
-function initialTracks(microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): readonly MediaStreamTrack[] {
-  return [microphone, camera].filter((track): track is MediaStreamTrack => track !== undefined);
-}
-function missingInitialTrack(intent: Readonly<Record<"microphone" | "camera", boolean>>, microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): boolean {
-  return (intent.microphone && !microphone) || (intent.camera && !camera);
-}
-function initialTrackEntries(microphone: MediaStreamTrack | undefined, camera: MediaStreamTrack | undefined): readonly (readonly ["microphone" | "camera", MediaStreamTrack])[] {
-  const entries: ["microphone" | "camera", MediaStreamTrack][] = [];
-  if (microphone) entries.push(["microphone", microphone]);
-  if (camera) entries.push(["camera", camera]);
-  return entries;
-}
-function localMedia(source: MediaSource, tracks: ReadonlyMap<MediaSource, MediaStreamTrack>, snapshot: ConnectionMediaSnapshot | undefined, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean) {
-  const track = tracks.get(source) ?? null;
-  const publication = snapshot?.localTracks.find((candidate) => candidate.source === source);
-  if (pending) return Object.freeze({ source, state: "requesting" as const, track });
-  if (locallyMuted(intended, track, publication)) return Object.freeze({ source, state: "disabled" as const, track });
-  if (publication?.enabled) return Object.freeze({ source, state: "enabled" as const, track });
-  if (publication && connectionState === "live") return Object.freeze({ source, state: "disabled" as const, track });
-  return Object.freeze({ source, state: localMediaState(source, track, intended, connectionState), track });
-}
-function locallyMuted(intended: boolean, track: MediaStreamTrack | null, publication: ConnectionMediaSnapshot["localTracks"][number] | undefined): boolean {
-  return !intended && track?.enabled === false && publication?.enabled === false;
-}
-function localMediaState(source: MediaSource, track: MediaStreamTrack | null, intended: boolean, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
-  if (!mediaIsDesired(source, track, intended)) return inactiveLocalMediaState(connectionState, track);
-  if (connectionState === "joining" || track) return "requesting";
-  return activeLocalMediaState(connectionState);
-}
-function mediaIsDesired(source: MediaSource, track: MediaStreamTrack | null, intended: boolean): boolean {
-  return source === "screen" ? track !== null : intended;
-}
-function inactiveLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], track: MediaStreamTrack | null): MediaSlice["local"][MediaSource]["state"] {
-  return connectionState === "live" || connectionState === "reconnecting" || track ? "disabled" : "unavailable";
-}
-function activeLocalMediaState(connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"][MediaSource]["state"] {
-  return connectionState === "failed" || connectionState === "live" || connectionState === "reconnecting" ? "failed" : "unavailable";
+function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"]): MediaSlice["local"]["screen"]["state"] {
+  if (enabled === false) {
+    if (track?.enabled === false || connectionState === "live") return "disabled";
+  }
+  if (enabled) return "enabled";
+  if (track) return "requesting";
+  return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;

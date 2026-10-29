@@ -45,8 +45,8 @@ def registration(issuer, root, provider_id):
 
 
 def bootstrap_pending(result):
-    # The controller translates the issuer's 202 into this typed 409 response.
-    return result["status"] == 409 and (result.get("body") or {}).get("error", {}).get("code") == "recorder_fleet.bootstrap_pending"
+    return result["status"] == 409 and (result.get("body") or {}).get("error", {}).get("code") in (
+        "recorder_fleet.bootstrap_pending", "recorder_fleet.inventory_not_ready")
 
 
 def duration_seconds(value):

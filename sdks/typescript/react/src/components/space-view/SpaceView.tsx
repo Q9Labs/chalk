@@ -1,5 +1,6 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -286,6 +287,8 @@ export function SpaceView({
     else callToasts.dismiss(id);
   };
   const [foldedNotices, setFoldedNotices] = useState<readonly string[]>([]);
+  const microphoneTarget = mediaToggleTarget(media.local.microphone.state, connection.status === "live");
+  const cameraTarget = mediaToggleTarget(media.local.camera.state, connection.status === "live");
   const folded = toasts.filter((toast) => foldedNotices.includes(toast.id));
   return (
     <ParticipantVolumeProvider>
@@ -309,9 +312,8 @@ export function SpaceView({
             diagnostics: callDiagnostics(connection, media),
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
-              onToggleMute:
-                connection.status === "live" || media.local.microphone.state === "enabled" ? () => void runCommand(() => client.media.setMicrophoneEnabled(media.local.microphone.state !== "enabled"), "microphone", media.local.microphone.state === "enabled" ? "stop" : "start") : undefined,
-              onToggleVideo: connection.status === "live" || media.local.camera.state === "enabled" ? () => void runCommand(() => client.media.setCameraEnabled(media.local.camera.state !== "enabled"), "camera", media.local.camera.state === "enabled" ? "stop" : "start") : undefined,
+              onToggleMute: microphoneTarget === undefined ? undefined : () => void runCommand(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop"),
+              onToggleVideo: cameraTarget === undefined ? undefined : () => void runCommand(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop"),
               onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,

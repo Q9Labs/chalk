@@ -121,6 +121,11 @@ export async function signOut(): Promise<void> {
   csrfToken = undefined;
 }
 
+export async function clearOwnerSeats(): Promise<void> {
+  const response = await post("/auth/clear-owner-seats", {});
+  if (!response.ok) throw toError(response, await readJSON(response));
+}
+
 export async function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<Pages[P]["data"]> {
   return (await readPageTimed(page, query)).data;
 }

@@ -33,6 +33,7 @@ export interface DevicePopoverProps {
   disabled?: boolean;
   toggleDisabled?: boolean;
   busy?: boolean;
+  onCancelPending?: () => void;
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
@@ -148,6 +149,7 @@ export function DevicePopover({
   disabled,
   toggleDisabled,
   busy,
+  onCancelPending,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
   const mic = type === "mic";
@@ -157,12 +159,20 @@ export function DevicePopover({
       <ShellStyles />
       <ChalkTooltip
         trigger={
-          <button type="button" className="chalk-shell-main" aria-label={busy ? `Updating ${mic ? "microphone" : "camera"}` : label} aria-pressed={isActive} disabled={disabled || toggleDisabled || busy} onClick={onToggle}>
-            <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />
+          <button
+            type="button"
+            className="chalk-shell-main"
+            aria-label={busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label}
+            aria-pressed={isActive}
+            aria-busy={busy}
+            disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
+            onClick={busy && onCancelPending ? onCancelPending : onToggle}
+          >
+            {busy ? <span aria-hidden="true">…</span> : <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />}
           </button>
         }
       >
-        {label}
+        {warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
@@ -211,8 +221,14 @@ export function DevicePopover({
         )}
       </ChalkMenu>
       {warning ? (
-        <span className="chalk-shell-warning" role="img" aria-label={`${mic ? "Microphone" : "Camera"} blocked or unavailable`}>
-          !
+        <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
+          <span aria-hidden="true">!</span>
+          <span className="sr-only">{mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.</span>
+        </span>
+      ) : null}
+      {busy ? (
+        <span className="sr-only" role="status">
+          Connecting {mic ? "microphone" : "camera"}…
         </span>
       ) : null}
       {mic && speakingWhileMuted ? (

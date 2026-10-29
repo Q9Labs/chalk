@@ -2533,7 +2533,50 @@ func (q *Queries) LockRecordingJobClaimRequest(ctx context.Context, claimRequest
 }
 
 const recoverExpiredRecordingJobs = `-- name: RecoverExpiredRecordingJobs :many
-with expired as (
+with completed_captures as materialized (
+    -- Capture completion is durable even if the worker lost its stopped callback.
+    -- Publish through Sync; never bypass its epoch and source-operation fences.
+    select recording.tenant_id, recording.space_id, recording.episode_id, recording.recording_id,
+        source.journey_id, source.parent_journey_event_id,
+        'capture_complete_recovery_' || recording.recording_id::text || '_' || pipelines.capture_epoch::text as request_key,
+        jsonb_build_object('recordingId', recording.recording_id::text,
+            'stopOperationId', pipelines.stop_operation_id::text,
+            'captureEpoch', pipelines.capture_epoch) as payload
+    from recording_pipelines pipelines
+    join sync_recordings recording on recording.tenant_id = pipelines.tenant_id
+        and recording.recording_id = pipelines.recording_id
+    join sync_external_operations source on source.tenant_id = recording.tenant_id
+        and source.space_id = recording.space_id and source.episode_id = recording.episode_id
+        and source.recording_id = recording.recording_id
+        and source.external_operation_id = pipelines.stop_operation_id
+        and source.operation_name = 'stop_recording' and source.status = 'applied'
+    where pipelines.capture_completed_at is not null
+      and recording.status = 'stopping'
+      and recording.stop_external_operation_id = pipelines.stop_operation_id
+      and not exists (
+          select 1 from sync_external_operations operation
+          where operation.tenant_id = recording.tenant_id
+            and operation.episode_id = recording.episode_id
+            and operation.operation_name = 'recording_capture_stopped'
+            and operation.recording_id = recording.recording_id
+            and operation.status in ('pending', 'applied')
+            and operation.payload ->> 'stopOperationId' = pipelines.stop_operation_id::text
+            and operation.payload ->> 'captureEpoch' = pipelines.capture_epoch::text
+      )
+    order by pipelines.capture_completed_at, pipelines.recording_id
+    limit 100
+), recovered_capture_stops as (
+    insert into sync_external_operations (
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, recording_id, payload, fence_active,
+        journey_id, parent_journey_event_id
+    )
+    select tenant_id, space_id, episode_id, gen_random_uuid(), request_key,
+        sha256(convert_to(payload::text, 'UTF8')), 'recording_capture_stopped', recording_id,
+        payload, false, journey_id, parent_journey_event_id
+    from completed_captures
+    on conflict (tenant_id, episode_id, operation_name, request_key) do nothing
+), expired as (
     select jobs.id, jobs.state as prior_state, ((jobs.kind in ('render', 'transcription') and
         pipelines.capture_completed_at +
             ((case when jobs.kind = 'transcription'
@@ -3186,6 +3229,21 @@ where recording_pipelines.tenant_id = $2
   )
   and (
       recording_pipelines.stop_operation_id = $1
+      or (
+          recording_pipelines.stop_operation_id is not null
+          and recording_pipelines.stop_requested_at is not null
+          and exists (
+              select 1 from sync_external_operations operation
+              join recordings recording on recording.id = recording_pipelines.recording_id
+              where operation.tenant_id = recording_pipelines.tenant_id
+                and operation.space_id = recording.space_id
+                and operation.episode_id = recording.episode_id
+                and operation.recording_id = recording.id
+                and operation.external_operation_id = $1
+                and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
+                and operation.status = 'pending'
+          )
+      )
       or (
           recording_pipelines.stop_operation_id is null
           and recording_pipelines.state in ('reserved', 'capture_leased', 'capturing_segmented', 'capture_complete', 'render_queued', 'rendering', 'verifying', 'retryable_failure', 'committed', 'terminal_failure', 'deleted')

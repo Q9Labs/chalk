@@ -3,10 +3,11 @@ import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { z } from "zod";
+import { z } from "../../lib/zod-mini";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
-import { act, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { act, clearOwnerSeats, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
+import { dashboardAccessFailure } from "../../lib/dashboard/owner-access";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
@@ -42,6 +43,7 @@ function ownerAccess(spaceId: string, userId: string) {
   const episodeStorageKey = `${joinStorageKey}:episode`;
   let joined = false;
   let current: OwnerAccessDTO["access"] | undefined;
+  let ownerSeat: string | undefined;
   let deadlineCeiling: string | undefined;
   const listeners = new Set<() => void>();
   let recovery: ReturnType<typeof readOwnerReload> | undefined;
@@ -55,6 +57,10 @@ function ownerAccess(spaceId: string, userId: string) {
       }
     } catch {
       // Storage may be disabled; intentional leave must still work.
+    }
+    if (ownerSeat) {
+      ownerSeat = undefined;
+      void clearOwnerSeats().catch(() => console.warn(JSON.stringify({ event: "dashboard.seat_cleanup_failed" })));
     }
   };
   const rotateJoinKey = () => {
@@ -81,22 +87,26 @@ function ownerAccess(spaceId: string, userId: string) {
     if (saved && page.live?.id === saved.episodeId) joinKey = saved.joinKey;
     else if (!pendingEpisode || page.live?.id !== pendingEpisode) rotateJoinKey();
   };
-  const getAccess: GetAccess = async ({ reason, replaceMediaConnection }) => {
+  const requestAccess = async ({ reason, replaceMediaConnection }: Parameters<GetAccess>[0]) => {
     await (restoring ??= restore().catch((error) => {
       restoring = undefined;
       throw error;
     }));
-    const { access, deadlineCeiling: ceiling } =
-      reason === "join"
-        ? // A Leave can commit while its acknowledgement is lost; its seat then refuses the retained key.
-          await join().catch((error: unknown) => {
-            if (!(error instanceof DashboardRequestError && error.code === "participant_not_active")) throw error;
-            rotateJoinKey();
-            return join();
-          })
-        : // Without the current token the server replaces the media connection.
-          await act("call", { action: "refresh-access", spaceId, ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
+    const {
+      access,
+      ownerSeat: sealedSeat,
+      deadlineCeiling: ceiling,
+    } = reason === "join"
+      ? // A Leave can commit while its acknowledgement is lost; its seat then refuses the retained key.
+        await join().catch((error: unknown) => {
+          if (!(error instanceof DashboardRequestError && error.code === "participant_not_active")) throw error;
+          rotateJoinKey();
+          return join();
+        })
+      : // Without the current token the server replaces the media connection.
+        await act("call", { action: "refresh-access", spaceId, joinKey, ...(ownerSeat ? { ownerSeat } : {}), ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
     current = access;
+    ownerSeat = sealedSeat;
     deadlineCeiling = ceiling;
     try {
       window.sessionStorage.setItem(joinStorageKey, joinKey);
@@ -107,6 +117,7 @@ function ownerAccess(spaceId: string, userId: string) {
     for (const listener of listeners) listener();
     return access;
   };
+  const getAccess: GetAccess = (input) => requestAccess(input).catch(dashboardAccessFailure);
   const saveReload = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
     if (!current || (snapshot.connection.status !== "live" && snapshot.connection.status !== "reconnecting") || snapshot.connection.episodeEnded || snapshot.connection.removedByHost) return;
     const marker = {
@@ -293,6 +304,22 @@ function OwnerCallSurface({
   const reportsAvailable = useProblemReports(baseURL, tenantId);
   const reportExpired = useReportCredentialExpired(access ? Date.parse(access.media.expires_at) : undefined);
   const onReportProblem = useMemo(() => problemReporter({ baseURL, tenantId, mediaProof: owner.reportCredential, connection: () => client.getSnapshot().connection }), [baseURL, tenantId, owner, client]);
+  if (connection.status === "failed" && connection.lastError?.code === "access.invalid")
+    return (
+      <SiteRoot>
+        <div className="dash">
+          <div className="wrap">
+            <ErrorPanel title="Refresh to rejoin the call" detail="Access to this call was rejected. Refresh the page to rejoin." />
+            <button type="button" className="btn pri" onClick={() => window.location.reload()}>
+              Reload page
+            </button>
+            <button type="button" className="btn sec" onClick={props.onHome}>
+              Home
+            </button>
+          </div>
+        </div>
+      </SiteRoot>
+    );
   return (
     <Chalk
       {...props}

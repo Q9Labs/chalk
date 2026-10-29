@@ -34,7 +34,9 @@ export type ConnectionOptions = {
   readonly initialCameraEnabled?: boolean;
   readonly accessRefreshWindowMs?: number;
   readonly recovery?: {
+    /** Sync attempt cap. Recoverable media failures retry until budgetMs expires. */
     readonly maxAttempts?: number;
+    /** Foreground recovery budget for either transport; defaults to 60 seconds. */
     readonly budgetMs?: number;
     readonly backoffMs?: readonly number[];
   };

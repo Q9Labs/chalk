@@ -20,6 +20,59 @@ import (
 
 const connectionReportFixture = `{"version":1,"trigger":"join_failed","events":[{"event":"space_join_span","elapsed_ms":0,"step":"join","outcome":"started"},{"event":"sync_socket_close","elapsed_ms":400,"close_code":1006,"duration_ms":400},{"event":"connection_failed","elapsed_ms":401,"state":"joining","code":"sync_start_failed"}]}`
 
+func TestMediaProjectionMismatchReport(t *testing.T) {
+	const body = `{"version":1,"trigger":"media_projection_mismatch","events":[{"event":"media_projection_mismatch","elapsed_ms":3000,"source":"microphone","publication_state":"on","projection_state":"off","duration_ms":2750,"attempt":2,"outcome":"started"}]}`
+	for _, test := range []struct {
+		name, body string
+		valid      bool
+	}{
+		{"microphone", body, true},
+		{"camera", strings.ReplaceAll(body, "microphone", "camera"), true},
+		{"private source", strings.ReplaceAll(body, "microphone", "private iPad label"), false},
+		{"private state", strings.ReplaceAll(body, `"publication_state":"on"`, `"publication_state":"private"`), false},
+		{"negative duration", strings.ReplaceAll(body, `"duration_ms":2750`, `"duration_ms":-1`), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+			_, err := decodeConnectionReport(request)
+			if (err == nil) != test.valid {
+				t.Fatalf("valid=%v, err=%v", test.valid, err)
+			}
+		})
+	}
+	var logs bytes.Buffer
+	router := chi.NewRouter()
+	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
+	connectionReportEndpoint(&participantMediaVerifierStub{subject: participantMediaSubject(t)}).Mount(router, DefaultRateLimitOptions())
+	request := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status=%d", response.Code)
+	}
+	var logged struct {
+		Event  string `json:"event"`
+		Report string `json:"report"`
+	}
+	if err := json.NewDecoder(&logs).Decode(&logged); err != nil {
+		t.Fatal(err)
+	}
+	if logged.Event != "sdk.connection_report" {
+		t.Fatalf("event=%s", logged.Event)
+	}
+	var report connectionReport
+	if err := json.Unmarshal([]byte(logged.Report), &report); err != nil {
+		t.Fatal(err)
+	}
+	if report.Events[0].Source != "microphone" || report.Events[0].PublicationState != "on" || report.Events[0].ProjectionState != "off" {
+		t.Fatal("mismatch facts missing from production log event")
+	}
+	if report.Events[0].DurationMS == nil || *report.Events[0].DurationMS != 2750 || report.Events[0].Attempt == nil || *report.Events[0].Attempt != 2 {
+		t.Fatal("mismatch duration or retry count missing from production log event")
+	}
+}
+
 func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 	runtime, err := observability.Start(context.Background(), observability.Config{Environment: "test", Service: "connection-report-test", Version: "test"})
 	if err != nil {
@@ -51,7 +104,8 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 	if got := send(connectionReportFixture, false); got != http.StatusUnauthorized {
 		t.Fatalf("anonymous: %d", got)
 	}
-	if got := send(connectionReportFixture, true); got != http.StatusNoContent {
+	mediaReport := strings.Replace(connectionReportFixture, `"code":"sync_start_failed"`, `"code":"media_start_failed","media_error_kind":"CloudflareSFUError","media_error_step":"sfu_tracks","http_status":503,"granted_audio":"granted","granted_video":"not_granted"`, 1)
+	if got := send(mediaReport, true); got != http.StatusNoContent {
 		t.Fatalf("report: %d", got)
 	}
 	participantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(verifier.subject.ParticipantID.String())))
@@ -74,6 +128,10 @@ func TestConnectionReportBoundaryAndCorrelation(t *testing.T) {
 		if report.Events[1].CloseCode == nil || *report.Events[1].CloseCode != 1006 {
 			t.Fatal("missing close code")
 		}
+		failure := report.Events[2]
+		if failure.MediaErrorKind != "CloudflareSFUError" || failure.MediaErrorStep != "sfu_tracks" || failure.GrantedAudio != "granted" || failure.GrantedVideo != "not_granted" || failure.HTTPStatus == nil || *failure.HTTPStatus != 503 {
+			t.Fatal("missing bounded media cause in production log projection")
+		}
 		for _, expected := range []string{participantHash, verifier.subject.EpisodeID.String(), "0af7651916cd43dd8448eb211c80319c", `"trigger":"join_failed"`} {
 			if !strings.Contains(line, expected) {
 				t.Errorf("missing %s in %s", expected, line)
@@ -95,6 +153,10 @@ func TestConnectionReportRejectsUnboundedOrPrivateInput(t *testing.T) {
 	}{
 		{"unknown field", strings.Replace(connectionReportFixture, `"version":1`, `"version":1,"token":"private"`, 1), 400},
 		{"untrusted text", strings.Replace(connectionReportFixture, "sync_start_failed", "private@example.test", 1), 400},
+		{"private media kind", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","media_error_kind":"private@example.test"`, 1), 400},
+		{"private media step", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","media_error_step":"https://private.test/token"`, 1), 400},
+		{"private granted audio", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","granted_audio":"device label"`, 1), 400},
+		{"private granted video", strings.Replace(connectionReportFixture, `"state":"joining"`, `"state":"joining","granted_video":"device id"`, 1), 400},
 		{"unknown event", strings.Replace(connectionReportFixture, "sync_socket_close", "192.0.2.1", 1), 400},
 		{"version", strings.Replace(connectionReportFixture, `"version":1`, `"version":2`, 1), 400},
 		{"empty", `{"version":1,"trigger":"join_failed","events":[]}`, 400},

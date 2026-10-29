@@ -39,6 +39,17 @@ as the journey ID. Its attributes contain only the recording ID, capture epoch,
 `reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
 emit this event, and replaying a completed lease cannot emit it twice.
 
+Pipeline maintenance also repairs a missing capture-stopped callback after durable
+capture completion. It queues the existing `recording_capture_stopped` operation
+under the original applied manual-stop authority and capture epoch, carrying that
+stop's journey and parent-event IDs. Sync validates and commits its normal
+`recording_status_changed` event; retries do not add another terminal event.
+Episode end may adopt that same stop without replacing its authority. Neither
+path commits an export or changes the successful capture job. The regression in
+`apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
+callback recovery, and duplicate delivery against the Go controller and maintenance
+commands.
+
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
 provider-failure span event carries `chalk.provider.response_snapshot`. This is
@@ -70,7 +81,14 @@ No token, raw participant or user identity, error text, or media payload is adde
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue
-recordings and transcripts or exhausted webhooks, and stale collector state.
+recordings and transcripts or exhausted webhooks plus terminal SDK connection
+reports, and stale collector state. The connection-report rules alert on one
+affected participant per Tenant, Episode and failure in ten minutes, evaluated
+every minute. Messages include the first report's PKT time; a cleared threshold
+does not prove the person rejoined or recovered. Persistent media-projection
+mismatches also group by microphone/camera source and show publication/projection
+states, duration and attempt. The mismatch rule matches nothing until the SDK/API
+emit accepted `media_projection_mismatch` reports.
 The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
 An independent uptime Worker checks API/Sync health and readiness and reports
@@ -84,8 +102,9 @@ reports pending, due, and retrying counts, plus the oldest lag-eligible intent's
 count and allowlisted error code (`other` for unknown codes; `null` before a failure).
 Unattempted participant joins age from `next_attempt_at`, when their held seat is
 due to expire, not from creation. Before that time they count as pending but do
-not contribute lag. Other intents and attempted joins still age from creation,
-including scheduled retries, so retry backoff cannot hide stuck work. The legacy
+not contribute lag. Intentionally unscheduled joins use `infinity`; they remain
+pending but contribute neither lag nor due work. Other intents and attempted joins
+still age from creation, including scheduled retries, so retry backoff cannot hide stuck work. The legacy
 `oldest_pending_lifecycle_intent_ms` field reports this lag age; the oldest intent's
 diagnostics use the same ordering and are null when no pending work is lag-eligible.
 Use these fields to distinguish undiscovered backlog from repeated delivery failures;
@@ -99,6 +118,11 @@ line. It records the check and reason, measured database values and limits or
 consumer freshness/failure counters where available; unavailable dependencies
 report `observed=false`. Exceptions and exits record only their category, never
 the raw error text. These are probe observations, before readiness hysteresis.
+
+Database query failures also record `query_stage` (`role`, `migration`, `pending_age`,
+or `replication`), `error_class`, and SQLSTATE when available. SQL text, parameters,
+connection details, and database error messages are not recorded. Query errors
+still report the public reason `database_unavailable`.
 
 For lifecycle lag, the journal and trace also contain the oldest currently due
 intent's ID, kind, ISO-8601 due time and attempt count from the same database
@@ -151,6 +175,58 @@ and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
 
+Both transports default to a 60-second foreground recovery budget. Recoverable
+media failures retry throughout that budget, with default delays of 1, 2, 4,
+then 6 seconds (custom delays cannot shorten that ramp or exceed 6 seconds);
+the Sync attempt cap does not shorten media recovery. Only then does media emit
+`media_recovery_exhausted` and continue retrying in the background while Sync
+stays connected. Rejected media access requires an explicit rejoin rather than
+automatically replacing another connection's seat. Before declaring rejection
+terminal, the SDK checks the primary Episode lifecycle through a participant's
+signed, route-bound status read. `ending` or `ended` takes the normal ended
+path even when SFU 401/403 or close-tracks 410 precedes the Sync end event;
+an active Episode keeps current-binding revocation terminal. A local End in
+flight settles first. Unavailable status reads keep Sync running and retry
+without requesting a replacement binding; a late read cannot fail a newer binding.
+Normal end emits no `connection_failed` report. End/rejection races are covered
+in `sdks/typescript/client/src/connection/episode-end-race.test.ts`. The timing and rejection
+regressions are covered in
+`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+
+Automatic replacement forwards `expectedMediaConnectionId` through the browser
+access context and the server SDK's refresh request. The API compares the
+corresponding `expected_media_connection_id` against the current binding before
+and after issuing credentials; a takeover returns HTTP 409 with
+`participant.connection_superseded`, which requires explicit rejoin. Requests
+without this optional field keep the legacy replacement/takeover behavior, so
+the API can deploy before the SDK. A lifecycle attempt uses its fresh binding
+without an additional inner replacement; fast failures produce at most twelve
+replacement grants and track requests in the default foreground minute.
+Recovery also forwards the browser's `currentMediaToken` for the existing
+encrypted replay mechanism. A lost response replays the committed grant only
+while its replacement binding remains current; a later takeover invalidates it.
+Never log the credential or substitute another tab's backend-retained token.
+An identical conditional request still being issued returns HTTP 409 with
+`participant.media_replacement_pending`. The SDK treats this as temporarily
+unavailable, keeps Sync/media recovery alive, and retries with the same
+credential and expected binding. Pending retries allocate no additional SFU
+session; only another binding's takeover returns the terminal superseded code.
+
+Failed media acquisition/start spans and media recovery reports include
+`media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
+`network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
+`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`, or
+`sfu_publications`). SFU HTTP failures also carry `http_status` (400–599).
+`network` identifies a fetch rejection or browser NetworkError, not an arbitrary
+TypeError. `granted_audio` and `granted_video` are `granted`, `not_granted`, or
+`unknown`: live tracks returned by acquisition, regardless of mute state, not
+the requested intent. Fallback capture can grant only one kind. Before
+acquisition completes these fields are `unknown`. Recovery retains the original
+acquisition result, not a new permission query. Unclassified failures stay
+`unknown`; no raw error text is serialized.
+Deploy the API allowlist before shipping an SDK that emits these fields; older
+APIs reject unknown report fields.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync
@@ -160,6 +236,23 @@ from that verified credential. The `sdk.connection_report` warning includes
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.
+An own microphone/camera publication that disagrees with the Sync projection for
+two seconds triggers `media_projection_mismatch`.
+Its event includes allowlisted `source` (`microphone`/`camera`), `publication_state`
+and `projection_state` (`on`/`off`), mismatch `duration_ms`, retry count in `attempt`,
+and `outcome` (`started`/`failed`). Publication IDs and device labels are excluded.
+The monitor never sends a self-media target. Its `attempt` is always zero.
+After the ten-second grace, unconfirmed live capture is paused locally before
+failure is shown. Only a new user action can enable again; changing publication
+identity cannot extend the grace or restore capture. Projection-on without own
+live capture is reported once but left alone: it may belong to another client of
+the same participant. OS microphone interruptions also pause only local capture.
+Recovery retains
+old intent revisions across Sync replacement, including unconfirmed publications.
+A recovered off/missing source requires a new user action. Moderation control
+revisions order stops against user actions, including capture still awaiting permission.
+The existing report cooldown also applies to these reports.
+Receiver projection gating remains unchanged: bypassing it would defeat moderation.
 Rejected reports emit `sdk.connection_report.rejected` with the same trace ID
 and verified participant hash, plus a bounded `reason` identifying the failed
 schema, label, ordering, size, or range check. Rejected values, bodies, and decoder

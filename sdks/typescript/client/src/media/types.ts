@@ -77,6 +77,7 @@ export type CloudflareSFUSnapshot = {
   readonly failure: {
     readonly code: CloudflareSFUFailureCode;
     readonly recoverable: boolean;
+    readonly diagnostic?: import("./failure-diagnostics").MediaFailureDiagnostic;
   } | null;
 };
 export type CloudflareSFUClientOptions = {
@@ -85,7 +86,7 @@ export type CloudflareSFUClientOptions = {
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
-  readonly onError?: (error: unknown) => void;
+  readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;

@@ -1,6 +1,11 @@
 # Real-call proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
+Every real-call plan keeps both clients through scheduled credential refresh and
+their original five-minute expiry, then checks received audio/video progress and
+requires SDK end-for-everyone without a cleanup fallback. The dashboard-specific
+shared-browser owner flow is independently required by the `dashboard-engine` Gate lane.
+
 It uses an existing Tenant API key from `CHALK_PROOF_API_KEY`. Reuse an operator-provisioned
 Tenant dedicated to release proofs.
 
@@ -189,6 +194,13 @@ MP4, ffprobe output, four frames/contact sheet, Transcript document, and Transcr
 PR. The command prints phase results and the absolute local artifact path.
 Review the contact sheet as one image. Remove local artifacts after the release
 handoff; they contain production identifiers but no saved owner credentials.
+
+Export completion has a fourteen-minute limit: ten minutes for a scale-to-zero
+render worker to start (the fleet controller's default startup limit), plus four
+minutes for processing. Failed or unavailable Exports still fail immediately;
+pending jobs cannot wait indefinitely. The offline export regression replays a
+successful 246.610-second cold-start Export that exceeded the old four-minute
+limit. It runs in Gate's required `self-test` lane and `pnpm test`.
 
 ## Cancellation and recovery
 

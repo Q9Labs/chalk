@@ -111,9 +111,9 @@ defmodule ChalkSync.Operations.Probe do
               ]
             ]
           }} <-
-           Postgrex.query(connection, role_query(), [], timeout: @query_timeout_ms),
+           database_query(connection, :role, role_query()),
          {:ok, %{rows: [[migration_version]]}} <-
-           Postgrex.query(connection, migration_query(), [], timeout: @query_timeout_ms),
+           database_query(connection, :migration, migration_query()),
          {:ok,
           %{
             rows: [
@@ -132,9 +132,9 @@ defmodule ChalkSync.Operations.Probe do
               ]
             ]
           }} <-
-           Postgrex.query(connection, pending_age_query(), [], timeout: @query_timeout_ms),
+           database_query(connection, :pending_age, pending_age_query()),
          {:ok, %{rows: [[synchronous_standbys, wal_lag_bytes]]}} <-
-           Postgrex.query(connection, replication_query(), [], timeout: @query_timeout_ms) do
+           database_query(connection, :replication, replication_query()) do
       {:ok,
        %{
          writable_primary: not in_recovery,
@@ -162,6 +162,46 @@ defmodule ChalkSync.Operations.Probe do
       _error -> {:error, :database_unavailable}
     end
   end
+
+  defp database_query(connection, stage, query) do
+    case Postgrex.query(connection, query, [], timeout: @query_timeout_ms) do
+      {:error, error} = result ->
+        record_database_query_failure(stage, database_error_attributes(error))
+        result
+
+      result ->
+        result
+    end
+  rescue
+    exception ->
+      record_database_query_failure(stage, database_error_attributes(exception))
+      reraise exception, __STACKTRACE__
+  catch
+    :exit, reason ->
+      record_database_query_failure(stage, %{error_class: "exit"})
+      exit(reason)
+  end
+
+  defp record_database_query_failure(stage, attributes) do
+    record_failure(
+      :database_query,
+      :database_unavailable,
+      Map.put(attributes, :query_stage, Atom.to_string(stage))
+    )
+  end
+
+  defp database_error_attributes(%Postgrex.Error{postgres: %{pg_code: sqlstate}}) do
+    attributes = %{error_class: "Postgrex.Error"}
+
+    if is_binary(sqlstate) and Regex.match?(~r/\A[0-9A-Z]{5}\z/, sqlstate),
+      do: Map.put(attributes, :sqlstate, sqlstate),
+      else: attributes
+  end
+
+  defp database_error_attributes(%{__struct__: error_class}),
+    do: %{error_class: inspect(error_class)}
+
+  defp database_error_attributes(_error), do: %{error_class: "unknown"}
 
   defp validate_observed_database(database, oldest_due) do
     case validate_database(database) do
@@ -524,7 +564,8 @@ defmodule ChalkSync.Operations.Probe do
     with pending_intents as (
       select lifecycle_intent_id, intent_name, next_attempt_at, attempt_count, last_error_code,
         case
-          when intent_name = 'participant_joined' and attempt_count = 0 then next_attempt_at
+          when intent_name = 'participant_joined' and attempt_count = 0
+            then nullif(next_attempt_at, 'infinity'::timestamptz)
           else created_at
         end as lag_since
       from sync_lifecycle_intents

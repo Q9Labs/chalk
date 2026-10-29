@@ -341,6 +341,7 @@ export function createGatePlan(files, options = {}) {
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
   const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", ...deploymentRoots]));
+  const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
@@ -418,6 +419,7 @@ export function createGatePlan(files, options = {}) {
     ]),
     task("tests", "Affected workspace tests with coverage", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", ["--coverage"], [workspaceConcurrency, "--sort"])),
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
+    task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
     task("call-performance", "Call performance budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call rendering inputs or full gate", [
       "node",
@@ -525,7 +527,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "call-performance": ["call-performance"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests", "dashboard-engine"], "call-performance": ["call-performance"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";

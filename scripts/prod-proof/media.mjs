@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
+import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -12,7 +13,7 @@ async function sdkBundle() {
     stdin: {
       contents: `import {createSpaceClient} from './sdks/typescript/client/src/index.ts';
 window.proofJoin=async(space,baseUrl,displayName)=>{
- const client=createSpaceClient({space,baseUrl,getAccess:({replaceMediaConnection})=>window.proofAccess({replaceMediaConnection})});
+ const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
 };`,
       resolveDir: process.cwd(),
@@ -36,10 +37,15 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const reopen = [];
   const close = [];
   const participants = [];
+  const refreshes = [];
+  const networks = [];
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
+    const initial = credentialExpiries(grant);
+    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
+    refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
     const open = async (replacing = false) => {
@@ -67,6 +73,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await context.addInitScript(installFixture, { speech, guest, tones });
       const page = await context.newPage();
       const network = [];
+      networks[guest] = network;
       page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
       page.on("websocket", (socket) => {
         socket.on("socketerror", (error) => network.push({ type: "websocket-error", error }));
@@ -79,16 +86,19 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
           }
         });
       });
+      const issueRefresh = async (request) => {
+        const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
+        grant = await issueCredentialRefresh(run, refreshes, refresh, { reason: request.reason, replaceMediaConnection }, () => chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection }));
+        replaceOnNextAccess = false;
+        return grant;
+      };
       await page.exposeFunction("proofAccess", (request) => {
         const next = queue.then(async () => {
           if (first) {
             first = false;
             return grant;
           }
-          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
-          maskCredentials(grant);
-          replaceOnNextAccess = false;
-          return grant;
+          return issueRefresh(request);
         });
         queue = next.catch(() => {}); // The caller receives errors; a failed refresh must not poison later calls.
         return next;
@@ -122,6 +132,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   return {
     pages,
     participants,
+    waitForRefresh: async () => {
+      try {
+        await waitForCredentialRefresh(run, refreshes, ready);
+      } finally {
+        await Promise.all(networks.map((network, guest) => save(`${run.directory}/guest-${guest + 1}-network.json`, network)));
+      }
+    },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
       await close[guest]();
@@ -251,4 +268,24 @@ export async function proveLayers(run, { before, after, limited = false, receive
     }
   }
   return moving;
+}
+
+function receivedStreamMoved(rows, current) {
+  const previous = rows.find((row) => row.id === current.id && row.connection === current.connection);
+  if (!previous) return false;
+  if (!(current.bytesReceived > previous.bytesReceived)) return false;
+  return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
+}
+export function checkMediaProgress(before, after) {
+  check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
+  for (let guest = 0; guest < after.length; guest++) {
+    for (const kind of ["audio", "video"]) {
+      const source = { audio: "microphone", video: "camera" }[kind];
+      const receivers = after[guest].filter((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source);
+      check(
+        receivers.some((current) => receivedStreamMoved(before[guest], current)),
+        `Client ${guest + 1} stopped receiving ${kind} after credential refresh`,
+      );
+    }
+  }
 }

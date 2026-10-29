@@ -21,6 +21,7 @@ const taskIds = [
   "native-quality",
   "tests",
   "browser-tests",
+  "dashboard-engine",
   "build",
   "call-performance",
   "call-leaks",

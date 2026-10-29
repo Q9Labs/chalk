@@ -1,0 +1,43 @@
+name: Production alert tests
+
+on:
+  pull_request:
+    paths:
+      - infrastructure/observability/production-alerts/**
+      - .github/workflows/production-alerts.yml
+      - apps/api/go.mod
+      - apps/api/go.sum
+
+permissions:
+  contents: read
+
+jobs:
+  alerts:
+    name: Production alert tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: alerts_test
+          POSTGRES_PASSWORD: alerts_test
+          POSTGRES_DB: alerts_test
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - name: Test collector and Discord rendering
+        working-directory: apps/api
+        env:
+          CHALK_ALERT_TEST_DATABASE_URL: postgres://alerts_test:alerts_test@localhost:5432/alerts_test?sslmode=disable
+        run: go test -count=1 ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/discord_test.go
+      - name: Test monitor provisioning and selective undo
+        run: python3 infrastructure/observability/production-alerts/test_monitors.py

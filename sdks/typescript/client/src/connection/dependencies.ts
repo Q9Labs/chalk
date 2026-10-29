@@ -1,3 +1,4 @@
+import type { ParticipantEpisodeStatus } from "../generated/schemas";
 import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
@@ -13,6 +14,7 @@ export type ConnectionAccessRequest = {
   readonly signal?: AbortSignal;
   readonly currentMediaToken?: ParticipantMediaCredential;
   readonly expectedParticipantGeneration?: number;
+  readonly expectedMediaConnectionId?: string;
 };
 export type ConnectionAccessProvider = (request?: ConnectionAccessRequest) => ParsedAccessGrant | Promise<ParsedAccessGrant>;
 export type ConnectionClock = {
@@ -80,7 +82,7 @@ export type ConnectionMediaFactoryInput = {
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
-  readonly onFailure: (error: unknown) => void;
+  readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
 };
 export type ConnectionSyncFactoryInput = {
@@ -101,6 +103,7 @@ export type ConnectionChatFileFactoryInput = {
 export type ConnectionDependencies = {
   readonly clock: ConnectionClock;
   readonly createConnectionReporter?: (access: () => ParsedAccessGrant | null) => ConnectionReporter | undefined;
+  readonly getEpisodeStatus?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<ParticipantEpisodeStatus["status"]>;
   readonly cancelPendingAdmission?: (access: ParsedAccessGrant, signal: AbortSignal) => Promise<boolean>;
   readonly mediaDevices: ConnectionMediaDevices;
   readonly createMediaClient: (input: ConnectionMediaFactoryInput) => ConnectionMediaClient;

@@ -8,6 +8,8 @@ import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
 import { createCloudflareSFUHTTPTransport } from "../media";
 import { streamFromTracks } from "./media-devices";
+import { ConnectionReporter, type ConnectionReport } from "./report";
+import { track } from "../space-client/capture.test.helpers";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -317,6 +319,7 @@ describe("failed join admission cleanup", () => {
 
   it.each([401, 403, 503])("does not refresh rejected media access and preserves other startup failures (HTTP %s)", async (status) => {
     const platform = createCoreTestPlatform();
+    const reports: ConnectionReport[] = [];
     const requests: string[] = [];
     const transport = createCloudflareSFUHTTPTransport({
       apiBaseURL: "http://localhost:8080",
@@ -334,6 +337,17 @@ describe("failed join admission cleanup", () => {
       },
       dependencies: {
         ...platform.dependencies,
+        createConnectionReporter: (access) =>
+          new ConnectionReporter({
+            access,
+            traceparent: "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+            now: () => status * 61000,
+            online: () => true,
+            subscribeOnline: () => () => undefined,
+            send: async (_access, report) => {
+              reports.push(report);
+            },
+          }),
         cancelPendingAdmission: async () => false,
         createMediaClient: (input) => ({
           ...platform.dependencies.createMediaClient(input),
@@ -349,6 +363,120 @@ describe("failed join admission cleanup", () => {
         expect(result._tag).toBe("Failure");
         expect(requests).toEqual(["join"]);
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: status === 503 ? "media_start_failed" : "invalid_access", recoverable: status === 503 } });
+        expect(reports).toHaveLength(1);
+        expect(reports[0]).toMatchObject({
+          trigger: "join_failed",
+          events: expect.arrayContaining([expect.objectContaining({ event: "space_join_span", step: "start_media", outcome: "failed", media_error_kind: "CloudflareSFUError", media_error_step: "sfu_publications", http_status: status, granted_audio: "not_granted", granted_video: "not_granted" })]),
+        });
+      }),
+    );
+  });
+
+  it("reports granted tracks after fallback capture when the initial media starter rejects", async () => {
+    const platform = createCoreTestPlatform();
+    const reports: ConnectionReport[] = [];
+    const audio = track("audio");
+    audio.enabled = false;
+    const layer = admissionLayer({
+      access: async () => parseParsedAccessGrant(opaqueAccessGrant(1)),
+      dependencies: {
+        ...platform.dependencies,
+        createConnectionReporter: (access) =>
+          new ConnectionReporter({
+            access,
+            now: () => 100000000,
+            traceparent: "fixture",
+            online: () => true,
+            subscribeOnline: () => () => undefined,
+            send: async (_access, report) => {
+              reports.push(report);
+            },
+          }),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        yield* lifecycle.setInitialMedia(
+          (intent) => (intent.camera ? Effect.fail(new DOMException("private camera label", "NotAllowedError")) : Effect.succeed(streamFromTracks([audio]))),
+          () => ({ microphone: true, camera: true }),
+          () => Effect.fail(new DOMException("private peer information", "InvalidStateError")),
+        );
+        yield* Effect.exit(lifecycle.join());
+        expect(reports).toHaveLength(1);
+        expect(reports[0]).toMatchObject({
+          trigger: "join_failed",
+          events: expect.arrayContaining([expect.objectContaining({ event: "connection_failed", code: "media_start_failed", media_error_kind: "InvalidStateError", media_error_step: "peer_connection", granted_audio: "granted", granted_video: "not_granted" })]),
+        });
+        expect(JSON.stringify(reports)).not.toContain("private");
+      }),
+    );
+  });
+
+  it.each(["restart", "snapshot", "access"] as const)("includes the %s cause in an exhausted media recovery report", async (source) => {
+    const platform = createCoreTestPlatform();
+    const reports: ConnectionReport[] = [];
+    let grants = 0;
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "https://private.test",
+      tenantId: "t",
+      spaceId: "s",
+      episodeId: "e",
+      participantId: "p",
+      bearerToken: "private-token",
+      fetch: async () => {
+        throw new TypeError("private URL and token");
+      },
+    });
+    const layer = makeConnectionLifecycleLayer({
+      apiBaseURL: "https://api.chalk.test",
+      syncURL: "wss://sync.chalk.test/v1/sync",
+      access: async () => {
+        grants++;
+        if (source === "access" && grants > 1) throw new DOMException("private refresh URL", "NetworkError");
+        return parseParsedAccessGrant(opaqueAccessGrant(1, "recovery", `connection-${grants}`));
+      },
+      recovery: { budgetMs: 100, maxAttempts: 1 },
+      dependencies: {
+        ...platform.dependencies,
+        createMediaClient: (input) => ({
+          ...platform.dependencies.createMediaClient(input),
+          restart: async () => {
+            if (source === "restart") await transport.listPublications();
+          },
+        }),
+        createConnectionReporter: (access) =>
+          new ConnectionReporter({
+            access,
+            now: () => 200000000 + ["restart", "snapshot", "access"].indexOf(source) * 61000,
+            traceparent: "fixture",
+            online: () => true,
+            subscribeOnline: () => () => undefined,
+            send: async (_access, report) => {
+              reports.push(report);
+            },
+          }),
+      },
+    });
+    await exerciseAdmission(layer, (lifecycle) =>
+      Effect.gen(function* () {
+        yield* lifecycle.join();
+        const snapshot = platform.media.getSnapshot();
+        platform.media.emit({ ...snapshot, connection: { ...snapshot.connection, phase: "failed" }, failure: { code: "media_failed", recoverable: true, diagnostic: { media_error_kind: "NotReadableError", media_error_step: "local_capture" } } });
+        yield* Effect.promise(() => vi.waitFor(() => expect(reports).toHaveLength(1)));
+        expect(reports[0]).toMatchObject({
+          trigger: "recovery_exhausted",
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              event: "recovery_exhausted",
+              code: "media_recovery_exhausted",
+              media_error_kind: source === "snapshot" ? "NotReadableError" : "network",
+              media_error_step: source === "snapshot" ? "local_capture" : source === "access" ? "access_refresh" : "sfu_publications",
+              granted_audio: "not_granted",
+              granted_video: "not_granted",
+            }),
+          ]),
+        });
+        expect(JSON.stringify(reports)).not.toContain("private");
       }),
     );
   });

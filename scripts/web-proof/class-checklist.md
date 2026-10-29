@@ -1,5 +1,20 @@
 # Class checklist (slow, local stack)
 
+## Live-class checks
+
+Run these checks before treating a class as healthy. Record times in **PKT**.
+The [in-class response checklist](../../docs/proofs/class-checklist/README.md#in-class-response-28-october-2026-failures)
+has the short recovery steps; these cases are not claimed as automated passes.
+
+1. **W33 — media recovery exhaustion:** confirm audio/video in both directions even when chat and the board work. For missing audio, mute then unmute; if still broken, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
+2. **W34 — slow media start / failed join:** watch camera/microphone startup through the join result. If it fails, check permissions and device selection, use **Report a problem** when available, and rejoin once. If that fails, use the agreed fallback.
+3. **W35 — local mic on / remote muted:** compare the local mic button with a classmate's mute badge and received audio, including on iPad. Mute then unmute; if still silent, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
+
+For every unresolved failure, include the Episode ID, PKT time and device/browser
+in the report. Do not infer a browser or network cause from the symptom alone.
+
+## Automated local proof
+
 `tests/class-checklist.e2e.ts` automates C1–C7 from the class go/no-go checklist.
 It uses the real web app, local API, PostgreSQL-backed Sync/whiteboard and the
 approved **development** Cloudflare SFU. Camera, microphone and moving display
