@@ -60,16 +60,8 @@ export function episodeEnd(run, path) {
   };
   return {
     end,
-    useSDK: (page, { strict = false } = {}) => {
-      endRequest = async () => {
-        try {
-          await page.evaluate(() => window.proofClient.endEpisode());
-        } catch (error) {
-          if (strict) throw error;
-          // A dead guest must not prevent owner-authorized lifecycle cleanup.
-          await ownerEnd();
-        }
-      };
+    useSDK: (page) => {
+      endRequest = () => page.evaluate(() => window.proofClient.endEpisode());
     },
   };
 }
@@ -223,7 +215,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   console.log("Joining two synthetic camera/voice guests");
   const guests = await launchGuests(run, space, episode, rejoin ? null : await generateVoice(run.directory, run.signal), receiver.origin, rejoin);
   const { pages } = guests;
-  useSDK(pages[0], { strict: true });
+  useSDK(pages[0]);
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);

@@ -33,7 +33,7 @@ test("a frozen screen share cannot pass on a lone decoded frame", () => {
   assert.throws(() => checkShareProgress(screen(100), screen(200, 1)), /decoding stalled/);
   checkShareProgress(screen(100), screen(200));
 });
-test("a crashed guest falls back to the owner end endpoint and waits for durability", async () => {
+test("a crashed guest fails the normal end proof instead of falling back to owner cleanup", async () => {
   const calls = [];
   const ending = episodeEnd(
     {
@@ -49,21 +49,15 @@ test("a crashed guest falls back to the owner end endpoint and waits for durabil
       throw new Error("page closed");
     },
   });
-  await ending.end();
-  await ending.end();
-  assert.deepEqual(calls, [
-    ["POST", "/episode/end"],
-    ["GET", "/episode"],
-    ["GET", "/episode"],
-  ]);
+  await assert.rejects(ending.end(), /page closed/);
+  assert.deepEqual(calls, []);
 });
-test("owner fallback waits for a previously accepted SDK end to become durable", async () => {
+test("SDK end waits for durability without invoking the owner end endpoint", async () => {
   let reads = 0;
-  const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
   const ending = episodeEnd(
     {
       ownerRequest: async (method) => {
-        if (method === "POST") throw conflict;
+        assert.equal(method, "GET");
         return { status: ++reads === 1 ? "ending" : "ended" };
       },
     },
@@ -71,13 +65,13 @@ test("owner fallback waits for a previously accepted SDK end to become durable",
   );
   ending.useSDK({
     evaluate: async () => {
-      throw new Error("SDK stopped before receipt");
+      return undefined;
     },
   });
   await ending.end();
-  assert.ok(reads >= 2, "the conflict alone must not count as durable completion");
+  assert.ok(reads >= 2, "SDK acknowledgement alone must not count as durable completion");
 });
-test("owner fallback still times out when an accepted end never completes", async (t) => {
+test("owner end still times out when an accepted end never completes", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
   let reads = 0;
@@ -97,7 +91,7 @@ test("owner fallback still times out when an accepted end never completes", asyn
   await result;
   assert.ok(reads > 0);
 });
-test("owner fallback preserves unrelated conflicts and an Episode still active", async () => {
+test("owner end preserves unrelated conflicts and an Episode still active", async () => {
   for (const [apiCode, status] of [
     ["participant.connection_superseded", "ending"],
     ["episode.not_active", "active"],
@@ -233,29 +227,6 @@ for (const name of ["export", "transcript"]) {
     await assert.rejects(name === "export" ? exportProof(run) : transcriptProof(run), /timed out after 240s/);
   });
 }
-
-test("normal real-call proof cannot hide SDK end failure behind owner cleanup", async () => {
-  let ownerCalls = 0;
-  const ending = episodeEnd(
-    {
-      ownerRequest: async () => {
-        ownerCalls++;
-        return { status: "ended" };
-      },
-    },
-    "/episode",
-  );
-  ending.useSDK(
-    {
-      evaluate: async () => {
-        throw new Error("access refresh failed");
-      },
-    },
-    { strict: true },
-  );
-  await assert.rejects(ending.end(), /access refresh failed/);
-  assert.equal(ownerCalls, 0);
-});
 
 test("post-refresh proof requires advancing received audio and decoded camera frames for both clients", () => {
   const received = (kind, value, connection = 0) => ({ id: kind, connection, kind, type: "inbound-rtp", source: kind === "video" ? "camera" : "microphone", bytesReceived: value, framesDecoded: value });
