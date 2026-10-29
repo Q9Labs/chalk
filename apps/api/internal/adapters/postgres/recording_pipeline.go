@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
@@ -720,6 +721,10 @@ func (r RecordingPipelineRepository) CompleteCapture(ctx context.Context, input 
 		return completed, nil
 	}
 	span.SetStatus(codes.Error, "completion failed")
+	var publicationErr *pgconn.PgError
+	if errors.As(err, &publicationErr) && publicationErr.Code == "PC001" {
+		err = errors.Join(recordingpipeline.ErrCaptureStopPublication, err)
+	}
 	// Another request may have committed while this request was preparing
 	// presentation objects. A replay must not refreeze or requeue that capture.
 	if replay, replayErr := r.completedCaptureReplay(ctx, input); replayErr == nil {

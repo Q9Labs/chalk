@@ -45,6 +45,7 @@ var (
 	ErrReservationExpired           = errors.New("recording reservation expired before capture")
 	ErrInvalidIdempotencyKey        = errors.New("invalid recording idempotency key")
 	ErrInvalidOwner                 = errors.New("invalid recording lease owner")
+	ErrCaptureStopPublication       = errors.New("capture stopped publication failed")
 	ErrInvalidLease                 = errors.New("invalid recording lease")
 	ErrInvalidAttempt               = errors.New("invalid recording attempt")
 	ErrInvalidStateTransition       = errors.New("invalid recording state transition")

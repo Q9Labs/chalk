@@ -78,11 +78,7 @@ with candidate as (
      and exists (select 1 from recording_data_keys where recording_id = recording_jobs.recording_id
                  and capture_epoch = recording_pipelines.capture_epoch)
     cross join lateral (
-        select case when recording_jobs.kind = 'capture' then (
-            select count(*)::integer from recording_job_attempt_authorities authority
-            where authority.job_id = recording_jobs.id
-              and (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is true
-        ) else 0 end as attempts
+        select case when recording_jobs.kind = 'capture' then recording_capture_completion_attempts(recording_jobs.id) else 0 end as attempts
     ) completion
     where (
         recording_jobs.kind = $1
@@ -129,7 +125,6 @@ with candidate as (
                 candidate.recovery_expires_at, recording_capture_salvage_deadline(recording_jobs.recording_id))
             else least($7::timestamptz, candidate.recovery_expires_at) end,
         fencing_generation = fencing_generation + 1,
-        attempt_limit = case when candidate.completion_only then greatest(recording_jobs.attempt_limit, recording_jobs.attempt_count + 1) else recording_jobs.attempt_limit end,
         updated_at = now()
     from candidate
     where recording_jobs.id = candidate.id
@@ -465,7 +460,7 @@ with completion_eligibility as materialized (
         recording_capture_completion_available(jobs.recording_id) as completion_available,
         recording_capture_stop_confirmed(jobs.recording_id) as stop_confirmed
     from recording_jobs jobs
-    where jobs.id = $1 and jobs.kind = 'capture'
+    where jobs.id = $3 and jobs.kind = 'capture'
 ), completed as (
     update recording_jobs
     set state = 'succeeded', lease_token = null, lease_owner = null, lease_expires_at = null,
@@ -474,10 +469,10 @@ with completion_eligibility as materialized (
     where recording_jobs.id = eligibility.id
       and kind = 'capture'
       and state = 'leased'
-      and recording_jobs.attempt_count = $2
-      and recording_jobs.fencing_generation = $3
-      and recording_jobs.lease_token = $4
-      and recording_jobs.lease_owner = $5
+      and recording_jobs.attempt_count = $4
+      and recording_jobs.fencing_generation = $5
+      and recording_jobs.lease_token = $6
+      and recording_jobs.lease_owner = $7
       and recording_jobs.lease_expires_at > now()
       and exists (
           select 1 from recording_job_attempt_authorities authority
@@ -485,12 +480,12 @@ with completion_eligibility as materialized (
             and authority.kind = recording_jobs.kind
             and ((convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is not true
                  or eligibility.completion_available)
-            and authority.attempt_count = $2
-            and authority.fencing_generation = $3
-            and authority.capture_epoch = $6
-            and authority.envelope_digest = $7
-            and authority.lease_token = $4
-            and authority.lease_owner = $5
+            and authority.attempt_count = $4
+            and authority.fencing_generation = $5
+            and authority.capture_epoch = $8
+            and authority.envelope_digest = $9
+            and authority.lease_token = $6
+            and authority.lease_owner = $7
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
 ), pipeline as (
@@ -510,8 +505,8 @@ with completion_eligibility as materialized (
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce(start_operation.journey_id, completed.recording_id)), 0),
         now(), 'recording.capture.salvaged', 'capture_completion', 'succeeded', 'server', 'api', 'visible',
-        start_operation.parent_journey_event_id, $8, $9,
-        jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $6::bigint,
+        start_operation.parent_journey_event_id, $1, $2,
+        jsonb_build_object('recording_id', completed.recording_id, 'capture_epoch', $8::bigint,
                            'reason', 'stop_unconfirmed', 'source', 'committed_bundles')
     from completed
     join completion_eligibility eligibility on eligibility.id = completed.id
@@ -565,7 +560,7 @@ with completion_eligibility as materialized (
         coalesce((select max(sequence) + 1 from observability_journey_events
                   where journey_id = coalesce($13::uuid, render_job.recording_id)), 0),
         now(), 'recording.render.queued', 'render', 'queued', 'worker', 'api', 'visible',
-        $8::text, $9::text,
+        $1::text, $2::text,
         jsonb_build_object('tenant_id', render_job.tenant_id, 'episode_id', render_job.episode_id,
             'recording_id', render_job.recording_id, 'capture_job_id', completed.id,
             'render_job_id', render_job.id, 'trigger', 'automatic')
@@ -622,10 +617,15 @@ with completion_eligibility as materialized (
         due_at = least(transcription_cleanup_jobs.due_at, excluded.due_at),
         updated_at = now()
 )
-select id, tenant_id, episode_id, recording_id, kind, idempotency_key, payload_schema_version, state, priority, available_at, attempt_count, attempt_limit, lease_token, lease_owner, lease_expires_at, fencing_generation, error_code, error_detail, terminal_at, updated_at, created_at, result_metadata from completed
+select completed.id, completed.tenant_id, completed.episode_id, completed.recording_id, completed.kind, completed.idempotency_key, completed.payload_schema_version, completed.state, completed.priority, completed.available_at, completed.attempt_count, completed.attempt_limit, completed.lease_token, completed.lease_owner, completed.lease_expires_at, completed.fencing_generation, completed.error_code, completed.error_detail, completed.terminal_at, completed.updated_at, completed.created_at, completed.result_metadata
+from completed
+join pipeline on pipeline.recording_id = completed.recording_id
+where recording_publish_completed_capture_stop(pipeline.recording_id, $1::text, $2::text)
 `
 
 type CompleteCaptureRecordingJobParams struct {
+	TraceID              pgtype.Text `json:"trace_id"`
+	SpanID               pgtype.Text `json:"span_id"`
 	ID                   pgtype.UUID `json:"id"`
 	AttemptCount         int32       `json:"attempt_count"`
 	FencingGeneration    int64       `json:"fencing_generation"`
@@ -633,8 +633,6 @@ type CompleteCaptureRecordingJobParams struct {
 	LeaseOwner           pgtype.Text `json:"lease_owner"`
 	CaptureEpoch         int64       `json:"capture_epoch"`
 	EnvelopeDigest       []byte      `json:"envelope_digest"`
-	TraceID              pgtype.Text `json:"trace_id"`
-	SpanID               pgtype.Text `json:"span_id"`
 	PayloadSchemaVersion int32       `json:"payload_schema_version"`
 	Priority             int32       `json:"priority"`
 	AttemptLimit         int32       `json:"attempt_limit"`
@@ -668,8 +666,12 @@ type CompleteCaptureRecordingJobRow struct {
 	ResultMetadata       []byte             `json:"result_metadata"`
 }
 
+// Read pipeline's RETURNING row so publication follows its completion update.
+// Failure rolls back the completion and lease release along with the outbox.
 func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, completeCaptureRecordingJob,
+		arg.TraceID,
+		arg.SpanID,
 		arg.ID,
 		arg.AttemptCount,
 		arg.FencingGeneration,
@@ -677,8 +679,6 @@ func (q *Queries) CompleteCaptureRecordingJob(ctx context.Context, arg CompleteC
 		arg.LeaseOwner,
 		arg.CaptureEpoch,
 		arg.EnvelopeDigest,
-		arg.TraceID,
-		arg.SpanID,
 		arg.PayloadSchemaVersion,
 		arg.Priority,
 		arg.AttemptLimit,
@@ -1245,27 +1245,23 @@ func (q *Queries) ExtendRecordingReservation(ctx context.Context, arg ExtendReco
 const failRecordingJob = `-- name: FailRecordingJob :one
 with failure_policy as (
     select jobs.id,
-        (jobs.kind = 'capture' and (($1::text = 'capture_completion_failed'
+        (jobs.kind = 'capture' and (($1::text in ('capture_completion_failed', 'capture_stop_publication_failed')
          and pipelines.stop_requested_at is not null)
          or recording_capture_completion_available(jobs.recording_id)))::boolean as completion_failure,
-        case when jobs.kind = 'capture' then (
-            select count(*)::integer from recording_job_attempt_authorities authority
-            where authority.job_id = jobs.id
-              and (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is true
-        ) else 0 end as completion_attempts
+        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts
     from recording_jobs jobs
     left join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
     where jobs.id = $2
 ), failed as (
     update recording_jobs
     set state = case when failure_policy.completion_failure then
-            case when failure_policy.completion_attempts >= 3 then 'terminal_failure' else 'pending' end
+            case when failure_policy.completion_attempts >= 3 and $1::text is distinct from 'capture_stop_publication_failed' then 'terminal_failure' else 'pending' end
         when attempt_count >= attempt_limit then 'terminal_failure' else 'pending' end,
         available_at = $3,
         lease_token = null, lease_owner = null, lease_expires_at = null,
         error_code = $1, error_detail = $4,
         terminal_at = case when failure_policy.completion_failure then
-            case when failure_policy.completion_attempts >= 3 then now() else null end
+            case when failure_policy.completion_attempts >= 3 and $1::text is distinct from 'capture_stop_publication_failed' then now() else null end
             when attempt_count >= attempt_limit then now() else null end,
         updated_at = now()
     from failure_policy
@@ -1288,6 +1284,11 @@ with failure_policy as (
             and authority.lease_owner = $8
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
+), publication_failure as (
+    insert into recording_capture_publication_failures(job_id, attempt_count, fencing_generation)
+    select id, attempt_count, fencing_generation from failed
+    where kind = 'capture' and $1::text = 'capture_stop_publication_failed'
+    on conflict do nothing
 ), pipeline as (
     update recording_pipelines
     set state = case
@@ -2591,11 +2592,7 @@ with completed_captures as materialized (
             coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = jobs.id), jobs.created_at) + $1::integer * interval '1 second' <= clock_timestamp() as execution_deadline_reached,
         (jobs.kind = 'capture' and pipelines.stop_requested_at is not null)::boolean as capture_stopped,
         (jobs.kind = 'capture' and recording_capture_completion_available(jobs.recording_id))::boolean as completion_only,
-        case when jobs.kind = 'capture' then (
-            select count(*)::integer from recording_job_attempt_authorities authority
-            where authority.job_id = jobs.id
-              and (convert_from(authority.envelope_bytes, 'UTF8')::jsonb ->> 'completion_only')::boolean is true
-        ) else 0 end as completion_attempts
+        case when jobs.kind = 'capture' then recording_capture_completion_attempts(jobs.id) else 0 end as completion_attempts
     from recording_jobs jobs
     join recording_pipelines pipelines on pipelines.recording_id = jobs.recording_id
     join episodes on episodes.id = jobs.episode_id

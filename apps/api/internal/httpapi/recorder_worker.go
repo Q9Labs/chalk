@@ -773,6 +773,8 @@ func writeRecorderWorkerError(w http.ResponseWriter, err error) {
 
 func recorderWorkerAPIError(err error) APIError {
 	switch {
+	case errors.Is(err, recordingpipeline.ErrCaptureStopPublication):
+		return APIError{Status: http.StatusServiceUnavailable, Code: "recording.capture_stop_publication_failed", Message: "Capture stopped publication is temporarily unavailable"}
 	case errors.Is(err, recordingpresentation.ErrInvalidCompletionSource):
 		// Repeating a deterministic build with the same authority cannot repair
 		// its source. Let the worker report capture_completion_failed so the

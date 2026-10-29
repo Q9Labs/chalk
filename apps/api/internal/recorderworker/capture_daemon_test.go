@@ -98,6 +98,8 @@ func TestCaptureDaemonCorrelatesWholeAttemptFromClaimAuthority(t *testing.T) {
 func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *testing.T) {
 	claim := captureDaemonClaim(t, 7)
 	started := make(chan struct{})
+	captureHeartbeat := make(chan struct{})
+	var completionHeartbeat sync.Once
 	renewed := make(chan struct{})
 	control := &captureControlStub{}
 	control.complete = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
@@ -113,18 +115,27 @@ func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *te
 		return captureJobFromLease(input, time.Now().Add(DefaultCaptureLease)), nil
 	}
 	control.heartbeat = func(ctx context.Context, input recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+		if control.heartbeatCalls == 1 {
+			close(captureHeartbeat)
+		}
 		select {
 		case <-started:
-		case <-ctx.Done():
-			return recordingpipeline.Job{}, ctx.Err()
-		}
-		if control.heartbeatCalls == 1 {
-			close(renewed)
+			completionHeartbeat.Do(func() { close(renewed) })
+		default:
 		}
 		return captureJobFromLease(input, time.Now().Add(DefaultCaptureLease)), nil
 	}
 	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
-		return &captureAttemptStub{run: func(context.Context) error { return nil }}, nil
+		return &captureAttemptStub{run: func(ctx context.Context) error {
+			// Exercise a capture heartbeat before completion starts. Heartbeats
+			// must renew that lease without waiting for the completion RPC.
+			select {
+			case <-captureHeartbeat:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}}, nil
 	}), nil)
 	daemon.config.HeartbeatInterval = time.Millisecond
 	daemon.config.ClaimRetryWait = time.Millisecond
@@ -132,7 +143,7 @@ func TestCaptureCompletionHeartbeatsWhileBlockedAndRetriesTransientFailure(t *te
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
 		t.Fatalf("complete with live lease: %v", err)
 	}
-	if control.completeCalls.Load() != 2 || control.heartbeatCalls == 0 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
+	if control.completeCalls.Load() != 2 || control.heartbeatCalls < 2 || control.failCalls != 0 || control.completed.CaptureEpoch != claim.Envelope.CaptureEpoch {
 		t.Fatalf("completion calls=%d heartbeat=%d failures=%d epoch=%d", control.completeCalls.Load(), control.heartbeatCalls, control.failCalls, control.completed.CaptureEpoch)
 	}
 }
