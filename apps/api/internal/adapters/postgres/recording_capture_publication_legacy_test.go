@@ -9,7 +9,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestCapturePublicationRecoverySkipsLegacyEpochWithoutBlockingClaims(t *testing.T) {
