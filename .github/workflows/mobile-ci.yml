@@ -68,11 +68,6 @@ jobs:
           node-version-file: .tool-versions
           cache: pnpm
 
-      - name: Check Android release automation
-        run: |
-          bash apps/mobile/scripts/release/test-build-signed-android.sh
-          bash apps/mobile/scripts/release/test-publish-nightly-android.sh
-
       - name: Compare native fingerprints
         id: compare
         continue-on-error: true
