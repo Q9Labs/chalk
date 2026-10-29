@@ -68,9 +68,9 @@ const cases = [
   },
   {
     name: "provider-bridge-readiness",
-    file: "apps/sync/lib/chalk_sync/operations/probe.ex",
-    from: "{:error, _reason} -> {:error, :provider_bridge_unavailable}",
-    to: '{:error, _reason} -> {:ok, %{status: "ready"}}',
+    file: "apps/sync/lib/chalk_sync/provider_bridge/client.ex",
+    from: ":chalk_sync_bridge_readiness",
+    to: ":default",
     command: ["apps/sync/scripts/provider-bridge-readiness-test"],
   },
   {
@@ -85,6 +85,7 @@ const cases = [
     file: "sdks/typescript/client/src/sync/v1-reducer.ts",
     from: "admission_requests: state.admissionRequests.map((request)",
     to: "admission_requests: [...state.admissionRequests].reverse().map((request)",
+    failure: /V1StateDigestMismatchError/,
     ...vitest("sdks/typescript/client", "src/sync/v1-admission-order.test.ts"),
   },
   {
@@ -112,7 +113,7 @@ const cases = [
     name: "transcription-terminal-failure",
     file: "apps/transcription-dispatcher/src/finalizer.ts",
     from: 'const terminal = kind === "nonretryable" || kind === "schema";',
-    to: 'const terminal = kind === "nonretryable";',
+    to: 'const terminal = kind === "schema";',
     ...vitest("apps/transcription-dispatcher", "test/finalizer.test.ts"),
   },
   {
@@ -162,7 +163,8 @@ for (const mutation of cases) {
     try {
       writeFileSync(filename, original.replace(mutation.from, mutation.to));
       const result = run("mutant");
-      if (result.status === 0 || !/--- FAIL:|AssertionError|\bassert\b|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
+      const failure = mutation.failure ?? /--- FAIL:|AssertionError|\bassert\b|assertion|Expected/i;
+      if (result.status === 0 || !failure.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
       console.log(`KILLED ${mutation.name}`);
     } finally {
       writeFileSync(filename, original);

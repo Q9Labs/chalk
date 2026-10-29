@@ -599,9 +599,6 @@ defmodule ChalkSync.SyncPostgres do
     Postgrex.query!(connection, "delete from #{table} where tenant_id = $1", [tenant_id])
   end
 
-  defp episode_params(episode),
-    do: [uuid(episode.tenant_id), uuid(episode.space_id), uuid(episode.episode_id)]
-
   defp uuid(value), do: UUID.dump!(value)
   defp nullable_uuid(nil), do: nil
   defp nullable_uuid(value), do: uuid(value)
