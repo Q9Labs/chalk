@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
+import { createConnection, createServer as createTcpServer } from "node:net";
 
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryDirectory = resolve(packageDirectory, "../../..");
@@ -27,12 +28,14 @@ async function run() {
   let browser;
   let browserBundleDirectory;
   let server;
+  let proxy;
 
   try {
     config = external ?? (await fixture.ready);
     assertLocalhostWebSocketUrl(config.url);
+    proxy = await startFaultProxy(config.url);
     browserBundleDirectory = await buildBrowserProof();
-    server = await startBrowserServer(config, join(browserBundleDirectory, "client.js"));
+    server = await startBrowserServer({ ...config, url: proxy.url }, join(browserBundleDirectory, "client.js"));
     const { chromium } = await import("playwright");
     browser = await chromium.launch({
       channel: "chromium",
@@ -44,13 +47,13 @@ async function run() {
     const missingAssets = [];
     const receivedFrameTypes = [];
     page.on("console", (message) => {
-      if (message.type() === "error") {
+      if (message.type() === "error" && !(message.text().includes("WebSocket connection to") && message.text().includes(proxy.origin))) {
         browserErrors.push(message.text());
       }
     });
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("requestfailed", (request) => {
-      missingAssets.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? "request failed"}`);
+      if (!request.url().startsWith(proxy.origin)) missingAssets.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? "request failed"}`);
     });
     page.on("response", (response) => {
       if (response.status() >= 400) {
@@ -66,9 +69,18 @@ async function run() {
         }
         if (receivedFrameTypes.length > 12) receivedFrameTypes.shift();
       });
-      socket.on("socketerror", (error) => missingAssets.push(`websocket: ${error}`));
+      socket.on("socketerror", (error) => {
+        if (!socket.url().startsWith(proxy.origin)) missingAssets.push(`websocket: ${error}`);
+      });
     });
     await page.goto(server.url, { waitUntil: "load" });
+    await page.waitForFunction(() => window.__chalkSyncFault === "ready", undefined, { timeout: browserTimeoutMs });
+    proxy.partition();
+    await page.evaluate(() => {
+      window.__chalkSyncFault = "partitioned";
+    });
+    await Promise.all([page.waitForFunction(() => window.__chalkSyncFault === "queued", undefined, { timeout: browserTimeoutMs }), proxy.waitForRejectedConnection()]);
+    proxy.heal();
     try {
       await page.waitForFunction(() => "__chalkSyncProof" in window, undefined, { timeout: browserTimeoutMs + 1_000 });
     } catch (error) {
@@ -85,15 +97,84 @@ async function run() {
       throw new Error(`real-browser sync proof emitted browser or network errors: ${diagnostics}; recent frames=${receivedFrameTypes.join(",")}`);
     }
 
-    console.log(`real-browser sync proof passed: url=${config.url} revision=${result.revision}`);
+    console.log(`real-browser sync outage and recovery proof passed: url=${config.url} revision=${result.revision}`);
   } finally {
     await browser?.close();
     await server?.close();
+    await proxy?.close();
     if (browserBundleDirectory) {
       await rm(browserBundleDirectory, { force: true, recursive: true });
     }
     await fixture?.stop();
   }
+}
+
+async function startFaultProxy(upstreamUrl) {
+  const upstream = new URL(upstreamUrl);
+  const sockets = new Set();
+  let partitioned = false;
+  let rejected;
+  const rejectedConnection = new Promise((resolveRejected) => {
+    rejected = resolveRejected;
+  });
+  const server = createTcpServer((incoming) => {
+    if (partitioned) {
+      rejected();
+      incoming.destroy();
+      return;
+    }
+    const host = upstream.hostname.startsWith("[") ? upstream.hostname.slice(1, -1) : upstream.hostname;
+    const outgoing = createConnection({ host, port: Number(upstream.port || 80) });
+    sockets.add(incoming);
+    sockets.add(outgoing);
+    incoming.on("error", () => outgoing.destroy());
+    outgoing.on("error", () => incoming.destroy());
+    incoming.on("close", () => {
+      sockets.delete(incoming);
+      outgoing.destroy();
+    });
+    outgoing.on("close", () => {
+      sockets.delete(outgoing);
+      incoming.destroy();
+    });
+    incoming.pipe(outgoing);
+    outgoing.pipe(incoming);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("fault proxy did not expose a TCP port");
+  const url = new URL(upstreamUrl);
+  url.host = `127.0.0.1:${address.port}`;
+
+  return {
+    url: url.toString(),
+    origin: url.origin,
+    partition() {
+      partitioned = true;
+      for (const socket of sockets) socket.destroy();
+    },
+    heal() {
+      partitioned = false;
+    },
+    async waitForRejectedConnection() {
+      let timer;
+      try {
+        await Promise.race([
+          rejectedConnection,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("SDK did not retry during the network partition")), browserTimeoutMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    async close() {
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolveClose, rejectClose) => server.close((error) => (error ? rejectClose(error) : resolveClose())));
+    },
+  };
 }
 
 function externalFixture() {
@@ -330,15 +411,34 @@ function browserPage() {
             targets[0].command.payload.raised === true && targets[0].bytes > 0 ? targets[0] : null;
         }, "client did not persist the v1 hand-raised target");
         await commandResult;
-        const snapshot = await waitFor(() => {
+        await waitFor(() => {
           const next = client.getSnapshot();
           const participant = next.control?.participants.find((item) => item.participantId === next.participantId);
           return next.pendingCommandCount === 0 && next.control?.revision === 2 && participant?.handRaised ? next : null;
         }, "client did not converge on the committed control event");
         if ((await pendingStore.load()).length !== 0) throw new Error("client did not clear the persisted v1 target");
 
+        window.__chalkSyncFault = "ready";
+        await waitFor(() => window.__chalkSyncFault === "partitioned", "network partition was not injected");
+        await waitFor(() => client.getSnapshot().connection.phase !== "live", "client stayed live during the partition");
+        const queuedResult = client.setHandRaised(false);
+        await waitFor(async () => {
+          const targets = await pendingStore.load();
+          return targets.length === 1 && targets[0].command.name === "set_hand_raised" &&
+            targets[0].command.payload.raised === false;
+        }, "client did not persist the offline hand-raised target");
+        window.__chalkSyncFault = "queued";
+        await queuedResult;
+        const recovered = await waitFor(() => {
+          const next = client.getSnapshot();
+          const participant = next.control?.participants.find((item) => item.participantId === next.participantId);
+          return next.connection.phase === "live" && next.pendingCommandCount === 0 &&
+            next.control?.revision === 3 && participant?.handRaised === false ? next : null;
+        }, "client did not recover and apply the queued target");
+        if ((await pendingStore.load()).length !== 0) throw new Error("client did not clear the recovered target");
+
         client.stop();
-        window.__chalkSyncProof = { status: "passed", revision: snapshot.control.revision, commandId: persisted.commandId };
+        window.__chalkSyncProof = { status: "passed", revision: recovered.control.revision, commandId: persisted.commandId };
       } catch (error) {
         window.__chalkSyncProof = { status: "failed", message: error instanceof Error ? error.message : "browser harness failed" };
       }
