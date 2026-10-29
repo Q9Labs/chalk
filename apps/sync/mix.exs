@@ -25,8 +25,10 @@ defmodule ChalkSync.MixProject do
     ]
   end
 
-  defp elixirc_paths(:test), do: ["lib", "test/support", "../../features/whiteboard/sync/lib"]
-  defp elixirc_paths(_), do: ["lib", "../../features/whiteboard/sync/lib"]
+  defp elixirc_paths(:test),
+    do: ["lib", "test/support", Path.expand("../../features/whiteboard/sync/lib", __DIR__)]
+
+  defp elixirc_paths(_), do: ["lib", Path.expand("../../features/whiteboard/sync/lib", __DIR__)]
 
   defp deps do
     [

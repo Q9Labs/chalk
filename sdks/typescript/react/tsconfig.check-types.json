@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "include": ["src/**/*", "type-tests/**/*.ts", "../../../features/whiteboard/sdk/react/src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test.tsx"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test.tsx", "../../../features/whiteboard/sdk/react/src/**/*.test.ts", "../../../features/whiteboard/sdk/react/src/**/*.test.tsx"],
   "compilerOptions": {
     "composite": false,
     "noEmit": true,

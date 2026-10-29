@@ -20,7 +20,7 @@
     }
   },
   "include": ["src/**/*", "../../../features/whiteboard/sdk/react/src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "../../../features/whiteboard/sdk/react/src/**/*.test.ts", "../../../features/whiteboard/sdk/react/src/**/*.test.tsx"],
   "references": [
     {
       "path": "../../../packages/facehash"

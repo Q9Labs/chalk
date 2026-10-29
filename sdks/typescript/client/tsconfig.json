@@ -12,5 +12,5 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*", "../../../features/whiteboard/sdk/client/src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "../../../features/whiteboard/sdk/client/src/**/*.test.ts", "../../../features/whiteboard/sdk/client/src/**/*.test.tsx"]
 }

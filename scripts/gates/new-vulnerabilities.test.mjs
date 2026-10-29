@@ -70,6 +70,12 @@ test("the zod importer guard fails closed outside the locked Expo CLI chain", as
       },
     ],
     [
+      "direct zod in the feature resolution host",
+      (lock) => {
+        lock.importers["features/whiteboard"].dependencies.zod = { version: "3.25.76" };
+      },
+    ],
+    [
       "direct production zod 4",
       (lock) => {
         lock.importers["apps/web"].dependencies.zod.version = "4.6.5";

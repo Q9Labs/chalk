@@ -4,6 +4,8 @@ export default defineConfig({
   test: { include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}", "../../../features/whiteboard/sdk/react-native/src/**/*.test.{ts,tsx}"] },
   resolve: {
     alias: [
+      { find: /^react-native$/, replacement: fileURLToPath(import.meta.resolve("react-native")) },
+      { find: /^@cloudflare\/react-native-webrtc$/, replacement: fileURLToPath(import.meta.resolve("@cloudflare/react-native-webrtc")) },
       { find: "@q9labsai/chalk-client/effect", replacement: fileURLToPath(new URL("../client/src/effect.ts", import.meta.url)) },
       { find: "@q9labsai/chalk-client/invites", replacement: fileURLToPath(new URL("../client/src/public-invites/index.ts", import.meta.url)) },
       { find: "@q9labsai/chalk-client", replacement: fileURLToPath(new URL("../client/src/index.ts", import.meta.url)) },

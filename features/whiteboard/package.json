@@ -24,5 +24,8 @@
     "react-native-webview": "13.16.1",
     "vite": "8.1.6",
     "vitest": "^4.1.12"
+  },
+  "devDependencies": {
+    "@cloudflare/react-native-webrtc": "~125.0.1 || ~125.0.3"
   }
 }

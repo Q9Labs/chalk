@@ -55,7 +55,7 @@
   "apps/sync/test/chalk_sync/whiteboard_v1/view_owner_test.exs": "features/whiteboard/tests/sync/chalk_sync/whiteboard_v1/view_owner_test.exs",
   "apps/web/scripts/self-hosted-excalidraw.ts": "features/whiteboard/web/self-hosted-excalidraw.ts",
   "apps/web/scripts/sync-public-assets.ts": "features/whiteboard/web/sync-assets.ts",
-  "apps/web/scripts/upload-vendor-assets.ts": "features/whiteboard/web/upload-vendor-assets.ts",
+  "apps/web/scripts/upload-vendor-assets.ts": "features/whiteboard/tools/upload-vendor-assets.ts",
   "apps/web/scripts/vendor-asset-files.ts": "features/whiteboard/web/vendor-asset-files.ts",
   "apps/web/src/docs/content/whiteboard.mdx": "features/whiteboard/docs/whiteboard.mdx",
   "apps/web/src/lib/whiteboard-asset-versions.ts": "features/whiteboard/web/whiteboard-asset-versions.ts",

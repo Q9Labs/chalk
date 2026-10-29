@@ -29,6 +29,14 @@ existing Mix application. SDK bundlers consume the source directly and bundle
 published declarations without moving unrelated SDK features. The private root
 workspace supplies module resolution for feature-owned TypeScript sources.
 
+Fallow treats the relocated SDK source as SDK entrypoints, matching its existing
+public-package treatment of the SDK shells. Its package-cycle warnings describe
+these source fragments and their shells, not independently built packages; module
+cycle checks and the feature dependency guard remain enabled. The health baseline
+preserves the existing contract validator's complexity finding at its new path.
+`scripts/features/compare-contracts.mjs` proves that validator changed only its
+schema path. Web tooling/test exclusions follow their previous `apps/web/` scope.
+
 ## Public interfaces and dependencies
 
 The Go entrypoint is `github.com/q9labs/chalk/features/whiteboard/api`.
@@ -61,6 +69,10 @@ repository-root named build context but copy only the source their build needs.
 Go embeds migrations from their owning folders into one sorted set. The local
 Goose helper assembles that same SQL set in a disposable directory. No tracked
 second source tree or import-rewriting build generator exists.
+
+`apps/api/db/schema.sql` remains the shared database-schema projection consumed by
+sqlc and cross-feature fixtures. Whiteboard's historical migrations and queries
+live here; the shared projection is not a second implementation of the feature.
 
 The native package stages its feature-owned bridge into distribution output,
 alongside the existing generated embedded renderer assets. Source remains here;

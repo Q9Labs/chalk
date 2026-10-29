@@ -4,7 +4,7 @@ import { AwsClient } from "aws4fetch";
 import { extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { assetFiles, treeDigest } from "./vendor-asset-files";
+import { assetFiles, treeDigest } from "../web/vendor-asset-files";
 
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],

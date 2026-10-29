@@ -1,0 +1,25 @@
+{
+  "kind": "health",
+  "finding_counts": {
+    "features/whiteboard/tools/emitters/whiteboard-contract.mjs": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    }
+  },
+  "identity_finding_counts": {
+    "features/whiteboard/tools/emitters/whiteboard-contract.mjs\u0000validateWhiteboardContract": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": []
+}

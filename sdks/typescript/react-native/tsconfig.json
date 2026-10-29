@@ -19,7 +19,7 @@
     }
   },
   "include": ["src/**/*", "../../../features/whiteboard/sdk/react-native/src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "../../../features/whiteboard/sdk/react-native/src/**/*.test.ts", "../../../features/whiteboard/sdk/react-native/src/**/*.test.tsx"],
   "references": [
     {
       "path": "../../../packages/facehash"

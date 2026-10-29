@@ -17,6 +17,9 @@ const unchanged = (old, file) => {
 };
 unchanged("contract/schema/whiteboard-v1.json", "features/whiteboard/contract/whiteboard-v1.json");
 unchanged("contract/generated/openapi.json", "contract/generated/openapi.json");
+const validator = "features/whiteboard/tools/emitters/whiteboard-contract.mjs";
+assert.equal(current(validator).toString().replace("features/whiteboard/contract/whiteboard-v1.json", "contract/schema/whiteboard-v1.json"), before("tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs").toString());
+console.log("unchanged: contract validator, apart from its schema path (legacy Fallow health baseline)");
 for (const [old, file] of Object.entries(moves)) {
   if (file.endsWith(".sql") && file.startsWith("features/whiteboard/api/")) unchanged(old, file);
 }
