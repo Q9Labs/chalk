@@ -329,7 +329,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring") return;
-    const { connection, connectionId, generation, transceiver, state } = publication;
+    const { connection, transceiver } = publication;
     const closed = connection.connectionState === "closed";
     try {
       if (!phase.detached && !closed) {
@@ -338,11 +338,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       phase.detached = true;
       if (!phase.handle) return;
-      const { mid, publicationId } = phase.handle;
-      // A closed peer cannot negotiate. Its owned handle can still be force-closed.
-      const offer = closed ? null : await connection.createOffer();
-      if (offer) await connection.setLocalDescription(offer);
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, ...(offer ? providerDescription(requireDescription(offer)) : {}), tracks: [{ mid, source: state.source, publicationId }], force: closed }), { generation, connectionId });
+      const response = await this.#closePublicationHandle(publication, phase.handle, closed);
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
@@ -352,6 +348,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (connection === this.#connection && !this.#stopped) this.#reportError(error);
       throw error;
     }
+  }
+  async #closePublicationHandle(publication: OwnedLocalPublication, handle: LocalPublicationHandle, closed: boolean): Promise<CloudflareSFUTracksResponse> {
+    const { connection, connectionId, generation, state } = publication;
+    // A closed peer cannot negotiate. Its owned handle can still be force-closed.
+    const description = closed ? undefined : await createLocalOffer(connection);
+    return this.#signal(() => this.#requireTransport().closeTracks({ connectionId, ...description, tracks: [{ ...handle, source: state.source }], force: closed }), { generation, connectionId });
   }
   #fenceLocalPublications(): void {
     for (const publication of this.#ownedPublications) publication.lifecycle = { kind: "retired" };
@@ -577,10 +579,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number): Promise<void> {
-    let offer: Parameters<RTCPeerConnection["setRemoteDescription"]>[0];
+    let description: Awaited<ReturnType<typeof createLocalOffer>>;
     try {
-      offer = await (() => connection.createOffer())();
-      await (() => connection.setLocalDescription(offer))();
+      description = await createLocalOffer(connection);
     } catch (error) {
       const cameras = publications.filter(({ state, transceiver }) => state.source === "camera" && transceiver.sender.getParameters().encodings.length > 1);
       if (!simulcastUnsupported(error) || cameras.length === 0) throw error;
@@ -592,8 +593,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         publication.transceiver = connection.addTransceiver(publication.state.track, { direction: "sendonly" });
         publication.state.transceiver = publication.transceiver;
       }
-      offer = await (() => connection.createOffer())();
-      await (() => connection.setLocalDescription(offer))();
+      description = await createLocalOffer(connection);
     }
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
@@ -603,7 +603,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await this.#signal(() => this.#requireTransport().addTracks({ connectionId, ...providerDescription(requireDescription(offer)), tracks }), { generation, connectionId });
+    const response = await this.#signal(() => this.#requireTransport().addTracks({ connectionId, ...description, tracks }), { generation, connectionId });
     this.#recordLocalPublicationHandles(publications, response.tracks);
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
@@ -1333,6 +1333,11 @@ function providerDescription(description: ReturnType<typeof requireDescription>)
   readonly sessionDescription: ReturnType<typeof requireDescription>;
 } {
   return { sessionDescription: description };
+}
+async function createLocalOffer(connection: RTCPeerConnection) {
+  const offer = await connection.createOffer();
+  await connection.setLocalDescription(offer);
+  return providerDescription(requireDescription(offer));
 }
 function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;
