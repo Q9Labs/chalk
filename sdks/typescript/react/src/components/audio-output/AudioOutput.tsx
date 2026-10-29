@@ -175,7 +175,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
 
     // If the browser already considers the page activated, try immediately.
     try {
-      const ua = (navigator as any)?.userActivation;
+      const ua = navigator?.userActivation;
       if (ua?.isActive || ua?.hasBeenActive) void tryUnlock();
     } catch {
       // ignore

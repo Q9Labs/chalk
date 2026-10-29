@@ -58,9 +58,9 @@ const config = defineConfig({
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
     __BUILD_TIME__: JSON.stringify(buildTime),
-    __APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
-    __WEB_APP_VERSION__: JSON.stringify((pkg as any).version || "0.0.0"),
-    __SDK_REACT_VERSION__: JSON.stringify((sdkReactPkg as any).version || "0.0.0"),
+    __APP_VERSION__: JSON.stringify(pkg.version || "0.0.0"),
+    __WEB_APP_VERSION__: JSON.stringify(pkg.version || "0.0.0"),
+    __SDK_REACT_VERSION__: JSON.stringify(sdkReactPkg.version || "0.0.0"),
   },
   server: {
     host: "127.0.0.1",
