@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
-import { credentialExpiries, waitForCredentialRefresh } from "./credential-refresh.mjs";
+import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
@@ -88,26 +88,9 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       const issueRefresh = async (request) => {
         const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
-        const attempt = { startedAt: new Date().toISOString(), reason: request.reason, replaceMediaConnection };
-        refresh.requests.push(attempt);
-        try {
-          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
-          maskCredentials(grant);
-          const expiry = credentialExpiries(grant);
-          Object.assign(attempt, { status: 201, ...expiry });
-          if (!replaceMediaConnection) {
-            refresh.count++;
-            refresh.latestExpiry = expiry.mediaExpiry;
-          }
-          replaceOnNextAccess = false;
-          return grant;
-        } catch (error) {
-          Object.assign(attempt, { status: error.status ?? null, code: error.code ?? null });
-          throw error;
-        } finally {
-          attempt.completedAt = new Date().toISOString();
-          await save(`${run.directory}/credential-refresh.json`, refreshes);
-        }
+        grant = await issueCredentialRefresh(run, refreshes, refresh, { reason: request.reason, replaceMediaConnection }, () => chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection }));
+        replaceOnNextAccess = false;
+        return grant;
       };
       await page.exposeFunction("proofAccess", (request) => {
         const next = queue.then(async () => {

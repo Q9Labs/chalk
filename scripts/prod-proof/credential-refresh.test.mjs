@@ -4,7 +4,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { credentialExpiries, waitForCredentialRefresh } from "./credential-refresh.mjs";
+import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
+
+test("refresh attempts retain outcomes without counting replacements or leaking credentials", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-refresh-"));
+  const refresh = { count: 0, latestExpiry: 0, requests: [] };
+  const refreshes = [refresh];
+  const expiresAt = "2026-10-29T12:00:00Z";
+  const grant = { media: { expires_at: expiresAt, token: "private-media-sentinel" }, sync: { expires_at: expiresAt, token: "private-sync-sentinel" } };
+  try {
+    for (const replaceMediaConnection of [false, true]) {
+      assert.equal(await issueCredentialRefresh({ directory }, refreshes, refresh, { reason: "refresh", replaceMediaConnection }, async () => grant), grant);
+    }
+    const denied = Object.assign(new Error("private-error-sentinel"), { status: 403, code: "access.forbidden" });
+    await assert.rejects(
+      issueCredentialRefresh({ directory }, refreshes, refresh, { reason: "refresh", replaceMediaConnection: false }, async () => {
+        throw denied;
+      }),
+      (error) => error === denied,
+    );
+    assert.equal(refresh.count, 1);
+    assert.equal(refresh.latestExpiry, Date.parse(expiresAt));
+    const evidence = await readFile(join(directory, "credential-refresh.json"), "utf8");
+    assert.deepEqual(JSON.parse(evidence), refreshes);
+    assert.deepEqual(
+      refresh.requests.map(({ status, code, replaceMediaConnection }) => ({ status, code, replaceMediaConnection })),
+      [
+        { status: 201, code: undefined, replaceMediaConnection: false },
+        { status: 201, code: undefined, replaceMediaConnection: true },
+        { status: 403, code: "access.forbidden", replaceMediaConnection: false },
+      ],
+    );
+    assert.doesNotMatch(evidence, /private-.*-sentinel/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("server SDK grants prove renewal and hold both guests past their original expiry", async () => {
   const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
