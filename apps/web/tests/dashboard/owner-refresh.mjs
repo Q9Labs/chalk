@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { setTimeout as delay } from "node:timers/promises";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
+import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./owner-cookie-budget.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
@@ -28,6 +29,21 @@ try {
   assert.notEqual(original.subject.participant_id, sibling.subject.participant_id);
   await second.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const secondRefreshed = callResponse(second, "refresh-access");
+  await proveCookieBudget(context, origin);
+  const leaving = await context.newPage();
+  await leaving.goto(`${origin}/dashboard`);
+  await leaving.getByRole("button", { name: "Start a call", exact: true }).click();
+  await leaving.getByRole("button", { name: "Join call", exact: true }).click();
+  await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+  const leaveCleanup = leaving.waitForResponse(`${origin}/auth/clear-owner-seats`);
+  const leave = leaving.getByRole("button", { name: "Leave call", exact: true });
+  const opensMenu = (await leave.getAttribute("aria-haspopup")) === "menu";
+  await leave.click();
+  if (opensMenu) await leaving.getByRole("menuitem", { name: "Leave call", exact: true }).click();
+  assert.equal((await leaveCleanup).status(), 200);
+  await assertNoSeatCookies(context);
+  await leaving.close();
+  console.log("PASS: real UI Leave clears the bounded cache without disrupting sibling tabs");
   const refreshed = await Promise.all([firstRefreshed, secondRefreshed].map(async (response) => access(await response)));
   for (const [index, previous] of [original, sibling].entries()) {
     assert.equal(refreshed[index].subject.participant_id, previous.subject.participant_id, "Refresh must retain its own tab's seat");
@@ -38,10 +54,14 @@ try {
   for (const page of [first, second]) await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 10000 });
   await first.bringToFront();
   await first.mouse.move(200, 200);
+  const endCleanup = first.waitForResponse(`${origin}/auth/clear-owner-seats`);
   await first.getByRole("button", { name: "Leave call", exact: true }).click();
   await first.getByRole("menuitem", { name: "End call for everyone", exact: true }).click();
   for (const page of [first, second]) await page.getByRole("heading", { name: "The call ended", exact: true }).waitFor({ timeout: 30000 });
+  assert.equal((await endCleanup).status(), 200);
+  await assertNoSeatCookies(context);
   console.log("PASS: shared-browser owner tabs independently refresh, survive original five-minute credential expiry, and end for everyone through real Sync");
+  await proveSignOutCleanup(context, origin);
 } finally {
   await cleanup();
 }

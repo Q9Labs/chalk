@@ -9,6 +9,7 @@ import type { Identity } from "./identity";
 afterEach(() => vi.restoreAllMocks());
 
 it.each([false, true])("refreshes this tab's seat after a sibling join, recovering supersession once (recovery also superseded: %s)", async (recoveryFails) => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-22T14:00:00Z"));
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const env = configuration({
     CHALK_ENVIRONMENT: "test",
@@ -77,7 +78,7 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
   );
   const result = ownerAccess(request, env, { api, tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN }, identity, { action: "refresh-access", spaceId, joinKey: participantId, currentMediaToken: "lost-response-old-token" });
   if (recoveryFails) await expect(result).rejects.toMatchObject({ status: 409 });
-  else expect(await (await result).json()).toEqual({ access, deadlineCeiling: "2026-10-23T14:00:00.000Z" });
+  else expect(await (await result).json()).toEqual({ access, ownerSeat: expect.any(String), deadlineCeiling: "2026-10-23T14:00:00.000Z" });
   expect(payloads).toEqual([
     { participant_generation: 1, replace_media_connection: false, current_media_token: "lost-response-old-token" },
     { participant_generation: 1, replace_media_connection: true },

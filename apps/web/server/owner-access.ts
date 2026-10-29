@@ -1,16 +1,15 @@
 import { Effect, Schema } from "effect";
-import { EpisodeIdSchema, ParticipantIdSchema, SpaceIdSchema } from "@q9labsai/chalk-client/effect";
-import { z } from "zod";
+import { EpisodeIdSchema, ParticipantIdSchema, SpaceIdSchema, type Episode } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { live, run } from "./engine";
 import { episodeDeadlineCeiling } from "./call";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
-import { readCookie, seal, unseal, writeCookie } from "./cookies";
+import { seal } from "./cookies";
+import { readOwnerSeat, writeOwnerSeat, type OwnerSeat } from "./owner-seats";
 import { DashboardError, json } from "./http";
 import type { CallAction, OwnerAccessDTO } from "../src/lib/dashboard/contracts";
 
-const seatSchema = z.object({ userId: z.string(), sessionId: z.string(), spaceId: z.uuid(), episodeId: z.uuid(), participantId: z.uuid(), generation: z.number().int().positive(), expiresAt: z.number() });
 // Domain-separated, Tenant/owner/Episode-bound retry identity. A deliberate new
 // join uses a new idempotency key and therefore gets a new seat.
 async function ownerParticipantId(tenantId: string, userId: string, spaceId: string, episodeId: string, idempotencyKey: string) {
@@ -27,12 +26,7 @@ async function ownerParticipantId(tenantId: string, userId: string, spaceId: str
 export async function ownerAccess(request: Request, env: DashboardEnvironment, engine: Engine, person: Identity, action: Extract<CallAction, { action: "join" | "refresh-access" }>): Promise<Response> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   if (action.action === "refresh-access") {
-    // Already-loaded bundles keep their signed single-seat path until reload.
-    // A supplied but unknown join key must never fall back to another tab.
-    const encoded = readCookie(request, env, action.joinKey ? `seat_${action.spaceId}_${action.joinKey}` : `seat_${action.spaceId}`);
-    if (!encoded) throw new DashboardError(401, "join_required");
-    const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
-    if (seat.userId !== person.userId || seat.sessionId !== person.sessionId || seat.spaceId !== action.spaceId || seat.expiresAt <= Date.now()) throw new DashboardError(401, "join_required");
+    const seat = await readOwnerSeat(request, env, person, action);
     const grantParams = { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(seat.episodeId), participant_id: Schema.decodeUnknownSync(ParticipantIdSchema)(seat.participantId) };
     const access = await run(
       engine.api.default
@@ -50,7 +44,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
         ),
     );
     const episode = await run(engine.api.episodes.getEpisode({ params: { ...params, episode_id: grantParams.episode_id } }));
-    return json({ access, deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
+    return ownerResponse(request, env, person, seat, access, episode);
   }
   await run(engine.api.spaces.prepareSpaceEntrance({ params }));
   const current = (await live(engine, [action.spaceId]))[0]?.episode;
@@ -73,18 +67,11 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   );
   if (!result.access) throw new DashboardError(409, "admission_pending");
   const episode = await run(engine.api.episodes.getEpisode({ params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) } }));
-  const response = json({ access: result.access, deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
-  const seat = await seal({ userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, expiresAt: Date.now() + 86400000 }, env.SESSION_SECRET, "owner-seat");
-  // Refresh authority belongs to a join, not the browser's latest tab in this Space.
-  writeCookie(response, env, `seat_${action.spaceId}_${action.idempotencyKey}`, seat, 86400);
-  // The past-session view still uses the most recently joined seat for its "You" marker.
-  writeCookie(response, env, `seat_${action.spaceId}`, seat, 86400);
-  return response;
+  return ownerResponse(request, env, person, { userId: person.userId, sessionId: person.sessionId, spaceId: action.spaceId, episodeId, participantId: result.participant.id, generation: result.participant.generation, joinKey: action.idempotencyKey }, result.access, episode);
 }
-
-export async function viewerSeat(request: Request, env: DashboardEnvironment, person: Identity, spaceId: string, episodeId: string): Promise<string | null> {
-  const encoded = readCookie(request, env, `seat_${spaceId}`);
-  if (!encoded) return null;
-  const seat = seatSchema.parse(await unseal(encoded, env.SESSION_SECRET, "owner-seat"));
-  return seat.userId === person.userId && seat.sessionId === person.sessionId && seat.spaceId === spaceId && seat.episodeId === episodeId && seat.expiresAt > Date.now() ? seat.participantId : null;
+async function ownerResponse(request: Request, env: DashboardEnvironment, person: Identity, binding: Omit<OwnerSeat, "expiresAt">, access: OwnerAccessDTO["access"], episode: Episode): Promise<Response> {
+  const seat = { ...binding, expiresAt: Math.min(person.expiresAt, Date.parse(access.media.expires_at), Date.parse(access.sync.expires_at), episode.deadline_at ? Date.parse(episode.deadline_at) : Infinity) };
+  const response = json({ access, ownerSeat: await seal(seat, env.SESSION_SECRET, "owner-seat"), deadlineCeiling: episodeDeadlineCeiling(episode) } satisfies OwnerAccessDTO);
+  await writeOwnerSeat(request, response, env, person, seat);
+  return response;
 }

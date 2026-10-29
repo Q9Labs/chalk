@@ -306,7 +306,8 @@ try {
       const join = { action: "join", spaceId: ownerSpaceId, idempotencyKey: crypto.randomUUID() };
       const joined = await post(ada, "/dashboard-api/call", join, session.csrfToken);
       assert.equal(joined.status, 200, await joined.clone().text());
-      const grant = (await joined.json()).access;
+      const joinedDTO = await joined.json();
+      const grant = joinedDTO.access;
       sourceEpisodeId = grant.subject.episode_id;
       assert(grant.sync.token && grant.media.token);
       // Exercise Sync's real UUID decoder, not a second copy of its regex.
@@ -341,24 +342,29 @@ try {
       // Already-loaded bundles without a join key retain their signed single-seat path.
       // An admitted joining seat can refresh before Sync confirms entry.
       assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
-      const refreshedGrant = (await refreshedAccess.json()).access;
+      const refreshedDTO = await refreshedAccess.json();
+      const refreshedGrant = refreshedDTO.access;
       assert.equal(refreshedGrant.subject.participant_id, grant.subject.participant_id);
       // Tabs in one signed-in browser share cookies, but own different seats.
       // Production returned 403 media_token.subject_mismatch here, surfaced as 502.
       const otherJoin = { ...join, idempotencyKey: crypto.randomUUID() };
       const otherJoined = await post(ada, "/dashboard-api/call", otherJoin, session.csrfToken);
       assert.equal(otherJoined.status, 200, await otherJoined.clone().text());
-      const otherGrant = (await otherJoined.json()).access;
+      const otherDTO = await otherJoined.json();
+      const otherGrant = otherDTO.access;
       assert.notEqual(otherGrant.subject.participant_id, grant.subject.participant_id);
-      for (const [initial, joinKey] of [
-        [refreshedGrant, join.idempotencyKey],
-        [otherGrant, otherJoin.idempotencyKey],
+      for (const [initial, joinKey, initialSeat] of [
+        [refreshedGrant, join.idempotencyKey, refreshedDTO.ownerSeat],
+        [otherGrant, otherJoin.idempotencyKey, otherDTO.ownerSeat],
       ]) {
         let access = initial;
+        let ownerSeat = initialSeat;
         for (const replaceMedia of [false, true]) {
-          const refreshed = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, joinKey, ...(!replaceMedia ? { currentMediaToken: access.media.token } : {}) }, session.csrfToken);
+          const refreshed = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, joinKey, ownerSeat, ...(!replaceMedia ? { currentMediaToken: access.media.token } : {}) }, session.csrfToken);
           assert.equal(refreshed.status, 200, `A sibling tab must not replace this tab's owner seat: ${await refreshed.clone().text()}`);
-          access = (await refreshed.json()).access;
+          const dto = await refreshed.json();
+          access = dto.access;
+          ownerSeat = dto.ownerSeat;
           assert.equal(access.subject.participant_id, initial.subject.participant_id);
         }
       }

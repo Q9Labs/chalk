@@ -43,7 +43,7 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
   Both callbacks clear their own login transaction on success or failure.
 - `GET /auth/session`: profile plus session-bound CSRF token, no provider tokens.
   An expired/invalid session returns 401 `sign_in_required`: sign in again.
-- `POST /auth/sign-out`: strict empty JSON object. Clears session and binding
+- `POST /auth/sign-out`: strict empty JSON object. Clears session, binding and all current/legacy seat
   cookies; clear this account's local bookmarks when `clearLocalBookmarks` is true.
   This is local sign-out, not Google/Apple account logout or token revocation.
 - `GET /dashboard-api/home?cursor=...`: owned, unarchived Spaces and one activity
@@ -74,11 +74,18 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 Joined-only bookmarks use the public invite/call client. Owner `join` prepares
 an Entrance, creates/reuses a live Episode and admits an owner Guest.
 `refresh-access` is media reconnection, not an identity-session refresh: it takes
-the Space ID, the tab's join key and an optional current media token. The join
-key selects a session-bound, purpose-sealed HttpOnly seat cookie; it supplies no
-Participant identity or generation. Separate joins in one browser keep separate
-refresh cookies, so another tab cannot replace this tab's seat. A latest-seat
-cookie supports older loaded bundles and the past-session "You" marker.
+the Space ID, the tab's join key, its sealed seat handle and an optional current
+media token. The server mints and renews the handle, bound to the user, session,
+Space and join key; the client supplies no Participant identity or generation.
+Each tab retains its own handle, so concurrent cookie writes cannot replace its
+authority. One HttpOnly cookie caches at most four recent seats for older loaded
+bundles and the past-session "You" marker. Entries expire no later than their
+credentials, identity session or Episode deadline; refresh renews them.
+`POST /auth/clear-owner-seats` requires the session binding, exact Origin and CSRF
+token and clears this bounded cache plus legacy seat cookies. The call UI invokes
+it after confirmed Leave or Episode end; sign-out also clears all seat cookies.
+Authoritative dashboard access denials use the SDK's HTTP access-rejection
+contract; network, 5xx, timeout and rate-limit failures remain retryable.
 Nothing accepts arbitrary Participant IDs or promotes joined-only calls.
 The server never returns provider tokens, credentials, Tenant configuration,
 service bearer, storage keys, webhook events or raw engine responses.
@@ -363,12 +370,17 @@ runs own and clean up their Pages process, local HTTP server and sandbox.
 Already-loaded dashboard bundles without a join key retain the previous signed
 single-seat refresh path. New bundles always send a join key; an unknown key
 never falls back to the latest seat. Existing multi-tab calls need a reload to
-acquire separate per-join cookies.
+acquire per-tab sealed handles. Legacy per-Space/per-join cookies are deleted
+when a seat is written or cleared; no new per-join cookie is created.
 
 The required `dashboard-engine` Gate lane also runs `apps/web/tests/dashboard/owner-refresh.mjs`: two
 owner tabs share one signed-in browser and keep separate seats through the real
 four-minute refresh and original five-minute expiry, then end for everyone over
-real Sync. It uses the real API, database and Pages runtime, with vendor media
+real Sync. During the hold it also makes 300 joins across 12 other Spaces in a
+real Chromium jar, checks that auth cookies survive and that a third tab's Leave
+clears seats without breaking the original tabs, then verifies end/sign-out
+cleanup. The lane prints separate HTTP-suite and long-proof elapsed times.
+It uses the real API, database and Pages runtime, with vendor media
 stubbed. The promote/nightly real-SFU `prod:proof` separately waits for both
 clients' scheduled refresh, checks post-refresh media, and requires the normal
 SDK end to succeed without an owner-API fallback.
