@@ -40,6 +40,38 @@ it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add wh
   }
 });
 
+it("retires through a peer that closes while sender detachment is pending", async () => {
+  const harness = createHarness();
+  const detaching = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const peer = harness.peers[0]!;
+    const transceiver = peer.getTransceivers()[0]!;
+    const replace = transceiver.sender.replaceTrack.bind(transceiver.sender);
+    vi.spyOn(transceiver.sender, "replaceTrack").mockImplementation(async (track) => {
+      detaching.resolve();
+      await gate.promise;
+      await replace(track);
+    });
+    const stop = transceiver.stop.bind(transceiver);
+    vi.spyOn(transceiver, "stop").mockImplementation(() => {
+      if (peer.connectionState === "closed") throw new DOMException("Peer closed", "InvalidStateError");
+      stop();
+    });
+    const off = harness.client.closeForcedLocalPublication("microphone");
+    await detaching.promise;
+    await harness.client.restart(bootstrap("connection-1"));
+    gate.resolve();
+    await off;
+    expect(harness.transport.localPublications.size).toBe(0);
+    expect(harness.transport.closeInputs).toMatchObject([{ force: true, sessionDescription: undefined }]);
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
 it.each(["signaling_failed", "invalid_publication"] as const)("attempts screen audio even when an owned video close returns %s", async (code) => {
   const harness = createHarness();
   try {

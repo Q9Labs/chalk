@@ -348,16 +348,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
+    const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
-    const closed = connection.connectionState === "closed";
+    let closed = connection.connectionState === "closed";
     try {
       if (!phase.detached && !closed) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
-        transceiver.stop();
+        closed = connection.connectionState === "closed";
+        if (!closed) transceiver.stop();
       }
       phase.detached = true;
       const sessionDescription = closed ? undefined : await createLocalOffer(connection);
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...phase.handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
