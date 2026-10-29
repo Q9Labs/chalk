@@ -72,8 +72,12 @@ it.skipIf(baseline).each([
       const [a, b] = await Promise.all([context.newPage(), context.newPage()]);
       const room = `pin-${viewport.width}`;
       await a.setViewportSize({ width: 1440, height: 900 });
+      await a.clock.install();
       await mount(a, "a", room);
       await mount(b, "b", room);
+      // Loading the sibling can outlast the three-second desktop controls timer.
+      await a.clock.fastForward(3100);
+      await a.locator('[data-part="call-frame"][data-idle="true"]').waitFor();
       await showCallControls(a);
       await a.getByRole("button", { name: "Board", exact: true }).click();
       const followed = b.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Amina" });
