@@ -48,12 +48,23 @@ stop's journey and parent-event IDs. Immediate publication also carries the
 completion span's trace and span IDs. Both paths share one request key per
 recording and epoch, and skip an existing pending or applied callback for that
 stop authority. Sync validates and commits its normal `recording_status_changed`
-event; retries do not add another terminal event.
+event; retries do not add another terminal event. Publication failure rolls back
+completion, including its lease, pipeline, reservation and capacity updates.
+The API returns `recording.capture_stop_publication_failed`; the worker reports
+`capture_stop_publication_failed` with its existing bounded completion detail.
+Only a lease-fenced failure report records that attempt as a publication failure.
+Claim and maintenance exclude those attempts from the media-completion retry
+budget, while retaining the existing source-expiry deadline. Restoring publication
+therefore lets the ordinary completion-only worker finish without operator repair.
 Episode end may adopt that same stop without replacing its authority. Neither
 path commits an export or changes the successful capture job. The regression in
 `apps/api/internal/adapters/postgres/recording_capture_stop_completion_integration_test.go`
 proves immediate publication, completion replay and maintenance deduplication
-after manual stop and failed provider close. The regression in
+after manual stop and failed provider close. The two-connection regressions in
+`apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go`
+prove both worker/completion lock orders, concurrent completion, atomic rollback
+on publisher failure, and automatic recovery after four publication failures.
+The regression in
 `apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
 callback recovery, and duplicate delivery against the Go controller and maintenance
 commands.

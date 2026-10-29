@@ -479,6 +479,12 @@ type RecordingCaptureProviderRateBudget struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RecordingCapturePublicationFailure struct {
+	JobID             pgtype.UUID `json:"job_id"`
+	AttemptCount      int32       `json:"attempt_count"`
+	FencingGeneration int64       `json:"fencing_generation"`
+}
+
 type RecordingCaptureRetiredPublication struct {
 	TenantID      pgtype.UUID        `json:"tenant_id"`
 	EpisodeID     pgtype.UUID        `json:"episode_id"`

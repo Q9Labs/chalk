@@ -624,9 +624,14 @@ func completionFailureDetail(err error) string {
 func (d *CaptureDaemon) reportCompletionFailure(ctx context.Context, lease recordingpipeline.LeaseInput, cause error) error {
 	reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.config.RelinquishTimeout)
 	defer cancel()
+	errorCode := completionFailureCode
+	var httpErr HTTPError
+	if errors.As(cause, &httpErr) && httpErr.Code == "recording.capture_stop_publication_failed" {
+		errorCode = "capture_stop_publication_failed"
+	}
 	_, reportErr := d.control.Fail(reportCtx, recordingpipeline.FailureInput{
 		LeaseInput: lease, AvailableAt: d.config.Now().UTC().Add(DefaultAttemptRetryDelay),
-		ErrorCode: completionFailureCode, ErrorDetail: completionFailureDetail(cause),
+		ErrorCode: errorCode, ErrorDetail: completionFailureDetail(cause),
 	})
 	if reportErr != nil {
 		return fmt.Errorf("report capture completion failure (%s): %w", completionFailureDetail(cause), reportErr)

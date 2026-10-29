@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"time"
 )
 
@@ -43,4 +45,18 @@ type captureFailedCloseCoordinator struct {
 
 func (coordinator *captureFailedCloseCoordinator) Close(context.Context, bool) error {
 	return coordinator.failure
+}
+
+func TestCaptureStopPublicationFailureUsesSeparateRetryBudget(t *testing.T) {
+	control := &captureControlStub{}
+	daemon := captureDaemonForTest(t, control, captureAttemptFactoryFunc(func(context.Context, ClaimResult) (CaptureAttempt, error) {
+		t.Fatal("publication retry started media")
+		return nil, nil
+	}), nil)
+	if err := daemon.reportCompletionFailure(t.Context(), recordingpipeline.LeaseInput{}, completionStageError{stage: "api_complete", outcome: "timed_out", cause: HTTPError{Status: 503, Code: "recording.capture_stop_publication_failed", Retryable: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if control.failed.ErrorCode != "capture_stop_publication_failed" {
+		t.Fatalf("publication failure spent media budget: %s", control.failed.ErrorCode)
+	}
 }
