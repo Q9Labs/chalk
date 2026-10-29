@@ -246,6 +246,78 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		t.Fatalf("move Sync recording to stopping: %v", err)
 	}
 	stoppedInput := recordinglifecycle.StoppedInput{Authority: authority, RequestKey: "capture_stopped_" + recordingID.String() + "_1", StoppedAt: time.Now().UTC()}
+	t.Run("adopted end requires matching operations and live capture authority", func(t *testing.T) {
+		endTx, err := transaction.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer endTx.Rollback(ctx)
+		endService, err := recordinglifecycle.NewService(NewRecordingLifecycleRepositoryWithTransactor(recordingLifecycleNestedTransactor{transaction: endTx}), time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		endOperationID := recordingLifecycleIntegrationID(t)
+		if _, err := endTx.Exec(ctx, `update sync_external_operations set status = 'applied', completed_at = now() where external_operation_id = $1`, stopOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := endTx.Exec(ctx, `update recording_pipelines set stop_operation_id = $2, stop_requested_at = now() where recording_id = $1`, recordingID.Bytes(), stopOperationID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := endTx.Exec(ctx, `insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, recording_id, payload, status, completed_at) values($1, $2, $3, $4, 'adopted_end_integration', $5, 'tenant_end_episode', $6, '{}'::jsonb, 'applied', now())`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), endOperationID.Bytes(), seedFingerprint[:], recordingID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := endTx.Exec(ctx, `update episodes set status = 'ended' where id = $1`, episodeID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		completedAt := stoppedInput.StoppedAt.Add(-time.Millisecond).Truncate(time.Microsecond)
+		if _, err := endTx.Exec(ctx, `update sync_recordings set status = 'stopped', completed_at = $2 where recording_id = $1`, recordingID.Bytes(), completedAt); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := endService.PublishStopped(ctx, stoppedInput); err != nil {
+			t.Fatalf("valid adopted end authority: %v", err)
+		}
+		for _, mutation := range []struct {
+			name  string
+			query string
+			id    utilities.ID
+		}{
+			{"unrelated end recording", `update sync_external_operations set recording_id = null where external_operation_id = $1`, endOperationID},
+			{"unapplied end", `update sync_external_operations set status = 'pending', completed_at = null where external_operation_id = $1`, endOperationID},
+			{"unapplied manual stop", `update sync_external_operations set status = 'pending', completed_at = null where external_operation_id = $1`, stopOperationID},
+			{"unrelated manual stop recording", `update sync_external_operations set recording_id = null where external_operation_id = $1`, stopOperationID},
+			{"missing Sync stop authority", `update sync_recordings set stop_external_operation_id = null where recording_id = $1`, recordingID},
+		} {
+			t.Run(mutation.name, func(t *testing.T) {
+				invalidTx, err := endTx.Begin(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer invalidTx.Rollback(ctx)
+				if _, err := invalidTx.Exec(ctx, mutation.query, mutation.id.Bytes()); err != nil {
+					t.Fatal(err)
+				}
+				invalidService, err := recordinglifecycle.NewService(NewRecordingLifecycleRepositoryWithTransactor(recordingLifecycleNestedTransactor{transaction: invalidTx}), time.Now)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := invalidService.PublishStopped(ctx, stoppedInput); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+					t.Fatalf("invalid adopted stop error = %v", err)
+				}
+			})
+		}
+		stale := stoppedInput
+		stale.Authority.CaptureEpoch++
+		if _, err := endService.PublishStopped(ctx, stale); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("stale adopted stop epoch error = %v", err)
+		}
+		if _, err := endTx.Exec(ctx, `update recording_jobs set lease_expires_at = clock_timestamp() - interval '1 second' where id = $1`, jobID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := endService.PublishStopped(ctx, stoppedInput); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+			t.Fatalf("expired adopted stop lease error = %v", err)
+		}
+	})
 	stopped, err := service.PublishStopped(ctx, stoppedInput)
 	if err != nil {
 		t.Fatalf("publish stopped: %v", err)

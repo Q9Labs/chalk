@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
+	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingorchestrator"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -41,7 +42,7 @@ func TestRecordingStopLifecycleProbe(t *testing.T) {
 	service := recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool))
 	controller := recordingorchestrator.NewController(service)
 	switch action {
-	case "seed":
+	case "seed", "capture":
 		_, err = service.Materialize(ctx, recordingpipeline.ReservationInput{
 			TenantID: tenantID, SpaceID: parse("CHALK_STOP_SPACE_ID"), EpisodeID: episodeID, RecordingID: recordingID,
 			IdempotencyKey: "stop-recovery-" + recordingID.String(), PolicySnapshotVersion: recordingpipeline.SupportedPolicySnapshotVersion,
@@ -49,6 +50,20 @@ func TestRecordingStopLifecycleProbe(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+		if action == "capture" {
+			claimID, err := utilities.NewID()
+			if err != nil {
+				t.Fatal(err)
+			}
+			job, err := service.Claim(ctx, recordingpipeline.ClaimInput{
+				ClaimRequestID: claimID, Kind: recordingpipeline.JobKindCapture,
+				Owner: "late-stop-probe", LeaseToken: "late-stop-lease", LeaseFor: 10 * time.Minute,
+			})
+			if err != nil || job.RecordingID != recordingID || job.Authority == nil {
+				t.Fatalf("claim finishing capture = %+v, error = %v", job, err)
+			}
+			return
 		}
 		_, err = service.RequestStop(ctx, tenantID, episodeID, recordingID, parse("CHALK_STOP_OPERATION_ID"))
 		if err != nil {
@@ -81,6 +96,52 @@ func TestRecordingStopLifecycleProbe(t *testing.T) {
 		}
 	case "reconcile":
 		_, err = service.RecoverExpired(ctx)
+	case "callback", "complete":
+		authority := recordinglifecycle.Authority{
+			TenantID: tenantID.String(), SpaceID: parse("CHALK_STOP_SPACE_ID").String(),
+			EpisodeID: episodeID.String(), RecordingID: recordingID.String(),
+		}
+		err = pool.QueryRow(ctx, `select authority.job_id::text, authority.attempt_count,
+            authority.fencing_generation, authority.capture_epoch, authority.envelope_digest,
+            authority.lease_owner, authority.lease_token, authority.lease_expires_at
+            from recording_job_attempt_authorities authority
+            join recording_jobs job on job.id=authority.job_id
+              and job.attempt_count=authority.attempt_count
+              and job.fencing_generation=authority.fencing_generation
+            where job.tenant_id=$1 and job.recording_id=$2 and job.kind='capture'`,
+			tenantID.Bytes(), recordingID.Bytes()).Scan(&authority.JobID, &authority.AttemptCount,
+			&authority.FencingGeneration, &authority.CaptureEpoch, &authority.EnvelopeDigest,
+			&authority.LeaseOwner, &authority.LeaseToken, &authority.LeaseExpiresAt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if action == "callback" {
+			lifecycle, err := recordinglifecycle.NewService(NewRecordingLifecycleRepositoryWithPool(pool), time.Now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			publication, err := lifecycle.PublishStopped(ctx, recordinglifecycle.StoppedInput{
+				Authority: authority, RequestKey: "late_capture_stopped_" + recordingID.String(), StoppedAt: time.Now().UTC(),
+			})
+			if err != nil || publication.ExternalOperationID != "" {
+				t.Fatalf("late callback acknowledgment = %+v, error = %v", publication, err)
+			}
+			return
+		}
+		jobID, err := utilities.ParseID(authority.JobID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			job, err := service.CompleteCapture(ctx, recordingpipeline.LeaseInput{
+				JobID: jobID, AttemptCount: authority.AttemptCount, FencingGeneration: authority.FencingGeneration,
+				CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: authority.EnvelopeDigest,
+				LeaseOwner: authority.LeaseOwner, LeaseToken: authority.LeaseToken, LeaseFor: time.Minute,
+			})
+			if err != nil || job.State != recordingpipeline.JobStateSucceeded {
+				t.Fatalf("complete finishing capture = %+v, error = %v", job, err)
+			}
+		}
 	default:
 		t.Fatalf("unknown action %q", action)
 	}
