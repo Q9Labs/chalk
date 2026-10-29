@@ -45,13 +45,29 @@ select
           on episode.id = operation.episode_id
          and episode.tenant_id = operation.tenant_id
          and episode.space_id = operation.space_id
-        where operation.external_operation_id = pipelines.stop_operation_id
-          and operation.tenant_id = jobs.tenant_id
+        where operation.tenant_id = jobs.tenant_id
           and operation.space_id = reservations.space_id
           and operation.episode_id = jobs.episode_id
           and operation.operation_name in ('end_episode', 'tenant_end_episode', 'maximum_episode_duration_expired')
           and operation.status = 'applied'
           and episode.status = 'ended'
+          and (
+              operation.external_operation_id = pipelines.stop_operation_id
+              or (
+                  operation.recording_id = jobs.recording_id
+                  and exists (
+                      select 1 from sync_external_operations manual_stop
+                      where manual_stop.external_operation_id = pipelines.stop_operation_id
+                        and manual_stop.external_operation_id = sync_recordings.stop_external_operation_id
+                        and manual_stop.tenant_id = jobs.tenant_id
+                        and manual_stop.space_id = reservations.space_id
+                        and manual_stop.episode_id = jobs.episode_id
+                        and manual_stop.recording_id = jobs.recording_id
+                        and manual_stop.operation_name = 'stop_recording'
+                        and manual_stop.status = 'applied'
+                  )
+              )
+          )
      ))::boolean as episode_stop_applied
 from recording_job_attempt_authorities authority
 join recording_jobs jobs on jobs.id = authority.job_id
