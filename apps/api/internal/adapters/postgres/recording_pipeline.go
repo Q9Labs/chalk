@@ -61,6 +61,7 @@ type recordingPipelineQuerier interface {
 	LockRecordingCapacity(context.Context) (int16, error)
 	ExpireRecordingReservations(context.Context, pgtype.Timestamptz) ([]sqlc.ExpireRecordingReservationsRow, error)
 	RecoverExpiredRecordingJobs(context.Context, int32) ([]sqlc.RecoverExpiredRecordingJobsRow, error)
+	DrainCaptureStopPublications(context.Context, pgtype.Timestamptz) error
 	ReleaseRecordingReservation(context.Context, sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error)
 	UpsertRecordingPoolHealth(context.Context, sqlc.UpsertRecordingPoolHealthParams) (sqlc.UpsertRecordingPoolHealthRow, error)
 	GetRecordingPoolHealth(context.Context, string) (sqlc.GetRecordingPoolHealthRow, error)
@@ -915,6 +916,9 @@ func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]reco
 		var err error
 		rows, err = queries.RecoverExpiredRecordingJobs(ctx, int32(recordingpipeline.MaximumRenderDuration/time.Second))
 		if err != nil {
+			return err
+		}
+		if err := queries.DrainCaptureStopPublications(ctx, pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}); err != nil {
 			return err
 		}
 		for _, row := range rows {

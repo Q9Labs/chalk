@@ -910,7 +910,7 @@ with completion_eligibility as materialized (
         updated_at = now()
 )
 -- Read pipeline's RETURNING row so publication follows its completion update.
--- Failure rolls back the completion and lease release along with the outbox.
+-- The obligation commits with media and lease release, even if its immediate outbox insert fails.
 select completed.*
 from completed
 join pipeline on pipeline.recording_id = completed.recording_id
@@ -1136,6 +1136,7 @@ with completed_captures as materialized (
         and source.operation_name = 'stop_recording' and source.status = 'applied'
     where pipelines.capture_completed_at is not null
       and recording.status = 'stopping'
+      and not exists (select 1 from recording_capture_stop_publications publication where publication.recording_id = pipelines.recording_id)
       and recording.stop_external_operation_id = pipelines.stop_operation_id
       and not exists (
           select 1 from sync_external_operations operation
@@ -1150,16 +1151,10 @@ with completed_captures as materialized (
     order by pipelines.capture_completed_at, pipelines.recording_id
     limit 100
 ), recovered_capture_stops as (
-    insert into sync_external_operations (
-        tenant_id, space_id, episode_id, external_operation_id, request_key,
-        request_fingerprint, operation_name, recording_id, payload, fence_active,
-        journey_id, parent_journey_event_id
-    )
-    select tenant_id, space_id, episode_id, gen_random_uuid(), request_key,
-        sha256(convert_to(payload::text, 'UTF8')), 'recording_capture_stopped', recording_id,
-        payload, false, journey_id, parent_journey_event_id
+    insert into recording_capture_stop_publications(recording_id, stop_operation_id, capture_epoch)
+    select recording_id, (payload ->> 'stopOperationId')::uuid, (payload ->> 'captureEpoch')::bigint
     from completed_captures
-    on conflict (tenant_id, episode_id, operation_name, request_key) do nothing
+    on conflict (recording_id) do nothing
 ), expired as (
     select jobs.id, jobs.state as prior_state, ((jobs.kind in ('render', 'transcription') and
         pipelines.capture_completed_at +
@@ -1603,3 +1598,6 @@ select envelope_bytes, envelope_digest
 from recording_job_attempt_authorities
 where job_id = sqlc.arg(job_id) and kind = 'capture' and envelope_digest = sqlc.arg(envelope_digest)
 limit 1;
+
+-- name: DrainCaptureStopPublications :exec
+select recording_drain_capture_stop_publications(sqlc.arg(observed_at)::timestamptz, 100);

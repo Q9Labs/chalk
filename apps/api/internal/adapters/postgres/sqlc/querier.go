@@ -53,7 +53,7 @@ type Querier interface {
 	CommitRecordingRenderObject(ctx context.Context, arg CommitRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	CompleteArtifactJob(ctx context.Context, arg CompleteArtifactJobParams) (ArtifactJob, error)
 	// Read pipeline's RETURNING row so publication follows its completion update.
-	// Failure rolls back the completion and lease release along with the outbox.
+	// The obligation commits with media and lease release, even if its immediate outbox insert fails.
 	CompleteCaptureRecordingJob(ctx context.Context, arg CompleteCaptureRecordingJobParams) (CompleteCaptureRecordingJobRow, error)
 	CompleteChatAttachmentCleanup(ctx context.Context, arg CompleteChatAttachmentCleanupParams) (int64, error)
 	CompleteChatAttachmentUpload(ctx context.Context, arg CompleteChatAttachmentUploadParams) (int64, error)
@@ -104,6 +104,7 @@ type Querier interface {
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
+	DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
 	// admission use that same lock, so an earlier reconnect cancels the old window.
