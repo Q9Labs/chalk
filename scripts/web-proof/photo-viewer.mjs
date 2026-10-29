@@ -33,6 +33,7 @@ const aliases = {
   "@q9labsai/chalk-assets": "packages/assets/src/index.ts",
   "@q9labsai/chalk-ui": "packages/ui/src/index.ts",
   "@q9labsai/whiteboard": "packages/whiteboard/src/index.ts",
+  "@q9labsai/facehash/react": "packages/facehash/src/react.ts",
   "@q9labsai/facehash": "packages/facehash/src/index.ts",
 };
 const changed = execFileSync("git", ["diff", "--name-only", baseline, "--", "sdks/typescript/react/src/components"], { encoding: "utf8" }).trim().split("\n").filter(Boolean);
