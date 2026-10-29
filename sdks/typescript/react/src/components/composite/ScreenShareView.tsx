@@ -136,30 +136,30 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
           </div>
         ) : null}
         {status === "paused" ? (
-          <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-white">
-            <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[rgba(12,14,18,.82)]">
+          <div role="status" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 text-[var(--chalk-on-overlay)]">
+            <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[var(--chalk-overlay-strong)]">
               <StageIcon name="pause" size={24} />
             </span>
-            <p className="rounded-[8px] bg-[rgba(12,14,18,.82)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
+            <p className="rounded-[8px] bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
           </div>
         ) : null}
         {status === "low-quality" ? (
-          <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-[6px] bg-[rgba(12,14,18,.82)] px-2.5 text-[12px] font-medium text-white">
+          <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-[6px] bg-[var(--chalk-overlay-strong)] px-2.5 text-[12px] font-medium text-[var(--chalk-on-overlay)]">
             <SignalBars />
             <span>{sharedByName}’s connection is slow</span>
           </div>
         ) : null}
         {primary ? switcher : null}
         {isLocal && primary ? (
-          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-[12px] bg-[rgba(12,14,18,.86)] p-2 pl-3.5 text-white max-[640px]:flex-wrap">
+          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-[12px] bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:flex-wrap">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
-              {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-[12px] text-[#c9cbd1]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
+              {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-[12px] text-[var(--chalk-on-overlay)]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
             </div>
             {onChangeShare ? (
               <ChalkMenu
                 trigger={
-                  <ChalkButton disabled={pending} className="!h-8 !bg-white/[.14] !px-3 !text-white hover:!bg-white/[.22]">
+                  <ChalkButton disabled={pending} className="!h-8 !bg-[var(--chalk-on-overlay)]/[.14] !px-3 !text-[var(--chalk-on-overlay)] hover:!bg-[var(--chalk-on-overlay)]/[.22]">
                     Change
                   </ChalkButton>
                 }
@@ -178,7 +178,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
               </ChalkMenu>
             ) : null}
             {onStopSharing ? (
-              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-white hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing, "screen", "stop")}>
+              <ChalkButton disabled={pending} tone="danger" className="!h-8 !bg-[var(--chalk-danger)] !px-3 !text-[var(--chalk-on-overlay)] hover:!bg-[var(--chalk-danger-hover)]" onClick={() => void run(onStopSharing, "screen", "stop")}>
                 Stop sharing
               </ChalkButton>
             ) : null}
@@ -201,7 +201,7 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
           </div>
         ) : null}
         {error ? (
-          <p role="alert" className="absolute right-2 bottom-12 left-2 z-40 rounded-md bg-[rgba(12,14,18,.86)] p-2 text-sm text-white">
+          <p role="alert" className="absolute right-2 bottom-12 left-2 z-40 rounded-md bg-[var(--chalk-overlay-strong)] p-2 text-sm text-[var(--chalk-on-overlay)]">
             {error}
           </p>
         ) : null}
@@ -216,7 +216,7 @@ function ShareControl({ label, pressed, onClick, children }: { readonly label: s
       aria-label={label}
       aria-pressed={pressed}
       onClick={onClick}
-      className="relative grid h-8 w-8 place-items-center rounded-[50%] bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] aria-pressed:bg-white aria-pressed:text-[#0b0c0e] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out] active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
+      className="relative grid h-8 w-8 place-items-center rounded-[50%] bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] aria-pressed:bg-[var(--chalk-on-overlay)] aria-pressed:text-[var(--chalk-overlay)] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out] active:scale-[.92] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-1.5"
     >
       {children}
     </button>

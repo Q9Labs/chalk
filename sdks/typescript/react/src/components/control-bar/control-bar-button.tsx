@@ -63,7 +63,7 @@ export const ControlBarButton = React.memo(
           // Custom active state
           !disabled && active && activeClassName && activeClassName,
           // Danger state - vibrant red for visibility
-          danger && "border-transparent bg-[var(--chalk-app-danger)] text-white hover:bg-[var(--chalk-app-danger-hover)]",
+          danger && "border-transparent bg-[var(--chalk-app-danger)] text-[var(--chalk-on-overlay)] hover:bg-[var(--chalk-app-danger-hover)]",
           className,
         )}
         aria-label={label}

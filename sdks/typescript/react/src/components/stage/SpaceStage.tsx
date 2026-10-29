@@ -78,7 +78,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
             onChangeShare={item.participant.isLocal ? onChangeShare : undefined}
             switcher={
               shares.length > 1 ? (
-                <div role="group" aria-label="Whose screen is big" className={cn("absolute left-2 z-30 flex rounded-[999px] bg-[rgba(12,14,18,.82)] p-[3px]", item.participant.screenShareState === "low-quality" ? "top-11" : "top-2")}>
+                <div role="group" aria-label="Whose screen is big" className={cn("absolute left-2 z-30 flex rounded-[999px] bg-[var(--chalk-overlay-strong)] p-[3px]", item.participant.screenShareState === "low-quality" ? "top-11" : "top-2")}>
                   {shares.map((share) => (
                     <button
                       key={share.id}
@@ -88,7 +88,7 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
                         setPin(null);
                         setSelectedShare(share.id);
                       }}
-                      className="relative h-7 rounded-[999px] px-3 text-[12px] font-semibold text-[#d4d5d9] hover:bg-white/10 aria-pressed:bg-white aria-pressed:text-[#0b0c0e] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-y-2 [@media(pointer:coarse)]:before:inset-x-0"
+                      className="relative h-7 rounded-[999px] px-3 text-[12px] font-semibold text-[var(--chalk-on-overlay)] hover:bg-[var(--chalk-on-overlay)]/10 aria-pressed:bg-[var(--chalk-on-overlay)] aria-pressed:text-[var(--chalk-overlay)] [@media(pointer:coarse)]:before:absolute [@media(pointer:coarse)]:before:-inset-y-2 [@media(pointer:coarse)]:before:inset-x-0"
                     >
                       {share.participant.displayName}
                     </button>

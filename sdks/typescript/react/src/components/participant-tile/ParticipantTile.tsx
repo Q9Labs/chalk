@@ -122,7 +122,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {showStatus && hasPoorConnection ? (
-            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[rgba(12,14,18,.75)] px-[7px]">
+            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[var(--chalk-overlay)] px-[7px]">
               <SignalBars />
             </span>
           ) : null}
@@ -130,7 +130,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
               <ChalkMenu
                 trigger={
-                  <button type="button" aria-label={`More options for ${participant.displayName}`} className="grid h-8 w-8 place-items-center rounded-full bg-[rgba(12,14,18,.75)] text-white outline-none hover:bg-[rgba(40,42,48,.95)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]">
+                  <button
+                    type="button"
+                    aria-label={`More options for ${participant.displayName}`}
+                    className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
+                  >
                     <StageIcon name="more" size={18} />
                   </button>
                 }
@@ -150,7 +154,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               <>
                 <span dir="auto" data-part="tile-full-name" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
                   {participant.displayName}
-                  {participant.isLocal && participant.displayName !== "You" && <span className="text-white"> (You)</span>}
+                  {participant.isLocal && participant.displayName !== "You" && <span className="text-[var(--chalk-on-overlay)]"> (You)</span>}
                 </span>
                 <span dir="auto" data-part="tile-short-name" className="hidden min-w-0 truncate [unicode-bidi:plaintext]">
                   {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
@@ -162,9 +166,9 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 following
               </span>
             ) : null}
-            {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[#ff6b6b]" aria-label="Muted" />}
+            {showStatus && participant.isMuted && <StageIcon name="mute" size={14} className="shrink-0 text-[var(--chalk-overlay-danger)]" aria-label="Muted" />}
             {showStatus && participant.isHandRaised && (
-              <span className="flex shrink-0 items-center text-[#e2bd3a]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
+              <span className="flex shrink-0 items-center text-[var(--chalk-overlay-warning)]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
                 <StageIcon name="hand" size={14} />
                 {participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}
               </span>
@@ -215,7 +219,7 @@ export function SignalBars(): React.JSX.Element {
   return (
     <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">
       {[6, 9, 12, 15].map((height, index) => (
-        <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "#e2bd3a" : "rgba(255,255,255,.3)" }} />
+        <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "var(--chalk-overlay-warning)" : "color-mix(in srgb, var(--chalk-on-overlay) 30%, transparent)" }} />
       ))}
     </span>
   );

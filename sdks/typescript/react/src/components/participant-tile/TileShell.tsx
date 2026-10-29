@@ -52,19 +52,19 @@ export function TileShell({ label, accentColor, pinned = false, ring = false, sp
           tabIndex={hidden ? -1 : 0}
           aria-label={label}
           aria-pressed={pinned}
-          className="absolute inset-0 z-20 rounded-[inherit] outline-none motion-safe:transition-colors motion-safe:duration-150 motion-safe:ease-[ease-out] hover:bg-white/[.045] active:bg-white/[.09] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chalk-focus)]"
+          className="absolute inset-0 z-20 rounded-[inherit] outline-none motion-safe:transition-colors motion-safe:duration-150 motion-safe:ease-[ease-out] hover:bg-[var(--chalk-on-overlay)]/[.045] active:bg-[var(--chalk-on-overlay)]/[.09] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--chalk-focus)]"
         />
       ) : null}
       <div
         aria-hidden="true"
         data-part="speaking-ring"
         className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] motion-safe:transition-opacity motion-safe:duration-[90ms] motion-safe:ease-linear"
-        style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "inset 0 0 0 3px rgba(255,255,255,.9), inset 0 0 0 4px rgba(0,0,0,.35)" }}
+        style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "inset 0 0 0 3px color-mix(in srgb, var(--chalk-on-overlay) 90%, transparent), inset 0 0 0 4px var(--chalk-scrim)" }}
       />
       {ring ? <div aria-hidden="true" data-part="follow-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] shadow-[inset_0_0_0_2px_var(--chalk-text)]" /> : null}
       {corner}
       {chip ? (
-        <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[rgba(12,14,18,.75)] px-2 text-[12px] leading-[1.4] font-medium text-white">
+        <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[var(--chalk-overlay)] px-2 text-[12px] leading-[1.4] font-medium text-[var(--chalk-on-overlay)]">
           {chip}
         </div>
       ) : null}
