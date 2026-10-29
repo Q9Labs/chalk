@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { movingLayers, proveLayers } from "./media.mjs";
+import { movingLayers, proveLayers, checkMediaProgress } from "./media.mjs";
 import { cleanupRun } from "./cleanup.mjs";
 import { checkShareProgress, episodeEnd, exportProof } from "./proofs.mjs";
 import { proofServer } from "./webhooks.mjs";
@@ -33,7 +33,7 @@ test("a frozen screen share cannot pass on a lone decoded frame", () => {
   assert.throws(() => checkShareProgress(screen(100), screen(200, 1)), /decoding stalled/);
   checkShareProgress(screen(100), screen(200));
 });
-test("a crashed guest falls back to the owner end endpoint and waits for durability", async () => {
+test("a crashed guest fails the normal end proof instead of falling back to owner cleanup", async () => {
   const calls = [];
   const ending = episodeEnd(
     {
@@ -49,21 +49,15 @@ test("a crashed guest falls back to the owner end endpoint and waits for durabil
       throw new Error("page closed");
     },
   });
-  await ending.end();
-  await ending.end();
-  assert.deepEqual(calls, [
-    ["POST", "/episode/end"],
-    ["GET", "/episode"],
-    ["GET", "/episode"],
-  ]);
+  await assert.rejects(ending.end(), /page closed/);
+  assert.deepEqual(calls, []);
 });
-test("owner fallback waits for a previously accepted SDK end to become durable", async () => {
+test("SDK end waits for durability without invoking the owner end endpoint", async () => {
   let reads = 0;
-  const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
   const ending = episodeEnd(
     {
       ownerRequest: async (method) => {
-        if (method === "POST") throw conflict;
+        assert.equal(method, "GET");
         return { status: ++reads === 1 ? "ending" : "ended" };
       },
     },
@@ -71,13 +65,13 @@ test("owner fallback waits for a previously accepted SDK end to become durable",
   );
   ending.useSDK({
     evaluate: async () => {
-      throw new Error("SDK stopped before receipt");
+      return undefined;
     },
   });
   await ending.end();
-  assert.ok(reads >= 2, "the conflict alone must not count as durable completion");
+  assert.ok(reads >= 2, "SDK acknowledgement alone must not count as durable completion");
 });
-test("owner fallback still times out when an accepted end never completes", async (t) => {
+test("owner end still times out when an accepted end never completes", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const conflict = Object.assign(new Error("Episode is not active"), { status: 409, apiCode: "episode.not_active" });
   let reads = 0;
@@ -97,7 +91,7 @@ test("owner fallback still times out when an accepted end never completes", asyn
   await result;
   assert.ok(reads > 0);
 });
-test("owner fallback preserves unrelated conflicts and an Episode still active", async () => {
+test("owner end preserves unrelated conflicts and an Episode still active", async () => {
   for (const [apiCode, status] of [
     ["participant.connection_superseded", "ending"],
     ["episode.not_active", "active"],
@@ -267,3 +261,19 @@ for (const status of ["failed", "unavailable"]) {
     assert.equal(polls, 1);
   });
 }
+
+test("post-refresh proof requires advancing received audio and decoded camera frames for both clients", () => {
+  const received = (kind, value, connection = 0) => ({ id: kind, connection, kind, type: "inbound-rtp", source: kind === "video" ? "camera" : "microphone", bytesReceived: value, framesDecoded: value });
+  const before = [
+    [received("audio", 10), received("video", 10)],
+    [received("audio", 10), received("video", 10)],
+  ];
+  const after = [
+    [received("audio", 20), received("video", 20)],
+    [received("audio", 20), received("video", 20)],
+  ];
+  checkMediaProgress(before, after);
+  assert.throws(() => checkMediaProgress(before, [after[0], before[1]]), /stopped receiving audio/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20), received("video", 10)]]), /stopped receiving video/);
+  assert.throws(() => checkMediaProgress(before, [after[0], [received("audio", 20, 1), received("video", 20)]]), /stopped receiving audio/);
+});

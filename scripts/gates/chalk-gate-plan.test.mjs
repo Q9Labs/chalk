@@ -58,6 +58,18 @@ test("external services leave API and Sync to their own CI jobs", () => {
   assert.equal(services({ services: "external" })?.selected, false);
 });
 
+test("the real dashboard engine proof cannot be skipped with external service gates", () => {
+  for (const file of ["apps/web/server/owner-access.ts", "apps/api/internal/httpapi/access_grants.go", "sdks/typescript/client/src/connection/lifecycle.ts"]) {
+    const plan = createGatePlan([file], { services: "external" });
+    const lane = plan.tasks.find((task) => task.id === "dashboard-engine");
+    assert.equal(lane?.selected, true, file);
+    assert.deepEqual(lane?.command, ["bash", "apps/web/tests/dashboard/check-engine.sh"]);
+    assert(laneGroupLanes(plan.tasks, "browser-tests").includes(lane));
+    assert(ciJobs([file]).rootGroups.includes("browser-tests"));
+  }
+  assert.equal(createGatePlan(["docs/contract-codegen.md"]).tasks.find((task) => task.id === "dashboard-engine")?.selected, false);
+});
+
 test("the services lane has no command when no service gate is selected", () => {
   const services = (files, options) => createGatePlan(files, options).tasks.find((task) => task.id === "services");
   assert.equal(services(["apps/api/internal/server.go"], { services: "external" })?.command, null);
@@ -183,7 +195,7 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks"] });
+  assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks", "browser-tests"] });
   assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
   assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
   assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
@@ -195,7 +207,7 @@ test("deployment tree changes run the gates that read them, not a full gate", ()
     const plan = createGatePlan([file]);
     assert.equal(plan.full, false, file);
     assert.equal(plan.tasks.find((task) => task.id === "recorder")?.selected, true, file);
-    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks"] }, file);
+    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks", "browser-tests"] }, file);
   }
   assert.equal(createGatePlan(["infrastructure/observability/new.yaml"]).full, true);
 });
@@ -234,14 +246,14 @@ test("the Gate workflow narrows only on a job selection that succeeded", () => {
   for (const line of narrowing) assert.match(line, /needs\.changes\.result [!=]= 'success'|"\$\{\{ needs\.changes\.result \}\}" == "success"/u, line.trim());
 });
 
-test("browser CI groups each run only their own selected lane", () => {
+test("browser CI groups each run only their own selected lanes", () => {
   const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
   for (const group of ["browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3"]) {
     assert.deepEqual(
       laneGroupLanes(plan.tasks, group)
         .filter((lane) => lane.selected)
         .map((lane) => lane.id),
-      [group.startsWith("call-leaks-") ? "call-leaks" : group],
+      group === "browser-tests" ? ["browser-tests", "dashboard-engine"] : [group.startsWith("call-leaks-") ? "call-leaks" : group],
     );
   }
   assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);

@@ -1,3 +1,4 @@
+import { inviteCredential } from "./invite-credential.mjs";
 import { stopFixturePages } from "./oauth-test-support.mjs";
 import { strict as assert } from "node:assert";
 import { createServer, request as httpRequest } from "node:http";
@@ -16,11 +17,7 @@ const requests = [];
 const engineReads = [];
 const engineRequests = [];
 const unsupportedBodies = [];
-const inviteCredential = (raw) => {
-  const invite = new URL(raw);
-  const code = invite.pathname.slice(1);
-  return /^[a-z]+(?:-[a-z]+){2,3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
-};
+
 let rateLimitPath;
 const engine = createServer(async (request, response) => {
   requests.push(request.url);
@@ -309,7 +306,8 @@ try {
       const join = { action: "join", spaceId: ownerSpaceId, idempotencyKey: crypto.randomUUID() };
       const joined = await post(ada, "/dashboard-api/call", join, session.csrfToken);
       assert.equal(joined.status, 200, await joined.clone().text());
-      const grant = (await joined.json()).access;
+      const joinedDTO = await joined.json();
+      const grant = joinedDTO.access;
       sourceEpisodeId = grant.subject.episode_id;
       assert(grant.sync.token && grant.media.token);
       // Exercise Sync's real UUID decoder, not a second copy of its regex.
@@ -341,9 +339,37 @@ try {
         `update participants set status='joining', joined_at=null, first_joined_at=null where id='${grant.subject.participant_id}'; update sync_episode_control set folded_state=jsonb_set(folded_state,'{participants}','[]'::jsonb) where tenant_id='${firstTenant}' and episode_id='${grant.subject.episode_id}'`,
       );
       const refreshedAccess = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId }, session.csrfToken);
+      // Already-loaded bundles without a join key retain their signed single-seat path.
       // An admitted joining seat can refresh before Sync confirms entry.
       assert.equal(refreshedAccess.status, 200, await refreshedAccess.clone().text());
-      assert.equal((await refreshedAccess.json()).access.subject.participant_id, grant.subject.participant_id);
+      const refreshedDTO = await refreshedAccess.json();
+      const refreshedGrant = refreshedDTO.access;
+      assert.equal(refreshedGrant.subject.participant_id, grant.subject.participant_id);
+      // Tabs in one signed-in browser share cookies, but own different seats.
+      // Production returned 403 media_token.subject_mismatch here, surfaced as 502.
+      const otherJoin = { ...join, idempotencyKey: crypto.randomUUID() };
+      const otherJoined = await post(ada, "/dashboard-api/call", otherJoin, session.csrfToken);
+      assert.equal(otherJoined.status, 200, await otherJoined.clone().text());
+      const otherDTO = await otherJoined.json();
+      const otherGrant = otherDTO.access;
+      assert.notEqual(otherGrant.subject.participant_id, grant.subject.participant_id);
+      for (const [initial, joinKey, initialSeat] of [
+        [refreshedGrant, join.idempotencyKey, refreshedDTO.ownerSeat],
+        [otherGrant, otherJoin.idempotencyKey, otherDTO.ownerSeat],
+      ]) {
+        let access = initial;
+        let ownerSeat = initialSeat;
+        for (const replaceMedia of [false, true]) {
+          const refreshed = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, joinKey, ownerSeat, ...(!replaceMedia ? { currentMediaToken: access.media.token } : {}) }, session.csrfToken);
+          assert.equal(refreshed.status, 200, `A sibling tab must not replace this tab's owner seat: ${await refreshed.clone().text()}`);
+          const dto = await refreshed.json();
+          access = dto.access;
+          ownerSeat = dto.ownerSeat;
+          assert.equal(access.subject.participant_id, initial.subject.participant_id);
+        }
+      }
+      const unknownSeat = await post(ada, "/dashboard-api/call", { action: "refresh-access", spaceId: ownerSpaceId, joinKey: crypto.randomUUID() }, session.csrfToken);
+      assert.equal(unknownSeat.status, 401, "A join key without its sealed seat cookie grants no authority");
       if (admission === "knock") {
         const guest = await fetch(`${process.env.DASHBOARD_TEST_API_ORIGIN}/v1/tenants/${firstTenant}/spaces/${ownerSpaceId}/episodes/${grant.subject.episode_id}/participants`, {
           method: "POST",
@@ -361,8 +387,11 @@ try {
       const rejoin = await post(ada, "/dashboard-api/call", { ...join, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
       assert.equal(rejoin.status, 200, await rejoin.clone().text());
       assert.notEqual((await rejoin.json()).access.subject.participant_id, grant.subject.participant_id);
+      const end = await post(ada, "/dashboard-api/call", { action: "end-for-everyone", spaceId: ownerSpaceId, episodeId: grant.subject.episode_id, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+      assert.equal(end.status, 200, await end.clone().text());
+      assert.equal(sql(`select status from episodes where id='${grant.subject.episode_id}'`), "ending");
     }
-    console.log("PASS: owner open/knock direct grants, same-key seat replay, pre-Sync refresh stays on seat, new-key rejoin seat, guest knock still waits");
+    console.log("PASS: owner open/knock grants, shared-cookie tab refresh/replacement isolation, same-key replay, new-key rejoin, end-for-everyone accepted, guest knock still waits");
     // Completed decisions are history, not new knocks the owner can answer again.
     const knockingCall = await post(ada, "/dashboard-api/home", { action: "create-call", admission: "knock", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(knockingCall.status, 200);
@@ -638,8 +667,8 @@ try {
       );
       assert(!attempted.some((path) => path.includes(firstTenant)));
     }
-    assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId }, other.csrfToken)).status, 401);
-    assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId, participantId: foreign.recordingId }, other.csrfToken)).status, 400);
+    assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId, joinKey: crypto.randomUUID() }, other.csrfToken)).status, 401);
+    assert.equal((await post(malik, "/dashboard-api/call", { action: "refresh-access", spaceId: foreign.spaceId, joinKey: crypto.randomUUID(), participantId: foreign.recordingId }, other.csrfToken)).status, 400);
     assert.equal((await post(malik, "/dashboard-api/home", { action: "archive-call", spaceId: foreign.spaceId, tenantId: firstTenant }, other.csrfToken)).status, 400);
 
     assert.equal((await tenantFor("malik")).recording_render_mode, "on_demand");

@@ -1,12 +1,7 @@
+import { inviteCredential } from "./invite-credential.mjs";
 import { strict as assert } from "node:assert";
 import { createRequire } from "node:module";
 import { setTimeout as delay } from "node:timers/promises";
-
-const inviteCredential = (raw) => {
-  const invite = new URL(raw);
-  const code = invite.pathname.slice(1);
-  return /^[a-z]+(?:-[a-z]+){2,3}$/.test(code) ? code : new URLSearchParams(invite.hash.slice(1)).get("spaceInviteToken");
-};
 
 // Run with DASHBOARD_REFRESH_COST=1 through real-engine.sh. Every dashboard
 // success comes from the real Pages worker, HTTP API and PostgreSQL repositories.

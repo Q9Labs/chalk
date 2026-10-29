@@ -36,10 +36,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const reopen = [];
   const close = [];
   const participants = [];
+  const refreshes = [];
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
     maskCredentials(grant);
+    const refresh = { count: 0, initialExpiry: Date.parse(grant.media.expiresAt), latestExpiry: 0 };
+    refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
     const open = async (replacing = false) => {
@@ -79,16 +82,24 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
           }
         });
       });
+      const issueRefresh = async (request) => {
+        const replaceMediaConnection = replaceOnNextAccess || request.replaceMediaConnection;
+        grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection });
+        maskCredentials(grant);
+        if (!replaceMediaConnection) {
+          refresh.count++;
+          refresh.latestExpiry = Date.parse(grant.media.expiresAt);
+        }
+        replaceOnNextAccess = false;
+        return grant;
+      };
       await page.exposeFunction("proofAccess", (request) => {
         const next = queue.then(async () => {
           if (first) {
             first = false;
             return grant;
           }
-          grant = await chalk.participants.issueAccess(space.id, episode.id, admission.participant.id, getAccessRefreshState(grant), { replaceMediaConnection: replaceOnNextAccess || request.replaceMediaConnection });
-          maskCredentials(grant);
-          replaceOnNextAccess = false;
-          return grant;
+          return issueRefresh(request);
         });
         queue = next.catch(() => {}); // The caller receives errors; a failed refresh must not poison later calls.
         return next;
@@ -122,6 +133,12 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   return {
     pages,
     participants,
+    waitForRefresh: async () => {
+      await waitFor("both clients' scheduled credential refresh", async () => refreshes.every((refresh) => refresh.count > 0 && refresh.latestExpiry > refresh.initialExpiry), 360_000, 1000, run.signal);
+      await run.wait(Math.max(0, Math.max(...refreshes.map((refresh) => refresh.initialExpiry)) + 5000 - Date.now()));
+      await ready();
+      await save(`${run.directory}/credential-refresh.json`, refreshes);
+    },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
       await close[guest]();
@@ -251,4 +268,24 @@ export async function proveLayers(run, { before, after, limited = false, receive
     }
   }
   return moving;
+}
+
+function receivedStreamMoved(rows, current) {
+  const previous = rows.find((row) => row.id === current.id && row.connection === current.connection);
+  if (!previous) return false;
+  if (!(current.bytesReceived > previous.bytesReceived)) return false;
+  return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
+}
+export function checkMediaProgress(before, after) {
+  check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
+  for (let guest = 0; guest < after.length; guest++) {
+    for (const kind of ["audio", "video"]) {
+      const source = { audio: "microphone", video: "camera" }[kind];
+      const receivers = after[guest].filter((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source);
+      check(
+        receivers.some((current) => receivedStreamMoved(before[guest], current)),
+        `Client ${guest + 1} stopped receiving ${kind} after credential refresh`,
+      );
+    }
+  }
 }
