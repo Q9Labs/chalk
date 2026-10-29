@@ -8,7 +8,7 @@ git -C "$repo" worktree add --quiet --detach "$probe" HEAD
 cleanup() { git -C "$repo" worktree remove --force "$probe"; }
 trap cleanup EXIT
 cd "$probe"
-export GOWORK=off GOMAXPROCS=1
+export GOWORK=off GOMAXPROCS=1 GOTOOLCHAIN=auto
 
 git mv apps/api/go.mod go.mod
 git mv apps/api/go.sum go.sum
