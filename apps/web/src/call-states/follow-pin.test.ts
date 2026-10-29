@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
+import { showCallControls } from "../../tests/call-controls.mjs";
 
 let browser: Browser;
 let origin: string;
@@ -73,6 +74,7 @@ it.skipIf(baseline).each([
       await a.setViewportSize({ width: 1440, height: 900 });
       await mount(a, "a", room);
       await mount(b, "b", room);
+      await showCallControls(a);
       await a.getByRole("button", { name: "Board", exact: true }).click();
       const followed = b.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Amina" });
       await followed.waitFor();

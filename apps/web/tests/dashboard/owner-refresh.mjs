@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createDashboardProofFixture } from "./browser-fixture.mjs";
 import { assertNoSeatCookies, proveCookieBudget, proveSignOutCleanup } from "./owner-cookie-budget.mjs";
 import { proveEvictionReload } from "./owner-eviction.mjs";
+import { showCallControls } from "../call-controls.mjs";
 
 const fixture = await createDashboardProofFixture({ devicesMissing: true, recordingName: "dashboard-owner-refresh.webm" });
 const { context, origin, cleanup, recordPage } = fixture;
@@ -40,6 +41,7 @@ try {
   await leaving.getByRole("button", { name: "Start a call", exact: true }).click();
   await leaving.getByRole("button", { name: "Join call", exact: true }).click();
   await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
+  await showCallControls(leaving);
   const leaveCleanup = leaving.waitForResponse(`${origin}/auth/clear-owner-seats`);
   pendingResponses.push(leaveCleanup);
   const leave = leaving.getByRole("button", { name: "Leave call", exact: true });
@@ -58,8 +60,7 @@ try {
   // Cross the original five-minute expiry using real clocks, not an accelerated timer.
   await delay(Math.max(0, Math.max(...[original, sibling].map((grant) => Date.parse(grant.media.expires_at))) + 5000 - Date.now()));
   for (const page of [first, second]) await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 10000 });
-  await first.bringToFront();
-  await first.mouse.move(200, 200);
+  await showCallControls(first);
   const endCleanup = first.waitForResponse(`${origin}/auth/clear-owner-seats`);
   pendingResponses.push(endCleanup);
   await first.getByRole("button", { name: "Leave call", exact: true }).click();
