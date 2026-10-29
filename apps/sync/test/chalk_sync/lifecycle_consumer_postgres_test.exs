@@ -876,6 +876,91 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   end
 
   @tag :readiness_due_lag
+  test "an unscheduled join stays pending without making readiness unready", %{
+    connections: connections
+  } do
+    readiness = start_lifecycle_readiness()
+    connection = hd(connections)
+    fixture = managed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents
+      set created_at = now() - interval '1 day', next_attempt_at = 'infinity'::timestamptz
+      where lifecycle_intent_id = $1
+      """,
+      [UUID.dump!(fixture.lifecycle_intent_id)]
+    )
+
+    health = assert_lifecycle_ready(readiness)
+    assert health.dependencies.database.oldest_pending_lifecycle_intent_ms == 0
+
+    assert health.dependencies.database.lifecycle_intents == %{
+             pending: 1,
+             due: 0,
+             retrying: 0,
+             oldest_attempt_count: nil,
+             oldest_error_code: nil
+           }
+  end
+
+  @tag :readiness_due_lag
+  test "an unscheduled join does not hide overdue lifecycle work", %{connections: connections} do
+    readiness = start_lifecycle_readiness()
+    connection = hd(connections)
+    unscheduled = managed_pending_join(connection)
+    overdue = managed_pending_join(connection)
+
+    on_exit(fn ->
+      SyncPostgres.cleanup(connection, unscheduled.episode)
+      SyncPostgres.cleanup(connection, overdue.episode)
+    end)
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents
+      set created_at = now() - interval '1 day', next_attempt_at = 'infinity'::timestamptz
+      where lifecycle_intent_id = $1
+      """,
+      [UUID.dump!(unscheduled.lifecycle_intent_id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_lifecycle_intents
+      set created_at = now() - interval '2 minutes',
+          next_attempt_at = now() - interval '1 minute',
+          attempt_count = 1, last_error_code = 'dependency_unavailable'
+      where lifecycle_intent_id = $1
+      """,
+      [UUID.dump!(overdue.lifecycle_intent_id)]
+    )
+
+    log =
+      ExUnit.CaptureLog.capture_log(fn ->
+        health = Readiness.probe_now(readiness)
+        assert health.status == "unready"
+        assert health.dependencies.reason == "lifecycle_intent_lag"
+        assert health.dependencies.database.oldest_pending_lifecycle_intent_ms >= 120_000
+
+        assert health.dependencies.database.lifecycle_intents == %{
+                 pending: 2,
+                 due: 1,
+                 retrying: 1,
+                 oldest_attempt_count: 1,
+                 oldest_error_code: "dependency_unavailable"
+               }
+      end)
+
+    assert log =~ "\"oldest_due_intent_id\":\"#{overdue.lifecycle_intent_id}\""
+    refute log =~ unscheduled.lifecycle_intent_id
+  end
+
+  @tag :readiness_due_lag
   test "a seat held for 90 seconds stays ready through confirmation", %{connections: connections} do
     readiness = start_lifecycle_readiness()
     connection = hd(connections)
@@ -888,6 +973,8 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms == 0
     assert health.dependencies.database.lifecycle_intents.pending == 1
     assert health.dependencies.database.lifecycle_intents.due == 0
+    assert health.dependencies.database.lifecycle_intents.oldest_attempt_count == nil
+    assert health.dependencies.database.lifecycle_intents.oldest_error_code == nil
 
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(fixture.identity)
     health = assert_lifecycle_ready(readiness)
@@ -907,6 +994,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms >= 10_000
     assert health.dependencies.database.oldest_pending_lifecycle_intent_ms < 30_000
     assert health.dependencies.database.lifecycle_intents.due == 1
+    assert health.dependencies.database.lifecycle_intents.oldest_attempt_count == 0
 
     schedule_join_expiry(connection, fixture, -31)
 
