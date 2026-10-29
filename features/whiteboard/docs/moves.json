@@ -181,5 +181,6 @@
   "sdks/typescript/react/src/whiteboard/wire-adapters.ts": "features/whiteboard/sdk/react/src/whiteboard/wire-adapters.ts",
   "tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs": "features/whiteboard/tools/emitters/whiteboard-contract.mjs",
   "tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs": "features/whiteboard/tools/emitters/whiteboard-elixir.mjs",
-  "tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs": "features/whiteboard/tools/emitters/whiteboard-typescript.mjs"
+  "tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs": "features/whiteboard/tools/emitters/whiteboard-typescript.mjs",
+  "docs/whiteboard-colocation/inventory.md": "features/whiteboard/docs/baseline-inventory.md"
 }
