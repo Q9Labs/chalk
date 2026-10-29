@@ -34,11 +34,13 @@ def api(method, path, payload=None):
 
 def monitor_definitions(variables, disabled=False, without_connection_reports=False):
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
+    readiness = " | union (\n" + Path(__file__).with_name("sync-readiness.apl").read_text() + "\n)"
     branch = ""
     if not without_connection_reports:
         query = Path(__file__).with_name("connection-reports.apl").read_text()
         branch = " | union (\n" + query + "\n) | summarize value=max(value) by alert_message"
     for monitor in monitors:
+        monitor["aplQuery"] = monitor["aplQuery"].replace("${SYNC_READINESS_BRANCH}", readiness)
         monitor["aplQuery"] = monitor["aplQuery"].replace("${CONNECTION_REPORT_BRANCH}", branch)
         for key, value in variables.items():
             monitor["aplQuery"] = monitor["aplQuery"].replace("${" + key + "}", value)

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,6 +35,7 @@ type snapshot struct {
 	Headline      string     `json:"chalk_alert_headline"`
 	Next          string     `json:"chalk_alert_next"`
 	Engineers     string     `json:"chalk_alert_engineers"`
+	Reason        string     `json:"chalk_alert_reason,omitempty"`
 }
 
 func main() {
@@ -54,6 +56,7 @@ func run() error {
 		return errors.New("usage: collector [--check|--test|--clear-test]")
 	}
 	var snapshots []snapshot
+	var collectionErr error
 	switch mode {
 	case "--test", "--clear-test":
 		value := int64(1)
@@ -62,22 +65,26 @@ func run() error {
 		}
 		snapshots = []snapshot{{Rule: "delivery-test", Value: value, Summary: "TEST: Chalk production alert delivery proof; no user failure was induced."}}
 	case "", "--check":
-		var err error
-		snapshots, err = collect(ctx, os.Getenv("CHALK_DATABASE_URL"))
-		if err != nil {
-			return err
-		}
+		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"))
 	default:
 		return errors.New("unknown collector mode")
 	}
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID."
-		snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
+		if snapshots[i].Rule == "sync-readiness" {
+			snapshots[i].Engineers = "For engineers: sync-readiness; inspect /readyz and sync.readiness.failed events, then systemctl status chalk-alert-state.timer chalk-alert-state.service."
+		}
+		if snapshots[i].Time == "" {
+			snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
+		}
 		snapshots[i].Stream = "production-state-v2"
 	}
 	if mode == "--check" {
-		return json.NewEncoder(os.Stdout).Encode(snapshots)
+		if err := json.NewEncoder(os.Stdout).Encode(snapshots); err != nil {
+			return err
+		}
+		return collectionErr
 	}
 	token, dataset := ingestConfig(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_HEADERS"))
 	if value := os.Getenv("CHALK_ALERT_AXIOM_TOKEN"); value != "" {
@@ -89,7 +96,10 @@ func run() error {
 	if token == "" || dataset == "" {
 		return errors.New("Axiom ingest token and log dataset are required")
 	}
-	return ingest(ctx, http.DefaultClient, "https://api.axiom.co/v1/datasets/"+url.PathEscape(dataset)+"/ingest", token, snapshots)
+	if err := ingest(ctx, http.DefaultClient, "https://api.axiom.co/v1/datasets/"+url.PathEscape(dataset)+"/ingest", token, snapshots); err != nil {
+		return err
+	}
+	return collectionErr
 }
 
 func message(rule string) (headline, impact, next string) {
@@ -98,6 +108,8 @@ func message(rule string) (headline, impact, next string) {
 		return "A class was not recorded", "The Recording stopped before it finished, so there is no complete video for this class.", "An engineer must check immediately whether any retained source can be recovered; a complete video cannot be promised."
 	case "recording-stop":
 		return "A Recording has not finished stopping", "Capture finished more than two minutes ago, but Sync still reports stopping. This can block Episode end and another Episode in the same Space.", "An engineer must check capture-stopped callback delivery and pipeline maintenance now."
+	case "sync-readiness":
+		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
 	case "export":
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
 	case "transcript":
@@ -111,6 +123,9 @@ func message(rule string) (headline, impact, next string) {
 
 func formatMessage(item *snapshot) {
 	item.Headline, item.Summary, item.Next = message(item.Rule)
+	if item.Rule == "sync-readiness" {
+		item.Summary += " Latest readiness reason: " + item.Reason + "."
+	}
 	if item.Tenant != "" {
 		item.TenantName = safeTenantName(item.TenantName)
 		item.Summary = "Tenant: " + item.TenantName + ". " + item.Summary
@@ -125,6 +140,66 @@ func formatMessage(item *snapshot) {
 	if (item.Rule == "export" || item.Rule == "transcript") && item.Value > 0 && item.UnknownExpiry > 0 {
 		item.Next += " Some source expiry times are unknown; an engineer must check them now."
 	}
+}
+
+func collectState(ctx context.Context, client *http.Client, databaseURL, readinessURL string) ([]snapshot, error) {
+	// Preserve the independent readiness observation even if the SQL snapshot fails.
+	readiness := collectReadiness(ctx, client, readinessURL)
+	databaseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	snapshots, err := collect(databaseCtx, databaseURL)
+	return append(snapshots, readiness), err
+}
+
+func collectReadiness(ctx context.Context, client *http.Client, endpoint string) snapshot {
+	if endpoint == "" {
+		endpoint = "http://127.0.0.1:14100/readyz"
+	}
+	item := snapshot{Rule: "sync-readiness", Value: 1, Reason: "unreachable", Time: time.Now().UTC().Format(time.RFC3339Nano)}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		item.Reason = "invalid_probe_url"
+		return item
+	}
+	// A redirect to a healthy landing page must not turn a failed probe green.
+	probeClient := *client
+	probeClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	response, err := probeClient.Do(request)
+	if err != nil {
+		return item
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusOK {
+		item.Value, item.Reason = 0, "ready"
+		return item
+	}
+	item.Reason = fmt.Sprintf("http_%d", response.StatusCode)
+	var health struct {
+		Reason       string `json:"reason"`
+		Dependencies struct {
+			Reason string `json:"reason"`
+		} `json:"dependencies"`
+	}
+	if json.NewDecoder(io.LimitReader(response.Body, 32*1024)).Decode(&health) == nil {
+		reason := health.Dependencies.Reason
+		if reason == "" {
+			reason = health.Reason
+		}
+		// Only protocol reason codes leave the probe; never export response bodies.
+		switch reason {
+		case "database_unavailable", "database_not_writable_primary", "incompatible_database_migration", "unsupported_postgres_version",
+			"unsafe_database_durability", "synchronous_commit_disabled", "lifecycle_intent_lag", "synchronous_standby_not_configured",
+			"synchronous_standby_unavailable", "synchronous_standby_lag", "required_process_unavailable", "readiness_process_unavailable",
+			"lifecycle_consumer_unavailable", "lifecycle_consumer_initializing", "lifecycle_consumer_stale",
+			"external_operation_consumer_unavailable", "external_operation_consumer_initializing", "external_operation_consumer_stale",
+			"notification_listener_unavailable", "retention_cleanup_unavailable", "provider_bridge_not_configured", "provider_bridge_unavailable",
+			"non_production_stateholder", "development_token_verifier", "invalid_token_verifier", "probe_failed":
+			item.Reason = reason
+		}
+	}
+	return item
 }
 
 func safeTenantName(name string) string {

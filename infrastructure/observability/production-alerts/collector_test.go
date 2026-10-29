@@ -23,6 +23,74 @@ func alertTestFile(name string) string {
 	return filepath.Join(filepath.Dir(source), name)
 }
 
+func TestReadinessSnapshotsPreserveSafeReasonsAndRecovery(t *testing.T) {
+	for _, fixture := range []struct {
+		name, body, reason string
+		status             int
+		value              int64
+	}{
+		{"incident", `{"status":"unready","dependencies":{"reason":"database_unavailable"}}`, "database_unavailable", 503, 1},
+		{"process unavailable", `{"status":"unready","reason":"readiness_process_unavailable"}`, "readiness_process_unavailable", 503, 1},
+		{"unknown reason", `{"dependencies":{"reason":"private-test-payload @everyone"}}`, "http_503", 503, 1},
+		{"non JSON", `private-test-payload`, "http_502", 502, 1},
+		{"recovered", `{"status":"ready","dependencies":{}}`, "ready", 200, 0},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/readyz" {
+					t.Errorf("unexpected probe: %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(fixture.status)
+				fmt.Fprint(w, fixture.body)
+			}))
+			defer server.Close()
+			item := collectReadiness(context.Background(), server.Client(), server.URL+"/readyz")
+			if item.Rule != "sync-readiness" || item.Reason != fixture.reason || item.Value != fixture.value || item.Time == "" {
+				t.Fatalf("unexpected snapshot: %+v", item)
+			}
+			formatMessage(&item)
+			if !strings.Contains(item.Summary, fixture.reason) || strings.Contains(item.Summary, "private-test") {
+				t.Fatal(item.Summary)
+			}
+			content := renderDiscord(t, map[string]interface{}{"Action": "Open", "Value": 1, "GroupKeys": []string{"alert_message"}, "GroupValues": []string{discordGroup(item)}})
+			if !strings.Contains(content, fixture.reason) || !strings.Contains(content, "Sync has stayed unready") {
+				t.Fatal(content)
+			}
+		})
+	}
+}
+
+func TestReadinessSurvivesDatabaseCollectionFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"dependencies":{"reason":"database_unavailable"}}`)
+	}))
+	defer server.Close()
+	items, err := collectState(context.Background(), server.Client(), "", server.URL)
+	if err == nil || len(items) != 1 || items[0].Value != 1 || items[0].Reason != "database_unavailable" {
+		t.Fatalf("database failure hid the independent probe: %+v, %v", items, err)
+	}
+}
+
+func TestReadinessDoesNotFollowRedirectsOrHideTransportFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/readyz" {
+			http.Redirect(w, r, "/healthy", http.StatusFound)
+			return
+		}
+		t.Error("probe followed a redirect")
+	}))
+	defer server.Close()
+	if item := collectReadiness(context.Background(), server.Client(), server.URL+"/readyz"); item.Value != 1 || item.Reason != "http_302" {
+		t.Fatal(item)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if item := collectReadiness(ctx, server.Client(), server.URL); item.Value != 1 || item.Reason != "unreachable" {
+		t.Fatal(item)
+	}
+}
+
 func TestIngestRejectsPartialAcceptanceWithoutLeakingResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

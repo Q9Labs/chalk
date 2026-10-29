@@ -5,6 +5,7 @@ No events, monitors or notifiers are written.
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 import sys
@@ -49,13 +50,26 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(failures["threshold"], 0)
         self.assertEqual(failures["intervalMinutes"], 1)
         self.assertIn("'recording-stop'", freshness["aplQuery"])
-        self.assertEqual(freshness["threshold"], 5)
+        self.assertEqual(freshness["threshold"], 6)
+
+    def test_readiness_uses_distinct_minutes_latest_state_and_freshness(self):
+        failures, _, freshness = monitor_definitions(VARIABLES)
+        query = failures["aplQuery"]
+        self.assertIn("chalk_alert_rule != 'sync-readiness'", query)
+        self.assertIn("extend probe_minute=bin(_time, 1m)", query)
+        self.assertIn("by probe_minute", query)
+        self.assertIn("unready_minutes=countif(chalk_alert_value > 0)", query)
+        self.assertIn("unready_minutes >= 4 and chalk_alert_value > 0", query)
+        self.assertIn("where _time > ago(90s)", query)
+        self.assertIn("'sync-readiness'", freshness["aplQuery"])
+        self.assertEqual(freshness["threshold"], 6)
 
     def test_selective_undo_preserves_all_previous_queries_and_notifier_route(self):
         definitions = json.loads(Path(__file__).with_name("monitors.json").read_text())
         rollback = monitor_definitions(VARIABLES, without_connection_reports=True)
         for before, after in zip(definitions, rollback):
             expected = before["aplQuery"].replace("${CONNECTION_REPORT_BRANCH}", "")
+            expected = expected.replace("${SYNC_READINESS_BRANCH}", " | union (\n" + Path(__file__).with_name("sync-readiness.apl").read_text() + "\n)")
             for key, value in VARIABLES.items():
                 expected = expected.replace("${" + key + "}", value)
             self.assertEqual(after["aplQuery"], expected)
@@ -89,7 +103,7 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(actual, {fixture["envelope"]["attributes.episode_id"]:
                                  (fixture["expected_failure"], fixture["expected_count"]) for fixture in fixtures})
 
-    def query_fixture(self, rows, without_connection_reports=False):
+    def query_fixture(self, rows, without_connection_reports=False, now=None):
         fields = {
             "service.name": "service", "attributes.event": "event",
             "attributes.tenant_id": "tenant", "attributes.episode_id": "episode",
@@ -106,6 +120,10 @@ class MonitorTests(unittest.TestCase):
             ",".join(json.dumps(row.get(key, "")) for key in fields.values()) for row in rows
         ) + "];\n"
         query = monitor_definitions(VARIABLES, without_connection_reports=without_connection_reports)[0]["aplQuery"].replace("['fixture-logs']", "FixtureLogs")
+        now = now or datetime(2026, 10, 27, 22, 10, tzinfo=timezone.utc)
+        for window, delta in (("5m", timedelta(minutes=5)), ("90s", timedelta(seconds=90))):
+            cutoff = (now - delta).isoformat().replace("+00:00", "Z")
+            query = query.replace("ago(" + window + ")", "datetime(" + cutoff + ")")
         request = Request(
             "https://api.axiom.co/v1/datasets/_apl?format=tabular",
             data=json.dumps({"apl": fixture + query + " | where value > 0",
@@ -122,6 +140,41 @@ class MonitorTests(unittest.TestCase):
                 self.fail(f"Axiom query HTTP {error.code}: {error.read(2000).decode()}")
         self.assertFalse(result["status"]["isPartial"])
         return result
+
+    @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
+    def test_readiness_incident_blip_sustained_recovery_duplicates_and_missing_samples(self):
+        def sample(at, value=1, reason="database_unavailable"):
+            return {"at": "2026-10-28T" + at + "Z", "stream": "production-state-v2",
+                    "rule": "sync-readiness", "value": value, "headline": "Sync has stayed unready",
+                    "summary": "Latest readiness reason: " + reason + ".", "next": "Check Sync readiness.",
+                    "engineers": "For engineers: inspect /readyz."}
+
+        # Replay the observed 06:58:29–06:58:53 blip and 07:07:35–07:12:34 outage.
+        blip = [sample("06:58:30"), sample("06:59:30", 0, "ready")]
+        sustained = [sample("07:08:00"), sample("07:09:00"), sample("07:10:00"), sample("07:11:00")]
+        fixtures = [
+            ("blip", blip, "07:00:00", False),
+            ("below threshold", sustained[:3], "07:10:30", False),
+            ("sustained", sustained, "07:11:30", True),
+            ("recovered", sustained + [sample("07:12:35", 0, "ready")], "07:12:40", False),
+            ("duplicate minute", [sample("07:11:00"), sample("07:11:10"), sample("07:11:20"), sample("07:11:30")], "07:11:40", False),
+            ("missing samples", sustained[:2] + sustained[3:], "07:11:30", False),
+            ("stale", sustained, "07:13:00", False),
+            ("reason changes", sustained[:3] + [sample("07:11:00", reason="lifecycle_intent_lag")], "07:11:30", True),
+        ]
+        for name, rows, at, fires in fixtures:
+            with self.subTest(name=name):
+                now = datetime.fromisoformat("2026-10-28T" + at).replace(tzinfo=timezone.utc)
+                result = self.query_fixture(rows, without_connection_reports=True, now=now)
+                alerts = []
+                for table in result["tables"]:
+                    fields = [field["name"] for field in table["fields"]]
+                    alerts += [dict(zip(fields, values)) for values in zip(*table["columns"])]
+                self.assertEqual(len(alerts), int(fires))
+                if fires:
+                    self.assertEqual(alerts[0]["value"], 1)
+                    self.assertIn("Latest readiness reason: " + ("lifecycle_intent_lag" if name == "reason changes" else "database_unavailable"), alerts[0]["alert_message"])
+                    self.assertEqual(alerts[0]["alert_message"].split("\n")[2], "sync-readiness")
 
     @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
     def test_media_projection_mismatch_sources_directions_deduplication_and_noise(self):
