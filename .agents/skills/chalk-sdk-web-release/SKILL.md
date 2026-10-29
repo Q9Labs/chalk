@@ -101,7 +101,7 @@ git push origin HEAD:master
 
 ## Publish SDK Packages
 
-Dispatch the guarded npm workflow. It verifies that `RELEASE_SHA` is live `origin/master`, builds the packages, checks their publication layout and TypeScript resolution, and publishes only versions missing from npm.
+Dispatch the guarded npm workflow after promotion. A non-dry-run publish requires an explicit full `RELEASE_SHA` that is equal to or an ancestor of live `origin/master` and matches the production commit at `https://chalkmeet.com/release.json` (`environment: production`). This is the same marker checked by the web deployment verifier. An unreachable or malformed marker blocks publishing. The guard runs from the workflow revision before checking out `RELEASE_SHA`, so an older production commit can be published after master advances. Dry runs skip this guard. The workflow then builds the packages, checks their publication layout and TypeScript resolution, and publishes only versions missing from npm.
 
 ```bash
 NPM_RUN_URL="$(
