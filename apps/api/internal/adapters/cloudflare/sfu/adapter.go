@@ -321,7 +321,7 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		a.client = a.forcedCloseClient
 	}
 	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), request, &providerResponse, "close_tracks")
-	alreadyClosed := input.Force && (forcedCloseSatisfied(err) || a.internalCloseTracksAbsent(ctx, input, err))
+	alreadyClosed := input.Force && (forcedCloseSatisfied(err) || a.internalCloseSessionGone(ctx, input, err))
 	if err != nil && !alreadyClosed {
 		return mediaplane.CloseTracksResponse{}, err
 	}

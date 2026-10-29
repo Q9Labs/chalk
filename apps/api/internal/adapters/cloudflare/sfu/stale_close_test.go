@@ -13,7 +13,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
-func TestForcedInternalCloseRequiresObservedAbsence(t *testing.T) {
+func TestForcedInternalCloseRequiresSessionGone(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		status  int
@@ -21,9 +21,9 @@ func TestForcedInternalCloseRequiresObservedAbsence(t *testing.T) {
 		readErr error
 		absent  bool
 	}{
-		{name: "empty session", status: 200, body: `{"tracks":[]}`, absent: true},
-		{name: "requested track inactive", status: 200, body: `{"tracks":[{"mid":"0","status":"inactive"}]}`, absent: true},
-		{name: "requested track absent with unrelated live track", status: 200, body: `{"tracks":[{"mid":"1","status":"active"}]}`, absent: true},
+		{name: "empty session", status: 200, body: `{"tracks":[]}`},
+		{name: "requested track inactive", status: 200, body: `{"tracks":[{"mid":"0","status":"inactive"}]}`},
+		{name: "requested track absent with unrelated live track", status: 200, body: `{"tracks":[{"mid":"1","status":"active"}]}`},
 		{name: "session not found", status: 404, body: `{}`, absent: true},
 		{name: "session gone", status: 410, body: `{}`, absent: true},
 		{name: "requested track active", status: 200, body: `{"tracks":[{"mid":"0","status":"active"}]}`},
@@ -62,6 +62,100 @@ func TestForcedInternalCloseRequiresObservedAbsence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInternalCloseInspectionRequiresObservedFailureScope(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		operation string
+		stage     providerFailureStage
+		status    int
+		code      string
+	}{
+		{name: "other operation", operation: "add_tracks", stage: failureStageTrack, status: 200, code: "internal_error"},
+		{name: "transport", operation: "close_tracks", stage: failureStageTransport, status: 200, code: "internal_error"},
+		{name: "http status", operation: "close_tracks", stage: failureStageHTTPStatus, status: 503, code: "internal_error"},
+		{name: "decode", operation: "close_tracks", stage: failureStageDecode, status: 200, code: "internal_error"},
+		{name: "top level", operation: "close_tracks", stage: failureStageTopLevel, status: 200, code: "internal_error"},
+		{name: "contract", operation: "close_tracks", stage: failureStageContract, status: 200, code: "internal_error"},
+		{name: "track with non-200 status", operation: "close_tracks", stage: failureStageTrack, status: 503, code: "internal_error"},
+		{name: "other code", operation: "close_tracks", stage: failureStageTrack, status: 200, code: "timeout"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &closeInspectionClient{status: 404, body: `{}`}
+			adapter := Adapter{client: client, endpoint: "https://example.invalid", appID: "test-app", appSecret: "test-secret"}
+			failure := newProviderFailure(tc.operation, tc.stage, tc.status, tc.code)
+			if adapter.internalCloseSessionGone(context.Background(), mediaplane.CloseTracksRequest{ConnectionID: "retired"}, failure) || client.reads != 0 {
+				t.Fatalf("out-of-scope failure inspected or satisfied: reads=%d", client.reads)
+			}
+		})
+	}
+}
+
+func TestInternalCloseDoesNotCompleteBeforeLateTrackAllocation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client := &lateAllocationClient{started: make(chan struct{}), release: make(chan struct{}), allocated: make(chan struct{})}
+	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-secret", RequestTimeout: time.Second}, client, "https://example.invalid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutation := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: "retired", Tracks: []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "microphone"}}})
+		mutation <- err
+	}()
+	select {
+	case <-client.started:
+	case <-ctx.Done():
+		t.Fatal("tracks/new did not start")
+	}
+	input := mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: "retired", Force: true, Tracks: []mediaplane.CloseTrack{{Mid: "0"}}}
+	response, err := adapter.CloseTracks(ctx, input)
+	if !errors.Is(err, mediaplane.ErrProviderFailed) || response.AlreadyClosed {
+		t.Fatalf("empty snapshot completed cleanup while tracks/new was in flight: %+v %v", response, err)
+	}
+	close(client.release)
+	if err := <-mutation; err != nil {
+		t.Fatalf("late allocation failed: %v", err)
+	}
+	response, err = adapter.CloseTracks(ctx, input)
+	if !errors.Is(err, mediaplane.ErrProviderFailed) || response.AlreadyClosed || client.reads != 2 {
+		t.Fatalf("late allocation must remain unresolved on retry: %+v %v reads=%d", response, err, client.reads)
+	}
+}
+
+type lateAllocationClient struct {
+	started   chan struct{}
+	release   chan struct{}
+	allocated chan struct{}
+	reads     int
+}
+
+func (c *lateAllocationClient) Do(request *http.Request) (*http.Response, error) {
+	var body string
+	switch request.Method {
+	case http.MethodPost:
+		close(c.started)
+		select {
+		case <-c.release:
+		case <-request.Context().Done():
+			return nil, request.Context().Err()
+		}
+		close(c.allocated)
+		body = `{"tracks":[{"location":"local","mid":"0","trackName":"microphone"}]}`
+	case http.MethodGet:
+		c.reads++
+		body = `{"tracks":[]}`
+		select {
+		case <-c.allocated:
+			body = `{"tracks":[{"mid":"0","status":"active"}]}`
+		default:
+		}
+	case http.MethodPut:
+		body = `{"tracks":[{"mid":"0","errorCode":"internal_error","errorDescription":"Internal error"}]}`
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
 }
 
 func TestInteractiveInternalCloseDoesNotInferAbsence(t *testing.T) {
