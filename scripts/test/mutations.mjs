@@ -132,38 +132,45 @@ const cases = [
 ];
 
 const baselines = new Set();
+let killed = 0;
 for (const mutation of cases) {
-  const filename = path.join(root, mutation.file);
-  const cwd = path.join(root, mutation.cwd ?? ".");
-  const original = readFileSync(filename, "utf8");
-  if (original.split(mutation.from).length !== 2) throw new Error(`${mutation.name}: mutation must match exactly once`);
-  const run = (kind) => {
-    const result = spawnSync(mutation.command[0], mutation.command.slice(1), {
-      cwd,
-      encoding: "utf8",
-      timeout: 240_000,
-      maxBuffer: 8 * 1024 * 1024,
-      env: { ...process.env, GOMAXPROCS: "1", VITEST_MAX_WORKERS: "1", ERL_FLAGS: "+S 1:1", MIX_ENV: "test", GOFLAGS: "-buildvcs=false" },
-    });
-    const output = [result.stdout, result.stderr].join("\n");
-    const log = path.join(logs, `${mutation.name}-${kind}.log`);
-    writeFileSync(log, output);
-    if (result.error || result.signal || /build failed|syntax error|undefined:|Cannot find module|No test files found|Compilation error|--- SKIP:/i.test(output)) throw new Error(`${mutation.name}: invalid ${kind} run; see ${log}`);
-    return { ...result, output, log };
-  };
-  const key = JSON.stringify([mutation.cwd, mutation.command]);
-  if (!baselines.has(key)) {
-    const baseline = run("baseline");
-    if (baseline.status !== 0 || /[1-9]\d* (?:skipped|invalid)/.test(baseline.output)) throw new Error(`${mutation.name}: baseline failed; see ${baseline.log}`);
-    baselines.add(key);
-  }
   try {
-    writeFileSync(filename, original.replace(mutation.from, mutation.to));
-    const result = run("mutant");
-    if (result.status === 0 || !/--- FAIL:|AssertionError|\bassert\b|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
-    console.log(`KILLED ${mutation.name}`);
-  } finally {
-    writeFileSync(filename, original);
+    const filename = path.join(root, mutation.file);
+    const cwd = path.join(root, mutation.cwd ?? ".");
+    const original = readFileSync(filename, "utf8");
+    if (original.split(mutation.from).length !== 2) throw new Error(`${mutation.name}: mutation must match exactly once`);
+    const run = (kind) => {
+      const result = spawnSync(mutation.command[0], mutation.command.slice(1), {
+        cwd,
+        encoding: "utf8",
+        timeout: 240_000,
+        maxBuffer: 8 * 1024 * 1024,
+        env: { ...process.env, GOMAXPROCS: "1", VITEST_MAX_WORKERS: "1", ERL_FLAGS: "+S 1:1", MIX_ENV: "test", GOFLAGS: "-buildvcs=false" },
+      });
+      const output = [result.stdout, result.stderr].join("\n");
+      const log = path.join(logs, `${mutation.name}-${kind}.log`);
+      writeFileSync(log, output);
+      if (result.error || result.signal || /build failed|syntax error|undefined:|Cannot find module|No test files found|Compilation error|--- SKIP:/i.test(output)) throw new Error(`${mutation.name}: invalid ${kind} run; see ${log}`);
+      return { ...result, output, log };
+    };
+    const key = JSON.stringify([mutation.cwd, mutation.command]);
+    if (!baselines.has(key)) {
+      const baseline = run("baseline");
+      if (baseline.status !== 0 || /[1-9]\d* (?:skipped|invalid)/.test(baseline.output)) throw new Error(`${mutation.name}: baseline failed; see ${baseline.log}`);
+      baselines.add(key);
+    }
+    try {
+      writeFileSync(filename, original.replace(mutation.from, mutation.to));
+      const result = run("mutant");
+      if (result.status === 0 || !/--- FAIL:|AssertionError|\bassert\b|assertion|Expected/i.test(result.output)) throw new Error(`${mutation.name}: not killed by a behavioral assertion; see ${result.log}`);
+      console.log(`KILLED ${mutation.name}`);
+    } finally {
+      writeFileSync(filename, original);
+    }
+    killed += 1;
+  } catch (error) {
+    console.error(error);
   }
 }
-console.log(`Mutation proof: ${cases.length}/${cases.length} killed; logs: ${logs}`);
+console.log(`Mutation proof: ${killed}/${cases.length} killed; logs: ${logs}`);
+if (killed !== cases.length) process.exitCode = 1;
