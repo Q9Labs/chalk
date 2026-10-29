@@ -55,6 +55,9 @@ func TestManualStopProviderCloseFailurePublishesOnCompletionOnlySalvage(t *testi
 				if _, err := queries.RecoverExpiredRecordingJobs(ctx, 7200); err != nil {
 					t.Fatal(err)
 				}
+				if err := queries.DrainCaptureStopPublications(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}); err != nil {
+					t.Fatal(err)
+				}
 			}
 			var count int
 			if err := tx.QueryRow(ctx, `select count(*) from sync_external_operations where recording_id=$1 and operation_name='recording_capture_stopped'`, f.recordingID.Bytes()).Scan(&count); err != nil || count != 1 {

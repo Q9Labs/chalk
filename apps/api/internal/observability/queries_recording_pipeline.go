@@ -204,6 +204,13 @@ func (q operationQuerier) RecoverExpiredRecordingJobs(ctx context.Context, maxim
 	return jobs, err
 }
 
+func (q operationQuerier) DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error {
+	startedAt := time.Now()
+	err := q.next.DrainCaptureStopPublications(ctx, observedAt)
+	LogOperation(ctx, q.logger, "db.query", "DrainCaptureStopPublications", startedAt, err)
+	return err
+}
+
 func (q operationQuerier) ReleaseRecordingReservation(ctx context.Context, arg sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error) {
 	startedAt := time.Now()
 	reservation, err := q.next.ReleaseRecordingReservation(ctx, arg)

@@ -39,32 +39,39 @@ as the journey ID. Its attributes contain only the recording ID, capture epoch,
 `reason=stop_unconfirmed`, and `source=committed_bundles`. Confirmed stops do not
 emit this event, and replaying a completed lease cannot emit it twice.
 
-Durable capture completion queues a missing capture-stopped callback in the same
-transaction that releases the capture lease. Pipeline maintenance retains the
-same repair as a safety net for older completions. Both queue the existing
-`recording_capture_stopped` operation
-under the original applied manual-stop authority and capture epoch, carrying that
-stop's journey and parent-event IDs. Immediate publication also carries the
-completion span's trace and span IDs. Both paths share one request key per
-recording and epoch, and skip an existing pending or applied callback for that
-stop authority. Sync validates and commits its normal `recording_status_changed`
-event; retries do not add another terminal event. Publication failure rolls back
-completion, including its lease, pipeline, reservation and capacity updates.
-The API returns `recording.capture_stop_publication_failed`; the worker reports
-`capture_stop_publication_failed` with its existing bounded completion detail.
-Only a lease-fenced failure report records that attempt as a publication failure.
-Claim and maintenance exclude those attempts from the media-completion retry
-budget. Unconfirmed stops retain their existing source-expiry deadline. Restoring publication
-therefore lets the ordinary completion-only worker finish without operator repair.
-Episode end may adopt that same stop without replacing its authority. Neither
-path commits an export or changes the successful capture job. The regression in
-`apps/api/internal/adapters/postgres/recording_capture_stop_completion_integration_test.go`
-proves immediate publication, completion replay and maintenance deduplication
-after manual stop and failed provider close. The two-connection regressions in
-`apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go`
-prove both worker/completion lock orders, concurrent completion, atomic rollback
-on publisher failure, and automatic recovery beyond 20 publication failures, including server-side
-query cancellation.
+Durable capture completion commits a pending capture-stopped publication obligation
+with the completed media, capture lease release, reservation release and capacity
+release. It immediately attempts the existing `recording_capture_stopped` outbox
+operation. An outbox insert failure, including server-side query cancellation,
+rolls back only that insert. The obligation retains its SQLSTATE and next attempt
+time; the capture stays complete and rendering/transcription can proceed.
+
+API pipeline maintenance seeds missing obligations from older durable completions
+(the #614 safety net), then drains at most 100 due obligations per cycle with
+`FOR UPDATE SKIP LOCKED`. Failed inserts use exponential backoff from five seconds
+to five minutes. Publication has no absolute deadline and never reacquires capture
+capacity or reopens media completion. Existing media-completion retry and source
+retention limits remain unchanged. The previous publication-failure journal and
+API error classification remain compatible with older API/worker images.
+Legacy epoch-zero completions have no current recorder authority. Ordinary recovery
+skips them; the `recording-stop` alert keeps them visible for explicit repair.
+
+Immediate publication and the drainer use the original applied manual-stop
+operation, capture epoch, journey and parent-event IDs. Immediate completion also
+persists its trace/span carrier for later publication. Both paths share #614's
+request key and skip an existing pending or applied callback. A changed stop or
+epoch retires the obsolete obligation. A source stop still pending in Sync keeps
+the obligation pending until that authority is applied. Sync retains its normal callback authority
+checks, including an Episode end that adopts the stop (#618).
+
+`apps/api/internal/adapters/postgres/recording_capture_publication_integration_test.go` proves a three-hour outbox
+outage releases capture capacity, never terminalizes completed media, respects
+backoff and drains automatically after recovery. It runs the production #619
+alert SQL against a completed capture with pending publication: Sync `stopping`
+continues to alert until the callback is applied. The existing two-connection
+regressions in `apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go` cover both
+worker/completion lock orders and concurrent completion without duplicate release
+or publication.
 The regression in
 `apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
 callback recovery, and duplicate delivery against the Go controller and maintenance
