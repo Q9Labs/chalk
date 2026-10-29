@@ -5,10 +5,465 @@ import { describe, expect, it, vi } from "vitest";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { V1SyncError } from "../sync/v1-error";
+import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+
+it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add when its response arrives after same-binding restart", async (source) => {
+  const harness = createHarness();
+  const gate = Promise.withResolvers<void>();
+  const add = harness.transport.addTracks.bind(harness.transport);
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    const result = await add(input);
+    await gate.promise;
+    return result;
+  });
+  try {
+    await harness.client.start(fakeStream());
+    const track = new FakeTrack("pending-restart", source === "microphone" ? "audio" : "video");
+    harness.client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
+    const enabling = source === "screen" ? setScreenTarget(harness.client, "pending", true) : harness.client.setLocalPublicationTarget({ operationId: "pending", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    await harness.client.closeForcedLocalPublication(source);
+    await harness.client.restart(bootstrap("connection-1"));
+    gate.resolve();
+    await enabling;
+    expect(track.enabled).toBe(false);
+    expect(harness.transport.localPublications.size).toBe(0);
+    expect(harness.transport.closeInputs).toMatchObject([{ force: true, tracks: [{ publicationId: oldId }] }]);
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
+it("retires through a peer that closes while sender detachment is pending", async () => {
+  const harness = createHarness();
+  const detaching = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const peer = harness.peers[0]!;
+    const transceiver = peer.getTransceivers()[0]!;
+    const replace = transceiver.sender.replaceTrack.bind(transceiver.sender);
+    vi.spyOn(transceiver.sender, "replaceTrack").mockImplementation(async (track) => {
+      detaching.resolve();
+      await gate.promise;
+      await replace(track);
+    });
+    const stop = transceiver.stop.bind(transceiver);
+    vi.spyOn(transceiver, "stop").mockImplementation(() => {
+      if (peer.connectionState === "closed") throw new DOMException("Peer closed", "InvalidStateError");
+      stop();
+    });
+    const off = harness.client.closeForcedLocalPublication("microphone");
+    await detaching.promise;
+    await harness.client.restart(bootstrap("connection-1"));
+    gate.resolve();
+    await off;
+    expect(harness.transport.localPublications.size).toBe(0);
+    expect(harness.transport.closeInputs).toMatchObject([{ force: true, sessionDescription: undefined }]);
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
+it.each(["signaling_failed", "invalid_publication"] as const)("attempts screen audio even when an owned video close returns %s", async (code) => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream());
+    const video = new FakeTrack("screen-video", "video");
+    const audio = new FakeTrack("screen-audio", "audio");
+    harness.client.prepareLocalTrack("screen", video as unknown as MediaStreamTrack);
+    harness.client.prepareLocalTrack("screen_audio", audio as unknown as MediaStreamTrack);
+    await setScreenTarget(harness.client, "share", true);
+    const oldId = harness.client.getSnapshot().localTracks.find((item) => item.source === "screen")!.publicationId;
+    await restartWithRetainedPublications(harness);
+    const failure = new CloudflareSFUError("owned video close rejected", code);
+    const close = harness.transport.closeTracks.bind(harness.transport);
+    const attempted: string[] = [];
+    let failed = false;
+    vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
+      attempted.push(input.tracks[0]!.source!);
+      if (input.tracks[0]!.publicationId === oldId && (!failed || code === "invalid_publication")) {
+        failed = true;
+        throw failure;
+      }
+      return close(input);
+    });
+    const result = await harness.client.closeForcedLocalPublication("screen").catch((error: unknown) => error);
+    expect(attempted.sort()).toEqual(["screen", "screen", "screen_audio", "screen_audio"]);
+    expect(video.enabled).toBe(false);
+    expect(audio.enabled).toBe(false);
+    expect(harness.client.getSnapshot().localTracks.every((item) => !item.enabled)).toBe(true);
+    expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+    expect(result).toMatchObject({ errors: [failure] });
+    const retry = harness.client.closeForcedLocalPublication("screen");
+    if (code === "invalid_publication") {
+      await expect(retry).rejects.toMatchObject({ errors: [failure] });
+      expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+    } else {
+      await retry;
+      expect(harness.transport.localPublications.size).toBe(0);
+    }
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each([false, true])("shutdown retires owned publications, including a late add: %s", async (late) => {
+  const harness = createHarness();
+  const gate = Promise.withResolvers<void>();
+  const add = harness.transport.addTracks.bind(harness.transport);
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    const result = await add(input);
+    if (late) await gate.promise;
+    return result;
+  });
+  try {
+    await harness.client.start(fakeStream());
+    const track = new FakeTrack("shutdown", "audio");
+    harness.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
+    const enabling = harness.client.setLocalPublicationTarget({ operationId: "shutdown", participantId: "participant-1", source: "microphone", enabled: true });
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    if (!late) await enabling;
+    harness.client.stop();
+    gate.resolve();
+    await enabling;
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+    expect(track.enabled).toBe(false);
+    expect(harness.transport.closeInputs).toMatchObject([{ force: true }]);
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("off retires a cached %s publication even without a prepared capture slot", async (source) => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("cached", source === "microphone" ? "audio" : "video")));
+    await harness.client.clearPreparedLocalTrack(source);
+    expect(harness.client.getSnapshot().localTracks).toEqual([]);
+    expect(harness.transport.localPublications.size).toBe(1);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "off", participantId: "participant-1", source, enabled: false })).resolves.toMatchObject({ outcome: "satisfied" });
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("an already-off local target waits for retirement and exposes close failure before retry", async () => {
+  const harness = createHarness();
+  const failure = new CloudflareSFUError("close failed", "signaling_failed");
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const close = vi.spyOn(harness.transport, "closeTracks").mockRejectedValue(failure);
+    harness.client.setLocalSourceIntent("microphone", false);
+    const target = { operationId: "off", participantId: "participant-1", source: "microphone", enabled: false } as const;
+    await expect(harness.client.setLocalPublicationTarget(target)).resolves.toMatchObject({ outcome: "retryable_failure" });
+    expect(harness.transport.localPublications.size).toBe(1);
+    close.mockRestore();
+    await expect(harness.client.setLocalPublicationTarget(target)).resolves.toMatchObject({ outcome: "satisfied" });
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("returns all video-close failures together after attempting both screen-audio handles", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack("screen", new FakeTrack("video", "video") as unknown as MediaStreamTrack);
+    harness.client.prepareLocalTrack("screen_audio", new FakeTrack("audio", "audio") as unknown as MediaStreamTrack);
+    await setScreenTarget(harness.client, "share", true);
+    await restartWithRetainedPublications(harness);
+    const close = harness.transport.closeTracks.bind(harness.transport);
+    const failures: Error[] = [];
+    const failing = vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
+      if (input.tracks[0]?.source === "screen") {
+        const error = new CloudflareSFUError("video close failed", "signaling_failed");
+        failures.push(error);
+        throw error;
+      }
+      return close(input);
+    });
+    const error = await harness.client.closeForcedLocalPublication("screen").catch((cause: unknown) => cause);
+    expect(failures).toHaveLength(2);
+    expect(error).toMatchObject({ errors: failures });
+    expect([...harness.transport.localPublications.values()].every((item) => item.source === "screen")).toBe(true);
+    expect(harness.transport.closeInputs.map((input) => input.tracks[0]?.source)).toEqual(["screen_audio", "screen_audio"]);
+    failing.mockRestore();
+    await harness.client.closeForcedLocalPublication("screen");
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("a failed camera retirement cannot revoke a fresh microphone publication", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+    const close = harness.transport.closeTracks.bind(harness.transport);
+    vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
+      if (input.tracks[0]?.source === "camera") throw new CloudflareSFUError("camera close failed", "signaling_failed");
+      return close(input);
+    });
+    await expect(harness.client.closeForcedLocalPublication("camera")).rejects.toBeInstanceOf(AggregateError);
+    const microphone = new FakeTrack("microphone", "audio");
+    harness.client.prepareLocalTrack("microphone", microphone as unknown as MediaStreamTrack);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "fresh-mic", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(microphone.enabled).toBe(true);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")?.enabled).toBe(true);
+    expect([...harness.transport.localPublications.values()].some((item) => item.source === "microphone")).toBe(true);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("a timed-out owned close does not suppress the remaining handles or its late completion", async () => {
+  vi.useFakeTimers();
+  const harness = createHarness();
+  const gate = Promise.withResolvers<void>();
+  try {
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack("screen", new FakeTrack("video", "video") as unknown as MediaStreamTrack);
+    harness.client.prepareLocalTrack("screen_audio", new FakeTrack("audio", "audio") as unknown as MediaStreamTrack);
+    await setScreenTarget(harness.client, "share", true);
+    await restartWithRetainedPublications(harness);
+    const close = harness.transport.closeTracks.bind(harness.transport);
+    const attempts: string[] = [];
+    vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
+      attempts.push(input.tracks[0]!.publicationId);
+      if (attempts.length === 1) await gate.promise;
+      return close(input);
+    });
+    const result = harness.client.closeForcedLocalPublication("screen").catch((error: unknown) => error);
+    for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+    expect(attempts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(35001);
+    expect(attempts).toHaveLength(4);
+    expect(await result).toMatchObject({ errors: [expect.objectContaining({ code: "negotiation_timeout" })] });
+    expect(harness.transport.localPublications.size).toBe(1);
+    gate.resolve();
+    await harness.client.closeForcedLocalPublication("screen");
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it.each(["microphone", "camera", "screen", "screen_audio", "screen-with-audio"] as const)("preserves the current %s publication when a held add completes after same-binding restart", async (source) => {
+  const harness = createHarness();
+  const gate = Promise.withResolvers<void>();
+  const add = harness.transport.addTracks.bind(harness.transport);
+  let held = false;
+  vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+    const result = await add(input);
+    if (!held && input.tracks.some((track) => track.source === (source === "screen-with-audio" ? "screen_audio" : source))) {
+      held = true;
+      await gate.promise;
+    }
+    return result;
+  });
+  const sources = source === "screen-with-audio" ? (["screen", "screen_audio"] as const) : [source];
+  try {
+    await harness.client.start(fakeStream());
+    for (const item of sources) harness.client.prepareLocalTrack(item, new FakeTrack(item, item === "microphone" || item === "screen_audio" ? "audio" : "video") as unknown as MediaStreamTrack);
+    const enabling = source === "screen-with-audio" ? setScreenTarget(harness.client, "user-on", true) : harness.client.setLocalPublicationTarget({ operationId: "user-on", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(sources.length));
+    const restarting = harness.client.restart(bootstrap("connection-1"));
+    gate.resolve();
+    await Promise.all([enabling, restarting]);
+    await vi.waitFor(() => {
+      for (const item of sources) {
+        const current = harness.client.getSnapshot().localTracks.find((track) => track.source === item);
+        expect(current?.enabled).toBe(true);
+        expect([...harness.transport.localPublications.values()].filter((publication) => publication.source === item).map((publication) => publication.publicationId)).toEqual([current?.publicationId]);
+      }
+    });
+  } finally {
+    gate.resolve();
+    harness.client.stop();
+  }
+});
+
+it("preserves on publications and retires off handles across seeded add/pause/restart/response/failure/retry interleavings", async () => {
+  const sources = ["microphone", "camera", "screen"] as const;
+  const publishedSources = new Set<string>();
+  const checkedOnSources = new Set<string>();
+  let totalFailures = 0;
+  for (let seed = 1; seed <= 32; seed++) {
+    let random = seed;
+    const next = () => (random = (Math.imul(random, 1664525) + 1013904223) >>> 0);
+    const harness = createHarness();
+    const responses: { resolve: () => void }[] = [];
+    const operations: Promise<unknown>[] = [];
+    const ownedIds = new Set<string>();
+    const trace: string[] = [];
+    let holding = true;
+    let closeFailures = 0;
+    let observedFailures = 0;
+    const add = harness.transport.addTracks.bind(harness.transport);
+    const close = harness.transport.closeTracks.bind(harness.transport);
+    vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+      const result = await add(input);
+      for (const track of result.tracks ?? []) {
+        if (track.publicationId) ownedIds.add(track.publicationId);
+        if (track.source) publishedSources.add(track.source);
+      }
+      if (holding) {
+        const response = Promise.withResolvers<void>();
+        responses.push(response);
+        await response.promise;
+      }
+      return result;
+    });
+    vi.spyOn(harness.transport, "closeTracks").mockImplementation(async (input) => {
+      if (closeFailures > 0) {
+        closeFailures--;
+        observedFailures++;
+        totalFailures++;
+        throw new CloudflareSFUError("injected close failure", "signaling_failed");
+      }
+      return close(input);
+    });
+    const observe = (operation: Promise<unknown>) => operations.push(operation.catch((error: unknown) => error));
+    try {
+      await harness.client.start(fakeStream());
+      const tracks = [new FakeTrack("mic", "audio"), new FakeTrack("cam", "video"), new FakeTrack("screen", "video"), new FakeTrack("screen-audio", "audio")];
+      for (const [index, source] of [...sources, "screen_audio" as const].entries()) harness.client.prepareLocalTrack(source, tracks[index]! as unknown as MediaStreamTrack);
+      const foreign = `other-client-${seed}`;
+      harness.transport.localPublications.set(foreign, { participantId: "participant-1", source: "microphone", publicationId: foreign });
+      const actions = ["add", "pause", "response", "restart", "failure", "retry"] as const;
+      for (let step = 0; step < 48; step++) {
+        const action = step < actions.length ? actions[step]! : actions[(next() >>> 16) % actions.length]!;
+        const source = sources[(next() >>> 8) % sources.length]!;
+        trace.push(`${action}:${source}`);
+        switch (action) {
+          case "add":
+            harness.client.setLocalSourceIntent(source, true);
+            observe(source === "screen" ? setScreenTarget(harness.client, `user-${step}`, true) : harness.client.setLocalPublicationTarget({ operationId: `user-${step}`, participantId: "participant-1", source, enabled: true }));
+            break;
+          case "pause":
+          case "retry":
+            observe(harness.client.closeForcedLocalPublication(source));
+            break;
+          case "response":
+            responses.splice(next() % Math.max(1, responses.length), 1)[0]?.resolve();
+            break;
+          case "restart":
+            observe(harness.client.restart(bootstrap("connection-1")));
+            break;
+          case "failure":
+            if (seed % 4 !== 0) closeFailures = 2;
+            break;
+        }
+        for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+      }
+      holding = false;
+      for (const response of responses.splice(0)) response.resolve();
+      await Promise.all(operations);
+      closeFailures = 0;
+      for (const [index, source] of sources.entries()) if (!tracks[index]!.enabled) await harness.client.closeForcedLocalPublication(source);
+      // Interrupted enables may fail closed; settled capture and advertising must agree.
+      await vi.waitFor(() => {
+        for (const [index, source] of [...sources, "screen_audio" as const].entries()) {
+          const current = harness.client.getSnapshot().localTracks.find((item) => item.source === source)!;
+          const enabled = tracks[index]!.enabled;
+          if (enabled) checkedOnSources.add(source);
+          const advertised = [...harness.transport.localPublications.values()].filter((item) => item.source === current.source && ownedIds.has(item.publicationId));
+          expect(
+            advertised.map((item) => item.publicationId),
+            `seed=${seed}, source=${current.source}: ${trace.join(",")}`,
+          ).toEqual(enabled ? [current.publicationId] : []);
+          expect(current.enabled).toBe(enabled);
+        }
+      });
+      const off = sources.map((source) => harness.client.closeForcedLocalPublication(source));
+      for (const operation of off) observe(operation);
+      holding = false;
+      for (const response of responses.splice(0)) response.resolve();
+      await Promise.all(operations);
+      closeFailures = 0;
+      if (observedFailures) await Promise.all(sources.map((source) => harness.client.closeForcedLocalPublication(source)));
+      else expect((await Promise.allSettled(off)).every((result) => result.status === "fulfilled")).toBe(true);
+      const advertised = [...harness.transport.localPublications.keys()].filter((id) => ownedIds.has(id));
+      expect(advertised, `seed=${seed}: ${trace.join(",")}`).toEqual([]);
+      expect(harness.transport.localPublications.has(foreign)).toBe(true);
+      expect(tracks.every((track) => !track.enabled)).toBe(true);
+    } finally {
+      holding = false;
+      closeFailures = 0;
+      for (const response of responses.splice(0)) response.resolve();
+      await Promise.all(operations);
+      harness.client.stop();
+    }
+  }
+  expect([...publishedSources].sort()).toEqual(["camera", "microphone", "screen", "screen_audio"]);
+  expect([...checkedOnSources].sort()).toEqual(["camera", "microphone", "screen", "screen_audio"]);
+  expect(totalFailures).toBeGreaterThan(0);
+});
+
+describe.each(["microphone", "camera"] as const)("same-binding restart %s retirement", (source) => {
+  it.each([false, true])("retires every owned publication even when the first close fails: %s", async (failFirstClose) => {
+    const harness = createHarness();
+    const track = new FakeTrack("same-binding", source === "microphone" ? "audio" : "video");
+    try {
+      await harness.client.start(fakeStream(track));
+      const oldPeer = harness.peers[0]!;
+      const oldId = harness.client.getSnapshot().localTracks[0]!.publicationId;
+      const createOffer = oldPeer.createOffer.bind(oldPeer);
+      const offer = vi.spyOn(oldPeer, "createOffer").mockImplementation(async () => {
+        if (oldPeer.closed) throw new DOMException("RTCPeerConnection is closed", "InvalidStateError");
+        return createOffer();
+      });
+      const sender = oldPeer.getSenders()[0]!;
+      const replaceTrack = sender.replaceTrack.bind(sender);
+      vi.spyOn(sender, "replaceTrack").mockImplementation(async (replacement) => {
+        if (oldPeer.closed) throw new DOMException("RTCPeerConnection is closed", "InvalidStateError");
+        return replaceTrack(replacement);
+      });
+      await restartWithRetainedPublications(harness);
+      expect(oldPeer.closed).toBe(true);
+      const currentId = harness.client.getSnapshot().localTracks[0]!.publicationId;
+      expect(currentId).not.toBe(oldId);
+      expect(harness.transport.localPublications.size).toBe(2);
+      offer.mockClear();
+      const failure = new CloudflareSFUError("interrupted close", "signaling_failed");
+      if (failFirstClose) vi.spyOn(harness.transport, "closeTracks").mockRejectedValueOnce(failure);
+      const pause = harness.client.closeForcedLocalPublication(source);
+      if (failFirstClose) {
+        await expect(pause).rejects.toMatchObject({ errors: [failure] });
+        expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+      } else {
+        await expect(pause).resolves.toBeUndefined();
+      }
+      expect(harness.transport.localPublications.has(currentId!)).toBe(false);
+      expect(track.enabled).toBe(false);
+      await expect(harness.client.closeForcedLocalPublication(source)).resolves.toBeUndefined();
+      expect(harness.transport.localPublications.size).toBe(0);
+      expect(offer).not.toHaveBeenCalled();
+      expect(harness.transport.closeInputs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ connectionId: "connection-1", force: true, tracks: [expect.objectContaining({ publicationId: oldId })] }),
+          expect.objectContaining({ connectionId: "connection-1", force: false, tracks: [expect.objectContaining({ publicationId: currentId })] }),
+        ]),
+      );
+      expect(harness.transport.closeInputs.find((input) => input.force)?.sessionDescription).toBeUndefined();
+    } finally {
+      harness.client.stop();
+    }
+  });
+});
 
 it("does not end an automatic replacement when an obsolete local publication gets HTTP 403", async () => {
   const platform = createCoreTestPlatform();
@@ -84,6 +539,263 @@ it("does not end an automatic replacement when an obsolete local publication get
   }
 });
 
+it.each(["microphone", "camera"] as const)("ownership: retires a publication whose SFU response arrives after local pause (%s)", async (source) => {
+  const harness = createHarness();
+  const track = new FakeTrack("pending-off", source === "microphone" ? "audio" : "video");
+  try {
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
+    harness.transport.blockConnection("connection-1");
+    const enabling = harness.client.setLocalPublicationTarget({ operationId: "pending-enable", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    await harness.client.closeForcedLocalPublication(source);
+    expect(track.enabled).toBe(false);
+    harness.transport.releaseConnection("connection-1");
+    await enabling;
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+    expect(track.enabled).toBe(false);
+    const retiredId = harness.transport.closeInputs[0]?.tracks[0]?.publicationId;
+    harness.client.setLocalSourceIntent(source, true);
+    await harness.client.setLocalPublicationTarget({ operationId: "fresh-consent", participantId: "participant-1", source, enabled: true });
+    expect(track.enabled).toBe(true);
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).not.toBe(retiredId);
+    expect(harness.transport.localPublications.size).toBe(1);
+  } finally {
+    harness.transport.releaseConnection("connection-1");
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: a late response cannot retire a freshly prepared %s request", async (source) => {
+  const harness = createHarness();
+  const kind = source === "microphone" ? "audio" : "video";
+  const old = new FakeTrack("old-pending", kind);
+  const fresh = new FakeTrack("fresh-consent", kind);
+  try {
+    await harness.client.start(fakeStream());
+    harness.client.prepareLocalTrack(source, old as unknown as MediaStreamTrack);
+    harness.transport.blockConnection("connection-1");
+    const first = harness.client.setLocalPublicationTarget({ operationId: "old-request", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    await harness.client.clearPreparedLocalTrack(source);
+    harness.client.prepareLocalTrack(source, fresh as unknown as MediaStreamTrack);
+    const second = harness.client.setLocalPublicationTarget({ operationId: "fresh-request", participantId: "participant-1", source, enabled: true });
+    harness.transport.releaseConnection("connection-1");
+    await Promise.all([first, second]);
+    expect(old.readyState).toBe("ended");
+    expect(fresh.enabled).toBe(true);
+    const local = harness.client.getSnapshot().localTracks;
+    expect(local).toHaveLength(1);
+    expect(local[0]?.enabled).toBe(true);
+    expect([...harness.transport.localPublications.keys()]).toEqual([local[0]?.publicationId]);
+    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.transport.closeInputs[0]?.tracks[0]?.publicationId).not.toBe(local[0]?.publicationId);
+  } finally {
+    harness.transport.releaseConnection("connection-1");
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("reuses a confirmed %s publication for device handoff, then retires it on pause", async (source) => {
+  const harness = createHarness();
+  const kind = source === "microphone" ? "audio" : "video";
+  const old = new FakeTrack("old-device", kind);
+  const fresh = new FakeTrack("new-device", kind);
+  try {
+    await harness.client.start(fakeStream(old));
+    const publicationId = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    await harness.client.clearPreparedLocalTrack(source, { stopTrack: false });
+    harness.client.prepareLocalTrack(source, fresh as unknown as MediaStreamTrack);
+    await harness.client.setLocalPublicationTarget({ operationId: "device-handoff", participantId: "participant-1", source, enabled: true });
+    expect(harness.transport.addInputs).toHaveLength(1);
+    expect(harness.client.getSnapshot().localTracks[0]?.publicationId).toBe(publicationId);
+    expect(fresh.enabled).toBe(true);
+    await harness.client.closeForcedLocalPublication(source);
+    expect(fresh.enabled).toBe(false);
+    expect(harness.transport.localPublications.size).toBe(0);
+  } finally {
+    old.stop();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: production replacement fences an in-flight %s publication", async (source) => {
+  const replace = vi.fn(async () => {
+    // BindParticipantMediaConnection makes publications on the prior connection inactive.
+    harness.transport.localPublications.clear();
+    return bootstrap("connection-2");
+  });
+  const harness = createHarness({ replaceMediaConnection: replace });
+  const track = new FakeTrack("pending-forced-off", source === "microphone" ? "audio" : "video");
+  try {
+    const other = new FakeTrack("still-live", source === "microphone" ? "video" : "audio");
+    await harness.client.start(fakeStream(other));
+    harness.client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
+    harness.transport.blockConnection("connection-1");
+    const enabling = harness.client.setLocalPublicationTarget({ operationId: "pending-enable", participantId: "participant-1", source, enabled: true });
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(2));
+    expect(harness.transport.addInputs[1]?.connectionId).toBe("connection-1");
+    const retiring = harness.client.closeForcedLocalPublication(source);
+    expect(track.enabled).toBe(false);
+    harness.transport.releaseConnection("connection-1");
+    await Promise.all([enabling, retiring]);
+    await vi.waitFor(() => expect([...harness.transport.localPublications.values()].some((item) => item.source === source)).toBe(false));
+    expect(other.enabled).toBe(true);
+    expect([...harness.transport.localPublications.values()]).toHaveLength(1);
+  } finally {
+    harness.transport.releaseConnection("connection-1");
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: failed-close recovery can fence the old %s publication", async (source) => {
+  const replace = vi.fn(async () => {
+    // Mirror the server's old-connection retirement on replacement.
+    harness.transport.localPublications.clear();
+    return bootstrap("connection-2");
+  });
+  const harness = createHarness({ replaceMediaConnection: replace });
+  const track = new FakeTrack("failed-close-recovery", source === "microphone" ? "audio" : "video");
+  try {
+    await harness.client.start(fakeStream(track));
+    vi.spyOn(harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close transport interrupted", "signaling_failed"));
+    await expect(harness.client.closeForcedLocalPublication(source)).rejects.toBeDefined();
+    await harness.client.closeForcedLocalPublication(source);
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: retains ownership after a failed close so the publication can be retired (%s)", async (source) => {
+  const harness = createHarness();
+  const track = new FakeTrack("failed-close", source === "microphone" ? "audio" : "video");
+  try {
+    await harness.client.start(fakeStream(track));
+    const close = vi.spyOn(harness.transport, "closeTracks");
+    const ownedId = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    close.mockRejectedValueOnce(new CloudflareSFUError("close transport interrupted", "signaling_failed"));
+    await expect(harness.client.closeForcedLocalPublication(source)).rejects.toBeDefined();
+    expect(harness.transport.localPublications.has(ownedId!)).toBe(true);
+    expect(track.enabled).toBe(false);
+    await harness.client.closeForcedLocalPublication(source);
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+    expect(close.mock.calls.map(([input]) => input.tracks[0]?.publicationId)).toEqual([ownedId, ownedId]);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("ownership: retires camera publication when the operating system ends capture", async () => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const camera = new FakeTrack("os-ended", "video");
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("os-ended") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(camera) }, createMediaClient: () => harness.client } },
+  );
+  try {
+    await client.join({ microphone: false, camera: true });
+    expect(harness.transport.localPublications.size).toBe(1);
+    camera.endFromBrowser();
+    await vi.waitFor(() => expect(harness.client.getSnapshot().localTracks).toHaveLength(0));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: manual pause during a production-ordered %s enable leaves no provider publication", async (source) => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("pending-manual-off", source === "microphone" ? "audio" : "video");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn((enabled: boolean) => coordinator.send(source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", source, enabled));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("pending-manual-off") },
+    {
+      ...platform,
+      dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }) },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.blockConnection("connection-1");
+    const enabling = (source === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)).catch(() => undefined);
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    const disabling = (source === "microphone" ? client.media.setMicrophoneEnabled(false) : client.media.setCameraEnabled(false)).catch(() => undefined);
+    await vi.waitFor(() => expect(track.enabled).toBe(false));
+    harness.transport.releaseConnection("connection-1");
+    await Promise.all([enabling, disabling]);
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+  } finally {
+    harness.transport.releaseConnection("connection-1");
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("ownership: Sync loss before the %s SFU response leaves no provider publication", async (source) => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("pending-manual-off", source === "microphone" ? "audio" : "video");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn((enabled: boolean) => coordinator.send(source === "microphone" ? "set_microphone_enabled" : "set_camera_enabled", source, enabled));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("pending-manual-off") },
+    {
+      ...platform,
+      dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }) },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.blockConnection("connection-1");
+    const enabling = (source === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)).catch(() => undefined);
+    await vi.waitFor(() => expect(harness.transport.addInputs).toHaveLength(1));
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    coordinator.disconnect("transport_closed");
+    await enabling;
+    await vi.waitFor(() => expect(track.enabled && track.readyState === "live").toBe(false));
+    harness.transport.releaseConnection("connection-1");
+    await enabling;
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+  } finally {
+    harness.transport.releaseConnection("connection-1");
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
 it("keeps startup poll rejection interrupted while Sync commands remain available", async () => {
   const platform = createCoreTestPlatform();
   let onFailure: (cause: unknown, binding?: string) => void = () => {};
@@ -138,6 +850,156 @@ it("keeps startup poll rejection interrupted while Sync commands remain availabl
     harness.client.stop();
   }
 });
+it.each(["microphone", "camera", "screen"] as const)("does not replace an SFU connection when pausing unpublished %s", async (source) => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
+  try {
+    await harness.client.start(fakeStream());
+    await harness.client.closeForcedLocalPublication(source);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.client.getSnapshot().connection.phase).toBe("live");
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("retires only its own timed-out %s publication and accepts one fresh enable", async (source) => {
+  const harness = createHarness();
+  const track = new FakeTrack("timed-out", source === "microphone" ? "audio" : "video");
+  try {
+    await harness.client.start(fakeStream(track));
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === source);
+    expect(publication?.enabled).toBe(true);
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source, publicationId: "another-tab" });
+    harness.client.setLocalSourceIntent(source, false);
+    await harness.client.closeForcedLocalPublication(source);
+    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.transport.closeInputs[0]?.tracks).toEqual([expect.objectContaining({ source, publicationId: publication?.publicationId })]);
+    expect(harness.transport.localPublications.has(publication?.publicationId ?? "")).toBe(false);
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "late-enable", participantId: "participant-1", source, enabled: true })).resolves.toEqual({ outcome: "terminal_failure", errorCode: "local_source_paused" });
+    expect(track.enabled).toBe(false);
+    harness.client.setLocalSourceIntent(source, true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "fresh-tap", participantId: "participant-1", source, enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    const fresh = harness.client.getSnapshot().localTracks.find((item) => item.source === source);
+    expect(fresh?.enabled).toBe(true);
+    expect(fresh?.publicationId).not.toBe(publication?.publicationId);
+    expect(track.enabled).toBe(true);
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each([false, true])("retires a committed microphone after interrupted enable (Sync reconnect: %s)", async (reconnect) => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const microphone = new FakeTrack("rejected-enable", "audio");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn((enabled: boolean) => coordinator.send("set_microphone_enabled", "microphone", enabled));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("rejected-enable") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(microphone) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+  );
+  let committedPublication: string | undefined;
+  const unsubscribe = harness.client.observeLocalPublications((publications) => {
+    const publication = publications.find((item) => item.source === "microphone" && item.enabled);
+    if (publication && !committedPublication) {
+      committedPublication = publication.publicationId;
+      if (reconnect) platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      coordinator.disconnect("transport_closed");
+    }
+  });
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source: "microphone", publicationId: "another-tab" });
+    await expect(client.media.setMicrophoneEnabled(true)).rejects.toBeDefined();
+    if (reconnect) platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [{ participantId: "participant-1", source: "microphone", publicationId: committedPublication!, enabled: true }] } });
+    expect(committedPublication).toBeDefined();
+    expect(microphone.enabled).toBe(false);
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    await vi.waitFor(() => expect(harness.transport.localPublications.has(committedPublication ?? "")).toBe(false));
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    expect(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.publicationId))).toEqual([committedPublication]);
+    expect(command).toHaveBeenCalledExactlyOnceWith(true);
+  } finally {
+    unsubscribe();
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("retires its own %s on manual mute even when the Sync off command rejects", async (source) => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("manual-mute", source === "microphone" ? "audio" : "video");
+  const command = vi.fn(async () => {
+    throw new V1SyncError("off rejected", "not_live");
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("manual-mute") },
+    {
+      ...platform,
+      dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }) },
+    },
+  );
+  try {
+    await client.join({ microphone: source === "microphone", camera: source === "camera" });
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === source);
+    expect(publication?.publicationId).toBeDefined();
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source, publicationId: "another-tab" });
+    await expect(source === "microphone" ? client.media.setMicrophoneEnabled(false) : client.media.setCameraEnabled(false)).rejects.toBeDefined();
+    expect(track.enabled).toBe(false);
+    await vi.waitFor(() => expect(harness.transport.localPublications.has(publication!.publicationId)).toBe(false));
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    expect(command).toHaveBeenCalledExactlyOnceWith(false);
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("retires a late owned %s publication without consent", async (source) => {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("late-publication", source === "microphone" ? "audio" : "video");
+  const command = vi.fn();
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("late-publication") },
+    { ...platform, dependencies: { ...platform.dependencies, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }) } },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.localPublications.set("another-tab", { participantId: "participant-1", source, publicationId: "another-tab" });
+    harness.client.prepareLocalTrack(source, track as unknown as MediaStreamTrack);
+    await harness.client.setLocalPublicationTarget({ operationId: "stale-enable", participantId: "participant-1", source, enabled: true });
+    expect(track.enabled).toBe(false);
+    await vi.waitFor(() => expect(harness.transport.closeInputs).toHaveLength(1));
+    expect(harness.transport.localPublications.size).toBe(1);
+    expect(harness.transport.localPublications.has("another-tab")).toBe(true);
+    expect(command).not.toHaveBeenCalled();
+    expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+  } finally {
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
 it("keeps a rejected microphone Off paused in the production adapter", async () => {
   const harness = createHarness();
   const platform = createCoreTestPlatform();
@@ -721,7 +1583,7 @@ describe("shared tab audio publications", () => {
       harness.client.setLocalSourceIntent("screen", false);
       expect(video.enabled).toBe(false);
       if (withAudio) expect(audio.enabled).toBe(false);
-      await expect(setScreenTarget(harness.client, "share-off", false)).resolves.toMatchObject({ outcome: "confirmed" });
+      await expect(setScreenTarget(harness.client, "share-off", false)).resolves.toMatchObject({ outcome: "satisfied" });
       await harness.client.clearPreparedLocalTrack("screen_audio");
       await harness.client.clearPreparedLocalTrack("screen");
       expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "microphone", enabled: true, publicationId: microphonePublication }]);
@@ -771,6 +1633,15 @@ async function startScreenPublication(harness: ReturnType<typeof createHarness>,
   await expect(setScreenTarget(harness.client, operationId, true)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
   expect(harness.client.getSnapshot().localTracks.find((publication) => publication.source === "screen")).toMatchObject({ enabled: true });
 }
+async function restartWithRetainedPublications(harness: ReturnType<typeof createHarness>): Promise<void> {
+  const close = vi.spyOn(harness.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("old peer close interrupted", "signaling_failed"));
+  try {
+    await harness.client.restart(bootstrap("connection-1"));
+  } finally {
+    close.mockRestore();
+  }
+}
+
 function createHarness(
   options: {
     readonly autoConnect?: boolean;
@@ -1104,6 +1975,7 @@ it.each([
       ...guestPlatform,
       dependencies: {
         ...guestPlatform.dependencies,
+        mediaDevices: { ...guestPlatform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(new FakeTrack("mic", "audio")) },
         createConnectionReporter: () => undefined,
         getEpisodeStatus: async () => episodeStatus,
         createMediaClient: (input) => {
@@ -1129,10 +2001,9 @@ it.each([
   let ending: Promise<void> | undefined;
   try {
     await host.join({ microphone: false, camera: false });
-    await guest.join({ microphone: false, camera: false });
+    await guest.join({ microphone: operation === "close_tracks", camera: false });
     if (operation === "close_tracks") {
-      harness.client.prepareLocalTrack("microphone", new FakeTrack("mic", "audio") as unknown as MediaStreamTrack);
-      await harness.client.setLocalPublicationTarget({ operationId: "on", participantId: "participant-1", source: "microphone", enabled: true });
+      expect(harness.transport.localPublications.size).toBe(1);
     }
     ending = host.endEpisode();
     await vi.waitFor(() => expect(episodeStatus).toBe("ending"));
@@ -1141,7 +2012,7 @@ it.each([
       await expect(harness.client.refreshRemotePublications()).rejects.toMatchObject({ options: { status } });
     } else {
       vi.spyOn(harness.transport, "closeTracks").mockImplementation((input) => http.closeTracks(input));
-      await expect(harness.client.closeForcedLocalPublication("microphone")).rejects.toMatchObject({ options: { status } });
+      await expect(harness.client.closeForcedLocalPublication("microphone")).rejects.toMatchObject({ errors: [expect.objectContaining({ options: expect.objectContaining({ status }) })] });
     }
     await vi.waitFor(() => expect(guest.getSnapshot().connection.status).toBe("left"));
     expect(ended).toHaveBeenCalledOnce();
