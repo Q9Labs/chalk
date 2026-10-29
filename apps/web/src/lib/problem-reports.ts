@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { z } from "zod";
+import { z } from "zod/mini";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 
