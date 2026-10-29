@@ -36,9 +36,10 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
   end
 
   @tag timeout: 240_000
-  test "Episode end adopts a completed capture stop and recovery finalizes it once", %{
-    connections: connections
-  } do
+  test "Episode end adopts capture stops before or after capture completion without duplicate finalization",
+       %{
+         connections: connections
+       } do
     connection = hd(connections)
     probe = Path.join(System.tmp_dir!(), "chalk-recording-stop-probe-#{UUID.generate()}")
     on_exit(fn -> File.rm(probe) end)
@@ -52,10 +53,39 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     assert status == 0, output
 
-    for recover_before_end <- [false, true] do
+    for scenario <- [:end_retry, :recover_before_end, :late_callback] do
+      recover_before_end = scenario == :recover_before_end
+      capture_finishing = scenario == :late_callback
       fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
 
       on_exit(fn ->
+        if capture_finishing do
+          # Claim authority is append-only; restore its trigger before teardown commits.
+          assert {:ok, _} =
+                   Postgrex.transaction(connection, fn transaction ->
+                     Postgrex.query!(
+                       transaction,
+                       "alter table recording_job_attempt_authorities disable trigger user",
+                       []
+                     )
+
+                     Postgrex.query!(
+                       transaction,
+                       """
+                       delete from recording_job_attempt_authorities
+                       where job_id in (select id from recording_jobs where tenant_id=$1)
+                       """,
+                       [UUID.dump!(fixture.episode.tenant_id)]
+                     )
+
+                     Postgrex.query!(
+                       transaction,
+                       "alter table recording_job_attempt_authorities enable trigger user",
+                       []
+                     )
+                   end)
+        end
+
         for table <- [
               "recording_jobs",
               "recording_pipelines",
@@ -70,16 +100,8 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         SyncPostgres.cleanup(connection, fixture.episode)
       end)
 
-      recording_id = activate_recording(connection, fixture, "adopt_stop", 2)
-
-      {:ok, stop} =
-        Operation.new("adopt_stop_original_a", :stop_recording, %{"recordingId" => recording_id})
-
-      assert {:ok, %{external_operation_id: stop_id}} =
-               Postgres.begin_operation(hd(fixture.identities), stop)
-
-      assert {:ok, %{result: :applied}} =
-               Postgres.finalize_operation(fixture.episode, stop_id, {:confirmed, :recording})
+      capture_epoch = if capture_finishing, do: 1, else: 2
+      recording_id = activate_recording(connection, fixture, "adopt_stop", capture_epoch)
 
       run_probe = fn action, operation_id ->
         {output, status} =
@@ -99,9 +121,49 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         assert status == 0, output
       end
 
-      run_probe.("seed", stop_id)
-      # An unrelated command is still fenced, even for a completed capture.
+      if capture_finishing, do: run_probe.("capture", UUID.generate())
+
+      {:ok, stop} =
+        Operation.new("adopt_stop_original_a", :stop_recording, %{"recordingId" => recording_id})
+
+      assert {:ok, %{external_operation_id: stop_id}} =
+               Postgres.begin_operation(hd(fixture.identities), stop)
+
+      if capture_finishing, do: run_probe.("stop", stop_id)
+
+      assert {:ok, %{result: :applied}} =
+               Postgres.finalize_operation(fixture.episode, stop_id, {:confirmed, :recording})
+
+      unless capture_finishing, do: run_probe.("seed", stop_id)
       run_probe.("conflict", UUID.generate())
+
+      assert [[^stop_id, stop_requested_at]] =
+               query_rows(
+                 fixture,
+                 """
+                 select pipeline.stop_operation_id::text, pipeline.stop_requested_at
+                 from recording_pipelines pipeline join recordings recording on recording.id=pipeline.recording_id
+                 where pipeline.tenant_id=$1 and recording.episode_id=$2
+                 """,
+                 []
+               )
+
+      refute is_nil(stop_requested_at)
+
+      if capture_finishing do
+        assert [["stopping", "capture_leased", nil, "leased"]] =
+                 query_rows(
+                   fixture,
+                   """
+                   select recording.status, pipeline.state, pipeline.capture_completed_at, job.state
+                   from sync_recordings recording
+                   join recording_pipelines pipeline on pipeline.recording_id=recording.recording_id
+                   join recording_jobs job on job.recording_id=recording.recording_id and job.kind='capture'
+                   where recording.tenant_id=$1 and recording.episode_id=$2
+                   """,
+                   []
+                 )
+      end
 
       if recover_before_end do
         run_probe.("reconcile", stop_id)
@@ -137,10 +199,21 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         run_probe.("stop", end_id)
       end
 
+      assert [[^stop_id, ^stop_requested_at]] =
+               query_rows(
+                 fixture,
+                 """
+                 select pipeline.stop_operation_id::text, pipeline.stop_requested_at
+                 from recording_pipelines pipeline join recordings recording on recording.id=pipeline.recording_id
+                 where pipeline.tenant_id=$1 and recording.episode_id=$2
+                 """,
+                 []
+               )
+
       assert {:ok, %{result: :applied}} =
                Postgres.finalize_operation(fixture.episode, end_id, {:confirmed, :provider})
 
-      before_replay =
+      read_recording = fn ->
         query_rows(
           fixture,
           """
@@ -155,23 +228,48 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
           """,
           []
         )
+      end
 
+      before_replay = read_recording.()
       event_count = if recover_before_end, do: 1, else: 0
+      pipeline_state = if capture_finishing, do: "capture_leased", else: "capture_complete"
+      completed_jobs = if capture_finishing, do: 0, else: 1
 
       assert [
                [
                  "stopped",
                  completed_at,
                  "ended",
-                 "capture_complete",
+                 ^pipeline_state,
                  ^stop_id,
                  nil,
-                 1,
+                 ^completed_jobs,
                  ^event_count
                ]
              ] = before_replay
 
       refute is_nil(completed_at)
+
+      if capture_finishing do
+        run_probe.("callback", stop_id)
+        run_probe.("callback", stop_id)
+        assert read_recording.() == before_replay
+
+        assert [[0]] =
+                 query_rows(
+                   fixture,
+                   """
+                   select count(*) from sync_external_operations
+                   where tenant_id=$1 and episode_id=$2 and operation_name='recording_capture_stopped'
+                   """,
+                   []
+                 )
+
+        run_probe.("complete", stop_id)
+
+        assert [["stopped", ^completed_at, "ended", "capture_complete", ^stop_id, nil, 1, 0]] =
+                 read_recording.()
+      end
 
       assert {:ok, %{result: :applied}} =
                Postgres.finalize_operation(fixture.episode, end_id, {:confirmed, :provider})

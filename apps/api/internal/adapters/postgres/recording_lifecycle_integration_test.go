@@ -246,7 +246,7 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		t.Fatalf("move Sync recording to stopping: %v", err)
 	}
 	stoppedInput := recordinglifecycle.StoppedInput{Authority: authority, RequestKey: "capture_stopped_" + recordingID.String() + "_1", StoppedAt: time.Now().UTC()}
-	t.Run("acknowledge adopted episode end before first callback", func(t *testing.T) {
+	t.Run("adopted end requires matching operations and live capture authority", func(t *testing.T) {
 		endTx, err := transaction.Begin(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -274,20 +274,8 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 			t.Fatal(err)
 		}
 
-		for range 2 {
-			publication, err := endService.PublishStopped(ctx, stoppedInput)
-			if err != nil || publication.ExternalOperationID != "" {
-				t.Fatalf("adopted end before callback acknowledgment = %+v, error = %v", publication, err)
-			}
-		}
-		var count int
-		if err := endTx.QueryRow(ctx, `select count(*) from sync_external_operations where tenant_id = $1 and episode_id = $2 and operation_name = 'recording_capture_stopped'`, tenantID.Bytes(), episodeID.Bytes()).Scan(&count); err != nil || count != 0 {
-			t.Fatalf("redundant capture-stopped operations = %d, error = %v", count, err)
-		}
-		var stopID, status string
-		var terminalAt time.Time
-		if err := endTx.QueryRow(ctx, `select pipelines.stop_operation_id::text, recording.status, recording.completed_at from recording_pipelines pipelines join sync_recordings recording using (recording_id) where pipelines.recording_id = $1`, recordingID.Bytes()).Scan(&stopID, &status, &terminalAt); err != nil || stopID != stopOperationID.String() || status != "stopped" || !terminalAt.Equal(completedAt) {
-			t.Fatalf("acknowledged terminal recording stop=%s status=%s completed=%s, error=%v", stopID, status, terminalAt, err)
+		if _, err := endService.PublishStopped(ctx, stoppedInput); err != nil {
+			t.Fatalf("valid adopted end authority: %v", err)
 		}
 		for _, mutation := range []struct {
 			name  string
