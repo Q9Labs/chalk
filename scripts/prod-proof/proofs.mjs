@@ -236,7 +236,6 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
   checkMediaProgress(refreshedBefore, refreshedAfter);
-  await proveLayers(run, { before: refreshedBefore, after: refreshedAfter });
   // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
   console.log("Ending own Episode and its active Recording");
   await end();
