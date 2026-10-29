@@ -96,6 +96,8 @@ func message(rule string) (headline, impact, next string) {
 	switch rule {
 	case "recording":
 		return "A class was not recorded", "The Recording stopped before it finished, so there is no complete video for this class.", "An engineer must check immediately whether any retained source can be recovered; a complete video cannot be promised."
+	case "recording-stop":
+		return "A Recording has not finished stopping", "Capture finished more than two minutes ago, but Sync still reports stopping. This can block Episode end and another Episode in the same Space.", "An engineer must check capture-stopped callback delivery and pipeline maintenance now."
 	case "export":
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
 	case "transcript":
@@ -179,7 +181,7 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 		seenRules[item.Rule] = true
 		snapshots = append(snapshots, item)
 	}
-	if rows.Err() != nil || len(seenRules) != 4 {
+	if rows.Err() != nil || len(seenRules) != 5 {
 		return nil, errors.New("alert state snapshot incomplete")
 	}
 	return snapshots, nil

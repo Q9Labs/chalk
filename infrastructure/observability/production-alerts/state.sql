@@ -14,6 +14,13 @@ WITH failures AS (
       OR (jobs.state IN ('pending', 'leased', 'retryable_failure')
         AND jobs.created_at < now() - interval '14 hours')))
   UNION ALL
+  SELECT 'recording-stop', recordings.tenant_id, recordings.recording_id::text, NULL::timestamptz
+  FROM sync_recordings recordings
+  JOIN recording_pipelines pipelines ON pipelines.tenant_id = recordings.tenant_id
+    AND pipelines.recording_id = recordings.recording_id
+  WHERE recordings.status = 'stopping'
+    AND pipelines.capture_completed_at < now() - interval '2 minutes'
+  UNION ALL
   SELECT 'transcript', tenant_id, recording_id::text, source_expires_at
   FROM transcriptions
   WHERE (status = 'terminal_failure' AND updated_at >= now() - interval '15 minutes')
@@ -27,7 +34,7 @@ WITH failures AS (
   SELECT id::text AS tenant, name FROM tenants
   UNION ALL SELECT '', ''
 ), rules AS (
-  SELECT unnest(ARRAY['recording', 'export', 'transcript', 'webhook']) AS rule
+  SELECT unnest(ARRAY['recording', 'recording-stop', 'export', 'transcript', 'webhook']) AS rule
 )
 SELECT rules.rule, subjects.tenant, subjects.name, count(DISTINCT failures.item),
   min(failures.expires_at), count(*) FILTER (WHERE failures.item IS NOT NULL AND failures.expires_at IS NULL)

@@ -91,6 +91,14 @@ states, duration and attempt. The mismatch rule matches nothing until the SDK/AP
 emit accepted `media_projection_mismatch` reports.
 The read-only collector and Discord message templates live in
 [infrastructure/observability/production-alerts](../infrastructure/observability/production-alerts/README.md).
+The minute-based collector also emits `recording-stop` counts per Tenant when
+Sync still reports `stopping` more than two minutes after pipeline capture
+completion. Successful capture jobs still count. Any nonzero latest snapshot
+newer than five minutes alerts on the next evaluation. A zero snapshot clears
+the alert after callback recovery. This rule detects blocked Episode end and
+new Episodes in the same Space without changing lifecycle or retry behavior.
+The PostgreSQL fixture in `infrastructure/observability/production-alerts/collector_test.go` checks stranded,
+recent, incomplete, healthy, and cross-Tenant rows and clearing after repair.
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
 

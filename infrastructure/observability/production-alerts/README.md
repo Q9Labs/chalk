@@ -9,14 +9,15 @@ Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at t
 current monitor allowance. Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
-| Rule                         | Production source             | Evaluation                                                                                  |
-| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------- |
-| Recording Capture failed     | `recording_jobs`              | Terminal failure in the last 15 minutes                                                     |
-| Export failed or overdue     | `recording_jobs`, Render kind | Terminal failure in 15 minutes, or active for over 14 hours                                 |
-| Transcript failed or overdue | `transcriptions`              | Terminal failure in 15 minutes, or active for over 30 minutes                               |
-| Webhook retries exhausted    | `webhook_deliveries`          | Exhausted in the last 15 minutes                                                            |
-| API 5xx rate                 | Axiom API request logs        | More than 15 server errors in 5 minutes, sustained for 5 evaluations                        |
-| Sync connection failures     | Axiom Sync event spans        | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations |
+| Rule                         | Production source                        | Evaluation                                                                                  |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Recording Capture failed     | `recording_jobs`                         | Terminal failure in the last 15 minutes                                                     |
+| Recording stop stranded      | `sync_recordings`, `recording_pipelines` | Sync still `stopping` more than 2 minutes after capture completed                           |
+| Export failed or overdue     | `recording_jobs`, Render kind            | Terminal failure in 15 minutes, or active for over 14 hours                                 |
+| Transcript failed or overdue | `transcriptions`                         | Terminal failure in 15 minutes, or active for over 30 minutes                               |
+| Webhook retries exhausted    | `webhook_deliveries`                     | Exhausted in the last 15 minutes                                                            |
+| API 5xx rate                 | Axiom API request logs                   | More than 15 server errors in 5 minutes, sustained for 5 evaluations                        |
+| Sync connection failures     | Axiom Sync event spans                   | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations |
 
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
@@ -34,9 +35,9 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o collector ../../infrastructure
 ```
 
 The collector uses one connection, a read-only transaction and a five-second SQL
-timeout. It emits four counts per Tenant plus four empty-Tenant heartbeat rows, including zero values to clear earlier failures. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
+timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
 partial ingest fails the service. The freshness monitor detects missing snapshots
-within five minutes. Latest values, not sums of repeated snapshots, drive alerts.
+within five minutes. Latest values, not sums of repeated snapshots, drive alerts. Only snapshots newer than five minutes drive state alerts. The `recording-stop` rule counts completed captures even when the capture job succeeded. It clears when Sync no longer reports `stopping`.
 
 Install the binary at `/opt/chalk-alerts/collector` and the units in `/etc/systemd/system`.
 The service reuses `/run/chalk/env/api.env` under the existing runtime User. It reads
