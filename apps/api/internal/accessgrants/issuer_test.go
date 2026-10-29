@@ -21,8 +21,6 @@ var testNow = time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
 
 type credentialFixture struct {
 	privateKey ed25519.PrivateKey
-	publicKey  ed25519.PublicKey
-	issuer     accessgrants.Issuer
 	verifier   accessgrants.Verifier
 	subject    accessgrants.Subject
 	token      string
@@ -51,7 +49,7 @@ func newCredentialFixture(t *testing.T) credentialFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return credentialFixture{privateKey: privateKey, publicKey: publicKey, issuer: issuer, verifier: verifier, subject: subject, token: credential.Token}
+	return credentialFixture{privateKey: privateKey, verifier: verifier, subject: subject, token: credential.Token}
 }
 
 func testSubject(t *testing.T) accessgrants.Subject {
