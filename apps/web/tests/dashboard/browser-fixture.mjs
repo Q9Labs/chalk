@@ -151,7 +151,7 @@ Process.sleep(:infinity)
       DASHBOARD_IDENTITY_PROVIDER: "oauth",
     };
     const pagesLog = [];
-    const pages = start("pnpm", ["exec", "wrangler", "pages", "dev", "dist/client", "--port", webPort, "--inspector-port", "0", ...Object.entries(bindings).flatMap(([k, v]) => ["--binding", `${k}=${v}`])], web, { CI: "true", WRANGLER_SEND_METRICS: "false" }, pagesLog);
+    const pages = start(process.execPath, [resolve(web, "tests/dashboard/pages-runtime.mjs"), web, webPort, JSON.stringify(bindings)], web, { CI: "true", WRANGLER_SEND_METRICS: "false" }, pagesLog);
     await ready(`${origin}/auth/session`, pages, pagesLog);
     const userId = `lane-test-${crypto.randomUUID()}`;
     const tenant = await fetch(`${apiOrigin}/v1/tenants`, {

@@ -64,6 +64,9 @@ try {
   await assertNoSeatCookies(context);
   console.log("PASS: shared-browser owner tabs independently refresh, survive original five-minute credential expiry, and end for everyone through real Sync");
   await proveSignOutCleanup(context, origin);
+} catch (error) {
+  console.error(fixture.pagesLog.join("").slice(-8000));
+  throw error;
 } finally {
   // A failed independent assertion cancels response waiters during browser teardown.
   // Attach handlers before closing so those cancellations cannot mask its error.
