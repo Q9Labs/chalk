@@ -24,7 +24,7 @@ const compile = () => {
 const fixtures = {
   go: ["features/whiteboard/api/manifest_violation.go", 'package whiteboardfiles\nimport _ "github.com/q9labs/chalk/platform/ratelimit"\n'],
   typescript: ["features/whiteboard/sdk/client/src/manifest-violation.ts", 'import "@q9labsai/recording-presentation";\n'],
-  elixir: ["features/whiteboard/sync/lib/chalk_sync/whiteboard_v1/manifest_violation.ex", "defmodule ChalkSync.WhiteboardV1.ManifestViolation do\n  def violation, do: ChalkSync.Chat.Postgres.__info__(:functions)\nend\n"],
+  elixir: ["features/whiteboard/sync/lib/chalk_sync/whiteboard_v1/manifest_violation.ex", "defmodule ChalkSync.WhiteboardV1.ManifestViolation do\n  def violation, do: ChalkSync.Chat.Repository.Postgres.__info__(:functions)\nend\n"],
 };
 assert.ok(Object.hasOwn(fixtures, language), "Usage: node scripts/features/demo.mjs go|typescript|elixir");
 if (language === "elixir") compile();
