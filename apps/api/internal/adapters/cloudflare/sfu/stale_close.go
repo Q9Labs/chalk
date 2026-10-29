@@ -30,7 +30,7 @@ func (a Adapter) internalCloseTracksAbsent(ctx context.Context, input mediaplane
 
 	states := make(map[string]string, len(response.Tracks))
 	for _, track := range response.Tracks {
-		if strings.TrimSpace(track.Mid) == "" || track.ErrorCode != "" || track.ErrorDescription != "" {
+		if track.Mid == "" || strings.TrimSpace(track.Mid) != track.Mid || track.ErrorCode != "" || track.ErrorDescription != "" {
 			return false
 		}
 		if _, duplicate := states[track.Mid]; duplicate {

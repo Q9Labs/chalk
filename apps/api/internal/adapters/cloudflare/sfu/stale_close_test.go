@@ -32,6 +32,7 @@ func TestForcedInternalCloseRequiresObservedAbsence(t *testing.T) {
 		{name: "missing track list", status: 200, body: `{}`},
 		{name: "null track list", status: 200, body: `{"tracks":null}`},
 		{name: "missing mid", status: 200, body: `{"tracks":[{"status":"inactive"}]}`},
+		{name: "noncanonical mid", status: 200, body: `{"tracks":[{"mid":" 0 ","status":"active"}]}`},
 		{name: "duplicate mid", status: 200, body: `{"tracks":[{"mid":"0","status":"inactive"},{"mid":"0","status":"active"}]}`},
 		{name: "partial inactive tracks", status: 200, body: `{"tracks":[{"mid":"0","status":"inactive"},{"mid":"2","status":"active"}]}`},
 		{name: "track error", status: 200, body: `{"tracks":[{"mid":"0","status":"inactive","errorCode":"internal_error"}]}`},
