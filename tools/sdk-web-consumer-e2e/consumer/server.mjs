@@ -63,10 +63,10 @@ const server = createServer((request, response) => void dispatchHTTP(request, re
 server.on("upgrade", handleUpgrade);
 
 async function dispatchHTTP(request, response) {
-  const url = new URL(request.url ?? "/", "http://localhost");
+  const url = new URL(request.url, "http://localhost");
   const episodeStatus = /^\/v1\/tenants\/fixture-tenant\/spaces\/fixture-space\/episodes\/fixture-episode\/participants\/([a-z]+)\/episode-status$/u.exec(url.pathname);
   if (request.method === "GET" && episodeStatus) return serveEpisodeStatus(request, response, episodeStatus[1]);
-  const handler = httpRoutes.get(`${request.method ?? "GET"} ${url.pathname}`);
+  const handler = httpRoutes.get(`${request.method} ${url.pathname}`);
   if (!handler) return sendJSON(response, 404, { error: "not_found" });
   await handler(request, response, url);
 }
