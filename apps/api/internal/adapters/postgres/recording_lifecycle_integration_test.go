@@ -323,9 +323,10 @@ func testRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T, polic
 		if _, err := endService.PublishStopped(ctx, stale); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
 			t.Fatalf("stale adopted stop epoch error = %v", err)
 		}
-		expired := stoppedInput
-		expired.Authority.LeaseExpiresAt = time.Now().UTC().Add(-time.Second)
-		if _, err := endService.PublishStopped(ctx, expired); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
+		if _, err := endTx.Exec(ctx, `update recording_jobs set lease_expires_at = clock_timestamp() - interval '1 second' where id = $1`, jobID.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := endService.PublishStopped(ctx, stoppedInput); !errors.Is(err, recordinglifecycle.ErrAuthorityMismatch) {
 			t.Fatalf("expired adopted stop lease error = %v", err)
 		}
 	})
