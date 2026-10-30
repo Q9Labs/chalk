@@ -16,12 +16,21 @@ it.each([true, false])("joining with another device microphone %s preserves that
   const platform = createCoreTestPlatform();
   const mic = track("audio");
   const start = vi.fn(async (_stream: MediaStream) => undefined);
-  platform.emitSync({ ...platform.sync.getSnapshot(), presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), presence("desktop", "person")] }, media: { projectionId: "media", sequence: 0, items: [{ participantId: "desktop", source: "microphone", enabled, publicationId: enabled ? "publication" : null }] } });
-  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } });
+  platform.emitSync({
+    ...platform.sync.getSnapshot(),
+    presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), presence("desktop", "person")] },
+    media: { projectionId: "media", sequence: 0, items: [{ participantId: "desktop", source: "microphone", enabled, publicationId: enabled ? "publication" : null }] },
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+  );
   try {
     await client.join({ microphone: true, camera: false });
-    expect(start.mock.calls[0]?.[0].getAudioTracks()).toHaveLength(enabled ? 0 : 1);
+    expect(start.mock.calls[0]?.[0].getTracks().filter((track) => track.kind === "audio")).toHaveLength(enabled ? 0 : 1);
     expect(client.getSnapshot().media.microphoneMutedByOtherDevice).toBe(enabled);
     expect(platform.sync.getSnapshot().media?.items[0]?.enabled).toBe(enabled);
-  } finally { client.dispose(); }
+  } finally {
+    client.dispose();
+  }
 });

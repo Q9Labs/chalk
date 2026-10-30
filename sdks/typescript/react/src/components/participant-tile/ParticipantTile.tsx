@@ -162,7 +162,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 </span>
               </>
             )}
-            {participant.deviceHint ? <span data-part="tile-device" className="min-w-0 truncate text-[11px] opacity-80">{participant.deviceHint}</span> : null}
+            {participant.deviceHint ? (
+              <span data-part="tile-device" className="min-w-0 truncate text-[11px] opacity-80">
+                {participant.deviceHint}
+              </span>
+            ) : null}
             {following ? (
               <span data-part="tile-following" className="shrink-0 font-semibold opacity-80">
                 following

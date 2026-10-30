@@ -111,6 +111,7 @@ export type AccessGrant = typeof AccessGrantSchema.Type;
 
 export const AdmitEpisodeParticipantRequestSchema = Schema.Struct({
   admission: Schema.optional(Schema.Literals(["policy", "direct"])),
+  identity_external_id: Schema.optional(UUIDSchema),
   identity_id: Schema.optional(UUIDSchema),
   metadata: Schema.optional(Schema.Unknown),
   name: Schema.String.check(Schema.isMinLength(1)),

@@ -21,6 +21,8 @@ defmodule ChalkSync.Stateholder.Identity do
   @type t :: %__MODULE__{
           episode: EpisodeKey.t(),
           participant_id: String.t(),
+          identity_id: String.t() | nil,
+          device_type: String.t() | nil,
           participant_generation: pos_integer(),
           admission_lifecycle_intent_id: String.t() | nil,
           entry_generation: pos_integer() | nil,

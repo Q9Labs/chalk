@@ -366,6 +366,7 @@ type Querier interface {
 	ReserveRecordingFleetBootstrap(ctx context.Context, arg ReserveRecordingFleetBootstrapParams) (RecordingFleetNode, error)
 	ReserveRecordingRenderObject(ctx context.Context, arg ReserveRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	ReserveSpaceCreateRequest(ctx context.Context, arg ReserveSpaceCreateRequestParams) (SpaceCreateRequest, error)
+	ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (pgtype.UUID, error)
 	RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpaceParams) (Space, error)
 	RetireRecordingCapturePublication(ctx context.Context, arg RetireRecordingCapturePublicationParams) (int64, error)
 	RetryArtifactJob(ctx context.Context, arg RetryArtifactJobParams) (ArtifactJob, error)

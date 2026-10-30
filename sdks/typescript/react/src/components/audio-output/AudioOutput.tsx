@@ -51,14 +51,16 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     const stateById = new Map(participantState.roster.map((participant) => [participant.participantId, participant.media]));
     const identityId = participantState.roster.find((participant) => participant.participantId === self.participantId)?.identityId;
     const ownDevices = new Set(participantState.roster.filter((participant) => identityId && participant.identityId === identityId).map((participant) => participant.participantId));
-    return (participants ?? contextParticipants).filter((participant) => !ownDevices.has(participant.id)).map((participant) => {
-      const state = stateById.get(participant.id);
-      return {
-        ...participant,
-        audioTrack: state?.microphone === "active" ? participant.audioTrack : null,
-        screenShareAudioTrack: state?.screenShare === "active" ? participant.screenShareAudioTrack : null,
-      };
-    });
+    return (participants ?? contextParticipants)
+      .filter((participant) => !ownDevices.has(participant.id))
+      .map((participant) => {
+        const state = stateById.get(participant.id);
+        return {
+          ...participant,
+          audioTrack: state?.microphone === "active" ? participant.audioTrack : null,
+          screenShareAudioTrack: state?.screenShare === "active" ? participant.screenShareAudioTrack : null,
+        };
+      });
   }, [participants, contextParticipants, participantState.roster, self.participantId]);
   const effectiveAudioOutputDeviceId = audioOutputDeviceId ?? media.selection.speaker ?? undefined;
   const effectiveGetParticipantVolume = getParticipantVolume ?? ((participantId: string) => (volumeContext?.volumes.get(participantId) ?? 100) / 100);
