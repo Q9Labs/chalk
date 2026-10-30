@@ -81,6 +81,7 @@ it("releases the pre-publication wait when Sync fails before becoming live", asy
       ...platform,
       dependencies: {
         ...platform.dependencies,
+        createConnectionReporter: () => undefined,
         createSyncClient: () => ({ ...platform.sync, start: () => syncStart }),
         createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start, stop: () => platform.media.emit({ ...platform.media.getSnapshot(), connection: { ...platform.media.getSnapshot().connection, phase: "stopped" } }) }),
       },
