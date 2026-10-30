@@ -288,7 +288,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         });
       const enqueue = <A, E>(effect: Effect.Effect<A, E>, join = false): Effect.Effect<A, E> =>
         Effect.gen(function* () {
-          if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed")) as Effect.Effect<never, E>;
+          if (model.closed) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) as Effect.Effect<never, E>;
           const deferred = yield* Deferred.make<A, E>();
           yield* Queue.offer(queue, { effect, deferred, join } as Work);
           return yield* Deferred.await(deferred);
@@ -639,7 +639,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             yield* scheduleRefresh();
           }),
         );
-      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed")) : Effect.void));
+      const requireOpen = Effect.suspend(() => (model.closed ? Effect.fail(lifecycleFailure("invalid_state", false, "The Connection scope is closed. Rejoin the call.")) : Effect.void));
       const withFreshAccess = <A, E>(operation: () => Effect.Effect<A, E>): Effect.Effect<A, ConnectionLifecycleFailure | E> =>
         Effect.gen(function* () {
           yield* requireOpen;

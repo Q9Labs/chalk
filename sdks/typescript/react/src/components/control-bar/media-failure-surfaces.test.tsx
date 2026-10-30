@@ -72,7 +72,7 @@ it("stage screen-share stop uses safe media failure guidance", async () => {
     await act(async () => button?.click());
     const actual = container.querySelector('[role="alert"]')?.textContent;
 
-    expect(actual).toBe("That change was interrupted.");
+    expect(actual).toBe("That change was interrupted. Rejoin the call.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
@@ -98,7 +98,7 @@ it("standalone MediaRequestDialog uses safe camera failure guidance", async () =
     const button = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Allow"));
     expect(button).not.toBeUndefined();
     await act(async () => button?.click());
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Couldn’t respond to the camera request.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("That change was interrupted. Rejoin the call.");
   } finally {
     await act(async () => root.unmount());
     container.remove();
