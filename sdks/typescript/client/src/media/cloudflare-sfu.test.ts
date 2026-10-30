@@ -46,7 +46,6 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       });
       const originalPulls = harness.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(24_000);
-      expect(harness.transport.addInputs.slice(originalPulls).some((input) => input.replacementCause === "receive_stalled")).toBe(true);
       if (all) expect(harness.peers.length).toBeGreaterThan(1);
       else {
         expect(harness.peers).toHaveLength(1);
@@ -54,6 +53,7 @@ it.each([false, true])("recovers connected receive stalls through the existing p
         const retry = harness.transport.addInputs.at(-1)!;
         expect(retry.tracks.map((track) => track.trackName)).toEqual(["microphone"]);
       }
+      expect(harness.transport.addInputs.slice(originalPulls).some((input) => input.replacementCause === "receive_stalled")).toBe(true);
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
   );
