@@ -187,7 +187,7 @@ export class SpaceClientCore {
       }
   }
   #requireActive(): void {
-    if (this.#disposed) throw new SpaceClientError({ code: "connection.invalid_state", recoverable: false, message: "The SpaceClient has been disposed" });
+    if (this.#disposed) throw new SpaceClientError({ code: "connection.invalid_state", recoverable: false, message: "The SpaceClient has been disposed. Rejoin the call." });
   }
 }
 function liveClock(dependencies: ConnectionDependencies) {

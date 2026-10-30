@@ -77,7 +77,7 @@ function expectedMessage(family: Family, source: MediaCommandSource | undefined,
         : source === "speaker" && operation !== "start" && operation !== "request"
           ? "This browser can’t change your speaker. Use your system sound settings to choose an output device."
           : unsupported;
-  if (family === "interrupted" && operation !== "request" && operation !== "test") return "That change was interrupted." + again;
+  if (family === "interrupted") return recoverable ? "That change was interrupted. Try again." : "That change was interrupted. Rejoin the call.";
   if (operation === "test" || operation === "stop") return generic + again;
   if (family === "access") return "Your call access is unavailable. Rejoin the call.";
   if (family === "permission")

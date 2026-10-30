@@ -113,6 +113,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
+  #disposed = false;
   #recovering: ReadonlyMap<MediaSource, number> | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
@@ -271,8 +272,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#fork(this.#refreshDevices().pipe(Effect.ignore));
   }
   dispose(): void {
+    this.#disposed = true;
     this.#projection.reset();
-    for (const check of this.#readinessChecks) check(normalizeMediaError(cancelledCaptureError()));
+    for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
     this.#cancelCaptures();
     for (const unsubscribe of [this.#unsubscribeMedia, this.#unsubscribeRequests, this.#unsubscribePause, this.#unsubscribeSync]) unsubscribe?.();
     this.#unsubscribeConnection?.();
@@ -301,7 +303,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const check = (failure?: SpaceClientError) => {
           if (failure) return resume(Effect.fail(failure));
           if (this.#sources[source].desired.revision !== revision) return resume(Effect.void);
-          if (ports && !this.#canUsePorts(ports)) return resume(Effect.fail(normalizeMediaError(cancelledCaptureError())));
+          if (ports && !this.#canUsePorts(ports)) return resume(Effect.fail(normalizeMediaError(this.#cancelledCaptureError())));
           const state = this.#connection.getSnapshot().state;
           const phases = [state, this.#ports?.sync.getSnapshot().connection.phase, this.#store.getSnapshot().connection.status];
           if (phases.every((phase) => phase === "live")) return resume(Effect.void);
@@ -583,7 +585,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #assertCurrentIntent(source: MediaSource, revision: number, enabling = true): void {
     const state = this.#sources[source];
-    if (state.desired.revision !== revision || (enabling && state.forcedRevision === revision)) throw cancelledCaptureError();
+    if (state.desired.revision !== revision || (enabling && state.forcedRevision === revision)) throw this.#cancelledCaptureError();
   }
   #hasConsent(source: MediaSource): boolean {
     const state = this.#sources[source];
@@ -753,8 +755,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
       return;
     }
     const state = this.#camera;
-    if (!("owner" in state)) throw cancelledCaptureError();
-    if (state.status === "live" && state.track !== track) throw cancelledCaptureError();
+    if (!("owner" in state)) throw this.#cancelledCaptureError();
+    if (state.status === "live" && state.track !== track) throw this.#cancelledCaptureError();
     const onEnded = () => this.#handleCameraEnded(track);
     this.#transitionCamera({ status: "live", owner: state.owner, track, publication: this.#ports?.media ?? "initial", onEnded });
   }
@@ -854,7 +856,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       references: 0,
       cancel: () => {
         abort.abort();
-        Deferred.doneUnsafe(owner.result, Effect.fail(cancelledCaptureError()));
+        Deferred.doneUnsafe(owner.result, Effect.fail(this.#cancelledCaptureError()));
       },
     };
     this.#transitionCamera({ status: "capturing", owner });
@@ -866,13 +868,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const state = this.#camera;
               if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
                 track.stop();
-                throw cancelledCaptureError();
+                throw this.#cancelledCaptureError();
               }
               const onEnded = () => this.#handleCameraEnded(track);
               this.#transitionCamera({ status: "live", owner, track, publication: state.status === "live" ? state.publication : null, onEnded });
               if (track.readyState !== "live") {
                 this.#transitionCamera({ status: "ended" });
-                throw cancelledCaptureError();
+                throw this.#cancelledCaptureError();
               }
             },
             catch: (cause) => cause,
@@ -895,7 +897,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (owner.references === 0 && "owner" in current && current.owner === owner && (current.status !== "live" || current.publication === null)) this.#transitionCamera({ status: "ended" });
     };
     return Deferred.await(owner.result).pipe(
-      Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(cancelledCaptureError()))),
+      Effect.flatMap((track) => (track.readyState === "live" ? Effect.succeed({ track, release }) : Effect.fail(this.#cancelledCaptureError()))),
       Effect.onExit((exit) =>
         Effect.sync(() => {
           if (Exit.isFailure(exit)) release();
@@ -928,26 +930,26 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const cancel = () => {
         cancelled = true;
         stopStream(captured);
-        Deferred.doneUnsafe(cancellation, Effect.fail(cancelledCaptureError()));
+        Deferred.doneUnsafe(cancellation, Effect.fail(this.#cancelledCaptureError()));
       };
       this.#pendingCaptures.add(cancel);
       signal?.addEventListener("abort", cancel, { once: true });
       if (signal?.aborted) cancel();
       return foreign(async () => {
-        if (cancelled) throw cancelledCaptureError();
+        if (cancelled) throw this.#cancelledCaptureError();
         const stream = await operation();
         captured = stream;
         // Browser capture cannot be aborted; this owner must dispose its late result.
         if (cancelled || this.#ports?.media.getSnapshot().connection.phase === "stopped") {
           stopStream(stream);
-          throw cancelledCaptureError();
+          throw this.#cancelledCaptureError();
         }
         return stream;
       }).pipe(
         Effect.mapError(onCaptureError),
         Effect.flatMap(use),
         Effect.raceFirst(Deferred.await(cancellation)),
-        Effect.tap(() => (cancelled ? Effect.fail(cancelledCaptureError()) : Effect.void)),
+        Effect.tap(() => (cancelled ? Effect.fail(this.#cancelledCaptureError()) : Effect.void)),
         Effect.onExit((exit) =>
           Effect.sync(() => {
             this.#pendingCaptures.delete(cancel);
@@ -1022,12 +1024,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const failure = isPermissionDenied(input.cause) || captureWasUnavailable ? captureError(input.cause, input.action, input.permissionMessage) : input.cause;
     return rollback.pipe(Effect.andThen(Effect.sync(() => this.#publish())), Effect.andThen(Effect.fail(failure)));
   }
+  #cancelledCaptureError(): ConnectionError {
+    return new ConnectionError({ code: "invalid_state", action: null, recoverable: !this.#disposed, message: this.#disposed ? "This media client has been disposed. Rejoin the call." : "Media capture was cancelled before its result could be used" });
+  }
   #canUsePorts(ports: ConnectionPorts): boolean {
     return this.#ports?.sync === ports.sync && this.#ports.media === ports.media && ports.media.getSnapshot().connection.phase !== "stopped";
   }
   #assertActivePorts(ports: ConnectionPorts, action: "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare" | "stopScreenShare"): void {
     if (this.#connection.getSnapshot().state === "live" && this.#canUsePorts(ports)) return;
-    throw new ConnectionError({ code: "invalid_state", action, recoverable: false, message: `${action} belongs to an inactive connection` });
+    throw new ConnectionError({ code: "invalid_state", action, recoverable: !this.#disposed, message: this.#disposed ? "This media client has been disposed. Rejoin the call." : `${action} belongs to an inactive connection` });
   }
   #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {
     const state = this.#sources[source];
@@ -1261,9 +1266,6 @@ function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boole
   if (convergence) return convergence;
   if (!live && track && liveTrack(track)) return "requesting";
   return confirmed ? "enabled" : pending ? "requesting" : "disabled";
-}
-function cancelledCaptureError(): ConnectionError {
-  return new ConnectionError({ code: "invalid_state", action: null, recoverable: false, message: "Media capture was cancelled before its result could be used" });
 }
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });

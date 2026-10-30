@@ -18,6 +18,7 @@ export function commandFailure(cause: unknown): ClientFailure {
 }
 
 const again = ({ recoverable }: Context) => (recoverable ? " Try again." : "");
+const interrupted: Copy = ({ recoverable }) => `That change was interrupted.${recoverable ? " Try again." : " Rejoin the call."}`;
 const device = ({ source }: Context) => source ?? "device";
 const settings: Copy = (context) => `Couldn’t change ${context.source === "screen" ? "screen sharing" : `your ${device(context)} settings`}.`;
 const stop: Copy = (context) => (context.source === "screen" ? "Couldn’t stop screen sharing." : settings(context));
@@ -49,11 +50,12 @@ export const MEDIA_FAILURE_POLICY = {
   "command.rejected": unavailable,
   "connection.invalid_state": {
     copy: {
-      ...operationCopy,
-      start: (context) => `That change was interrupted.${again(context)}`,
-      stop: (context) => `That change was interrupted.${again(context)}`,
-      select: (context) => `That change was interrupted.${again(context)}`,
-      change: (context) => `That change was interrupted.${again(context)}`,
+      start: interrupted,
+      stop: interrupted,
+      select: interrupted,
+      test: interrupted,
+      request: interrupted,
+      change: interrupted,
     },
     retry: true,
   },
