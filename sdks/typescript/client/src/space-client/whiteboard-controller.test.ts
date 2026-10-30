@@ -70,6 +70,7 @@ it("does not turn a temporarily unavailable control replica into participant dep
     media: { getSnapshot: () => ({ remoteTracks: [], localTracks: [] }), subscribe: () => () => {} },
   } as unknown as ConnectionPorts;
   const connection = {
+    getSnapshot: () => ({ subject: null, state: "live" }),
     subscribePorts: (listener: (ports: ConnectionPorts) => void) => {
       listener(ports);
       return () => {};

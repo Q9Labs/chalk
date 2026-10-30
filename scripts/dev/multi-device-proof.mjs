@@ -152,6 +152,25 @@ try {
     });
     await context.addInitScript(() => {
       window.playedAudioTracks = [];
+      window.proofSyncSockets = [];
+      window.proofBlockSync = false;
+      const NativeWebSocket = window.WebSocket;
+      window.WebSocket = class extends NativeWebSocket {
+        constructor(url, protocols) {
+          const sync = new URL(url, location.href).pathname === "/v1/sync";
+          if (sync && window.proofBlockSync) throw new Error("Proof blocks only Sync reconnects");
+          super(url, protocols);
+          if (sync) window.proofSyncSockets.push(this);
+        }
+      };
+      window.proofPeerConnections = [];
+      const NativePeerConnection = window.RTCPeerConnection;
+      window.RTCPeerConnection = class extends NativePeerConnection {
+        constructor(configuration) {
+          super(configuration);
+          window.proofPeerConnections.push(this);
+        }
+      };
       const play = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function () {
         for (const track of this.srcObject?.getAudioTracks?.() ?? []) window.playedAudioTracks.push(track.id);
@@ -165,6 +184,14 @@ try {
         oscillator.start();
         await audio.resume();
         return destination.stream;
+      };
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 640;
+        canvas.height = 360;
+        canvas.getContext("2d").fillRect(0, 0, 640, 360);
+        const audio = await navigator.mediaDevices.getUserMedia({ audio: true });
+        return new MediaStream([...canvas.captureStream(5).getVideoTracks(), ...audio.getAudioTracks()]);
       };
     });
     const page = await context.newPage();
@@ -248,6 +275,69 @@ try {
     );
   }
   report.assertions.push("both teachers mute the learner", "other-person audio plays on both devices", "no self audio plays after explicitly enabling the phone mic");
+  report.stage = "Sync-only disconnect";
+  await desktop.evaluate(() => client.media.setScreenShareEnabled(true, { audio: true }));
+  await phone.waitForFunction((id) => ["microphone", "screen_audio"].every((source) => client.getSnapshot().media.remote.some((item) => item.participantId === id && item.source === source && item.track.readyState === "live")), admissions[0].participant.id, { timeout: 60000 });
+  const inboundAudio = async (page, id) =>
+    page.evaluate(async (id) => {
+      const ids = new Set(
+        client
+          .getSnapshot()
+          .media.remote.filter((item) => item.participantId === id && ["microphone", "screen_audio"].includes(item.source))
+          .map((item) => item.track.id),
+      );
+      const reports = await Promise.all(window.proofPeerConnections.map((pc) => pc.getStats()));
+      return reports
+        .flatMap((report) => [...report.values()])
+        .filter((item) => item.type === "inbound-rtp" && ids.has(item.trackIdentifier))
+        .map((item) => ({ id: item.trackIdentifier, bytes: item.bytesReceived }));
+    }, id);
+  const inboundBefore = await inboundAudio(phone, admissions[0].participant.id);
+  assert.equal(inboundBefore.length, 2);
+  await desktop.evaluate(() => {
+    window.proofBlockSync = true;
+    for (const socket of window.proofSyncSockets) if (socket.readyState === WebSocket.OPEN) socket.close(4000, "proof Sync-only disconnect");
+  });
+  await phone.waitForFunction((id) => client.getSnapshot().participants.roster.some((item) => item.participantId === id && item.presence.state !== "connected"), admissions[0].participant.id);
+  await phone.waitForFunction(
+    async ({ id, before }) => {
+      const ids = new Set(
+        client
+          .getSnapshot()
+          .media.remote.filter((item) => item.participantId === id)
+          .map((item) => item.track.id),
+      );
+      const reports = await Promise.all(window.proofPeerConnections.map((pc) => pc.getStats()));
+      const received = reports.flatMap((report) => [...report.values()]).filter((item) => item.type === "inbound-rtp" && ids.has(item.trackIdentifier));
+      return before.every((previous) => received.some((item) => item.trackIdentifier === previous.id && item.bytesReceived > previous.bytes));
+    },
+    { id: admissions[0].participant.id, before: inboundBefore },
+    { timeout: 15000 },
+  );
+  const disconnect = await phone.evaluate((id) => {
+    const snapshot = client.getSnapshot();
+    const sibling = snapshot.participants.roster.find((item) => item.participantId === id);
+    const ownTracks = snapshot.media.remote.filter((item) => item.participantId === id);
+    return {
+      identityRetained: sibling?.identityId === snapshot.participants.roster.find((item) => item.participantId === snapshot.self.participantId)?.identityId,
+      deviceType: sibling?.deviceType,
+      microphonePlays: ownTracks.filter((item) => item.source === "microphone" && window.playedAudioTracks.includes(item.track.id)).length,
+      sharedAudioPlays: ownTracks.filter((item) => item.source === "screen_audio" && window.playedAudioTracks.includes(item.track.id)).length,
+    };
+  }, admissions[0].participant.id);
+  assert.equal(disconnect.identityRetained, true);
+  assert.equal(disconnect.deviceType, "computer");
+  assert.equal(disconnect.microphonePlays, 0);
+  assert.equal(disconnect.sharedAudioPlays, 0);
+  report.syncOnlyDisconnect = { ...disconnect, inboundAudioContinued: true };
+  report.assertions.push("phone stays silent for the desktop microphone and shared audio through desktop Sync-only loss while both SFU audio streams keep receiving packets");
+  await phone.screenshot({ path: `${output}/sync-disconnect-phone.png` });
+  await desktop.evaluate(() => {
+    window.proofBlockSync = false;
+  });
+  await desktop.waitForFunction(() => client.getSnapshot().connection.status === "live", undefined, { timeout: 60000 });
+  await phone.waitForFunction((id) => client.getSnapshot().participants.roster.find((item) => item.participantId === id)?.presence.state === "connected", admissions[0].participant.id);
+  await desktop.evaluate(() => client.media.setScreenShareEnabled(false));
   report.stage = "phone leave";
   await phone.getByRole("button", { name: "Leave call", exact: true }).click();
   await phone.getByRole("menuitem", { name: "Leave call", exact: true }).click();

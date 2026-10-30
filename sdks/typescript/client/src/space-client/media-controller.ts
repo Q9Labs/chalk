@@ -650,7 +650,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
           waitForSync.pipe(
             Effect.map(() => {
               const snapshot = this.#ports?.sync.getSnapshot();
-              this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
+              this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot, this.#store.getSnapshot().participants.roster));
               if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
               return streamFromTracks(
                 tracks.filter((track) => {

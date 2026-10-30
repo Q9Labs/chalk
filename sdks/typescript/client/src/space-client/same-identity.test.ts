@@ -3,12 +3,14 @@ import { otherDevices } from "./same-identity";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 import { stream, track } from "./capture.test.helpers";
+import { control } from "./terminal.test.helpers";
 import type { V1Presence } from "../sync/v1-types";
 
+const deviceControl = { ...control, participants: ["participant-1", "desktop"].map((participantId) => ({ participantId, displayName: "Member", handRaised: false, admissionRevision: 1, role: "owner" as const, eligibleRoles: [], capabilities: [] })) };
 const presence = (participantId: string, identityId?: string, state: V1Presence["state"] = "connected"): V1Presence => ({ participantId, identityId, state, speaking: false, activeSpeaker: false });
-it("matches a verified person identity only across live distinct seats", () => {
+it("matches a verified person identity across distinct admitted seats even through presence loss", () => {
   const seats = [presence("desktop", "person"), presence("phone", "person"), presence("gone", "person", "disconnected"), presence("someone", "other"), presence("anonymous")];
-  expect(otherDevices(seats, "desktop").map((item) => item.participantId)).toEqual(["phone"]);
+  expect(otherDevices(seats, "desktop").map((item) => item.participantId)).toEqual(["phone", "gone"]);
   expect(otherDevices(seats, "anonymous")).toEqual([]);
   expect(otherDevices(seats, null)).toEqual([]);
 });
@@ -21,6 +23,7 @@ it.each([true, false])("joining with another device microphone %s preserves that
   });
   platform.emitSync({
     ...platform.sync.getSnapshot(),
+    control: deviceControl,
     presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), presence("desktop", "person")] },
     media: { projectionId: "media", sequence: 0, items: [{ participantId: "desktop", source: "microphone", enabled, publicationId: enabled ? "publication" : null }] },
   });
@@ -95,6 +98,84 @@ it("releases the pre-publication wait when Sync fails before becoming live", asy
     await failed;
     await vi.waitFor(() => expect(publicationGateReleased).toHaveBeenCalledOnce());
   } finally {
+    client.dispose();
+  }
+});
+
+function knownDevicesPlatform() {
+  const platform = createCoreTestPlatform();
+  platform.emitSync({
+    ...platform.sync.getSnapshot(),
+    control: deviceControl,
+    presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), { ...presence("desktop", "person"), deviceType: "computer" }] },
+    media: { projectionId: "media", sequence: 0, items: [{ participantId: "desktop", source: "microphone", enabled: true, publicationId: "mic" }] },
+  });
+  return platform;
+}
+
+it("retains seat identity and device type through presence loss and replica recovery, then clears them at a durable leave", async () => {
+  const platform = knownDevicesPlatform();
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
+  const sibling = () => client.getSnapshot().participants.roster.find((item) => item.participantId === "desktop");
+  try {
+    await client.join({ microphone: false, camera: false });
+    platform.emitSync({ ...platform.sync.getSnapshot(), presence: { projectionId: "presence", sequence: 1, items: [presence("participant-1", "person")] } });
+    expect(sibling()).toMatchObject({ identityId: "person", deviceType: "computer", presence: { state: "unknown" }, media: { microphone: "active" } });
+    platform.emitSync({ ...platform.sync.getSnapshot(), control: null });
+    expect(sibling()).toMatchObject({ identityId: "person", deviceType: "computer" });
+    platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...deviceControl, participants: deviceControl.participants.filter((item) => item.participantId !== "desktop") } });
+    expect(sibling()).toBeUndefined();
+    platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...deviceControl, participants: deviceControl.participants.map((item) => ({ ...item, admissionRevision: 2 })) } });
+    expect(sibling()?.identityId).toBeUndefined();
+    expect(sibling()?.deviceType).toBeUndefined();
+    platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...deviceControl, status: "ended" } });
+    expect(client.getSnapshot().participants.roster).toEqual([]);
+  } finally {
+    client.dispose();
+  }
+});
+
+it("does not carry an old buffered hint into a new admission of the same participant ID", async () => {
+  const platform = knownDevicesPlatform();
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
+  try {
+    await client.join({ microphone: false, camera: false });
+    platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...deviceControl, participants: deviceControl.participants.map((item) => ({ ...item, admissionRevision: 2 })) } });
+    expect(client.getSnapshot().participants.roster.every((item) => item.identityId === undefined)).toBe(true);
+    platform.emitSync({ ...platform.sync.getSnapshot(), presence: { projectionId: "presence", sequence: 1, items: [presence("participant-1", "person"), presence("desktop", "different-person")] } });
+    expect(client.getSnapshot().participants.roster.find((item) => item.participantId === "desktop")?.identityId).toBe("different-person");
+  } finally {
+    client.dispose();
+  }
+});
+
+it("starts muted when a known sibling is still sending after disappearing from presence before publication", async () => {
+  const platform = knownDevicesPlatform();
+  const mic = track("audio");
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let published: MediaStream | undefined;
+  const start = vi.fn(async (_stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => {
+    await held;
+    published = await beforePublish?.();
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+  );
+  try {
+    const joining = client.join({ microphone: true, camera: false });
+    await vi.waitFor(() => expect(client.getSnapshot().participants.roster.find((item) => item.participantId === "desktop")?.identityId).toBe("person"));
+    platform.emitSync({ ...platform.sync.getSnapshot(), presence: { projectionId: "presence", sequence: 1, items: [presence("participant-1", "person")] } });
+    release();
+    await joining;
+    expect(published?.getTracks()).toHaveLength(0);
+    expect(mic.stop).toHaveBeenCalled();
+    expect(client.getSnapshot().media.microphoneMutedByOtherDevice).toBe(true);
+  } finally {
+    release();
     client.dispose();
   }
 });

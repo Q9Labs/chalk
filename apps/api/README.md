@@ -207,7 +207,9 @@ apps/api/scripts/dev-services.sh start
 For a person joining from multiple devices, admit one Participant per device with
 a separate admission idempotency key. Pass the same `identity_external_id` on each
 admission to resolve a tenant-scoped person Identity, or pass an existing
-`identity_id`. These fields are mutually exclusive. Each Participant keeps its
+`identity_id`. The backend must derive this identity from its own authenticated
+subject: two people assigned the same key are treated as one person. These fields
+are mutually exclusive. Each Participant keeps its
 own media connection, role, access refresh, leave, attendance, and webhooks.
 Updated clients use the shared Identity to suppress audio from the person's other
 devices and start a new microphone off when another device is already sending.
