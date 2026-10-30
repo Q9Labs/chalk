@@ -54,7 +54,7 @@ returned commit function before using its output track. Stop its output when don
 
 Unit tests cover device preferences, load failures, capture ownership, late model
 loads, camera disabling, interruptions, and private previews. The web
-`camera-backgrounds.test.ts` proof drives the real picker and sends the processed
+`apps/web/src/call-states/camera-backgrounds.test.ts` proof drives the real picker and sends the processed
 track between two real WebRTC peers. It checks decoded remote background pixels
 and stable sender, track, and publication identities. It also saves screenshots
 and a frame-rate sample for None, Blur, and Office at laptop and phone viewport

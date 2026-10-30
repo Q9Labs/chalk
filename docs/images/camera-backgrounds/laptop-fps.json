@@ -1,0 +1,427 @@
+{
+  "browser": "156.0.8078.73",
+  "metric": "local preview frames",
+  "measurements": [
+    {
+      "width": 1440,
+      "run": 0,
+      "background": "none",
+      "fps": 25.979216625873445,
+      "localFps": 25.979216625873445,
+      "seconds": 1.5012000000476837,
+      "localFrames": 39,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 0,
+      "background": "blur",
+      "fps": 23.988805224419252,
+      "localFps": 23.988805224419252,
+      "seconds": 1.500699999988079,
+      "localFrames": 36,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 0,
+      "background": "modern-acoustic-office",
+      "fps": 22.648547827684542,
+      "localFps": 22.648547827684542,
+      "seconds": 1.5012000000476837,
+      "localFrames": 34,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 1,
+      "background": "none",
+      "fps": 29.994001199521726,
+      "localFps": 29.994001199521726,
+      "seconds": 1.5003000000119209,
+      "localFrames": 45,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 1,
+      "background": "blur",
+      "fps": 22.653074822133448,
+      "localFps": 22.653074822133448,
+      "seconds": 1.500899999976158,
+      "localFrames": 34,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 1,
+      "background": "modern-acoustic-office",
+      "fps": 23.724792407507273,
+      "localFps": 23.724792407507273,
+      "seconds": 1.5174000000357628,
+      "localFrames": 36,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 2,
+      "background": "none",
+      "fps": 26.65422802607385,
+      "localFps": 26.65422802607385,
+      "seconds": 1.5007000000476838,
+      "localFrames": 40,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 2,
+      "background": "blur",
+      "fps": 21.85430463576159,
+      "localFps": 21.85430463576159,
+      "seconds": 1.51,
+      "localFrames": 33,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 2,
+      "background": "modern-acoustic-office",
+      "fps": 22.641006858174332,
+      "localFps": 22.641006858174332,
+      "seconds": 1.5017000000476837,
+      "localFrames": 34,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 3,
+      "background": "none",
+      "fps": 27.311484146233397,
+      "localFps": 27.311484146233397,
+      "seconds": 1.5011999999880792,
+      "localFrames": 41,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 3,
+      "background": "blur",
+      "fps": 23.25272388977626,
+      "localFps": 23.25272388977626,
+      "seconds": 1.5052000000476837,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 3,
+      "background": "modern-acoustic-office",
+      "fps": 23.268182422734597,
+      "localFps": 23.268182422734597,
+      "seconds": 1.504199999988079,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 4,
+      "background": "none",
+      "fps": 26.636478657732923,
+      "localFps": 26.636478657732923,
+      "seconds": 1.5016999999880791,
+      "localFrames": 40,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 4,
+      "background": "blur",
+      "fps": 21.780740545692655,
+      "localFps": 21.780740545692655,
+      "seconds": 1.5150999999642372,
+      "localFrames": 33,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 1440,
+      "run": 4,
+      "background": "modern-acoustic-office",
+      "fps": 23.171135385633896,
+      "localFps": 23.171135385633896,
+      "seconds": 1.5105,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 0,
+      "background": "none",
+      "fps": 29.29622478124528,
+      "localFps": 29.29622478124528,
+      "seconds": 1.5019000000357627,
+      "localFrames": 44,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 0,
+      "background": "blur",
+      "fps": 22.433359725168348,
+      "localFps": 22.433359725168348,
+      "seconds": 1.5156000000238419,
+      "localFrames": 34,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 0,
+      "background": "modern-acoustic-office",
+      "fps": 23.334888992970427,
+      "localFps": 23.334888992970427,
+      "seconds": 1.4998999999761582,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 1,
+      "background": "none",
+      "fps": 26.643575567629643,
+      "localFps": 26.643575567629643,
+      "seconds": 1.501300000011921,
+      "localFrames": 40,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 1,
+      "background": "blur",
+      "fps": 23.86793078281209,
+      "localFps": 23.86793078281209,
+      "seconds": 1.5083000000119209,
+      "localFrames": 36,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 1,
+      "background": "modern-acoustic-office",
+      "fps": 23.232658479920346,
+      "localFps": 23.232658479920346,
+      "seconds": 1.5065,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 2,
+      "background": "none",
+      "fps": 29.31574388630261,
+      "localFps": 29.31574388630261,
+      "seconds": 1.5009000000357628,
+      "localFrames": 44,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 2,
+      "background": "blur",
+      "fps": 23.952095808383234,
+      "localFps": 23.952095808383234,
+      "seconds": 1.503,
+      "localFrames": 36,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 2,
+      "background": "modern-acoustic-office",
+      "fps": 22.644022644022645,
+      "localFps": 22.644022644022645,
+      "seconds": 1.5015,
+      "localFrames": 34,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 3,
+      "background": "none",
+      "fps": 28.64756828780813,
+      "localFps": 28.64756828780813,
+      "seconds": 1.501,
+      "localFrames": 43,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 3,
+      "background": "blur",
+      "fps": 23.998400107231685,
+      "localFps": 23.998400107231685,
+      "seconds": 1.5000999999642373,
+      "localFrames": 36,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 3,
+      "background": "modern-acoustic-office",
+      "fps": 23.138966019322698,
+      "localFps": 23.138966019322698,
+      "seconds": 1.5125999999642372,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 4,
+      "background": "none",
+      "fps": 27.990669776741086,
+      "localFps": 27.990669776741086,
+      "seconds": 1.5005,
+      "localFrames": 42,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 4,
+      "background": "blur",
+      "fps": 23.169601483403024,
+      "localFps": 23.169601483403024,
+      "seconds": 1.5105999999642372,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    },
+    {
+      "width": 390,
+      "run": 4,
+      "background": "modern-acoustic-office",
+      "fps": 23.327112770298694,
+      "localFps": 23.327112770298694,
+      "seconds": 1.5003999999761581,
+      "localFrames": 35,
+      "remoteFrames": 0,
+      "stats": {
+        "framesDecoded": 0,
+        "framesPerSecond": 0
+      }
+    }
+  ],
+  "errors": []
+}
