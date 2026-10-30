@@ -306,6 +306,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return enabled ? Promise.resolve() : this.#retireOwnedPublications();
   }
   async closeForcedLocalPublication(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): Promise<void> {
+    const connection = this.#connection;
+    const generationAtClose = this.#generation;
     const sources = localSourceGroup(source);
     const ownsPublication = [...this.#ownedPublications].some((item) => sources.includes(item.state.source));
     let failedRetirement: Promise<void> | undefined;
@@ -317,8 +319,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       // Detachment has already happened, and a lost provider response cannot
       // establish whether its SDP was applied. Fence that connection via the
       // same rebuild used after successful bundled-sender retirement.
+      if (connection !== this.#connection || generationAtClose !== this.#generation) return;
       failedRetirement = this.#retirement;
-      this.#retiredLocalConnection = this.#connection;
+      this.#retiredLocalConnection = connection;
       this.#retiredLocalCause = cause;
     }
     if (!ownsPublication || !this.#replaceMediaConnection) return;
@@ -760,10 +763,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (cursor === null) return;
     const participantRevision = this.#remoteParticipantRevision;
     const desired = this.#desiredRemotePublications(authoritative, cursor);
-    const allStalled = this.#retireStalledReceivers();
     const toPull = this.#pendingRemotePulls(desired);
+    const receiveStalled = toPull.some((publication) => this.#stalledReceivers.has(publication.publicationId));
     this.#pollFailedPull = true;
-    const pulled = await this.#pullWithRecovery(toPull, cursor, generation, allStalled);
+    const pulled = await this.#pullWithRecovery(receiveStalled ? [...desired.values()] : toPull, cursor, generation, receiveStalled);
     if (pulled === null) return;
     this.#requireGeneration(generation);
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
@@ -781,15 +784,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitRemote();
   }
-  #retireStalledReceivers(): boolean {
-    const allStalled = this.#remoteTracks.size > 0 && [...this.#remoteTracks.values()].every((publication) => this.#stalledReceivers.has(publication.publicationId));
-    for (const [key, publication] of this.#remoteTracks) {
-      if (!this.#stalledReceivers.delete(publication.publicationId)) continue;
-      this.#remoteTracks.delete(key);
-      safeStopTrack(publication.track, this.#reportError.bind(this));
-    }
-    return allStalled;
-  }
   #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
     for (const publicationId of this.#remotePullRetries.keys()) {
@@ -801,7 +795,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const now = Date.now();
     return [...desired]
       .filter(([key, publication]) => {
-        if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) return false;
+        if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) {
+          // The close API authorizes publisher MIDs only. Keep the receive
+          // allocation until the existing replacement owner retires its peer;
+          // repulling on that peer would allocate another receiver/provider pull.
+          if (!this.#stalledReceivers.has(publication.publicationId) || !this.#replaceMediaConnection) return false;
+        }
         const remaining = (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) - now;
         return remaining <= 0;
       })
@@ -985,14 +984,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #observeReceiveProgress(connection: RTCPeerConnection, report: RTCStatsReport): void {
     if (!this.#started || !connectionIsLive(connection) || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
       this.#receiveProgress.clear();
+      this.#stalledReceivers.clear();
       return;
     }
     const samples = [...this.#remoteTracks.values()].flatMap((publication) => {
       if (!this.#expectedRemotePublications.has(publication.publicationId)) return [];
       const rows = [...report.values()].filter((row) => row.type === "inbound-rtp" && row.trackIdentifier === publication.track.id);
       if (rows.some((row) => !Number.isSafeInteger(row.packetsReceived) || row.packetsReceived < 0)) return [];
-      // DTX permits intentional packet gaps. Unknown audio codec parameters
-      // cannot establish expected continuous RTP either.
+      // Opus DTX still sends periodic packets during silence. Unknown audio
+      // codec parameters cannot establish the expected packet cadence.
       if (publication.track.kind === "audio") {
         // Inbound RTP stats do not exist until the first packet. Negotiated
         // receiver codecs still distinguish a dead pull from intentional DTX.
@@ -1003,12 +1003,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
               .find((receiver) => receiver.track.id === publication.track.id)
               ?.getParameters().codecs ?? []);
         const opus = negotiated.filter((codec) => codec?.mimeType?.toLowerCase() === "audio/opus");
-        if (!opus.length || opus.some((codec) => typeof codec.sdpFmtpLine !== "string" || /(?:^|;)\s*usedtx\s*=\s*1(?:;|$)/i.test(codec.sdpFmtpLine))) return [];
+        if (!opus.length || opus.some((codec) => typeof codec.sdpFmtpLine !== "string")) return [];
       }
       return [{ publicationId: publication.publicationId, trackId: publication.track.id, packets: rows.reduce((sum, row) => sum + row.packetsReceived, 0) }];
     });
     const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), samples);
-    for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
+    for (const publicationId of advanced) {
+      this.#remotePullRetries.delete(publicationId);
+      this.#stalledReceivers.delete(publicationId);
+    }
+    for (const publicationId of this.#stalledReceivers) {
+      if (!stalled.includes(publicationId)) this.#stalledReceivers.delete(publicationId);
+    }
     if (!stalled.length) return;
     for (const publicationId of stalled) {
       if (this.#stalledReceivers.has(publicationId)) continue;

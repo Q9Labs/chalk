@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ReceiveStallDetector, RECEIVE_STALL_WINDOW_MS } from "./receive-stall";
+import { ReceiveStallDetector, RECEIVE_STALL_WINDOW_MS, RECEIVE_STARTUP_GRACE_MS } from "./receive-stall";
 
 const track = { publicationId: "publication", trackId: "receiver", packets: 10 };
-function observe(detector: ReceiveStallDetector, from = 0, until = RECEIVE_STALL_WINDOW_MS) {
+function observe(detector: ReceiveStallDetector, from = 0, until = RECEIVE_STARTUP_GRACE_MS) {
   let result: readonly string[] = [];
   for (let now = from; now <= until; now += 1000) result = detector.sample(now, [track]).stalled;
   return result;
@@ -10,8 +10,16 @@ function observe(detector: ReceiveStallDetector, from = 0, until = RECEIVE_STALL
 describe("expected receive packet progress", () => {
   it("gives a new pull a full window before declaring a stall", () => {
     const detector = new ReceiveStallDetector();
-    expect(observe(detector, 0, RECEIVE_STALL_WINDOW_MS - 1000)).toEqual([]);
-    expect(detector.sample(RECEIVE_STALL_WINDOW_MS, [track]).stalled).toEqual([track.publicationId]);
+    expect(observe(detector, 0, RECEIVE_STARTUP_GRACE_MS - 1000)).toEqual([]);
+    expect(detector.sample(RECEIVE_STARTUP_GRACE_MS, [track]).stalled).toEqual([track.publicationId]);
+  });
+  it("recovers flowing media after seven seconds without packets", () => {
+    const detector = new ReceiveStallDetector();
+    detector.sample(0, [track]);
+    const flowing = { ...track, packets: 11 };
+    expect(detector.sample(1000, [flowing]).advanced).toEqual([track.publicationId]);
+    for (let now = 2000; now < 1000 + RECEIVE_STALL_WINDOW_MS; now += 1000) expect(detector.sample(now, [flowing]).stalled).toEqual([]);
+    expect(detector.sample(1000 + RECEIVE_STALL_WINDOW_MS, [flowing]).stalled).toEqual([track.publicationId]);
   });
   it("does not count elapsed time while stats sampling is throttled", () => {
     const detector = new ReceiveStallDetector();

@@ -11,6 +11,126 @@ import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
+function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
+  const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
+  harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+  harness.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+  const peer = harness.peers[0]!;
+  let packets = 10;
+  vi.spyOn(peer, "getStats").mockImplementation(async () => {
+    if (progress()) packets++;
+    const rows = harness.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: packets, codecId: "codec" }));
+    const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+    return new Map([...rows.map((r) => [r.id, r] as const), ["codec", codec]]);
+  });
+}
+
+it("resumed packet progress cancels a stall awaiting discovery", async () => {
+  let healthy = false;
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      remoteMedia(h, () => healthy);
+      await h.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(20_000);
+      h.transport.blockPublicationList = true;
+      await vi.advanceTimersByTimeAsync(1_100);
+      healthy = true;
+      await vi.advanceTimersByTimeAsync(1_000);
+      h.transport.blockPublicationList = false;
+      h.transport.releasePublicationList();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(h.peers, "healthy packet progress should cancel pending recovery").toHaveLength(1);
+    },
+    { replaceMediaConnection: async () => bootstrap("replacement") },
+  );
+});
+
+it.each([false, true])("old close does not retire an already-replaced connection (503: %s)", async (failClose) => {
+  let replacements = 0;
+  const replacementGate = Promise.withResolvers<CloudflareSFUBootstrap>();
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      remoteMedia(h);
+      await h.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(22_100);
+      expect(replacements, "receive recovery should have requested fresh access").toBe(1);
+      const gate = Promise.withResolvers<CloudflareSFUTracksResponse>();
+      vi.spyOn(h.transport, "closeTracks").mockImplementationOnce(() => gate.promise);
+      const close = h.client.closeForcedLocalPublication("camera");
+      const observedClose = close.then(
+        () => ({ ok: true }),
+        (error) => ({ ok: false, error }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      replacementGate.resolve(bootstrap("replacement-1"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.peers).toHaveLength(2);
+      if (failClose) gate.reject(new CloudflareSFUError("old close 503", "signaling_failed", { status: 503, retryableConnection: true }));
+      else gate.resolve({ sessionDescription: { type: "answer", sdp: "close-answer" } });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await observedClose).toEqual({ ok: true });
+      expect.soft(replacements, "the old close must not trigger a second replacement").toBe(1);
+      expect(h.client.getSnapshot().localTracks.find((p) => p.source === "microphone")?.enabled).toBe(true);
+    },
+    { replaceMediaConnection: async () => (++replacements === 1 ? replacementGate.promise : bootstrap(`replacement-${replacements}`)) },
+  );
+});
+
+it("repeated partial stalls retire old SFU receiver allocations", async () => {
+  let replacements = 0;
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      h.transport.uniqueRemoteMids = true;
+      remoteMedia(h);
+      await h.client.refreshRemotePublications();
+      let packets = 10;
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+        packets++;
+        const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.source === "microphone" ? 10 : packets, codecId: "codec" }));
+        const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+        return new Map([...rows.map((r) => [r.id, r] as const), ["codec", codec]]);
+      });
+      expect(h.peers[0]!.getReceivers()).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(110_000);
+      const livePeers = h.peers.filter((peer) => !peer.closed);
+      expect(livePeers).toHaveLength(1);
+      expect(
+        livePeers.flatMap((peer) => peer.getReceivers()),
+        "only current receive allocations should remain",
+      ).toHaveLength(2);
+      expect(h.peers.slice(0, -1).every((peer) => peer.closed)).toBe(true);
+      const currentConnectionId = `replacement-${h.peers.length - 1}`;
+      const livePulls = h.transport.addInputs.filter((input) => input.connectionId === currentConnectionId).flatMap((input) => input.tracks.filter((track) => track.location === "remote"));
+      expect(livePulls.map((track) => track.trackName).sort()).toEqual(["camera", "microphone"]);
+    },
+    { replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`) },
+  );
+});
+
+it("formerly flowing DTX audio recovers a real packet freeze", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      remoteMedia(h);
+      await h.client.refreshRemotePublications();
+      vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+        const rows = h.client
+          .getSnapshot()
+          .remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: 100 + Math.floor((p.source === "microphone" ? Math.min(performance.now(), 5000) : performance.now()) / 400), codecId: "codec" }));
+        const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
+        return new Map([...rows.map((r) => [r.id, r] as const), ["codec", codec]]);
+      });
+      const pulls = h.transport.addInputs.length;
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(h.transport.addInputs.length, "a dead DTX publication should eventually be retried").toBeGreaterThan(pulls);
+    },
+    { replaceMediaConnection: async () => bootstrap("replacement") },
+  );
+});
+
 it.each(["microphone", "camera"] as const)("rebuilds after the first HTTP 503 close without reviving the disabled %s", async (source) => {
   const other = source === "microphone" ? "camera" : "microphone";
   const harness = createHarness({ replaceMediaConnection: async () => bootstrap("replacement") });
@@ -46,13 +166,9 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       });
       const originalPulls = harness.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(24_000);
-      if (all) expect(harness.peers.length).toBeGreaterThan(1);
-      else {
-        expect(harness.peers).toHaveLength(1);
-        expect(harness.transport.addInputs.length).toBeGreaterThan(originalPulls);
-        const retry = harness.transport.addInputs.at(-1)!;
-        expect(retry.tracks.map((track) => track.trackName)).toEqual(["microphone"]);
-      }
+      expect(harness.peers).toHaveLength(2);
+      expect(original.closed).toBe(true);
+      expect(harness.transport.addInputs.length).toBeGreaterThan(originalPulls);
       expect(harness.transport.addInputs.slice(originalPulls).some((input) => input.replacementCause === "receive_stalled")).toBe(true);
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
@@ -71,9 +187,8 @@ it.each(["audio", "video", "dtx-audio"] as const)("handles a pull before its fir
       await harness.client.refreshRemotePublications();
       await vi.advanceTimersByTimeAsync(19_000);
       expect(harness.peers).toHaveLength(1);
-      await vi.advanceTimersByTimeAsync(mode === "dtx-audio" ? 26_000 : 5000);
-      if (mode === "dtx-audio") expect(harness.peers).toHaveLength(1);
-      else expect(harness.peers.length).toBeGreaterThan(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(harness.peers.length).toBeGreaterThan(1);
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
   );
@@ -90,7 +205,7 @@ it.each(["publisher-muted", "video-disabled", "dtx", "hidden", "pull-grace", "si
         await harness.client.refreshRemotePublications();
         const remote = harness.client.getSnapshot().remoteTracks[0]!;
         vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(async () => {
-          const inbound = { id: "inbound", timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: remote.track.id, packetsReceived: mode === "silence" ? Math.floor(performance.now() / 10_000) : 10, bytesReceived: performance.now(), codecId: "codec" };
+          const inbound = { id: "inbound", timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: remote.track.id, packetsReceived: mode === "silence" || mode === "dtx" ? Math.floor(performance.now() / 400) : 10, bytesReceived: performance.now(), codecId: "codec" };
           const codec = { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: mode === "codec-unknown" ? undefined : mode === "dtx" ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" };
           return new Map<string, RTCStats>([
             ["inbound", inbound],
@@ -2142,6 +2257,8 @@ function createHarness(
   return { client, peers, transport, peerConnectionFactory };
 }
 class FakeTransport implements CloudflareSFUSignalingTransport {
+  uniqueRemoteMids = false;
+  #nextRemoteMid = 0;
   readonly addInputs: {
     readonly connectionId: string;
     readonly sessionDescription?: CloudflareSFUSessionDescription;
@@ -2187,13 +2304,13 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
       }
-      const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: `remote-${index}` }));
+      const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
       const trackErrors = input.tracks.flatMap((track) => {
         const code = this.failedRemoteTrackNames.get(track.trackName);
         return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
       });
       if (this.reverseRemoteTracks) tracks.reverse();
-      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
+      tracks.forEach((track, index) => this.#peer()?.emitTrack(track.mid, new FakeTrack(`pulled-${track.trackName}-${this.uniqueRemoteMids ? track.mid : index}`, track.trackName.includes("microphone") || track.trackName.includes("audio") ? "audio" : "video")));
       const requiresImmediateRenegotiation = this.immediateRenegotiation || this.#peer()?.connectionState !== "connected";
       return {
         tracks,

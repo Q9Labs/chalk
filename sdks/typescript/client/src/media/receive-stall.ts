@@ -1,4 +1,5 @@
-export const RECEIVE_STALL_WINDOW_MS = 20_000;
+export const RECEIVE_STALL_WINDOW_MS = 7000;
+export const RECEIVE_STARTUP_GRACE_MS = 20_000;
 const MAX_SAMPLE_GAP_MS = 3000;
 
 export type ReceivePacketSample = {
@@ -9,7 +10,7 @@ export type ReceivePacketSample = {
 
 /** Only consecutive, timely observations of expected media establish a stall. */
 export class ReceiveStallDetector {
-  readonly #progress = new Map<string, { trackId: string; packets: number; advancedAt: number }>();
+  readonly #progress = new Map<string, { trackId: string; packets: number; advancedAt: number; flowing: boolean }>();
   #sampledAt: number | undefined;
 
   forget(publicationId: string): void {
@@ -36,8 +37,11 @@ export class ReceiveStallDetector {
   #observeTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample): "stalled" | "advanced" | null {
     const previous = this.#progress.get(publicationId);
     const sameTrack = previous?.trackId === trackId;
-    if (sameTrack && previous.packets === packets) return now - previous.advancedAt >= RECEIVE_STALL_WINDOW_MS ? "stalled" : null;
-    this.#progress.set(publicationId, { trackId, packets, advancedAt: now });
+    if (sameTrack && previous.packets === packets) {
+      const window = previous.flowing ? RECEIVE_STALL_WINDOW_MS : RECEIVE_STARTUP_GRACE_MS;
+      return now - previous.advancedAt >= window ? "stalled" : null;
+    }
+    this.#progress.set(publicationId, { trackId, packets, advancedAt: now, flowing: sameTrack && packets > previous.packets });
     return sameTrack && packets > previous.packets ? "advanced" : null;
   }
 }
