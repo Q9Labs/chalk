@@ -57,6 +57,7 @@ type providerFailure struct {
 	statusCode                 int
 	statusClass                string
 	providerCode               string
+	transportCause             transportCause
 	trackCode                  string
 	details                    providerFailureDetails
 	missingRemoteTracks        []mediaplane.RemoteTrackIdentity
@@ -87,6 +88,8 @@ func (e providerFailure) ProviderFailureCode() string { return e.providerCode }
 
 func (e providerFailure) Unwrap() error {
 	switch {
+	case e.transportCause == transportCauseCallerCanceled:
+		return context.Canceled
 	case e.providerCode == "plane_unavailable":
 		return mediaplane.ErrPlaneUnavailable
 	case e.statusCode == http.StatusUnauthorized, e.statusCode == http.StatusForbidden:
@@ -372,8 +375,10 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	defer func() {
 		if err != nil {
 			err = enrichProviderFailure(err, body, responseBytes)
-			span.RecordError(sfuSpanError(err))
-			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			if !errors.Is(err, context.Canceled) {
+				span.RecordError(sfuSpanError(err))
+				span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			}
 			recordProviderFailure(ctx, span, err)
 		}
 		span.End()
@@ -401,13 +406,13 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	}
 	providerResponse, err := a.client.Do(request)
 	if err != nil {
-		return 0, newProviderFailure(operation, failureStageTransport, 0, transportFailureCode(ctx, err))
+		return 0, newTransportFailure(ctx, operation, 0, err)
 	}
 	defer providerResponse.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
 	if err != nil {
-		return providerResponse.StatusCode, newProviderFailure(operation, failureStageTransport, providerResponse.StatusCode, transportFailureCode(ctx, err))
+		return providerResponse.StatusCode, newTransportFailure(ctx, operation, providerResponse.StatusCode, err)
 	}
 	responseBytes = len(payload)
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
@@ -436,15 +441,6 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 		}
 	}
 	return providerResponse.StatusCode, nil
-}
-
-// transportFailureCode separates a deadline, from the caller or the client's
-// timeout while waiting for headers or reading the body, from other failures.
-func transportFailureCode(ctx context.Context, err error) string {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return "timeout"
-	}
-	return "transport_error"
 }
 
 func (r *closeTracksResponse) providerError(operation string) error {
@@ -794,8 +790,8 @@ func normalizedProviderCode(code string) string {
 		return "rate_limited"
 	case "timeout", "request_timeout", "deadline_exceeded":
 		return "timeout"
-	case "transport_error":
-		return "transport_error"
+	case "transport_error", "client_canceled":
+		return code
 	case "plane_unavailable":
 		return "plane_unavailable"
 	case "invalid_json":
@@ -823,9 +819,25 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		attribute.String("http.response.status_class", failure.statusClass),
 		attribute.String("chalk.provider.error_code", failure.providerCode),
 	}
+	if failure.transportCause != "" {
+		attributes = append(attributes, attribute.String("chalk.provider.transport_cause", string(failure.transportCause)))
+	}
 	span.SetAttributes(attributes...)
+	event := "cloudflare_sfu.provider_failure"
+	logEvent := "cloudflare_sfu.request_failed"
+	message := "Cloudflare SFU request failed"
+	level := slog.LevelWarn
+	if failure.transportCause == transportCauseCallerCanceled {
+		event, logEvent, message = "cloudflare_sfu.client_canceled", "cloudflare_sfu.client_canceled", "Cloudflare SFU request canceled by caller"
+		level = slog.LevelInfo
+	} else {
+		sfuFailureCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
+		if failure.stage == failureStageTransport || failure.statusClass == "5xx" {
+			level = slog.LevelError
+		}
+	}
 	span.AddEvent(
-		"cloudflare_sfu.provider_failure",
+		event,
 		trace.WithAttributes(
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
 			attribute.String("chalk.provider.message", failure.details.message),
@@ -837,22 +849,17 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 			attribute.Int("chalk.provider.failed_track_count", failure.details.failedTrackCount),
 		),
 	)
-	sfuFailureCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
-
-	level := slog.LevelWarn
-	if failure.stage == failureStageTransport || failure.statusClass == "5xx" {
-		level = slog.LevelError
-	}
 	slog.Default().Log(
 		ctx,
 		level,
-		"Cloudflare SFU request failed",
-		"event", "cloudflare_sfu.request_failed",
+		message,
+		"event", logEvent,
 		"operation", failure.operation,
 		"failure_stage", failure.stage,
 		"http_status", failure.statusCode,
 		"http_status_class", failure.statusClass,
 		"provider_code", failure.providerCode,
+		"transport_cause", failure.transportCause,
 		"provider_raw_code", failure.details.rawCode,
 		"provider_message", failure.details.message,
 		"provider_message_fingerprint", failure.details.messageFingerprint,
@@ -909,8 +916,10 @@ func (a Adapter) VerifyConnectionMetadata(ctx context.Context, connectionRef str
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu.verify_connection", trace.WithSpanKind(trace.SpanKindClient))
 	defer func() {
 		if err != nil {
-			span.RecordError(sfuSpanError(err))
-			span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			if !errors.Is(err, context.Canceled) {
+				span.RecordError(sfuSpanError(err))
+				span.SetStatus(codes.Error, "Cloudflare SFU request failed")
+			}
 			recordProviderFailure(ctx, span, err)
 		}
 		span.End()
@@ -929,18 +938,14 @@ func (a Adapter) VerifyConnectionMetadata(ctx context.Context, connectionRef str
 
 	response, err := a.client.Do(request)
 	if err != nil {
-		code := "transport_error"
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			code = "timeout"
-		}
-		return ConnectionMetadata{}, newProviderFailure("verify_connection", failureStageTransport, 0, code)
+		return ConnectionMetadata{}, newTransportFailure(ctx, "verify_connection", 0, err)
 	}
 	defer response.Body.Close()
 	span.SetAttributes(attribute.Int("http.response.status_code", response.StatusCode))
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return ConnectionMetadata{}, newProviderFailure("verify_connection", failureStageTransport, response.StatusCode, "transport_error")
+		return ConnectionMetadata{}, newTransportFailure(ctx, "verify_connection", response.StatusCode, err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		failure := sfuStatusError("verify_connection", response.StatusCode, payload)

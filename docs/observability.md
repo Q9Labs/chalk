@@ -91,6 +91,15 @@ HTTP 200 acceptance rules are unchanged. The regression in
 checks the recorded logs and span events against provider responses with
 credential-shaped fields.
 
+SFU transport failures retain only the bounded `transport_cause` log field and
+`chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
+`connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
+error text is not retained. A canceled or expired caller context produces
+`cloudflare_sfu.client_canceled`, does not increment the provider-failure counter
+or mark the provider span as an error, and is recorded as HTTP 499 without an
+API error body. The HTTP client's own timeout and network failures remain 503s;
+the six-second request timeout is unchanged.
+
 HTTP-stage SFU failures record the provider's top-level `errorCode` in
 `provider_raw_code` and the `chalk.provider.raw_error_code` span-event field.
 Only exact codes from [Cloudflare's error reference](https://developers.cloudflare.com/realtime/sfu/observability/error-codes/)
