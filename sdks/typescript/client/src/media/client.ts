@@ -330,7 +330,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  #retireOwnedPublications(): Promise<void> {
+  #retireOwnedPublications(options: { readonly recoverExpiredConnection?: boolean } = {}): Promise<void> {
     const publications = [...this.#ownedPublications].filter((item) => item.lifecycle.kind === "retiring" && item.lifecycle.handle);
     const retirement = (async () => {
       const errors: unknown[] = [];
@@ -339,7 +339,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           await this.#serializeSDP(() => this.#closeOwnedPublication(publication), true);
         } catch (error) {
           errors.push(error);
-          if (!this.#stopped) this.#reportError(error);
+          const recovering = options.recoverExpiredConnection && this.#retiredLocalConnection === publication.connection && this.#isRetryableConnectionFailure(error);
+          if (!this.#stopped && !recovering) this.#reportError(error);
         }
       }
       if (this.#stopped && this.#ownedPublications.size === 0) this.#transport = undefined;
@@ -489,11 +490,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (publication && publication.detachedAt !== null && Date.now() - publication.detachedAt >= CAPTURE_REUSE_WINDOW_MS) {
         this.#pauseLocalSource(state.source, "capture_cleanup");
         try {
-          await this.#retireOwnedPublications();
+          await this.#retireOwnedPublications({ recoverExpiredConnection: true });
         } catch (error) {
           // An already expired BUNDLE session can reject its close. The normal
           // retired-connection path below obtains a fresh binding before publish.
           if (!this.#replaceMediaConnection || this.#retiredLocalConnection !== this.#connection || !(error instanceof AggregateError) || !error.errors.every((cause: unknown) => this.#isRetryableConnectionFailure(cause))) throw error;
+          // The provider says this binding is gone. Fence it before another
+          // retirement pass can report the expected 410 to lifecycle recovery.
+          this.#fenceLocalPublications();
         }
       }
       if (this.#locallyPausedSources.has(state.source)) return false;

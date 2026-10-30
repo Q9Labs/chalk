@@ -631,7 +631,9 @@ it.each([
 });
 
 it.each([false, true])("republishes expired capture after 40 seconds so the remote side receives media (expired close=%s)", async (expiredClose) => {
+  const onError = vi.fn();
   const sender = createHarness({
+    onError,
     replaceMediaConnection: async () => {
       // Binding a new connection fences the old Chalk registry entries.
       sender.transport.localPublications.clear();
@@ -651,6 +653,7 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
   const receivedMedia = () =>
     receiver.client.getSnapshot().remoteTracks.filter(
       (remote) =>
+        remote.source === "microphone" &&
         providerTracks.has(remote.publicationId) &&
         sender.peers
           .at(-1)
@@ -658,7 +661,7 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
           .some((item) => item.track === microphone && item.track.enabled),
     );
   try {
-    await sender.client.start(fakeStream(microphone));
+    await sender.client.start(fakeStream(microphone, new FakeTrack("still-live-camera", "video")));
     await receiver.client.start(fakeStream());
     receiver.transport.snapshot = { incarnation: 1, sequence: 1, publications: [...sender.transport.localPublications.values()].map((publication) => ({ ...publication, participantId: "participant-2" })) };
     await receiver.client.refreshRemotePublications();
@@ -668,7 +671,7 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     await sender.client.pauseLocalCapture("microphone");
     clock.mockReturnValue(now + 40_000);
-    providerTracks.clear(); // Provider inactivity expiry does not update Chalk's registry.
+    providerTracks.delete(original!); // Provider inactivity expiry does not update Chalk's registry.
     if (expiredClose) vi.spyOn(sender.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("provider session expired", "signaling_failed", { status: 410, retryableConnection: true }));
     expect(sender.transport.localPublications.has(original!)).toBe(true);
     expect(receivedMedia()).toHaveLength(0);
@@ -679,6 +682,8 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
     expect(receivedMedia()).toHaveLength(1);
     expect(receivedMedia()[0]!.publicationId).not.toBe(original);
     expect(sender.client.getSnapshot().localTracks[0]!.enabled).toBe(true);
+    expect(sender.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.enabled).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
   } finally {
     vi.restoreAllMocks();
     sender.client.stop();
