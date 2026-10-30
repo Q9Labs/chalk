@@ -12,6 +12,8 @@ export interface Participant {
   displayName: string;
   deviceHint?: string;
   isLocal?: boolean;
+  /** A different seat belonging to the local person. */
+  isOwnDevice?: boolean;
   /** Voice activity for this participant, from sync presence. */
   isSpeaking?: boolean;
   /** Normalized voice level (0–1); omit when the integration only supplies speaking activity. */

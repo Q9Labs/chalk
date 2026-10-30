@@ -199,6 +199,24 @@ try {
   report.assertions.push("separate seats share one identity", "new phone microphone starts off with an explanation", "teacher rights on both devices");
   await desktop.waitForFunction(() => client.getSnapshot().participants.roster.filter((item) => item.displayName === "Teacher" && item.presence.state === "connected").length === 2);
   for (const page of [desktop, phone]) await page.waitForFunction(() => ![...document.querySelectorAll(".chalk-toast")].some((item) => item.textContent.includes("joined")));
+  for (const [page, ownDeviceId] of [
+    [desktop, admissions[1].participant.id],
+    [phone, admissions[0].participant.id],
+  ]) {
+    await page.waitForFunction((id) => document.querySelector('[data-stage-role="primary"]')?.getAttribute("data-stage-item") === id, admissions[2].participant.id);
+    const ids = await page.locator("[data-stage-item]").evaluateAll((items) => items.map((item) => item.getAttribute("data-stage-item")));
+    assert.equal(ids.at(-1), ownDeviceId);
+    await page.locator(`[data-stage-item="${ownDeviceId}"] [data-part="tile-device"]`).filter({ hasText: "2 devices" }).waitFor();
+  }
+  assert.equal(
+    await desktop.locator('[data-part="tile-self-label"]').evaluate((label) => {
+      const rect = label.getBoundingClientRect();
+      const chip = label.closest('[data-part="tile-tag"]').getBoundingClientRect();
+      return label.textContent.trim() === "(You)" && rect.width > 0 && rect.left >= chip.left && rect.right <= chip.right && label.scrollWidth <= label.clientWidth;
+    }),
+    true,
+  );
+  report.assertions.push("learner leads the stage on desktop and phone; own devices come last", "desktop self label keeps (You) visible");
   await desktop.screenshot({ path: `${output}/after-desktop.png` });
   await phone.screenshot({ path: `${output}/after-phone.png` });
   await freezeReview(desktop, "review-desktop");

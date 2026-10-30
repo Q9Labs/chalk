@@ -156,7 +156,7 @@ export function Stage({
     if (!interactive) {
       seenAtRef.current = new Map(items.map((item, index) => [item.id, index]));
       nextSeenRef.current = items.length;
-      return [...items];
+      return stabilizeOrder([], items);
     }
     // Departed ids are dropped so long calls don't retain every past guest; the
     // counter keeps growing so shares keep their arrival order.

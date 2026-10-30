@@ -24,6 +24,10 @@ export function isContentItem(item: StageItem): boolean {
   return item.kind !== "participant";
 }
 
+function isOwnDeviceSeat(item: StageItem): boolean {
+  return item.kind === "participant" && item.participant.isOwnDevice === true;
+}
+
 /** Keeps surviving items in their previous order and appends newcomers, so tiles do not reshuffle. */
 export function stabilizeOrder(previousIds: readonly string[], items: readonly StageItem[]): StageItem[] {
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -40,7 +44,7 @@ export function stabilizeOrder(previousIds: readonly string[], items: readonly S
     ordered.push(item);
     placed.add(item.id);
   }
-  return ordered;
+  return [...ordered.filter((item) => !isOwnDeviceSeat(item)), ...ordered.filter(isOwnDeviceSeat)];
 }
 
 export interface PrimaryContext {
@@ -71,35 +75,37 @@ function participantWhere(items: readonly StageItem[], predicate: (participant: 
 
 /** A pin wins; otherwise the first live share, board, then active speaker leads Spotlight. */
 export function choosePrimary(items: readonly StageItem[], context: PrimaryContext): StageItem | null {
-  if (items.length === 0) return null;
-  const pinned = context.pinnedId ? items.find((item) => item.id === context.pinnedId) : undefined;
+  const eligible = items.filter((item) => !isOwnDeviceSeat(item));
+  if (eligible.length === 0) return null;
+  const pinned = context.pinnedId ? eligible.find((item) => item.id === context.pinnedId) : undefined;
   if (pinned) return pinned;
-  const content = firstScreenShare(items, context.seenAt) ?? items.find((item) => item.kind === "whiteboard");
+  const content = firstScreenShare(eligible, context.seenAt) ?? eligible.find((item) => item.kind === "whiteboard");
   if (content) return content;
   return (
-    participantWhere(items, (participant) => participant.isActiveSpeaker === true) ??
-    participantWhere(items, (participant) => participant.isSpeaking === true) ??
-    (context.lastSpeakerId ? items.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined) ??
-    participantWhere(items, (participant) => !participant.isLocal) ??
-    participantWhere(items, () => true) ??
-    items[0] ??
+    participantWhere(eligible, (participant) => participant.isActiveSpeaker === true) ??
+    participantWhere(eligible, (participant) => participant.isSpeaking === true) ??
+    (context.lastSpeakerId ? eligible.find((item) => item.kind === "participant" && item.id === context.lastSpeakerId) : undefined) ??
+    participantWhere(eligible, (participant) => !participant.isLocal) ??
+    participantWhere(eligible, () => true) ??
+    eligible[0] ??
     null
   );
 }
 
 /** Who is speaking now: the active speaker before anyone else speaking. */
 export function speakingParticipantId(items: readonly StageItem[], accept: (participant: Participant) => boolean = () => true): string | undefined {
-  return (participantWhere(items, (participant) => accept(participant) && participant.isActiveSpeaker === true) ?? participantWhere(items, (participant) => accept(participant) && participant.isSpeaking === true))?.id;
+  return (participantWhere(items, (participant) => !participant.isOwnDevice && accept(participant) && participant.isActiveSpeaker === true) ?? participantWhere(items, (participant) => !participant.isOwnDevice && accept(participant) && participant.isSpeaking === true))?.id;
 }
 
 /** The remote person whose face leads the floating column: whoever is speaking now, else the last remote speaker. */
 export function floatingSpeakerId(items: readonly StageItem[], lastRemoteSpeakerId: string | null): string | null {
-  return speakingParticipantId(items, (participant) => !participant.isLocal) ?? lastRemoteSpeakerId;
+  const previous = items.some((item) => item.id === lastRemoteSpeakerId && isOwnDeviceSeat(item)) ? null : lastRemoteSpeakerId;
+  return speakingParticipantId(items, (participant) => !participant.isLocal) ?? previous;
 }
 
 /** Grid order: pinned item first, everything else in stable order. */
 export function gridOrder(items: readonly StageItem[], pinnedId: string | null): StageItem[] {
-  if (!pinnedId) return [...items];
-  const pinned = items.find((item) => item.id === pinnedId);
-  return pinned ? [pinned, ...items.filter((item) => item.id !== pinnedId)] : [...items];
+  if (!pinnedId) return stabilizeOrder([], items);
+  const pinned = items.find((item) => item.id === pinnedId && !isOwnDeviceSeat(item));
+  return stabilizeOrder([], pinned ? [pinned, ...items.filter((item) => item.id !== pinnedId)] : items);
 }

@@ -153,9 +153,14 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
             {showName && (
               <>
-                <span dir="auto" data-part="tile-full-name" className="min-w-0 truncate [unicode-bidi:plaintext]" title={participant.displayName}>
-                  {participant.displayName}
-                  {participant.isLocal && participant.displayName !== "You" && <span className="text-[var(--chalk-on-overlay)]"> (You)</span>}
+                <span dir="auto" data-part="tile-full-name" className="inline-flex min-w-0 [unicode-bidi:plaintext]" title={participant.displayName}>
+                  <span className="min-w-0 truncate">{participant.displayName}</span>
+                  {participant.isLocal && participant.displayName !== "You" && (
+                    <span data-part="tile-self-label" className="shrink-0 whitespace-pre text-[var(--chalk-on-overlay)]">
+                      {" "}
+                      (You)
+                    </span>
+                  )}
                 </span>
                 <span dir="auto" data-part="tile-short-name" className="hidden min-w-0 truncate [unicode-bidi:plaintext]">
                   {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}

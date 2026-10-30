@@ -45,6 +45,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       id: participant.participantId,
       displayName: participant.displayName,
       deviceHint: deviceHint(participant, participants),
+      isOwnDevice: Boolean(localFromSync?.identityId && participant.identityId === localFromSync.identityId),
       isMuted: participant.media.microphone !== "active",
       isSpeaking: participant.presence.speaking,
       isActiveSpeaker: participant.presence.activeSpeaker,

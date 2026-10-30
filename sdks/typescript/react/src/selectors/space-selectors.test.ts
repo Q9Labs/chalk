@@ -56,3 +56,22 @@ it("routes share audio separately from microphone audio", () => {
     ]),
   ).toEqual([{ id: "remote", audioTrack: microphone, screenShareAudioTrack: audio }]);
 });
+
+it("marks only another seat with the local person's verified identity as an own device", () => {
+  const seat = (participantId: string, identityId?: string): Participant => ({
+    participantId,
+    identityId,
+    displayName: "Person",
+    role: "collaborator",
+    eligibleRoles: [],
+    capabilities: [],
+    handRaised: false,
+    media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
+    presence: { state: "connected", speaking: false, activeSpeaker: false },
+  });
+  const localMedia = { microphone: { source: "microphone" as const, state: "disabled" as const, track: null }, camera: { source: "camera" as const, state: "disabled" as const, track: null }, screen: { source: "screen" as const, state: "disabled" as const, track: null } };
+  const tiles = toVideoParticipants([seat("self", "teacher"), seat("phone", "teacher"), seat("learner", "learner"), seat("unknown")], [], "self", "Person", localMedia);
+  expect(tiles.filter((tile) => tile.isOwnDevice).map(({ id }) => id)).toEqual(["phone"]);
+  const anonymous = toVideoParticipants([seat("self"), seat("phone")], [], "self", "Person", localMedia);
+  expect(anonymous.some((tile) => tile.isOwnDevice)).toBe(false);
+});
