@@ -3,7 +3,7 @@ import { cameraEffectFailure } from "./camera-effect-failure";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient } from "../space-client/capture.test.helpers";
 import { track, stream } from "../space-client/capture.test.helpers";
-import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, configureCameraEffectProvider } from "./camera-effects";
+import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, configureCameraEffectProvider } from "./camera-effects";
 
 const model = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
 afterEach(() => {
@@ -15,7 +15,7 @@ function browser() {
   const output = track("video");
   const source = track("video");
   source.getSettings = () => ({ deviceId: "camera-1", width: 640, height: 360 });
-  const painter = { drawImage: vi.fn(), clearRect: vi.fn(), createImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData: vi.fn() };
+  const painter = { drawImage: vi.fn(), clearRect: vi.fn(), createImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData: vi.fn(), getExtension: () => null };
   const canvas = { width: 0, height: 0, getContext: () => painter };
   vi.stubGlobal("document", { createElement: () => ({ ...canvas }) });
   let frames: ReadableStreamDefaultController<VideoFrame> | undefined;
@@ -189,6 +189,31 @@ describe("camera effects ownership", () => {
     await Promise.all([setCameraBackground("camera-a", "blur"), setCameraBackground("camera-a", "none"), setCameraBackground("camera-b", "blur")]);
     expect(getCameraBackground("camera-a")).toBe("none");
     expect(getCameraBackground("camera-b")).toBe("blur");
+  });
+  it("remembers plain camera after slow processing and clears the notice on retry", async () => {
+    const { source, output, frame, write } = browser();
+    vi.stubGlobal("HTMLCanvasElement", class {});
+    configureCameraEffectProvider(files, () => model.create());
+    await setCameraBackground("camera-1", "blur");
+    let now = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    try {
+      await processCameraStream(stream([source]));
+      for (let index = 0; index < 5; index++) {
+        now = index * 1000;
+        frame((index + 1) * 1_000_000);
+        await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(index + 1));
+      }
+      expect(getCameraBackground("camera-1")).toBe("none");
+      expect(getCameraBackgroundFallback("camera-1")).toBeLessThan(15);
+      expect(source.readyState).toBe("live");
+      await setCameraBackground("camera-1", "blur");
+      expect(getCameraBackground("camera-1")).toBe("blur");
+      expect(getCameraBackgroundFallback("camera-1")).toBeUndefined();
+    } finally {
+      clock.mockRestore();
+      output.stop();
+    }
   });
   it.each(["leave", "dispose"] as const)("stops acquired camera immediately on %s while a saved model is pending", async (action) => {
     const { source, output } = browser();

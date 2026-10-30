@@ -10,16 +10,16 @@ export class CameraEffectPerformance {
     this.#frames = 0;
   }
 
-  record(now: number): boolean {
+  record(now: number): number | undefined {
     this.#warmUntil ??= now + 1000;
-    if (now < this.#warmUntil) return false;
+    if (now < this.#warmUntil) return;
     this.#started ??= now;
     this.#frames++;
     const elapsed = now - this.#started;
-    if (elapsed < 3000) return false;
-    const slow = (this.#frames * 1000) / elapsed < 15;
+    if (elapsed < 3000) return;
+    const fps = (this.#frames * 1000) / elapsed;
     this.#started = now;
     this.#frames = 0;
-    return slow;
+    return fps < 15 ? fps : undefined;
   }
 }

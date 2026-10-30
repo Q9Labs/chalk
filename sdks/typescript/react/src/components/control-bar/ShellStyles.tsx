@@ -52,7 +52,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 }
 .chalk-shell-muted-hint.chalk-shell-background-hint {inset-inline-start:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);white-space:normal;}
 [data-chalk] .chalk-shell-split button:focus {
-  outline: none;
+  outline: 0;
   box-shadow: none;
 }
 .chalk-shell-split:has(button:focus-visible) {

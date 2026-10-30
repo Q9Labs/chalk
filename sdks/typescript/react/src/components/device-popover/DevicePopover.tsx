@@ -177,7 +177,7 @@ export function DevicePopover({
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
     subscribeCameraBackground,
-    () => type === "video" && getCameraBackgroundFallback(deviceId),
+    () => type === "video" && getCameraBackgroundFallback(deviceId) !== undefined,
     () => false,
   );
   const mic = type === "mic";

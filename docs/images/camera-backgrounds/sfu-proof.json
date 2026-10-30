@@ -5,7 +5,7 @@
   "effects": [
     {
       "background": "blur",
-      "remotePixelDifference": 43.751157407407405,
+      "remotePixelDifference": 27.394675925925927,
       "samePublication": true,
       "sameSenderTrack": true,
       "sameReceiverTrack": true,
@@ -13,7 +13,7 @@
     },
     {
       "background": "modern-acoustic-office",
-      "remotePixelDifference": 60.510995370370374,
+      "remotePixelDifference": 54.9068287037037,
       "samePublication": true,
       "sameSenderTrack": true,
       "sameReceiverTrack": true,
@@ -21,7 +21,7 @@
     },
     {
       "background": "none",
-      "remotePixelDifference": 86.75231481481481,
+      "remotePixelDifference": 6.091435185185185,
       "samePublication": true,
       "sameSenderTrack": true,
       "sameReceiverTrack": true,

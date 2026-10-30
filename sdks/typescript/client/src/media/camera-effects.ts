@@ -30,7 +30,7 @@ const preferences = new CameraBackgroundPreferences();
 const sessions = new Map<string, Set<CameraEffectsTrack>>();
 const pending = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
-const fallbacks = new Set<string>();
+const fallbacks = new Map<string, number>();
 
 /** Call before creating a browser Space client. Native capture never uses this layer. */
 export function configureCameraEffectProvider(next: CameraEffectsAssets, createSegmenter: CameraEffectsProvider): void {
@@ -52,8 +52,8 @@ export function cameraEffectsSupported(): boolean {
 export function getCameraBackground(deviceId: string): CameraBackground {
   return preferences.get(deviceId);
 }
-export function getCameraBackgroundFallback(deviceId: string): boolean {
-  return fallbacks.has(deviceId);
+export function getCameraBackgroundFallback(deviceId: string): number | undefined {
+  return fallbacks.get(deviceId);
 }
 export function subscribeCameraBackground(listener: () => void): () => void {
   listeners.add(listener);
@@ -103,10 +103,10 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
   const deviceId = source.getSettings().deviceId ?? "default";
   signal?.addEventListener("abort", cancel, { once: true });
   try {
-    const captured = await createCameraEffectsTrack(source, assets, provider, () => {
+    const captured = await createCameraEffectsTrack(source, assets, provider, (fps) => {
       for (const active of sessions.get(deviceId) ?? []) active.usePlainCamera();
       preferences.set(deviceId, "none");
-      fallbacks.add(deviceId);
+      fallbacks.set(deviceId, fps);
       for (const listener of listeners) listener();
     });
     session = captured;
@@ -141,7 +141,7 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
 }
 
 /** Provider-neutral browser processor. It owns source until the output is stopped. */
-export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: () => void): Promise<CameraEffectsTrack> {
+export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
@@ -275,9 +275,10 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       const processed = new VideoFrame(canvas, { timestamp: input.timestamp });
       try {
         await pipeline.writer.write(processed);
-        if (background !== "none" && performanceMeter.record(performance.now())) {
+        const slowFps = background === "none" ? undefined : performanceMeter.record(performance.now());
+        if (slowFps !== undefined) {
           usePlainCamera();
-          onSlow?.();
+          onSlow?.(slowFps);
         }
       } finally {
         processed.close();

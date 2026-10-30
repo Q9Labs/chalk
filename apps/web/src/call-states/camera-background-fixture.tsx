@@ -1,18 +1,24 @@
 import "../styles.css";
 import "../lib/camera-effects";
 import { createRoot } from "react-dom/client";
-import { processCameraStream, setCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, type CameraBackground } from "@q9labsai/chalk-client";
 import { PreviewDevicePopover } from "@q9labsai/chalk-react/preview";
 import { syntheticCamera } from "./camera-fixtures/synthetic-camera";
 import portraitUrl from "./camera-fixtures/webcam-subject.jpg";
 
 /** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
 class CameraBackgroundFixture extends HTMLElement {
-  async mount({ requireRemote = true, inputWidth = 1280 }: { readonly requireRemote?: boolean; readonly inputWidth?: number } = {}) {
+  async mount({ requireRemote = true, inputWidth = 1280, nativeCamera = false }: { readonly requireRemote?: boolean; readonly inputWidth?: number; readonly nativeCamera?: boolean } = {}) {
     const portrait = new Image();
     portrait.src = portraitUrl;
     await portrait.decode();
-    const camera = syntheticCamera(portrait, inputWidth);
+    const nativeStream = nativeCamera ? await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 } }) : undefined;
+    const nativeTrack = nativeStream?.getVideoTracks()[0];
+    if (nativeTrack) {
+      const settings = nativeTrack.getSettings();
+      nativeTrack.getSettings = () => ({ ...settings, deviceId: "proof-camera" });
+    }
+    const camera = nativeTrack ? { track: nativeTrack, stop: () => nativeTrack.stop() } : syntheticCamera(portrait, inputWidth);
     const source = camera.track;
     const raw = new MediaStream([source]);
     const processed = await processCameraStream(raw);
@@ -43,14 +49,16 @@ class CameraBackgroundFixture extends HTMLElement {
         }),
       );
     };
-    await sending.setLocalDescription(await sending.createOffer());
-    await gather(sending);
-    if (!sending.localDescription) throw new Error("Missing offer");
-    await receiving.setRemoteDescription(sending.localDescription);
-    await receiving.setLocalDescription(await receiving.createAnswer());
-    await gather(receiving);
-    if (!receiving.localDescription) throw new Error("Missing answer");
-    await sending.setRemoteDescription(receiving.localDescription);
+    if (requireRemote) {
+      await sending.setLocalDescription(await sending.createOffer());
+      await gather(sending);
+      if (!sending.localDescription) throw new Error("Missing offer");
+      await receiving.setRemoteDescription(sending.localDescription);
+      await receiving.setLocalDescription(await receiving.createAnswer());
+      await gather(receiving);
+      if (!receiving.localDescription) throw new Error("Missing answer");
+      await sending.setRemoteDescription(receiving.localDescription);
+    }
     const root = document.getElementById("root");
     if (!root) throw new Error("Missing root");
     root.replaceChildren(this);
@@ -64,10 +72,12 @@ class CameraBackgroundFixture extends HTMLElement {
     this.appendChild(heading);
     const views = document.createElement("div");
     views.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px";
-    for (const [label, video] of [
-      ["Local", local],
-      ["Remote", remote],
-    ] as const) {
+    for (const [label, video] of (
+      [
+        ["Local", local],
+        ["Remote", remote],
+      ] as const
+    ).filter(([label]) => requireRemote || label === "Local")) {
       const view = document.createElement("div");
       const title = document.createElement("h2");
       title.textContent = label;
@@ -104,7 +114,11 @@ class CameraBackgroundFixture extends HTMLElement {
       },
       id,
       source() {
-        return { live: source.readyState === "live", sameTrack: track === source };
+        const { width, height, frameRate } = source.getSettings();
+        return { live: source.readyState === "live", sameTrack: track === source, width, height, frameRate };
+      },
+      backgroundState() {
+        return { selected: getCameraBackground("proof-camera"), fallbackFps: getCameraBackgroundFallback("proof-camera") };
       },
       lifecycle() {
         track.enabled = false;

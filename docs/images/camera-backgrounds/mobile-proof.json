@@ -1,0 +1,55 @@
+{
+  "browsers": [
+    {
+      "engine": "webkit",
+      "version": "26.5",
+      "supported": false,
+      "effects": [],
+      "backgroundHidden": true,
+      "cameraAdvances": true,
+      "cameraLive": true,
+      "errors": []
+    },
+    {
+      "engine": "firefox",
+      "version": "153.0",
+      "supported": false,
+      "effects": [],
+      "backgroundHidden": true,
+      "cameraAdvances": true,
+      "cameraLive": true,
+      "errors": []
+    }
+  ],
+  "throttle": {
+    "rate": 8,
+    "completedEffectFps": 7.738690226679019,
+    "plainCameraFps": 30.08842732298713,
+    "elapsedSecondsIncludingLoad": 6.076248056000001,
+    "selected": "none",
+    "input": {
+      "live": true,
+      "sameTrack": false,
+      "width": 1280,
+      "height": 720,
+      "frameRate": 30
+    },
+    "sourceLive": true,
+    "publicationRetained": true,
+    "remoteFramesContinue": true,
+    "lazyOnJoin": true,
+    "initialEffectRequests": [],
+    "effectRequestsAfterSelection": [
+      "/@fs/tmp/camera-followup-vite-v2/deps/@mediapipe_tasks-vision.js?v=8cf0bafe",
+      "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.js",
+      "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.wasm",
+      "/camera-effects/selfie-segmenter-landscape.490e9ea73431.tflite"
+    ],
+    "keyboardRing": {
+      "child": "0px",
+      "parent": "2px",
+      "radius": "999px"
+    },
+    "errors": []
+  }
+}
