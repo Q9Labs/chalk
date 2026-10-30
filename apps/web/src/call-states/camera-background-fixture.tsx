@@ -33,9 +33,7 @@ class CameraBackgroundFixture extends HTMLElement {
     const source = raw.getVideoTracks()[0];
     if (!source) throw new Error("Missing camera track");
     source.getSettings = () => ({ deviceId: "proof-camera", width: 1280, height: 720, frameRate: 30 });
-    console.log("Camera proof: processing capture");
     const processed = await processCameraStream(raw);
-    console.log("Camera proof: capture processed");
     const track = processed.getVideoTracks()[0];
     if (!track || track === source) throw new Error("Camera effects were not installed");
     const local = document.createElement("video");
@@ -71,7 +69,6 @@ class CameraBackgroundFixture extends HTMLElement {
     await gather(receiving);
     if (!receiving.localDescription) throw new Error("Missing answer");
     await sending.setRemoteDescription(receiving.localDescription);
-    console.log("Camera proof: peers negotiated");
     const root = document.getElementById("root");
     if (!root) throw new Error("Missing root");
     root.replaceChildren(this);
@@ -104,7 +101,6 @@ class CameraBackgroundFixture extends HTMLElement {
     this.appendChild(controls);
     const react = createRoot(controls);
     react.render(<PreviewDevicePopover type="video" isActive onToggle={() => {}} devices={[{ deviceId: "proof-camera", label: "Camera", kind: "videoinput" }]} selectedDeviceId="proof-camera" onDeviceChange={() => {}} track={track} orientation="down" />);
-    console.log("Camera proof: playing video");
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -116,7 +112,6 @@ class CameraBackgroundFixture extends HTMLElement {
     } finally {
       clearTimeout(timeout);
     }
-    console.log("Camera proof: video playing");
     const id = publication.mid;
     return {
       async background(value: CameraBackground) {
