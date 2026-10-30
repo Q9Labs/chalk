@@ -13,6 +13,14 @@ The React Native SDK adds `parseChalkInviteLink`, which reads short links, bare
 codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
 `parseInviteCode`.
 
+## 5.3.0
+
+- Let one person join an Episode from several devices, with verified identity and device hints, automatic microphone mute on the additional device, and no playback of their own audio.
+- Recover bounded receive stalls and failed sender closes while preserving working media.
+- Preserve the original SFU transport failure and return HTTP 499 for caller cancellation.
+- Retain timestamped transport diagnostics in encrypted real-call proof evidence.
+- Advance the seven synchronized Chalk SDK packages to 5.3.0.
+
 ## 5.2.6
 
 - Reuse microphone and camera senders after short browser capture interruptions, keeping capture disabled until a fresh user enable. Republish after long interruptions before trusting an expired provider track, and detach again if capture is interrupted during reattachment. Report interrupted owned capture as unavailable to other participants through the existing Sync pause command. Include a bounded replacement cause on the first SFU track request after a media connection is replaced.
