@@ -6,16 +6,20 @@
       "reactTarballBytes": 172148,
       "initialJsBytes": 1586329,
       "initialJsGzipBytes": 474750,
-      "demoInitialJsBytes": 18659096,
-      "demoInitialJsGzipBytes": 3982517,
+      "demoInitialJsBytes": 18659102,
+      "demoInitialJsGzipBytes": 3982685,
       "initialScripts": [
         {
-          "path": "/assets/rolldown-runtime-BHe-jwch.js",
-          "gzipKiB": 0.546875
+          "path": "/assets/not-found-i5RsCZif.js",
+          "gzipKiB": 0.1083984375
         },
         {
           "path": "/assets/react-Dk4GeZMQ.js",
           "gzipKiB": 2.818359375
+        },
+        {
+          "path": "/assets/rolldown-runtime-BHe-jwch.js",
+          "gzipKiB": 0.546875
         },
         {
           "path": "/assets/lazyRouteComponent-BGC7luh-.js",
@@ -24,10 +28,6 @@
         {
           "path": "/assets/useMatch-CM1xLdt9.js",
           "gzipKiB": 1.9150390625
-        },
-        {
-          "path": "/assets/link-B66UOGbR.js",
-          "gzipKiB": 2.9501953125
         },
         {
           "path": "/assets/root-DLTE-HSj.js",
@@ -46,8 +46,8 @@
           "gzipKiB": 0.6796875
         },
         {
-          "path": "/assets/not-found-i5RsCZif.js",
-          "gzipKiB": 0.1083984375
+          "path": "/assets/link-B66UOGbR.js",
+          "gzipKiB": 2.9501953125
         },
         {
           "path": "/assets/index--XCiCMTV.js",
@@ -58,16 +58,16 @@
           "gzipKiB": 0.6591796875
         },
         {
-          "path": "/assets/manifest-DBIVLcm7.js",
-          "gzipKiB": 3.095703125
+          "path": "/assets/_space-DKiEJAFk.js",
+          "gzipKiB": 5.9189453125
         },
         {
           "path": "/assets/head-DPyl6x8u.js",
           "gzipKiB": 0.3544921875
         },
         {
-          "path": "/assets/_space-DKiEJAFk.js",
-          "gzipKiB": 5.9189453125
+          "path": "/assets/manifest-DBIVLcm7.js",
+          "gzipKiB": 3.095703125
         },
         {
           "path": "/assets/PrivacyNotice-C6VRUyjp.js",
@@ -100,11 +100,11 @@
       ]
     },
     "head": {
-      "reactTarballBytes": 173068,
-      "initialJsBytes": 1598424,
-      "initialJsGzipBytes": 478906,
-      "demoInitialJsBytes": 18685866,
-      "demoInitialJsGzipBytes": 3989074,
+      "reactTarballBytes": 173185,
+      "initialJsBytes": 1598453,
+      "initialJsGzipBytes": 478910,
+      "demoInitialJsBytes": 18685895,
+      "demoInitialJsGzipBytes": 3989075,
       "initialScripts": [
         {
           "path": "/assets/rolldown-runtime-BHe-jwch.js",
@@ -135,10 +135,6 @@
           "gzipKiB": 0.05078125
         },
         {
-          "path": "/assets/index-DBFIqkmx.js",
-          "gzipKiB": 96.2734375
-        },
-        {
           "path": "/assets/preload-helper-Czpn1I53.js",
           "gzipKiB": 0.6591796875
         },
@@ -151,28 +147,32 @@
           "gzipKiB": 0.2529296875
         },
         {
+          "path": "/assets/head-DPyl6x8u.js",
+          "gzipKiB": 0.3544921875
+        },
+        {
           "path": "/assets/site-head-C6bjMzUP.js",
           "gzipKiB": 0.6796875
         },
         {
-          "path": "/assets/head-DPyl6x8u.js",
-          "gzipKiB": 0.3544921875
+          "path": "/assets/index-Dfz5I0z1.js",
+          "gzipKiB": 96.2705078125
         },
         {
           "path": "/assets/manifest-DBIVLcm7.js",
           "gzipKiB": 3.095703125
         },
         {
-          "path": "/assets/_space-BVm4D-3u.js",
-          "gzipKiB": 5.9189453125
-        },
-        {
-          "path": "/assets/PrivacyNotice-BZfVBuNa.js",
-          "gzipKiB": 0.5869140625
+          "path": "/assets/_space-9quLw-OQ.js",
+          "gzipKiB": 5.919921875
         },
         {
           "path": "/assets/client-DJ2h_Du_.js",
           "gzipKiB": 1.60546875
+        },
+        {
+          "path": "/assets/PrivacyNotice-DFB5VFm_.js",
+          "gzipKiB": 0.5859375
         },
         {
           "path": "/assets/with-selector-CGygPV8s.js",
@@ -183,25 +183,25 @@
           "gzipKiB": 62.900390625
         },
         {
-          "path": "/assets/problem-reports-BkC7_qJa.js",
-          "gzipKiB": 271.0244140625
+          "path": "/assets/problem-reports-L0NSLkrD.js",
+          "gzipKiB": 271.0302734375
+        },
+        {
+          "path": "/assets/floating-ui.react-dom-C9-eAg8k.js",
+          "gzipKiB": 8.1962890625
         },
         {
           "path": "/assets/Facehash-BTQFdUSV.js",
           "gzipKiB": 5.2626953125
-        },
-        {
-          "path": "/assets/floating-ui.react-dom-C_TQJAGE.js",
-          "gzipKiB": 8.1953125
         }
       ]
     }
   },
   "added": {
-    "reactTarballBytes": 920,
-    "initialJsBytes": 12095,
-    "initialJsGzipBytes": 4156,
-    "demoInitialJsBytes": 26770,
-    "demoInitialJsGzipBytes": 6557
+    "reactTarballBytes": 1037,
+    "initialJsBytes": 12124,
+    "initialJsGzipBytes": 4160,
+    "demoInitialJsBytes": 26793,
+    "demoInitialJsGzipBytes": 6390
   }
 }

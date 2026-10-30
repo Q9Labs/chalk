@@ -3,8 +3,9 @@
 The [contact sheet](./contact-sheet.png) shows None, the real camera picker,
 local and SFU-received Blur and Office, phone viewport controls, the slow-device
 fallback message, and WebKit's camera picker without Background. The final row
-compares the old chevron outline with keyboard focus on the entire split button.
-Pointer clicks have no focus ring.
+compares the old full-width row outline with keyboard focus on the content-sized
+split button. The group measures 96 px at phone width, equal to its two buttons.
+Mouse and touch clicks have no focus ring.
 
 The subject is a fictional adult generated for this repository. The opaque
 1280 × 720 image fills the camera frame without transparent padding. Its
@@ -40,6 +41,21 @@ hardware, because those devices were not available. A narrow desktop viewport
 and CPU throttling are not measurements of a physical phone. React Native is
 outside this change.
 
+## Browser proof race
+
+The previous proof waited for eight frames and screenshots before comparing
+Blur pixels. On a slow runner the 15 fps guard could restore None before that
+comparison, so correct fallback failed the test. A controlled run pinned the
+browser to one CPU alongside two CPU load processes: the old proof failed with
+None selected and a measured fallback rate of 1.23 fps.
+
+The proof now observes the first decoded processed pixels while the requested
+background is selected. Office must differ from both the plain camera and Blur;
+the pixel-difference threshold remains 12. The revised proof passed at both
+1440 × 900 and 390 × 844 under the same controlled load. No retries or guard
+bypasses were added. Child-process stdout, stderr, and Xvfb diagnostics are
+retained on failure.
+
 ## Slow-device guard
 
 The processor allows one second of warm-up, then measures completed output
@@ -52,9 +68,9 @@ an effect again clears the message and starts a new measurement.
 The [mobile report](./mobile-proof.json) records an 8× Chromium CPU throttle on
 Instabox (4 vCPU, software graphics), using a native 1280 × 720, 30 fps Y4M fake
 camera. The native source avoids conflating a throttled JavaScript fixture timer
-with slow processing. Blur completed **7.74 fps**, triggered fallback **6.08 s**
+with slow processing. Blur completed **7.54 fps**, triggered fallback **6.33 s**
 after selection including model loading, and the remote plain camera then
-decoded **30.09 fps** during a two-second sample under the same throttle. The
+decoded **28.36 fps** during a two-second sample under the same throttle. The
 publication and track were unchanged; the source stayed live and remote frames
 continued. All page-error arrays were empty.
 
@@ -87,11 +103,11 @@ includes the initial-script list. Neither build is a runtime-download total.
 
 | Artifact                   | Before (bytes) | After (bytes) |  Added | Change |
 | -------------------------- | -------------: | ------------: | -----: | -----: |
-| Packed chalk-react tarball |        172,148 |       173,068 |    920 |  0.53% |
-| Web initial JS, raw        |      1,586,329 |     1,598,424 | 12,095 |  0.76% |
-| Web initial JS, gzip       |        474,750 |       478,906 |  4,156 |  0.88% |
-| SDK demo initial JS, raw   |     18,659,096 |    18,685,866 | 26,770 |  0.14% |
-| SDK demo initial JS, gzip  |      3,982,517 |     3,989,074 |  6,557 |  0.16% |
+| Packed chalk-react tarball |        172,148 |       173,185 |  1,037 |  0.60% |
+| Web initial JS, raw        |      1,586,329 |     1,598,453 | 12,124 |  0.76% |
+| Web initial JS, gzip       |        474,750 |       478,910 |  4,160 |  0.88% |
+| SDK demo initial JS, raw   |     18,659,102 |    18,685,895 | 26,793 |  0.14% |
+| SDK demo initial JS, gzip  |      3,982,685 |     3,989,075 |  6,390 |  0.16% |
 
 Reproduce with `turbo run build --filter=web... --concurrency=1`,
 `pnpm --filter @chalk/sdk-web-consumer-e2e consumer:build`, and `pnpm pack` in

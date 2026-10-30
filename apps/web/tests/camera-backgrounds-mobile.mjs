@@ -87,7 +87,7 @@ const browser = await chromium.launch({
   ],
 });
 try {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, reducedMotion: "reduce" });
   const page = await context.newPage();
   const requests = [];
   const errors = [];
@@ -100,20 +100,37 @@ try {
   assert.equal(initialEffectRequests.length, 0, "Joining with None must not load MediaPipe, its model, or WASM");
   const initial = await page.evaluate(() => window.cameraBackgroundProof.publication());
   const camera = page.getByRole("button", { name: "Select camera", exact: true });
-  await camera.click();
-  assert.equal(await camera.evaluate((button) => button.matches(":focus-visible")), false);
-  assert.equal(await camera.evaluate((button) => getComputedStyle(button.closest(".chalk-shell-split")).outlineStyle), "none");
-  await page.keyboard.press("Escape");
+  const dismissWithPointer = async (pointer = "mouse") => {
+    if (pointer === "touch") await camera.tap();
+    else await camera.click();
+    await page.getByRole("menu").waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.activeElement === document.querySelector('button[aria-label="Select camera"]'));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector(".chalk-shell-split")).outlineStyle === "none");
+  };
+  for (const pointer of ["mouse", "touch"]) {
+    if (pointer === "mouse") await camera.click();
+    else await camera.tap();
+    assert.equal(await camera.evaluate((button) => button.matches(":focus-visible")), false);
+    assert.equal(await camera.evaluate((button) => getComputedStyle(button.closest(".chalk-shell-split")).outlineStyle), "none");
+    await dismissWithPointer(pointer);
+  }
   await camera.press("Tab");
   await page.keyboard.press("Shift+Tab");
   await page.waitForFunction(() => {
     const button = document.querySelector('button[aria-label="Select camera"]');
     return button.matches(":focus-visible") && getComputedStyle(button).outlineWidth === "0px" && getComputedStyle(button.closest(".chalk-shell-split")).outlineWidth === "2px";
   });
-  const ring = await camera.evaluate((button) => ({ child: getComputedStyle(button).outlineWidth, parent: getComputedStyle(button.closest(".chalk-shell-split")).outlineWidth, radius: getComputedStyle(button.closest(".chalk-shell-split")).borderRadius }));
+  const ring = await camera.evaluate((button) => ({
+    child: getComputedStyle(button).outlineWidth,
+    parent: getComputedStyle(button.closest(".chalk-shell-split")).outlineWidth,
+    radius: getComputedStyle(button.closest(".chalk-shell-split")).borderRadius,
+    groupWidth: button.closest(".chalk-shell-split").getBoundingClientRect().width,
+    buttonsWidth: button.getBoundingClientRect().width + button.closest(".chalk-shell-split").querySelector(".chalk-shell-main").getBoundingClientRect().width,
+  }));
   assert.equal(ring.child, "0px");
   assert.equal(ring.parent, "2px");
   assert.equal(ring.radius, "999px");
+  assert.equal(ring.groupWidth, ring.buttonsWidth, "The group and its ring must fit the two buttons");
   await page.screenshot({ path: resolve(directory, "keyboard-focus-phone.png") });
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate });
@@ -136,8 +153,10 @@ try {
   const last = await page.evaluate(async () => (await window.cameraBackgroundProof.stats()).framesDecoded);
   const plainCameraFps = ((last - first) * 1000) / (performance.now() - sampleStarted);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
-  await page.keyboard.press("Escape");
+  await dismissWithPointer();
   await page.getByRole("status").filter({ hasText: "Background off to keep video smooth." }).waitFor();
+  const notice = await page.getByRole("status").filter({ hasText: "Background off to keep video smooth." }).boundingBox();
+  assert(notice && notice.x >= 0 && notice.x + notice.width <= 390, "Fallback text must fit the phone viewport");
   await page.screenshot({ path: resolve(directory, "fallback-phone.png") });
   assert.deepEqual(errors, []);
   report.throttle = {
@@ -154,9 +173,17 @@ try {
     initialEffectRequests,
     effectRequestsAfterSelection: requests.filter(runtimeAsset).map((url) => url.replace(origin, "")),
     keyboardRing: ring,
+    mouseRing: false,
+    touchRing: false,
     errors,
   };
   await save();
+  await camera.click();
+  await page.getByRole("menuitemradio", { name: "Office", exact: true }).click();
+  await page.waitForFunction(() => window.cameraBackgroundProof.backgroundState().selected === "modern-acoustic-office");
+  await advance(page);
+  await dismissWithPointer();
+  await page.screenshot({ path: resolve(directory, "office-phone.png") });
   await page.evaluate(() => window.cameraBackgroundProof.dispose());
 } finally {
   await browser.close();

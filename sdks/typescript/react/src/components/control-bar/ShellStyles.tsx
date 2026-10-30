@@ -22,7 +22,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   flex-shrink: 0;
 }
 .chalk-shell-split {
-  display: flex;
+  display: inline-flex;
+  width: max-content;
   height: 44px;
   border-radius: 999px;
   background: var(--chalk-raised);

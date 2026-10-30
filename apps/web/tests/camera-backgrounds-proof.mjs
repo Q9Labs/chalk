@@ -57,31 +57,45 @@ try {
       console.log("Frame failure", await page.evaluate(() => ({ publication: window.cameraBackgroundProof.publication(), frames: window.cameraBackgroundProof.frames() })));
       throw error;
     });
+    const waitForProcessedPixels = async (background, references) => {
+      const frame = await page.waitForFunction(
+        ({ background, references, localOnly }) => {
+          if (window.cameraBackgroundProof.backgroundState().selected !== background) return false;
+          const pixels = window.cameraBackgroundProof.pixels(localOnly);
+          const differences = references.map((previous) => {
+            let sum = 0;
+            for (let i = 0; i < pixels.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2]);
+            return sum / (24 * 72 * 3);
+          });
+          return differences.every((difference) => difference > 12) ? { pixels, differences } : false;
+        },
+        { background, references, localOnly },
+      );
+      const decoded = await frame.jsonValue();
+      console.log("Decoded processed background", background, decoded.differences);
+      return decoded.pixels;
+    };
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
     await page.getByRole("button", { name: "Select camera", exact: true }).click();
     await page.getByRole("menuitemradio", { name: "Blur", exact: true }).click();
-    await page.getByRole("menuitemradio", { name: "Blur", exact: true }).waitFor();
-    await page.waitForFunction(() => !document.querySelector('[role="status"]')?.textContent?.includes("Loading background"));
-    await pauseForFrames();
+    const blurred = await waitForProcessedPixels("blur", [original]);
     await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
     await page.keyboard.press("Escape");
     await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
-    const blurred = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
-    const difference = (a, b) => {
-      let sum = 0;
-      for (let i = 0; i < a.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
-      return sum / (24 * 72 * 3);
-    };
-    assert(difference(original, blurred) > 12, "Remote Blur must change background pixels");
     await page.getByRole("button", { name: "Select camera", exact: true }).click();
     await page.getByRole("menuitemradio", { name: "Office", exact: true }).click();
-    await page.waitForFunction(() => !document.querySelector('[role="status"]')?.textContent?.includes("Loading background"));
-    await pauseForFrames();
-    await page.keyboard.press("Escape");
+    await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
+    await page.getByRole("button", { name: "Select camera", exact: true }).click();
+    await page.getByRole("menu").waitFor({ state: "hidden" });
+    const cameraGroup = await page.locator(".chalk-shell-split").evaluate((group) => ({
+      width: group.getBoundingClientRect().width,
+      buttonsWidth: [...group.querySelectorAll("button")].reduce((width, button) => width + button.getBoundingClientRect().width, 0),
+      outline: getComputedStyle(group).outlineStyle,
+    }));
+    assert.equal(cameraGroup.width, cameraGroup.buttonsWidth, "Camera group must fit its buttons");
+    assert.equal(cameraGroup.outline, "none", "Pointer dismissal must not show keyboard focus");
     await page.screenshot({ path: resolve(artifacts, `office-${viewport.width}.png`) });
-    const replaced = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
-    assert(difference(blurred, replaced) > 12, "Remote replacement must differ from Blur");
     const publication = await page.evaluate(() => window.cameraBackgroundProof.publication());
     if (!localOnly) assert.deepEqual(publication, initial, "Switching effects must keep the same sender, track, and publication");
     if (!localOnly && viewport.width === 1440 && process.env.CAMERA_EFFECTS_HEADFUL === "1") {

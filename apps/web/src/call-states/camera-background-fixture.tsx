@@ -89,7 +89,7 @@ class CameraBackgroundFixture extends HTMLElement {
     }
     this.appendChild(views);
     const controls = document.createElement("div");
-    controls.style.cssText = "padding-top:24px";
+    controls.style.cssText = "padding-top:24px;text-align:center";
     this.appendChild(controls);
     const react = createRoot(controls);
     react.render(<PreviewDevicePopover type="video" isActive onToggle={() => {}} devices={[{ deviceId: "proof-camera", label: "Camera", kind: "videoinput" }]} selectedDeviceId="proof-camera" onDeviceChange={() => {}} track={track} orientation="down" />);
