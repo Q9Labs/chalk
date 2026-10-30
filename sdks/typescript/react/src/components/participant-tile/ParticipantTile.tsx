@@ -98,6 +98,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const prefersReducedMotion = usePrefersReducedMotion();
   const phone = useMediaQuery("(max-width:640px)");
   const [localMirrored] = useMirrorSetting();
+  const [deviceLabel, ...deviceDetails] = participant.deviceHint?.split(" · ") ?? [];
   const mirrored = mirror ?? (participant.isLocal === true && localMirrored);
   const colors = useMemo(() => getParticipantColor(participant.displayName || participant.id, gradientPreference), [gradientPreference, participant.displayName, participant.id]);
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
@@ -168,8 +169,9 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               </>
             )}
             {participant.deviceHint ? (
-              <span data-part="tile-device" className="min-w-0 truncate text-[11px] opacity-80">
-                {participant.deviceHint}
+              <span data-part="tile-device" className="inline-flex min-w-[70px] text-[11px] opacity-80">
+                <span className="min-w-0 truncate">{deviceLabel}</span>
+                {deviceDetails.length > 0 && <span className="shrink-0">{` · ${deviceDetails.join(" · ")}`}</span>}
               </span>
             ) : null}
             {following ? (
