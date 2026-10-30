@@ -3,10 +3,6 @@ type FrameProcessor = new (options: { track: MediaStreamTrack; maxBufferSize: nu
 type FrameGenerator = new (options: { kind: "video" }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> };
 const environment = globalThis as typeof globalThis & { MediaStreamTrackProcessor?: FrameProcessor; MediaStreamTrackGenerator?: FrameGenerator };
 
-export function cameraFrameProcessingSupported(): boolean {
-  return typeof environment.MediaStreamTrackProcessor === "function" && typeof environment.MediaStreamTrackGenerator === "function" && typeof VideoFrame === "function";
-}
-
 /** Frame arrival drives processing even when the document is not being rendered. */
 export function createCameraFrameSource(source: MediaStreamTrack) {
   const Processor = environment.MediaStreamTrackProcessor;

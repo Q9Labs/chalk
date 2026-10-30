@@ -16,7 +16,7 @@ const install = async (page) => {
     await route.fulfill({ body: await readFile(new URL(`../src/call-states/camera-fixtures/${name}`, import.meta.url)), contentType: name.endsWith(".avif") ? "image/avif" : "image/webp", headers: { "Access-Control-Allow-Origin": "*" } });
   });
 };
-const runtimeAsset = (url) => /mediapipe|vision_wasm|selfie-segmenter/.test(url);
+const runtimeAsset = (url) => /camera-effects-provider|mediapipe|vision_wasm|selfie-segmenter/.test(url);
 const mount = async (page, options) => {
   await page.goto(`${origin}/camera-backgrounds-proof.html`);
   await page.waitForFunction(() => customElements.get("chalk-camera-background-fixture"));

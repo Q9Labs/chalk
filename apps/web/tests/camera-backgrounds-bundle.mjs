@@ -10,7 +10,7 @@ import { measureRouteBundle } from "../scripts/call-route-bundle.mjs";
 const [baseRoot, headRoot, baseArchive, headArchive, output] = process.argv.slice(2);
 assert(output, "Pass base/head repository paths, base/head React tarballs, and an output JSON path");
 const browser = await chromium.launch();
-const report = { route: "/space/performance-budget", baseline: "2ec22c54", builds: {}, added: {} };
+const report = { route: "/space/performance-budget", baseline: execFileSync("git", ["rev-parse", "HEAD"], { cwd: baseRoot, encoding: "utf8" }).trim(), head: execFileSync("git", ["rev-parse", "HEAD"], { cwd: headRoot, encoding: "utf8" }).trim(), builds: {}, added: {} };
 try {
   for (const [label, root, archive] of [
     ["base", baseRoot, baseArchive],
@@ -21,7 +21,7 @@ try {
     const scripts = measured.loaded.filter(({ path }) => path.endsWith(".js"));
     let initialJsBytes = 0;
     for (const { path } of scripts) initialJsBytes += (await readFile(resolve(web, `dist/client${path}`))).length;
-    assert(!scripts.some(({ path }) => /vision_bundle|vision_wasm|selfie-segmenter/.test(path)), "No segmentation runtime in initial JS");
+    assert(!scripts.some(({ path }) => /camera-effects-provider|vision_bundle|vision_wasm|selfie-segmenter/.test(path)), "No segmentation runtime in initial JS");
     const files = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" }).trim().split("\n");
     assert(!files.some((file) => /\.(wasm|tflite|avif|webp|jpg)$/.test(file)), "React tarball must not contain model, WASM or pictures");
     const demo = await readFile(resolve(root, "tools/sdk-web-consumer-e2e/consumer/dist/bundle.js"));
