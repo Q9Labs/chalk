@@ -38,15 +38,11 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       let packets = 0;
       vi.spyOn(original, "getStats").mockImplementation(async () => {
         packets++;
-        return new Map(
-          harness.client
-            .getSnapshot()
-            .remoteTracks.map((publication) => [
-              publication.track.id,
-              { id: publication.track.id, timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: publication.track.id, kind: publication.track.kind, packetsReceived: all || publication.source === "microphone" ? 10 : packets, codecId: "codec" },
-            ])
-            .concat([["codec", { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" }]]),
-        );
+        const rows = harness.client
+          .getSnapshot()
+          .remoteTracks.map((publication) => ({ id: publication.track.id, timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: publication.track.id, kind: publication.track.kind, packetsReceived: all || publication.source === "microphone" ? 10 : packets, codecId: "codec" }));
+        const codec = { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+        return new Map<string, RTCStats>([...rows.map((row) => [row.id, row] as const), ["codec", codec]]);
       });
       const originalPulls = harness.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(24_000);
@@ -60,6 +56,37 @@ it.each([false, true])("recovers connected receive stalls through the existing p
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
   );
+});
+
+it.each(["publisher-muted", "dtx", "hidden", "pull-grace", "silence"] as const)("does not recover intentional or unobserved receive gaps: %s", async (mode) => {
+  try {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote", "0", "microphone") };
+        harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+        harness.client.remotePublicationsChanged([{ ...publication, enabled: mode !== "publisher-muted" }]);
+        await harness.client.refreshRemotePublications();
+        const remote = harness.client.getSnapshot().remoteTracks[0]!;
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(async () => {
+          const inbound = { id: "inbound", timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: remote.track.id, packetsReceived: mode === "silence" ? Math.floor(performance.now() / 10_000) : 10, bytesReceived: performance.now(), codecId: "codec" };
+          const codec = { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: mode === "dtx" ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" };
+          return new Map<string, RTCStats>([
+            ["inbound", inbound],
+            ["codec", codec],
+          ]);
+        });
+        if (mode === "hidden") vi.stubGlobal("document", { visibilityState: "hidden" });
+        const pulls = harness.transport.addInputs.length;
+        await vi.advanceTimersByTimeAsync(mode === "pull-grace" ? 19_000 : 45_000);
+        expect(harness.peers).toHaveLength(1);
+        expect(harness.transport.addInputs).toHaveLength(pulls);
+      },
+      { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
+    );
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add when its response arrives after same-binding restart", async (source) => {
