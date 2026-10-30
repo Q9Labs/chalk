@@ -8,7 +8,8 @@ it.each([
   { variant: "desktop", phone: false },
   { variant: "phone", phone: true },
 ])("shows the full call name in the $variant trigger title", async ({ phone }) => {
-  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ matches: phone && query === "(max-width: 640px)", media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({ matches: query === "(max-width: 640px)" ? phone : !phone && query === "(pointer:fine)", media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => true }));
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -27,5 +28,6 @@ it.each([
     await act(async () => root.unmount());
     container.remove();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   }
 });
