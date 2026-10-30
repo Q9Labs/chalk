@@ -28,6 +28,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.Stateholder.Postgres.Lifecycle
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.ParticipantAuthority
+  alias ChalkSync.Stateholder.Postgres.ParticipantDevices
   alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.PublicationGrants
   alias ChalkSync.Stateholder.Postgres.RecoveryReader
@@ -259,6 +260,10 @@ defmodule ChalkSync.Stateholder.Postgres do
              (is_nil(expected_generation) or
                 (is_integer(expected_generation) and expected_generation > 0)),
       do: ParticipantAuthority.participant_authority(episode, participant_id, expected_generation)
+
+  @impl ChalkSync.Stateholder
+  def participant_devices(%EpisodeKey{} = episode),
+    do: ParticipantDevices.list(episode)
 
   @impl ChalkSync.Stateholder
   def media_pauses(%EpisodeKey{} = episode) do

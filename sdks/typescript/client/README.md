@@ -77,7 +77,7 @@ unsubscribe();
 `SpaceSnapshot` contains these slices:
 
 - `connection`: status, live Episode summary, and the latest failure
-- `self`: local Participant identity, role, capabilities, hand state, and `can(capability)`
+- `self`: local Participant and verified person Identity, role, capabilities, hand state, and `can(capability)`
 - `participants`: roster and admission queue
 - `media`: device selection, local and remote media, screen share, and requests
 - `chat`: messages, pending sends, read receipts, unread count, and pagination

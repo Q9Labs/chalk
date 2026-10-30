@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { choosePrimary, floatingSpeakerId, speakingParticipantId, type StageItem, type PrimaryContext } from "./stage-items";
+import { buildStageItems, gridOrder, stabilizeOrder, choosePrimary, floatingSpeakerId, speakingParticipantId, type StageItem, type PrimaryContext } from "./stage-items";
 import { DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid, fitSpotlight, MORE_TILE_ID } from "./stage-layout";
 
 const person: StageItem = { kind: "participant", id: "person", participant: { id: "person", displayName: "Nora", isActiveSpeaker: true } };
@@ -207,4 +207,40 @@ it.each([1, 2, 3])("keeps the secondary cap on phone/desktop strips, slim strips
       expect(geometry.overflowCount).toBe(ids.filter((id) => !geometry.frames.some((frame) => frame.id === id)).length);
     }
   }
+});
+
+describe("other devices belonging to the local person", () => {
+  const own: StageItem = { kind: "participant", id: "own-phone", participant: { id: "own-phone", displayName: "Teacher", isOwnDevice: true } };
+  const local: StageItem = { kind: "participant", id: "self", participant: { id: "self", displayName: "Teacher", isLocal: true } };
+  const learner: StageItem = { kind: "participant", id: "learner", participant: { id: "learner", displayName: "Learner" } };
+
+  it.each([{ isActiveSpeaker: true }, { isSpeaking: true }, {}])("never stages an own-device face, even if pinned or remembered: %j", (activity) => {
+    const device: StageItem = { ...own, participant: { ...own.participant, ...activity } };
+    const items = [device, local, learner];
+    expect(choosePrimary(items, { ...context, pinnedId: own.id, lastSpeakerId: own.id })).toBe(learner);
+    expect(speakingParticipantId(items)).toBeUndefined();
+    expect(floatingSpeakerId(items, own.id)).toBeNull();
+    expect(choosePrimary([device], context)).toBeNull();
+  });
+
+  it("keeps an own-device screen share eligible for the main stage", () => {
+    const items = buildStageItems([{ ...own.participant, isScreenSharing: true }, learner.participant], false);
+    expect(choosePrimary(items, context)).toMatchObject({ kind: "screen-share", participant: own.participant });
+  });
+
+  it("puts own-device faces after every other person, including later arrivals and pins", () => {
+    const items = [own, local, learner];
+    expect(stabilizeOrder([own.id, local.id], items).map(({ id }) => id)).toEqual([local.id, learner.id, own.id]);
+    expect(gridOrder(items, own.id).map(({ id }) => id)).toEqual([local.id, learner.id, own.id]);
+  });
+});
+
+it("keeps own-device faces last and small in the phone board column, folding them before other people", () => {
+  const box = { width: 358, height: 692 };
+  const options = { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, floatingPhonePeople: true, speakerId: "phone", localId: "self", ownDeviceIds: ["phone"] };
+  const geometry = fitSpotlight(box, "whiteboard", ["phone", "self", "learner"], options);
+  expect(geometry.frames.map(({ id }) => id)).toEqual(["whiteboard", "learner", "self", "phone"]);
+  expect(geometry.frames.find(({ id }) => id === "phone")?.width).toBe(76);
+  const folded = fitSpotlight(box, "whiteboard", ["phone", "self", "learner", "other"], { ...options, maxPerPage: 3 });
+  expect(folded.frames.map(({ id }) => id)).toEqual(["whiteboard", "learner", "self", MORE_TILE_ID]);
 });

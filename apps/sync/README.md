@@ -285,3 +285,13 @@ The external
 still controls nightly provider drills. The replayable v1 matrix is documented
 in [`apps/sync/docs/sync-breaker-v1.md`](./docs/sync-breaker-v1.md); the complete acceptance
 contract is covered by the checked-in Sync tests and reliability profiles.
+
+## Participant device hints
+
+New web SDKs opt into identity and coarse device hints with the
+`participant_devices=1` WebSocket query. Presence items may then contain
+`identity_id` and `device_type` (`phone`, `tablet`, or `computer`). Identity comes
+from the admitted participant's tenant-scoped database row. Device type is a
+best-effort user-agent hint. These fields do not change the canonical control
+digest. Sockets without the query retain the previous exact presence shape;
+new SDKs also accept presence from older servers without these optional hints.

@@ -116,7 +116,7 @@ export function ParticipantRow({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1.5"></div>
+          {participant.deviceHint ? <div className="text-xs text-[var(--chalk-app-text-muted)]">{participant.deviceHint}</div> : null}
         </div>
       </div>
 

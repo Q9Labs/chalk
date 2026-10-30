@@ -164,12 +164,33 @@ defmodule ChalkSync.Live.Projection do
   end
 
   defp valid_item?(:presence, item) do
-    exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"]) and
+    exact_keys?(
+      item,
+      ["participant_id", "state", "speaking", "active_speaker"] ++
+        Enum.filter(["identity_id", "device_type", "admission_revision"], &Map.has_key?(item, &1))
+    ) and
+      valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
       item["state"] in ["connected", "disconnected"] and
       canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and
-      (item["state"] == "connected" or (not item["speaking"] and not item["active_speaker"]))
+      valid_presence_activity?(item)
   end
+
+  defp valid_presence_activity?(%{"state" => "connected"}), do: true
+  defp valid_presence_activity?(item), do: not item["speaking"] and not item["active_speaker"]
+
+  defp valid_identity_hint?(%{"identity_id" => id}), do: canonical_uuid?(id)
+  defp valid_identity_hint?(_item), do: true
+
+  defp valid_device_hint?(%{"device_type" => device}),
+    do: device in ["phone", "tablet", "computer"]
+
+  defp valid_device_hint?(_item), do: true
+
+  defp valid_admission_hint?(%{"admission_revision" => revision}),
+    do: is_integer(revision) and revision > 0
+
+  defp valid_admission_hint?(_item), do: true
 
   defp valid_publication(true, value), do: is_binary(value) and byte_size(value) in 1..256
   defp valid_publication(false, nil), do: true

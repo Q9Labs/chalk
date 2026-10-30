@@ -133,6 +133,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: {:retryable, :dependency_unavailable}
 
   @impl ChalkSync.Stateholder
+  def participant_devices(%EpisodeKey{} = episode),
+    do: GenServer.call(__MODULE__, {:participant_devices, episode})
+
+  @impl ChalkSync.Stateholder
   def media_pauses(%EpisodeKey{} = episode),
     do: GenServer.call(__MODULE__, {:media_pauses, episode})
 
@@ -190,11 +194,35 @@ defmodule ChalkSync.Stateholder.Memory do
          generation <= issued + if(allocate?, do: 1, else: 0) do
       next = Map.put(generations, key, max(issued, generation))
 
+      identity = remember_device(identity)
+
       {:reply, {:ok, %{identity | entry_generation: generation}},
        Map.put(state, :entry_generations, next)}
     else
       {:reply, {:error, :invalid_admission_intent}, state}
     end
+  end
+
+  def handle_call({:participant_devices, key}, _from, server_state) do
+    items =
+      case :ets.lookup(@episodes, EpisodeKey.authority_key(key)) do
+        [{_, %{state: %{status: "active"}} = episode}] ->
+          for {id, seat} <- episode.state.participants,
+              %{status: :active} = participant <- [episode.participants[id]] do
+            %{
+              participant_id: id,
+              generation: participant.generation,
+              identity_id: Map.get(participant, :identity_id),
+              device_type: Map.get(participant, :device_type),
+              admission_revision: seat.admission_revision
+            }
+          end
+
+        _ ->
+          []
+      end
+
+    {:reply, {:ok, items}, server_state}
   end
 
   def handle_call({:media_pauses, episode}, _from, server_state) do
@@ -537,6 +565,37 @@ defmodule ChalkSync.Stateholder.Memory do
     end)
   end
 
+  defp remember_device(identity) do
+    key = EpisodeKey.authority_key(identity.episode)
+
+    case :ets.lookup(@episodes, key) do
+      [{^key, episode}] ->
+        case episode.participants[identity.participant_id] do
+          %{generation: generation} = participant
+          when generation == identity.participant_generation ->
+            participant = %{participant | device_type: identity.device_type}
+
+            :ets.insert(
+              @episodes,
+              {key,
+               %{
+                 episode
+                 | participants:
+                     Map.put(episode.participants, identity.participant_id, participant)
+               }}
+            )
+
+            %{identity | identity_id: participant.identity_id}
+
+          _ ->
+            identity
+        end
+
+      _ ->
+        identity
+    end
+  end
+
   defp seeded_episode(episode_key, participants) do
     initial = %{
       episode: episode_key,
@@ -576,6 +635,8 @@ defmodule ChalkSync.Stateholder.Memory do
            }) do
       product = %{
         generation: generation,
+        identity_id: Map.get(participant, :identity_id),
+        device_type: Map.get(participant, :device_type),
         status: :active,
         role: role,
         admission_lifecycle_intent_id:

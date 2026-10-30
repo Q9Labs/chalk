@@ -255,3 +255,29 @@ func (q *Queries) LockLiveEpisodeForUpdate(ctx context.Context, arg LockLiveEpis
 	)
 	return i, err
 }
+
+const resolveAdmissionIdentity = `-- name: ResolveAdmissionIdentity :one
+insert into identities (id, tenant_id, kind, external_id, display_name)
+values ($1, $2, 'user', $3, $4)
+on conflict (tenant_id, external_id) do update set external_id = excluded.external_id
+returning id
+`
+
+type ResolveAdmissionIdentityParams struct {
+	ID          pgtype.UUID `json:"id"`
+	TenantID    pgtype.UUID `json:"tenant_id"`
+	ExternalID  string      `json:"external_id"`
+	DisplayName string      `json:"display_name"`
+}
+
+func (q *Queries) ResolveAdmissionIdentity(ctx context.Context, arg ResolveAdmissionIdentityParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveAdmissionIdentity,
+		arg.ID,
+		arg.TenantID,
+		arg.ExternalID,
+		arg.DisplayName,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}

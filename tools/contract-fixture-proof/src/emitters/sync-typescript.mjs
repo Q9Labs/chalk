@@ -171,7 +171,9 @@ function renderTypeScript(contract) {
     "}",
     "function strictProjectionItem(value: unknown, stream: unknown): boolean {",
     "  if (stream === 'media') return exactObject(value, " + JSON.stringify(contract.projectionFrames.mediaSnapshot.items.exactFields) + ");",
-    "  if (stream === 'presence') return exactObject(value, " + JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) + ");",
+    "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
+      JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
+      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : [])]);",
     "  return false;",
     "}",
     "function strictProjection(value: Record<string, unknown>): boolean {",
@@ -183,7 +185,7 @@ function renderTypeScript(contract) {
     "  const extension = Array.isArray(value.extensions) && value.extensions.length === 1 ? value.extensions[0] : undefined;",
     "  const extensionValid = isObject(extension) && ['collaboration_v1', 'collaboration_v2'].includes(String(extension.name)) && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']) && Array.isArray(extension.read_receipts);",
     "  if (Object.hasOwn(value, 'entry_confirmation') && value.entry_confirmation !== true) return false;",
-    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : [])];",
+    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObjectWithCorrelation(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
     "  if (value.mode === 'terminal') return exactObjectWithCorrelation(value, [...fields, 'reason']);",
@@ -375,7 +377,7 @@ function renderTypeScript(contract) {
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
   lines.push(
-    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
+    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
   );
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
@@ -410,7 +412,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.state) +
-      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
+      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), admission_revision: Schema.optional(PositiveIntegerSchema) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
   );
   lines.push(
     "export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal('projection_snapshot'), stream: Schema.Literal('media'), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(" +

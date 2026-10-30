@@ -19,3 +19,16 @@ Admission is distinct from identity. A Guest can be admitted to the current Epis
 </Callout>
 
 Your backend can call `admitEpisodeParticipant` with `admission: "direct"` to admit a Participant and receive access without applying the Space’s `open`, `knock`, or `members_only` admission gate. Omit `admission` (or send `"policy"`) to retain policy-based admission; direct admission still requires `episodes:write` and all normal Tenant, Episode, role, and capacity checks.
+
+### Joining on multiple devices
+
+Admit a separate participant for each device. Reuse that device's admission key
+for retries, and keep its access grants and leave operation scoped to its
+participant. The optional `identityExternalId` admission field resolves a stable
+person key within your tenant; use the same key for each of that person's devices.
+Use either `identityExternalId` or an existing `identityId`.
+
+The web SDK suppresses audio playback from your other devices. A new device starts
+with its microphone off if another live device with the same identity is already
+publishing microphone audio. Each device retains its own assigned role and
+moderation capabilities. Attendance and lifecycle webhooks remain per participant.

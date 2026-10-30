@@ -12559,6 +12559,11 @@
             "enum": ["policy", "direct"],
             "type": "string"
           },
+          "identity_external_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
           "identity_id": {
             "$ref": "#/components/schemas/UUID"
           },

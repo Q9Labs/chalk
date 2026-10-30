@@ -294,6 +294,7 @@ function participantAdmissionRequest(input: AdmitParticipantInput): Record<strin
     name: input.name,
     role: input.role,
     ...(input.identityId === undefined ? {} : { identity_id: input.identityId }),
+    ...(input.identityExternalId === undefined ? {} : { identity_external_id: input.identityExternalId }),
     ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     ...(input.participantId === undefined ? {} : { participant_id: input.participantId }),
   };

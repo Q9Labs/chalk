@@ -73,8 +73,8 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     send(first, {:observation, observation(1)})
     assert_receive {:observing, second, ^episode}, 1_000
     send(second, {:observation, observation(2)})
-    assert_receive {:sync_v1_live_frame, ^coordinator, _}, 1_000
-    assert_receive {:sync_v1_live_frame, ^coordinator, _}, 1_000
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"}}, 1_000
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"}}, 1_000
     assert_converged(coordinator, 2)
     refute_receive {:observing, _, _}, 200
   end
@@ -116,7 +116,7 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     assert_receive {:observing, reader, ^episode}, 3_000
     assert System.monotonic_time(:millisecond) - started >= 14_000
     send(reader, {:observation, observation(1)})
-    assert_receive {:sync_v1_live_frame, ^coordinator, _}, 1_000
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"}}, 1_000
     assert_converged(coordinator, 1)
   end
 
@@ -145,7 +145,7 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     notify(connection, episode)
     assert_receive {:observing, first, ^episode}, 1_000
     send(first, {:observation, observation(1)})
-    assert_receive {:sync_v1_live_frame, ^coordinator, _}, 1_000
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"}}, 1_000
     assert_converged(coordinator, 1)
     notifications = :sys.get_state(listener).notifications
     accepted = TcpFaultProxy.stats(proxy).accepted
@@ -157,7 +157,7 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     assert TcpFaultProxy.stats(proxy).accepted > accepted
     assert :sys.get_state(listener).notifications == notifications
     send(second, {:observation, observation(2)})
-    assert_receive {:sync_v1_live_frame, ^coordinator, _}, 1_000
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"}}, 1_000
     assert_converged(coordinator, 2)
   end
 

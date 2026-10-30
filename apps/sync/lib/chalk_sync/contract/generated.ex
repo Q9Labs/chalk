@@ -984,6 +984,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
+    base = if Map.has_key?(frame, "participant_identity_id"),
+        do: base ++ ["participant_identity_id"], else: base
+    valid_identity = not Map.has_key?(frame, "participant_identity_id") or
+        valid_uuid?(frame["participant_identity_id"])
     valid_generation = not Map.has_key?(frame, "entry_generation") or
         (valid_positive_integer?(frame["entry_generation"]) and
         frame["entry_generation"] <= 9_007_199_254_740_991)
@@ -993,7 +997,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_confirmation"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_generation
+        valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,
@@ -1349,7 +1353,12 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id))
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
-      ["participant_id", "state", "speaking", "active_speaker"]) and valid_uuid?(id) and
+      ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
+      "device_type", "admission_revision"], &Map.has_key?(item, &1))) and (not Map.has_key?(item,
+      "identity_id") or valid_uuid?(item["identity_id"])) and (not Map.has_key?(item,
+      "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and
+      (not Map.has_key?(item, "admission_revision") or
+      valid_positive_integer?(item["admission_revision"])) and valid_uuid?(id) and
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false

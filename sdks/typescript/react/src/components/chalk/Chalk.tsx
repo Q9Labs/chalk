@@ -354,6 +354,11 @@ function SpaceSurface(
       reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
       overlay={
         <>
+          {media.microphoneMutedByOtherDevice ? (
+            <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">
+              <p className="chalk-toast text-center text-sm">Mic off: your other device is using it.</p>
+            </div>
+          ) : null}
           {media.incomingRequests[0] ? (
             <MediaRequestDialog
               request={media.incomingRequests[0]}

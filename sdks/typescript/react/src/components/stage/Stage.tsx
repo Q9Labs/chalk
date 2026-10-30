@@ -156,7 +156,7 @@ export function Stage({
     if (!interactive) {
       seenAtRef.current = new Map(items.map((item, index) => [item.id, index]));
       nextSeenRef.current = items.length;
-      return [...items];
+      return stabilizeOrder([], items);
     }
     // Departed ids are dropped so long calls don't retain every past guest; the
     // counter keeps growing so shares keep their arrival order.
@@ -220,6 +220,7 @@ export function Stage({
         floatingPhonePeople: primary.kind === "whiteboard",
         speakerId,
         localId,
+        ownDeviceIds: remaining.filter((item) => item.kind === "participant" && item.participant.isOwnDevice).map((item) => item.id),
         wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds,
         maxPerPage,
       },

@@ -43,6 +43,7 @@ export interface SpotlightFitOptions {
   readonly floatingPhonePeople?: boolean;
   readonly speakerId?: string | null;
   readonly localId?: string | null;
+  readonly ownDeviceIds?: readonly string[];
 }
 export const WIDESCREEN = 16 / 9;
 export const MORE_TILE_ID = "stage:more";
@@ -164,15 +165,17 @@ const FLOAT_BOTTOM = 8 + 64 + 60;
 function floatPeople(box: StageBox, primaryId: string, stripIds: readonly string[], options: SpotlightFitOptions): StageGeometry | null {
   const content = stripIds.filter((id) => options.wideIds?.includes(id));
   const people = stripIds.filter((id) => !content.includes(id));
-  const speaker = options.speakerId && options.speakerId !== options.localId && people.includes(options.speakerId) ? options.speakerId : null;
+  const ownDevices = people.filter((id) => options.ownDeviceIds?.includes(id));
+  const speaker = options.speakerId && options.speakerId !== options.localId && !ownDevices.includes(options.speakerId) && people.includes(options.speakerId) ? options.speakerId : null;
   const local = options.localId && people.includes(options.localId) ? options.localId : null;
-  const others = people.filter((id) => id !== speaker && id !== local);
-  const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : [])];
+  const others = people.filter((id) => id !== speaker && id !== local && !ownDevices.includes(id));
+  const ordered = [...(speaker ? [speaker] : []), ...others, ...(local ? [local] : []), ...ownDevices];
   const fold = (max: number): readonly string[] => {
     if (content.length + ordered.length <= max) return [...content, ...ordered];
     const shares = content.slice(0, max - 1);
     const slots = max - 1 - shares.length;
-    const faces = ordered.length <= slots ? ordered : slots > 0 ? [...ordered.slice(0, slots - 1), ...ordered.slice(-1)] : [];
+    const faces = ordered.slice(0, slots);
+    if (slots > 0 && local && !faces.includes(local)) faces[slots - 1] = local;
     return [...shares, ...faces, MORE_TILE_ID];
   };
   const sizeOf = (id: string) => (id === speaker || content.includes(id) ? FLOAT_SPEAKER : FLOAT_PERSON);

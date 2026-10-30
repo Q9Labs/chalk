@@ -405,6 +405,12 @@
     }
   },
   "welcome": {
+    "participantIdentityId": {
+      "wireName": "participant_identity_id",
+      "optional": true,
+      "format": "uuid",
+      "description": "Verified person association of this authenticated seat, including pending admission. Negotiated with participant_device_admissions=2; scoped to the welcome participant and generation."
+    },
     "entryConfirmation": {
       "wireName": "entry_confirmation",
       "optional": true,
@@ -1155,6 +1161,10 @@
         "kind": "array",
         "maxItems": 500,
         "exactFields": ["participant_id", "state", "speaking", "active_speaker"],
+        "optionalFields": ["identity_id", "device_type", "admission_revision"],
+        "identityId": "uuid",
+        "deviceType": ["phone", "tablet", "computer"],
+        "negotiation": "participant_devices=1 WebSocket query opts into identity and coarse device hints; omitted for older clients",
         "participantId": "uuid",
         "state": ["connected", "disconnected"],
         "speaking": {

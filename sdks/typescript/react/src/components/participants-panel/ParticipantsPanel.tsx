@@ -1,3 +1,4 @@
+import { deviceHint } from "../../selectors/device-hint";
 import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
 import React, { useMemo, useState } from "react";
 import { ChalkButton, ChalkPopover } from "../chalk-ui";
@@ -14,6 +15,7 @@ import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 export interface ParticipantListParticipant {
   id: string;
   displayName: string;
+  deviceHint?: string;
   role?: string;
   /** Whether the participant has the endEpisode capability. */
   isHost?: boolean;
@@ -233,6 +235,7 @@ export const ParticipantsPanel = React.memo((props: ParticipantsPanelProps): Rea
       participantsSlice.roster.map((participant) => ({
         id: participant.participantId,
         displayName: participant.displayName,
+        deviceHint: deviceHint(participant, participantsSlice.roster),
         role: participant.role,
         isHost: participant.capabilities.includes("endEpisode"),
         eligibleRoles: participant.eligibleRoles,

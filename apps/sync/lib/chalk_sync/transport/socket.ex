@@ -56,6 +56,9 @@ defmodule ChalkSync.Transport.SocketV1 do
        heartbeat_timer: nil,
        entry_timer: nil,
        entry_confirmation: Map.get(opts, :entry_confirmation, false),
+       participant_self_identity: Map.get(opts, :participant_self_identity, false),
+       participant_devices: Map.get(opts, :participant_devices, false),
+       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
        requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
        terminal_ack_timer: nil,
        terminal_head: nil,
@@ -709,22 +712,52 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp merge_hello_observability(state, _correlation), do: state
 
+  defp encode_with_context(state, encoded) when is_binary(encoded) do
+    encode_with_context(state, JSON.decode!(encoded))
+  end
+
   defp encode_with_context(state, frame) when is_map(frame) do
     frame
+    |> own_identity_projection(state)
+    |> device_projection(device_hint_keys(state))
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
 
-  defp encode_with_context(state, encoded) when is_binary(encoded) do
-    fields = Observability.frame_fields(state.observability)
+  # The authenticated seat can still be pending when its media startup policy runs.
+  # Send its verified association privately, without making pending seats public.
+  defp own_identity_projection(%{"type" => "welcome", "mode" => mode} = frame, %{
+         participant_self_identity: true,
+         identity: %{identity_id: identity_id}
+       })
+       when mode != "terminal" and is_binary(identity_id),
+       do: Map.put(frame, "participant_identity_id", identity_id)
 
-    if fields == %{} do
-      encoded
-    else
-      encoded
-      |> JSON.decode!()
-      |> Map.merge(fields)
-      |> ProtocolV1.encode!()
+  defp own_identity_projection(frame, _state), do: frame
+
+  # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
+  defp device_hint_keys(%{participant_devices: false}),
+    do: ["identity_id", "device_type", "admission_revision"]
+
+  defp device_hint_keys(%{participant_device_admissions: false}), do: ["admission_revision"]
+  defp device_hint_keys(_state), do: []
+
+  defp device_projection(%{"stream" => "presence", "items" => items} = frame, keys),
+    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, keys))}
+
+  defp device_projection(%{"stream" => "presence", "item" => item} = frame, keys),
+    do: %{frame | "item" => Map.drop(item, keys)}
+
+  defp device_projection(frame, _keys), do: frame
+
+  defp device_type(nil), do: nil
+
+  defp device_type(agent) do
+    cond do
+      String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
+      String.contains?(agent, ["Mobile", "iPhone"]) -> "phone"
+      String.contains?(agent, ["Windows", "Macintosh", "X11"]) -> "computer"
+      true -> nil
     end
   end
 
@@ -933,7 +966,10 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp authenticated_hello(state, identity, cursor, hello) do
     with {:ok, identity} <-
-           Stateholder.admit_socket_entry(identity, state.requested_entry_generation),
+           Stateholder.admit_socket_entry(
+             %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
+             state.requested_entry_generation
+           ),
          state = %{
            state
            | entry_confirmation:

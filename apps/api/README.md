@@ -204,6 +204,21 @@ apps/api/scripts/dev-services.sh start
 
 ## Sync participant tokens
 
+For a person joining from multiple devices, admit one Participant per device with
+a separate admission idempotency key. Pass the same `identity_external_id` on each
+admission to resolve a tenant-scoped person Identity, or pass an existing
+`identity_id`. The backend must derive this identity from its own authenticated
+subject: two people assigned the same key are treated as one person. These fields
+are mutually exclusive. Each Participant keeps its
+own media connection, role, access refresh, leave, attendance, and webhooks.
+Updated clients use the shared Identity to suppress audio from the person's other
+devices and start a new microphone off when another device is already sending.
+Sync projects this verified association for every admitted seat, including seats
+without a live socket. The optional device type is stored per participant
+generation; older clients receive no additional presence fields. The negotiated
+welcome also includes the authenticated seat’s own verified Identity before entry
+confirmation, so a pending admission applies the same microphone startup policy.
+
 Participant admission returns a five-minute Ed25519-signed sync JWT. An
 authenticated tenant member can refresh it with
 `POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token`.

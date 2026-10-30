@@ -104,6 +104,8 @@ export type EpisodeEnd = {
   readonly status: string;
 };
 export type AdmitParticipantInput = {
+  /** Stable person key scoped to this tenant. Mutually exclusive with identityId. */
+  readonly identityExternalId?: string;
   readonly identityId?: string;
   readonly metadata?: unknown;
   readonly name: string;

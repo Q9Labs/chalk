@@ -4,7 +4,17 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { AudioOutput } from "./AudioOutput";
 
-vi.mock("../../bindings/hooks", () => ({ useMedia: () => ({ remote: [], selection: {} }), useParticipants: () => ({ roster: [{ participantId: "remote", media: { microphone: "active", screenShare: "active" } }] }) }));
+vi.mock("../../bindings/hooks", () => ({
+  useSelf: () => ({ participantId: "self" }),
+  useMedia: () => ({ remote: [], selection: {} }),
+  useParticipants: () => ({
+    roster: [
+      { participantId: "self", identityId: "person", media: { microphone: "inactive", screenShare: "inactive" } },
+      { participantId: "own-phone", identityId: "person", media: { microphone: "active", screenShare: "active" } },
+      { participantId: "remote", media: { microphone: "active", screenShare: "active" } },
+    ],
+  }),
+}));
 vi.mock("../participants-panel/participant-volume-context", () => ({ useParticipantVolumeContext: () => null }));
 
 afterEach(() => vi.restoreAllMocks());
@@ -83,6 +93,19 @@ it("ignores an autoplay rejection that arrives after the track leaves", async ()
     await act(async () => root.render(<AudioOutput participants={[]} />));
     await act(async () => rejectPlay?.(new DOMException("Gesture required", "NotAllowedError")));
     expect(container.querySelector("button")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("never plays microphone or shared audio from another device belonging to self", async () => {
+  const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+  const track = { id: "own-audio", kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const root = createRoot(document.createElement("div"));
+  try {
+    await act(async () => root.render(<AudioOutput participants={[{ id: "own-phone", audioTrack: track, screenShareAudioTrack: track }]} />));
+    expect(play).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
   }

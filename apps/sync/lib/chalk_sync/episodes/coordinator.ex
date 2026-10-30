@@ -41,17 +41,49 @@ defmodule ChalkSync.Episodes.Coordinator do
         protocol_options \\ %{}
       )
       when is_pid(socket) and is_map(protocol_options) do
-    with {:ok, coordinator} <- ensure_started(identity.episode),
-         :ok <-
-           GenServer.call(
-             coordinator,
-             {:begin_recovery, socket, identity, protocol_options},
-             3000
-           ) do
-      {:ok, coordinator}
-    end
+    begin_socket_recovery(identity, socket, protocol_options, true)
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
+  defp begin_socket_recovery(identity, socket, protocol_options, replace?) do
+    with {:ok, coordinator} <- ensure_started(identity.episode) do
+      monitor = Process.monitor(coordinator)
+
+      try do
+        with :ok <-
+               GenServer.call(
+                 coordinator,
+                 {:begin_recovery, socket, identity, protocol_options},
+                 3000
+               ) do
+          {:ok, coordinator}
+        end
+      catch
+        :exit, {reason, {GenServer, :call, _args}}
+        when reason in [:normal, :noproc] and replace? ->
+          with :ok <- await_coordinator_departure(coordinator, monitor, identity.episode) do
+            begin_socket_recovery(identity, socket, protocol_options, false)
+          end
+
+        :exit, _reason ->
+          {:error, :coordinator_unavailable}
+      after
+        Process.demonitor(monitor, [:flush])
+      end
+    end
+  end
+
+  defp await_coordinator_departure(coordinator, monitor, episode) do
+    receive do
+      {:DOWN, ^monitor, :process, ^coordinator, _reason} ->
+        case whereis(episode) do
+          ^coordinator -> {:error, :coordinator_unavailable}
+          _replacement_or_empty -> :ok
+        end
+    after
+      3000 -> {:error, :coordinator_unavailable}
+    end
   end
 
   @spec activate_recovery(pid(), Recovery.t(), pid()) :: :ok | {:error, atom()}
@@ -582,6 +614,12 @@ defmodule ChalkSync.Episodes.Coordinator do
     end
   end
 
+  @impl GenServer
+  def terminate(_reason, state) do
+    # Withdraw synchronously before DOWN: Registry's automatic cleanup is asynchronous.
+    Registry.unregister(ChalkSync.Episodes.Registry, EpisodeKey.authority_key(state.episode))
+  end
+
   defp ensure_started(episode) do
     case whereis(episode) do
       nil ->
@@ -617,12 +655,14 @@ defmodule ChalkSync.Episodes.Coordinator do
         |> Map.put(:head, head)
         |> Map.put(:target_revision, max(state.target_revision, head.revision))
         |> catch_up_live_sockets()
+        |> start_live_reconcile()
 
       {:ok, %{mode: :terminal, replay_cursor: cursor, head: head}} when is_integer(cursor) ->
         state
         |> Map.put(:head, head)
         |> Map.put(:target_revision, head.revision)
         |> catch_up_live_sockets()
+        |> start_live_reconcile()
 
       {:ok, %{mode: mode}} when mode in [:snapshot, :terminal] ->
         reconnect_all(state, :authoritative_snapshot_required)
@@ -730,7 +770,18 @@ defmodule ChalkSync.Episodes.Coordinator do
         state.head
       end
 
-    %{state | sockets: sockets, head: head, target_revision: max(state.target_revision, revision)}
+    next = %{
+      state
+      | sockets: sockets,
+        head: head,
+        target_revision: max(state.target_revision, revision)
+    }
+
+    if field(event, :name) in ["participant_joined", "participant_left", "episode_ended"] do
+      start_live_reconcile(next)
+    else
+      next
+    end
   end
 
   defp deliver_to_socket({socket, subscriber}, kept, event) do
@@ -1443,7 +1494,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   defp start_live_reconcile(%{live_reconcile_task: task} = state) when not is_nil(task) do
-    state
+    %{state | live_reconcile_pending: true}
   end
 
   defp start_live_reconcile(%{live: %{connections: connections}} = state)
@@ -1456,7 +1507,10 @@ defmodule ChalkSync.Episodes.Coordinator do
 
     task =
       Task.Supervisor.async_nolink(ChalkSync.CommandTaskSupervisor, fn ->
-        LiveEpisode.reconcile(snapshot)
+        with {:ok, live, media_frames} <- LiveEpisode.reconcile(snapshot),
+             {:ok, live, presence_frames} <- LiveEpisode.presence_snapshot(live) do
+          {:ok, live, media_frames ++ presence_frames}
+        end
       end)
 
     %{state | live_reconcile_task: %{pid: task.pid, ref: task.ref, live: snapshot}}

@@ -68,7 +68,8 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly requestStartCamera: (participantId: string) => Promise<V1DirectedRequestResult>;
 };
 export type ConnectionMediaClient = ClientMediaPlane & {
-  readonly start: (stream: MediaStream) => Promise<void>;
+  /** Starts receiving immediately; resolves the optional initial publication policy before sending. */
+  readonly start: (stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => Promise<void>;
   readonly stop: () => void;
   readonly restart: (input: CloudflareSFUBootstrap | ParticipantMediaAccess) => Promise<void>;
   readonly prepareLocalTrack: (source: "microphone" | "camera" | "screen" | "screen_audio", track: MediaStreamTrack) => void;

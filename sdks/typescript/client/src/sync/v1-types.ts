@@ -74,6 +74,10 @@ export type V1ControlState = {
 };
 export type V1MediaPublication = MediaPublication;
 export type V1Presence = {
+  readonly admissionRevision?: number;
+  /** Stable person identity, independent of the per-device participant ID. */
+  readonly identityId?: string;
+  readonly deviceType?: "phone" | "tablet" | "computer";
   readonly participantId: string;
   readonly state: "connected" | "disconnected";
   readonly speaking: boolean;
@@ -108,6 +112,8 @@ export type V1EpisodeSnapshot = {
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;
+  /** Verified own-seat identity, available before admission confirmation on negotiated servers. */
+  readonly participantIdentityId?: string;
   readonly control: V1ControlState | null;
   readonly optimisticControl: V1ControlState | null;
   readonly media: V1Projection<V1MediaPublication> | null;

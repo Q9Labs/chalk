@@ -212,6 +212,15 @@ type Participant struct {
 	LastLeftReason            pgtype.Text        `json:"last_left_reason"`
 }
 
+type ParticipantDeviceHint struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	SpaceID       pgtype.UUID `json:"space_id"`
+	EpisodeID     pgtype.UUID `json:"episode_id"`
+	ParticipantID pgtype.UUID `json:"participant_id"`
+	Generation    int64       `json:"generation"`
+	DeviceType    pgtype.Text `json:"device_type"`
+}
+
 type ParticipantJoinSeat struct {
 	TenantID                 pgtype.UUID        `json:"tenant_id"`
 	SpaceID                  pgtype.UUID        `json:"space_id"`

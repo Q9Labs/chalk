@@ -63,7 +63,12 @@ defmodule ChalkSync.Live.Episode do
            DirectedRequests.register(state.requests, authority.participant_id, socket),
          next = %{
            state
-           | connections: Map.put(state.connections, socket, authority),
+           | connections:
+               Map.put(
+                 state.connections,
+                 socket,
+                 authority
+               ),
              requests: requests
          },
          {:ok, next, _discarded_frames} <- refresh_media(next, []),
@@ -112,9 +117,11 @@ defmodule ChalkSync.Live.Episode do
 
   @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}
   def presence_snapshot(%__MODULE__{} = state) do
-    case reconcile_projection(:presence, state.presence_projection, presence_items(state)) do
-      {:ok, projection, frames} -> {:ok, %{state | presence_projection: projection}, frames}
-      {:error, reason} -> {:error, reason}
+    with {:ok, items} <- presence_items(state) do
+      case reconcile_presence(state.presence_projection, items) do
+        {:ok, projection, frames} -> {:ok, %{state | presence_projection: projection}, frames}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
@@ -237,9 +244,10 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp replace_live_projections(state) do
-    with {:ok, media_projection, media_frame} <- Projection.replace(:media, state.media_items),
+    with {:ok, items} <- presence_items(state),
+         {:ok, media_projection, media_frame} <- Projection.replace(:media, state.media_items),
          {:ok, presence_projection, presence_frame} <-
-           Projection.replace(:presence, presence_items(state)) do
+           Projection.replace(:presence, items) do
       next = %{
         state
         | media_projection: media_projection,
@@ -247,6 +255,25 @@ defmodule ChalkSync.Live.Episode do
       }
 
       {:ok, next, [media_frame, presence_frame]}
+    end
+  end
+
+  defp reconcile_presence(projection, items) do
+    ids = MapSet.new(items, & &1["participant_id"])
+
+    departed =
+      projection &&
+        Enum.any?(Projection.items(projection), &(not MapSet.member?(ids, &1["participant_id"])))
+
+    # Presence tombstones retain their old fields. Rotate on durable departure so
+    # initial/recovery snapshots cannot resurrect a departed seat's association.
+    if departed do
+      case Projection.replace(:presence, items) do
+        {:ok, next, frame} -> {:ok, next, [frame]}
+        error -> error
+      end
+    else
+      reconcile_projection(:presence, projection, items)
     end
   end
 
@@ -305,18 +332,34 @@ defmodule ChalkSync.Live.Episode do
   defp compare_media_cursor(_cursor, _current), do: :newer
 
   defp presence_items(state) do
-    state.connections
-    |> Map.values()
-    |> Enum.uniq_by(& &1.participant_id)
-    |> Enum.map(fn authority ->
-      %{
-        "participant_id" => authority.participant_id,
-        "state" => "connected",
-        "speaking" => false,
-        "active_speaker" => false
-      }
-    end)
+    case Stateholder.participant_devices(state.episode) do
+      {:ok, seats} ->
+        {:ok,
+         Enum.map(seats, fn seat ->
+           connected =
+             Enum.any?(state.connections, fn {_socket, authority} ->
+               authority.participant_id == seat.participant_id and
+                 authority.generation == seat.generation
+             end)
+
+           %{
+             "participant_id" => seat.participant_id,
+             "state" => if(connected, do: "connected", else: "disconnected"),
+             "speaking" => false,
+             "active_speaker" => false,
+             "admission_revision" => seat.admission_revision
+           }
+           |> put_known("identity_id", seat.identity_id)
+           |> put_known("device_type", seat.device_type)
+         end)}
+
+      {:retryable, reason} ->
+        {:error, reason}
+    end
   end
+
+  defp put_known(item, _key, nil), do: item
+  defp put_known(item, key, value), do: Map.put(item, key, value)
 
   defp media_item(item) do
     %{

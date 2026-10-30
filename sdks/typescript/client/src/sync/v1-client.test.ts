@@ -1063,6 +1063,14 @@ describe("V1SyncClient", () => {
     expect("setParticipantRole" in client).toBe(false);
     expect("setParticipantMediaEnabled" in client).toBe(false);
   });
+  it("exposes the private verified identity before a pending seat confirms entry", async () => {
+    const state = { ...baseState(), participants: [] };
+    const { client, socket, urls } = await liveClient({}, state, ownerId, true, 1, peerId);
+    expect(new URL(urls[0]!).searchParams.get("participant_device_admissions")).toBe("2");
+    expect(client.getSnapshot()).toMatchObject({ participantId: ownerId, participantIdentityId: peerId, control: { participants: [] } });
+    expect(socket.frames().some((frame) => frame.type === "entered")).toBe(false);
+    client.stop();
+  });
   it("treats satisfied and duplicate satisfied ACKs as terminal success without an event", async () => {
     const { client, socket, state } = await liveClient();
     const promise = client.setHandRaised(false, { commandId: commandIds[0] });
@@ -2269,7 +2277,7 @@ describe("v1 exact decoding and durable state", () => {
     for (const snapshot of malformed) await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
   });
 });
-async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true, entryGeneration?: number) {
+async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true, entryGeneration?: number, ownIdentityId?: string) {
   const socket = new TestSocket();
   const urls: string[] = [];
   const factory: SyncWebSocketFactory = {
@@ -2296,6 +2304,7 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
     snapshot,
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
+    ...(ownIdentityId === undefined ? {} : { participant_identity_id: ownIdentityId }),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

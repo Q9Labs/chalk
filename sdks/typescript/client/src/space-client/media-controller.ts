@@ -1,3 +1,4 @@
+import { otherDeviceHasMicrophone } from "./same-identity";
 import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
@@ -134,6 +135,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribePorts: (() => void) | null = null;
   #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
+  #microphoneMutedByOtherDevice = false;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
@@ -164,7 +166,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.microphone !== undefined) this.#recordIntent("microphone", intent.microphone);
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
-  setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => this.#set("microphone", enabled);
+  setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> =>
+    Effect.sync(() => {
+      this.#microphoneMutedByOtherDevice = false;
+      this.#publish();
+    }).pipe(Effect.andThen(this.#set("microphone", enabled)));
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
   captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
@@ -613,21 +619,35 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
   }
   startInitial(media: ConnectionPorts["media"], stream: MediaStream): Effect.Effect<void, unknown> {
-    const publish = foreign(async () => {
-      // Capture and access initialization may yield; inspect intent again at the send boundary.
-      const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
-      const tracks = stream.getTracks().filter((track) => {
-        const source = track.kind === "audio" ? "microphone" : "camera";
-        const enabled = this.#hasConsent(source);
-        track.enabled = enabled;
-        if (!enabled) {
-          // An omitted source was never prepared in the media plane. Release its publication ownership.
-          this.#deleteTrack(source);
-          if (source === "microphone") track.stop();
-        }
-        return enabled;
+    const waitForSync = Effect.callback<void>((resume) => {
+      const sync = this.#ports?.sync;
+      if (!sync) return resume(Effect.void);
+      const check = () => {
+        if (sync.getSnapshot().connection.phase === "live" || media.getSnapshot().connection.phase === "stopped") resume(Effect.void);
+      };
+      const unsubscribe = sync.subscribe(check);
+      const unsubscribeMedia = media.subscribe(check);
+      check();
+      return Effect.sync(() => {
+        unsubscribe();
+        unsubscribeMedia();
       });
-      await media.start(streamFromTracks(tracks));
+    });
+    const publish = foreign(async () => {
+      const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
+      const tracks = this.#consentedTracks(stream.getTracks());
+      await media.start(streamFromTracks(tracks), () =>
+        Effect.runPromise(
+          waitForSync.pipe(
+            Effect.map(() => {
+              const snapshot = this.#ports?.sync.getSnapshot();
+              this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot, this.#store.getSnapshot().participants.roster));
+              if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
+              return streamFromTracks(this.#consentedTracks(tracks));
+            }),
+          ),
+        ),
+      );
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
         if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
@@ -635,6 +655,20 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
   }
+
+  #consentedTracks(tracks: readonly MediaStreamTrack[]): MediaStreamTrack[] {
+    return tracks.filter((track) => {
+      const source = track.kind === "audio" ? "microphone" : "camera";
+      const enabled = this.#hasConsent(source);
+      track.enabled = enabled;
+      if (!enabled) {
+        this.#deleteTrack(source);
+        if (source === "microphone") track.stop();
+      }
+      return enabled;
+    });
+  }
+
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
     const command = this.#mediaAction(
       enabled,
@@ -1271,6 +1305,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({
       ...current.media,
+      microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
       local,
       remote,
       screenShare: {

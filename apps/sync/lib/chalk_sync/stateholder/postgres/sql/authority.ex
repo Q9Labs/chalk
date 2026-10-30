@@ -26,7 +26,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Authority do
 
   def lock_participant do
     """
-    select generation, status, role, capabilities
+    select generation, status, role, capabilities, identity_id
     from participants
     where participants.tenant_id = $1
       and participants.space_id = $2

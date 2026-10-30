@@ -4,10 +4,12 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import type { ChalkParticipantMediaState } from "../collaboration/types";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
+import type { V1ControlState, V1Participant, V1Presence, V1Projection } from "../sync/v1-types";
 import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
 export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
 const EMPTY_PARTICIPANTS: ParticipantsSlice = Object.freeze({ roster: Object.freeze([]), admissionQueue: Object.freeze([]) });
+type SeatDevice = Pick<Participant, "identityId" | "deviceType"> & { readonly admissionRevision: number };
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type ParticipantsControllerEffects = {
   readonly assignRole: (participantId: string, roleName: string) => ClientEffect<void>;
@@ -44,6 +46,12 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   #unsubscribePorts: (() => void) | null = null;
   #unsubscribe: (() => void) | null = null;
   #unsubscribeMedia: (() => void) | null = null;
+  #deviceScope: string | null = null;
+  // Retain verified seats while the local Sync replica is recovering, and for older servers
+  // whose negotiated hints disappear with sockets. New servers send every admitted seat.
+  #devices = new Map<string, SeatDevice>();
+  #presenceCursor: string | null = null;
+  readonly #invalidatedDevices = new Set<string>();
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, offline?: OfflineActionsHold) {
     this.#offline = offline;
     this.#connection = connection;
@@ -115,6 +123,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       return ({ sync }) => foreign(() => sync.setDisplayName(displayName));
     });
   dispose(): void {
+    this.#devices.clear();
+    this.#invalidatedDevices.clear();
     this.#unsubscribePorts?.();
     this.#unsubscribe?.();
     this.#unsubscribeMedia?.();
@@ -134,6 +144,10 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribe = null;
     this.#unsubscribeMedia = null;
     if (!ports) {
+      if (["idle", "leaving", "left", "failed"].includes(this.#connection.getSnapshot().state)) {
+        this.#devices.clear();
+        this.#invalidatedDevices.clear();
+      }
       this.#publish(null, {});
       return;
     }
@@ -142,12 +156,59 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribeMedia = ports.media.subscribe(publish);
     publish();
   }
+  #syncDeviceScope(): void {
+    const subject = this.#connection.getSnapshot().subject;
+    const scope = subject ? JSON.stringify([subject.tenantId, subject.spaceId, subject.episodeId, subject.participantId, subject.participantGeneration]) : null;
+    if (scope !== this.#deviceScope) {
+      this.#devices.clear();
+      this.#invalidatedDevices.clear();
+    }
+    this.#deviceScope = scope;
+  }
+  #rememberDevices(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): void {
+    this.#syncDeviceScope();
+    const control = snapshot?.control;
+    if (!control) return;
+    this.#pruneDevices(control, snapshot.presence);
+    const retained = new Map<string, SeatDevice>();
+    if (control.status !== "ended") {
+      for (const participant of control.participants) {
+        const device = this.#deviceFor(participant, snapshot.presence?.items ?? []);
+        if (device) retained.set(participant.participantId, device);
+      }
+    }
+    this.#devices = retained;
+  }
+  #pruneDevices(control: V1ControlState, presence: V1Projection<V1Presence> | null): void {
+    const cursor = presence ? JSON.stringify([presence.projectionId, presence.sequence]) : null;
+    if (cursor !== this.#presenceCursor) this.#invalidatedDevices.clear();
+    this.#presenceCursor = cursor;
+    // A new admission cannot inherit a hint still buffered from the old seat.
+    for (const [id, device] of this.#devices) {
+      if (!control.participants.some((participant) => participant.participantId === id && participant.admissionRevision === device.admissionRevision)) this.#invalidatedDevices.add(id);
+    }
+  }
+  #deviceFor(participant: V1Participant, presence: readonly V1Presence[]): SeatDevice | undefined {
+    const previous = this.#devices.get(participant.participantId);
+    const known: Pick<SeatDevice, "identityId" | "deviceType"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
+    const hint: Pick<SeatDevice, "identityId" | "deviceType"> = this.#hintFor(participant, presence) ?? {};
+    const identityId = hint.identityId ?? known.identityId;
+    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType } : undefined;
+  }
+  #hintFor(participant: V1Participant, presence: readonly V1Presence[]): V1Presence | undefined {
+    return presence.find((item) => {
+      if (item.participantId !== participant.participantId) return false;
+      if (item.admissionRevision !== undefined) return item.admissionRevision === participant.admissionRevision;
+      return !this.#invalidatedDevices.has(participant.participantId);
+    });
+  }
   #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, media?: ReturnType<ConnectionPorts["media"]["getSnapshot"]>): void {
+    this.#rememberDevices(snapshot);
     // A missing replica during digest recovery is not a durable participant leave.
     if (snapshot && !controlFor(snapshot)) return;
     const audioParticipants = new Set(media?.remoteTracks.filter((track) => track.source === "screen_audio" && track.track.readyState === "live").map((track) => track.participantId));
     if (snapshot?.participantId && media?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")) audioParticipants.add(snapshot.participantId);
-    const projected = participantsFor(snapshot, collaborationCapabilities);
+    const projected = participantsFor(snapshot, collaborationCapabilities, this.#devices);
     const participants = Object.freeze({
       ...projected,
       roster: Object.freeze(projected.roster.map((participant) => Object.freeze({ ...participant, media: Object.freeze({ ...participant.media, screenShareHasAudio: participant.media.screenShare === "active" && audioParticipants.has(participant.participantId) }) }))),
@@ -173,10 +234,10 @@ function invalid(message: string): SpaceClientError {
 function directed(result: { readonly request_id: string; readonly result: "delivered" | "expired" | "rate_limited" | "rejected" | "target_unavailable" }) {
   return Object.freeze({ status: result.result, requestId: result.request_id });
 }
-function participantsFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>): ParticipantsSlice {
+function participantsFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, devices: ReadonlyMap<string, SeatDevice>): ParticipantsSlice {
   const control = controlFor(snapshot);
-  if (!control) return EMPTY_PARTICIPANTS;
-  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot), presenceFor(snapshot)), admissionQueue: admissionQueueFor(control.admissionRequests) });
+  if (!control || control.status === "ended") return EMPTY_PARTICIPANTS;
+  return Object.freeze({ roster: rosterFor(control.participants, collaborationCapabilities, mediaFor(snapshot), presenceFor(snapshot), devices), admissionQueue: admissionQueueFor(control.admissionRequests) });
 }
 function controlFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): NonNullable<ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["control"]> | null {
   if (!snapshot) return null;
@@ -195,11 +256,14 @@ function rosterFor(
   collaborationCapabilities: Readonly<Record<string, readonly string[]>>,
   media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"],
   presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"],
+  devices: ReadonlyMap<string, SeatDevice>,
 ): ParticipantsSlice["roster"] {
   return Object.freeze(
     participants.map((participant) =>
       Object.freeze({
         participantId: participant.participantId,
+        identityId: devices.get(participant.participantId)?.identityId,
+        deviceType: devices.get(participant.participantId)?.deviceType,
         displayName: participant.displayName,
         role: participant.role,
         eligibleRoles: Object.freeze([...participant.eligibleRoles]),
@@ -221,13 +285,20 @@ function admissionQueueFor(requests: NonNullable<ReturnType<ConnectionPorts["syn
 function selfFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, roster: ParticipantsSlice["roster"]): SelfSlice {
   const participantId = snapshot?.participantId ?? null;
   const participant = roster.find((candidate) => candidate.participantId === participantId);
-  if (!participant) return emptySelf(participantId);
+  const identityId = selfIdentityFor(snapshot, participant);
+  if (!participant) return emptySelf(participantId, identityId);
   const capabilities = participant.capabilities;
   const allowed = new Set(capabilities);
-  return Object.freeze({ participantId, displayName: participant.displayName, role: participant.role, capabilities, handRaised: participant.handRaised, can: (capability) => allowed.has(capability) });
+  return Object.freeze({ participantId, identityId, displayName: participant.displayName, role: participant.role, capabilities, handRaised: participant.handRaised, can: (capability) => allowed.has(capability) });
 }
-function emptySelf(participantId: string | null): SelfSlice {
-  return Object.freeze({ participantId, displayName: null, role: null, capabilities: Object.freeze([]), handRaised: false, can: () => false });
+function selfIdentityFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, participant: Participant | undefined): string | undefined {
+  if (!snapshot) return undefined;
+  if (snapshot.connection.phase === "terminal") return undefined;
+  if (snapshot.control?.status === "ended") return undefined;
+  return snapshot.participantIdentityId ?? participant?.identityId;
+}
+function emptySelf(participantId: string | null, identityId?: string): SelfSlice {
+  return Object.freeze({ participantId, identityId, displayName: null, role: null, capabilities: Object.freeze([]), handRaised: false, can: () => false });
 }
 function capabilitiesFor(control: readonly string[], collaboration: readonly string[] | undefined): readonly Capability[] {
   const capabilities = new Set<Capability>();
@@ -264,10 +335,10 @@ function sameParticipantMedia(left: Participant, right: Participant): boolean {
   return left.media.microphone === right.media.microphone && left.media.camera === right.media.camera && left.media.screenShare === right.media.screenShare && left.media.screenShareHasAudio === right.media.screenShareHasAudio;
 }
 function sameParticipantPresence(left: Participant, right: Participant): boolean {
-  return left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
+  return left.identityId === right.identityId && left.deviceType === right.deviceType && left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
 }
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
-  return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
+  return left.participantId === right.participantId && left.identityId === right.identityId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
 }
 function sameArray<T>(left: readonly T[], right: readonly T[], equal: (current: T, next: T) => boolean): boolean {
   return left.length === right.length && left.every((value, index) => equal(value, right[index]!));

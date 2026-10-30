@@ -70,6 +70,7 @@ defmodule ChalkSync.Stateholder do
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
   @callback complete_publication_grant(EpisodeKey.t(), String.t(), MediaPlane.outcome()) ::
               {:ok, map()} | {:error, atom()} | {:retryable, atom()}
+  @callback participant_devices(EpisodeKey.t()) :: {:ok, [map()]} | {:retryable, atom()}
   @callback media_pauses(EpisodeKey.t()) ::
               {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
   @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
@@ -118,6 +119,9 @@ defmodule ChalkSync.Stateholder do
              after_revision >= 0 and through_revision >= after_revision do
     impl().recovery_page(episode, after_revision, through_revision)
   end
+
+  @spec participant_devices(EpisodeKey.t()) :: {:ok, [map()]} | {:retryable, atom()}
+  def participant_devices(%EpisodeKey{} = episode), do: impl().participant_devices(episode)
 
   @spec media_pauses(EpisodeKey.t()) ::
           {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
