@@ -1,4 +1,4 @@
-import { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
+import type { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
 import type { CameraBackground } from "./camera-background-settings";
 import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
 import { createCameraFrameSource } from "./camera-frame-source";
@@ -23,7 +23,14 @@ export type CameraEffectsTrack = {
 };
 
 /** Provider-neutral browser processor. It owns source until the output is stopped. */
-export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow: ((fps: number) => void) | undefined, onFailure: (track: MediaStreamTrack) => void): Promise<CameraEffectsTrack> {
+export async function createCameraEffectsTrack(
+  source: MediaStreamTrack,
+  files: CameraEffectsAssets,
+  createSegmenter: CameraEffectsProvider,
+  onSlow: ((fps: number) => void) | undefined,
+  onFailure: (track: MediaStreamTrack) => void,
+  images: typeof CAMERA_BACKGROUND_IMAGES,
+): Promise<CameraEffectsTrack> {
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
@@ -197,11 +204,11 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       if (next !== "none" && next !== "blur") {
         nextImage = new Image();
         nextImage.crossOrigin = "anonymous";
-        nextImage.src = CAMERA_BACKGROUND_IMAGES[next].avif;
+        nextImage.src = images[next].avif;
         try {
           await nextImage.decode();
         } catch {
-          nextImage.src = CAMERA_BACKGROUND_IMAGES[next].image;
+          nextImage.src = images[next].image;
           await nextImage.decode();
         }
       }

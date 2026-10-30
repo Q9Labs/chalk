@@ -1,4 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
 import { CameraBackgroundPreferences, type CameraBackground } from "./camera-background-settings";
 import type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack } from "./camera-effects-track";
 export type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack, CameraSegmenter } from "./camera-effects-track";
@@ -132,5 +133,5 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
 
 export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
   const { createCameraEffectsTrack: createTrack } = await import("./camera-effects-track");
-  return createTrack(source, files, createSegmenter, onSlow, markCameraEffectFailure);
+  return createTrack(source, files, createSegmenter, onSlow, markCameraEffectFailure, CAMERA_BACKGROUND_IMAGES);
 }
