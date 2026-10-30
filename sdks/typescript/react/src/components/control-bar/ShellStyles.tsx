@@ -429,6 +429,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   .chalk-shell-split .chalk-shell-caret {
     display: none;
   }
+  .chalk-shell-split[data-camera-backgrounds] .chalk-shell-caret {
+    display: grid;
+    width: 44px;
+    height: 52px;
+  }
   .chalk-shell-dock .chalk-icon-button {
     width: 52px;
     height: 52px;

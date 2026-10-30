@@ -7,7 +7,7 @@ import portraitUrl from "./camera-fixtures/portrait.jpg";
 
 /** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
 class CameraBackgroundFixture extends HTMLElement {
-  async mount() {
+  async mount({ requireRemote = true }: { readonly requireRemote?: boolean } = {}) {
     const portrait = new Image();
     portrait.src = portraitUrl;
     await portrait.decode();
@@ -25,7 +25,7 @@ class CameraBackgroundFixture extends HTMLElement {
         }
       tick++;
       const width = (720 * portrait.naturalWidth) / portrait.naturalHeight;
-      painter.drawImage(portrait, (1280 - width) / 2, 0, width, 720);
+      painter.drawImage(portrait, (1280 - width) / 2 + Math.sin(tick / 5) * 8, 0, width, 720);
     };
     paint();
     const timer = setInterval(paint, 1000 / 30);
@@ -108,7 +108,7 @@ class CameraBackgroundFixture extends HTMLElement {
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        Promise.all([local.play(), remote.play()]),
+        Promise.all([local.play(), ...(requireRemote ? [remote.play()] : [])]),
         new Promise((_, reject) => {
           timeout = setTimeout(() => reject(new Error(`Video did not start: ${JSON.stringify([local, remote].map((video) => ({ ready: video.readyState, paused: video.paused, frames: video.getVideoPlaybackQuality().totalVideoFrames })))}`)), 20000);
         }),
@@ -126,6 +126,17 @@ class CameraBackgroundFixture extends HTMLElement {
         return { id: publication.mid, sameSender: sending.getSenders()[0] === publication.sender, sameTrack: publication.sender.track === track, state: sending.connectionState, trackState: track.readyState };
       },
       id,
+      lifecycle() {
+        track.enabled = false;
+        const disabledCamera = !source.enabled;
+        const preview = track.clone();
+        preview.enabled = true;
+        const privatePreview = source.enabled && !track.enabled;
+        preview.stop();
+        const stoppedPreview = !source.enabled;
+        track.enabled = true;
+        return { disabledCamera, privatePreview, stoppedPreview, resumedCamera: source.enabled };
+      },
       frames() {
         return { local: local.getVideoPlaybackQuality().totalVideoFrames, remote: remote.getVideoPlaybackQuality().totalVideoFrames };
       },
@@ -134,13 +145,13 @@ class CameraBackgroundFixture extends HTMLElement {
         const inbound = [...stats.values()].find((entry) => entry.type === "inbound-rtp" && entry.kind === "video");
         return { framesDecoded: inbound?.framesDecoded ?? 0, framesPerSecond: inbound?.framesPerSecond ?? 0 };
       },
-      pixels() {
+      pixels(localOnly = false) {
         const pixels = document.createElement("canvas");
         pixels.width = 128;
         pixels.height = 72;
         const context = pixels.getContext("2d", { willReadFrequently: true });
         if (!context) throw new Error("Missing pixels context");
-        context.drawImage(remote, 0, 0, 128, 72);
+        context.drawImage(localOnly ? local : remote, 0, 0, 128, 72);
         return [...context.getImageData(0, 0, 128, 72).data];
       },
       dispose() {

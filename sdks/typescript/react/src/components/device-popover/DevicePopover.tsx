@@ -1,4 +1,5 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
+import { cameraEffectsSupported } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
 import { useEffect, useRef, useState } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
@@ -173,10 +174,13 @@ export function DevicePopover({
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
+  const [backgroundsAvailable, setBackgroundsAvailable] = useState(false);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect browser processing support after hydration before exposing the mobile camera menu.
+  useEffect(() => setBackgroundsAvailable(cameraEffectsSupported()), []);
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive}>
+    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-backgrounds={!mic && backgroundsAvailable ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
@@ -237,7 +241,7 @@ export function DevicePopover({
         ) : (
           <>
             <Menu.Separator className="chalk-shell-menu-separator" />
-            {open && previewDeviceId ? <CameraBackgroundPicker deviceId={previewDeviceId} /> : null}
+            {open && previewDeviceId ? <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} /> : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
           </>
         )}
