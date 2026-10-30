@@ -23,9 +23,9 @@
   ],
   "throttle": {
     "rate": 8,
-    "completedEffectFps": 7.543951718708885,
-    "plainCameraFps": 28.357845424575608,
-    "elapsedSecondsIncludingLoad": 6.331024808000001,
+    "completedEffectFps": 7.154704218022483,
+    "plainCameraFps": 29.347872106020393,
+    "elapsedSecondsIncludingLoad": 6.287855487000001,
     "selected": "none",
     "input": {
       "live": true,
@@ -40,7 +40,8 @@
     "lazyOnJoin": true,
     "initialEffectRequests": [],
     "effectRequestsAfterSelection": [
-      "/@fs/tmp/camera-focus-vite/deps/@mediapipe_tasks-vision.js?v=489fbf43",
+      "/@fs/data/home/work/sdks/typescript/client/src/camera-effects-provider.ts",
+      "/@fs/tmp/chalk-call-harness-8z3Erq/deps/@mediapipe_tasks-vision.js?v=5501ed00",
       "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.js",
       "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.wasm",
       "/camera-effects/selfie-segmenter-landscape.490e9ea73431.tflite"
