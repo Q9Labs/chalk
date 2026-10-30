@@ -1,0 +1,148 @@
+import "../lib/camera-effects";
+import { createRoot } from "react-dom/client";
+import { processCameraStream, setCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { DevicePopover } from "@q9labsai/chalk-react";
+import portraitUrl from "./camera-fixtures/portrait.jpg";
+
+/** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
+class CameraBackgroundFixture extends HTMLElement {
+  async mount() {
+    const portrait = new Image();
+    portrait.src = portraitUrl;
+    await portrait.decode();
+    const input = document.createElement("canvas");
+    input.width = 1280;
+    input.height = 720;
+    const painter = input.getContext("2d");
+    if (!painter) throw new Error("Missing canvas context");
+    let tick = 0;
+    const paint = () => {
+      for (let y = 0; y < 720; y += 16)
+        for (let x = 0; x < 1280; x += 16) {
+          painter.fillStyle = (x / 16 + y / 16 + tick) % 2 ? "#334d6c" : "#b4c1cf";
+          painter.fillRect(x, y, 16, 16);
+        }
+      tick++;
+      const width = (720 * portrait.naturalWidth) / portrait.naturalHeight;
+      painter.drawImage(portrait, (1280 - width) / 2, 0, width, 720);
+    };
+    paint();
+    const timer = setInterval(paint, 1000 / 30);
+    const raw = input.captureStream(30);
+    const source = raw.getVideoTracks()[0];
+    if (!source) throw new Error("Missing camera track");
+    source.getSettings = () => ({ deviceId: "proof-camera", width: 1280, height: 720, frameRate: 30 });
+    const processed = await processCameraStream(raw);
+    const track = processed.getVideoTracks()[0];
+    if (!track || track === source) throw new Error("Camera effects were not installed");
+    const local = document.createElement("video");
+    local.autoplay = true;
+    local.muted = true;
+    local.playsInline = true;
+    local.srcObject = processed;
+    local.setAttribute("aria-label", "Local video");
+    const remote = document.createElement("video");
+    remote.autoplay = true;
+    remote.muted = true;
+    remote.playsInline = true;
+    remote.setAttribute("aria-label", "Remote video");
+    const sending = new RTCPeerConnection();
+    const receiving = new RTCPeerConnection();
+    const publication = sending.addTransceiver(track, { direction: "sendonly" });
+    receiving.ontrack = (event) => {
+      remote.srcObject = new MediaStream([event.track]);
+    };
+    const gather = async (connection: RTCPeerConnection) => {
+      if (connection.iceGatheringState === "complete") return;
+      await new Promise<void>((resolve) =>
+        connection.addEventListener("icegatheringstatechange", () => {
+          if (connection.iceGatheringState === "complete") resolve();
+        }),
+      );
+    };
+    await sending.setLocalDescription(await sending.createOffer());
+    await gather(sending);
+    if (!sending.localDescription) throw new Error("Missing offer");
+    await receiving.setRemoteDescription(sending.localDescription);
+    await receiving.setLocalDescription(await receiving.createAnswer());
+    await gather(receiving);
+    if (!receiving.localDescription) throw new Error("Missing answer");
+    await sending.setRemoteDescription(receiving.localDescription);
+    const root = document.getElementById("root");
+    if (!root) throw new Error("Missing root");
+    root.replaceChildren(this);
+    this.dataset.chalk = "";
+    this.className = "chalk-root";
+    this.style.cssText = "display:block;min-height:100vh;padding:24px;background:var(--chalk-bg);color:var(--chalk-text);";
+    const heading = document.createElement("h1");
+    heading.textContent = "Camera backgrounds";
+    heading.style.cssText = "font-size:20px;margin:0 0 20px";
+    this.append(heading);
+    const views = document.createElement("div");
+    views.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px";
+    for (const [label, video] of [
+      ["Local", local],
+      ["Remote", remote],
+    ] as const) {
+      const view = document.createElement("div");
+      const title = document.createElement("h2");
+      title.textContent = label;
+      title.style.cssText = "font-size:14px;margin:0 0 8px";
+      video.style.cssText = "width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:12px;background:#111";
+      view.append(title, video);
+      views.append(view);
+    }
+    this.append(views);
+    const controls = document.createElement("div");
+    controls.style.cssText = "padding-top:24px";
+    this.append(controls);
+    const react = createRoot(controls);
+    react.render(<DevicePopover type="video" isActive onToggle={() => {}} devices={[{ deviceId: "proof-camera", label: "Camera" }]} selectedDeviceId="proof-camera" onDeviceChange={() => {}} track={track} orientation="down" />);
+    await Promise.all([local.play(), remote.play()]);
+    const id = publication.mid;
+    return {
+      async background(value: CameraBackground) {
+        await setCameraBackground("proof-camera", value);
+      },
+      publication() {
+        return { id: publication.mid, sameSender: sending.getSenders()[0] === publication.sender, sameTrack: publication.sender.track === track, state: sending.connectionState, trackState: track.readyState };
+      },
+      id,
+      frames() {
+        return { local: local.getVideoPlaybackQuality().totalVideoFrames, remote: remote.getVideoPlaybackQuality().totalVideoFrames };
+      },
+      async stats() {
+        const stats = await receiving.getStats();
+        const inbound = [...stats.values()].find((entry) => entry.type === "inbound-rtp" && entry.kind === "video");
+        return { framesDecoded: inbound?.framesDecoded ?? 0, framesPerSecond: inbound?.framesPerSecond ?? 0 };
+      },
+      pixels() {
+        const pixels = document.createElement("canvas");
+        pixels.width = 128;
+        pixels.height = 72;
+        const context = pixels.getContext("2d", { willReadFrequently: true });
+        if (!context) throw new Error("Missing pixels context");
+        context.drawImage(remote, 0, 0, 128, 72);
+        return [...context.getImageData(0, 0, 128, 72).data];
+      },
+      dispose() {
+        react.unmount();
+        sending.close();
+        receiving.close();
+        track.stop();
+        clearInterval(timer);
+        local.srcObject = null;
+        remote.srcObject = null;
+      },
+    };
+  }
+}
+customElements.define("chalk-camera-background-fixture", CameraBackgroundFixture);
+declare global {
+  interface Window {
+    cameraBackgroundProof: Awaited<ReturnType<CameraBackgroundFixture["mount"]>>;
+  }
+  interface HTMLElementTagNameMap {
+    "chalk-camera-background-fixture": CameraBackgroundFixture;
+  }
+}

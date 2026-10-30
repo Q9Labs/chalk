@@ -4,7 +4,12 @@ import { CameraBackgroundPreferences, CAMERA_BACKGROUND_OPTIONS, isCameraBackgro
 describe("camera background preferences", () => {
   function storage() {
     const values = new Map<string, string>();
-    return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
   }
   it("defaults to None and remembers each camera separately across page loads", () => {
     const saved = storage();
@@ -23,7 +28,9 @@ describe("camera background preferences", () => {
     }
   });
   it("keeps the chosen effect when storage throws", () => {
-    const preferences = new CameraBackgroundPreferences(() => { throw new Error("Storage blocked"); });
+    const preferences = new CameraBackgroundPreferences(() => {
+      throw new Error("Storage blocked");
+    });
     expect(preferences.get("camera")).toBe("none");
     preferences.set("camera", "blur");
     expect(preferences.get("camera")).toBe("blur");

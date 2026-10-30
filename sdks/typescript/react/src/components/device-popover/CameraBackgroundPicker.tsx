@@ -3,7 +3,11 @@ import { useState, useSyncExternalStore } from "react";
 import { ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
 
 export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string }) {
-  const selected = useSyncExternalStore(subscribeCameraBackground, () => getCameraBackground(deviceId), () => "none");
+  const selected = useSyncExternalStore(
+    subscribeCameraBackground,
+    () => getCameraBackground(deviceId),
+    () => "none",
+  );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   if (!cameraEffectsSupported()) return null;
@@ -18,13 +22,25 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
       setBusy(false);
     }
   };
-  return <>
-    <ChalkMenuLabel>Background</ChalkMenuLabel>
-    {CAMERA_BACKGROUND_OPTIONS.map((option) => <ChalkMenuItem key={option.id} checked={selected === option.id} disabled={busy} closeOnClick={false} onClick={() => { void select(option.id); }}>
-      {option.image ? <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: 4 }} /> : null}
-      {option.label}
-    </ChalkMenuItem>)}
-    {busy ? <span role="status">Loading background…</span> : null}
-    {failed ? <span role="alert">Background didn’t load. Try again.</span> : null}
-  </>;
+  return (
+    <>
+      <ChalkMenuLabel>Background</ChalkMenuLabel>
+      {CAMERA_BACKGROUND_OPTIONS.map((option) => (
+        <ChalkMenuItem
+          key={option.id}
+          checked={selected === option.id}
+          disabled={busy}
+          closeOnClick={false}
+          onClick={() => {
+            void select(option.id);
+          }}
+        >
+          {option.image ? <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: 4 }} /> : null}
+          {option.label}
+        </ChalkMenuItem>
+      ))}
+      {busy ? <span role="status">Loading background…</span> : null}
+      {failed ? <span role="alert">Background didn’t load. Try again.</span> : null}
+    </>
+  );
 }

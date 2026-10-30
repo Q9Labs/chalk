@@ -218,10 +218,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@noble/hashes": "2.3.0",
-    "effect": "4.0.0-beta.102",
     "@mediapipe/tasks-vision": "1.1.1",
-    "@q9labsai/chalk-assets": "workspace:^5.2.6"
+    "@noble/hashes": "2.3.0",
+    "@q9labsai/chalk-assets": "workspace:^5.2.6",
+    "effect": "4.0.0-beta.102"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

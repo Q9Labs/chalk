@@ -47,16 +47,20 @@ export function subscribeCameraBackground(listener: () => void): () => void {
 
 /** Serialize rapid choices; load everything before changing any live canvas. */
 export function setCameraBackground(deviceId: string, background: CameraBackground): Promise<void> {
-  const change = (pending.get(deviceId) ?? Promise.resolve()).catch(() => {}).then(async () => {
-    const commits = await Promise.all([...sessions.get(deviceId) ?? []].map((session) => session.prepare(background)));
-    for (const commit of commits) commit();
-    preferences.set(deviceId, background);
-    for (const listener of listeners) listener();
-  });
+  const change = (pending.get(deviceId) ?? Promise.resolve())
+    .catch(() => {})
+    .then(async () => {
+      const commits = await Promise.all([...(sessions.get(deviceId) ?? [])].map((session) => session.prepare(background)));
+      for (const commit of commits) commit();
+      preferences.set(deviceId, background);
+      for (const listener of listeners) listener();
+    });
   pending.set(deviceId, change);
-  void change.finally(() => {
-    if (pending.get(deviceId) === change) pending.delete(deviceId);
-  }).catch(() => {});
+  void change
+    .finally(() => {
+      if (pending.get(deviceId) === change) pending.delete(deviceId);
+    })
+    .catch(() => {});
   return change;
 }
 
@@ -77,7 +81,10 @@ export async function processCameraStream(stream: MediaStream): Promise<MediaStr
     };
     session.track.addEventListener("ended", remove, { once: true });
     const stop = session.track.stop.bind(session.track);
-    session.track.stop = () => { remove(); stop(); };
+    session.track.stop = () => {
+      remove();
+      stop();
+    };
     const commit = await session.prepare(preferences.get(deviceId));
     commit();
     stream.removeTrack(source);
@@ -111,16 +118,27 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   let stopped = false;
   let lastFrame = -Infinity;
   let generation = 0;
-  const loadSegmenter = () => loading ??= import("@mediapipe/tasks-vision").then(async ({ FilesetResolver, ImageSegmenter }) => {
-    const vision = await FilesetResolver.forVisionTasks(files.wasmRoot);
-    const loaded = await ImageSegmenter.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: files.modelUrl, delegate: "GPU" },
-      runningMode: "VIDEO", outputConfidenceMasks: true, outputCategoryMask: false,
-    });
-    if (stopped) { loaded.close(); throw new Error("Camera effects stopped"); }
-    segmenter = loaded;
-    return loaded;
-  }).catch((error: unknown) => { loading = undefined; throw error; });
+  const loadSegmenter = () =>
+    (loading ??= import("@mediapipe/tasks-vision")
+      .then(async ({ FilesetResolver, ImageSegmenter }) => {
+        const vision = await FilesetResolver.forVisionTasks(files.wasmRoot);
+        const loaded = await ImageSegmenter.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: files.modelUrl, delegate: "GPU" },
+          runningMode: "VIDEO",
+          outputConfidenceMasks: true,
+          outputCategoryMask: false,
+        });
+        if (stopped) {
+          loaded.close();
+          throw new Error("Camera effects stopped");
+        }
+        segmenter = loaded;
+        return loaded;
+      })
+      .catch((error: unknown) => {
+        loading = undefined;
+        throw error;
+      }));
   try {
     await video.play();
   } catch (error) {
@@ -132,7 +150,11 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   canvas.width = foreground.width = Math.round((video.videoWidth || 640) * scale);
   canvas.height = foreground.height = Math.round((video.videoHeight || 360) * scale);
   const output = canvas.captureStream(24).getVideoTracks()[0];
-  if (!output) { source.stop(); video.srcObject = null; throw new Error("Camera effects could not create a video track"); }
+  if (!output) {
+    source.stop();
+    video.srcObject = null;
+    throw new Error("Camera effects could not create a video track");
+  }
   const nativeStop = output.stop.bind(output);
   const stop = () => {
     if (stopped) return;
@@ -146,11 +168,20 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     nativeStop();
     source.stop();
   };
-  const ended = () => { stop(); output.dispatchEvent(new Event("ended")); };
+  const ended = () => {
+    stop();
+    output.dispatchEvent(new Event("ended"));
+  };
   source.addEventListener("ended", ended, { once: true });
   output.stop = stop;
   const settings = output.getSettings.bind(output);
   output.getSettings = () => ({ ...source.getSettings(), ...settings(), deviceId: source.getSettings().deviceId });
+  const nativeClone = output.clone.bind(output);
+  output.clone = () => {
+    const clone = nativeClone();
+    clone.getSettings = output.getSettings;
+    return clone;
+  };
   const draw = (time: number) => {
     if (stopped) return;
     frame = video.requestVideoFrameCallback(draw);
@@ -173,7 +204,11 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
         }
         const pixels = alpha.createImageData(mask.width, mask.height);
         const values = confidence.getAsFloat32Array();
-        for (let i = 0; i < values.length; i++) pixels.data[i * 4 + 3] = Math.round(Math.max(0, Math.min(1, (values[i] - 0.25) / 0.5)) * 255);
+        let pixel = 3;
+        for (const value of values) {
+          pixels.data[pixel] = Math.round(Math.max(0, Math.min(1, (value - 0.25) / 0.5)) * 255);
+          pixel += 4;
+        }
         alpha.putImageData(pixels, 0, 0);
         person.globalCompositeOperation = "copy";
         person.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -195,7 +230,8 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   };
   frame = video.requestVideoFrameCallback(draw);
   return {
-    track: output, stop,
+    track: output,
+    stop,
     async prepare(next) {
       const revision = generation;
       if (next !== "none") await loadSegmenter();
@@ -207,7 +243,13 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
         await nextImage.decode();
       }
       if (stopped || generation !== revision) throw new Error("Camera effects stopped");
-      return () => { if (!stopped) { background = next; image = nextImage; ready = true; } };
+      return () => {
+        if (!stopped) {
+          background = next;
+          image = nextImage;
+          ready = true;
+        }
+      };
     },
   };
 }

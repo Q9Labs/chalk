@@ -110,11 +110,11 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
   }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview]);
   return (
     <>
-    <div className="chalk-shell-preview">
-      <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
-      <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
-    </div>
-    {open && !unavailable ? <CameraBackgroundPicker deviceId={deviceId} /> : null}
+      <div className="chalk-shell-preview">
+        <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
+        <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
+      </div>
+      {open && !unavailable ? <CameraBackgroundPicker deviceId={deviceId} /> : null}
     </>
   );
 }
