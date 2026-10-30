@@ -1,7 +1,8 @@
+import "../styles.css";
 import "../lib/camera-effects";
 import { createRoot } from "react-dom/client";
 import { processCameraStream, setCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
-import { DevicePopover } from "@q9labsai/chalk-react";
+import { PreviewDevicePopover } from "@q9labsai/chalk-react/preview";
 import portraitUrl from "./camera-fixtures/portrait.jpg";
 
 /** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
@@ -32,7 +33,9 @@ class CameraBackgroundFixture extends HTMLElement {
     const source = raw.getVideoTracks()[0];
     if (!source) throw new Error("Missing camera track");
     source.getSettings = () => ({ deviceId: "proof-camera", width: 1280, height: 720, frameRate: 30 });
+    console.log("Camera proof: processing capture");
     const processed = await processCameraStream(raw);
+    console.log("Camera proof: capture processed");
     const track = processed.getVideoTracks()[0];
     if (!track || track === source) throw new Error("Camera effects were not installed");
     const local = document.createElement("video");
@@ -68,16 +71,18 @@ class CameraBackgroundFixture extends HTMLElement {
     await gather(receiving);
     if (!receiving.localDescription) throw new Error("Missing answer");
     await sending.setRemoteDescription(receiving.localDescription);
+    console.log("Camera proof: peers negotiated");
     const root = document.getElementById("root");
     if (!root) throw new Error("Missing root");
     root.replaceChildren(this);
     this.dataset.chalk = "";
+    this.dataset.chalkTheme = "dark";
     this.className = "chalk-root";
-    this.style.cssText = "display:block;min-height:100vh;padding:24px;background:var(--chalk-bg);color:var(--chalk-text);";
+    this.style.cssText = "display:block;min-height:100vh;padding:24px;background:var(--chalk-canvas);color:var(--chalk-text);";
     const heading = document.createElement("h1");
     heading.textContent = "Camera backgrounds";
     heading.style.cssText = "font-size:20px;margin:0 0 20px";
-    this.append(heading);
+    this.appendChild(heading);
     const views = document.createElement("div");
     views.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px";
     for (const [label, video] of [
@@ -89,16 +94,29 @@ class CameraBackgroundFixture extends HTMLElement {
       title.textContent = label;
       title.style.cssText = "font-size:14px;margin:0 0 8px";
       video.style.cssText = "width:100%;aspect-ratio:16/9;object-fit:contain;border-radius:12px;background:#111";
-      view.append(title, video);
-      views.append(view);
+      view.appendChild(title);
+      view.appendChild(video);
+      views.appendChild(view);
     }
-    this.append(views);
+    this.appendChild(views);
     const controls = document.createElement("div");
     controls.style.cssText = "padding-top:24px";
-    this.append(controls);
+    this.appendChild(controls);
     const react = createRoot(controls);
-    react.render(<DevicePopover type="video" isActive onToggle={() => {}} devices={[{ deviceId: "proof-camera", label: "Camera" }]} selectedDeviceId="proof-camera" onDeviceChange={() => {}} track={track} orientation="down" />);
-    await Promise.all([local.play(), remote.play()]);
+    react.render(<PreviewDevicePopover type="video" isActive onToggle={() => {}} devices={[{ deviceId: "proof-camera", label: "Camera", kind: "videoinput" }]} selectedDeviceId="proof-camera" onDeviceChange={() => {}} track={track} orientation="down" />);
+    console.log("Camera proof: playing video");
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.all([local.play(), remote.play()]),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`Video did not start: ${JSON.stringify([local, remote].map((video) => ({ ready: video.readyState, paused: video.paused, frames: video.getVideoPlaybackQuality().totalVideoFrames })))}`)), 20000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timeout);
+    }
+    console.log("Camera proof: video playing");
     const id = publication.mid;
     return {
       async background(value: CameraBackground) {

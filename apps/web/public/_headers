@@ -50,3 +50,7 @@
 
 /.well-known/assetlinks.json
   Content-Type: application/json
+
+/camera-effects/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable

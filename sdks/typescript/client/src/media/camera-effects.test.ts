@@ -16,9 +16,9 @@ function browser() {
   const output = track("video");
   const source = track("video");
   source.getSettings = () => ({ deviceId: "camera-1", width: 640, height: 360 });
-  const video = { muted: false, playsInline: false, srcObject: null, videoWidth: 640, videoHeight: 360, play: vi.fn(async () => {}), pause: vi.fn(), requestVideoFrameCallback: vi.fn(() => 1), cancelVideoFrameCallback: vi.fn() };
+  const video = { style: {}, setAttribute: vi.fn(), remove: vi.fn(), muted: false, playsInline: false, srcObject: null, videoWidth: 640, videoHeight: 360, play: vi.fn(async () => {}), pause: vi.fn(), requestVideoFrameCallback: vi.fn(() => 1), cancelVideoFrameCallback: vi.fn() };
   const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }), captureStream: () => stream([output]) };
-  vi.stubGlobal("document", { createElement: (tag: string) => (tag === "video" ? video : { ...canvas }) });
+  vi.stubGlobal("document", { documentElement: { appendChild: vi.fn() }, createElement: (tag: string) => (tag === "video" ? video : { ...canvas }) });
   vi.stubGlobal(
     "MediaStream",
     class {

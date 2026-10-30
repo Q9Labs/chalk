@@ -1,4 +1,4 @@
-import { CAMERA_BACKGROUND_OPTIONS, cameraEffectsSupported, getCameraBackground, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { CAMERA_BACKGROUND_OPTIONS, cameraBackgroundAvailable, getCameraBackground, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
 import { useState, useSyncExternalStore } from "react";
 import { ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
 
@@ -10,7 +10,7 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
   );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!cameraEffectsSupported()) return null;
+  if (!cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
     setBusy(true);
     setFailed(false);
@@ -35,7 +35,12 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
             void select(option.id);
           }}
         >
-          {option.image ? <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: 4 }} /> : null}
+          {option.image ? (
+            <picture>
+              <source srcSet={option.avif} type="image/avif" />
+              <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: 4 }} />
+            </picture>
+          ) : null}
           {option.label}
         </ChalkMenuItem>
       ))}

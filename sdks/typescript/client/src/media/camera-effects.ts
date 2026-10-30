@@ -1,6 +1,7 @@
 import type { ImageSegmenter } from "@mediapipe/tasks-vision";
 import { CHALK_BACKGROUND_ASSETS } from "@q9labsai/chalk-assets";
 import { CameraBackgroundPreferences, type CameraBackground } from "./camera-background-settings";
+import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
 
 export type CameraEffectsAssets = {
   /** Self-host the WASM files from the pinned tasks-vision package at this URL. */
@@ -47,14 +48,16 @@ export function subscribeCameraBackground(listener: () => void): () => void {
 
 /** Serialize rapid choices; load everything before changing any live canvas. */
 export function setCameraBackground(deviceId: string, background: CameraBackground): Promise<void> {
-  const change = (pending.get(deviceId) ?? Promise.resolve())
-    .catch(() => {})
-    .then(async () => {
-      const commits = await Promise.all([...(sessions.get(deviceId) ?? [])].map((session) => session.prepare(background)));
-      for (const commit of commits) commit();
-      preferences.set(deviceId, background);
-      for (const listener of listeners) listener();
-    });
+  return enqueue(deviceId, async () => {
+    const commits = await Promise.all([...(sessions.get(deviceId) ?? [])].map((session) => session.prepare(background)));
+    for (const commit of commits) commit();
+    preferences.set(deviceId, background);
+    for (const listener of listeners) listener();
+  });
+}
+
+function enqueue(deviceId: string, action: () => Promise<void>): Promise<void> {
+  const change = (pending.get(deviceId) ?? Promise.resolve()).catch(() => {}).then(action);
   pending.set(deviceId, change);
   void change
     .finally(() => {
@@ -64,34 +67,43 @@ export function setCameraBackground(deviceId: string, background: CameraBackgrou
   return change;
 }
 
+export function cameraBackgroundAvailable(deviceId: string): boolean {
+  return cameraEffectsSupported() && (sessions.get(deviceId)?.size ?? 0) > 0;
+}
+
 /** Capture boundary: only this processed track reaches preview or the SFU. */
 export async function processCameraStream(stream: MediaStream): Promise<MediaStream> {
   if (!cameraEffectsSupported() || !assets) return stream;
   const source = stream.getVideoTracks()[0];
   if (!source) return stream;
   const deviceId = source.getSettings().deviceId ?? "default";
+  let session: CameraEffectsTrack | undefined;
   try {
-    const session = await createCameraEffectsTrack(source, assets);
-    const active = sessions.get(deviceId) ?? new Set<CameraEffectsTrack>();
-    sessions.set(deviceId, active);
-    active.add(session);
-    const remove = () => {
-      active.delete(session);
-      if (active.size === 0) sessions.delete(deviceId);
-    };
-    session.track.addEventListener("ended", remove, { once: true });
-    const stop = session.track.stop.bind(session.track);
-    session.track.stop = () => {
-      remove();
-      stop();
-    };
-    const commit = await session.prepare(preferences.get(deviceId));
-    commit();
+    const captured = await createCameraEffectsTrack(source, assets);
+    session = captured;
+    await enqueue(deviceId, async () => {
+      const commit = await captured.prepare(preferences.get(deviceId));
+      commit();
+      const active = sessions.get(deviceId) ?? new Set<CameraEffectsTrack>();
+      sessions.set(deviceId, active);
+      active.add(captured);
+      const remove = () => {
+        active.delete(captured);
+        if (active.size === 0) sessions.delete(deviceId);
+      };
+      captured.track.addEventListener("ended", remove, { once: true });
+      const stop = captured.track.stop.bind(captured.track);
+      captured.track.stop = () => {
+        remove();
+        stop();
+      };
+    });
     stream.removeTrack(source);
-    stream.addTrack(session.track);
+    stream.addTrack(captured.track);
     return stream;
   } catch (error) {
-    for (const track of stream.getTracks()) track.stop();
+    session?.track.stop();
+    for (const track of stream.getTracks()) if (track.readyState !== "ended") track.stop();
     throw error;
   }
 }
@@ -102,13 +114,21 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   video.muted = true;
   video.playsInline = true;
   video.srcObject = new MediaStream([source]);
+  video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
+  video.setAttribute("aria-hidden", "true");
+  document.documentElement.appendChild(video);
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
   const context = canvas.getContext("2d");
   const person = foreground.getContext("2d");
   const alpha = mask.getContext("2d");
-  if (!context || !person || !alpha) throw new Error("Camera effects are unavailable");
+  if (!context || !person || !alpha) {
+    video.srcObject = null;
+    video.remove();
+    source.stop();
+    throw new Error("Camera effects are unavailable");
+  }
   let segmenter: ImageSegmenter | undefined;
   let loading: Promise<ImageSegmenter> | undefined;
   let background: CameraBackground = "none";
@@ -143,16 +163,34 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     await video.play();
   } catch (error) {
     video.srcObject = null;
+    video.remove();
     source.stop();
     throw error;
   }
-  const scale = Math.min(1, 960 / (video.videoWidth || 640));
-  canvas.width = foreground.width = Math.round((video.videoWidth || 640) * scale);
-  canvas.height = foreground.height = Math.round((video.videoHeight || 360) * scale);
-  const output = canvas.captureStream(24).getVideoTracks()[0];
+  const resize = (next: CameraBackground) => {
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 360;
+    const limit = globalThis.matchMedia?.("(max-width: 640px)").matches ? 640 : 960;
+    const scale = next === "none" ? 1 : Math.min(1, limit / width);
+    canvas.width = foreground.width = Math.round(width * scale);
+    canvas.height = foreground.height = Math.round(height * scale);
+  };
+  resize("none");
+  let outputStream: MediaStream;
+  try {
+    outputStream = canvas.captureStream(30);
+  } catch (error) {
+    video.pause();
+    video.srcObject = null;
+    video.remove();
+    source.stop();
+    throw error;
+  }
+  const output = outputStream.getVideoTracks()[0];
   if (!output) {
     source.stop();
     video.srcObject = null;
+    video.remove();
     throw new Error("Camera effects could not create a video track");
   }
   const nativeStop = output.stop.bind(output);
@@ -163,7 +201,9 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     video.cancelVideoFrameCallback(frame);
     video.pause();
     video.srcObject = null;
+    video.remove();
     source.removeEventListener("ended", ended);
+    releaseBindings();
     segmenter?.close();
     nativeStop();
     source.stop();
@@ -176,18 +216,13 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   output.stop = stop;
   const settings = output.getSettings.bind(output);
   output.getSettings = () => ({ ...source.getSettings(), ...settings(), deviceId: source.getSettings().deviceId });
-  const nativeClone = output.clone.bind(output);
-  output.clone = () => {
-    const clone = nativeClone();
-    clone.getSettings = output.getSettings;
-    return clone;
-  };
+  const releaseBindings = bindCameraEffectLifecycle(source, output);
   const draw = (time: number) => {
     if (stopped) return;
     frame = video.requestVideoFrameCallback(draw);
     if (time < lastFrame) return;
-    lastFrame = Math.max(lastFrame + 1000 / 24, time);
-    if (!ready) return;
+    lastFrame = Math.max(lastFrame + 1000 / (background === "none" ? 30 : 24), time);
+    if (!ready || !source.enabled) return;
     try {
       context.globalCompositeOperation = "source-over";
       context.clearRect(0, 0, canvas.width, canvas.height);
@@ -239,12 +274,18 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       if (next !== "none" && next !== "blur") {
         nextImage = new Image();
         nextImage.crossOrigin = "anonymous";
-        nextImage.src = CHALK_BACKGROUND_ASSETS[next].webp.url;
-        await nextImage.decode();
+        nextImage.src = CHALK_BACKGROUND_ASSETS[next].avif.url;
+        try {
+          await nextImage.decode();
+        } catch {
+          nextImage.src = CHALK_BACKGROUND_ASSETS[next].webp.url;
+          await nextImage.decode();
+        }
       }
       if (stopped || generation !== revision) throw new Error("Camera effects stopped");
       return () => {
         if (!stopped) {
+          resize(next);
           background = next;
           image = nextImage;
           ready = true;

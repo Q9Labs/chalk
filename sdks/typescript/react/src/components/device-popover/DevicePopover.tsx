@@ -69,10 +69,23 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   );
 }
 
-function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraPreview }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly selectedDeviceId?: string; readonly captureCameraPreview?: () => Promise<CameraPreviewHandle> }) {
+function CameraPreview({
+  track,
+  mirrored,
+  open,
+  selectedDeviceId,
+  captureCameraPreview,
+  onDeviceId,
+}: {
+  readonly onDeviceId: (deviceId: string | null) => void;
+  readonly track?: MediaStreamTrack | null;
+  readonly mirrored: boolean;
+  readonly open: boolean;
+  readonly selectedDeviceId?: string;
+  readonly captureCameraPreview?: () => Promise<CameraPreviewHandle>;
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const [deviceId, setDeviceId] = useState(selectedDeviceId ?? "default");
   const trackEnabled = track?.enabled;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Acquire a camera preview for the mounted open popover; release late captures and the owned preview on cleanup.
   useEffect(() => {
@@ -81,6 +94,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
     let cancelled = false;
     let preview: CameraPreviewHandle | undefined;
     setUnavailable(false);
+    onDeviceId(null);
     if (captureCameraPreview) {
       void captureCameraPreview().then(
         (captured) => {
@@ -89,7 +103,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
             return;
           }
           preview = captured;
-          setDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
+          onDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
           element.srcObject = new MediaStream([captured.track]);
         },
         () => {
@@ -97,7 +111,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
         },
       );
     } else if (track?.enabled && track.readyState === "live") {
-      setDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
+      onDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
       element.srcObject = new MediaStream([track]);
     } else {
       setUnavailable(true);
@@ -107,14 +121,13 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
       element.srcObject = null;
       preview?.release();
     };
-  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview]);
+  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId]);
   return (
     <>
       <div className="chalk-shell-preview">
         <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
         <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
       </div>
-      {open && !unavailable ? <CameraBackgroundPicker deviceId={deviceId} /> : null}
     </>
   );
 }
@@ -159,6 +172,7 @@ export function DevicePopover({
   onCancelPending,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
@@ -191,7 +205,7 @@ export function DevicePopover({
           </button>
         }
       >
-        {!mic ? <CameraPreview track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
+        {!mic ? <CameraPreview onDeviceId={setPreviewDeviceId} track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (
@@ -223,6 +237,7 @@ export function DevicePopover({
         ) : (
           <>
             <Menu.Separator className="chalk-shell-menu-separator" />
+            {open && previewDeviceId ? <CameraBackgroundPicker deviceId={previewDeviceId} /> : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
           </>
         )}

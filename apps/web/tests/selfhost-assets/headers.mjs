@@ -16,6 +16,7 @@ test("Pages serves a single cache policy for fonts, vendor assets and HTML", asy
       ["/fonts/site.css", "public, max-age=86400, must-revalidate"],
       ["/chalk-whiteboard/0.18.1/index.css", "public, max-age=0, s-maxage=0, must-revalidate"],
       ["/chalk-mathjax/4.1.3/tex-svg.js", "public, max-age=0, s-maxage=0, must-revalidate"],
+      ["/camera-effects/tasks-vision-1.1.1-test/vision_wasm_internal.wasm", "public, max-age=31536000, immutable"],
       ["/assets/app.js", "public, max-age=31536000, immutable"],
       ["/", "public, max-age=0, s-maxage=0, must-revalidate"],
     ];
