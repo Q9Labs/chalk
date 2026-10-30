@@ -342,16 +342,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const phase = publication.lifecycle;
     if (phase.kind === "pending" || phase.kind === "confirmed") publication.lifecycle = { kind: "retiring", handle: phase.kind === "confirmed" ? phase.handle : null, detached: false };
   }
+  #markBundledTransportRetiring(publication: OwnedLocalPublication): void {
+    // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
+    // session_error; closing MID 1 kept MID 0 and the session working.
+    // Follow the negotiated BUNDLE tag, since the first sender can be video.
+    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
+    if (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag) this.#retiredLocalConnection = publication.connection;
+  }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
-    // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
-    // session_error; closing MID 1 kept MID 0 and the session working.
-    // Follow the negotiated BUNDLE tag, since the first sender can be video.
-    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(connection.localDescription?.sdp ?? "")?.[1];
-    if (transceiver.mid !== null && transceiver.mid === bundleTag) this.#retiredLocalConnection = connection;
+    this.#markBundledTransportRetiring(publication);
     let closed = connection.connectionState === "closed";
     try {
       if (!phase.detached && !closed) {
