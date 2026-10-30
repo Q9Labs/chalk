@@ -31,7 +31,7 @@ test("contracts keep the exact source, arguments and inputs beside both builds",
   for (const build of ["build-managed-images", "build-media"]) {
     assert.deepEqual(needs(build), ["plan-managed"]);
   }
-  const checkout = contracts.steps.find((step) => step.uses === "actions/checkout@v4");
+  const checkout = contracts.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
   assert.deepEqual(checkout.with, { ref: "${{ inputs.target_sha }}", "fetch-depth": 0 });
   const checks = contracts.steps.filter((step) => step.run?.includes("scripts/releases/check-contracts.sh"));
   assert.equal(checks.length, 1);
