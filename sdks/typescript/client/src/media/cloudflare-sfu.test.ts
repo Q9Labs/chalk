@@ -59,6 +59,26 @@ it.each([false, true])("recovers connected receive stalls through the existing p
   );
 });
 
+it.each(["audio", "video", "dtx-audio"] as const)("handles a pull before its first RTP stats row: %s", async (mode) => {
+  await withTimedHarness(
+    async (harness) => {
+      await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const source = mode === "video" ? ("camera" as const) : ("microphone" as const);
+      const publication = { participantId: "participant-2", source, publicationId: versionedPublicationID("remote", "0", source) };
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+      harness.peers[0]!.receiveDTX = mode === "dtx-audio";
+      harness.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
+      await harness.client.refreshRemotePublications();
+      await vi.advanceTimersByTimeAsync(19_000);
+      expect(harness.peers).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(mode === "dtx-audio" ? 26_000 : 5000);
+      if (mode === "dtx-audio") expect(harness.peers).toHaveLength(1);
+      else expect(harness.peers.length).toBeGreaterThan(1);
+    },
+    { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
+  );
+});
+
 it.each(["publisher-muted", "video-disabled", "dtx", "hidden", "pull-grace", "silence", "codec-unknown"] as const)("does not recover intentional or unobserved receive gaps: %s", async (mode) => {
   try {
     await withTimedHarness(
@@ -2324,6 +2344,11 @@ class FakePeerConnection extends EventTarget {
   }
   availableOutgoingBitrate: number | undefined;
   refuseSenderParameters = false;
+  receiveDTX = false;
+  readonly #receivers = new Map<string, RTCRtpReceiver>();
+  getReceivers(): RTCRtpReceiver[] {
+    return [...this.#receivers.values()];
+  }
   getStats(): Promise<RTCStatsReport> {
     const stat: RTCStats = { id: "candidate-pair", timestamp: 0, type: "candidate-pair" };
     Object.assign(stat, { selected: true, state: "succeeded", availableOutgoingBitrate: this.availableOutgoingBitrate });
@@ -2372,6 +2397,7 @@ class FakePeerConnection extends EventTarget {
     this.#nextRemoteDescriptionStates = { connection, ice };
   }
   emitTrack(mid: string, track: FakeTrack): void {
+    this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
     const event = new Event("track");
     Object.defineProperties(event, {
       track: { value: track as unknown as MediaStreamTrack },

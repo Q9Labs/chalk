@@ -990,17 +990,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const samples = [...this.#remoteTracks.values()].flatMap((publication) => {
       if (!this.#expectedRemotePublications.has(publication.publicationId)) return [];
       const rows = [...report.values()].filter((row) => row.type === "inbound-rtp" && row.trackIdentifier === publication.track.id);
-      if (!rows.length || rows.some((row) => !Number.isSafeInteger(row.packetsReceived) || row.packetsReceived < 0)) return [];
+      if (rows.some((row) => !Number.isSafeInteger(row.packetsReceived) || row.packetsReceived < 0)) return [];
       // DTX permits intentional packet gaps. Unknown audio codec parameters
       // cannot establish expected continuous RTP either.
-      if (
-        publication.track.kind === "audio" &&
-        rows.some((row) => {
-          const codec = report.get(row.codecId);
-          return !codec || typeof codec.sdpFmtpLine !== "string" || /(?:^|;)\s*usedtx\s*=\s*1(?:;|$)/i.test(codec.sdpFmtpLine);
-        })
-      )
-        return [];
+      if (publication.track.kind === "audio") {
+        // Inbound RTP stats do not exist until the first packet. Negotiated
+        // receiver codecs still distinguish a dead pull from intentional DTX.
+        const negotiated = rows.length
+          ? rows.map((row) => report.get(row.codecId))
+          : (connection
+              .getReceivers()
+              .find((receiver) => receiver.track.id === publication.track.id)
+              ?.getParameters().codecs ?? []);
+        const opus = negotiated.filter((codec) => codec?.mimeType?.toLowerCase() === "audio/opus");
+        if (!opus.length || opus.some((codec) => typeof codec.sdpFmtpLine !== "string" || /(?:^|;)\s*usedtx\s*=\s*1(?:;|$)/i.test(codec.sdpFmtpLine))) return [];
+      }
       return [{ publicationId: publication.publicationId, trackId: publication.track.id, packets: rows.reduce((sum, row) => sum + row.packetsReceived, 0) }];
     });
     const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), samples);
