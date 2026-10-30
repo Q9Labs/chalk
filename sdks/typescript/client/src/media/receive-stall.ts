@@ -11,9 +11,11 @@ export type ReceivePacketSample = {
   readonly packets: number;
 };
 
+type ReceiveProgress = { trackId: string; packets: number; advancedAt: number; flowing: boolean; flowingSince: number };
+
 /** Only consecutive, timely observations of expected media establish a stall. */
 export class ReceiveStallDetector {
-  readonly #progress = new Map<string, { trackId: string; packets: number; advancedAt: number; flowing: boolean }>();
+  readonly #progress = new Map<string, ReceiveProgress>();
   #sampledAt: number | undefined;
 
   forget(publicationId: string): void {
@@ -25,7 +27,7 @@ export class ReceiveStallDetector {
     this.#sampledAt = undefined;
   }
 
-  sample(now: number, tracks: readonly ReceivePacketSample[]): { readonly stalled: readonly string[]; readonly advanced: readonly string[] } {
+  sample(now: number, tracks: readonly ReceivePacketSample[]): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly resumed: readonly string[] } {
     if (this.#sampledAt !== undefined && (now - this.#sampledAt > MAX_SAMPLE_GAP_MS || now < this.#sampledAt)) this.clear();
     this.#sampledAt = now;
     const observed = new Set(tracks.map((track) => track.publicationId));
@@ -33,55 +35,131 @@ export class ReceiveStallDetector {
     const observations = tracks.map((track) => ({ id: track.publicationId, outcome: this.#observeTrack(now, track) }));
     return {
       stalled: observations.filter((track) => track.outcome === "stalled").map((track) => track.id),
-      advanced: observations.filter((track) => track.outcome === "advanced").map((track) => track.id),
+      resumed: observations.filter((track) => track.outcome === "resumed").map((track) => track.id),
+      advanced: observations.filter((track) => track.outcome === "advanced" || track.outcome === "resumed").map((track) => track.id),
     };
   }
 
-  #observeTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample): "stalled" | "advanced" | null {
+  #observeTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample): "stalled" | "advanced" | "resumed" | null {
     const previous = this.#progress.get(publicationId);
     const sameTrack = previous?.trackId === trackId;
     if (sameTrack && previous.packets === packets) {
       const window = previous.flowing ? RECEIVE_STALL_WINDOW_MS : RECEIVE_STARTUP_GRACE_MS;
       return now - previous.advancedAt >= window ? "stalled" : null;
     }
-    this.#progress.set(publicationId, { trackId, packets, advancedAt: now, flowing: sameTrack && packets > previous.packets });
-    return sameTrack && packets > previous.packets ? "advanced" : null;
+    return this.#advanceTrack(now, { publicationId, trackId, packets }, previous);
+  }
+
+  #advanceTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample, previous: ReceiveProgress | undefined): "advanced" | "resumed" | null {
+    const advanced = previous?.trackId === trackId && packets > previous.packets;
+    const flowingSince = advanced && now - previous.advancedAt < RECEIVE_STALL_WINDOW_MS ? previous.flowingSince : now;
+    this.#progress.set(publicationId, { trackId, packets, advancedAt: now, flowing: advanced, flowingSince });
+    if (!advanced) return null;
+    return now - flowingSince >= RECEIVE_STALL_WINDOW_MS ? "resumed" : "advanced";
   }
 }
 
-/** Keeps pending recovery valid only while current, expected RTP remains stalled. */
+export type ReceiveStallObservation = {
+  readonly event: "receive_stalled";
+  readonly scope: "partial" | "all";
+  readonly observedAtMs: number;
+  readonly expectedTracks: number;
+  readonly stalledTracks: number;
+};
+const MAX_RECEIVE_REBUILDS = 2;
+const MAX_RECEIVE_OBSERVATIONS = 32;
+
+/** Owns eligibility, pending stalls and the budget across replacement peers. */
 export class ReceiveStallRecovery {
   readonly #detector = new ReceiveStallDetector();
+  readonly #attempts = new Map<string, number>();
+  readonly #identities = new Map<string, CloudflareSFURemoteTrack>();
   #expected = new Set<string>();
+  #screens = new Set<string>();
   #stalled = new Set<string>();
+  #active: readonly string[] = [];
+  #observations: readonly ReceiveStallObservation[] = Object.freeze([]);
+
+  get observations(): readonly ReceiveStallObservation[] {
+    return this.#observations;
+  }
 
   expect(publications: readonly MediaPublication[], participantId: string): void {
-    const expected = new Set(publications.flatMap((publication) => (publication.participantId !== participantId && publication.enabled && publication.publicationId ? [publication.publicationId] : [])));
-    for (const id of this.#expected) {
-      if (expected.has(id)) continue;
-      this.#detector.forget(id);
-      this.#stalled.delete(id);
+    const enabled = publications.filter((publication) => publication.participantId !== participantId && publication.enabled);
+    this.#expected = new Set(enabled.flatMap((publication) => (publication.publicationId ? [publication.publicationId] : [])));
+    this.#screens = new Set(enabled.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));
+    this.#pruneWithdrawn(publications);
+    for (const publication of this.#identities.values()) {
+      if (this.#isExpected(publication)) continue;
+      this.#detector.forget(publication.publicationId);
+      this.#stalled.delete(publication.publicationId);
     }
-    this.#expected = expected;
+    this.#active = [...this.#identities.values()].filter((publication) => this.#isExpected(publication)).map((publication) => publication.publicationId);
+  }
+
+  #pruneWithdrawn(publications: readonly MediaPublication[]): void {
+    const advertised = new Set(publications.map((publication) => publication.publicationId));
+    const screens = new Set(publications.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));
+    for (const [key, publication] of this.#identities) {
+      if (advertised.has(publication.publicationId) || (publication.source === "screen_audio" && screens.has(publication.participantId))) continue;
+      this.#forget(publication.publicationId);
+      this.#identities.delete(key);
+    }
   }
 
   isStalled(publicationId: string): boolean {
     return this.#stalled.has(publicationId);
   }
 
+  canRebuild(): boolean {
+    return this.#active.length > 0 && this.#active.every((id) => this.#stalled.has(id) && (this.#attempts.get(id) ?? 0) < MAX_RECEIVE_REBUILDS);
+  }
+
+  reserveRebuild(): boolean {
+    if (!this.canRebuild()) return false;
+    for (const id of this.#active) this.#attempts.set(id, (this.#attempts.get(id) ?? 0) + 1);
+    return true;
+  }
+
   clear(): void {
     this.#detector.clear();
     this.#stalled.clear();
+    this.#active = [];
   }
 
   sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<CloudflareSFURemoteTrack>): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
-    const samples = [...tracks].filter((publication) => this.#expected.has(publication.publicationId)).flatMap((publication) => receivePacketSample(connection, report, publication) ?? []);
-    const { stalled, advanced } = this.#detector.sample(now, samples);
+    const active = [...tracks].filter((publication) => this.#isExpected(publication));
+    for (const publication of active) this.#rememberIdentity(publication);
+    this.#active = active.map((publication) => publication.publicationId);
+    const samples = active.flatMap((publication) => receivePacketSample(connection, report, publication) ?? []);
+    const { stalled, advanced, resumed } = this.#detector.sample(now, samples);
+    for (const id of resumed) this.#attempts.delete(id);
     const newlyStalled = stalled.filter((id) => !this.#stalled.has(id));
-    // Progress, an ineligible publication or a throttled sample invalidates a
-    // pending stall, including while publication discovery is still in flight.
     this.#stalled = new Set(stalled);
+    if (newlyStalled.length) this.#record(now);
     return { stalled, advanced, newlyStalled };
+  }
+
+  #isExpected(publication: CloudflareSFURemoteTrack): boolean {
+    return publication.source === "screen_audio" ? this.#screens.has(publication.participantId) : this.#expected.has(publication.publicationId);
+  }
+
+  #rememberIdentity(publication: CloudflareSFURemoteTrack): void {
+    const key = `${publication.participantId}\0${publication.source}`;
+    const previous = this.#identities.get(key);
+    if (previous && previous.publicationId !== publication.publicationId) this.#forget(previous.publicationId);
+    this.#identities.set(key, publication);
+  }
+
+  #forget(id: string): void {
+    this.#detector.forget(id);
+    this.#stalled.delete(id);
+    this.#attempts.delete(id);
+  }
+
+  #record(now: number): void {
+    const observation = Object.freeze({ event: "receive_stalled" as const, scope: this.#active.every((id) => this.#stalled.has(id)) ? ("all" as const) : ("partial" as const), observedAtMs: now, expectedTracks: this.#active.length, stalledTracks: this.#stalled.size });
+    this.#observations = Object.freeze([...this.#observations.slice(-(MAX_RECEIVE_OBSERVATIONS - 1)), observation]);
   }
 }
 

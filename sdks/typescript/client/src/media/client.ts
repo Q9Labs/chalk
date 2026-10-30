@@ -113,6 +113,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       cursor: null,
       localTracks: EMPTY_LOCAL,
       remoteTracks: EMPTY_REMOTE,
+      receiveStalls: this.#receiveProgress.observations,
       failure: null,
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
@@ -794,7 +795,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           // The close API authorizes publisher MIDs only. Keep the receive
           // allocation until the existing replacement owner retires its peer;
           // repulling on that peer would allocate another receiver/provider pull.
-          if (!this.#receiveProgress.isStalled(publication.publicationId) || !this.#replaceMediaConnection) return false;
+          if (!this.#receiveProgress.canRebuild() || !this.#replaceMediaConnection) return false;
         }
         const remaining = (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) - now;
         return remaining <= 0;
@@ -831,8 +832,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const pending = this.#pendingRemotePulls(desired);
     const receiveStalled = pending.some((publication) => this.#receiveProgress.isStalled(publication.publicationId));
     const publications = receiveStalled ? [...desired.values()] : pending;
+    if (receiveStalled) {
+      if (!this.#replaceMediaConnection || !this.#receiveProgress.reserveRebuild()) return [];
+      return this.#retryRemotePullOnReplacement(publications, cursor, generation, "receive_stalled");
+    }
     try {
-      if (receiveStalled && this.#replaceMediaConnection) return await this.#retryRemotePullOnReplacement(publications, cursor, generation, "receive_stalled");
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
@@ -852,12 +856,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure"): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     this.#remoteRecoveryGeneration = generation;
+    const connection = this.#connection;
     try {
       await this.#replaceMediaConnectionForRecovery(generation, cause);
       await this.#republishPreparedTracksAfterRecovery(generation);
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
+      if (cause === "receive_stalled" && connection === this.#connection) {
+        this.#replacementAttemptedGeneration = null;
+        for (const publication of publications) this.#backoffRemotePull(publication.publicationId, true);
+      }
       this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
       throw error;
     }
@@ -979,15 +988,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const failures = Math.min(previous.failures + 1, 6);
     this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
+  #canObserveReceiveProgress(connection: RTCPeerConnection): boolean {
+    return this.#started && connectionIsLive(connection) && (typeof document === "undefined" || document.visibilityState !== "hidden");
+  }
   #observeReceiveProgress(connection: RTCPeerConnection, report: RTCStatsReport): void {
-    if (!this.#started || !connectionIsLive(connection) || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
+    if (!this.#canObserveReceiveProgress(connection)) {
       this.#receiveProgress.clear();
       return;
     }
-    const { stalled, advanced, newlyStalled } = this.#receiveProgress.sample(performance.now(), connection, report, this.#remoteTracks.values());
+    const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), connection, report, this.#remoteTracks.values());
     for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
-    if (!stalled.length) return;
-    for (const publicationId of newlyStalled) this.#backoffRemotePull(publicationId, true);
+    this.#publishSnapshot();
+    if (!this.#receiveProgress.canRebuild()) return;
+    for (const publicationId of stalled) {
+      if (!this.#remotePullRetries.get(publicationId)?.receiveStalled) this.#backoffRemotePull(publicationId, true);
+    }
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
@@ -1313,6 +1328,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           )
         : EMPTY_LOCAL,
       remoteTracks: this.#remoteTracks.size ? [...this.#remoteTracks.values()] : EMPTY_REMOTE,
+      receiveStalls: this.#receiveProgress.observations,
       failure,
     });
     if (snapshotEqual(this.#snapshot, next)) return;
@@ -1446,7 +1462,14 @@ function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot
   return snapshotMetadataEqual(left, right) && left.localTracks.every((publication, index) => publicationEqual(publication, right.localTracks[index])) && left.remoteTracks.every((publication, index) => remotePublicationEqual(publication, right.remoteTracks[index]));
 }
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
-  return connectionEqual(left.connection, right.connection) && cursorEqual(left.cursor, right.cursor) && failureEqual(left.failure, right.failure) && left.localTracks.length === right.localTracks.length && left.remoteTracks.length === right.remoteTracks.length;
+  return (
+    left.receiveStalls === right.receiveStalls &&
+    connectionEqual(left.connection, right.connection) &&
+    cursorEqual(left.cursor, right.cursor) &&
+    failureEqual(left.failure, right.failure) &&
+    left.localTracks.length === right.localTracks.length &&
+    left.remoteTracks.length === right.remoteTracks.length
+  );
 }
 function connectionEqual(left: CloudflareSFUSnapshot["connection"], right: CloudflareSFUSnapshot["connection"]): boolean {
   return left.phase === right.phase && left.peerConnectionState === right.peerConnectionState && left.iceConnectionState === right.iceConnectionState;

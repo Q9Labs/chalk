@@ -35,6 +35,7 @@ export type ConnectionMediaRemoteTrack = Pick<MediaPublication, "participantId" 
 };
 
 export type ConnectionMediaSnapshot = {
+  readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   readonly connection: {
     readonly phase: ConnectionMediaPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;

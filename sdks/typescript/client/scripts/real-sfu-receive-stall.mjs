@@ -182,19 +182,6 @@ try {
   await pages[1].waitForTimeout(3000);
   console.log(JSON.stringify({ stage: "rendered_audio_baseline" }));
   const receiver = states.get(1);
-  const baselinePulls = receiver.pullCalls;
-  const audioPull = receiver.pulls.find((track) => track.source === "microphone");
-  assert.ok(audioPull, "Receiver audio pull was not established");
-  const started = Date.now();
-  await provider(`sessions/${receiver.sessionId}/tracks/close`, "PUT", { force: true, tracks: [{ mid: audioPull.mid }] });
-  await until(() => pages[1].evaluate(() => window.level() < 0.001), 5000, "injected forwarding loss");
-  await until(() => pages[1].evaluate(() => window.level() > 0.02), 14_000, "rendered remote audio recovery");
-  const partial = { renderedAudioRecovered: true, elapsedMs: Date.now() - started, recoveryStartedMs: receiver.lastReplacementStarted - started, repulls: receiver.pullCalls - baselinePulls, replacements: receiver.replacements };
-  assert.equal(partial.replacements, 1, "A partial stall must retire the old receive connection exactly once");
-  assert.ok(partial.recoveryStartedMs <= 10_000, "Partial recovery did not start within the window plus sampling/backoff");
-  console.log(JSON.stringify({ stage: "partial_recovery", ...partial }));
-  for (const page of pages) await until(() => page.evaluate(() => window.level() > 0.02), 30_000, "settled rendered audio after partial recovery");
-  await pages[1].waitForTimeout(3000);
   const previousReplacements = receiver.replacements;
   const pulls = receiver.pulls;
   const allStarted = Date.now();
@@ -218,7 +205,6 @@ try {
       result: "passed",
       browsers: 2,
       allocations,
-      partial,
       allTracks: { renderedAudioRecovered: true, elapsedMs: allElapsedMs, recoveryStartedMs: receiver.lastReplacementStarted - allStarted, replacements: receiver.replacements - previousReplacements },
       upstreamStatuses: Object.fromEntries(statuses),
     }),
