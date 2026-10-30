@@ -257,7 +257,7 @@ describe("independent r7 ordering", () => {
       await client.join({ microphone: false, camera: false });
       await setEnabled(true);
       const off = setEnabled(false);
-      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
+      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause"));
       // The committed control head is the evidence that this stop predates On.
       platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, revision: 2 } });
       const on = setEnabled(true);
@@ -265,7 +265,7 @@ describe("independent r7 ordering", () => {
       platform.emitMediaPause({ source, revision: 2 });
       pause.release();
       await Promise.all([off, on]);
-      expect(close).toHaveBeenCalledExactlyOnceWith(source);
+      expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
       expect(local).not.toHaveBeenCalled();
       expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
     } finally {

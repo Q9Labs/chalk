@@ -596,25 +596,153 @@ it.each(["microphone", "camera"] as const)("ownership: a late response cannot re
   }
 });
 
-it.each(["microphone", "camera"] as const)("reuses a confirmed %s publication for device handoff, then retires it on pause", async (source) => {
-  const harness = createHarness();
+it.each([
+  ["microphone", false],
+  ["camera", false],
+  ["microphone", true],
+  ["camera", true],
+] as const)("reuses a confirmed %s publication for device handoff (ended=%s), then retires it on pause", async (source, ended) => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
   const kind = source === "microphone" ? "audio" : "video";
   const old = new FakeTrack("old-device", kind);
   const fresh = new FakeTrack("new-device", kind);
   try {
     await harness.client.start(fakeStream(old));
     const publicationId = harness.client.getSnapshot().localTracks[0]?.publicationId;
+    const sender = harness.peers[0]?.getSenders()[0];
+    if (ended) old.endFromBrowser();
     await harness.client.clearPreparedLocalTrack(source, { stopTrack: false });
+    expect(harness.transport.closeInputs).toHaveLength(0);
     harness.client.prepareLocalTrack(source, fresh as unknown as MediaStreamTrack);
     await harness.client.setLocalPublicationTarget({ operationId: "device-handoff", participantId: "participant-1", source, enabled: true });
     expect(harness.transport.addInputs).toHaveLength(1);
     expect(harness.client.getSnapshot().localTracks[0]?.publicationId).toBe(publicationId);
     expect(fresh.enabled).toBe(true);
+    expect(harness.peers[0]?.getSenders()[0]).toBe(sender);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
     await harness.client.closeForcedLocalPublication(source);
     expect(fresh.enabled).toBe(false);
     expect(harness.transport.localPublications.size).toBe(0);
   } finally {
     old.stop();
+    harness.client.stop();
+  }
+});
+
+it.each([false, true])("republishes expired capture after 40 seconds so the remote side receives media (expired close=%s)", async (expiredClose) => {
+  const onError = vi.fn();
+  const sender = createHarness({
+    onError,
+    replaceMediaConnection: async () => {
+      // Binding a new connection fences the old Chalk registry entries.
+      sender.transport.localPublications.clear();
+      return bootstrap("connection-2");
+    },
+  });
+  const receiver = createHarness();
+  const microphone = new FakeTrack("interrupted-microphone", "audio");
+  const providerTracks = new Set<string>();
+  const publish = sender.transport.addTracks.bind(sender.transport);
+  vi.spyOn(sender.transport, "addTracks").mockImplementation(async (input) => {
+    const response = await publish(input);
+    for (const track of response.tracks ?? []) if (track.publicationId) providerTracks.add(track.publicationId);
+    return response;
+  });
+  // The provider only delivers media from a live publication and attached sender.
+  const receivedMedia = () =>
+    receiver.client.getSnapshot().remoteTracks.filter(
+      (remote) =>
+        remote.source === "microphone" &&
+        providerTracks.has(remote.publicationId) &&
+        sender.peers
+          .at(-1)
+          ?.getSenders()
+          .some((item) => item.track === microphone && item.track.enabled),
+    );
+  try {
+    await sender.client.start(fakeStream(microphone, new FakeTrack("still-live-camera", "video")));
+    await receiver.client.start(fakeStream());
+    receiver.transport.snapshot = { incarnation: 1, sequence: 1, publications: [...sender.transport.localPublications.values()].map((publication) => ({ ...publication, participantId: "participant-2" })) };
+    await receiver.client.refreshRemotePublications();
+    expect(receivedMedia()).toHaveLength(1);
+    const original = sender.client.getSnapshot().localTracks[0]!.publicationId;
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    await sender.client.pauseLocalCapture("microphone");
+    clock.mockReturnValue(now + 40_000);
+    providerTracks.delete(original!); // Provider inactivity expiry does not update Chalk's registry.
+    if (expiredClose) vi.spyOn(sender.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("provider session expired", "signaling_failed", { status: 410, retryableConnection: true }));
+    expect(sender.transport.localPublications.has(original!)).toBe(true);
+    expect(receivedMedia()).toHaveLength(0);
+    await sender.client.setLocalSourceIntent("microphone", true);
+    await expect(sender.client.setLocalPublicationTarget({ operationId: "resume-after-expiry", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    receiver.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...sender.transport.localPublications.values()].map((publication) => ({ ...publication, participantId: "participant-2" })) };
+    await receiver.client.refreshRemotePublications();
+    expect(receivedMedia()).toHaveLength(1);
+    expect(receivedMedia()[0]!.publicationId).not.toBe(original);
+    expect(sender.client.getSnapshot().localTracks[0]!.enabled).toBe(true);
+    expect(sender.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.enabled).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  } finally {
+    vi.restoreAllMocks();
+    sender.client.stop();
+    receiver.client.stop();
+  }
+});
+
+it("acknowledges Sync capture unavailability without retiring the retained sender", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+    const original = harness.client.getSnapshot().localTracks[0]!.publicationId;
+    await harness.client.pauseLocalCapture("microphone");
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "capture-unavailable", participantId: "participant-1", source: "microphone", enabled: false })).resolves.toEqual({ outcome: "satisfied", errorCode: null });
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.client.getSnapshot().localTracks[0]!.publicationId).toBe(original);
+    await harness.client.setLocalSourceIntent("microphone", false, "user_pause");
+    expect(harness.transport.closeInputs).toHaveLength(1);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("detaches again when capture flaps during a pending reattachment without closing BUNDLE", async () => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
+  const microphone = new FakeTrack("flapping-microphone", "audio");
+  const gate = Promise.withResolvers<void>();
+  const attaching = Promise.withResolvers<void>();
+  try {
+    await harness.client.start(fakeStream(microphone, new FakeTrack("camera", "video")));
+    const original = harness.client.getSnapshot().localTracks.find((track) => track.source === "microphone")!.publicationId;
+    await harness.client.pauseLocalCapture("microphone");
+    await harness.client.setLocalSourceIntent("microphone", true);
+    const sender = harness.peers[0]!.getSenders()[0]!;
+    const replace = sender.replaceTrack.bind(sender);
+    vi.spyOn(sender, "replaceTrack").mockImplementation(async (track) => {
+      if (track) {
+        attaching.resolve();
+        await gate.promise;
+      }
+      await replace(track);
+    });
+    const resume = harness.client.setLocalPublicationTarget({ operationId: "flapping-enable", participantId: "participant-1", source: "microphone", enabled: true });
+    await attaching.promise;
+    await harness.client.pauseLocalCapture("microphone");
+    gate.resolve();
+    await expect(resume).resolves.toEqual({ outcome: "terminal_failure", errorCode: "local_source_paused" });
+    expect(sender.track).toBeNull();
+    expect(microphone.enabled).toBe(false);
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    expect(harness.client.getSnapshot().localTracks).toEqual(expect.arrayContaining([expect.objectContaining({ source: "microphone", enabled: false, publicationId: original }), expect.objectContaining({ source: "camera", enabled: true })]));
+    await harness.client.setLocalSourceIntent("microphone", true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "fresh-enable", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+    expect(sender.track).toBe(microphone);
+    expect(harness.transport.addInputs).toHaveLength(1);
+  } finally {
+    gate.resolve();
     harness.client.stop();
   }
 });
@@ -710,6 +838,49 @@ it.each(["microphone", "camera"] as const)("ownership: failed-close recovery can
   }
 });
 
+it.each(["user_pause", "moderation_pause", "sync_recovery_loss"] as const)("reports the %s retirement caller once on the new connection", async (cause) => {
+  const harness = createHarness({ replaceMediaConnection: async () => bootstrap("connection-2") });
+  const add = vi.spyOn(harness.transport, "addTracks");
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await harness.client.closeForcedLocalPublication("microphone", cause);
+    harness.client.setLocalSourceIntent("microphone", true);
+    await harness.client.setLocalPublicationTarget({ operationId: "resume", participantId: "participant-1", source: "microphone", enabled: true });
+    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual([cause]);
+    expect(harness.peers).toHaveLength(2);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("reports absent discovery as the caller when re-enable retires a bundled publication", async () => {
+  const harness = createHarness({ replaceMediaConnection: async () => bootstrap("connection-2") });
+  const add = vi.spyOn(harness.transport, "addTracks");
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    harness.transport.localPublications.delete(harness.client.getSnapshot().localTracks[0]!.publicationId!);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "resume-absent", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual(["discovery_absent"]);
+    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.peers).toHaveLength(2);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("reports an externally refreshed binding once and leaves same-binding restarts unmarked", async () => {
+  const harness = createHarness();
+  const add = vi.spyOn(harness.transport, "addTracks");
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await harness.client.restart(bootstrap("connection-2"));
+    await harness.client.restart(bootstrap("connection-2"));
+    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual(["access_refresh"]);
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("ownership: retains ownership after a failed close so the publication can be retired (%s)", async (source) => {
   const harness = createHarness();
   const track = new FakeTrack("failed-close", source === "microphone" ? "audio" : "video");
@@ -729,23 +900,40 @@ it.each(["microphone", "camera"] as const)("ownership: retains ownership after a
   }
 });
 
-it("ownership: retires camera publication when the operating system ends capture", async () => {
-  const harness = createHarness();
-  const platform = createCoreTestPlatform();
-  const camera = new FakeTrack("os-ended", "video");
-  const client = createSpaceClientForPlatform(
-    { space: "space-1", getAccess: async () => opaqueAccessGrant("os-ended") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(camera) }, createMediaClient: () => harness.client } },
-  );
+it.each([
+  ["microphone", "muted"],
+  ["microphone", "ended"],
+  ["camera", "ended"],
+] as const)("detaches an OS-interrupted %s (%s) and reuses its publication only after fresh consent", async (source, interruption) => {
+  const t = reviewFixture();
   try {
-    await client.join({ microphone: false, camera: true });
-    expect(harness.transport.localPublications.size).toBe(1);
-    camera.endFromBrowser();
-    await vi.waitFor(() => expect(harness.client.getSnapshot().localTracks).toHaveLength(0));
-    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(0));
+    await t.client.join({ microphone: true, camera: true });
+    const original = t.harness.client.getSnapshot().localTracks.find((item) => item.source === source)!;
+    const track = t.captured.find((item) => item.id === original.track.id)!;
+    if (interruption === "ended") track.endFromBrowser();
+    else {
+      Object.assign(track, { muted: true });
+      track.dispatchEvent(new Event("mute"));
+    }
+    await t.settle();
+    expect(track.enabled).toBe(false);
+    expect(t.client.getSnapshot().media.local[source].state).toBe("disabled");
+    expect(t.harness.transport.closeInputs).toHaveLength(0);
+    expect(t.harness.transport.localPublications.size).toBe(2);
+    expect(t.harness.peers[0]?.getSenders().some((sender) => sender.track === original.track)).toBe(false);
+    Object.assign(track, { muted: false });
+    track.dispatchEvent(new Event("unmute"));
+    await t.settle();
+    expect(track.enabled).toBe(false);
+    await (source === "microphone" ? t.client.media.setMicrophoneEnabled(true) : t.client.media.setCameraEnabled(true));
+    const resumed = t.harness.client.getSnapshot().localTracks.find((item) => item.source === source)!;
+    expect(resumed).toMatchObject({ enabled: true, publicationId: original.publicationId });
+    if (interruption === "ended") expect(resumed.track).not.toBe(original.track);
+    expect(t.harness.peers).toHaveLength(1);
+    expect(t.harness.transport.addInputs).toHaveLength(1);
+    expect(t.harness.transport.closeInputs).toHaveLength(0);
   } finally {
-    client.dispose();
-    harness.client.stop();
+    await t.cleanup();
   }
 });
 
@@ -1214,6 +1402,17 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toMatch(/\/tracks$/);
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
+  });
+  it("sends replacement diagnostics in an optional query without changing legacy bodies or CORS headers", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const input = { connectionId: "connection-2", tracks: [] };
+    await transport.addTracks(input);
+    await transport.addTracks({ ...input, replacementCause: "discovery_absent", allowPartialRemoteTracks: true });
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).searchParams.get("replacement_cause")).toBe("discovery_absent");
+    expect(new URL(String(fetch.mock.calls[1]?.[0])).searchParams.get("allow_partial_remote_tracks")).toBe("true");
+    expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
+    expect(fetch.mock.calls[1]?.[1]?.headers).toEqual(fetch.mock.calls[0]?.[1]?.headers);
   });
   it("marks expired provider connections as retryable connection failures", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response("connection expired", { status: 410 }));
@@ -1876,7 +2075,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   constructor(peer: () => FakePeerConnection | undefined) {
     this.#peer = peer;
   }
-  async addTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[] }): Promise<CloudflareSFUTracksResponse> {
+  async addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
     this.addInputs.push(input);
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));

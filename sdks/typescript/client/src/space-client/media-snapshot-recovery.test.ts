@@ -21,9 +21,9 @@ describe("recovery publication authority", () => {
       if (newerAction) {
         await vi.waitFor(() => expect(command).toHaveBeenLastCalledWith(false));
         // Only the explicit Off closes it; recovery must not close it again.
-        expect(close).toHaveBeenCalledExactlyOnceWith(source);
+        expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
       } else {
-        await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
+        await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "sync_recovery_loss"));
         expect(track.enabled).toBe(false);
         expect(command).toHaveBeenCalledExactlyOnceWith(true);
         // A fresh On remains available; recovery never writes the user's desired intent.

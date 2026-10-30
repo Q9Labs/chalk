@@ -1,3 +1,8 @@
+import type { operations } from "../generated/openapi-types";
+
+export type MediaConnectionReplacementCause = NonNullable<NonNullable<operations["addCloudflareSFUTracks"]["parameters"]["query"]>["replacement_cause"]>;
+export type LocalPublicationRetirementCause = Exclude<MediaConnectionReplacementCause, "local_signaling_failure" | "remote_signaling_failure" | "dormant_connection" | "access_refresh">;
+
 export type ScreenShareSurface = "monitor" | "window" | "browser";
 export type ScreenShareOptions = {
   readonly surface?: ScreenShareSurface;
@@ -57,8 +62,9 @@ export type MediaPlaneResult = {
 
 export type ClientMediaPlane = {
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
-  readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean) => void;
-  readonly closeForcedLocalPublication?: (source: MediaSource) => Promise<void>;
+  readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
+  readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;
+  readonly closeForcedLocalPublication?: (source: MediaSource, cause?: LocalPublicationRetirementCause) => Promise<void>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly remotePublicationsChanged?: () => void;

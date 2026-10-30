@@ -6862,6 +6862,21 @@ export interface operations {
     parameters: {
       query?: {
         allow_partial_remote_tracks?: boolean;
+        replacement_cause?:
+          | "user_pause"
+          | "moderation_pause"
+          | "sync_recovery_loss"
+          | "discovery_absent"
+          | "capture_cleanup"
+          | "consent_revoked"
+          | "publish_failure"
+          | "enable_failure"
+          | "projection_mismatch"
+          | "forced_pause"
+          | "local_signaling_failure"
+          | "remote_signaling_failure"
+          | "dormant_connection"
+          | "access_refresh";
       };
       header?: never;
       path: {
