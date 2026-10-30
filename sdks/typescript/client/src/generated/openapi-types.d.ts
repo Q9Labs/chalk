@@ -6876,7 +6876,8 @@ export interface operations {
           | "local_signaling_failure"
           | "remote_signaling_failure"
           | "dormant_connection"
-          | "access_refresh";
+          | "access_refresh"
+          | "receive_stalled";
       };
       header?: never;
       path: {

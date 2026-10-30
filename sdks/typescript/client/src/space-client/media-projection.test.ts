@@ -235,6 +235,7 @@ it.each([
     expect(test.received.enabled).toBe(false);
     expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
     expect(pause).toHaveBeenCalledExactlyOnceWith(source);
+    expect(test.command.mock.invocationCallOrder[0]).toBeLessThan(pause.mock.invocationCallOrder[0]!);
     expect(close).not.toHaveBeenCalled();
     if (event === "mute") {
       Object.assign(test.track, { muted: false });

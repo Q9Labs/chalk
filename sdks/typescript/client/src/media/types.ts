@@ -69,6 +69,8 @@ export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
 export type CloudflareSFUConnectionPhase = "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped";
 export type CloudflareSFUPhase = CloudflareSFUConnectionPhase;
 export type CloudflareSFUSnapshot = {
+  /** Omitted by media adapters without receive diagnostics; treat as empty. */
+  readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   readonly connection: {
     readonly phase: CloudflareSFUConnectionPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;

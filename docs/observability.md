@@ -258,12 +258,41 @@ event. No extra request, identifier, device label, credential or browser text is
 sent. Older APIs ignore the query parameter and older SDKs omit it. Unknown
 values are ignored without rejecting signaling.
 
+Receive-stall recovery uses `receive_stalled` only on the first signaling attempt
+on a replacement binding. Only a stall of every expected-active inbound track can
+replace a connection, through the existing recovery owner. Each publication
+identity permits at most two receive-stall replacement attempts, including rejected
+replacement grants. Seven seconds of sustained packet progress replenishes its
+budget; a republish starts a new identity. Brief startup packets do not replenish
+it. Flowing RTP uses a 7-second packet-progress window, separate from the new-pull
+20-second startup grace. Hidden or throttled stats reset observation, not budgets. A Sync transport loss
+or Sync-client stop clears eligibility while retaining identity budgets. A recovered authoritative
+projection prunes withdrawn publications; Episode end or media stop clears them.
+Opus DTX remains eligible because it still sends periodic silence packets.
+Screen-share audio inherits its participant's screen availability while tracking
+its own RTP counters and publication identity.
+
+Partial stalls do not retry or replace. The SDK snapshot's optional `receiveStalls`
+field is empty when absent and holds
+the latest 32 `receive_stalled` observations, with scope (`partial` or `all`),
+monotonic timestamp and expected/stalled track counts. These observations contain
+no identifiers and send no additional request. Selective remote subscription
+retirement needs an authorized API path and remains a follow-up.
+
+Same-binding re-pulls (including per-publication failures) do not set
+`replacement_cause`. Their existing `cloudflare_sfu.remote_track_response`
+observation records bounded requested, missing and response track counts,
+`partial`, SDP type and whether immediate renegotiation was required. It uses the
+request's trace context without adding publication identifiers or browser text.
+HTTP failures remain in the request's existing failure trace; a missing response
+is not a connection-replacement event.
+
 Retirement causes distinguish `user_pause`, `moderation_pause`,
 `sync_recovery_loss`, `discovery_absent`, `capture_cleanup`, `consent_revoked`,
 `publish_failure`, `enable_failure`, `projection_mismatch` and the legacy
 `forced_pause` fallback.
 Other replacement causes are `local_signaling_failure`,
-`remote_signaling_failure`, `dormant_connection` and `access_refresh` for an
+`remote_signaling_failure`, `dormant_connection`, `receive_stalled` and `access_refresh` for an
 externally refreshed binding. Capture interruptions detach microphone/camera
 senders and retain their publication for short interruptions. Fresh user consent
 within 20 seconds reattaches capture without replacing a healthy session. Longer
@@ -271,17 +300,30 @@ interruptions retire and republish, because the provider expires tracks after
 30 seconds without RTP even while Chalk's registry retains the publication.
 A second interruption during reattachment detaches again and returns
 `local_source_paused` without closing the retained publication. The existing Sync
-pause command marks the owned publication unavailable to other participants;
+pause command is queued before the intentional sender detach and marks the owned
+publication unavailable to other participants;
 fresh consent restores availability. It is sent only for a matching owned
 publication, including after delayed projection confirmation or Sync reconnect.
-User and moderation pauses still retire
+A delayed pause projection cannot rebuild while another expected track flows.
+If every track detaches and Sync delivery is delayed, the same two-attempt bound
+applies until availability arrives. User and moderation pauses still retire
 their owned publication, including when the Sync command fails. A retired
 BUNDLE sender still requires a fresh provider session.
 
 Proof: `sdks/typescript/client/src/media/cloudflare-sfu.test.ts` covers interrupted capture, sender reuse,
-retirement attribution and query-only compatibility. The API's
-`apps/api/internal/httpapi/sfu_signaling_observation_test.go` covers query decoding;
-`apps/api/internal/observability/media_replacement_test.go` verifies every allowed cause and
+retirement attribution and query-only compatibility. Its all-track cases assert
+one replacement-cause signal per new binding and at most two attempts, including
+rejected grants and brief startup traffic. Partial-stall and delayed-detach cases
+assert zero replacements; screen-audio and packet/republish budget-reset cases
+cover receive eligibility. Incomplete/partial/discovery backoff cases assert
+same-binding retries carry no replacement cause. Late-close success/failure and
+resumed-progress cases cover lifecycle races.
+`sdks/typescript/client/scripts/real-sfu-receive-stall.mjs` verifies rendered audio
+after an all-track fault, one live receive allocation per publication, and
+replacement start and end-to-end times on a disposable SFU app. The API's
+`apps/api/internal/httpapi/sfu_signaling_observation_test.go` covers query decoding
+and requested/missing remote-track observations; `apps/api/internal/observability/media_replacement_test.go`
+verifies every allowed cause and
 suppresses unknown or identifying text. This is request-scoped diagnostic
 evidence; it adds no durable journey event.
 

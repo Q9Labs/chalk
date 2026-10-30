@@ -1045,8 +1045,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#pauseTracks(source);
     if (cause === "capture_cleanup" && source !== "screen" && ports.media.pauseLocalCapture) {
       state.capturePause = "pending";
-      this.#retainPause(state, ports.media.pauseLocalCapture(source));
       this.#notifyCapturePauses(ports);
+      this.#retainPause(state, ports.media.pauseLocalCapture(source));
     } else {
       ports.media.setLocalSourceIntent?.(source, false, cause);
       this.#retainPause(state, this.#beginLocalPause(ports, source, cause));

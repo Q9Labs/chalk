@@ -210,6 +210,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket?.close(1000, "client stopped");
     this.#socket = null;
     this.#phase = { phase: "stopped" };
+    this.#options.mediaPlane?.remotePublicationsChanged?.([], "unavailable");
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
     this.#localPublications = [];
@@ -260,6 +261,7 @@ export class V1SyncClient implements V1CollaborationClient {
     return () => this.#mediaPauseListeners.delete(listener);
   }
   #notifyMediaPause(event: Extract<SyncV1ServerFrame, { type: "event" }>): void {
+    if (event.name === "episode_ended") this.#options.mediaPlane?.remotePublicationsChanged?.([]);
     const source = event.name === "participant_microphone_stopped" ? "microphone" : event.name === "participant_camera_stopped" ? "camera" : event.name === "participant_screen_share_stopped" ? "screen" : null;
     if (source && "participant_id" in event.payload && event.payload.participant_id === this.#participantId) {
       for (const listener of this.#mediaPauseListeners) listener({ source, revision: event.revision });
@@ -644,6 +646,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const control = await restoreV1Snapshot(frame.snapshot);
       if (!sameHead(control, frame.head)) throw new V1ReplicaError("snapshot head mismatch");
       this.#control = control;
+      if (control.status === "ended") this.#options.mediaPlane?.remotePublicationsChanged?.([]);
       this.#snapshotRevision = control.revision;
       this.#snapshotRecoveryRequested = false;
       this.#controlHeads.clear();
@@ -710,7 +713,7 @@ export class V1SyncClient implements V1CollaborationClient {
           previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
           item,
         );
-      if (!this.#mediaEnded()) this.#options.mediaPlane?.remotePublicationsChanged?.();
+      if (!this.#mediaEnded()) this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
     } else {
       this.#presence = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(presenceItem) };
       this.#presenceEventEvidence.clear();
@@ -736,7 +739,7 @@ export class V1SyncClient implements V1CollaborationClient {
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
       if (!this.#mediaEnded() && item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
-        this.#options.mediaPlane?.remotePublicationsChanged?.();
+        this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
       }
     } else {
       if (this.#acceptProjectionDuplicate(this.#presence, this.#presenceEventEvidence, frame)) return;
@@ -844,6 +847,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#commandScheduler.disconnect();
     this.#media = null;
     this.#presence = null;
+    this.#options.mediaPlane?.remotePublicationsChanged?.([], this.#mediaEnded() ? "available" : "unavailable");
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
     if (!this.#started || this.#phase.phase === "terminal") return;

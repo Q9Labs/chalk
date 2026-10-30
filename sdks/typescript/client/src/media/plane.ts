@@ -1,7 +1,7 @@
 import type { operations } from "../generated/openapi-types";
 
 export type MediaConnectionReplacementCause = NonNullable<NonNullable<operations["addCloudflareSFUTracks"]["parameters"]["query"]>["replacement_cause"]>;
-export type LocalPublicationRetirementCause = Exclude<MediaConnectionReplacementCause, "local_signaling_failure" | "remote_signaling_failure" | "dormant_connection" | "access_refresh">;
+export type LocalPublicationRetirementCause = Exclude<MediaConnectionReplacementCause, "local_signaling_failure" | "remote_signaling_failure" | "dormant_connection" | "access_refresh" | "receive_stalled">;
 
 export type ScreenShareSurface = "monitor" | "window" | "browser";
 export type ScreenShareOptions = {
@@ -35,6 +35,7 @@ export type ConnectionMediaRemoteTrack = Pick<MediaPublication, "participantId" 
 };
 
 export type ConnectionMediaSnapshot = {
+  readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   readonly connection: {
     readonly phase: ConnectionMediaPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
@@ -67,7 +68,8 @@ export type ClientMediaPlane = {
   readonly closeForcedLocalPublication?: (source: MediaSource, cause?: LocalPublicationRetirementCause) => Promise<void>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
-  readonly remotePublicationsChanged?: () => void;
+  /** Unavailable suspends receive eligibility without withdrawing publication identities. */
+  readonly remotePublicationsChanged?: (publications?: readonly MediaPublication[], projectionState?: "available" | "unavailable") => void;
   readonly remoteParticipantsChanged?: (participantIds: readonly string[]) => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
 };
