@@ -44,6 +44,7 @@ type OwnedLocalPublication = {
 type LocalPublicationHandle = { readonly publicationId: string; readonly mid: string };
 const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
+const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
@@ -1463,7 +1464,7 @@ function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot
 }
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return (
-    left.receiveStalls === right.receiveStalls &&
+    (left.receiveStalls ?? EMPTY_RECEIVE_STALLS) === (right.receiveStalls ?? EMPTY_RECEIVE_STALLS) &&
     connectionEqual(left.connection, right.connection) &&
     cursorEqual(left.cursor, right.cursor) &&
     failureEqual(left.failure, right.failure) &&

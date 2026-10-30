@@ -261,7 +261,8 @@ Opus DTX remains eligible because it still sends periodic silence packets.
 Screen-share audio inherits its participant's screen availability while tracking
 its own RTP counters and publication identity.
 
-Partial stalls do not retry or replace. The SDK snapshot's `receiveStalls` holds
+Partial stalls do not retry or replace. The SDK snapshot's optional `receiveStalls`
+field is empty when absent and holds
 the latest 32 `receive_stalled` observations, with scope (`partial` or `all`),
 monotonic timestamp and expected/stalled track counts. These observations contain
 no identifiers and send no additional request. Selective remote subscription

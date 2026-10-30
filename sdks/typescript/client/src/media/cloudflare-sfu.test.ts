@@ -128,7 +128,7 @@ it("formerly flowing DTX audio records a partial packet freeze", async () => {
       const pulls = h.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(70_000);
       expect(h.transport.addInputs).toHaveLength(pulls);
-      expect(h.client.getSnapshot().receiveStalls.at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
+      expect((h.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
     },
     { replaceMediaConnection: async () => bootstrap("replacement") },
   );
@@ -175,7 +175,7 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       expect(causes).toEqual(all ? [expect.objectContaining({ connectionId: "replacement", replacementCause: "receive_stalled" })] : []);
       if (!all) {
         expect(harness.transport.addInputs).toHaveLength(originalPulls);
-        expect(harness.client.getSnapshot().receiveStalls.at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
+        expect((harness.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
       }
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
@@ -2299,11 +2299,11 @@ it("uses the screen projection to observe its distinct screen-audio publication"
       await h.client.refreshRemotePublications();
       vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => reviewStats(h, (source) => (source === "screen_audio" ? Math.min(performance.now(), 5000) : performance.now())));
       await vi.advanceTimersByTimeAsync(16_000);
-      expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ event: "receive_stalled", scope: "partial", expectedTracks: 2, stalledTracks: 1 })]);
+      expect(h.client.getSnapshot().receiveStalls ?? []).toEqual([expect.objectContaining({ event: "receive_stalled", scope: "partial", expectedTracks: 2, stalledTracks: 1 })]);
       expect(replacements).toBe(0);
       h.client.remotePublicationsChanged([{ ...publications[0]!, enabled: false }]);
       await vi.advanceTimersByTimeAsync(40_000);
-      expect(h.client.getSnapshot().receiveStalls).toHaveLength(1);
+      expect(h.client.getSnapshot().receiveStalls ?? []).toHaveLength(1);
       expect(replacements).toBe(0);
     },
     { replaceMediaConnection: async () => bootstrap(`screen-${++replacements}`) },
