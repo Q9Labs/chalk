@@ -112,6 +112,8 @@ export type V1EpisodeSnapshot = {
   };
   readonly participantId: string | null;
   readonly participantGeneration: number | null;
+  /** Verified own-seat identity, available before admission confirmation on negotiated servers. */
+  readonly participantIdentityId?: string;
   readonly control: V1ControlState | null;
   readonly optimisticControl: V1ControlState | null;
   readonly media: V1Projection<V1MediaPublication> | null;

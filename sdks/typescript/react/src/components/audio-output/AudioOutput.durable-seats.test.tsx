@@ -77,6 +77,28 @@ async function rendered(client: ReturnType<typeof clientFor>, audioSource: strin
   return { play, render: async () => act(async () => render()), close: async () => act(async () => root.unmount()) };
 }
 
+it.each(["audioTrack", "screenShareAudioTrack"])("a pending local seat suppresses sibling %s before its own roster entry arrives", async (source) => {
+  const platform = seed(false, source);
+  const snapshot = platform.sync.getSnapshot();
+  platform.emitSync({
+    ...snapshot,
+    participantIdentityId: presence("own-phone").identityId,
+    control: { ...control, participants: [{ ...person, participantId: "own-phone" }] },
+    presence: { projectionId: "pending", sequence: 0, items: [{ ...presence("own-phone"), state: "disconnected" }] },
+  });
+  const client = clientFor(platform);
+  let view: Awaited<ReturnType<typeof rendered>> | undefined;
+  try {
+    await client.join({ microphone: false, camera: false });
+    expect(client.getSnapshot().participants.roster.some((seat) => seat.participantId === "participant-1")).toBe(false);
+    view = await rendered(client, source);
+    expect(view.play).not.toHaveBeenCalled();
+  } finally {
+    await view?.close();
+    client.dispose();
+  }
+});
+
 it.each(["audioTrack", "screenShareAudioTrack"])("REQUIREMENT: late joining during sibling presence gap suppresses %s", async (source) => {
   const platform = durableSeats(seed(false, source));
   const client = clientFor(platform);

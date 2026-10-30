@@ -38,32 +38,7 @@ defmodule ChalkSync.Live.ParticipantDevicesPostgresTest do
     fixture = SyncPostgres.seed_episode(connection, 2)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     [desktop, phone] = fixture.identities
-    person = UUID.generate()
-
-    on_exit(fn ->
-      Postgrex.query!(connection, "update participants set identity_id=null where tenant_id=$1", [
-        UUID.dump!(fixture.episode.tenant_id)
-      ])
-
-      Postgrex.query!(connection, "delete from identities where id=$1", [UUID.dump!(person)])
-    end)
-
-    Postgrex.query!(
-      connection,
-      "insert into identities (id, tenant_id, kind, external_id, display_name) values ($1,$2,'user',$3,'Teacher')",
-      [UUID.dump!(person), UUID.dump!(fixture.episode.tenant_id), person]
-    )
-
-    Postgrex.query!(
-      connection,
-      "update participants set identity_id=$1 where tenant_id=$2 and space_id=$3 and episode_id=$4",
-      [
-        UUID.dump!(person),
-        UUID.dump!(fixture.episode.tenant_id),
-        UUID.dump!(fixture.episode.space_id),
-        UUID.dump!(fixture.episode.episode_id)
-      ]
-    )
+    person = associate_person(connection, fixture.episode)
 
     assert {:ok, desktop} =
              Stateholder.admit_socket_entry(%{desktop | device_type: "computer"}, :legacy)
@@ -100,11 +75,16 @@ defmodule ChalkSync.Live.ParticipantDevicesPostgresTest do
     assert Enum.any?(Enum.find(recovery, &(&1["stream"] == "presence"))["items"], &(&1 == absent))
     # Check the actual negotiated wire for a fresh socket, including an older client.
     for {path, opted_in, admissions} <- [
+          {"/v1/sync?participant_devices=1&participant_device_admissions=2", true, true},
           {"/v1/sync?participant_devices=1&participant_device_admissions=1", true, true},
           {"/v1/sync?participant_devices=1", true, false},
           {"/v1/sync", false, false}
         ] do
-      {client, items} = connect_presence(port, path, phone)
+      {client, items, welcome} = connect_presence(port, path, phone)
+
+      assert welcome["participant_identity_id"] ==
+               if(String.contains?(path, "admissions=2"), do: person, else: nil)
+
       item = Enum.find(items, &(&1["participant_id"] == desktop.participant_id))
       assert item["state"] == "disconnected"
 
@@ -166,6 +146,74 @@ defmodule ChalkSync.Live.ParticipantDevicesPostgresTest do
     assert Projection.items(ended.presence_projection) == []
   end
 
+  test "a pending seat gets its verified own association before entered", %{
+    connection: connection,
+    port: port
+  } do
+    assert %{rows: [[true]]} =
+             Postgrex.query!(
+               connection,
+               "select enforced from sync_entry_rollout where singleton",
+               []
+             )
+
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    person = associate_person(connection, fixture.episode)
+
+    path =
+      "/v1/sync?entry_confirmation=1&entry_generation=new&participant_devices=1&participant_device_admissions=2"
+
+    {client, items, welcome} = connect_presence(port, path, fixture.identity)
+    assert welcome["participant_identity_id"] == person
+
+    refute Enum.any?(
+             welcome["snapshot"]["participants"],
+             &(&1["participant_id"] == fixture.identity.participant_id)
+           )
+
+    # The private welcome carries self identity while the public projection excludes it.
+    assert items == []
+
+    assert %{rows: [["joining"]]} =
+             Postgrex.query!(connection, "select status from participants where id=$1", [
+               UUID.dump!(fixture.identity.participant_id)
+             ])
+
+    Client.close(client)
+  end
+
+  defp associate_person(connection, episode) do
+    person = UUID.generate()
+
+    on_exit(fn ->
+      Postgrex.query!(connection, "update participants set identity_id=null where tenant_id=$1", [
+        UUID.dump!(episode.tenant_id)
+      ])
+
+      Postgrex.query!(connection, "delete from identities where id=$1", [UUID.dump!(person)])
+    end)
+
+    Postgrex.query!(
+      connection,
+      "insert into identities (id, tenant_id, kind, external_id, display_name) values ($1,$2,'user',$3,'Teacher')",
+      [UUID.dump!(person), UUID.dump!(episode.tenant_id), person]
+    )
+
+    Postgrex.query!(
+      connection,
+      "update participants set identity_id=$1 where tenant_id=$2 and space_id=$3 and episode_id=$4",
+      [
+        UUID.dump!(person),
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.episode_id)
+      ]
+    )
+
+    person
+  end
+
   defp connect_presence(port, path, identity) do
     token =
       DevTokenVerifier.token(%{
@@ -197,6 +245,10 @@ defmodule ChalkSync.Live.ParticipantDevicesPostgresTest do
     assert {:json, %{"type" => "recovery_complete"}, client} = Client.recv(client)
     assert {:json, %{"stream" => "media"}, client} = Client.recv(client)
     assert {:json, %{"stream" => "presence", "items" => items}, client} = Client.recv(client)
-    {client, items}
+
+    assert Map.has_key?(welcome, "participant_identity_id") ==
+             String.contains?(path, "participant_device_admissions=2")
+
+    {client, items, welcome}
   end
 end

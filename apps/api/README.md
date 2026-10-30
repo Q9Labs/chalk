@@ -215,7 +215,9 @@ Updated clients use the shared Identity to suppress audio from the person's othe
 devices and start a new microphone off when another device is already sending.
 Sync projects this verified association for every admitted seat, including seats
 without a live socket. The optional device type is stored per participant
-generation; older clients receive no additional presence fields.
+generation; older clients receive no additional presence fields. The negotiated
+welcome also includes the authenticated seat’s own verified Identity before entry
+confirmation, so a pending admission applies the same microphone startup policy.
 
 Participant admission returns a five-minute Ed25519-signed sync JWT. An
 authenticated tenant member can refresh it with

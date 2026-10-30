@@ -50,7 +50,8 @@ it("clears departed participants but retains view history through temporary sock
 it("does not turn a temporarily unavailable control replica into participant departures", async () => {
   const { makeParticipantsController } = await import("./participants-controller");
   const person = { participantId: "owner", displayName: "Owner", role: "host", eligibleRoles: [], capabilities: [], handRaised: false };
-  let snapshot: { participantId: string; control: { participants: (typeof person)[]; admissionRequests: [] } | null; optimisticControl: null; media: null; presence: null } = {
+  let snapshot: { connection: { phase: "live" }; participantId: string; control: { participants: (typeof person)[]; admissionRequests: [] } | null; optimisticControl: null; media: null; presence: null } = {
+    connection: { phase: "live" },
     participantId: "owner",
     control: { participants: [person], admissionRequests: [] },
     optimisticControl: null,

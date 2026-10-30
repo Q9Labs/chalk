@@ -14,7 +14,7 @@ it("matches a verified person identity across distinct admitted seats even throu
   expect(otherDevices(seats, "anonymous")).toEqual([]);
   expect(otherDevices(seats, null)).toEqual([]);
 });
-it.each([true, false])("joining with another device microphone %s preserves that device and starts the new mic safely", async (enabled) => {
+it.each([true, false].flatMap((enabled) => [true, false].map((pending) => ({ enabled, pending }))))("joining with sibling microphone $enabled and pending admission $pending starts the mic safely", async ({ enabled, pending }) => {
   const platform = createCoreTestPlatform();
   const mic = track("audio");
   const published: MediaStream[] = [];
@@ -23,8 +23,9 @@ it.each([true, false])("joining with another device microphone %s preserves that
   });
   platform.emitSync({
     ...platform.sync.getSnapshot(),
-    control: deviceControl,
-    presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), presence("desktop", "person")] },
+    participantIdentityId: pending ? "person" : undefined,
+    control: pending ? { ...deviceControl, participants: deviceControl.participants.filter((seat) => seat.participantId !== "participant-1") } : deviceControl,
+    presence: { projectionId: "presence", sequence: 0, items: pending ? [presence("desktop", "person", "disconnected")] : [presence("participant-1", "person"), presence("desktop", "person")] },
     media: { projectionId: "media", sequence: 0, items: [{ participantId: "desktop", source: "microphone", enabled, publicationId: enabled ? "publication" : null }] },
   });
   const client = createSpaceClientForPlatform(

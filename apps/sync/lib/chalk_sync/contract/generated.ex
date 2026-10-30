@@ -984,6 +984,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
+    base = if Map.has_key?(frame, "participant_identity_id"),
+        do: base ++ ["participant_identity_id"], else: base
+    valid_identity = not Map.has_key?(frame, "participant_identity_id") or
+        valid_uuid?(frame["participant_identity_id"])
     valid_generation = not Map.has_key?(frame, "entry_generation") or
         (valid_positive_integer?(frame["entry_generation"]) and
         frame["entry_generation"] <= 9_007_199_254_740_991)
@@ -993,7 +997,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_confirmation"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_generation
+        valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,

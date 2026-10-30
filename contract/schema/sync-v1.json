@@ -405,6 +405,12 @@
     }
   },
   "welcome": {
+    "participantIdentityId": {
+      "wireName": "participant_identity_id",
+      "optional": true,
+      "format": "uuid",
+      "description": "Verified person association of this authenticated seat, including pending admission. Negotiated with participant_device_admissions=2; scoped to the welcome participant and generation."
+    },
     "entryConfirmation": {
       "wireName": "entry_confirmation",
       "optional": true,

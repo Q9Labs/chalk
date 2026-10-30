@@ -616,7 +616,13 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
-  const fields = [...base, ...(extensionValid ? ["extensions"] : []), ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []), ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : [])];
+  const fields = [
+    ...base,
+    ...(extensionValid ? ["extensions"] : []),
+    ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
+    ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
+    ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
+  ];
   if (!strictCursor(value.head)) return false;
   if (value.mode === "snapshot") return exactObjectWithCorrelation(value, [...fields, "snapshot"]) && strictSnapshot(value.snapshot);
   if (value.mode === "terminal") return exactObjectWithCorrelation(value, [...fields, "reason"]);
@@ -1273,6 +1279,7 @@ const WelcomeBase = {
   protocol: Schema.Literal(1),
   participant_id: UuidSchema,
   participant_generation: PositiveIntegerSchema,
+  participant_identity_id: Schema.optionalKey(UuidSchema),
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),

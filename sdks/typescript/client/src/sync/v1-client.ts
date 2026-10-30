@@ -90,6 +90,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #presence: V1Projection<V1Presence> | null = null;
   #participantId: string | null = null;
   #participantGeneration: number | null = null;
+  #participantIdentityId: string | undefined;
   #entryGeneration: number | null = null;
   #recovery: Recovery | null = null;
   #snapshotRecoveryRequested = false;
@@ -241,6 +242,7 @@ export class V1SyncClient implements V1CollaborationClient {
       },
       participantId: this.#participantId,
       participantGeneration: this.#participantGeneration,
+      participantIdentityId: this.#participantIdentityId,
       control: this.#control,
       optimisticControl,
       media: copyProjection(this.#media),
@@ -532,6 +534,7 @@ export class V1SyncClient implements V1CollaborationClient {
           const control = this.#requireControl();
           this.#send({ type: "delivery_ack", stream: "control", revision: control.revision, state_digest: control.stateDigest });
         }
+        if (this.#control?.status === "ended" || (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId)) this.#participantIdentityId = undefined;
         if (frame.name === "participant_left" && frame.payload.participant_id === this.#participantId) {
           this.#phase = { phase: "terminal", terminalReason: frame.payload.reason === "removed" ? "participant_removed" : "participant_inactive" };
           this.#socket?.close(1000, "participant inactive");
@@ -631,6 +634,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
+    this.#participantIdentityId = frame.mode === "terminal" ? undefined : frame.participant_identity_id;
     this.#updateLocalMediaStates();
     if (frame.mode === "terminal") {
       await this.#commandScheduler.settleTerminalRecovery(frame);
@@ -1099,7 +1103,7 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
 function entryUrl(value: string, generation: number | null, confirmation: boolean): string {
   const url = new URL(value);
   url.searchParams.set("participant_devices", "1");
-  url.searchParams.set("participant_device_admissions", "1");
+  url.searchParams.set("participant_device_admissions", "2");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

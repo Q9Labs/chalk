@@ -107,6 +107,8 @@ export type ConnectionSlice = {
 };
 export type SelfSlice = {
   readonly participantId: string | null;
+  /** Verified person association, including before this seat confirms entry. */
+  readonly identityId?: string;
   readonly displayName: string | null;
   readonly role: string | null;
   readonly capabilities: readonly Capability[];

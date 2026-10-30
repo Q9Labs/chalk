@@ -285,13 +285,20 @@ function admissionQueueFor(requests: NonNullable<ReturnType<ConnectionPorts["syn
 function selfFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, roster: ParticipantsSlice["roster"]): SelfSlice {
   const participantId = snapshot?.participantId ?? null;
   const participant = roster.find((candidate) => candidate.participantId === participantId);
-  if (!participant) return emptySelf(participantId);
+  const identityId = selfIdentityFor(snapshot, participant);
+  if (!participant) return emptySelf(participantId, identityId);
   const capabilities = participant.capabilities;
   const allowed = new Set(capabilities);
-  return Object.freeze({ participantId, displayName: participant.displayName, role: participant.role, capabilities, handRaised: participant.handRaised, can: (capability) => allowed.has(capability) });
+  return Object.freeze({ participantId, identityId, displayName: participant.displayName, role: participant.role, capabilities, handRaised: participant.handRaised, can: (capability) => allowed.has(capability) });
 }
-function emptySelf(participantId: string | null): SelfSlice {
-  return Object.freeze({ participantId, displayName: null, role: null, capabilities: Object.freeze([]), handRaised: false, can: () => false });
+function selfIdentityFor(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, participant: Participant | undefined): string | undefined {
+  if (!snapshot) return undefined;
+  if (snapshot.connection.phase === "terminal") return undefined;
+  if (snapshot.control?.status === "ended") return undefined;
+  return snapshot.participantIdentityId ?? participant?.identityId;
+}
+function emptySelf(participantId: string | null, identityId?: string): SelfSlice {
+  return Object.freeze({ participantId, identityId, displayName: null, role: null, capabilities: Object.freeze([]), handRaised: false, can: () => false });
 }
 function capabilitiesFor(control: readonly string[], collaboration: readonly string[] | undefined): readonly Capability[] {
   const capabilities = new Set<Capability>();
@@ -331,7 +338,7 @@ function sameParticipantPresence(left: Participant, right: Participant): boolean
   return left.identityId === right.identityId && left.deviceType === right.deviceType && left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
 }
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
-  return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
+  return left.participantId === right.participantId && left.identityId === right.identityId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);
 }
 function sameArray<T>(left: readonly T[], right: readonly T[], equal: (current: T, next: T) => boolean): boolean {
   return left.length === right.length && left.every((value, index) => equal(value, right[index]!));
