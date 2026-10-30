@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cameraEffectFailure } from "./camera-effect-failure";
+import { createCoreTestPlatform } from "../space-client/core.test.helpers";
+import { captureClient } from "../space-client/capture.test.helpers";
 import { track, stream } from "../space-client/capture.test.helpers";
-import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground } from "./camera-effects";
+import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, configureCameraEffectProvider } from "./camera-effects";
 
 const model = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
-vi.mock("@mediapipe/tasks-vision", () => ({
-  FilesetResolver: { forVisionTasks: async () => ({}) },
-  ImageSegmenter: { createFromOptions: model.create },
-}));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
@@ -80,7 +78,7 @@ describe("camera effects ownership", () => {
   it("keeps one output track when switching None and Blur, and releases capture exactly once", async () => {
     const { source, output } = browser();
     const originalStop = output.stop;
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     (await session.prepare("none"))();
     expect(model.create).not.toHaveBeenCalled();
     (await session.prepare("blur"))();
@@ -95,7 +93,7 @@ describe("camera effects ownership", () => {
   });
   it("keeps the output live if loading an effect fails, and allows retry", async () => {
     const { source, output } = browser();
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     (await session.prepare("none"))();
     model.create.mockRejectedValueOnce(new Error("Model unavailable"));
     await expect(session.prepare("blur")).rejects.toThrow("Model unavailable");
@@ -107,7 +105,7 @@ describe("camera effects ownership", () => {
   it("ends the output and releases resources when the camera ends", async () => {
     const { source, output } = browser();
     const ended = vi.fn();
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     output.addEventListener("ended", ended);
     source.dispatchEvent(new Event("ended"));
     expect(output.readyState).toBe("ended");
@@ -123,7 +121,7 @@ describe("camera effects ownership", () => {
           complete = resolve;
         }),
     );
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     const preparing = session.prepare("blur");
     await vi.waitFor(() => expect(model.create).toHaveBeenCalled());
     session.stop();
@@ -133,7 +131,7 @@ describe("camera effects ownership", () => {
   });
   it("consumes captured frames without rendering callbacks, and closes every input", async () => {
     const { source, write, frame } = browser();
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     const before = frame();
     await vi.waitFor(() => expect(before.close).toHaveBeenCalled());
     expect(write).not.toHaveBeenCalled();
@@ -145,7 +143,7 @@ describe("camera effects ownership", () => {
   });
   it("ends failed processing with an allowlisted diagnostic and no raw fallback", async () => {
     const { source, output, painter, frame } = browser();
-    const session = await createCameraEffectsTrack(source, files);
+    const session = await createCameraEffectsTrack(source, files, () => model.create());
     (await session.prepare("none"))();
     painter.drawImage.mockImplementationOnce(() => {
       throw new Error("private error payload");
@@ -164,5 +162,41 @@ describe("camera effects ownership", () => {
     await Promise.all([setCameraBackground("camera-a", "blur"), setCameraBackground("camera-a", "none"), setCameraBackground("camera-b", "blur")]);
     expect(getCameraBackground("camera-a")).toBe("none");
     expect(getCameraBackground("camera-b")).toBe("blur");
+  });
+  it.each(["leave", "dispose"] as const)("stops acquired camera immediately on %s while a saved model is pending", async (action) => {
+    const { source, output } = browser();
+    vi.stubGlobal("HTMLCanvasElement", class {});
+    vi.stubGlobal("document", { createElement: () => ({ width: 0, height: 0, getContext: () => ({ getExtension: () => null }) }) });
+    configureCameraEffectProvider(files, () => model.create());
+    await setCameraBackground("camera-1", "blur");
+    let complete = (_: { close: () => void }) => {};
+    model.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const client = captureClient(createCoreTestPlatform(), { mediaDevices: { getUserMedia: (_constraints, signal) => processCameraStream(stream([source]), signal) } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      const preview = client.media.captureCameraPreview().then(
+        (captured) => {
+          captured.release();
+          return "resolved";
+        },
+        () => "rejected",
+      );
+      await vi.waitFor(() => expect(model.create).toHaveBeenCalled());
+      if (action === "leave") await client.leave();
+      else client.dispose();
+      expect(source.readyState).toBe("ended");
+      expect(output.readyState).toBe("ended");
+      complete({ close: model.close });
+      expect(await preview).toBe("rejected");
+      await vi.waitFor(() => expect(model.close).toHaveBeenCalledOnce());
+    } finally {
+      complete({ close: model.close });
+      client.dispose();
+    }
   });
 });

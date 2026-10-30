@@ -1,4 +1,3 @@
-import type { ImageSegmenter } from "@mediapipe/tasks-vision";
 import { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
 import { CameraBackgroundPreferences, type CameraBackground } from "./camera-background-settings";
 import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
@@ -11,6 +10,11 @@ export type CameraEffectsAssets = {
   /** Self-host the MediaPipe selfie_segmenter_landscape model at this URL. */
   readonly modelUrl: string;
 };
+export type CameraSegmenter = {
+  readonly close: () => void;
+  readonly segmentForVideo: (frame: HTMLCanvasElement, timestamp: number, result: (value: { readonly confidenceMasks?: readonly { readonly width: number; readonly height: number; readonly getAsFloat32Array: () => Float32Array }[] }) => void) => void;
+};
+export type CameraEffectsProvider = (files: CameraEffectsAssets) => Promise<CameraSegmenter>;
 export type CameraEffectsTrack = {
   readonly track: MediaStreamTrack;
   readonly prepare: (background: CameraBackground) => Promise<() => void>;
@@ -18,6 +22,7 @@ export type CameraEffectsTrack = {
 };
 
 let assets: CameraEffectsAssets | undefined;
+let provider: CameraEffectsProvider | undefined;
 let supported: boolean | undefined;
 const preferences = new CameraBackgroundPreferences();
 const sessions = new Map<string, Set<CameraEffectsTrack>>();
@@ -25,8 +30,9 @@ const pending = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 
 /** Call before creating a browser Space client. Native capture never uses this layer. */
-export function configureCameraEffects(next: CameraEffectsAssets): void {
+export function configureCameraEffectProvider(next: CameraEffectsAssets, createSegmenter: CameraEffectsProvider): void {
   assets = next;
+  provider = createSegmenter;
 }
 
 export function cameraEffectsSupported(): boolean {
@@ -74,15 +80,25 @@ export function cameraBackgroundAvailable(deviceId: string): boolean {
 }
 
 /** Capture boundary: only this processed track reaches preview or the SFU. */
-export async function processCameraStream(stream: MediaStream): Promise<MediaStream> {
-  if (!cameraEffectsSupported() || !assets) return stream;
+export async function processCameraStream(stream: MediaStream, signal?: AbortSignal): Promise<MediaStream> {
+  let session: CameraEffectsTrack | undefined;
+  const cancel = () => {
+    session?.track.stop();
+    for (const track of stream.getTracks()) if (track.readyState !== "ended") track.stop();
+  };
+  if (signal?.aborted) {
+    cancel();
+    signal.throwIfAborted();
+  }
+  if (!cameraEffectsSupported() || !assets || !provider) return stream;
   const source = stream.getVideoTracks()[0];
   if (!source) return stream;
   const deviceId = source.getSettings().deviceId ?? "default";
-  let session: CameraEffectsTrack | undefined;
+  signal?.addEventListener("abort", cancel, { once: true });
   try {
-    const captured = await createCameraEffectsTrack(source, assets);
+    const captured = await createCameraEffectsTrack(source, assets, provider);
     session = captured;
+    signal?.throwIfAborted();
     await enqueue(deviceId, async () => {
       const commit = await captured.prepare(preferences.get(deviceId));
       commit();
@@ -100,18 +116,20 @@ export async function processCameraStream(stream: MediaStream): Promise<MediaStr
         stop();
       };
     });
+    signal?.throwIfAborted();
     stream.removeTrack(source);
     stream.addTrack(captured.track);
     return stream;
   } catch (error) {
-    session?.track.stop();
-    for (const track of stream.getTracks()) if (track.readyState !== "ended") track.stop();
+    cancel();
     throw error;
+  } finally {
+    signal?.removeEventListener("abort", cancel);
   }
 }
 
 /** Provider-neutral browser processor. It owns source until the output is stopped. */
-export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets): Promise<CameraEffectsTrack> {
+export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider): Promise<CameraEffectsTrack> {
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
@@ -122,8 +140,8 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     source.stop();
     throw new Error("Camera effects are unavailable");
   }
-  let segmenter: ImageSegmenter | undefined;
-  let loading: Promise<ImageSegmenter> | undefined;
+  let segmenter: CameraSegmenter | undefined;
+  let loading: Promise<CameraSegmenter> | undefined;
   let background: CameraBackground = "none";
   let ready = false;
   let image: HTMLImageElement | undefined;
@@ -131,15 +149,8 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   let lastFrame = -Infinity;
   let generation = 0;
   const loadSegmenter = () =>
-    (loading ??= import("@mediapipe/tasks-vision")
-      .then(async ({ FilesetResolver, ImageSegmenter }) => {
-        const vision = await FilesetResolver.forVisionTasks(files.wasmRoot);
-        const loaded = await ImageSegmenter.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: files.modelUrl, delegate: "GPU" },
-          runningMode: "VIDEO",
-          outputConfidenceMasks: true,
-          outputCategoryMask: false,
-        });
+    (loading ??= createSegmenter(files)
+      .then((loaded) => {
         if (stopped) {
           loaded.close();
           throw new Error("Camera effects stopped");

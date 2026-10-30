@@ -56,7 +56,8 @@ const browserBundle = await build({
     contents: `
 import {syntheticCamera} from './apps/web/src/call-states/camera-fixtures/synthetic-camera.ts';
 import {createSpaceClientForPlatform} from './sdks/typescript/client/src/effect.ts';
-import {configureCameraEffects,setCameraBackground} from './sdks/typescript/client/src/media/camera-effects.ts';
+import {configureCameraEffects} from './sdks/typescript/client/src/camera-effects.ts';
+import {setCameraBackground} from './sdks/typescript/client/src/media/camera-effects.ts';
 import {CAMERA_VISION_ROOT,CAMERA_SEGMENTATION_MODEL} from './apps/web/src/lib/camera-effect-assets.ts';
 configureCameraEffects({wasmRoot:location.origin+CAMERA_VISION_ROOT,modelUrl:location.origin+CAMERA_SEGMENTATION_MODEL});
 navigator.mediaDevices.getUserMedia=async()=>{const image=new Image();image.src='/portrait.jpg';await image.decode();window.synthetic=syntheticCamera(image,640);return new MediaStream([window.synthetic.track]);};

@@ -23,7 +23,8 @@ export type ConnectionClock = {
   readonly clearTimeout: (handle: unknown) => void;
 };
 export type ConnectionMediaDevices = {
-  readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+  /** The signal cancels post-capture preparation; native permission prompts may still resolve late. */
+  readonly getUserMedia: (constraints: MediaStreamConstraints, signal?: AbortSignal) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**

@@ -6,10 +6,10 @@ import { processCameraStream } from "../media/camera-effects";
 
 export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
   return {
-    async getUserMedia(constraints) {
+    async getUserMedia(constraints, signal) {
       if (!mediaDevices?.getUserMedia || globalThis.isSecureContext === false) throw new ConnectionError({ code: "unsupported_environment", action: null, recoverable: false, message: "Browser media capture is unavailable. Use a supported browser over HTTPS." });
       try {
-        return await processCameraStream(await mediaDevices.getUserMedia(constraints));
+        return await processCameraStream(await mediaDevices.getUserMedia(constraints), signal);
       } catch (error) {
         markMediaFailure(error, "local_capture");
         throw error;

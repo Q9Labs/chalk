@@ -9,7 +9,7 @@ Goal: add a provider-neutral client-side camera effects layer that can produce a
 Before creating a browser Space client, configure assets hosted by your app:
 
 ```ts
-import { configureCameraEffects } from "@q9labsai/chalk-client";
+import { configureCameraEffects } from "@q9labsai/chalk-client/camera-effects";
 
 configureCameraEffects({
   wasmRoot: "/camera-effects/tasks-vision-1.1.1/",
@@ -49,7 +49,12 @@ their capture semantics.
 For a custom capture integration, `processCameraStream(stream)` applies the same
 configured, per-device effects. `createCameraEffectsTrack(source, assets)` exposes
 the provider-neutral processor directly; call `prepare(background)` and then the
-returned commit function before using its output track. Stop its output when done.
+returned commit function before using its output track. Stop its output when done. Import the ready-made
+MediaPipe processor from `@q9labsai/chalk-client/camera-effects`; the root entry
+also exposes `configureCameraEffectProvider` and a processor factory seam for
+other client-side segmentation providers. Native entry points do not import
+the browser segmentation runtime. Leaving or disposing capture aborts pending
+effect initialization and immediately releases the physical camera.
 
 ## Verification
 

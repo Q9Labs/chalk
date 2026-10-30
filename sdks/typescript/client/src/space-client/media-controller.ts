@@ -254,7 +254,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       return Effect.succeed(streamFromTracks([...this.#localTracks().values()]));
     }
     return this.#captureStream(
-      () => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera }),
+      (captureSignal) => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera }, captureSignal),
       (stream) =>
         Effect.try({ try: () => selectInitialTracks(stream, intent), catch: (cause) => cause }).pipe(
           Effect.tap((tracks) =>
@@ -962,13 +962,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #captureForPublish(source: "microphone" | "camera", media: ConnectionPorts["media"], prepare: (track: MediaStreamTrack) => Effect.Effect<void, unknown>): Effect.Effect<void, unknown> {
     return source === "camera" ? foreign(() => media.clearPreparedLocalTrack("camera", { stopTrack: false })).pipe(Effect.retry({ times: 1 }), Effect.andThen(this.#useCamera(prepare))) : this.#captureSource(source).pipe(Effect.flatMap(prepare));
   }
-  #captureStream<A>(operation: () => Promise<MediaStream>, use: (stream: MediaStream) => Effect.Effect<A, unknown>, onCaptureError: (cause: unknown) => unknown = (cause) => cause, signal?: AbortSignal): Effect.Effect<A, unknown> {
+  #captureStream<A>(operation: (signal: AbortSignal) => Promise<MediaStream>, use: (stream: MediaStream) => Effect.Effect<A, unknown>, onCaptureError: (cause: unknown) => unknown = (cause) => cause, signal?: AbortSignal): Effect.Effect<A, unknown> {
     return Effect.suspend(() => {
       let cancelled = false;
       let captured: MediaStream | null = null;
+      const preparation = new AbortController();
       const cancellation = Deferred.makeUnsafe<never, ConnectionError>();
       const cancel = () => {
         cancelled = true;
+        preparation.abort();
         stopStream(captured);
         Deferred.doneUnsafe(cancellation, Effect.fail(this.#cancelledCaptureError()));
       };
@@ -977,7 +979,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (signal?.aborted) cancel();
       return foreign(async () => {
         if (cancelled) throw this.#cancelledCaptureError();
-        const stream = await operation();
+        const stream = await operation(preparation.signal);
         captured = stream;
         // Browser capture cannot be aborted; this owner must dispose its late result.
         if (cancelled || this.#ports?.media.getSnapshot().connection.phase === "stopped") {
@@ -1010,7 +1012,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
-      () => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }),
+      (captureSignal) => this.#selection.getUserMedia({ audio: source === "microphone", video: source === "camera" }, captureSignal),
       (stream) =>
         this.#refreshDevices().pipe(
           Effect.ignore,

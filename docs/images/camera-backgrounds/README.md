@@ -58,3 +58,8 @@ host. No video frames go to a server for segmentation.
 A saved effect whose assets fail to initialize currently fails camera capture
 closed. Clearing that stored choice from the picker is tracked in
 [follow-up #647](https://github.com/Q9Labs/chalk/issues/647).
+
+Capture cancellation tests leave or dispose the client while a remembered model
+load is unresolved, then require both physical and generated tracks to be ended
+before that load settles. The segmentation loader lives in the browser-only
+`@q9labsai/chalk-client/camera-effects` entry point.
