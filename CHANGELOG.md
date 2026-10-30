@@ -15,6 +15,8 @@ codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
 
 ## 5.2.6
 
+- Reuse microphone and camera senders after short browser capture interruptions, keeping capture disabled until a fresh user enable. Republish after long interruptions before trusting an expired provider track, and detach again if capture is interrupted during reattachment. Report interrupted owned capture as unavailable to other participants through the existing Sync pause command. Include a bounded replacement cause on the first SFU track request after a media connection is replaced.
+
 - Keep audio flowing during sender retirement by backing off failed pulls per publication and retiring tracks only within their BUNDLE transport.
 - Show the full call name in the call-name buttons' tooltips.
 - Advance the seven synchronized Chalk SDK packages to 5.2.6.

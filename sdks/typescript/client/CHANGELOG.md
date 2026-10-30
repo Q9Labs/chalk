@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.6
+
+- Reuse microphone and camera senders after short browser capture interruptions, keeping capture disabled until a fresh user enable. Republish after long interruptions before trusting an expired provider track, and detach again if capture is interrupted during reattachment. Report interrupted owned capture as unavailable to other participants through the existing Sync pause command. Include a bounded replacement cause on the first SFU track request after a media connection is replaced.
+
 ## 5.2.0
 
 ### board-draw-policy
