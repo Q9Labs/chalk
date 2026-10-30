@@ -234,3 +234,13 @@ describe("other devices belonging to the local person", () => {
     expect(gridOrder(items, own.id).map(({ id }) => id)).toEqual([local.id, learner.id, own.id]);
   });
 });
+
+it("keeps own-device faces last and small in the phone board column, folding them before other people", () => {
+  const box = { width: 358, height: 692 };
+  const options = { ...DEFAULT_SPOTLIGHT_OPTIONS, content: true, primaryAspect: null, floatingPhonePeople: true, speakerId: "phone", localId: "self", ownDeviceIds: ["phone"] };
+  const geometry = fitSpotlight(box, "whiteboard", ["phone", "self", "learner"], options);
+  expect(geometry.frames.map(({ id }) => id)).toEqual(["whiteboard", "learner", "self", "phone"]);
+  expect(geometry.frames.find(({ id }) => id === "phone")?.width).toBe(76);
+  const folded = fitSpotlight(box, "whiteboard", ["phone", "self", "learner", "other"], { ...options, maxPerPage: 3 });
+  expect(folded.frames.map(({ id }) => id)).toEqual(["whiteboard", "learner", "self", MORE_TILE_ID]);
+});

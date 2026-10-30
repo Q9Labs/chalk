@@ -220,6 +220,7 @@ export function Stage({
         floatingPhonePeople: primary.kind === "whiteboard",
         speakerId,
         localId,
+        ownDeviceIds: remaining.filter((item) => item.kind === "participant" && item.participant.isOwnDevice).map((item) => item.id),
         wideIds: primary.kind === "screen-share" ? ordered.filter((item) => item.kind === "whiteboard").map((item) => item.id) : wideIds,
         maxPerPage,
       },
