@@ -4,6 +4,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import type { ChalkParticipantMediaState } from "../collaboration/types";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { SpaceStore } from "./store";
+import type { V1ControlState, V1Participant, V1Presence, V1Projection } from "../sync/v1-types";
 import { V1_CAPABILITIES } from "../sync/v1-types";
 import type { Capability, MediaRequestKind, Participant, ParticipantPresence, ParticipantsSlice, SelfSlice } from "./types";
 export const CAPABILITIES = new Set<Capability>(V1_CAPABILITIES);
@@ -46,6 +47,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
   #unsubscribe: (() => void) | null = null;
   #unsubscribeMedia: (() => void) | null = null;
   #deviceScope: string | null = null;
+  // Retain verified seats while the local Sync replica is recovering, and for older servers
+  // whose negotiated hints disappear with sockets. New servers send every admitted seat.
   #devices = new Map<string, SeatDevice>();
   #presenceCursor: string | null = null;
   readonly #invalidatedDevices = new Set<string>();
@@ -153,7 +156,7 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribeMedia = ports.media.subscribe(publish);
     publish();
   }
-  #rememberDevices(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): void {
+  #syncDeviceScope(): void {
     const subject = this.#connection.getSnapshot().subject;
     const scope = subject ? JSON.stringify([subject.tenantId, subject.spaceId, subject.episodeId, subject.participantId, subject.participantGeneration]) : null;
     if (scope !== this.#deviceScope) {
@@ -161,26 +164,43 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       this.#invalidatedDevices.clear();
     }
     this.#deviceScope = scope;
+  }
+  #rememberDevices(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null): void {
+    this.#syncDeviceScope();
     const control = snapshot?.control;
     if (!control) return;
-    const cursor = snapshot?.presence ? JSON.stringify([snapshot.presence.projectionId, snapshot.presence.sequence]) : null;
+    this.#pruneDevices(control, snapshot.presence);
+    const retained = new Map<string, SeatDevice>();
+    if (control.status !== "ended") {
+      for (const participant of control.participants) {
+        const device = this.#deviceFor(participant, snapshot.presence?.items ?? []);
+        if (device) retained.set(participant.participantId, device);
+      }
+    }
+    this.#devices = retained;
+  }
+  #pruneDevices(control: V1ControlState, presence: V1Projection<V1Presence> | null): void {
+    const cursor = presence ? JSON.stringify([presence.projectionId, presence.sequence]) : null;
     if (cursor !== this.#presenceCursor) this.#invalidatedDevices.clear();
     this.#presenceCursor = cursor;
     // A new admission cannot inherit a hint still buffered from the old seat.
     for (const [id, device] of this.#devices) {
       if (!control.participants.some((participant) => participant.participantId === id && participant.admissionRevision === device.admissionRevision)) this.#invalidatedDevices.add(id);
     }
-    const retained = new Map<string, SeatDevice>();
-    if (control.status !== "ended") {
-      for (const participant of control.participants) {
-        const previous = this.#devices.get(participant.participantId);
-        const known = previous?.admissionRevision === participant.admissionRevision ? previous : undefined;
-        const hint = this.#invalidatedDevices.has(participant.participantId) ? undefined : snapshot?.presence?.items.find((item) => item.participantId === participant.participantId);
-        const identityId = hint?.identityId ?? known?.identityId;
-        if (identityId) retained.set(participant.participantId, { admissionRevision: participant.admissionRevision, identityId, deviceType: hint?.deviceType ?? known?.deviceType });
-      }
-    }
-    this.#devices = retained;
+  }
+  #deviceFor(participant: V1Participant, presence: readonly V1Presence[]): SeatDevice | undefined {
+    const previous = this.#devices.get(participant.participantId);
+    const known: Pick<SeatDevice, "identityId" | "deviceType"> = previous && previous.admissionRevision === participant.admissionRevision ? previous : {};
+    const hint: Pick<SeatDevice, "identityId" | "deviceType"> = this.#hintFor(participant, presence) ?? {};
+    const identityId = hint.identityId ?? known.identityId;
+    return identityId ? { admissionRevision: participant.admissionRevision, identityId, deviceType: hint.deviceType ?? known.deviceType } : undefined;
+  }
+  #hintFor(participant: V1Participant, presence: readonly V1Presence[]): V1Presence | undefined {
+    return presence.find((item) => {
+      if (item.participantId !== participant.participantId) return false;
+      if (item.admissionRevision !== undefined) return item.admissionRevision === participant.admissionRevision;
+      return !this.#invalidatedDevices.has(participant.participantId);
+    });
   }
   #publish(snapshot: ReturnType<ConnectionPorts["sync"]["getSnapshot"]> | null, collaborationCapabilities: Readonly<Record<string, readonly string[]>>, media?: ReturnType<ConnectionPorts["media"]["getSnapshot"]>): void {
     this.#rememberDevices(snapshot);

@@ -635,16 +635,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
     const publish = foreign(async () => {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
-      const tracks = stream.getTracks().filter((track) => {
-        const source = track.kind === "audio" ? "microphone" : "camera";
-        const enabled = this.#hasConsent(source);
-        track.enabled = enabled;
-        if (!enabled) {
-          this.#deleteTrack(source);
-          if (source === "microphone") track.stop();
-        }
-        return enabled;
-      });
+      const tracks = this.#consentedTracks(stream.getTracks());
       await media.start(streamFromTracks(tracks), () =>
         Effect.runPromise(
           waitForSync.pipe(
@@ -652,18 +643,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const snapshot = this.#ports?.sync.getSnapshot();
               this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot, this.#store.getSnapshot().participants.roster));
               if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
-              return streamFromTracks(
-                tracks.filter((track) => {
-                  const source = track.kind === "audio" ? "microphone" : "camera";
-                  const enabled = this.#hasConsent(source);
-                  track.enabled = enabled;
-                  if (!enabled) {
-                    this.#deleteTrack(source);
-                    if (source === "microphone") track.stop();
-                  }
-                  return enabled;
-                }),
-              );
+              return streamFromTracks(this.#consentedTracks(tracks));
             }),
           ),
         ),
@@ -674,6 +654,19 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
+  }
+
+  #consentedTracks(tracks: readonly MediaStreamTrack[]): MediaStreamTrack[] {
+    return tracks.filter((track) => {
+      const source = track.kind === "audio" ? "microphone" : "camera";
+      const enabled = this.#hasConsent(source);
+      track.enabled = enabled;
+      if (!enabled) {
+        this.#deleteTrack(source);
+        if (source === "microphone") track.stop();
+      }
+      return enabled;
+    });
   }
 
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {

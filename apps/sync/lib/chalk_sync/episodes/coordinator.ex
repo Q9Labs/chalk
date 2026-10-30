@@ -617,12 +617,14 @@ defmodule ChalkSync.Episodes.Coordinator do
         |> Map.put(:head, head)
         |> Map.put(:target_revision, max(state.target_revision, head.revision))
         |> catch_up_live_sockets()
+        |> start_live_reconcile()
 
       {:ok, %{mode: :terminal, replay_cursor: cursor, head: head}} when is_integer(cursor) ->
         state
         |> Map.put(:head, head)
         |> Map.put(:target_revision, head.revision)
         |> catch_up_live_sockets()
+        |> start_live_reconcile()
 
       {:ok, %{mode: mode}} when mode in [:snapshot, :terminal] ->
         reconnect_all(state, :authoritative_snapshot_required)
@@ -730,7 +732,18 @@ defmodule ChalkSync.Episodes.Coordinator do
         state.head
       end
 
-    %{state | sockets: sockets, head: head, target_revision: max(state.target_revision, revision)}
+    next = %{
+      state
+      | sockets: sockets,
+        head: head,
+        target_revision: max(state.target_revision, revision)
+    }
+
+    if field(event, :name) in ["participant_joined", "participant_left", "episode_ended"] do
+      start_live_reconcile(next)
+    else
+      next
+    end
   end
 
   defp deliver_to_socket({socket, subscriber}, kept, event) do
@@ -1443,7 +1456,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   end
 
   defp start_live_reconcile(%{live_reconcile_task: task} = state) when not is_nil(task) do
-    state
+    %{state | live_reconcile_pending: true}
   end
 
   defp start_live_reconcile(%{live: %{connections: connections}} = state)
@@ -1456,7 +1469,10 @@ defmodule ChalkSync.Episodes.Coordinator do
 
     task =
       Task.Supervisor.async_nolink(ChalkSync.CommandTaskSupervisor, fn ->
-        LiveEpisode.reconcile(snapshot)
+        with {:ok, live, media_frames} <- LiveEpisode.reconcile(snapshot),
+             {:ok, live, presence_frames} <- LiveEpisode.presence_snapshot(live) do
+          {:ok, live, media_frames ++ presence_frames}
+        end
       end)
 
     %{state | live_reconcile_task: %{pid: task.pid, ref: task.ref, live: snapshot}}

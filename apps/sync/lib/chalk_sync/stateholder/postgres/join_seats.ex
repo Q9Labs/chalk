@@ -38,6 +38,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
           requested
         )
 
+      remember_device(connection, admitted)
       Presence.renew(connection, admitted)
 
       admitted
@@ -45,6 +46,20 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       # Recovery distinguishes expired admission from cancellation and departure.
       identity
     end
+  end
+
+  defp remember_device(connection, identity) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into participant_device_hints
+        (tenant_id, space_id, episode_id, participant_id, generation, device_type)
+      values ($1, $2, $3, $4, $5, $6)
+      on conflict (participant_id) do update
+        set generation=excluded.generation, device_type=excluded.device_type
+      """,
+      Scope.participant(identity) ++ [identity.participant_generation, identity.device_type]
+    )
   end
 
   defp socket_request(connection, identity, {:socket, requested}) do

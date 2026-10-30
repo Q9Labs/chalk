@@ -57,6 +57,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        entry_timer: nil,
        entry_confirmation: Map.get(opts, :entry_confirmation, false),
        participant_devices: Map.get(opts, :participant_devices, false),
+       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
        requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
        terminal_ack_timer: nil,
        terminal_head: nil,
@@ -716,19 +717,25 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp encode_with_context(state, frame) when is_map(frame) do
     frame
-    |> device_projection(state.participant_devices)
+    |> device_projection(device_hint_keys(state))
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
 
-  # Identity hints are opt-in so older SDKs keep their exact presence wire shape.
-  defp device_projection(%{"stream" => "presence", "items" => items} = frame, false),
-    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, ["identity_id", "device_type"]))}
+  # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
+  defp device_hint_keys(%{participant_devices: false}),
+    do: ["identity_id", "device_type", "admission_revision"]
 
-  defp device_projection(%{"stream" => "presence", "item" => item} = frame, false),
-    do: %{frame | "item" => Map.drop(item, ["identity_id", "device_type"])}
+  defp device_hint_keys(%{participant_device_admissions: false}), do: ["admission_revision"]
+  defp device_hint_keys(_state), do: []
 
-  defp device_projection(frame, _enabled), do: frame
+  defp device_projection(%{"stream" => "presence", "items" => items} = frame, keys),
+    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, keys))}
+
+  defp device_projection(%{"stream" => "presence", "item" => item} = frame, keys),
+    do: %{frame | "item" => Map.drop(item, keys)}
+
+  defp device_projection(frame, _keys), do: frame
 
   defp device_type(nil), do: nil
 
@@ -946,15 +953,14 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp authenticated_hello(state, identity, cursor, hello) do
     with {:ok, identity} <-
-           Stateholder.admit_socket_entry(identity, state.requested_entry_generation),
+           Stateholder.admit_socket_entry(
+             %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
+             state.requested_entry_generation
+           ),
          state = %{
            state
            | entry_confirmation:
                state.entry_confirmation && identity.entry_ownership != :compatibility
-         },
-         identity = %{
-           identity
-           | device_type: device_type(state.connection_attributes[:user_agent])
          },
          :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),

@@ -1056,7 +1056,7 @@ function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublicat
   return { participantId: item.participant_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
 }
 function presenceItem(item: typeof import("../generated/sync").PresenceProjectionItemSchema.Type): V1Presence {
-  return { participantId: item.participant_id, identityId: item.identity_id, deviceType: item.device_type, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
+  return { participantId: item.participant_id, admissionRevision: item.admission_revision, identityId: item.identity_id, deviceType: item.device_type, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
 }
 function mediaKey(item: V1MediaPublication): string {
   return `${item.participantId}:${item.source}`;
@@ -1099,6 +1099,7 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
 function entryUrl(value: string, generation: number | null, confirmation: boolean): string {
   const url = new URL(value);
   url.searchParams.set("participant_devices", "1");
+  url.searchParams.set("participant_device_admissions", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

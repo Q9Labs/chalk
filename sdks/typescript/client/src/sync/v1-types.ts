@@ -74,6 +74,7 @@ export type V1ControlState = {
 };
 export type V1MediaPublication = MediaPublication;
 export type V1Presence = {
+  readonly admissionRevision?: number;
   /** Stable person identity, independent of the per-device participant ID. */
   readonly identityId?: string;
   readonly deviceType?: "phone" | "tablet" | "computer";

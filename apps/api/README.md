@@ -213,6 +213,9 @@ are mutually exclusive. Each Participant keeps its
 own media connection, role, access refresh, leave, attendance, and webhooks.
 Updated clients use the shared Identity to suppress audio from the person's other
 devices and start a new microphone off when another device is already sending.
+Sync projects this verified association for every admitted seat, including seats
+without a live socket. The optional device type is stored per participant
+generation; older clients receive no additional presence fields.
 
 Participant admission returns a five-minute Ed25519-signed sync JWT. An
 authenticated tenant member can refresh it with

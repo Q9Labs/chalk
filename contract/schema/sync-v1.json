@@ -1155,7 +1155,7 @@
         "kind": "array",
         "maxItems": 500,
         "exactFields": ["participant_id", "state", "speaking", "active_speaker"],
-        "optionalFields": ["identity_id", "device_type"],
+        "optionalFields": ["identity_id", "device_type", "admission_revision"],
         "identityId": "uuid",
         "deviceType": ["phone", "tablet", "computer"],
         "negotiation": "participant_devices=1 WebSocket query opts into identity and coarse device hints; omitted for older clients",

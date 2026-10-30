@@ -214,6 +214,49 @@ try {
     if (index === 0) {
       await page.waitForFunction(() => client.getSnapshot().media.local.microphone.state === "enabled");
       await page.screenshot({ path: `${output}/before-desktop.png` });
+      // Keep the SFU publications alive before a completely fresh phone joins.
+      await page.evaluate(() => client.media.setScreenShareEnabled(true, { audio: true }));
+      await page.evaluate(() => {
+        window.proofBlockSync = true;
+        for (const socket of window.proofSyncSockets) if (socket.readyState === WebSocket.OPEN) socket.close(4000, "proof cold-join Sync outage");
+      });
+      await page.waitForFunction(() => window.proofSyncSockets.some((socket) => socket.readyState === WebSocket.CLOSED));
+    }
+    if (index === 1) {
+      report.stage = "fresh phone during desktop Sync outage";
+      const desktopId = admissions[0].participant.id;
+      await page.waitForFunction((id) => ["microphone", "screen_audio"].every((source) => client.getSnapshot().media.remote.some((item) => item.participantId === id && item.source === source && item.track.readyState === "live")), desktopId, { timeout: 60000 });
+      const cold = await page.evaluate((id) => {
+        const snapshot = client.getSnapshot();
+        const sibling = snapshot.participants.roster.find((item) => item.participantId === id);
+        const self = snapshot.participants.roster.find((item) => item.participantId === snapshot.self.participantId);
+        const ownTracks = snapshot.media.remote.filter((item) => item.participantId === id);
+        return {
+          desktopPresence: sibling?.presence.state,
+          identityMatched: !!self?.identityId && sibling?.identityId === self.identityId,
+          deviceType: sibling?.deviceType,
+          microphoneState: snapshot.media.local.microphone.state,
+          microphoneMutedByOtherDevice: snapshot.media.microphoneMutedByOtherDevice,
+          microphonePlays: ownTracks.filter((item) => item.source === "microphone" && window.playedAudioTracks.includes(item.track.id)).length,
+          sharedAudioPlays: ownTracks.filter((item) => item.source === "screen_audio" && window.playedAudioTracks.includes(item.track.id)).length,
+        };
+      }, desktopId);
+      assert.equal(cold.desktopPresence, "disconnected");
+      assert.equal(cold.identityMatched, true);
+      assert.equal(cold.deviceType, "computer");
+      assert.equal(cold.microphoneState, "disabled");
+      assert.equal(cold.microphoneMutedByOtherDevice, true);
+      assert.equal(cold.microphonePlays, 0);
+      assert.equal(cold.sharedAudioPlays, 0);
+      report.coldJoinDuringSyncOutage = cold;
+      report.assertions.push("desktop Sync socket closes before a fresh phone joins: phone mic off, zero desktop mic/shared-audio playback calls");
+      await page.screenshot({ path: `${output}/cold-join-phone.png` });
+      await pages[0].evaluate(() => {
+        window.proofBlockSync = false;
+      });
+      await pages[0].waitForFunction(() => client.getSnapshot().connection.status === "live", undefined, { timeout: 60000 });
+      await page.waitForFunction((id) => client.getSnapshot().participants.roster.find((item) => item.participantId === id)?.presence.state === "connected", desktopId);
+      await pages[0].evaluate(() => client.media.setScreenShareEnabled(false));
     }
   }
   const [desktop, phone, learner] = pages;
@@ -233,7 +276,13 @@ try {
     await page.waitForFunction((id) => document.querySelector('[data-stage-role="primary"]')?.getAttribute("data-stage-item") === id, admissions[2].participant.id);
     const ids = await page.locator("[data-stage-item]").evaluateAll((items) => items.map((item) => item.getAttribute("data-stage-item")));
     assert.equal(ids.at(-1), ownDeviceId);
-    await page.locator(`[data-stage-item="${ownDeviceId}"] [data-part="tile-device"]`).filter({ hasText: "2 devices" }).waitFor();
+    assert.equal(
+      await page
+        .locator(`[data-stage-item="${ownDeviceId}"] [data-part="tile-full-name"] > span`)
+        .first()
+        .evaluate((name) => name.scrollWidth <= name.clientWidth),
+      true,
+    );
   }
   assert.equal(
     await desktop.locator('[data-part="tile-self-label"]').evaluate((label) => {

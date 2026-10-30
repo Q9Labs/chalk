@@ -173,7 +173,7 @@ function renderTypeScript(contract) {
     "  if (stream === 'media') return exactObject(value, " + JSON.stringify(contract.projectionFrames.mediaSnapshot.items.exactFields) + ");",
     "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
       JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
-      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : [])]);",
+      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : [])]);",
     "  return false;",
     "}",
     "function strictProjection(value: Record<string, unknown>): boolean {",
@@ -412,7 +412,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.state) +
-      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
+      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), admission_revision: Schema.optional(PositiveIntegerSchema) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
   );
   lines.push(
     "export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal('projection_snapshot'), stream: Schema.Literal('media'), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(" +

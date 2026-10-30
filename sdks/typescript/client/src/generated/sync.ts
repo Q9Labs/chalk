@@ -599,7 +599,11 @@ function strictEvent(value: Record<string, unknown>): boolean {
 }
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
   if (stream === "media") return exactObject(value, ["participant_id", "source", "enabled", "publication_id"]);
-  if (stream === "presence") return isObject(value) && exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : [])]);
+  if (stream === "presence")
+    return (
+      isObject(value) &&
+      exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : []), ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : [])])
+    );
   return false;
 }
 function strictProjection(value: Record<string, unknown>): boolean {
@@ -1328,6 +1332,7 @@ export const PresenceProjectionItemSchema = Schema.Struct({
   active_speaker: Schema.Boolean,
   identity_id: Schema.optional(UuidSchema),
   device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
+  admission_revision: Schema.optional(PositiveIntegerSchema),
 }).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));
 export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
   type: Schema.Literal("projection_snapshot"),
