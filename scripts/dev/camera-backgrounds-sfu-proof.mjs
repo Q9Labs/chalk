@@ -54,10 +54,12 @@ const report = { stack: "local API + Sync, dedicated development Cloudflare SFU"
 const browserBundle = await build({
   stdin: {
     contents: `
+import {syntheticCamera} from './apps/web/src/call-states/camera-fixtures/synthetic-camera.ts';
 import {createSpaceClientForPlatform} from './sdks/typescript/client/src/effect.ts';
 import {configureCameraEffects,setCameraBackground} from './sdks/typescript/client/src/media/camera-effects.ts';
 import {CAMERA_VISION_ROOT,CAMERA_SEGMENTATION_MODEL} from './apps/web/src/lib/camera-effect-assets.ts';
 configureCameraEffects({wasmRoot:location.origin+CAMERA_VISION_ROOT,modelUrl:location.origin+CAMERA_SEGMENTATION_MODEL});
+navigator.mediaDevices.getUserMedia=async()=>{const image=new Image();image.src='/portrait.jpg';await image.decode();window.synthetic=syntheticCamera(image,640);return new MediaStream([window.synthetic.track]);};
 window.changeBackground = (value) => setCameraBackground('proof-camera',value);
 window.joinProof=async(space,baseUrl,syncUrl,name,camera)=>{window.client=createSpaceClientForPlatform({space,baseUrl,getAccess:()=>window.proofAccess()},{syncUrl});await client.join({displayName:name,microphone:false,camera});};
 `,
@@ -108,37 +110,9 @@ try {
     let grant = admission.access,
       first = true,
       accessQueue = Promise.resolve();
-    const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"] });
+    const browser = await chromium.launch({ headless: false, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"] });
     browsers.push(browser);
     const context = await browser.newContext({ permissions: ["camera"], viewport: { width: 1280, height: 800 } });
-    await context.addInitScript(() => {
-      navigator.mediaDevices.getUserMedia = async () => {
-        const image = new Image();
-        image.src = "/portrait.jpg";
-        await image.decode();
-        const canvas = document.createElement("canvas");
-        canvas.width = 1280;
-        canvas.height = 720;
-        const painter = canvas.getContext("2d");
-        let tick = 0;
-        const paint = () => {
-          for (let y = 0; y < 720; y += 16)
-            for (let x = 0; x < 1280; x += 16) {
-              painter.fillStyle = (x / 16 + y / 16 + tick) % 2 ? "#334d6c" : "#b4c1cf";
-              painter.fillRect(x, y, 16, 16);
-            }
-          tick++;
-          const width = (720 * image.width) / image.height;
-          painter.drawImage(image, (1280 - width) / 2 + Math.sin(tick / 5) * 8, 0, width, 720);
-        };
-        paint();
-        window.sourceTimer = setInterval(paint, 1000 / 30);
-        const stream = canvas.captureStream(30);
-        const track = stream.getVideoTracks()[0];
-        track.getSettings = () => ({ deviceId: "proof-camera", width: 1280, height: 720, frameRate: 30 });
-        return stream;
-      };
-    });
     const page = await context.newPage();
     pages.push(page);
     page.on("pageerror", (error) => console.error("Browser error:", error.message));
@@ -207,7 +181,15 @@ try {
     report.stage = `switch ${background}`;
     console.log(report.stage);
     await sender.evaluate((value) => window.changeBackground(value), background);
+    const cover = await browsers[0].contexts()[0].newPage();
+    // Playwright forces visibility through its original, session-scoped CDP override.
+    await sender._connection.toImpl(sender).delegate._mainFrameSession._client.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+    await cover.bringToFront();
+    await sender.waitForFunction(() => document.hidden);
     const current = await pixels();
+    await cover.close();
+    await sender.bringToFront();
+    await sender.waitForFunction(() => !document.hidden);
     let diff = 0;
     for (let i = 0; i < current.length; i++) diff += Math.abs(current[i] - original[i]);
     diff /= current.length;
@@ -220,7 +202,7 @@ try {
       }),
       true,
     );
-    report.effects.push({ background, remotePixelDifference: diff, samePublication: true, sameSenderTrack: true, sameReceiverTrack: true });
+    report.effects.push({ background, remotePixelDifference: diff, samePublication: true, sameSenderTrack: true, sameReceiverTrack: true, senderHidden: true });
     if (background !== "none") for (const [index, page] of pages.entries()) await page.screenshot({ path: `${output}/${background}-${index ? "remote" : "local"}.png` });
   }
   report.assertions.push("remote SFU receives blur and image pixels", "switching retains publication and both tracks", "None restores live camera");
@@ -235,7 +217,7 @@ try {
       .evaluate(async () => {
         await window.client?.leave();
         window.client?.dispose();
-        clearInterval(window.sourceTimer);
+        window.synthetic?.stop();
       })
       .catch(() => undefined);
   for (const browser of browsers) await browser.close();

@@ -8,7 +8,7 @@ assert(origin, "Pass the call-state harness origin");
 const artifacts = process.env.CAMERA_EFFECTS_PROOF_DIR ?? "/tmp/chalk-camera-backgrounds-proof";
 await mkdir(artifacts, { recursive: true });
 const browser = await chromium.launch({
-  headless: true,
+  headless: process.env.CAMERA_EFFECTS_HEADFUL !== "1",
   args: ["--disable-features=WebRtcHideLocalIpsWithMdns", "--allow-loopback-in-peer-connection", ...(process.env.CAMERA_EFFECTS_BROWSER_PATH ? [] : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])],
   ...(process.env.CAMERA_EFFECTS_BROWSER_PATH ? { executablePath: process.env.CAMERA_EFFECTS_BROWSER_PATH } : {}),
 });
@@ -38,9 +38,12 @@ try {
     await page.goto(`${origin}/camera-backgrounds-proof.html`, { waitUntil: "domcontentloaded", timeout: Number(process.env.CAMERA_EFFECTS_PAGE_TIMEOUT ?? 30_000) });
     await page.waitForFunction(() => customElements.get("chalk-camera-background-fixture"));
     console.log("Mounting camera peers");
-    await page.evaluate(async (localOnly) => {
-      window.cameraBackgroundProof = await document.createElement("chalk-camera-background-fixture").mount({ requireRemote: !localOnly });
-    }, localOnly);
+    await page.evaluate(
+      async ({ localOnly, inputWidth }) => {
+        window.cameraBackgroundProof = await document.createElement("chalk-camera-background-fixture").mount({ requireRemote: !localOnly, inputWidth });
+      },
+      { localOnly, inputWidth: process.env.CAMERA_EFFECTS_BROWSER_PATH ? 1280 : 640 },
+    );
     if (!localOnly) await page.waitForFunction(() => document.querySelector('video[aria-label="Remote video"]')?.readyState >= 2);
     console.log("Camera peers connected");
     assert.deepEqual(await page.evaluate(() => window.cameraBackgroundProof.lifecycle()), { disabledCamera: true, privatePreview: true, stoppedPreview: true, resumedCamera: true });
@@ -50,7 +53,10 @@ try {
       const start = await page.evaluate((localOnly) => window.cameraBackgroundProof.frames()[localOnly ? "local" : "remote"], localOnly);
       await page.waitForFunction(({ start, localOnly }) => window.cameraBackgroundProof.frames()[localOnly ? "local" : "remote"] >= start + 8, { start, localOnly });
     };
-    await pauseForFrames();
+    await pauseForFrames().catch(async (error) => {
+      console.log("Frame failure", await page.evaluate(() => ({ publication: window.cameraBackgroundProof.publication(), frames: window.cameraBackgroundProof.frames() })));
+      throw error;
+    });
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
     await page.getByRole("button", { name: "Select camera", exact: true }).click();
@@ -78,6 +84,19 @@ try {
     assert(difference(blurred, replaced) > 12, "Remote replacement must differ from Blur");
     const publication = await page.evaluate(() => window.cameraBackgroundProof.publication());
     if (!localOnly) assert.deepEqual(publication, initial, "Switching effects must keep the same sender, track, and publication");
+    if (!localOnly && viewport.width === 1440 && process.env.CAMERA_EFFECTS_HEADFUL === "1") {
+      const beforeHidden = await page.evaluate(async () => (await window.cameraBackgroundProof.stats()).framesDecoded);
+      const cover = await context.newPage();
+      // Undo Playwright's focus override on its original CDP session. A second
+      // session cannot clear this session-scoped override in Chromium.
+      await page._connection.toImpl(page).delegate._mainFrameSession._client.send("Emulation.setFocusEmulationEnabled", { enabled: false });
+      await cover.bringToFront();
+      await page.waitForFunction(() => document.hidden);
+      await page.waitForFunction(async (before) => (await window.cameraBackgroundProof.stats()).framesDecoded >= before + 6, beforeHidden, { timeout: 20_000 });
+      await cover.close();
+      await page.bringToFront();
+      await page.waitForFunction(() => !document.hidden);
+    }
     // Alternate effects five times; decoded remote frames prove work reached the receiver.
     for (let run = 0; run < (process.env.CAMERA_EFFECTS_MEASURE === "1" ? 5 : 1); run++)
       for (const background of ["none", "blur", "modern-acoustic-office"]) {

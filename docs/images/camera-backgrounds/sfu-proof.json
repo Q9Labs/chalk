@@ -5,24 +5,27 @@
   "effects": [
     {
       "background": "blur",
-      "remotePixelDifference": 42.751736111111114,
+      "remotePixelDifference": 43.751157407407405,
       "samePublication": true,
       "sameSenderTrack": true,
-      "sameReceiverTrack": true
+      "sameReceiverTrack": true,
+      "senderHidden": true
     },
     {
       "background": "modern-acoustic-office",
-      "remotePixelDifference": 60.960648148148145,
+      "remotePixelDifference": 60.510995370370374,
       "samePublication": true,
       "sameSenderTrack": true,
-      "sameReceiverTrack": true
+      "sameReceiverTrack": true,
+      "senderHidden": true
     },
     {
       "background": "none",
-      "remotePixelDifference": 85.25983796296296,
+      "remotePixelDifference": 86.75231481481481,
       "samePublication": true,
       "sameSenderTrack": true,
-      "sameReceiverTrack": true
+      "sameReceiverTrack": true,
+      "senderHidden": true
     }
   ],
   "result": "passed"

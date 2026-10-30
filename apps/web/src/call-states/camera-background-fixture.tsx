@@ -3,36 +3,18 @@ import "../lib/camera-effects";
 import { createRoot } from "react-dom/client";
 import { processCameraStream, setCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
 import { PreviewDevicePopover } from "@q9labsai/chalk-react/preview";
+import { syntheticCamera } from "./camera-fixtures/synthetic-camera";
 import portraitUrl from "./camera-fixtures/portrait.jpg";
 
 /** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
 class CameraBackgroundFixture extends HTMLElement {
-  async mount({ requireRemote = true }: { readonly requireRemote?: boolean } = {}) {
+  async mount({ requireRemote = true, inputWidth = 1280 }: { readonly requireRemote?: boolean; readonly inputWidth?: number } = {}) {
     const portrait = new Image();
     portrait.src = portraitUrl;
     await portrait.decode();
-    const input = document.createElement("canvas");
-    input.width = 1280;
-    input.height = 720;
-    const painter = input.getContext("2d");
-    if (!painter) throw new Error("Missing canvas context");
-    let tick = 0;
-    const paint = () => {
-      for (let y = 0; y < 720; y += 16)
-        for (let x = 0; x < 1280; x += 16) {
-          painter.fillStyle = (x / 16 + y / 16 + tick) % 2 ? "#334d6c" : "#b4c1cf";
-          painter.fillRect(x, y, 16, 16);
-        }
-      tick++;
-      const width = (720 * portrait.naturalWidth) / portrait.naturalHeight;
-      painter.drawImage(portrait, (1280 - width) / 2 + Math.sin(tick / 5) * 8, 0, width, 720);
-    };
-    paint();
-    const timer = setInterval(paint, 1000 / 30);
-    const raw = input.captureStream(30);
-    const source = raw.getVideoTracks()[0];
-    if (!source) throw new Error("Missing camera track");
-    source.getSettings = () => ({ deviceId: "proof-camera", width: 1280, height: 720, frameRate: 30 });
+    const camera = syntheticCamera(portrait, inputWidth);
+    const source = camera.track;
+    const raw = new MediaStream([source]);
     const processed = await processCameraStream(raw);
     const track = processed.getVideoTracks()[0];
     if (!track || track === source) throw new Error("Camera effects were not installed");
@@ -154,7 +136,7 @@ class CameraBackgroundFixture extends HTMLElement {
         sending.close();
         receiving.close();
         track.stop();
-        clearInterval(timer);
+        camera.stop();
         local.srcObject = null;
         remote.srcObject = null;
       },

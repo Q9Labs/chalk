@@ -741,9 +741,6 @@ importers:
       '@noble/hashes':
         specifier: 2.3.0
         version: 2.3.0
-      '@q9labsai/chalk-assets':
-        specifier: workspace:^5.2.6
-        version: link:../../../packages/assets
       effect:
         specifier: 4.0.0-beta.102
         version: 4.0.0-beta.102

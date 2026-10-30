@@ -3,6 +3,8 @@
     "gate.config.ts",
     "scripts/dev/share-audio-proof.mjs",
     "scripts/dev/multi-device-proof.mjs",
+    "scripts/dev/camera-backgrounds-sfu-proof.mjs",
+    "apps/web/src/call-states/camera-background-fixture.tsx",
     "apps/web/src/call-states/main.tsx",
     "apps/web/src/call-states/web-space-journey.tsx",
     "apps/web/src/call-states/web-space-boundary.ts",

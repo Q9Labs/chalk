@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cameraEffectFailure } from "./camera-effect-failure";
 import { track, stream } from "../space-client/capture.test.helpers";
 import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground } from "./camera-effects";
 
@@ -16,9 +17,42 @@ function browser() {
   const output = track("video");
   const source = track("video");
   source.getSettings = () => ({ deviceId: "camera-1", width: 640, height: 360 });
-  const video = { style: {}, setAttribute: vi.fn(), remove: vi.fn(), muted: false, playsInline: false, srcObject: null, videoWidth: 640, videoHeight: 360, play: vi.fn(async () => {}), pause: vi.fn(), requestVideoFrameCallback: vi.fn(() => 1), cancelVideoFrameCallback: vi.fn() };
-  const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }), captureStream: () => stream([output]) };
-  vi.stubGlobal("document", { documentElement: { appendChild: vi.fn() }, createElement: (tag: string) => (tag === "video" ? video : { ...canvas }) });
+  const painter = { drawImage: vi.fn(), clearRect: vi.fn() };
+  const canvas = { width: 0, height: 0, getContext: () => painter };
+  vi.stubGlobal("document", { createElement: () => ({ ...canvas }) });
+  let frames: ReadableStreamDefaultController<VideoFrame> | undefined;
+  const readable = new ReadableStream<VideoFrame>({
+    start(controller) {
+      frames = controller;
+    },
+  });
+  const write = vi.fn(async () => {});
+  vi.stubGlobal(
+    "MediaStreamTrackProcessor",
+    class {
+      readonly readable = readable;
+    },
+  );
+  vi.stubGlobal(
+    "MediaStreamTrackGenerator",
+    class {
+      constructor() {
+        return Object.assign(output, { writable: new WritableStream({ write }) });
+      }
+    },
+  );
+  vi.stubGlobal(
+    "VideoFrame",
+    class {
+      readonly timestamp: number;
+      readonly displayWidth = 640;
+      readonly displayHeight = 360;
+      readonly close = vi.fn();
+      constructor(_source: unknown, options: { timestamp: number }) {
+        this.timestamp = options.timestamp;
+      }
+    },
+  );
   vi.stubGlobal(
     "MediaStream",
     class {
@@ -28,13 +62,23 @@ function browser() {
     },
   );
   model.create.mockResolvedValue({ close: model.close });
-  return { output, source, video };
+  return {
+    output,
+    source,
+    painter,
+    write,
+    frame(timestamp = 1_000_000) {
+      const input = new VideoFrame(new Uint8Array(), { format: "RGBA", codedWidth: 640, codedHeight: 360, timestamp });
+      frames?.enqueue(input);
+      return input;
+    },
+  };
 }
 
 describe("camera effects ownership", () => {
   const files = { wasmRoot: "/camera-effects/wasm", modelUrl: "/camera-effects/model.tflite" };
   it("keeps one output track when switching None and Blur, and releases capture exactly once", async () => {
-    const { source, output, video } = browser();
+    const { source, output } = browser();
     const originalStop = output.stop;
     const session = await createCameraEffectsTrack(source, files);
     (await session.prepare("none"))();
@@ -48,8 +92,6 @@ describe("camera effects ownership", () => {
     expect(source.stop).toHaveBeenCalledTimes(1);
     expect(originalStop).toHaveBeenCalledTimes(1);
     expect(model.close).toHaveBeenCalledTimes(1);
-    expect(video.srcObject).toBe(null);
-    expect(video.cancelVideoFrameCallback).toHaveBeenCalled();
   });
   it("keeps the output live if loading an effect fails, and allows retry", async () => {
     const { source, output } = browser();
@@ -88,6 +130,31 @@ describe("camera effects ownership", () => {
     complete({ close: model.close });
     await expect(preparing).rejects.toThrow("stopped");
     expect(model.close).toHaveBeenCalledTimes(1);
+  });
+  it("consumes captured frames without rendering callbacks, and closes every input", async () => {
+    const { source, write, frame } = browser();
+    const session = await createCameraEffectsTrack(source, files);
+    const before = frame();
+    await vi.waitFor(() => expect(before.close).toHaveBeenCalled());
+    expect(write).not.toHaveBeenCalled();
+    (await session.prepare("none"))();
+    const input = frame(2_000_000);
+    await vi.waitFor(() => expect(write).toHaveBeenCalledOnce());
+    expect(input.close).toHaveBeenCalledOnce();
+    session.stop();
+  });
+  it("ends failed processing with an allowlisted diagnostic and no raw fallback", async () => {
+    const { source, output, painter, frame } = browser();
+    const session = await createCameraEffectsTrack(source, files);
+    (await session.prepare("none"))();
+    painter.drawImage.mockImplementationOnce(() => {
+      throw new Error("private error payload");
+    });
+    frame();
+    await vi.waitFor(() => expect(output.readyState).toBe("ended"));
+    expect(cameraEffectFailure(output)).toEqual({ event: "media_state", source: "camera", phase: "failed", outcome: "failed", code: "media_capture_failed", media_error_kind: "OperationError", media_error_step: "local_capture" });
+    expect(source.stop).toHaveBeenCalledOnce();
+    expect(session.track).not.toBe(source);
   });
   it("passes capture through when effects have not been configured", async () => {
     const input = stream([track("video")]);

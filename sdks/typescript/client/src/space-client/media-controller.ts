@@ -2,6 +2,7 @@ import { otherDeviceHasMicrophone } from "./same-identity";
 import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
+import { cameraEffectFailure } from "../media/camera-effect-failure";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
@@ -800,6 +801,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #handleCameraEnded(track: MediaStreamTrack): void {
     const state = this.#camera;
     if (state.status !== "live" || state.track !== track) return;
+    const failure = cameraEffectFailure(track);
+    if (failure) this.#connection.recordTransportDiagnostic(failure);
     if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision, "capture_cleanup");
     this.#transitionCamera({ status: "ended" });
   }
