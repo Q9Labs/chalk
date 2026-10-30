@@ -37,3 +37,63 @@ it.each([true, false])("joining with another device microphone %s preserves that
     client.dispose();
   }
 });
+it("stops a microphone muted while admission is pending before handing tracks to media", async () => {
+  const platform = createCoreTestPlatform();
+  const mic = track("audio");
+  let release = () => {};
+  const admission = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const getAccess = vi.fn(async () => {
+    await admission;
+    return opaqueAccessGrant("test");
+  });
+  const start = vi.fn(async (_stream: MediaStream) => undefined);
+  const client = createSpaceClientForPlatform({ space: "space-1", getAccess }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } });
+  try {
+    const joining = client.join({ microphone: true, camera: false });
+    await vi.waitFor(() => expect(getAccess).toHaveBeenCalled());
+    const muted = client.media.setMicrophoneEnabled(false);
+    release();
+    await joining;
+    await muted;
+    expect(start.mock.calls[0]?.[0].getTracks().filter((track) => track.kind === "audio")).toHaveLength(0);
+    expect(mic.stop).toHaveBeenCalled();
+  } finally {
+    release();
+    client.dispose();
+  }
+});
+it("releases the pre-publication wait when Sync fails before becoming live", async () => {
+  const platform = createCoreTestPlatform();
+  let failSync = (_error: Error) => {};
+  const syncStart = new Promise<void>((_resolve, reject) => {
+    failSync = reject;
+  });
+  const publicationGateReleased = vi.fn();
+  const start = vi.fn(async (_stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => {
+    await beforePublish?.();
+    publicationGateReleased();
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient: () => ({ ...platform.sync, start: () => syncStart }),
+        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start, stop: () => platform.media.emit({ ...platform.media.getSnapshot(), connection: { ...platform.media.getSnapshot().connection, phase: "stopped" } }) }),
+      },
+    },
+  );
+  try {
+    const joining = client.join({ microphone: false, camera: false });
+    const failed = expect(joining).rejects.toBeDefined();
+    await vi.waitFor(() => expect(start).toHaveBeenCalled());
+    failSync(new Error("Sync startup failed"));
+    await failed;
+    await vi.waitFor(() => expect(publicationGateReleased).toHaveBeenCalledOnce());
+  } finally {
+    client.dispose();
+  }
+});

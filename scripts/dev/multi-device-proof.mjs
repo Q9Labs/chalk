@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveDevConfig } from "./config.mjs";
@@ -119,14 +119,17 @@ try {
   assert.ok(tenant && space && systemToken);
   chalk = createChalkServerClient({ apiBaseURL: config.urls.api, tenantId: tenant.id, apiKey: systemToken });
   episode = await chalk.episodes.create(space.id, {});
-  server = createServer(async (request, response) => {
-    const path = request.url?.startsWith("/assets/") ? `${output}/static${request.url}` : `${output}/static/index.html`;
-    try {
-      response.setHeader("Content-Type", extname(path) === ".css" ? "text/css" : extname(path) === ".js" ? "text/javascript" : "text/html");
-      response.end(await readFile(path));
-    } catch {
-      response.writeHead(404).end();
-    }
+  const assets = new Map();
+  for (const entry of await readdir(`${output}/static/assets`, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    assets.set(`/assets/${entry.name}`, { content: await readFile(`${output}/static/assets/${entry.name}`), type: extname(entry.name) === ".css" ? "text/css" : extname(entry.name) === ".js" ? "text/javascript" : "application/octet-stream" });
+  }
+  assets.set("/", { content: await readFile(`${output}/static/index.html`), type: "text/html" });
+  server = createServer((request, response) => {
+    const asset = assets.get(request.url);
+    if (!asset) return response.writeHead(404).end();
+    response.setHeader("Content-Type", asset.type);
+    response.end(asset.content);
   });
   server.listen(config.ports.web, "127.0.0.1");
   await once(server, "listening");

@@ -623,11 +623,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const sync = this.#ports?.sync;
       if (!sync) return resume(Effect.void);
       const check = () => {
-        if (sync.getSnapshot().connection.phase === "live") resume(Effect.void);
+        if (sync.getSnapshot().connection.phase === "live" || media.getSnapshot().connection.phase === "stopped") resume(Effect.void);
       };
       const unsubscribe = sync.subscribe(check);
+      const unsubscribeMedia = media.subscribe(check);
       check();
-      return Effect.sync(unsubscribe);
+      return Effect.sync(() => {
+        unsubscribe();
+        unsubscribeMedia();
+      });
     });
     const publish = foreign(async () => {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
@@ -635,7 +639,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const source = track.kind === "audio" ? "microphone" : "camera";
         const enabled = this.#hasConsent(source);
         track.enabled = enabled;
-        if (!enabled) this.#deleteTrack(source);
+        if (!enabled) {
+          this.#deleteTrack(source);
+          if (source === "microphone") track.stop();
+        }
         return enabled;
       });
       await media.start(streamFromTracks(tracks), () =>
