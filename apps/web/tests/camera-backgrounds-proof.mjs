@@ -1,5 +1,6 @@
+import { routePresetAssets } from "./camera-backgrounds-assets.mjs";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const { chromium } = await import(process.env.CAMERA_PLAYWRIGHT_MODULE ?? "playwright");
@@ -29,11 +30,7 @@ try {
     page.on("console", (message) => console.log("Browser:", message.text()));
     const requests = [];
     page.on("request", (request) => requests.push(request.url()));
-    await page.route("https://assets.chalkmeet.com/ui/backgrounds/**", async (route) => {
-      const name = new URL(route.request().url()).pathname.split("/").at(-1);
-      assert(name && /^[a-z0-9.-]+\.(avif|webp)$/.test(name));
-      await route.fulfill({ body: await readFile(new URL(`../src/call-states/camera-fixtures/${name}`, import.meta.url)), contentType: name.endsWith(".avif") ? "image/avif" : "image/webp", headers: { "Access-Control-Allow-Origin": "*" } });
-    });
+    await routePresetAssets(page);
     console.log(`Starting ${viewport.width}`);
     await page.goto(`${origin}/camera-backgrounds-proof.html`, { waitUntil: "domcontentloaded", timeout: Number(process.env.CAMERA_EFFECTS_PAGE_TIMEOUT ?? 30_000) });
     await page.waitForFunction(() => customElements.get("chalk-camera-background-fixture"));

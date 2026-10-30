@@ -2,7 +2,6 @@ import { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
 import type { CameraBackground } from "./camera-background-settings";
 import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
 import { createCameraFrameSource } from "./camera-frame-source";
-import { markCameraEffectFailure } from "./camera-effects";
 import { CameraEffectPerformance } from "./camera-effect-performance";
 
 export type CameraEffectsAssets = {
@@ -24,7 +23,7 @@ export type CameraEffectsTrack = {
 };
 
 /** Provider-neutral browser processor. It owns source until the output is stopped. */
-export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
+export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow: ((fps: number) => void) | undefined, onFailure: (track: MediaStreamTrack) => void): Promise<CameraEffectsTrack> {
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
@@ -182,7 +181,7 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       }
     } catch {
       if (!stopped) {
-        markCameraEffectFailure(output);
+        onFailure(output);
         ended();
       }
     }

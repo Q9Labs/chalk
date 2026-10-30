@@ -132,5 +132,5 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
 
 export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
   const { createCameraEffectsTrack: createTrack } = await import("./camera-effects-track");
-  return createTrack(source, files, createSegmenter, onSlow);
+  return createTrack(source, files, createSegmenter, onSlow, markCameraEffectFailure);
 }

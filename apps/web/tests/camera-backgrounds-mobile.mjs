@@ -1,5 +1,6 @@
+import { routePresetAssets } from "./camera-backgrounds-assets.mjs";
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { chromium, firefox, webkit } from "playwright";
 
@@ -9,13 +10,6 @@ const directory = resolve(process.env.CAMERA_EFFECTS_PROOF_DIR ?? "/tmp/chalk-ca
 await mkdir(directory, { recursive: true });
 const report = { browsers: [], throttle: null };
 const save = () => writeFile(resolve(directory, "mobile-proof.json"), JSON.stringify(report, null, 2));
-const install = async (page) => {
-  await page.route("https://assets.chalkmeet.com/ui/backgrounds/**", async (route) => {
-    const name = new URL(route.request().url()).pathname.split("/").at(-1);
-    assert(name && /^[a-z0-9.-]+\.(avif|webp)$/.test(name));
-    await route.fulfill({ body: await readFile(new URL(`../src/call-states/camera-fixtures/${name}`, import.meta.url)), contentType: name.endsWith(".avif") ? "image/avif" : "image/webp", headers: { "Access-Control-Allow-Origin": "*" } });
-  });
-};
 const runtimeAsset = (url) => /camera-effects-provider|mediapipe|vision_wasm|selfie-segmenter/.test(url);
 const mount = async (page, options) => {
   await page.goto(`${origin}/camera-backgrounds-proof.html`);
@@ -38,7 +32,7 @@ for (const engine of [webkit, firefox]) {
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => requests.push(request.url()));
   try {
-    await install(page);
+    await routePresetAssets(page);
     await mount(page, { requireRemote: false, inputWidth: 640 });
     await advance(page);
     const source = await page.evaluate(() => window.cameraBackgroundProof.source());
@@ -93,7 +87,7 @@ try {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("request", (request) => requests.push(request.url()));
-  await install(page);
+  await routePresetAssets(page);
   await mount(page, { requireRemote: true, nativeCamera: true });
   await advance(page);
   const initialEffectRequests = requests.filter(runtimeAsset);
