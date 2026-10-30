@@ -10,7 +10,7 @@ function CardState({
   host = false,
   scheme = "dark",
   participants = true,
-  knocks = false,
+  knocks = 0,
   gallery = true,
   uploadDelay = 0,
   photoUrl = photo,
@@ -18,7 +18,7 @@ function CardState({
   readonly host?: boolean;
   readonly scheme?: "dark" | "light";
   readonly participants?: boolean;
-  readonly knocks?: boolean;
+  readonly knocks?: boolean | number;
   readonly gallery?: boolean;
   readonly uploadDelay?: number;
   readonly photoUrl?: string;
@@ -61,6 +61,7 @@ export const CARD_STATES: readonly CallState[] = [
   { id: "card-photo-single", title: "Card: single photo", render: () => <CardState host gallery={false} /> },
   { id: "card-photo-single-light", title: "Card: single photo Light", render: () => <CardState host gallery={false} scheme="light" /> },
   { id: "card-knocks", title: "Card: waiting requests", render: () => <CardState host knocks /> },
+  { id: "card-knocks-many", title: "Card: three people waiting", render: () => <CardState host knocks={3} /> },
   { id: "card-chat-only", title: "Card: Chat without People", render: () => <CardState participants={false} /> },
   { id: "card-people", title: "Card: People", actions: [{ click: "Participants" }], render: () => <CardState host /> },
   { id: "card-chat", title: "Card: Chat", actions: [{ click: "Chat" }], render: () => <CardState host /> },
