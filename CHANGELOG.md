@@ -19,6 +19,7 @@ codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
 - Recover bounded receive stalls and failed sender closes while preserving working media.
 - Preserve the original SFU transport failure and return HTTP 499 for caller cancellation.
 - Retain timestamped transport diagnostics in encrypted real-call proof evidence.
+- Update Sync's TLS hostname verification dependency to ssl_verify_fun 1.1.8.
 - Advance the seven synchronized Chalk SDK packages to 5.3.0.
 
 ## 5.2.6
