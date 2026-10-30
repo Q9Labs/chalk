@@ -93,10 +93,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       page.on("requestfailed", (request) => {
         const operation = signalingOperation(request.url());
-        if (operation) record({ type: "request-failed", operation, error: /^net::ERR_[A-Z_]+$/.test(request.failure()?.errorText ?? "") ? request.failure().errorText : "request_failed" });
+        if (operation) record({ type: "request-failed", operation, error: signalingFailure(request) });
       });
       page.on("websocket", (socket) => {
-        socket.on("socketerror", (error) => record({ type: "websocket-error" }));
+        socket.on("socketerror", () => record({ type: "websocket-error" }));
         socket.on("framereceived", ({ payload }) => {
           try {
             const frame = JSON.parse(String(payload));
@@ -172,6 +172,11 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     },
   };
 }
+function signalingFailure(request) {
+  const error = request.failure()?.errorText;
+  return /^net::ERR_[A-Z_]+$/.test(error) ? error : "request_failed";
+}
+
 export function signalingOperation(url) {
   const path = new URL(url).pathname;
   const operation = /\/media\/sfu\/(tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
@@ -210,6 +215,7 @@ export function browserStats() {
     return sources.get(row.mid);
   }
   function serialize(row, index, cameraMids, screenMids, remote) {
+    if (row.type === "transport") return { at: new Date().toISOString(), connection: index, type: "transport", dtlsState: row.dtlsState, iceState: row.iceState, packetsSent: row.packetsSent, packetsReceived: row.packetsReceived, bytesSent: row.bytesSent, bytesReceived: row.bytesReceived };
     return {
       at: new Date().toISOString(),
       connection: index,
@@ -254,10 +260,8 @@ export function browserStats() {
         .filter((transceiver) => transceiver.sender.track?.id === snapshot.media.screenShare.track?.id)
         .map((transceiver) => transceiver.mid);
       rows.push({ at: new Date().toISOString(), connection: index, type: "peer-state", signalingState: connection.signalingState, iceConnectionState: connection.iceConnectionState, connectionState: connection.connectionState });
-      for (const row of (await connection.getStats()).values()) {
-        if (row.type === "transport") rows.push({ at: new Date().toISOString(), connection: index, type: "transport", dtlsState: row.dtlsState, iceState: row.iceState, packetsSent: row.packetsSent, packetsReceived: row.packetsReceived, bytesSent: row.bytesSent, bytesReceived: row.bytesReceived });
-        if (["outbound-rtp", "inbound-rtp", "media-source"].includes(row.type)) rows.push(serialize(row, index, cameraMids, screenMids, snapshot.media.remote));
-      }
+      const selected = [...(await connection.getStats()).values()].filter((row) => ["transport", "outbound-rtp", "inbound-rtp", "media-source"].includes(row.type));
+      rows.push(...selected.map((row) => serialize(row, index, cameraMids, screenMids, snapshot.media.remote)));
     }
     return rows;
   })();
