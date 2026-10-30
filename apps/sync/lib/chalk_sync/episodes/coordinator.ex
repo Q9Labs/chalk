@@ -41,6 +41,10 @@ defmodule ChalkSync.Episodes.Coordinator do
         protocol_options \\ %{}
       )
       when is_pid(socket) and is_map(protocol_options) do
+    begin_socket_recovery(identity, socket, protocol_options, true)
+  end
+
+  defp begin_socket_recovery(identity, socket, protocol_options, retry?) do
     with {:ok, coordinator} <- ensure_started(identity.episode),
          :ok <-
            GenServer.call(
@@ -51,7 +55,13 @@ defmodule ChalkSync.Episodes.Coordinator do
       {:ok, coordinator}
     end
   catch
-    :exit, _reason -> {:error, :coordinator_unavailable}
+    # The last departure can stop the coordinator between registry lookup and call.
+    # Retry only that normal lifecycle race; a timeout is still a dependency failure.
+    :exit, {reason, {GenServer, :call, _args}} when reason in [:normal, :noproc] and retry? ->
+      begin_socket_recovery(identity, socket, protocol_options, false)
+
+    :exit, _reason ->
+      {:error, :coordinator_unavailable}
   end
 
   @spec activate_recovery(pid(), Recovery.t(), pid()) :: :ok | {:error, atom()}
