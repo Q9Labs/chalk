@@ -56,7 +56,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         handleSIGTERM: false,
         args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
       });
-      close[guest] = () => server.close();
+      close[guest] = async () => {
+        if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);
+        await server.close();
+      };
       run.resources.push({
         kind: "headless-browser",
         dispose: close[guest],
@@ -74,15 +77,32 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const page = await context.newPage();
       const network = [];
       networks[guest] = network;
-      page.on("requestfailed", (request) => network.push({ type: "request-failed", path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
+      const record = (event) => network.push({ at: new Date().toISOString(), ...event });
+      const requests = new WeakMap();
+      page.on("request", (request) => {
+        const operation = signalingOperation(request.url());
+        if (!operation) return;
+        requests.set(request, performance.now());
+        record({ type: "signaling-request", operation, method: request.method() });
+      });
+      page.on("response", (response) => {
+        const operation = signalingOperation(response.url());
+        if (!operation) return;
+        const started = requests.get(response.request());
+        record({ type: "signaling-response", operation, status: response.status(), ...(started === undefined ? {} : { durationMs: performance.now() - started }) });
+      });
+      page.on("requestfailed", (request) => {
+        const operation = signalingOperation(request.url());
+        if (operation) record({ type: "request-failed", operation, error: signalingFailure(request) });
+      });
       page.on("websocket", (socket) => {
-        socket.on("socketerror", (error) => network.push({ type: "websocket-error", error }));
+        socket.on("socketerror", () => record({ type: "websocket-error" }));
         socket.on("framereceived", ({ payload }) => {
           try {
             const frame = JSON.parse(String(payload));
-            network.push({ type: "websocket-frame", frameType: frame.type, event: frame.event, code: frame.code, status: frame.status });
+            record({ type: "websocket-frame", frameType: frame.type, event: frame.event, code: frame.code, status: frame.status });
           } catch {
-            network.push({ type: "websocket-frame", bytes: payload.length });
+            record({ type: "websocket-frame", bytes: payload.length });
           }
         });
       });
@@ -104,6 +124,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         return next;
       });
       await page.goto(origin);
+      await page.evaluate(installTransportDiagnostics);
       await page.addScriptTag({ content: bundle });
       try {
         await page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
@@ -151,14 +172,52 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     },
   };
 }
-function browserStats() {
+function signalingFailure(request) {
+  const error = request.failure()?.errorText;
+  return /^net::ERR_[A-Z_]+$/.test(error) ? error : "request_failed";
+}
+
+export function signalingOperation(url) {
+  const path = new URL(url).pathname;
+  const operation = /\/media\/sfu\/(tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
+  return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
+}
+
+export function installTransportDiagnostics() {
+  const NativePC = window.RTCPeerConnection;
+  const events = (window.proofTransportDiagnostics = []);
+  window.RTCPeerConnection = class extends NativePC {
+    constructor(...args) {
+      super(...args);
+      const connection = window.proofConnections.indexOf(this);
+      const observed = new WeakSet();
+      const capture = () => {
+        events.push({ at: new Date().toISOString(), connection, type: "peer-state", signalingState: this.signalingState, iceConnectionState: this.iceConnectionState, connectionState: this.connectionState });
+        for (const transceiver of this.getTransceivers()) {
+          const dtls = transceiver.sender.transport;
+          if (!dtls || observed.has(dtls)) continue;
+          observed.add(dtls);
+          const record = () => events.push({ at: new Date().toISOString(), connection, type: "dtls-state", state: dtls.state });
+          dtls.addEventListener("statechange", record);
+          record();
+        }
+      };
+      for (const name of ["signalingstatechange", "iceconnectionstatechange", "connectionstatechange", "track"]) this.addEventListener(name, capture);
+      capture();
+    }
+  };
+}
+
+export function browserStats() {
   function sourceFor(row, cameraMids, screenMids, remote) {
     if (row.type === "inbound-rtp") return remote.find((entry) => entry.track.id === row.trackIdentifier)?.source;
     const sources = new Map([...cameraMids.map((mid) => [mid, "camera"]), ...screenMids.map((mid) => [mid, "screen"])]);
     return sources.get(row.mid);
   }
   function serialize(row, index, cameraMids, screenMids, remote) {
+    if (row.type === "transport") return { at: new Date().toISOString(), connection: index, type: "transport", dtlsState: row.dtlsState, iceState: row.iceState, packetsSent: row.packetsSent, packetsReceived: row.packetsReceived, bytesSent: row.bytesSent, bytesReceived: row.bytesReceived };
     return {
+      at: new Date().toISOString(),
       connection: index,
       id: row.id,
       type: row.type,
@@ -171,6 +230,11 @@ function browserStats() {
       bytesSent: row.bytesSent,
       bytesReceived: row.bytesReceived,
       packetsReceived: row.packetsReceived,
+      packetsSent: row.packetsSent,
+      packetsLost: row.packetsLost,
+      jitter: row.jitter,
+      framesDropped: row.framesDropped,
+      retransmittedPacketsSent: row.retransmittedPacketsSent,
       framesEncoded: row.framesEncoded,
       framesDecoded: row.framesDecoded,
       frameWidth: row.frameWidth,
@@ -183,7 +247,7 @@ function browserStats() {
     };
   }
   return (async () => {
-    const rows = [];
+    const rows = [...(window.proofTransportDiagnostics ?? [])];
     for (let index = 0; index < window.proofConnections.length; index++) {
       const connection = window.proofConnections[index];
       const snapshot = window.proofClient.getSnapshot();
@@ -195,9 +259,9 @@ function browserStats() {
         .getTransceivers()
         .filter((transceiver) => transceiver.sender.track?.id === snapshot.media.screenShare.track?.id)
         .map((transceiver) => transceiver.mid);
-      for (const row of (await connection.getStats()).values()) {
-        if (["outbound-rtp", "inbound-rtp", "media-source"].includes(row.type)) rows.push(serialize(row, index, cameraMids, screenMids, snapshot.media.remote));
-      }
+      rows.push({ at: new Date().toISOString(), connection: index, type: "peer-state", signalingState: connection.signalingState, iceConnectionState: connection.iceConnectionState, connectionState: connection.connectionState });
+      const selected = [...(await connection.getStats()).values()].filter((row) => ["transport", "outbound-rtp", "inbound-rtp", "media-source"].includes(row.type));
+      rows.push(...selected.map((row) => serialize(row, index, cameraMids, screenMids, snapshot.media.remote)));
     }
     return rows;
   })();
