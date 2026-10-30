@@ -1,26 +1,25 @@
 /** A camera fixture whose frames do not depend on the document's rendering clock. */
 export function syntheticCamera(portrait: HTMLImageElement, width = 1280) {
-  const Generator = (globalThis as typeof globalThis & { MediaStreamTrackGenerator: new (options: { kind: "video" }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> } }).MediaStreamTrackGenerator;
-  const track = new Generator({ kind: "video" });
-  const writer = track.writable.getWriter();
+  const Generator = (globalThis as typeof globalThis & { MediaStreamTrackGenerator?: new (options: { kind: "video" }) => MediaStreamTrack & { writable: WritableStream<VideoFrame> } }).MediaStreamTrackGenerator;
   const canvas = document.createElement("canvas");
   const height = (width * 9) / 16;
   canvas.width = width;
   canvas.height = height;
   const painter = canvas.getContext("2d");
   if (!painter) throw new Error("Missing fixture canvas");
+  const generated = Generator && typeof VideoFrame === "function" ? new Generator({ kind: "video" }) : undefined;
+  const writer = generated?.writable.getWriter();
+  const track = generated ?? canvas.captureStream(30).getVideoTracks()[0];
   let tick = 0;
   let writing = false;
   const paint = () => {
     if (writing) return;
-    for (let y = 0; y < height; y += 16)
-      for (let x = 0; x < width; x += 16) {
-        painter.fillStyle = (x / 16 + y / 16 + tick) % 2 ? "#334d6c" : "#b4c1cf";
-        painter.fillRect(x, y, 16, 16);
-      }
     tick++;
-    const imageWidth = (height * portrait.width) / portrait.height;
-    painter.drawImage(portrait, (width - imageWidth) / 2 + (Math.sin(tick / 5) * width) / 160, 0, imageWidth, height);
+    const scale = Math.max(width / portrait.width, height / portrait.height) * 1.02;
+    const imageWidth = portrait.width * scale;
+    const imageHeight = portrait.height * scale;
+    painter.drawImage(portrait, (width - imageWidth) / 2 + (Math.sin(tick / 8) * width) / 500, (height - imageHeight) / 2, imageWidth, imageHeight);
+    if (!writer) return;
     const frame = new VideoFrame(canvas, { timestamp: Math.round(performance.now() * 1000) });
     writing = true;
     void writer
@@ -38,7 +37,7 @@ export function syntheticCamera(portrait: HTMLImageElement, width = 1280) {
     track,
     stop() {
       clearInterval(timer);
-      void writer.abort().catch(() => {});
+      void writer?.abort().catch(() => {});
       track.stop();
     },
   };

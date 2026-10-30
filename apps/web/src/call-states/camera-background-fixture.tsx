@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { processCameraStream, setCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
 import { PreviewDevicePopover } from "@q9labsai/chalk-react/preview";
 import { syntheticCamera } from "./camera-fixtures/synthetic-camera";
-import portraitUrl from "./camera-fixtures/portrait.jpg";
+import portraitUrl from "./camera-fixtures/webcam-subject.jpg";
 
 /** Browser proof: the production capture hand-off and picker over real WebRTC peers. */
 class CameraBackgroundFixture extends HTMLElement {
@@ -17,7 +17,7 @@ class CameraBackgroundFixture extends HTMLElement {
     const raw = new MediaStream([source]);
     const processed = await processCameraStream(raw);
     const track = processed.getVideoTracks()[0];
-    if (!track || track === source) throw new Error("Camera effects were not installed");
+    if (!track) throw new Error("Camera capture failed");
     const local = document.createElement("video");
     local.autoplay = true;
     local.muted = true;
@@ -103,6 +103,9 @@ class CameraBackgroundFixture extends HTMLElement {
         return { id: publication.mid, sameSender: sending.getSenders()[0] === publication.sender, sameTrack: publication.sender.track === track, state: sending.connectionState, trackState: track.readyState };
       },
       id,
+      source() {
+        return { live: source.readyState === "live", sameTrack: track === source };
+      },
       lifecycle() {
         track.enabled = false;
         const disabledCamera = !source.enabled;

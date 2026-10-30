@@ -3,6 +3,7 @@ import { CameraBackgroundPreferences, type CameraBackground } from "./camera-bac
 import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
 import { cameraFrameProcessingSupported, createCameraFrameSource } from "./camera-frame-source";
 import { markCameraEffectFailure } from "./camera-effect-failure";
+import { CameraEffectPerformance } from "./camera-effect-performance";
 
 export type CameraEffectsAssets = {
   /** Self-host the WASM files from the pinned tasks-vision package at this URL. */
@@ -19,6 +20,7 @@ export type CameraEffectsTrack = {
   readonly track: MediaStreamTrack;
   readonly prepare: (background: CameraBackground) => Promise<() => void>;
   readonly stop: () => void;
+  readonly usePlainCamera: () => void;
 };
 
 let assets: CameraEffectsAssets | undefined;
@@ -28,6 +30,7 @@ const preferences = new CameraBackgroundPreferences();
 const sessions = new Map<string, Set<CameraEffectsTrack>>();
 const pending = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
+const fallbacks = new Set<string>();
 
 /** Call before creating a browser Space client. Native capture never uses this layer. */
 export function configureCameraEffectProvider(next: CameraEffectsAssets, createSegmenter: CameraEffectsProvider): void {
@@ -49,6 +52,9 @@ export function cameraEffectsSupported(): boolean {
 export function getCameraBackground(deviceId: string): CameraBackground {
   return preferences.get(deviceId);
 }
+export function getCameraBackgroundFallback(deviceId: string): boolean {
+  return fallbacks.has(deviceId);
+}
 export function subscribeCameraBackground(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -60,6 +66,7 @@ export function setCameraBackground(deviceId: string, background: CameraBackgrou
     const commits = await Promise.all([...(sessions.get(deviceId) ?? [])].map((session) => session.prepare(background)));
     for (const commit of commits) commit();
     preferences.set(deviceId, background);
+    fallbacks.delete(deviceId);
     for (const listener of listeners) listener();
   });
 }
@@ -96,7 +103,12 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
   const deviceId = source.getSettings().deviceId ?? "default";
   signal?.addEventListener("abort", cancel, { once: true });
   try {
-    const captured = await createCameraEffectsTrack(source, assets, provider);
+    const captured = await createCameraEffectsTrack(source, assets, provider, () => {
+      for (const active of sessions.get(deviceId) ?? []) active.usePlainCamera();
+      preferences.set(deviceId, "none");
+      fallbacks.add(deviceId);
+      for (const listener of listeners) listener();
+    });
     session = captured;
     signal?.throwIfAborted();
     await enqueue(deviceId, async () => {
@@ -129,7 +141,7 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
 }
 
 /** Provider-neutral browser processor. It owns source until the output is stopped. */
-export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider): Promise<CameraEffectsTrack> {
+export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: () => void): Promise<CameraEffectsTrack> {
   const canvas = document.createElement("canvas");
   const foreground = document.createElement("canvas");
   const mask = document.createElement("canvas");
@@ -148,6 +160,7 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   let stopped = false;
   let lastFrame = -Infinity;
   let generation = 0;
+  const performanceMeter = new CameraEffectPerformance();
   const loadSegmenter = () =>
     (loading ??= createSegmenter(files)
       .then((loaded) => {
@@ -171,6 +184,15 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     canvas.height = foreground.height = Math.round(height * scale);
   };
   resize("none");
+  const usePlainCamera = () => {
+    if (stopped) return;
+    generation++;
+    background = "none";
+    image = undefined;
+    ready = true;
+    resize("none");
+    performanceMeter.reset();
+  };
   let pipeline: ReturnType<typeof createCameraFrameSource>;
   try {
     pipeline = createCameraFrameSource(source);
@@ -201,7 +223,10 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     const time = input.timestamp / 1000;
     if (time < lastFrame) return;
     lastFrame = Math.max(lastFrame + 1000 / (background === "none" ? 30 : 24), time);
-    if (!ready || !source.enabled) return;
+    if (!ready || !source.enabled || source.muted) {
+      performanceMeter.reset();
+      return;
+    }
     context.globalCompositeOperation = "source-over";
     context.clearRect(0, 0, canvas.width, canvas.height);
     if (background === "none" || !segmenter) {
@@ -250,6 +275,10 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       const processed = new VideoFrame(canvas, { timestamp: input.timestamp });
       try {
         await pipeline.writer.write(processed);
+        if (background !== "none" && performanceMeter.record(performance.now())) {
+          usePlainCamera();
+          onSlow?.();
+        }
       } finally {
         processed.close();
       }
@@ -277,6 +306,7 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
   return {
     track: output,
     stop,
+    usePlainCamera,
     async prepare(next) {
       const revision = generation;
       if (next !== "none") await loadSegmenter();
@@ -294,11 +324,12 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
       }
       if (stopped || generation !== revision) throw new Error("Camera effects stopped");
       return () => {
-        if (!stopped) {
+        if (!stopped && generation === revision) {
           resize(next);
           background = next;
           image = nextImage;
           ready = true;
+          performanceMeter.reset();
         }
       };
     },

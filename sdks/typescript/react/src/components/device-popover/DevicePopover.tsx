@@ -1,7 +1,7 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
-import { cameraEffectsSupported } from "@q9labsai/chalk-client";
+import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -174,13 +174,16 @@ export function DevicePopover({
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
-  const [backgroundsAvailable, setBackgroundsAvailable] = useState(false);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect browser processing support after hydration before exposing the mobile camera menu.
-  useEffect(() => setBackgroundsAvailable(cameraEffectsSupported()), []);
+  const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
+  const backgroundFallback = useSyncExternalStore(
+    subscribeCameraBackground,
+    () => type === "video" && getCameraBackgroundFallback(deviceId),
+    () => false,
+  );
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-backgrounds={!mic && backgroundsAvailable ? true : undefined}>
+    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
@@ -260,6 +263,11 @@ export function DevicePopover({
       {mic && speakingWhileMuted ? (
         <span className="chalk-shell-muted-hint" role="status">
           You’re muted
+        </span>
+      ) : null}
+      {backgroundFallback ? (
+        <span className="chalk-shell-muted-hint chalk-shell-background-hint" role="status">
+          Background off to keep video smooth.
         </span>
       ) : null}
     </div>

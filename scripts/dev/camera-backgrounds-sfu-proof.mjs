@@ -60,7 +60,7 @@ import {configureCameraEffects} from './sdks/typescript/client/src/camera-effect
 import {setCameraBackground} from './sdks/typescript/client/src/media/camera-effects.ts';
 import {CAMERA_VISION_ROOT,CAMERA_SEGMENTATION_MODEL} from './apps/web/src/lib/camera-effect-assets.ts';
 configureCameraEffects({wasmRoot:location.origin+CAMERA_VISION_ROOT,modelUrl:location.origin+CAMERA_SEGMENTATION_MODEL});
-navigator.mediaDevices.getUserMedia=async()=>{const image=new Image();image.src='/portrait.jpg';await image.decode();window.synthetic=syntheticCamera(image,640);return new MediaStream([window.synthetic.track]);};
+navigator.mediaDevices.getUserMedia=async()=>{const image=new Image();image.src='/webcam-subject.jpg';await image.decode();window.synthetic=syntheticCamera(image,640);return new MediaStream([window.synthetic.track]);};
 window.changeBackground = (value) => setCameraBackground('proof-camera',value);
 window.joinProof=async(space,baseUrl,syncUrl,name,camera)=>{window.client=createSpaceClientForPlatform({space,baseUrl,getAccess:()=>window.proofAccess()},{syncUrl});await client.join({displayName:name,microphone:false,camera});};
 `,
@@ -90,9 +90,9 @@ try {
         response.end(await readFile(resolve("apps/web/public" + path)));
         return;
       }
-      if (path === "/portrait.jpg") {
+      if (path === "/webcam-subject.jpg") {
         response.setHeader("Content-Type", "image/jpeg");
-        response.end(await readFile("apps/web/src/call-states/camera-fixtures/portrait.jpg"));
+        response.end(await readFile("apps/web/src/call-states/camera-fixtures/webcam-subject.jpg"));
         return;
       }
       response.setHeader("Content-Type", "text/html");

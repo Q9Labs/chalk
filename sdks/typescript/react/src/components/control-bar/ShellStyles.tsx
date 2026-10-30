@@ -50,6 +50,15 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   width: 16px;
   height: 16px;
 }
+.chalk-shell-muted-hint.chalk-shell-background-hint {inset-inline-start:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);white-space:normal;}
+[data-chalk] .chalk-shell-split button:focus {
+  outline: none;
+  box-shadow: none;
+}
+.chalk-shell-split:has(button:focus-visible) {
+  outline: 2px solid var(--chalk-focus);
+  outline-offset: 3px;
+}
 .chalk-shell-split button:hover,
 .chalk-shell-caret[aria-expanded="true"] {
   background: var(--chalk-hover);
@@ -429,7 +438,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   .chalk-shell-split .chalk-shell-caret {
     display: none;
   }
-  .chalk-shell-split[data-camera-backgrounds] .chalk-shell-caret {
+  .chalk-shell-split[data-camera-menu] .chalk-shell-main {border-radius:999px 0 0 999px;}
+  .chalk-shell-split[data-camera-menu] .chalk-shell-caret {
     display: grid;
     width: 44px;
     height: 52px;

@@ -36,6 +36,12 @@ effect changes the canvas contents without replacing the sender or renegotiating
 the publication. None preserves the camera dimensions and runs at up to 30 fps.
 Active effects run at up to 24 fps, with a maximum width of 960 pixels, or 640 in
 phone-sized viewports. The segmentation model runs entirely in the browser.
+After one second of warm-up, completed effect frames are measured over three
+seconds of wall time. Below 15 fps, all captures for that device switch to None
+without stopping the physical camera or changing the publication track. The
+choice is remembered and the camera control says “Background off to keep video
+smooth.” Disabling or muting capture resets the measurement. A person may retry
+an effect from the same menu.
 No video frames are uploaded for processing. Preset images come from Chalk's
 asset host, with AVIF preferred and WebP as fallback.
 

@@ -15,7 +15,7 @@ function browser() {
   const output = track("video");
   const source = track("video");
   source.getSettings = () => ({ deviceId: "camera-1", width: 640, height: 360 });
-  const painter = { drawImage: vi.fn(), clearRect: vi.fn() };
+  const painter = { drawImage: vi.fn(), clearRect: vi.fn(), createImageData: () => ({ data: new Uint8ClampedArray(4) }), putImageData: vi.fn() };
   const canvas = { width: 0, height: 0, getContext: () => painter };
   vi.stubGlobal("document", { createElement: () => ({ ...canvas }) });
   let frames: ReadableStreamDefaultController<VideoFrame> | undefined;
@@ -59,7 +59,10 @@ function browser() {
       }
     },
   );
-  model.create.mockResolvedValue({ close: model.close });
+  model.create.mockResolvedValue({
+    close: model.close,
+    segmentForVideo: (_input: unknown, _time: number, result: (value: { confidenceMasks: { width: number; height: number; getAsFloat32Array: () => Float32Array }[] }) => void) => result({ confidenceMasks: [{ width: 1, height: 1, getAsFloat32Array: () => new Float32Array([1]) }] }),
+  });
   return {
     output,
     source,
@@ -75,6 +78,30 @@ function browser() {
 
 describe("camera effects ownership", () => {
   const files = { wasmRoot: "/camera-effects/wasm", modelUrl: "/camera-effects/model.tflite" };
+  it("falls back to plain frames without stopping the camera or its publication track", async () => {
+    const { source, output, frame, write } = browser();
+    let now = 0;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const fallback = vi.fn();
+    const session = await createCameraEffectsTrack(source, files, () => model.create(), fallback);
+    try {
+      (await session.prepare("blur"))();
+      for (let index = 0; index < 6; index++) {
+        now = index * 1000;
+        frame((index + 1) * 1_000_000);
+        await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(index + 1));
+      }
+      expect(fallback).toHaveBeenCalledOnce();
+      expect(session.track).toBe(output);
+      expect(source.readyState).toBe("live");
+      expect(output.readyState).toBe("live");
+      expect(source.stop).not.toHaveBeenCalled();
+      expect(output.getSettings().frameRate).toBe(30);
+    } finally {
+      clock.mockRestore();
+      session.stop();
+    }
+  });
   it("keeps one output track when switching None and Blur, and releases capture exactly once", async () => {
     const { source, output } = browser();
     const originalStop = output.stop;
