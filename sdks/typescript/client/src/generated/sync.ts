@@ -599,7 +599,7 @@ function strictEvent(value: Record<string, unknown>): boolean {
 }
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
   if (stream === "media") return exactObject(value, ["participant_id", "source", "enabled", "publication_id"]);
-  if (stream === "presence") return exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : [])]);
+  if (stream === "presence") return isObject(value) && exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : [])]);
   return false;
 }
 function strictProjection(value: Record<string, unknown>): boolean {

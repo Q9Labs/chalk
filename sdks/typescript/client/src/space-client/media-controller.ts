@@ -629,41 +629,32 @@ class MediaControllerRuntime implements MediaControllerEffects {
       check();
       return Effect.sync(unsubscribe);
     });
-    const startTransport = foreign(async () => {
-      const cameras = stream.getTracks().filter((track) => track.kind === "video" && this.#hasConsent("camera"));
-      await media.start(streamFromTracks(cameras));
-    });
     const publish = foreign(async () => {
-      const snapshot = this.#ports?.sync.getSnapshot();
-      this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
-      if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
-      // Capture and access initialization may yield; inspect intent again at the send boundary.
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = stream.getTracks().filter((track) => {
         const source = track.kind === "audio" ? "microphone" : "camera";
         const enabled = this.#hasConsent(source);
         track.enabled = enabled;
-        if (!enabled) {
-          // An omitted source was never prepared in the media plane. Release its publication ownership.
-          this.#deleteTrack(source);
-          if (source === "microphone") track.stop();
-        }
+        if (!enabled) this.#deleteTrack(source);
         return enabled;
       });
-      const microphone = tracks.find((track) => track.kind === "audio");
-      if (microphone && this.#ports) {
-        media.prepareLocalTrack("microphone", microphone);
-        await Effect.runPromise(this.#localTarget(this.#ports, "microphone", true));
-      }
+      await media.start(streamFromTracks(tracks), () => Effect.runPromise(waitForSync.pipe(Effect.map(() => {
+        const snapshot = this.#ports?.sync.getSnapshot();
+        this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
+        if (!this.#microphoneMutedByOtherDevice) return streamFromTracks(tracks);
+        this.#recordIntent("microphone", false);
+        this.#deleteTrack("microphone");
+        for (const track of tracks) if (track.kind === "audio") { track.enabled = false; track.stop(); }
+        return streamFromTracks(tracks.filter((track) => track.kind !== "audio"));
+      }))));
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
         if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
       }
     });
-    // Start the receive transport independently; microphone publication needs the
-    // authoritative person identity from Sync before it can safely send audio.
-    return startTransport.pipe(Effect.andThen(waitForSync), Effect.andThen(this.#serialize("microphone", this.#serialize("camera", publish))));
+    return this.#serialize("microphone", this.#serialize("camera", publish));
   }
+
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
     const command = this.#mediaAction(
       enabled,

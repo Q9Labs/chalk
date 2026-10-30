@@ -196,18 +196,26 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  async start(localMedia: MediaStream): Promise<void> {
+  async start(localMedia: MediaStream, beforePublish?: () => Promise<MediaStream>): Promise<void> {
     if (this.#started) return;
     this.#requireActive();
-    const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
-    for (const track of tracks) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
     const generation = this.#generation;
     this.#setPhase("connecting", null);
+    if (beforePublish) {
+      this.#started = true;
+      this.#schedulePoll(0);
+      localMedia = await beforePublish();
+      // Startup rejection or Leave already owns cleanup; never publish after it.
+      if (generation !== this.#generation || this.#stopped) return;
+    }
+    const tracks = localMedia.getTracks().filter((track) => track.kind === "audio" || track.kind === "video");
+    for (const track of tracks) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
     await this.#activatePreparedTracks(
       [...this.#localTracks.values()].filter((state) => state.source === "microphone" || state.source === "camera"),
       generation,
     );
   }
+
   async refreshRemotePublications(): Promise<void> {
     if (!this.#started || this.#stopped || this.#polling) return;
     this.#polling = true;
