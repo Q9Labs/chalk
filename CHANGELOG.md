@@ -13,6 +13,12 @@ The React Native SDK adds `parseChalkInviteLink`, which reads short links, bare
 codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
 `parseInviteCode`.
 
+## 5.2.6
+
+- Keep audio flowing during sender retirement by backing off failed pulls per publication and retiring tracks only within their BUNDLE transport.
+- Show the full call name in the call-name buttons' tooltips.
+- Advance the seven synchronized Chalk SDK packages to 5.2.6.
+
 ## 5.2.0
 
 - Advance the seven coordinated Chalk SDK packages to 5.2.0. `@q9labsai/recording-presentation` remains at 0.1.1.
