@@ -138,3 +138,6 @@ hasan.md
 # Web assets copied from pinned whiteboard dependencies by sync:public.
 apps/web/public/chalk-whiteboard/
 apps/web/public/chalk-mathjax/
+
+# Pinned camera-effects WASM copied by sync:public.
+apps/web/public/camera-effects/tasks-vision-*/

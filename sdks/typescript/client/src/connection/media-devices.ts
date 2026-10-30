@@ -2,13 +2,14 @@ import type { ScreenShareOptions, ScreenShareCapture } from "../media/plane";
 import type { ConnectionMediaDevices } from "./dependencies";
 import { ConnectionError } from "./types";
 import { markMediaFailure } from "../media/failure-diagnostics";
+import { processCameraStream } from "../media/camera-effects";
 
 export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined = globalThis.navigator?.mediaDevices): ConnectionMediaDevices {
   return {
     async getUserMedia(constraints) {
       if (!mediaDevices?.getUserMedia || globalThis.isSecureContext === false) throw new ConnectionError({ code: "unsupported_environment", action: null, recoverable: false, message: "Browser media capture is unavailable. Use a supported browser over HTTPS." });
       try {
-        return await mediaDevices.getUserMedia(constraints);
+        return await processCameraStream(await mediaDevices.getUserMedia(constraints));
       } catch (error) {
         markMediaFailure(error, "local_capture");
         throw error;

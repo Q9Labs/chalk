@@ -8,6 +8,7 @@ import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+import { CameraBackgroundPicker } from "./CameraBackgroundPicker";
 
 export interface DevicePopoverProps {
   type: "mic" | "video";
@@ -71,6 +72,7 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
 function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraPreview }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly selectedDeviceId?: string; readonly captureCameraPreview?: () => Promise<CameraPreviewHandle> }) {
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [deviceId, setDeviceId] = useState(selectedDeviceId ?? "default");
   const trackEnabled = track?.enabled;
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Acquire a camera preview for the mounted open popover; release late captures and the owned preview on cleanup.
   useEffect(() => {
@@ -87,6 +89,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
             return;
           }
           preview = captured;
+          setDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
           element.srcObject = new MediaStream([captured.track]);
         },
         () => {
@@ -94,6 +97,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
         },
       );
     } else if (track?.enabled && track.readyState === "live") {
+      setDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
       element.srcObject = new MediaStream([track]);
     } else {
       setUnavailable(true);
@@ -105,10 +109,13 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
     };
   }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview]);
   return (
+    <>
     <div className="chalk-shell-preview">
       <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
       <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
     </div>
+    {open && !unavailable ? <CameraBackgroundPicker deviceId={deviceId} /> : null}
+    </>
   );
 }
 

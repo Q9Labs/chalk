@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { assetFiles, treeDigest } from "./vendor-asset-files";
 import { EXCALIDRAW_ASSET_DIGEST, EXCALIDRAW_ASSET_ROOT, EXCALIDRAW_ASSET_VERSION, MATHJAX_ASSET_DIGEST, MATHJAX_ASSET_ROOT, MATHJAX_ASSET_VERSION } from "../src/lib/whiteboard-asset-versions";
 
+import { CAMERA_VISION_VERSION, CAMERA_VISION_DIGEST, CAMERA_VISION_ROOT } from "../src/lib/camera-effect-assets";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = resolve(scriptDir, "../public");
 const blankHtml = '<!doctype html><html><head><meta charset="utf-8" /></head><body></body></html>\n';
@@ -78,3 +80,8 @@ publishVersionedTree(MATHJAX_ASSET_ROOT, "MATHJAX_ASSET_DIGEST", MATHJAX_ASSET_D
   [join(mathFontRoot, "svg"), "fonts/mathjax-newcm-font/svg"],
   [join(mathFontRoot, "svg.js"), "fonts/mathjax-newcm-font/svg.js"],
 ]);
+
+const clientRequire = createRequire(resolve(scriptDir, "../../../sdks/typescript/client/package.json"));
+const visionRoot = dirname(clientRequire.resolve("@mediapipe/tasks-vision"));
+assertAssetVersion(join(visionRoot, "package.json"), CAMERA_VISION_VERSION);
+publishVersionedTree(CAMERA_VISION_ROOT, "CAMERA_VISION_DIGEST", CAMERA_VISION_DIGEST, [[join(visionRoot, "wasm"), ""]]);
