@@ -28,15 +28,19 @@ over a five-minute window, not a percentage of all requests. Sync counts only re
 ## Read-only state collector
 
 `collector.go` is a standalone alert-only executable, not an API service change.
-Build on the remote test machine from `apps/api` to reuse its pinned pgx version:
+Build from `apps/api` to reuse its pinned pgx version. This standalone Go build
+can run locally. Use Go 1.26.10 and target the production host's architecture:
+`uname -m` on the host reports `aarch64`, which Go calls `arm64`.
 
 ```sh
-go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/discord_test.go
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
+GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/discord_test.go
+GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
+file collector
+shasum -a 256 collector
 ```
 
 The collector uses one connection, a read-only transaction and a five-second SQL
-timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
+timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. The global Sync readiness row brings coverage to six rules. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
 partial ingest fails the service. The freshness monitor detects missing snapshots
 within five minutes. Latest values, not sums of repeated snapshots, drive alerts. Only snapshots newer than five minutes drive state alerts. The `recording-stop` rule counts completed captures even when the capture job succeeded. It clears when Sync no longer reports `stopping`.
 
@@ -73,7 +77,7 @@ writes. Keep credentials out of SSM command bodies and CI output.
 
 Before enabling the timer, run `collector --check` with the private environment
 and verify the per-Tenant state counts against Postgres. Then run the service once,
-confirm all per-Tenant snapshots and the four heartbeat rows in Axiom, and enable `chalk-alert-state.timer`.
+confirm all per-Tenant snapshots, five heartbeat rows, and the global Sync readiness row in Axiom, and enable `chalk-alert-state.timer`.
 Only install these alert files: do not run an application deployment controller.
 
 The next managed release targets the existing host: its controller replaces only
