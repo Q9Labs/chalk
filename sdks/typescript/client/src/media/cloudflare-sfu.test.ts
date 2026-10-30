@@ -169,7 +169,8 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       expect(harness.peers).toHaveLength(2);
       expect(original.closed).toBe(true);
       expect(harness.transport.addInputs.length).toBeGreaterThan(originalPulls);
-      expect(harness.transport.addInputs.slice(originalPulls).some((input) => input.replacementCause === "receive_stalled")).toBe(true);
+      expect(harness.transport.addInputs.slice(originalPulls).filter((input) => input.replacementCause !== undefined)).toEqual([expect.objectContaining({ connectionId: "replacement", replacementCause: "receive_stalled" })]);
+      expect(harness.transport.addInputs[originalPulls]?.replacementCause).toBe("receive_stalled");
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
   );
@@ -1728,6 +1729,8 @@ describe("Cloudflare SFU HTTP signaling", () => {
         harness.transport.failedRemoteTrackNames.clear();
         await vi.advanceTimersByTimeAsync(15000);
         expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        expect(harness.peers).toHaveLength(1);
+        expect(harness.transport.addInputs.every((input) => input.replacementCause === undefined)).toBe(true);
         if (mode === "discovery") {
           const failingAgain = vi.spyOn(harness.transport, "listPublications").mockRejectedValue(new CloudflareSFUError("discovery unavailable", "signaling_failed"));
           await vi.advanceTimersByTimeAsync(15000);

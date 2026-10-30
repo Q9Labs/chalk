@@ -20,6 +20,7 @@ async function provider(path, method, body) {
   return response.json();
 }
 async function replace(state) {
+  state.lastReplacementStarted = Date.now();
   const session = await provider("sessions/new", "POST");
   state.sessionId = session.sessionId;
   state.publications = [];
@@ -154,14 +155,8 @@ try {
           return result;
         };
         window.proofErrors = [];
-        window.proofPeers = [];
         client = window.client = new ChalkMedia.CloudflareSFUClient({
           participantId: `publisher-${index}`,
-          peerConnectionFactory: (configuration) => {
-            const peer = new RTCPeerConnection(configuration);
-            window.proofPeers.push(peer);
-            return peer;
-          },
           bootstrap,
           pollIntervalMs: 1000,
           onError: (error) => window.proofErrors.push(error.code ?? "unclassified"),
@@ -194,8 +189,9 @@ try {
   await provider(`sessions/${receiver.sessionId}/tracks/close`, "PUT", { force: true, tracks: [{ mid: audioPull.mid }] });
   await until(() => pages[1].evaluate(() => window.level() < 0.001), 5000, "injected forwarding loss");
   await until(() => pages[1].evaluate(() => window.level() > 0.02), 14_000, "rendered remote audio recovery");
-  const partial = { renderedAudioRecovered: true, elapsedMs: Date.now() - started, repulls: receiver.pullCalls - baselinePulls, replacements: receiver.replacements };
+  const partial = { renderedAudioRecovered: true, elapsedMs: Date.now() - started, recoveryStartedMs: receiver.lastReplacementStarted - started, repulls: receiver.pullCalls - baselinePulls, replacements: receiver.replacements };
   assert.equal(partial.replacements, 1, "A partial stall must retire the old receive connection exactly once");
+  assert.ok(partial.recoveryStartedMs <= 10_000, "Partial recovery did not start within the window plus sampling/backoff");
   console.log(JSON.stringify({ stage: "partial_recovery", ...partial }));
   for (const page of pages) await until(() => page.evaluate(() => window.level() > 0.02), 30_000, "settled rendered audio after partial recovery");
   await pages[1].waitForTimeout(3000);
@@ -205,17 +201,28 @@ try {
   await provider(`sessions/${receiver.sessionId}/tracks/close`, "PUT", { force: true, tracks: pulls.map(({ mid }) => ({ mid })) });
   await until(() => pages[1].evaluate(() => window.level() < 0.001), 5000, "all inbound forwarding loss");
   await until(() => pages[1].evaluate(() => window.level() > 0.02), 14_000, "rendered remote audio after connection rebuild");
+  const allElapsedMs = Date.now() - allStarted;
   assert.equal(receiver.replacements - previousReplacements, 1, "All-track stall must rebuild exactly once");
+  assert.ok(receiver.lastReplacementStarted - allStarted <= 10_000, "All-track recovery did not start within the window plus sampling/backoff");
   const allocations = await pages[1].evaluate(() => {
-    const livePeers = window.proofPeers.filter((peer) => peer.connectionState !== "closed");
-    return { livePeers: livePeers.length, receivers: livePeers.flatMap((peer) => peer.getReceivers()).filter((receiver) => receiver.track.readyState === "live").length };
+    const livePeers = window.proofPCs.filter((peer) => peer.connectionState !== "closed");
+    return { livePeers: livePeers.length, receivers: livePeers.flatMap((peer) => peer.getTransceivers()).filter((transceiver) => ["recvonly", "sendrecv"].includes(transceiver.currentDirection) && transceiver.receiver.track.readyState === "live").length };
   });
   assert.deepEqual(allocations, { livePeers: 1, receivers: 2 });
   const providerSnapshot = await provider(`sessions/${receiver.sessionId}`, "GET");
   const providerPulls = providerSnapshot.tracks.filter((track) => track.location === "remote");
-  assert.deepEqual(providerPulls.map((track) => track.trackName).sort(), ["camera", "microphone"]);
+  assert.deepEqual(providerPulls.map((track) => track.trackName.split("-")[0]).sort(), ["camera", "microphone"]);
   allocations.providerPulls = providerPulls.length;
-  console.log(JSON.stringify({ result: "passed", browsers: 2, allocations, partial, allTracks: { renderedAudioRecovered: true, elapsedMs: Date.now() - allStarted, replacements: receiver.replacements - previousReplacements }, upstreamStatuses: Object.fromEntries(statuses) }));
+  console.log(
+    JSON.stringify({
+      result: "passed",
+      browsers: 2,
+      allocations,
+      partial,
+      allTracks: { renderedAudioRecovered: true, elapsedMs: allElapsedMs, recoveryStartedMs: receiver.lastReplacementStarted - allStarted, replacements: receiver.replacements - previousReplacements },
+      upstreamStatuses: Object.fromEntries(statuses),
+    }),
+  );
 } catch (error) {
   for (const page of pages)
     console.log(
