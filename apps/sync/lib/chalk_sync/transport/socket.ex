@@ -56,6 +56,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        heartbeat_timer: nil,
        entry_timer: nil,
        entry_confirmation: Map.get(opts, :entry_confirmation, false),
+       participant_devices: Map.get(opts, :participant_devices, false),
        requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
        terminal_ack_timer: nil,
        terminal_head: nil,
@@ -709,22 +710,33 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   defp merge_hello_observability(state, _correlation), do: state
 
+  defp encode_with_context(state, encoded) when is_binary(encoded) do
+    encode_with_context(state, JSON.decode!(encoded))
+  end
+
   defp encode_with_context(state, frame) when is_map(frame) do
     frame
+    |> device_projection(state.participant_devices)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
 
-  defp encode_with_context(state, encoded) when is_binary(encoded) do
-    fields = Observability.frame_fields(state.observability)
+  # Identity hints are opt-in so older SDKs keep their exact presence wire shape.
+  defp device_projection(%{"stream" => "presence", "items" => items} = frame, false),
+    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, ["identity_id", "device_type"]))}
 
-    if fields == %{} do
-      encoded
-    else
-      encoded
-      |> JSON.decode!()
-      |> Map.merge(fields)
-      |> ProtocolV1.encode!()
+  defp device_projection(%{"stream" => "presence", "item" => item} = frame, false),
+    do: %{frame | "item" => Map.drop(item, ["identity_id", "device_type"])}
+
+  defp device_projection(frame, _enabled), do: frame
+
+  defp device_type(nil), do: nil
+  defp device_type(agent) do
+    cond do
+      String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
+      String.contains?(agent, ["Mobile", "iPhone"]) -> "phone"
+      String.contains?(agent, ["Windows", "Macintosh", "X11"]) -> "computer"
+      true -> nil
     end
   end
 
@@ -939,6 +951,7 @@ defmodule ChalkSync.Transport.SocketV1 do
            | entry_confirmation:
                state.entry_confirmation && identity.entry_ownership != :compatibility
          },
+         identity = %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
          :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-

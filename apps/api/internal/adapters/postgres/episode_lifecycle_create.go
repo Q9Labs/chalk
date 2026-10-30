@@ -214,6 +214,19 @@ func (r EpisodeLifecycleRepository) AdmitParticipant(ctx context.Context, input 
 		if !ok {
 			return episodes.ErrInvalidRole
 		}
+		if input.IdentityExternalID != "" {
+			identityID, err := utilities.NewID()
+			if err != nil {
+				return fmt.Errorf("allocate admission identity: %w", err)
+			}
+			identity, err := queries.ResolveAdmissionIdentity(ctx, sqlc.ResolveAdmissionIdentityParams{
+				ID: uuid(identityID), TenantID: uuid(input.TenantID), ExternalID: input.IdentityExternalID, DisplayName: input.Name,
+			})
+			if err != nil {
+				return fmt.Errorf("resolve admission identity: %w", err)
+			}
+			input.IdentityID = utilities.IDFromBytes(identity.Bytes)
+		}
 		payload := input.Request.Payload()
 		if input.Admission != episodes.AdmissionDirect {
 			mode, err := configAdmissionMode(config.AdmissionPolicy)

@@ -53,3 +53,9 @@ insert into participants (
        and account_id = sqlc.arg(account_id)), 'joining'
 )
 returning *;
+
+-- name: ResolveAdmissionIdentity :one
+insert into identities (id, tenant_id, kind, external_id, display_name)
+values (sqlc.arg(id), sqlc.arg(tenant_id), 'user', sqlc.arg(external_id), sqlc.arg(display_name))
+on conflict (tenant_id, external_id) do update set external_id = excluded.external_id
+returning id;

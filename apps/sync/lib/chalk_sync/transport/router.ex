@@ -46,6 +46,7 @@ defmodule ChalkSync.Transport.Router do
             %{
               observability: observability,
               entry_confirmation: entry_confirmation,
+              participant_devices: conn.query_params["participant_devices"] == "1",
               entry_generation: entry_generation(conn.query_params["entry_generation"]),
               connection_attributes: SocketContext.request(conn)
             },

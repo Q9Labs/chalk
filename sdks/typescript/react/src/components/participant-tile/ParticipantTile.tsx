@@ -15,6 +15,7 @@ export interface ParticipantTileProps {
   participant: {
     id: string;
     displayName: string;
+    deviceHint?: string;
     isLocal?: boolean;
     isSpeaking?: boolean;
     /** Normalized voice level (0–1). Activity-only integrations use a neutral speaking level. */
@@ -161,6 +162,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 </span>
               </>
             )}
+            {participant.deviceHint ? <span data-part="tile-device" className="min-w-0 truncate text-[11px] opacity-80">{participant.deviceHint}</span> : null}
             {following ? (
               <span data-part="tile-following" className="shrink-0 font-semibold opacity-80">
                 following

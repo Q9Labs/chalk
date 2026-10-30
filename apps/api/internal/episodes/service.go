@@ -185,16 +185,17 @@ const (
 )
 
 type AdmitParticipantInput struct {
-	Admission     AdmissionMode
-	TenantID      utilities.ID
-	SpaceID       utilities.ID
-	EpisodeID     utilities.ID
-	ParticipantID utilities.ID
-	Name          string
-	Metadata      json.RawMessage
-	Role          string
-	IdentityID    utilities.ID
-	Request       Request
+	Admission          AdmissionMode
+	TenantID           utilities.ID
+	SpaceID            utilities.ID
+	EpisodeID          utilities.ID
+	ParticipantID      utilities.ID
+	Name               string
+	Metadata           json.RawMessage
+	Role               string
+	IdentityID         utilities.ID
+	IdentityExternalID string
+	Request            Request
 }
 
 type RequestParticipantRemovalInput struct {

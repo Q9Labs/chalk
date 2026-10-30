@@ -1349,7 +1349,10 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id))
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
-      ["participant_id", "state", "speaking", "active_speaker"]) and valid_uuid?(id) and
+      ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
+      "device_type"], &Map.has_key?(item, &1))) and (not Map.has_key?(item, "identity_id") or
+      valid_uuid?(item["identity_id"])) and (not Map.has_key?(item, "device_type") or
+      item["device_type"] in ["phone", "tablet", "computer"]) and valid_uuid?(id) and
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false

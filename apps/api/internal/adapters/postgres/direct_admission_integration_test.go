@@ -49,6 +49,7 @@ type directAdmissionResponse struct {
 	ID          string `json:"id"`
 	Participant struct {
 		ID           string   `json:"id"`
+		IdentityID   *string  `json:"identity_id"`
 		Generation   int64    `json:"generation"`
 		Role         string   `json:"role"`
 		Capabilities []string `json:"capabilities"`
@@ -217,6 +218,25 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 				setLegacyDirectAdmissionFixture(t, ctx, pool, episode.ID, spaceID)
 			}
 			path := base + "/" + episode.ID + "/participants"
+			if mode == "open" {
+				firstBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
+				secondBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
+				first := post(t, path, writer, "person-device-first", firstBody, http.StatusCreated)
+				second := post(t, path, writer, "person-device-second", secondBody, http.StatusCreated)
+				replay := post(t, path, writer, "person-device-second", secondBody, http.StatusCreated)
+				if first.Participant.IdentityID == nil || second.Participant.IdentityID == nil || *first.Participant.IdentityID != *second.Participant.IdentityID || first.Participant.ID == second.Participant.ID || second.Participant.ID != replay.Participant.ID {
+					t.Fatal("device admissions must share a person identity, retain separate seats, and replay idempotently")
+				}
+				changedBody := strings.Replace(secondBody, "stable-person", "different-person", 1)
+				post(t, path, writer, "person-device-second", changedBody, http.StatusConflict)
+				other, err := queries.ResolveAdmissionIdentity(ctx, sqlc.ResolveAdmissionIdentityParams{ID: uuid(accountTenantIntegrationID(t)), TenantID: uuid(foreignID), ExternalID: "stable-person", DisplayName: "Member"})
+				if err != nil || utilities.IDFromBytes(other.Bytes).String() == *first.Participant.IdentityID {
+					t.Fatalf("person identity must be tenant scoped: %v", err)
+				}
+				invalidBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","identity_id":%q,"admission":"direct"}`, accountTenantIntegrationID(t).String(), *first.Participant.IdentityID)
+				post(t, path, writer, "person-device-invalid", invalidBody, http.StatusBadRequest)
+			}
+
 			body := fmt.Sprintf(`{"participant_id":%q,"name":"Guest","role":"custom_guest","admission":"direct","metadata":{"source":"backend"}}`, accountTenantIntegrationID(t).String())
 			requestKey := "direct-admission-request-" + mode
 			admitted := post(t, path, writer, requestKey, body, http.StatusCreated)

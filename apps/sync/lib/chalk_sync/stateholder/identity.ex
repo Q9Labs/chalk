@@ -7,6 +7,8 @@ defmodule ChalkSync.Stateholder.Identity do
   defstruct [
     :episode,
     :participant_id,
+    :identity_id,
+    :device_type,
     :participant_generation,
     :admission_lifecycle_intent_id,
     :entry_generation,

@@ -164,7 +164,9 @@ defmodule ChalkSync.Live.Projection do
   end
 
   defp valid_item?(:presence, item) do
-    exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"]) and
+    exact_keys?(item, ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id", "device_type"], &Map.has_key?(item, &1))) and
+      (not Map.has_key?(item, "identity_id") or canonical_uuid?(item["identity_id"])) and
+      (not Map.has_key?(item, "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and
       item["state"] in ["connected", "disconnected"] and
       canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and

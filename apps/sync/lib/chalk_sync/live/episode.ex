@@ -63,7 +63,7 @@ defmodule ChalkSync.Live.Episode do
            DirectedRequests.register(state.requests, authority.participant_id, socket),
          next = %{
            state
-           | connections: Map.put(state.connections, socket, authority),
+           | connections: Map.put(state.connections, socket, Map.merge(authority, %{identity_id: identity.identity_id, device_type: identity.device_type})),
              requests: requests
          },
          {:ok, next, _discarded_frames} <- refresh_media(next, []),
@@ -315,8 +315,13 @@ defmodule ChalkSync.Live.Episode do
         "speaking" => false,
         "active_speaker" => false
       }
+      |> put_known("identity_id", authority.identity_id)
+      |> put_known("device_type", authority.device_type)
     end)
   end
+
+  defp put_known(item, _key, nil), do: item
+  defp put_known(item, key, value), do: Map.put(item, key, value)
 
   defp media_item(item) do
     %{

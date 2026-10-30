@@ -200,6 +200,8 @@ function rosterFor(
     participants.map((participant) =>
       Object.freeze({
         participantId: participant.participantId,
+        identityId: presence?.items.find((item) => item.participantId === participant.participantId)?.identityId,
+        deviceType: presence?.items.find((item) => item.participantId === participant.participantId)?.deviceType,
         displayName: participant.displayName,
         role: participant.role,
         eligibleRoles: Object.freeze([...participant.eligibleRoles]),
@@ -264,7 +266,7 @@ function sameParticipantMedia(left: Participant, right: Participant): boolean {
   return left.media.microphone === right.media.microphone && left.media.camera === right.media.camera && left.media.screenShare === right.media.screenShare && left.media.screenShareHasAudio === right.media.screenShareHasAudio;
 }
 function sameParticipantPresence(left: Participant, right: Participant): boolean {
-  return left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
+  return left.identityId === right.identityId && left.deviceType === right.deviceType && left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
 }
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
   return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);

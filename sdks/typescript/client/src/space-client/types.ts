@@ -119,6 +119,9 @@ export type ParticipantPresence = {
   readonly activeSpeaker: boolean;
 };
 export type Participant = {
+  /** Stable person identity, independent of the per-device participant ID. */
+  readonly identityId?: string;
+  readonly deviceType?: "phone" | "tablet" | "computer";
   readonly participantId: string;
   readonly displayName: string;
   readonly role: string;
@@ -158,6 +161,7 @@ export type RemoteMedia = {
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
 export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
 export type MediaSlice = {
+  readonly microphoneMutedByOtherDevice?: boolean;
   readonly devices: {
     readonly microphones: readonly MediaDevice[];
     readonly cameras: readonly MediaDevice[];

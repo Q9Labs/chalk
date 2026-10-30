@@ -1,3 +1,4 @@
+import { otherDeviceHasMicrophone } from "./same-identity";
 import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
@@ -134,6 +135,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #unsubscribePorts: (() => void) | null = null;
   #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
+  #microphoneMutedByOtherDevice = false;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
@@ -164,7 +166,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.microphone !== undefined) this.#recordIntent("microphone", intent.microphone);
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
-  setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => this.#set("microphone", enabled);
+  setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> => Effect.sync(() => {
+    this.#microphoneMutedByOtherDevice = false;
+    this.#publish();
+  }).pipe(Effect.andThen(this.#set("microphone", enabled)));
   setCameraEnabled = (enabled: boolean): ClientEffect<void> => this.#set("camera", enabled);
   captureCameraPreview = (): ClientEffect<CameraPreview> => this.#cameraSource("preview").pipe(Effect.mapError(normalizeMediaError));
   setScreenShareEnabled = (enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> => (enabled ? this.#mediaAction(true, this.#startScreen(options)) : this.#stopScreen());
@@ -613,7 +618,20 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }
   }
   startInitial(media: ConnectionPorts["media"], stream: MediaStream): Effect.Effect<void, unknown> {
+    const waitForSync = Effect.callback<void>((resume) => {
+      const sync = this.#ports?.sync;
+      if (!sync) return resume(Effect.void);
+      const check = () => {
+        if (sync.getSnapshot().connection.phase === "live") resume(Effect.void);
+      };
+      const unsubscribe = sync.subscribe(check);
+      check();
+      return Effect.sync(unsubscribe);
+    });
     const publish = foreign(async () => {
+      const snapshot = this.#ports?.sync.getSnapshot();
+      this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
+      if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
       // Capture and access initialization may yield; inspect intent again at the send boundary.
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = stream.getTracks().filter((track) => {
@@ -633,7 +651,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
       }
     });
-    return this.#serialize("microphone", this.#serialize("camera", publish));
+    return waitForSync.pipe(Effect.andThen(this.#serialize("microphone", this.#serialize("camera", publish))));
   }
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
     const command = this.#mediaAction(
@@ -1271,6 +1289,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
     const media = Object.freeze({
       ...current.media,
+      microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
       local,
       remote,
       screenShare: {

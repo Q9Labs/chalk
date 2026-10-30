@@ -599,7 +599,7 @@ function strictEvent(value: Record<string, unknown>): boolean {
 }
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
   if (stream === "media") return exactObject(value, ["participant_id", "source", "enabled", "publication_id"]);
-  if (stream === "presence") return exactObject(value, ["participant_id", "state", "speaking", "active_speaker"]);
+  if (stream === "presence") return exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : [])]);
   return false;
 }
 function strictProjection(value: Record<string, unknown>): boolean {
@@ -1321,9 +1321,14 @@ export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Lite
 export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
   Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })),
 );
-export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]), speaking: Schema.Boolean, active_speaker: Schema.Boolean }).check(
-  Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })),
-);
+export const PresenceProjectionItemSchema = Schema.Struct({
+  participant_id: UuidSchema,
+  state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]),
+  speaking: Schema.Boolean,
+  active_speaker: Schema.Boolean,
+  identity_id: Schema.optional(UuidSchema),
+  device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
+}).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));
 export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
   type: Schema.Literal("projection_snapshot"),
   stream: Schema.Literal("media"),

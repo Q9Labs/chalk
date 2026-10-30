@@ -10,6 +10,7 @@ import { buildStageItems, type StageItem } from "../stage/stage-items";
 export interface Participant {
   id: string;
   displayName: string;
+  deviceHint?: string;
   isLocal?: boolean;
   /** Voice activity for this participant, from sync presence. */
   isSpeaking?: boolean;
