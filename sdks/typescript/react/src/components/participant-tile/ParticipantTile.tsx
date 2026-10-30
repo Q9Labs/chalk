@@ -152,28 +152,32 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
         showName || showStatus ? (
           <>
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
-            {showName && (
-              <>
-                <span dir="auto" data-part="tile-full-name" className="inline-flex min-w-0 [unicode-bidi:plaintext]" title={participant.displayName}>
-                  <span className="min-w-0 truncate">{participant.displayName}</span>
-                  {participant.isLocal && participant.displayName !== "You" && (
-                    <span data-part="tile-self-label" className="shrink-0 whitespace-pre text-[var(--chalk-on-overlay)]">
-                      {" "}
-                      (You)
-                    </span>
-                  )}
+            <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-[5px] overflow-hidden">
+              {showName && (
+                <>
+                  <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full shrink-0 items-center [unicode-bidi:plaintext]" title={participant.displayName}>
+                    <span className="min-w-0 truncate">{participant.displayName}</span>
+                    {participant.isLocal && participant.displayName !== "You" && (
+                      <span data-part="tile-self-label" className="shrink-0 whitespace-pre text-[var(--chalk-on-overlay)]">
+                        {" "}
+                        (You)
+                      </span>
+                    )}
+                  </span>
+                  <span dir="auto" data-part="tile-short-name" className="hidden h-full min-w-0 max-w-full shrink-0 truncate [unicode-bidi:plaintext]">
+                    {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
+                  </span>
+                </>
+              )}
+              {participant.deviceHint ? (
+                <span data-part="tile-device" className="contents text-[11px]">
+                  <span data-part="tile-device-type" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">
+                    {deviceLabel}
+                  </span>
+                  {deviceDetails.length > 0 && <span data-part="tile-device-count" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">{`· ${deviceDetails.join(" · ")}`}</span>}
                 </span>
-                <span dir="auto" data-part="tile-short-name" className="hidden min-w-0 truncate [unicode-bidi:plaintext]">
-                  {participant.isLocal ? "You" : participant.displayName.split(" ")[0]}
-                </span>
-              </>
-            )}
-            {participant.deviceHint ? (
-              <span data-part="tile-device" className="inline-flex min-w-[70px] text-[11px] opacity-80">
-                <span className="min-w-0 truncate">{deviceLabel}</span>
-                {deviceDetails.length > 0 && <span className="shrink-0">{` · ${deviceDetails.join(" · ")}`}</span>}
-              </span>
-            ) : null}
+              ) : null}
+            </span>
             {following ? (
               <span data-part="tile-following" className="shrink-0 font-semibold opacity-80">
                 following
