@@ -648,6 +648,20 @@ it.each(["microphone", "camera"] as const)("ownership: production replacement fe
   }
 });
 
+it.each(["microphone", "camera"] as const)("replaces conservatively on %s retirement without BUNDLE information", async (source) => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    harness.peers[0]!.localDescription = { type: "offer", sdp: "v=0\r\n" };
+    await harness.client.closeForcedLocalPublication(source);
+    expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+    expect(harness.peers[0]?.connectionState).toBe("closed");
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("only retiring the negotiated BUNDLE sender replaces the connection (%s first)", async (firstSource) => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });
@@ -1321,6 +1335,85 @@ describe("Cloudflare SFU HTTP signaling", () => {
   });
 });
 describe("remote publication recovery", () => {
+  it.each(["resumed", "removed"] as const)("resets a publication's partial-error backoff after it is %s", async (transition) => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        harness.transport.failedRemoteTrackNames.set("camera", "unknown");
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(750);
+        await vi.advanceTimersByTimeAsync(1500);
+        expect(attempts).toHaveBeenCalledTimes(3);
+        if (transition === "resumed") harness.client.remotePublicationResumed("remote|camera");
+        else {
+          harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+          await harness.client.refreshRemotePublications();
+          harness.transport.snapshot = publicationSnapshot(1, 3, "remote|camera");
+          harness.client.remotePublicationsChanged();
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(749);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(attempts).toHaveBeenCalledTimes(5);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it("bounds partial-error retries despite unrelated presence churn", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        harness.transport.failedRemoteTrackNames.set("camera", "unknown");
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(0);
+        for (let index = 0; index < 80; index++) {
+          await vi.advanceTimersByTimeAsync(750);
+          harness.client.remoteParticipantsChanged(["participant-2", ...(index % 2 ? ["participant-3"] : [])]);
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(attempts.mock.calls.length).toBeLessThanOrEqual(10);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it("keeps signalling quota available for a healthy new microphone during partial failures", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        harness.transport.failedRemoteTrackNames.set("camera", "unknown");
+        const addTracks = harness.transport.addTracks.bind(harness.transport);
+        let writes = 0;
+        vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
+          if (++writes > 60) throw new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 });
+          return addTracks(input);
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        for (let index = 0; index < 59; index++) {
+          await vi.advanceTimersByTimeAsync(750);
+          harness.client.remoteParticipantsChanged(["participant-2", ...(index % 2 ? ["participant-3"] : [])]);
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        harness.transport.snapshot = {
+          incarnation: 1,
+          sequence: 2,
+          publications: [
+            { participantId: "participant-2", source: "camera", publicationId: "remote|camera" },
+            { participantId: "participant-2", source: "microphone", publicationId: "remote|microphone" },
+          ],
+        };
+        harness.client.remotePublicationsChanged();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toContain("remote|microphone");
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
   it("retries a republished microphone promptly after a partial pull failure", async () => {
     await withTimedHarness(async (harness) => {
       await harness.client.start(fakeStream());

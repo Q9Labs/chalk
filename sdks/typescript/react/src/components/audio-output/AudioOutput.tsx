@@ -219,7 +219,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       const currentStream = audioEl.srcObject as MediaStream | null;
       const currentTrack = currentStream?.getAudioTracks()[0];
 
-      if (currentTrack?.id !== audioTrack.id) {
+      if (currentTrack !== audioTrack) {
         // Attach the new track
         const stream = new MediaStream([audioTrack]);
         audioEl.srcObject = stream;
@@ -329,7 +329,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       const currentStream = audioEl.srcObject as MediaStream | null;
       const currentTrack = currentStream?.getAudioTracks()[0];
 
-      if (currentTrack?.id !== screenShareAudioTrack.id) {
+      if (currentTrack !== screenShareAudioTrack) {
         const stream = new MediaStream([screenShareAudioTrack]);
         audioEl.srcObject = stream;
         const attachedElement = audioEl;
