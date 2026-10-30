@@ -310,7 +310,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of this.#ownedPublications) {
       if (!sources.includes(publication.state.source)) continue;
       this.#markPublicationRetiring(publication);
-      this.#retiredLocalConnection = this.#connection;
     }
     for (const state of this.#localTracks.values()) {
       if (!sources.includes(state.source)) continue;
@@ -348,6 +347,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
+    // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
+    // session_error; closing MID 1 kept MID 0 and the session working.
+    // Follow the negotiated BUNDLE tag, since the first sender can be video.
+    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(connection.localDescription?.sdp ?? "")?.[1];
+    if (transceiver.mid !== null && transceiver.mid === bundleTag) this.#retiredLocalConnection = connection;
     let closed = connection.connectionState === "closed";
     try {
       if (!phase.detached && !closed) {
@@ -746,7 +750,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
-    return this.#isRetryableConnectionFailure(error) && !this.#hasLiveRemoteTracks() && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+    const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
+    return this.#isRetryableConnectionFailure(error) && (gone || !this.#hasLiveRemoteTracks()) && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
   }
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
@@ -861,7 +866,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const failure of failures) {
       const publication = requested.get(`${failure.connectionId}\u0000${failure.trackName}`);
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
-      const delay = 15_000;
+      // A republished track can be discovered before the provider can pull it.
+      // Let incomplete-pull polling retry with backoff instead of silencing it
+      // for a full connection-failure cooldown.
+      const delay = 750;
       this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + delay);
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
