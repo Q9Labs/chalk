@@ -184,6 +184,12 @@ func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Re
 }
 
 func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http.Request, err error) {
+	if r.Context().Err() != nil && errors.Is(err, context.Canceled) {
+		// 499 records a caller that left, without counting a server failure or
+		// attempting to send an API error body to the disconnected client.
+		w.WriteHeader(499)
+		return
+	}
 	apiErr := e.apiError(err)
 	if apiErr.Status >= http.StatusInternalServerError {
 		observability.LogHTTPError(r.Context(), e.contract.Method, e.contract.Path, apiErr.Code, err)

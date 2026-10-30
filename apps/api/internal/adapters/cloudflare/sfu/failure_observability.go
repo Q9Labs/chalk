@@ -1,12 +1,17 @@
 package sfu
 
 import (
+	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
@@ -31,6 +36,67 @@ var observableProviderWords = map[string]struct{}{
 	"not": {}, "offer": {}, "operation": {}, "provider": {}, "rate": {}, "ready": {}, "redacted": {}, "rejected": {}, "request": {},
 	"required": {}, "response": {}, "session": {}, "state": {}, "the": {}, "this": {}, "timeout": {}, "too": {},
 	"track": {}, "tracks": {}, "unavailable": {}, "unauthorized": {}, "unknown": {}, "unsupported": {}, "was": {},
+}
+
+// transportCause is bounded; the original transport error is never retained in telemetry.
+type transportCause string
+
+const (
+	transportCauseTimeout           transportCause = "timeout"
+	transportCauseCallerCanceled    transportCause = "caller_canceled"
+	transportCauseConnectionReset   transportCause = "connection_reset"
+	transportCauseConnectionRefused transportCause = "connection_refused"
+	transportCauseDNS               transportCause = "dns"
+	transportCauseTLS               transportCause = "tls"
+	transportCauseOther             transportCause = "other"
+)
+
+func newTransportFailure(ctx context.Context, operation string, statusCode int, err error) providerFailure {
+	cause := classifyTransportCause(ctx, err)
+	code := "transport_error"
+	if cause == transportCauseTimeout {
+		code = "timeout"
+	} else if cause == transportCauseCallerCanceled {
+		code = "client_canceled"
+	}
+	failure := newProviderFailure(operation, failureStageTransport, statusCode, code)
+	failure.transportCause = cause
+	return failure
+}
+
+func classifyTransportCause(ctx context.Context, err error) transportCause {
+	// The parent context distinguishes caller cancellation/deadline from the
+	// HTTP client's own timeout, whose parent remains live.
+	if ctx.Err() != nil {
+		return transportCauseCallerCanceled
+	}
+	var netError net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netError) && netError.Timeout()) {
+		return transportCauseTimeout
+	}
+	if errors.Is(err, syscall.ECONNRESET) {
+		return transportCauseConnectionReset
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return transportCauseConnectionRefused
+	}
+	var dnsError *net.DNSError
+	if errors.As(err, &dnsError) {
+		return transportCauseDNS
+	}
+	var certificateError *tls.CertificateVerificationError
+	var recordError tls.RecordHeaderError
+	var authorityError x509.UnknownAuthorityError
+	var invalidError x509.CertificateInvalidError
+	var hostnameError x509.HostnameError
+	var rootsError x509.SystemRootsError
+	var alertError tls.AlertError
+	if errors.As(err, &certificateError) || errors.As(err, &recordError) ||
+		errors.As(err, &authorityError) || errors.As(err, &invalidError) ||
+		errors.As(err, &hostnameError) || errors.As(err, &rootsError) || errors.As(err, &alertError) {
+		return transportCauseTLS
+	}
+	return transportCauseOther
 }
 
 type providerFailureDetails struct {
