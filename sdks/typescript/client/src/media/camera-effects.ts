@@ -227,6 +227,25 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
     });
     return true;
   };
+  const writeFrame = async (input: VideoFrame) => {
+    try {
+      if (stopped) return;
+      if (input.displayWidth !== width || input.displayHeight !== height) {
+        width = input.displayWidth;
+        height = input.displayHeight;
+        resize(background);
+      }
+      if (!draw(input)) return;
+      const processed = new VideoFrame(canvas, { timestamp: input.timestamp });
+      try {
+        await pipeline.writer.write(processed);
+      } finally {
+        processed.close();
+      }
+    } finally {
+      input.close();
+    }
+  };
   void (async () => {
     try {
       while (!stopped) {
@@ -235,23 +254,7 @@ export async function createCameraEffectsTrack(source: MediaStreamTrack, files: 
           if (!stopped) ended();
           break;
         }
-        try {
-          if (stopped) break;
-          if (input.displayWidth !== width || input.displayHeight !== height) {
-            width = input.displayWidth;
-            height = input.displayHeight;
-            resize(background);
-          }
-          if (!draw(input)) continue;
-          const processed = new VideoFrame(canvas, { timestamp: input.timestamp });
-          try {
-            await pipeline.writer.write(processed);
-          } finally {
-            processed.close();
-          }
-        } finally {
-          input.close();
-        }
+        await writeFrame(input);
       }
     } catch {
       if (!stopped) {
