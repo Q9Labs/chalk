@@ -218,6 +218,89 @@ it.each(["mute", "ended"] as const)("pauses an iPadOS %s microphone locally with
   }
 });
 
+it.each([
+  ["microphone", "mute"],
+  ["microphone", "ended"],
+  ["camera", "ended"],
+] as const)("projects interrupted %s capture (%s) as unavailable to the remote participant", async (source, event) => {
+  const pause = vi.fn(async () => {});
+  const close = vi.fn(async () => {});
+  const test = scenario(source, { pauseLocalCapture: pause, closeForcedLocalPublication: close });
+  try {
+    await test.join();
+    test.project(true);
+    Object.assign(test.track, event === "mute" ? { muted: true } : { readyState: "ended" });
+    test.track.dispatchEvent(new Event(event));
+    await vi.waitFor(() => expect(test.observer.sync.getSnapshot().media?.items[0]?.enabled).toBe(false));
+    expect(test.received.enabled).toBe(false);
+    expect(test.command).toHaveBeenCalledExactlyOnceWith(false);
+    expect(pause).toHaveBeenCalledExactlyOnceWith(source);
+    expect(close).not.toHaveBeenCalled();
+    if (event === "mute") {
+      Object.assign(test.track, { muted: false });
+      test.track.dispatchEvent(new Event("unmute"));
+      expect(test.received.enabled).toBe(false);
+      await test.client.media.setMicrophoneEnabled(true);
+      expect(test.received.enabled).toBe(true);
+      expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, true]);
+    }
+  } finally {
+    test.dispose();
+  }
+});
+
+it("does not announce a stale capture pause for another client's publication", async () => {
+  const test = scenario("microphone", { pauseLocalCapture: async () => {} });
+  try {
+    await test.join();
+    const snapshot = test.platform.sync.getSnapshot();
+    test.platform.emitSync({ ...snapshot, media: { projectionId: "replacement", sequence: 2, items: [{ ...test.publication, publicationId: "another-client", enabled: true }] } });
+    Object.assign(test.track, { muted: true });
+    test.track.dispatchEvent(new Event("mute"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(test.command).not.toHaveBeenCalled();
+  } finally {
+    test.dispose();
+  }
+});
+
+it("announces capture loss when its authoritative publication arrives after the interruption", async () => {
+  const test = scenario("microphone", { pauseLocalCapture: async () => {} });
+  try {
+    await test.join();
+    Object.assign(test.track, { muted: true });
+    test.track.dispatchEvent(new Event("mute"));
+    expect(test.command).not.toHaveBeenCalled();
+    const snapshot = test.platform.sync.getSnapshot();
+    test.platform.emitSync({ ...snapshot, media: { projectionId: "delayed", sequence: 2, items: [test.publication] } });
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledExactlyOnceWith(false));
+    expect(test.received.enabled).toBe(false);
+  } finally {
+    test.dispose();
+  }
+});
+
+it("reannounces capture unavailability after Sync reconnect without restoring capture", async () => {
+  const test = scenario("microphone", { pauseLocalCapture: async () => {} });
+  try {
+    await test.join();
+    test.project(true);
+    Object.assign(test.track, { muted: true });
+    test.track.dispatchEvent(new Event("mute"));
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledTimes(1));
+    const snapshot = test.platform.sync.getSnapshot();
+    test.platform.emitSync({ ...snapshot, connection: { phase: "recovering" } });
+    await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 2, items: [test.publication] } });
+    await vi.waitFor(() => expect(test.command).toHaveBeenCalledTimes(2));
+    expect(test.command.mock.calls.map(([enabled]) => enabled)).toEqual([false, false]);
+    expect(test.track.enabled).toBe(false);
+    expect(test.received.enabled).toBe(false);
+  } finally {
+    test.dispose();
+  }
+});
+
 it("applies a manual mute immediately, without waiting for the grace", async () => {
   const test = scenario();
   try {

@@ -245,6 +245,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result" && resolved.result.outcome !== "satisfied") return resolved.result;
     const outcome = resolved.kind === "state" && resolved.value.enabled ? "confirmed" : "satisfied";
+    if (target.source !== "screen" && this.#locallyPausedSources.get(target.source) === "capture_cleanup") {
+      // Sync acknowledges unavailable capture without revoking its retained
+      // publication. Explicit Off first records user_pause and still retires.
+      await this.pauseLocalCapture(target.source);
+      return { outcome, errorCode: null };
+    }
     this.#pauseLocalSource(target.source);
     try {
       await this.#retireOwnedPublications();
@@ -330,7 +336,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitLocal();
   }
-  #retireOwnedPublications(options: { readonly recoverExpiredConnection?: boolean } = {}): Promise<void> {
+  #retireOwnedPublications(reportFailure: (error: unknown) => void = this.#reportError.bind(this)): Promise<void> {
     const publications = [...this.#ownedPublications].filter((item) => item.lifecycle.kind === "retiring" && item.lifecycle.handle);
     const retirement = (async () => {
       const errors: unknown[] = [];
@@ -339,8 +345,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           await this.#serializeSDP(() => this.#closeOwnedPublication(publication), true);
         } catch (error) {
           errors.push(error);
-          const recovering = options.recoverExpiredConnection && this.#retiredLocalConnection === publication.connection && this.#isRetryableConnectionFailure(error);
-          if (!this.#stopped && !recovering) this.#reportError(error);
+          if (!this.#stopped) reportFailure(error);
         }
       }
       if (this.#stopped && this.#ownedPublications.size === 0) this.#transport = undefined;
@@ -486,42 +491,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #enablePreparedTrack(state: LocalTrackState): Promise<boolean> {
     const generation = this.#generation;
     try {
-      const publication = [...this.#ownedPublications].find((item) => item.transceiver === state.transceiver && item.lifecycle.kind === "confirmed");
-      if (publication && publication.detachedAt !== null && Date.now() - publication.detachedAt >= CAPTURE_REUSE_WINDOW_MS) {
-        this.#pauseLocalSource(state.source, "capture_cleanup");
-        try {
-          await this.#retireOwnedPublications({ recoverExpiredConnection: true });
-        } catch (error) {
-          // An already expired BUNDLE session can reject its close. The normal
-          // retired-connection path below obtains a fresh binding before publish.
-          if (!this.#replaceMediaConnection || this.#retiredLocalConnection !== this.#connection || !(error instanceof AggregateError) || !error.errors.every((cause: unknown) => this.#isRetryableConnectionFailure(cause))) throw error;
-          // The provider says this binding is gone. Fence it before another
-          // retirement pass can report the expected 410 to lifecycle recovery.
-          this.#fenceLocalPublications();
-        }
-      }
+      await this.#retireExpiredCapture(state);
       if (this.#locallyPausedSources.has(state.source)) return false;
       state.desiredEnabled = true;
       state.track.enabled = true;
-      if (state.providerPublicationId && state.transceiver) {
-        await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
-        state.enabled = !this.#locallyPausedSources.has(state.source);
-        state.desiredEnabled = state.enabled;
-        state.track.enabled = state.enabled;
-        if (!state.enabled) {
-          const cause = this.#locallyPausedSources.get(state.source) ?? "consent_revoked";
-          if (cause === "capture_cleanup") await this.#disablePreparedTrack(state);
-          else {
-            this.#pauseLocalSource(state.source, cause);
-            await this.#retireOwnedPublications();
-          }
-        } else if (publication) {
-          publication.detachedAt = null;
-        }
-        this.#publishSnapshot();
-        this.#emitLocal();
-        return state.enabled;
-      }
+      if (state.providerPublicationId && state.transceiver) return await this.#reattachLocalTrack(state, state.transceiver);
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
       // recovery that spent it is still unresolved: restoring it then lets every
@@ -535,6 +509,43 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       throw error;
     }
+  }
+  async #retireExpiredCapture(state: LocalTrackState): Promise<void> {
+    const publication = [...this.#ownedPublications].find((item) => item.transceiver === state.transceiver && item.lifecycle.kind === "confirmed");
+    if (!publication || publication.detachedAt === null || Date.now() - publication.detachedAt < CAPTURE_REUSE_WINDOW_MS) return;
+    this.#pauseLocalSource(state.source, "capture_cleanup");
+    try {
+      await this.#retireOwnedPublications((error) => {
+        if (!this.#isExpiredRetiredConnection(error)) this.#reportError(error);
+      });
+    } catch (error) {
+      if (!this.#isExpiredRetiredConnection(error)) throw error;
+      // The provider says this binding is gone. Fence it before another
+      // retirement pass can report the expected 410 to lifecycle recovery.
+      this.#fenceLocalPublications();
+    }
+  }
+  #isExpiredRetiredConnection(error: unknown): boolean {
+    if (!this.#replaceMediaConnection || this.#retiredLocalConnection !== this.#connection) return false;
+    if (error instanceof AggregateError) return error.errors.every((cause: unknown) => this.#isRetryableConnectionFailure(cause));
+    return this.#isRetryableConnectionFailure(error);
+  }
+  async #reattachLocalTrack(state: LocalTrackState, transceiver: RTCRtpTransceiver): Promise<boolean> {
+    await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
+    const cause = this.#locallyPausedSources.get(state.source);
+    state.enabled = cause === undefined;
+    state.desiredEnabled = state.enabled;
+    state.track.enabled = state.enabled;
+    if (cause === "capture_cleanup") await this.#disablePreparedTrack(state);
+    else if (cause) {
+      this.#pauseLocalSource(state.source, cause);
+      await this.#retireOwnedPublications();
+    } else {
+      for (const publication of this.#ownedPublications) if (publication.transceiver === transceiver) publication.detachedAt = null;
+    }
+    this.#publishSnapshot();
+    this.#emitLocal();
+    return state.enabled;
   }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;

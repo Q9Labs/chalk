@@ -691,6 +691,22 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
   }
 });
 
+it("acknowledges Sync capture unavailability without retiring the retained sender", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+    const original = harness.client.getSnapshot().localTracks[0]!.publicationId;
+    await harness.client.pauseLocalCapture("microphone");
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "capture-unavailable", participantId: "participant-1", source: "microphone", enabled: false })).resolves.toEqual({ outcome: "satisfied", errorCode: null });
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.client.getSnapshot().localTracks[0]!.publicationId).toBe(original);
+    await harness.client.setLocalSourceIntent("microphone", false, "user_pause");
+    expect(harness.transport.closeInputs).toHaveLength(1);
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it("detaches again when capture flaps during a pending reattachment without closing BUNDLE", async () => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });

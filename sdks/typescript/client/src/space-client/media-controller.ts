@@ -27,9 +27,10 @@ type SourceWorker = {
   serverSequence: number;
   forcedRevision: number | null;
   pausedPublicationId: string | null;
+  capturePause: "none" | "pending" | "announced";
 };
 function sourceWorker(enabled: boolean): SourceWorker {
-  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null };
+  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null, capturePause: "none" };
 }
 type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
 type CaptureAction = "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare";
@@ -355,6 +356,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const controlRevision = Math.max(state.serverSequence, this.#ports?.sync.getSnapshot().control?.revision ?? -1);
     const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
+    state.capturePause = "none";
     if (!enabled) {
       state.localEnabled = false;
       this.#pauseTracks(source);
@@ -1042,12 +1044,31 @@ class MediaControllerRuntime implements MediaControllerEffects {
     state.localEnabled = false;
     this.#pauseTracks(source);
     if (cause === "capture_cleanup" && source !== "screen" && ports.media.pauseLocalCapture) {
+      state.capturePause = "pending";
       this.#retainPause(state, ports.media.pauseLocalCapture(source));
+      this.#notifyCapturePauses(ports);
     } else {
       ports.media.setLocalSourceIntent?.(source, false, cause);
       this.#retainPause(state, this.#beginLocalPause(ports, source, cause));
     }
     this.#publish();
+  }
+  #notifyCapturePauses(ports: ConnectionPorts): void {
+    for (const source of ["microphone", "camera"] as const) {
+      const state = this.#sources[source];
+      if (state.capturePause === "pending") this.#retainPause(state, this.#announceCapturePause(ports, source));
+    }
+  }
+  async #announceCapturePause(ports: ConnectionPorts, source: "microphone" | "camera"): Promise<void> {
+    const snapshot = ports.sync.getSnapshot();
+    if (snapshot.connection.phase !== "live") return;
+    const owned = ports.media.getSnapshot().localTracks.find((item) => item.source === source);
+    const projected = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
+    // An OS event on an old capture cannot pause another client's publication.
+    if (!owned?.publicationId || !projected?.enabled || projected.publicationId !== owned.publicationId) return;
+    this.#sources[source].capturePause = "announced";
+    const send = source === "microphone" ? ports.sync.setMicrophoneEnabled : ports.sync.setCameraEnabled;
+    await send.call(ports.sync, false);
   }
   #bind(ports: ConnectionPorts | null): void {
     if (ports?.media.getSnapshot().connection.phase === "stopped") this.#cancelCaptures();
@@ -1093,6 +1114,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     );
   }
   #rememberRecoveryIntents(): void {
+    for (const state of Object.values(this.#sources)) if (state.capturePause === "announced") state.capturePause = "pending";
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
@@ -1111,6 +1133,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
+      this.#notifyCapturePauses(ports);
       this.#publish();
     });
   }

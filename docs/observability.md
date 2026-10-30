@@ -261,7 +261,11 @@ within 20 seconds reattaches capture without replacing a healthy session. Longer
 interruptions retire and republish, because the provider expires tracks after
 30 seconds without RTP even while Chalk's registry retains the publication.
 A second interruption during reattachment detaches again and returns
-`local_source_paused` without closing the retained publication. User and moderation pauses still retire
+`local_source_paused` without closing the retained publication. The existing Sync
+pause command marks the owned publication unavailable to other participants;
+fresh consent restores availability. It is sent only for a matching owned
+publication, including after delayed projection confirmation or Sync reconnect.
+User and moderation pauses still retire
 their owned publication, including when the Sync command fails. A retired
 BUNDLE sender still requires a fresh provider session.
 
