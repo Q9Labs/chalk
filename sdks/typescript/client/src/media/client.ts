@@ -69,7 +69,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
-  readonly #remotePullRetryAfter = new Map<string, number>();
+  readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number }>();
   #remoteParticipantIds: ReadonlySet<string> | null = null;
   #remoteParticipantRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
@@ -116,7 +116,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return subscribeSnapshot(this.#snapshotListeners, listener);
   }
   remotePublicationResumed(publicationId: string): void {
-    this.#remotePullRetryAfter.delete(publicationId);
+    this.#remotePullRetries.delete(publicationId);
     this.remotePublicationsChanged();
   }
   remoteParticipantsChanged(participantIds: readonly string[]): void {
@@ -310,7 +310,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of this.#ownedPublications) {
       if (!sources.includes(publication.state.source)) continue;
       this.#markPublicationRetiring(publication);
-      this.#retiredLocalConnection = this.#connection;
     }
     for (const state of this.#localTracks.values()) {
       if (!sources.includes(state.source)) continue;
@@ -343,11 +342,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const phase = publication.lifecycle;
     if (phase.kind === "pending" || phase.kind === "confirmed") publication.lifecycle = { kind: "retiring", handle: phase.kind === "confirmed" ? phase.handle : null, detached: false };
   }
+  #markBundledTransportRetiring(publication: OwnedLocalPublication): void {
+    // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
+    // session_error; closing MID 1 kept MID 0 and the session working.
+    // Follow the negotiated BUNDLE tag, since the first sender can be video.
+    // Missing bundle information retains the conservative rebuild behavior.
+    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
+    if (!bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag)) this.#retiredLocalConnection = publication.connection;
+  }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
+    this.#markBundledTransportRetiring(publication);
     let closed = connection.connectionState === "closed";
     try {
       if (!phase.detached && !closed) {
@@ -391,7 +399,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#polling = false;
     this.#pollAfterCurrent = false;
     this.#clearPoll();
-    this.#remotePullRetryAfter.clear();
+    this.#remotePullRetries.clear();
     this.#disposeConnection(false);
     for (const publication of this.#ownedPublications) this.#markPublicationRetiring(publication);
     void this.#retireOwnedPublications();
@@ -435,7 +443,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
-    this.#remotePullRetryAfter.clear();
+    this.#remotePullRetries.clear();
     this.#polling = false;
     this.#pollAfterCurrent = false;
     this.#disposeConnection(true);
@@ -692,8 +700,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
-    for (const publicationId of this.#remotePullRetryAfter.keys()) {
-      if (!desiredIds.has(publicationId)) this.#remotePullRetryAfter.delete(publicationId);
+    for (const publicationId of this.#remotePullRetries.keys()) {
+      if (!desiredIds.has(publicationId)) this.#remotePullRetries.delete(publicationId);
     }
     for (const publicationId of this.#subscribedPublicationIds) {
       if (!desiredIds.has(publicationId)) this.#subscribedPublicationIds.delete(publicationId);
@@ -702,7 +710,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return [...desired]
       .filter(([key, publication]) => {
         if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) return false;
-        const remaining = (this.#remotePullRetryAfter.get(publication.publicationId) ?? 0) - now;
+        const remaining = (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) - now;
         return remaining <= 0;
       })
       .map(([, publication]) => publication);
@@ -746,7 +754,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
-    return this.#isRetryableConnectionFailure(error) && !this.#hasLiveRemoteTracks() && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+    const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
+    return this.#isRetryableConnectionFailure(error) && (gone || !this.#hasLiveRemoteTracks()) && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
   }
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
@@ -800,7 +809,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #deferRemotePulls(publications: readonly CloudflareSFUPublication[], error: unknown): void {
     const retryAfter = retryableRemotePull(error) ? Date.now() + 15_000 : Number.POSITIVE_INFINITY;
-    for (const publication of publications) this.#remotePullRetryAfter.set(publication.publicationId, retryAfter);
+    for (const publication of publications) {
+      const failures = this.#remotePullRetries.get(publication.publicationId)?.failures ?? 0;
+      this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures });
+    }
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     if (publications.length === 0) return [];
@@ -831,7 +843,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
         const matched = matchRemotePullTracks(publications, responseTracks);
-        for (const { publication } of matched) this.#remotePullRetryAfter.delete(publication.publicationId);
+        for (const { publication } of matched) this.#remotePullRetries.delete(publication.publicationId);
         await this.#completeRenegotiation(response, connection, connectionId, generation);
         if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation);
@@ -861,8 +873,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const failure of failures) {
       const publication = requested.get(`${failure.connectionId}\u0000${failure.trackName}`);
       if (!publication) throw new CloudflareSFUError("Cloudflare SFU returned an unrequested remote track error", "invalid_publication");
-      const delay = 15_000;
-      this.#remotePullRetryAfter.set(publication.publicationId, Date.now() + delay);
+      // A republished track can be discovered before the provider can pull it.
+      // Keep its backoff independent of polls restarted by unrelated presence.
+      const previous = this.#remotePullRetries.get(publication.publicationId) ?? { retryAfter: 0, failures: 0 };
+      const failureCount = Math.min(previous.failures + 1, 6);
+      const delay = Math.min(15_000, 750 * 2 ** (failureCount - 1));
+      this.#remotePullRetries.set(publication.publicationId, { retryAfter: Date.now() + delay, failures: failureCount });
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }

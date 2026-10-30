@@ -4,10 +4,30 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { AudioOutput } from "./AudioOutput";
 
-vi.mock("../../bindings/hooks", () => ({ useMedia: () => ({ remote: [], selection: {} }), useParticipants: () => ({ roster: [{ participantId: "remote", media: { microphone: "active" } }] }) }));
+vi.mock("../../bindings/hooks", () => ({ useMedia: () => ({ remote: [], selection: {} }), useParticipants: () => ({ roster: [{ participantId: "remote", media: { microphone: "active", screenShare: "active" } }] }) }));
 vi.mock("../participants-panel/participant-volume-context", () => ({ useParticipantVolumeContext: () => null }));
 
 afterEach(() => vi.restoreAllMocks());
+it.each(["audioTrack", "screenShareAudioTrack"] as const)("plays a replacement %s object even when its ID is unchanged", async (source) => {
+  const played: MediaStreamTrack[] = [];
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {
+    const track = (this.srcObject as MediaStream | null)?.getAudioTracks()[0];
+    if (track) played.push(track);
+    return Promise.resolve();
+  });
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+  const previous = { id: "remote-audio", kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const replacement = { id: previous.id, kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const root = createRoot(document.createElement("div"));
+  try {
+    await act(async () => root.render(<AudioOutput participants={[{ id: "remote", [source]: previous }]} />));
+    Object.assign(previous, { readyState: "ended" });
+    await act(async () => root.render(<AudioOutput participants={[{ id: "remote", [source]: replacement }]} />));
+    expect(played).toEqual([previous, replacement]);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("shows one prompt for blocked playback and removes it only after playback succeeds", async () => {
   const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new DOMException("Gesture required", "NotAllowedError"));
   vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
