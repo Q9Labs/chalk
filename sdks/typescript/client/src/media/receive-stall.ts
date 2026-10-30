@@ -21,20 +21,23 @@ export class ReceiveStallDetector {
     this.#sampledAt = undefined;
   }
 
-  sample(now: number, tracks: readonly ReceivePacketSample[]): readonly string[] {
+  sample(now: number, tracks: readonly ReceivePacketSample[]): { readonly stalled: readonly string[]; readonly advanced: readonly string[] } {
     if (this.#sampledAt !== undefined && (now - this.#sampledAt > MAX_SAMPLE_GAP_MS || now < this.#sampledAt)) this.clear();
     this.#sampledAt = now;
     const observed = new Set(tracks.map((track) => track.publicationId));
     for (const id of this.#progress.keys()) if (!observed.has(id)) this.#progress.delete(id);
-    const stalled: string[] = [];
-    for (const { publicationId, trackId, packets } of tracks) {
-      const previous = this.#progress.get(publicationId);
-      if (!previous || previous.trackId !== trackId || previous.packets !== packets) {
-        this.#progress.set(publicationId, { trackId, packets, advancedAt: now });
-      } else if (now - previous.advancedAt >= RECEIVE_STALL_WINDOW_MS) {
-        stalled.push(publicationId);
-      }
-    }
-    return stalled;
+    const observations = tracks.map((track) => ({ id: track.publicationId, outcome: this.#observeTrack(now, track) }));
+    return {
+      stalled: observations.filter((track) => track.outcome === "stalled").map((track) => track.id),
+      advanced: observations.filter((track) => track.outcome === "advanced").map((track) => track.id),
+    };
+  }
+
+  #observeTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample): "stalled" | "advanced" | null {
+    const previous = this.#progress.get(publicationId);
+    const sameTrack = previous?.trackId === trackId;
+    if (sameTrack && previous.packets === packets) return now - previous.advancedAt >= RECEIVE_STALL_WINDOW_MS ? "stalled" : null;
+    this.#progress.set(publicationId, { trackId, packets, advancedAt: now });
+    return sameTrack && packets > previous.packets ? "advanced" : null;
   }
 }

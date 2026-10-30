@@ -1359,6 +1359,7 @@ export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
       "remote_signaling_failure",
       "dormant_connection",
       "access_refresh",
+      "receive_stalled",
     ]),
   ),
 });

@@ -76,7 +76,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #replacementCause: MediaConnectionReplacementCause | undefined;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
-  readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number }>();
+  readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
   readonly #expectedRemotePublications = new Set<string>();
   readonly #receiveProgress = new ReceiveStallDetector();
   readonly #stalledReceivers = new Set<string>();
@@ -760,12 +760,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (cursor === null) return;
     const participantRevision = this.#remoteParticipantRevision;
     const desired = this.#desiredRemotePublications(authoritative, cursor);
-    const allStalled = this.#remoteTracks.size > 0 && [...this.#remoteTracks.values()].every((publication) => this.#stalledReceivers.has(publication.publicationId));
-    for (const [key, publication] of this.#remoteTracks) {
-      if (!this.#stalledReceivers.delete(publication.publicationId)) continue;
-      this.#remoteTracks.delete(key);
-      safeStopTrack(publication.track, this.#reportError.bind(this));
-    }
+    const allStalled = this.#retireStalledReceivers();
     const toPull = this.#pendingRemotePulls(desired);
     this.#pollFailedPull = true;
     const pulled = await this.#pullWithRecovery(toPull, cursor, generation, allStalled);
@@ -785,6 +780,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#publishSnapshot();
     this.#emitRemote();
+  }
+  #retireStalledReceivers(): boolean {
+    const allStalled = this.#remoteTracks.size > 0 && [...this.#remoteTracks.values()].every((publication) => this.#stalledReceivers.has(publication.publicationId));
+    for (const [key, publication] of this.#remoteTracks) {
+      if (!this.#stalledReceivers.delete(publication.publicationId)) continue;
+      this.#remoteTracks.delete(key);
+      safeStopTrack(publication.track, this.#reportError.bind(this));
+    }
+    return allStalled;
   }
   #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
@@ -831,7 +835,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullWithRecovery(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, receiveStalled = false): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     try {
-      if (receiveStalled && this.#replaceMediaConnection) return await this.#retryRemotePullOnReplacement(publications, cursor, generation);
+      if (receiveStalled && this.#replaceMediaConnection) return await this.#retryRemotePullOnReplacement(publications, cursor, generation, "receive_stalled");
       return await this.#pull(publications, generation);
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
@@ -849,10 +853,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
-  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure"): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     this.#remoteRecoveryGeneration = generation;
     try {
-      await this.#replaceMediaConnectionForRecovery(generation, "remote_signaling_failure");
+      await this.#replaceMediaConnectionForRecovery(generation, cause);
       await this.#republishPreparedTracksAfterRecovery(generation);
       return await this.#pull(publications, generation);
     } catch (error) {
@@ -900,7 +904,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const retryAfter = retryableRemotePull(error) ? Date.now() + 15_000 : Number.POSITIVE_INFINITY;
     for (const publication of publications) {
       const failures = this.#remotePullRetries.get(publication.publicationId)?.failures ?? 0;
-      this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures });
+      this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures, receiveStalled: this.#remotePullRetries.get(publication.publicationId)?.receiveStalled });
     }
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
@@ -927,12 +931,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       connection.addEventListener("track", onTrack);
       try {
         this.#requireGeneration(generation);
-        const response = await this.#signal(() => this.#addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }), { generation, connectionId });
+        const response = await this.#signal(() => this.#addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true, replacementCause: publications.some((publication) => this.#remotePullRetries.get(publication.publicationId)?.receiveStalled) ? "receive_stalled" : undefined }), {
+          generation,
+          connectionId,
+        });
         this.#requireGeneration(generation);
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
         const matched = matchRemotePullTracks(publications, responseTracks);
-        for (const { publication } of matched) this.#remotePullRetries.delete(publication.publicationId);
+        for (const { publication } of matched) {
+          if (!this.#remotePullRetries.get(publication.publicationId)?.receiveStalled) this.#remotePullRetries.delete(publication.publicationId);
+        }
         await this.#completeRenegotiation(response, connection, connectionId, generation);
         if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation);
@@ -968,10 +977,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#reportError(new CloudflareSFUError(`Cloudflare SFU remote track failed: ${failure.code}`, "media_failed", { providerCode: failure.code }));
     }
   }
-  #backoffRemotePull(publicationId: string): void {
+  #backoffRemotePull(publicationId: string, receiveStalled = false): void {
     const previous = this.#remotePullRetries.get(publicationId) ?? { retryAfter: 0, failures: 0 };
     const failures = Math.min(previous.failures + 1, 6);
-    this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures });
+    this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
   #observeReceiveProgress(connection: RTCPeerConnection, report: RTCStatsReport): void {
     if (!this.#started || !connectionIsLive(connection) || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
@@ -994,12 +1003,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         return [];
       return [{ publicationId: publication.publicationId, trackId: publication.track.id, packets: rows.reduce((sum, row) => sum + row.packetsReceived, 0) }];
     });
-    const stalled = this.#receiveProgress.sample(performance.now(), samples);
+    const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), samples);
+    for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
     if (!stalled.length) return;
     for (const publicationId of stalled) {
       if (this.#stalledReceivers.has(publicationId)) continue;
       this.#stalledReceivers.add(publicationId);
-      this.#backoffRemotePull(publicationId);
+      this.#backoffRemotePull(publicationId, true);
     }
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
@@ -1160,7 +1170,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #addTracks(input: Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0]): Promise<CloudflareSFUTracksResponse> {
     // The first signaling attempt on the new binding reports its origin, even if
     // that attempt fails. Extra query parameters also work with older APIs.
-    const replacementCause = this.#replacementCause;
+    const replacementCause = this.#replacementCause ?? input.replacementCause;
     this.#replacementCause = undefined;
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }

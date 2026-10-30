@@ -46,6 +46,7 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       });
       const originalPulls = harness.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(24_000);
+      expect(harness.transport.addInputs.slice(originalPulls).some((input) => input.replacementCause === "receive_stalled")).toBe(true);
       if (all) expect(harness.peers.length).toBeGreaterThan(1);
       else {
         expect(harness.peers).toHaveLength(1);
@@ -58,19 +59,19 @@ it.each([false, true])("recovers connected receive stalls through the existing p
   );
 });
 
-it.each(["publisher-muted", "dtx", "hidden", "pull-grace", "silence"] as const)("does not recover intentional or unobserved receive gaps: %s", async (mode) => {
+it.each(["publisher-muted", "video-disabled", "dtx", "hidden", "pull-grace", "silence", "codec-unknown"] as const)("does not recover intentional or unobserved receive gaps: %s", async (mode) => {
   try {
     await withTimedHarness(
       async (harness) => {
         await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
-        const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote", "0", "microphone") };
+        const publication = { participantId: "participant-2", source: mode === "video-disabled" ? ("camera" as const) : ("microphone" as const), publicationId: versionedPublicationID("remote", "0", "microphone") };
         harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
-        harness.client.remotePublicationsChanged([{ ...publication, enabled: mode !== "publisher-muted" }]);
+        harness.client.remotePublicationsChanged([{ ...publication, enabled: mode !== "publisher-muted" && mode !== "video-disabled" }]);
         await harness.client.refreshRemotePublications();
         const remote = harness.client.getSnapshot().remoteTracks[0]!;
         vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(async () => {
           const inbound = { id: "inbound", timestamp: Date.now(), type: "inbound-rtp", trackIdentifier: remote.track.id, packetsReceived: mode === "silence" ? Math.floor(performance.now() / 10_000) : 10, bytesReceived: performance.now(), codecId: "codec" };
-          const codec = { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: mode === "dtx" ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" };
+          const codec = { id: "codec", timestamp: Date.now(), type: "codec", mimeType: "audio/opus", sdpFmtpLine: mode === "codec-unknown" ? undefined : mode === "dtx" ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" };
           return new Map<string, RTCStats>([
             ["inbound", inbound],
             ["codec", codec],

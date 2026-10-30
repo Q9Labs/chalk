@@ -36,12 +36,13 @@ async function rpc(index, method, input) {
   if (method === "listPublications") return { incarnation: 1, sequence: [...states.values()].reduce((sum, item) => sum + item.version, 0), publications: [...states.values()].flatMap((item) => item.publications) };
   if (method === "addTracks") {
     const result = await provider(`sessions/${input.connectionId}/tracks/new`, "POST", { sessionDescription: input.sessionDescription, tracks: input.tracks.map(({ source, publicationId, ...track }) => track) });
+    result.tracks = result.tracks.map((track, slot) => ({ ...input.tracks[slot], ...track }));
     if (input.tracks.some((track) => track.location === "local")) {
       result.tracks = result.tracks.map((track, slot) => {
         const original = input.tracks[slot];
         const id = publicationId(input.connectionId, track.mid, original.trackName);
         state.publications.push({ participantId: `publisher-${index}`, source: original.source, publicationId: id });
-        return { ...track, publicationId: id };
+        return { ...original, ...track, publicationId: id };
       });
       state.version++;
     } else {
@@ -100,7 +101,16 @@ try {
     await page.goto(origin);
     await page.evaluate(
       async ({ index, bootstrap }) => {
+        const NativePeer = window.RTCPeerConnection;
+        window.proofPCs = [];
+        window.RTCPeerConnection = class extends NativePeer {
+          constructor(...args) {
+            super(...args);
+            window.proofPCs.push(this);
+          }
+        };
         const context = new AudioContext();
+        window.audioContext = context;
         await context.resume();
         const oscillator = context.createOscillator();
         oscillator.frequency.value = 440 + index * 220;
@@ -121,7 +131,8 @@ try {
         const camera = canvas.captureStream(10).getVideoTracks()[0];
         const audio = document.querySelector("audio");
         const analyser = context.createAnalyser();
-        context.createMediaElementSource(audio).connect(analyser).connect(context.destination);
+        analyser.connect(context.destination);
+        let remoteAudio;
         window.level = () => {
           const samples = new Float32Array(analyser.fftSize);
           analyser.getFloatTimeDomainData(samples);
@@ -142,15 +153,20 @@ try {
           }
           return result;
         };
+        window.proofErrors = [];
         client = window.client = new ChalkMedia.CloudflareSFUClient({
           participantId: `publisher-${index}`,
           bootstrap,
           pollIntervalMs: 1000,
+          onError: (error) => window.proofErrors.push(error.code ?? "unclassified"),
           transport: Object.fromEntries(["addTracks", "listPublications", "renegotiate", "closeTracks"].map((method) => [method, (input) => call(method, input)])),
           replaceMediaConnection: () => call("replace"),
           onRemoteTrack: (publication) => {
             if (publication.source === "microphone") {
               audio.srcObject = new MediaStream([publication.track]);
+              remoteAudio?.disconnect();
+              remoteAudio = context.createMediaStreamSource(audio.srcObject);
+              remoteAudio.connect(analyser);
               void audio.play();
             }
           },
@@ -182,6 +198,20 @@ try {
   assert.ok(receiver.replacements > previousReplacements, "All-track stall did not rebuild");
   console.log(JSON.stringify({ result: "passed", browsers: 2, partial, allTracks: { renderedAudioRecovered: true, elapsedMs: Date.now() - allStarted, replacements: receiver.replacements - previousReplacements }, upstreamStatuses: Object.fromEntries(statuses) }));
 } catch (error) {
+  for (const page of pages)
+    console.log(
+      JSON.stringify({
+        browser: await page.evaluate(async () => ({
+          level: window.level?.(),
+          context: window.audioContext?.state,
+          paused: document.querySelector("audio").paused,
+          time: document.querySelector("audio").currentTime,
+          errors: window.proofErrors,
+          remoteTracks: window.client?.getSnapshot().remoteTracks.map(({ track }) => ({ kind: track.kind, state: track.readyState })),
+          rtp: (await Promise.all(window.proofPCs.map(async (pc) => [...(await pc.getStats()).values()].filter((row) => row.type.includes("bound-rtp")).map((row) => ({ type: row.type, kind: row.kind, sent: row.packetsSent, received: row.packetsReceived, energy: row.totalAudioEnergy }))))).flat(),
+        })),
+      }),
+    );
   console.error(JSON.stringify({ result: "failed", error: error.message, upstreamStatuses: Object.fromEntries(statuses), receivers: [...states.values()].map((state) => ({ replacements: state.replacements, pullCalls: state.pullCalls })) }));
   process.exitCode = 1;
 } finally {
