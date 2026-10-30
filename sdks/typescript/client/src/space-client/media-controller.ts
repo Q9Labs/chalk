@@ -629,6 +629,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       check();
       return Effect.sync(unsubscribe);
     });
+    const startTransport = foreign(async () => {
+      const cameras = stream.getTracks().filter((track) => track.kind === "video" && this.#hasConsent("camera"));
+      await media.start(streamFromTracks(cameras));
+    });
     const publish = foreign(async () => {
       const snapshot = this.#ports?.sync.getSnapshot();
       this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
@@ -646,13 +650,19 @@ class MediaControllerRuntime implements MediaControllerEffects {
         }
         return enabled;
       });
-      await media.start(streamFromTracks(tracks));
+      const microphone = tracks.find((track) => track.kind === "audio");
+      if (microphone && this.#ports) {
+        media.prepareLocalTrack("microphone", microphone);
+        await Effect.runPromise(this.#localTarget(this.#ports, "microphone", true));
+      }
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
         if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
       }
     });
-    return waitForSync.pipe(Effect.andThen(this.#serialize("microphone", this.#serialize("camera", publish))));
+    // Start the receive transport independently; microphone publication needs the
+    // authoritative person identity from Sync before it can safely send audio.
+    return startTransport.pipe(Effect.andThen(waitForSync), Effect.andThen(this.#serialize("microphone", this.#serialize("camera", publish))));
   }
   #send(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, enabled: boolean): Effect.Effect<void, unknown> {
     const command = this.#mediaAction(

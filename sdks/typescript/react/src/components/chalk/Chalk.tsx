@@ -355,8 +355,8 @@ function SpaceSurface(
       overlay={
         <>
           {media.microphoneMutedByOtherDevice ? (
-            <div role="status" className="pointer-events-none absolute inset-x-3 top-3 z-40 flex justify-center">
-              <p className="rounded-lg bg-[var(--chalk-app-surface)] px-3 py-2 text-center text-sm text-[var(--chalk-app-text)] shadow-sm">Mic off: your other device is using it.</p>
+            <div role="status" className="pointer-events-none absolute inset-x-3 bottom-24 z-40 flex justify-center">
+              <p className="chalk-toast text-center text-sm">Mic off: your other device is using it.</p>
             </div>
           ) : null}
           {media.incomingRequests[0] ? (
