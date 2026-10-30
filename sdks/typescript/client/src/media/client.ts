@@ -37,6 +37,7 @@ type OwnedLocalPublication = {
   readonly trackName: string;
   readonly connection: RTCPeerConnection;
   readonly connectionId: string;
+  detachedAt: number | null;
   lifecycle: { kind: "pending" } | { kind: "confirmed"; handle: LocalPublicationHandle } | { kind: "retiring"; handle: LocalPublicationHandle | null; detached: boolean; cause: LocalPublicationRetirementCause } | { kind: "retired" };
 };
 type LocalPublicationHandle = { readonly publicationId: string; readonly mid: string };
@@ -46,6 +47,9 @@ const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
+// Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
+// resume operation rather than trusting Chalk's registry as provider liveness.
+const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
@@ -259,7 +263,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.#retireUnavailableLocalPublication(state);
       if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       if (state.enabled) return { outcome: "satisfied", errorCode: null };
-      await this.#enablePreparedTrack(state);
+      if (!(await this.#enablePreparedTrack(state))) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
@@ -478,29 +482,48 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteListeners.clear();
     this.#snapshotListeners.clear();
   }
-  async #enablePreparedTrack(state: LocalTrackState): Promise<void> {
+  async #enablePreparedTrack(state: LocalTrackState): Promise<boolean> {
     const generation = this.#generation;
-    state.desiredEnabled = true;
-    state.track.enabled = true;
     try {
+      const publication = [...this.#ownedPublications].find((item) => item.transceiver === state.transceiver && item.lifecycle.kind === "confirmed");
+      if (publication && publication.detachedAt !== null && Date.now() - publication.detachedAt >= CAPTURE_REUSE_WINDOW_MS) {
+        this.#pauseLocalSource(state.source, "capture_cleanup");
+        try {
+          await this.#retireOwnedPublications();
+        } catch (error) {
+          // An already expired BUNDLE session can reject its close. The normal
+          // retired-connection path below obtains a fresh binding before publish.
+          if (!this.#replaceMediaConnection || this.#retiredLocalConnection !== this.#connection || !(error instanceof AggregateError) || !error.errors.every((cause: unknown) => this.#isRetryableConnectionFailure(cause))) throw error;
+        }
+      }
+      if (this.#locallyPausedSources.has(state.source)) return false;
+      state.desiredEnabled = true;
+      state.track.enabled = true;
       if (state.providerPublicationId && state.transceiver) {
         await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(state.track));
         state.enabled = !this.#locallyPausedSources.has(state.source);
         state.desiredEnabled = state.enabled;
         state.track.enabled = state.enabled;
         if (!state.enabled) {
-          this.#pauseLocalSource(state.source, this.#locallyPausedSources.get(state.source) ?? "consent_revoked");
-          await this.#retireOwnedPublications();
+          const cause = this.#locallyPausedSources.get(state.source) ?? "consent_revoked";
+          if (cause === "capture_cleanup") await this.#disablePreparedTrack(state);
+          else {
+            this.#pauseLocalSource(state.source, cause);
+            await this.#retireOwnedPublications();
+          }
+        } else if (publication) {
+          publication.detachedAt = null;
         }
         this.#publishSnapshot();
         this.#emitLocal();
-        return;
+        return state.enabled;
       }
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
       // recovery that spent it is still unresolved: restoring it then lets every
       // poll replace the healthy connection again for the same bad publication.
       if (this.#remoteRecoveryGeneration !== generation) this.#replacementAttemptedGeneration = null;
+      return state.enabled;
     } catch (error) {
       if (generation === this.#generation) {
         this.#pauseLocalSource(state.source, "enable_failure");
@@ -511,6 +534,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
+    for (const publication of this.#ownedPublications) {
+      if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
+    }
     state.desiredEnabled = false;
     state.track.enabled = false;
     // Queue the detach before notifying consumers, but never wait to expose off.
@@ -590,7 +616,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
-    const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, lifecycle: { kind: "pending" } };
+    const publication: OwnedLocalPublication = { state, transceiver, trackName: `${state.source}-${globalThis.crypto.randomUUID()}`, connection, connectionId: this.#bootstrap.connectionId, detachedAt: null, lifecycle: { kind: "pending" } };
     this.#ownedPublications.add(publication);
     if (state.transceiver) await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
     this.#requireGeneration(generation);

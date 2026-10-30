@@ -256,8 +256,12 @@ Retirement causes distinguish `user_pause`, `moderation_pause`,
 Other replacement causes are `local_signaling_failure`,
 `remote_signaling_failure`, `dormant_connection` and `access_refresh` for an
 externally refreshed binding. Capture interruptions detach microphone/camera
-senders and retain their publication; fresh user consent reattaches capture
-without replacing a healthy session. User and moderation pauses still retire
+senders and retain their publication for short interruptions. Fresh user consent
+within 20 seconds reattaches capture without replacing a healthy session. Longer
+interruptions retire and republish, because the provider expires tracks after
+30 seconds without RTP even while Chalk's registry retains the publication.
+A second interruption during reattachment detaches again and returns
+`local_source_paused` without closing the retained publication. User and moderation pauses still retire
 their owned publication, including when the Sync command fails. A retired
 BUNDLE sender still requires a fresh provider session.
 
