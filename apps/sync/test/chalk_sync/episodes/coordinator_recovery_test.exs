@@ -17,6 +17,7 @@ defmodule ChalkSync.Episodes.CoordinatorRecoveryTest do
 
     socket = self()
     assert {:ok, previous} = Coordinator.begin_recovery(identity, socket)
+    monitor = Process.monitor(previous)
     :sys.suspend(previous)
     # Queue the final departure, then prove the new recovery has found the old PID.
     Coordinator.unsubscribe(previous, socket)
@@ -38,7 +39,10 @@ defmodule ChalkSync.Episodes.CoordinatorRecoveryTest do
 
       :sys.resume(previous)
       assert {:ok, current} = Task.await(task)
+      assert_receive {:DOWN, ^monitor, :process, ^previous, :normal}
+      refute Process.alive?(previous)
       refute current == previous
+      assert Coordinator.whereis(identity.episode) == current
       Coordinator.unsubscribe(current, socket)
     after
       if Process.alive?(previous), do: :sys.resume(previous)

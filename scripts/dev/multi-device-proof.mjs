@@ -295,6 +295,12 @@ try {
       assert.equal(cold.sharedAudioPlays, 0);
       report.coldJoinDuringSyncOutage = cold;
       report.assertions.push("desktop Sync socket closes before a fresh phone joins: phone mic off, zero desktop mic/shared-audio playback calls");
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity));
+      await page.waitForFunction(() => document.querySelectorAll(".chalk-toast").length === 0);
+      // Capture normal pointer interaction without disabling keyboard focus styling.
+      await page.locator('[data-part="header-region"]').click({ position: { x: 280, y: 20 } });
+      await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity));
       await page.screenshot({ path: `${output}/cold-join-phone.png` });
       await pages[0].evaluate(() => {
         window.proofBlockSync = false;

@@ -42,26 +42,48 @@ defmodule ChalkSync.Episodes.Coordinator do
       )
       when is_pid(socket) and is_map(protocol_options) do
     begin_socket_recovery(identity, socket, protocol_options, true)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
-  defp begin_socket_recovery(identity, socket, protocol_options, retry?) do
-    with {:ok, coordinator} <- ensure_started(identity.episode),
-         :ok <-
-           GenServer.call(
-             coordinator,
-             {:begin_recovery, socket, identity, protocol_options},
-             3000
-           ) do
-      {:ok, coordinator}
-    end
-  catch
-    # The last departure can stop the coordinator between registry lookup and call.
-    # Retry only that normal lifecycle race; a timeout is still a dependency failure.
-    :exit, {reason, {GenServer, :call, _args}} when reason in [:normal, :noproc] and retry? ->
-      begin_socket_recovery(identity, socket, protocol_options, false)
+  defp begin_socket_recovery(identity, socket, protocol_options, replace?) do
+    with {:ok, coordinator} <- ensure_started(identity.episode) do
+      monitor = Process.monitor(coordinator)
 
-    :exit, _reason ->
-      {:error, :coordinator_unavailable}
+      try do
+        with :ok <-
+               GenServer.call(
+                 coordinator,
+                 {:begin_recovery, socket, identity, protocol_options},
+                 3000
+               ) do
+          {:ok, coordinator}
+        end
+      catch
+        :exit, {reason, {GenServer, :call, _args}}
+        when reason in [:normal, :noproc] and replace? ->
+          with :ok <- await_coordinator_departure(coordinator, monitor, identity.episode) do
+            begin_socket_recovery(identity, socket, protocol_options, false)
+          end
+
+        :exit, _reason ->
+          {:error, :coordinator_unavailable}
+      after
+        Process.demonitor(monitor, [:flush])
+      end
+    end
+  end
+
+  defp await_coordinator_departure(coordinator, monitor, episode) do
+    receive do
+      {:DOWN, ^monitor, :process, ^coordinator, _reason} ->
+        case whereis(episode) do
+          ^coordinator -> {:error, :coordinator_unavailable}
+          _replacement_or_empty -> :ok
+        end
+    after
+      3000 -> {:error, :coordinator_unavailable}
+    end
   end
 
   @spec activate_recovery(pid(), Recovery.t(), pid()) :: :ok | {:error, atom()}
@@ -590,6 +612,12 @@ defmodule ChalkSync.Episodes.Coordinator do
       %{monitor: ^monitor} -> stop_if_empty(remove_socket(state, socket))
       _other -> {:noreply, state}
     end
+  end
+
+  @impl GenServer
+  def terminate(_reason, state) do
+    # Withdraw synchronously before DOWN: Registry's automatic cleanup is asynchronous.
+    Registry.unregister(ChalkSync.Episodes.Registry, EpisodeKey.authority_key(state.episode))
   end
 
   defp ensure_started(episode) do
