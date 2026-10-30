@@ -163,7 +163,7 @@ it.each(lateConfirmationCases)("closes only its own $source after a late confirm
     vi.useRealTimers();
     expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     expect(test.track.enabled).toBe(false);
-    await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source));
+    await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "projection_mismatch"));
     expect(test.track.enabled).toBe(false);
     expect(test.client.getSnapshot().media.local[source].state).toBe("failed");
     test.project(true);

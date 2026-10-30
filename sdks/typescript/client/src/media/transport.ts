@@ -46,7 +46,10 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   };
   return {
     addTracks: async (input) => {
-      const path = input.allowPartialRemoteTracks ? "tracks?allow_partial_remote_tracks=true" : "tracks";
+      const query = new URLSearchParams();
+      if (input.allowPartialRemoteTracks) query.set("allow_partial_remote_tracks", "true");
+      if (input.replacementCause) query.set("replacement_cause", input.replacementCause);
+      const path = query.size ? `tracks?${query}` : "tracks";
       const response = await request<{
         readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
         readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {

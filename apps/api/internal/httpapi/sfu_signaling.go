@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -41,6 +42,7 @@ type sfuCloseTrackRequest struct {
 
 type sfuTracksEndpointRequest struct {
 	AllowPartialRemoteTracks bool
+	ReplacementCause         string
 	TenantID                 utilities.ID
 	SpaceID                  utilities.ID
 	EpisodeID                utilities.ID
@@ -121,7 +123,10 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 	).
 		Auth(APIAuthParticipantMedia).
 		RateLimit(authenticatedWriteRateLimit).
-		Parameters(append(tenantSpaceEpisodeParticipantParameters(), APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"})...).
+		Parameters(append(tenantSpaceEpisodeParticipantParameters(),
+			APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"},
+			APIParameterContract{Name: "replacement_cause", In: "query", Type: "string", Enum: observability.MediaReplacementCauses()},
+		)...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
@@ -132,6 +137,7 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	observability.LogMediaConnectionReplacement(ctx, request.ReplacementCause)
 	subject, ok := accessgrants.SubjectFromContext(ctx)
 	if !ok {
 		return mediaplane.TracksResponse{}, apiErrorUnauthenticated
@@ -462,7 +468,7 @@ func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, er
 	if err != nil {
 		return sfuTracksEndpointRequest{}, err
 	}
-	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true"}, nil
+	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true", ReplacementCause: request.URL.Query().Get("replacement_cause")}, nil
 }
 
 func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointRequest, error) {

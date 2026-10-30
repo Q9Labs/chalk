@@ -1,5 +1,6 @@
 import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
+import type { LocalPublicationRetirementCause } from "../media/plane";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
 import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
@@ -146,7 +147,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       changed: () => this.#publish(),
       report: (event) => connection.recordTransportDiagnostic(event),
       pause: (source, revision) => {
-        if (this.#ports) this.#pausePublication(this.#ports, source, revision);
+        if (this.#ports) this.#pausePublication(this.#ports, source, revision, "projection_mismatch");
       },
     });
     this.#unsubscribeConnection = connection.subscribe(() => this.#handleConnectionChange());
@@ -363,8 +364,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }
       const ports = this.#ports;
       if (ports) {
-        ports.media.setLocalSourceIntent?.(source, false);
-        this.#retainPause(state, this.#beginLocalPause(ports, source));
+        ports.media.setLocalSourceIntent?.(source, false, "user_pause");
+        this.#retainPause(state, this.#beginLocalPause(ports, source, "user_pause"));
       }
     }
     for (const check of this.#readinessChecks) check();
@@ -466,11 +467,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (state.desired.revision !== intent.revision) return;
       state.result = { revision: intent.revision, status: "failed", cause, cleanup: !intent.enabled || !previous };
       if (state.result.cleanup) {
-        if (intent.enabled && source !== "screen") this.#pausePublication(ports, source, intent.revision);
+        if (intent.enabled && source !== "screen") this.#pausePublication(ports, source, intent.revision, "enable_failure");
         else {
           state.localEnabled = false;
           this.#pauseTracks(source);
-          ports.media.setLocalSourceIntent?.(source, false);
+          ports.media.setLocalSourceIntent?.(source, false, "enable_failure");
         }
       }
     });
@@ -676,9 +677,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
       ),
     );
   }
-  #beginLocalPause(ports: ConnectionPorts, source: MediaSource): Promise<void> {
+  #beginLocalPause(ports: ConnectionPorts, source: MediaSource, cause: LocalPublicationRetirementCause): Promise<void> {
     this.#sources[source].pausedPublicationId = ports.media.getSnapshot().localTracks.find((item) => item.source === source)?.publicationId ?? null;
-    const pause = ports.media.closeForcedLocalPublication ? Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source)) : Effect.runPromise(this.#localTarget(ports, source, false));
+    const pause = ports.media.closeForcedLocalPublication ? Promise.resolve().then(() => ports.media.closeForcedLocalPublication!(source, cause)) : Effect.runPromise(this.#localTarget(ports, source, false));
     // The command gate awaits and propagates this error; observe it meanwhile.
     void pause.catch(() => undefined);
     return pause;
@@ -763,7 +764,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #handleCameraEnded(track: MediaStreamTrack): void {
     const state = this.#camera;
     if (state.status !== "live" || state.track !== track) return;
-    if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision);
+    if (this.#ports && state.publication === this.#ports.media) this.#pausePublication(this.#ports, "camera", this.#sources.camera.desired.revision, "capture_cleanup");
     this.#transitionCamera({ status: "ended" });
   }
   #watchMicrophone(track: MediaStreamTrack | null): void {
@@ -776,7 +777,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (track.muted || track.readyState === "ended") {
         track.enabled = false;
         const state = this.#sources.microphone;
-        if (this.#ports) this.#pausePublication(this.#ports, "microphone", state.desired.revision);
+        if (this.#ports) this.#pausePublication(this.#ports, "microphone", state.desired.revision, "capture_cleanup");
         else {
           state.forcedRevision = state.desired.revision;
           state.localEnabled = false;
@@ -1034,14 +1035,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#connection.getSnapshot().state === "live" && this.#canUsePorts(ports)) return;
     throw new ConnectionError({ code: "invalid_state", action, recoverable: !this.#disposed, message: this.#disposed ? "This media client has been disposed. Rejoin the call." : `${action} belongs to an inactive connection` });
   }
-  #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number): void {
+  #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number, cause: LocalPublicationRetirementCause): void {
     const state = this.#sources[source];
     if (state.desired.revision !== revision || state.forcedRevision === revision || ports.sync.getSnapshot().control?.status === "ended") return;
     state.forcedRevision = revision;
     state.localEnabled = false;
     this.#pauseTracks(source);
-    ports.media.setLocalSourceIntent?.(source, false);
-    this.#retainPause(state, this.#beginLocalPause(ports, source));
+    if (cause === "capture_cleanup" && source !== "screen" && ports.media.pauseLocalCapture) {
+      this.#retainPause(state, ports.media.pauseLocalCapture(source));
+    } else {
+      ports.media.setLocalSourceIntent?.(source, false, cause);
+      this.#retainPause(state, this.#beginLocalPause(ports, source, cause));
+    }
     this.#publish();
   }
   #bind(ports: ConnectionPorts | null): void {
@@ -1083,7 +1088,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (pause.revision <= state.serverSequence) return;
         state.serverSequence = pause.revision;
         // Revision evidence orders moderation against user consent, including unsent capture.
-        if (pause.revision > state.desired.controlRevision) this.#pausePublication(ports, pause.source, state.desired.revision);
+        if (pause.revision > state.desired.controlRevision) this.#pausePublication(ports, pause.source, state.desired.revision, "moderation_pause");
       }) ?? null
     );
   }
@@ -1098,7 +1103,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#recovering = null;
     for (const [source, revision] of recovering ?? []) {
       const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
-      if (!current?.enabled) this.#pausePublication(ports, source, revision);
+      if (!current?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
     }
   }
   #subscribeSync(ports: ConnectionPorts): () => void {
@@ -1202,8 +1207,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const state = this.#sources[source];
     if (!this.#hasConsent(source) && publication?.enabled && state.pausedPublicationId !== publication.publicationId) {
       this.#pauseTracks(source);
-      ports.media.setLocalSourceIntent?.(source, false);
-      this.#retainPause(state, this.#beginLocalPause(ports, source));
+      ports.media.setLocalSourceIntent?.(source, false, "consent_revoked");
+      this.#retainPause(state, this.#beginLocalPause(ports, source, "consent_revoked"));
     }
   }
   #observeProjection(ports: ConnectionPorts, source: "microphone" | "camera"): void {

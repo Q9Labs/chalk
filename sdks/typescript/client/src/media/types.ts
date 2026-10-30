@@ -1,5 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
-import type { MediaPublication, MediaPublicationSource } from "./plane";
+import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
@@ -47,7 +47,13 @@ export type CloudflareSFUPublicationSnapshot = {
   readonly publications: readonly CloudflareSFUPublication[];
 };
 export type CloudflareSFUSignalingTransport = {
-  readonly addTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUTrackRequest[]; readonly allowPartialRemoteTracks?: boolean }) => Promise<CloudflareSFUTracksResponse>;
+  readonly addTracks: (input: {
+    readonly connectionId: string;
+    readonly sessionDescription?: CloudflareSFUSessionDescription;
+    readonly tracks: readonly CloudflareSFUTrackRequest[];
+    readonly allowPartialRemoteTracks?: boolean;
+    readonly replacementCause?: MediaConnectionReplacementCause;
+  }) => Promise<CloudflareSFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;

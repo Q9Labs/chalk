@@ -1343,6 +1343,24 @@ export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPath
 
 export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
   allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+  replacement_cause: Schema.optional(
+    Schema.Literals([
+      "user_pause",
+      "moderation_pause",
+      "sync_recovery_loss",
+      "discovery_absent",
+      "capture_cleanup",
+      "consent_revoked",
+      "publish_failure",
+      "enable_failure",
+      "projection_mismatch",
+      "forced_pause",
+      "local_signaling_failure",
+      "remote_signaling_failure",
+      "dormant_connection",
+      "access_refresh",
+    ]),
+  ),
 });
 export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
 

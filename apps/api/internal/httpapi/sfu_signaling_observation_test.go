@@ -32,7 +32,7 @@ func TestPartialSFUTracksResponseRequiresClientOptIn(t *testing.T) {
 func TestSFUTracksDecoderRequiresExplicitPartialReplyQuery(t *testing.T) {
 	for _, value := range []string{"", "false", "true", "invalid"} {
 		t.Run(value, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, "/tracks?allow_partial_remote_tracks="+value, strings.NewReader(`{"connection_id":"receiver","tracks":[]}`))
+			request := httptest.NewRequest(http.MethodPost, "/tracks?replacement_cause=discovery_absent&allow_partial_remote_tracks="+value, strings.NewReader(`{"connection_id":"receiver","tracks":[]}`))
 			route := chi.NewRouteContext()
 			for _, name := range []string{"tenant_id", "space_id", "episode_id", "participant_id"} {
 				route.URLParams.Add(name, "11111111-1111-4111-8111-111111111111")
@@ -41,6 +41,9 @@ func TestSFUTracksDecoderRequiresExplicitPartialReplyQuery(t *testing.T) {
 			decoded, err := decodeSFUTracksRequest(request)
 			if err != nil || decoded.AllowPartialRemoteTracks != (value == "true") {
 				t.Fatalf("query %q: opted in = %t, error = %v", value, decoded.AllowPartialRemoteTracks, err)
+			}
+			if decoded.ReplacementCause != "discovery_absent" {
+				t.Fatal("replacement cause was lost at the HTTP boundary")
 			}
 		})
 	}

@@ -240,6 +240,34 @@ startup budget.
 
 ### Automatic browser connection reports
 
+When the SDK replaces an SFU binding, its first track-signaling attempt includes
+the optional `replacement_cause` query parameter. The API emits
+`media.connection_replacement` with an allowlisted `replacement_cause`, using the
+request's existing trace context. This records the origin of the new binding,
+including when that first negotiation fails; it is not a successful-recovery
+event. No extra request, identifier, device label, credential or browser text is
+sent. Older APIs ignore the query parameter and older SDKs omit it. Unknown
+values are ignored without rejecting signaling.
+
+Retirement causes distinguish `user_pause`, `moderation_pause`,
+`sync_recovery_loss`, `discovery_absent`, `capture_cleanup`, `consent_revoked`,
+`publish_failure`, `enable_failure`, `projection_mismatch` and the legacy
+`forced_pause` fallback.
+Other replacement causes are `local_signaling_failure`,
+`remote_signaling_failure`, `dormant_connection` and `access_refresh` for an
+externally refreshed binding. Capture interruptions detach microphone/camera
+senders and retain their publication; fresh user consent reattaches capture
+without replacing a healthy session. User and moderation pauses still retire
+their owned publication, including when the Sync command fails. A retired
+BUNDLE sender still requires a fresh provider session.
+
+Proof: `sdks/typescript/client/src/media/cloudflare-sfu.test.ts` covers interrupted capture, sender reuse,
+retirement attribution and query-only compatibility. The API's
+`apps/api/internal/httpapi/sfu_signaling_observation_test.go` covers query decoding;
+`apps/api/internal/observability/media_replacement_test.go` verifies every allowed cause and
+suppresses unknown or identifying text. This is request-scoped diagnostic
+evidence; it adds no durable journey event.
+
 The TypeScript Connection SDK keeps the latest 64 connection events in memory
 from construction, without installing a recorder. A failed join, terminal
 connection failure, or exhausted recovery freezes one report and posts it to
