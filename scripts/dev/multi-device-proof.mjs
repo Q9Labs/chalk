@@ -97,16 +97,18 @@ let chalk;
 let episode;
 const pages = [];
 async function freezeReview(page, name) {
-  let css = await page.evaluate(() => [...document.styleSheets].flatMap(sheet => [...sheet.cssRules].map(rule => rule.cssText)).join("\n"));
+  let css = await page.evaluate(() => [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules].map((rule) => rule.cssText)).join("\n"));
   for (const match of css.matchAll(/url\((["']?)(\/assets\/[^)"']+)\1\)/g)) {
     const data = await readFile(`${output}/static${match[2]}`);
     const mime = match[2].endsWith(".woff2") ? "font/woff2" : "image/svg+xml";
     css = css.replaceAll(match[0], `url("data:${mime};base64,${data.toString("base64")}")`);
   }
-  const html = await page.evaluate(css => {
+  const html = await page.evaluate((css) => {
     const frozen = document.documentElement.cloneNode(true);
-    frozen.querySelectorAll("script,link").forEach(element => element.remove());
-    const style = document.createElement("style"); style.textContent = css; frozen.querySelector("head").append(style);
+    frozen.querySelectorAll("script,link").forEach((element) => element.remove());
+    const style = document.createElement("style");
+    style.textContent = css;
+    frozen.querySelector("head").append(style);
     return `<!doctype html>${frozen.outerHTML}`;
   }, css);
   await writeFile(`${output}/${name}.html`, html);

@@ -171,7 +171,9 @@ function renderTypeScript(contract) {
     "}",
     "function strictProjectionItem(value: unknown, stream: unknown): boolean {",
     "  if (stream === 'media') return exactObject(value, " + JSON.stringify(contract.projectionFrames.mediaSnapshot.items.exactFields) + ");",
-    "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." + JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) + ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : [])]);",
+    "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
+      JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
+      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : [])]);",
     "  return false;",
     "}",
     "function strictProjection(value: Record<string, unknown>): boolean {",
