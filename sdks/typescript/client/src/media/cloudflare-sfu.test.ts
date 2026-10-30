@@ -2262,6 +2262,34 @@ it.each(["packets", "republish", "pause"] as const)("keeps or replenishes the re
   );
 });
 
+it("keeps the receive budget through ten Sync disconnect/reconnect cycles", async () => {
+  let replacements = 0;
+  let receiver: ReturnType<typeof createHarness>;
+  await withTimedHarness(
+    async (h) => {
+      receiver = h;
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => reviewStats(h, () => 10));
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(replacements).toBe(2);
+      for (let reconnect = 0; reconnect < 10; reconnect++) {
+        h.client.remotePublicationsChanged([], "unavailable");
+        await vi.advanceTimersByTimeAsync(30_000);
+        h.client.remotePublicationsChanged(reviewPublications().map((publication) => ({ ...publication, enabled: true })));
+        await vi.advanceTimersByTimeAsync(90_000);
+      }
+      expect(replacements).toBe(2);
+      // A recovered authoritative empty projection really retires these identities.
+      h.client.remotePublicationsChanged([]);
+      h.client.remotePublicationsChanged(reviewPublications().map((publication) => ({ ...publication, enabled: true })));
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(replacements).toBe(4);
+    },
+    { replaceMediaConnection: async () => reviewReplacement(receiver, `sync-budget-${++replacements}`) },
+  );
+});
+
 it("retries one rejected receive replacement grant within the two-attempt budget", async () => {
   let grants = 0;
   let receiver: ReturnType<typeof createHarness>;

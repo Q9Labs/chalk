@@ -97,6 +97,12 @@ export class ReceiveStallRecovery {
     this.#active = [...this.#identities.values()].filter((publication) => this.#isExpected(publication)).map((publication) => publication.publicationId);
   }
 
+  suspend(): void {
+    this.#expected.clear();
+    this.#screens.clear();
+    this.clear();
+  }
+
   #pruneWithdrawn(publications: readonly MediaPublication[]): void {
     const advertised = new Set(publications.map((publication) => publication.publicationId));
     const screens = new Set(publications.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));

@@ -256,7 +256,9 @@ identity permits at most two receive-stall replacement attempts, including rejec
 replacement grants. Seven seconds of sustained packet progress replenishes its
 budget; a republish starts a new identity. Brief startup packets do not replenish
 it. Flowing RTP uses a 7-second packet-progress window, separate from the new-pull
-20-second startup grace. Hidden or throttled stats reset observation, not budgets.
+20-second startup grace. Hidden or throttled stats reset observation, not budgets. A Sync transport loss
+or Sync-client stop clears eligibility while retaining identity budgets. A recovered authoritative
+projection prunes withdrawn publications; Episode end or media stop clears them.
 Opus DTX remains eligible because it still sends periodic silence packets.
 Screen-share audio inherits its participant's screen availability while tracking
 its own RTP counters and publication identity.

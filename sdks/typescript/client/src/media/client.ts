@@ -135,8 +135,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
-  remotePublicationsChanged(publications?: readonly MediaPublication[]): void {
-    if (publications) this.#receiveProgress.expect(publications, this.#participantId);
+  remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
+    if (projectionState === "unavailable") this.#receiveProgress.suspend();
+    else if (publications) this.#receiveProgress.expect(publications, this.#participantId);
     if (this.#polling) {
       this.#pollAfterCurrent = true;
       return;
@@ -492,6 +493,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
+    this.#receiveProgress.expect([], this.#participantId);
     this.#subscribedPublicationIds.clear();
     this.#generation++;
     this.#connectionEpoch++;

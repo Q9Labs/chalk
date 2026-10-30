@@ -46,6 +46,19 @@ describe("V1SyncClient", () => {
     }
   });
 
+  it("treats transport close and Sync stop as unavailable projections", async () => {
+    const { client, socket, mediaPlane } = await liveClient({ reconnectDelayMs: 100_000 });
+    const changed = vi.spyOn(mediaPlane, "remotePublicationsChanged");
+    try {
+      socket.close(1012, "transport lost");
+      await settle();
+      expect(changed).toHaveBeenLastCalledWith([], "unavailable");
+    } finally {
+      client.stop();
+    }
+    expect(changed).toHaveBeenLastCalledWith([], "unavailable");
+  });
+
   it("publishes diagnostics for the first silent dial before any socket event", async () => {
     const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", clock: new TestClock(), webSocket: { connect: () => new TestSocket() } });
     const observed = vi.fn();
@@ -1288,13 +1301,15 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
-  it("does not poll remote publications after the Episode has ended", async () => {
+  it("clears publication identities at Episode end without polling ended media", async () => {
     const { client, socket, state, mediaPlane } = await liveClient();
+    const changed = vi.spyOn(mediaPlane, "remotePublicationsChanged");
     try {
       const ended = { ...state, revision: 2, stateDigest: "0".repeat(64), status: "ended" as const, participants: [], admissionRequests: [], recording: null };
       const digest = await computeV1StateDigest(ended);
       socket.receive({ type: "event", stream: "control", name: "episode_ended", event_id: recoveryId, base_revision: 1, revision: 2, schema_version: 1, resulting_state_digest: digest, payload: { reason: "ended_by_participant" }, external_operation_id: commandIds[1] });
       await snapshotWhen(client, (snapshot) => snapshot.control?.status === "ended");
+      expect(changed).toHaveBeenLastCalledWith([]);
       const before = mediaPlane.changed;
       socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: peerId, source: "camera", enabled: false, publication_id: null } });
       await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);

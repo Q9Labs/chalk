@@ -68,7 +68,8 @@ export type ClientMediaPlane = {
   readonly closeForcedLocalPublication?: (source: MediaSource, cause?: LocalPublicationRetirementCause) => Promise<void>;
   readonly observeLocalPublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
   readonly observeRemotePublications: (listener: (publications: readonly MediaPublication[]) => void) => () => void;
-  readonly remotePublicationsChanged?: (publications?: readonly MediaPublication[]) => void;
+  /** Unavailable suspends receive eligibility without withdrawing publication identities. */
+  readonly remotePublicationsChanged?: (publications?: readonly MediaPublication[], projectionState?: "available" | "unavailable") => void;
   readonly remoteParticipantsChanged?: (participantIds: readonly string[]) => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
 };
