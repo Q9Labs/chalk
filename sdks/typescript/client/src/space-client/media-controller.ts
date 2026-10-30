@@ -638,15 +638,29 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (!enabled) this.#deleteTrack(source);
         return enabled;
       });
-      await media.start(streamFromTracks(tracks), () => Effect.runPromise(waitForSync.pipe(Effect.map(() => {
-        const snapshot = this.#ports?.sync.getSnapshot();
-        this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
-        if (!this.#microphoneMutedByOtherDevice) return streamFromTracks(tracks);
-        this.#recordIntent("microphone", false);
-        this.#deleteTrack("microphone");
-        for (const track of tracks) if (track.kind === "audio") { track.enabled = false; track.stop(); }
-        return streamFromTracks(tracks.filter((track) => track.kind !== "audio"));
-      }))));
+      await media.start(streamFromTracks(tracks), () =>
+        Effect.runPromise(
+          waitForSync.pipe(
+            Effect.map(() => {
+              const snapshot = this.#ports?.sync.getSnapshot();
+              this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot));
+              if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
+              return streamFromTracks(
+                tracks.filter((track) => {
+                  const source = track.kind === "audio" ? "microphone" : "camera";
+                  const enabled = this.#hasConsent(source);
+                  track.enabled = enabled;
+                  if (!enabled) {
+                    this.#deleteTrack(source);
+                    if (source === "microphone") track.stop();
+                  }
+                  return enabled;
+                }),
+              );
+            }),
+          ),
+        ),
+      );
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
         if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };

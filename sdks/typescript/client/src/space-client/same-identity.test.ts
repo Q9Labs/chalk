@@ -16,7 +16,9 @@ it.each([true, false])("joining with another device microphone %s preserves that
   const platform = createCoreTestPlatform();
   const mic = track("audio");
   const published: MediaStream[] = [];
-  const start = vi.fn(async (stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => { published.push(beforePublish ? await beforePublish() : stream); });
+  const start = vi.fn(async (stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => {
+    published.push(beforePublish ? await beforePublish() : stream);
+  });
   platform.emitSync({
     ...platform.sync.getSnapshot(),
     presence: { projectionId: "presence", sequence: 0, items: [presence("participant-1", "person"), presence("desktop", "person")] },

@@ -92,6 +92,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retirement: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
   #started = false;
+  #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
   constructor(options: CloudflareSFUClientOptions) {
@@ -202,9 +203,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const generation = this.#generation;
     this.#setPhase("connecting", null);
     if (beforePublish) {
-      this.#started = true;
+      this.#receivingInitial = true;
       this.#schedulePoll(0);
-      localMedia = await beforePublish();
+      try {
+        localMedia = await beforePublish();
+      } finally {
+        this.#receivingInitial = false;
+      }
       // Startup rejection or Leave already owns cleanup; never publish after it.
       if (generation !== this.#generation || this.#stopped) return;
     }
@@ -217,7 +222,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
 
   async refreshRemotePublications(): Promise<void> {
-    if (!this.#started || this.#stopped || this.#polling) return;
+    if ((!this.#started && !this.#receivingInitial) || this.#stopped || this.#polling) return;
     this.#polling = true;
     const generation = this.#generation;
     this.#pollFailedPull = false;
@@ -1204,7 +1209,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitRemote();
   }
   #schedulePoll(delayMs = this.#pollIntervalMs): void {
-    if (this.#stopped || !this.#started || this.#pollTimer !== undefined) return;
+    if (this.#stopped || (!this.#started && !this.#receivingInitial) || this.#pollTimer !== undefined) return;
     this.#pollTimer = globalThis.setTimeout(async () => {
       this.#pollTimer = undefined;
       // Skip the network round-trip while the tab is hidden; the poll

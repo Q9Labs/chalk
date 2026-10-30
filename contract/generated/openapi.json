@@ -12559,7 +12559,9 @@
             "type": "string"
           },
           "identity_external_id": {
-            "$ref": "#/components/schemas/UUID"
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
           },
           "identity_id": {
             "$ref": "#/components/schemas/UUID"

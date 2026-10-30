@@ -356,7 +356,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
     params = Scope.episode(episode) ++ [Scope.uuid(intent.participant_id)]
 
     case Postgrex.query!(connection, AuthoritySQL.lock_participant(), params).rows do
-      [[generation, status, role, capabilities]] ->
+      [[generation, status, role, capabilities, _identity_id]] ->
         %{generation: generation, status: status, role: role, capabilities: capabilities}
 
       [] ->

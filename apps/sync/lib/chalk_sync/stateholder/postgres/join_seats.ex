@@ -31,7 +31,12 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       ensure_seat(connection, identity, participant.status)
       reconcile_applied_join(connection, identity)
 
-      admitted = allocate_requested_entry(connection, %{identity | identity_id: participant.identity_id}, requested)
+      admitted =
+        allocate_requested_entry(
+          connection,
+          %{identity | identity_id: participant.identity_id},
+          requested
+        )
 
       Presence.renew(connection, admitted)
 

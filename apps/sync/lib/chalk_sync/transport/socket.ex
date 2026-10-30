@@ -731,6 +731,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp device_projection(frame, _enabled), do: frame
 
   defp device_type(nil), do: nil
+
   defp device_type(agent) do
     cond do
       String.contains?(agent, ["iPad", "Tablet"]) -> "tablet"
@@ -951,7 +952,10 @@ defmodule ChalkSync.Transport.SocketV1 do
            | entry_confirmation:
                state.entry_confirmation && identity.entry_ownership != :compatibility
          },
-         identity = %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
+         identity = %{
+           identity
+           | device_type: device_type(state.connection_attributes[:user_agent])
+         },
          :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
          {:ok, recovery} <- Stateholder.recover(identity, cursor),
          {:ok, protocol_options, negotiated?, collaboration_version} <-

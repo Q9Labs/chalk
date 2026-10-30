@@ -11,6 +11,7 @@ export const DOCS_SECTIONS: readonly DocsSection[] = [
   { slug: "custom-ui", heading: "Custom UI reads snapshots and sends commands", anchor: "custom-ui-reads-snapshots-and-sends-commands", excerpt: "ChalkProvider shares an existing SpaceClient with React." },
   { slug: "entrance-and-admission", heading: "Joining and admission", anchor: "joining-and-admission", excerpt: "The React call joins directly with the supplied display name and device defaults." },
   { slug: "entrance-and-admission", heading: "Admission policy", anchor: "admission-policy", excerpt: "Operators can set two Space admission policies: open and knock." },
+  { slug: "entrance-and-admission", heading: "Joining on multiple devices", anchor: "joining-on-multiple-devices", excerpt: "Admit a separate participant for each device." },
   { slug: "media", heading: "Media is a namespaced client controller", anchor: "media-is-a-namespaced-client-controller", excerpt: "The media controller manages microphone, camera, screen, device selection, and incoming media requests." },
   { slug: "media", heading: "Directed requests", anchor: "directed-requests", excerpt: "A Participant with the right capability can ask another Participant to enable a microphone or camera." },
   { slug: "participants-and-presence", heading: "Participants are live seats; Presence is live state", anchor: "participants-are-live-seats-presence-is-live-state", excerpt: "A Participant is anyone or anything present in a live Episode." },

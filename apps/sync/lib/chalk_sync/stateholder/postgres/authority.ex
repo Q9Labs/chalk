@@ -120,7 +120,13 @@ defmodule ChalkSync.Stateholder.Postgres.Authority do
     participant =
       case Postgrex.query!(connection, SQL.lock_participant(), Scope.participant(identity)).rows do
         [[generation, status, role, capabilities, identity_id]] ->
-          %{generation: generation, status: status, role: role, capabilities: capabilities, identity_id: Scope.nullable_uuid(identity_id)}
+          %{
+            generation: generation,
+            status: status,
+            role: role,
+            capabilities: capabilities,
+            identity_id: Scope.nullable_uuid(identity_id)
+          }
 
         [] ->
           nil

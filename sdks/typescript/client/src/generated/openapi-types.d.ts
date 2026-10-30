@@ -1196,7 +1196,7 @@ export interface components {
     AdmitEpisodeParticipantRequest: {
       /** @enum {string} */
       admission?: "policy" | "direct";
-      identity_external_id?: components["schemas"]["UUID"];
+      identity_external_id?: string;
       identity_id?: components["schemas"]["UUID"];
       metadata?:
         | {

@@ -219,8 +219,8 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 			}
 			path := base + "/" + episode.ID + "/participants"
 			if mode == "open" {
-				firstBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
-				secondBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
+				firstBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"custom_guest","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
+				secondBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"custom_guest","identity_external_id":"stable-person","admission":"direct"}`, accountTenantIntegrationID(t).String())
 				first := post(t, path, writer, "person-device-first", firstBody, http.StatusCreated)
 				second := post(t, path, writer, "person-device-second", secondBody, http.StatusCreated)
 				replay := post(t, path, writer, "person-device-second", secondBody, http.StatusCreated)
@@ -233,7 +233,7 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 				if err != nil || utilities.IDFromBytes(other.Bytes).String() == *first.Participant.IdentityID {
 					t.Fatalf("person identity must be tenant scoped: %v", err)
 				}
-				invalidBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"owner","identity_external_id":"stable-person","identity_id":%q,"admission":"direct"}`, accountTenantIntegrationID(t).String(), *first.Participant.IdentityID)
+				invalidBody := fmt.Sprintf(`{"participant_id":%q,"name":"Member","role":"custom_guest","identity_external_id":"stable-person","identity_id":%q,"admission":"direct"}`, accountTenantIntegrationID(t).String(), *first.Participant.IdentityID)
 				post(t, path, writer, "person-device-invalid", invalidBody, http.StatusBadRequest)
 			}
 
