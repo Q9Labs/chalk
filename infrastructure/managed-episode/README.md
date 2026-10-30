@@ -23,7 +23,7 @@ PostgreSQL service.
 The Dockerfiles use named build contexts so a build never sends the repository's
 multi-gigabyte working tree to BuildKit. The official Go 1.26.10 and Elixir
 1.19.5/OTP 28 image indexes are pinned by multi-architecture digest. Go 1.26.10
-matches the current `apps/api/go.mod` and the `apps/api/scripts/db-migrate.sh` helper default.
+matches the current `go.mod` and the `apps/api/scripts/db-migrate.sh` helper default.
 
 Production images are published by the manually dispatched release workflow in
 `.github/workflows/ci.yml` after the target commit passes its local gate. The
@@ -40,7 +40,7 @@ validation build:
 docker buildx build \
   --platform linux/arm64 \
   --provenance=mode=max \
-  --build-context api_source=apps/api \
+  --build-context api_source=. \
   --file infrastructure/managed-episode/images/api.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \
@@ -50,7 +50,7 @@ docker buildx build \
 docker buildx build \
   --platform linux/arm64 \
   --provenance=mode=max \
-  --build-context sync_source=apps/sync \
+  --build-context sync_source=. \
   --file infrastructure/managed-episode/images/sync.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \

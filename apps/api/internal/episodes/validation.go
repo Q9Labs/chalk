@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var requestKeyPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)

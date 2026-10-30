@@ -9,7 +9,8 @@ const sourceFilePattern = /\.(?:ts|tsx)$/u;
 const styleLiteralPatterns = [new RegExp(`["']?${colorProperty}["']?\\s*(?::|=)\\s*\\{?\\s*["'](?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\\([^)]*\\))["']`, "giu"), /\bboxShadow\s*:\s*["'][^"']*(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()/giu];
 
 const violations = [];
-for (const filePath of await sourceFiles(sourceRoot)) {
+const sourceRoots = process.argv.length > 2 ? process.argv.slice(2) : [sourceRoot, join(process.cwd(), "../../../features/whiteboard/sdk/react-native/src")];
+for (const filePath of (await Promise.all(sourceRoots.map(sourceFiles))).flat()) {
   const relativePath = relative(sourceRoot, filePath);
   if (tokenSources.has(relativePath) || /\.(?:test|spec)\.tsx?$/u.test(relativePath)) continue;
 

@@ -11,7 +11,7 @@ Pod::Spec.new do |spec|
   spec.authors = { "Q9Labs" => "opensource@q9labs.ai" }
   spec.platforms = { :ios => "15.1" }
   spec.source = { :git => "https://github.com/Q9Labs/chalk.git", :tag => spec.version.to_s }
-  spec.source_files = "ios/**/*.{h,m,mm,swift}"
+  spec.source_files = ["ios/**/*.{h,m,mm,swift}", "dist/whiteboard-ios/**/*.{h,m,mm,swift}"]
   spec.resource_bundles = {
     "ChalkWhiteboard" => ["embedded/chalk-whiteboard"]
   }

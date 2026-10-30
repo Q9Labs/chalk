@@ -8,9 +8,10 @@ const dependencyGroups = ["dependencies", "devDependencies", "optionalDependenci
 
 // Apply the exception to OSV's findings only after verifying this tooling tail:
 // apps/mobile -> ... -> expo@55.0.9 -> @expo/cli@55.0.19 -> zod@3.25.76.
-// sdks/typescript/react-native also reaches that tail through its Expo native peers.
+// sdks/typescript/react-native and its relocated features/whiteboard sources
+// also reach that tail through their Expo native peers.
 // Expo's native modules also depend on expo, so ancestors before expo can cycle.
-const allowedImporters = new Set(["importer:apps/mobile", "importer:sdks/typescript/react-native"]);
+const allowedImporters = new Set(["importer:apps/mobile", "importer:sdks/typescript/react-native", "importer:features/whiteboard"]);
 function checkZodException(source) {
   for (const document of loadAll(source)) {
     if (document?.lockfileVersion !== "9.0") throw new Error(`Zod exception only supports pnpm lockfileVersion 9.0; found ${document?.lockfileVersion ?? "missing"}. Regenerate the root lockfile with the pinned pnpm version, or extend and re-check this guard before changing its supported format.`);

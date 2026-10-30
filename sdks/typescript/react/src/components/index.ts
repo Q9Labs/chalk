@@ -24,8 +24,8 @@ export type {
   RecordingSourceStatus,
   RecordingTranscriptStatus,
 } from "./recording-history/RecordingHistoryPanel";
-export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./whiteboard-view/RecordingWhiteboardView";
-export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./whiteboard-view/RecordingWhiteboardView";
+export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/RecordingWhiteboardView";
+export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/RecordingWhiteboardView";
 export { ChatPanel } from "./composite/ChatPanel";
 export type { ChatPanelProps } from "./composite/ChatPanel";
 export { ParticipantsPanel } from "./participants-panel/ParticipantsPanel";

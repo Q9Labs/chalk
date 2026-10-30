@@ -31,7 +31,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingdecode"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // This opt-in qualification uses live SFU publishers and the production capture,

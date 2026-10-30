@@ -12,6 +12,7 @@
     "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
   },
   "dependencies": {
+    "@chalk/rendering": "workspace:*",
     "@excalidraw/excalidraw": "0.18.1",
     "@hugeicons/core-free-icons": "^4.2.3",
     "@napi-rs/canvas": "1.0.9",

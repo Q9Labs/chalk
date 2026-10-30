@@ -12,11 +12,12 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const maximumArtifactDownloadURLLifetime = 5 * time.Minute
@@ -175,7 +176,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		}
 		response := newRecordingResponse(recording, state)
 		return requestRecordingExportResponse{Recording: response, Export: response.Export}, nil
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
+	}).Auth(httpcontract.APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
 }
 
 func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecordingExportEndpointRequest, error) {
@@ -204,8 +205,8 @@ func listRecordingsEndpoint(service RecordingService, artifacts RecordingExportS
 		}
 		return newRecordingListResponse(ctx, list, artifacts)
 	}).
-		Auth(APIAuthSessionOrBearer).
-		Parameters(append([]APIParameterContract{tenantIDParameter(), spaceIDQueryParameter(), episodeIDQueryParameter()}, paginationParameters()...)...).
+		Auth(httpcontract.APIAuthSessionOrBearer).
+		Parameters(append([]httpcontract.APIParameterContract{tenantIDParameter(), spaceIDQueryParameter(), episodeIDQueryParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "RecordingList", recordingListResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
 		MapErrors(recordingEndpointAPIError)
@@ -230,7 +231,7 @@ func getRecordingEndpoint(service RecordingService, artifacts RecordingExportSer
 		}
 		return newRecordingResponse(recording, state), nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		Responds(http.StatusOK, "Recording", recordingResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound)...).
@@ -288,7 +289,7 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 			SignedHeader: cloneSignedHeaders(url),
 		}, nil
 	}).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		RequestBody("CreateRecordingDownloadURLRequest", createRecordingDownloadURLRequest{}).
@@ -349,8 +350,8 @@ func tenantRecordingIDsRequest(r *http.Request) (utilities.ID, utilities.ID, err
 	return tenantID, recordingID, nil
 }
 
-func recordingReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{
+func recordingReadErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,
 		apiErrorServiceUnavailable,
@@ -359,14 +360,14 @@ func recordingReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func recordingEndpointAPIError(err error) (APIError, bool) {
+func recordingEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := recordingServiceAPIError(err); ok {
 		return apiErr, true
 	}
 	return authorizationAPIError(err), true
 }
 
-func recordingDownloadEndpointAPIError(err error) (APIError, bool) {
+func recordingDownloadEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := recordingServiceAPIError(err); ok {
 		return apiErr, true
 	}
@@ -376,10 +377,10 @@ func recordingDownloadEndpointAPIError(err error) (APIError, bool) {
 	return authorizationAPIError(err), true
 }
 
-func recordingServiceAPIError(err error) (APIError, bool) {
+func recordingServiceAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case err == nil:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	case errors.Is(err, recordings.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingID):
@@ -411,14 +412,14 @@ func recordingServiceAPIError(err error) (APIError, bool) {
 	case errors.Is(err, recordingpipeline.ErrExportRetryLimit):
 		return apiErrorRecordingExportRetryLimit, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }
 
-func objectStorageAPIError(err error) (APIError, bool) {
+func objectStorageAPIError(err error) (httpcontract.APIError, bool) {
 	switch {
 	case err == nil:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	case errors.Is(err, objectstorage.ErrInvalidObjectKey):
 		return apiErrorInvalidStorageKey, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
@@ -428,7 +429,7 @@ func objectStorageAPIError(err error) (APIError, bool) {
 	case errors.Is(err, objectstorage.ErrObjectNotFound):
 		return apiErrorRecordingArtifactNotFound, true
 	default:
-		return APIError{}, false
+		return httpcontract.APIError{}, false
 	}
 }
 

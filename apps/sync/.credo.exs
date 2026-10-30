@@ -5,12 +5,17 @@
     %{
       name: "default",
       files: %{
-        included: ["lib/", "test/"],
+        included: [
+          "lib/",
+          "test/",
+          "../../features/whiteboard/sync/",
+          "../../features/whiteboard/tests/sync/"
+        ],
         excluded: [
           ~r"/_build/",
           ~r"/deps/",
           "lib/chalk_sync/contract/generated.ex",
-          "lib/chalk_sync/contract/generated_whiteboard_v1.ex"
+          "../../features/whiteboard/sync/lib/chalk_sync/contract/generated_whiteboard_v1.ex"
         ]
       }
     }

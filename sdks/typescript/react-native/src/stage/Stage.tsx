@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSpaceClient } from "../context/space-client-context";
 import { useToasts } from "../primitives/toast/ToastStack";
-import { ownNativeBoardSession } from "../whiteboard/native-board-session";
+import { ownNativeBoardSession } from "../../../../../features/whiteboard/sdk/react-native/src/whiteboard/native-board-session";
 import { useDevScenario } from "../frame/dev-scenario";
 import { useDeviceLayout } from "../frame/device-layout";
 import { useMeasuredRef } from "../frame/measurement";

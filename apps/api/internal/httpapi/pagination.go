@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 type paginationResponse struct {
@@ -56,7 +57,7 @@ func newPaginationResponse(page pagination.Page) (paginationResponse, error) {
 	}, nil
 }
 
-func paginationAPIError(err error) APIError {
+func paginationAPIError(err error) httpcontract.APIError {
 	switch {
 	case errors.Is(err, pagination.ErrInvalidPageSize):
 		return apiErrorInvalidPageSize

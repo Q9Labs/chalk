@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 )
 
 func TestTenantPurgeShortLiveBeforeImagesAndRollback(t *testing.T) {

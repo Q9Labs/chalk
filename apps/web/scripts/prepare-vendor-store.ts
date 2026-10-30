@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { uploadVendorAssets } from "./upload-vendor-assets";
+import { uploadVendorAssets } from "../../../features/whiteboard/tools/upload-vendor-assets";
 import { vendorProbe, verifyVendorStore } from "../../../scripts/deploy/verify-vendor-store.mjs";
 
 type Target = "production" | "nightly";

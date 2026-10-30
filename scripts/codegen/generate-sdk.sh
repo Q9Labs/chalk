@@ -8,14 +8,14 @@ node tools/contract-fixture-proof/src/emitters/effect-schemas.mjs
 node tools/contract-fixture-proof/src/emitters/effect-http-api.mjs
 CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/sync-typescript.mjs
 CODEGEN_SYNC_PROTOCOL_VERSION=1 node tools/contract-fixture-proof/src/emitters/sync-elixir.mjs
-node tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs
-node tools/contract-fixture-proof/src/emitters/whiteboard-elixir.mjs
+node features/whiteboard/tools/emitters/whiteboard-typescript.mjs
+node features/whiteboard/tools/emitters/whiteboard-elixir.mjs
 pnpm exec openapi-typescript contract/generated/openapi.json --output sdks/typescript/client/src/generated/openapi-types.d.ts
 pnpm exec oxfmt --write \
   contract/generated/openapi.json \
   sdks/typescript/client/src/generated/schemas.ts \
   sdks/typescript/client/src/generated/http-api.ts \
   sdks/typescript/client/src/generated/sync.ts \
-  sdks/typescript/client/src/generated/whiteboard-v1.ts \
-  packages/whiteboard/src/collab/view-limits.ts \
+  features/whiteboard/sdk/client/src/generated/whiteboard-v1.ts \
+  features/whiteboard/packages/canvas/src/collab/view-limits.ts \
   sdks/typescript/client/src/generated/openapi-types.d.ts

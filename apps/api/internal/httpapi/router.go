@@ -11,8 +11,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
+	"github.com/q9labs/chalk/features/whiteboard/api"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type ReadinessChecker interface {
@@ -101,8 +102,8 @@ type Options struct {
 	Webhooks               WebhookService
 	ChatAttachments        ChatAttachmentService
 	ChatParticipants       ChatParticipantVerifier
-	WhiteboardFiles        WhiteboardFileService
-	WhiteboardParticipants WhiteboardParticipantVerifier
+	WhiteboardFiles        whiteboardfiles.WhiteboardFileService
+	WhiteboardParticipants whiteboardfiles.WhiteboardParticipantVerifier
 	PublicInvites          PublicInviteService
 	ProblemReports         ProblemReportService
 }

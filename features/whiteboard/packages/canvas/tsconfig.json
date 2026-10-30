@@ -1,0 +1,25 @@
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true,
+    "declarationMap": false,
+    "noEmit": false,
+    "composite": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@q9labsai/chalk-client": ["../../../../sdks/typescript/client/dist/index.d.ts"],
+      "@q9labsai/facehash": ["../../../../packages/facehash/src/index.ts"],
+      "@q9labsai/facehash/react": ["../../../../packages/facehash/src/react.ts"]
+    }
+  },
+  "include": ["src/**/*", "src/**/*.json"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+  "references": [
+    {
+      "path": "../../../../packages/facehash"
+    }
+  ]
+}

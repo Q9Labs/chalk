@@ -70,11 +70,11 @@ fi
 recorder_package_dirs=()
 recorder_image_affected=false
 for path in "${paths[@]}"; do
-  if [[ "${path}" == apps/api/* ]]; then
+  if [[ "${path}" == apps/api/* || "${path}" == features/whiteboard/api/* || "${path}" == platform/* ]]; then
     command -v go >/dev/null || fail "go is required to plan recorder image dependencies"
     package_dirs="$(cd "${repo_root}/apps/api" && go list -deps -f '{{.Dir}}' ./cmd/recorder-capture ./cmd/recorder-render ./cmd/recorder-node-bootstrap)" || fail "cannot resolve recorder image dependencies"
     while IFS= read -r directory; do
-      if [[ "${directory}" == "${repo_root}/apps/api/"* ]]; then
+      if [[ "${directory}" == "${repo_root}/"* ]]; then
         recorder_package_dirs+=("${directory#"${repo_root}/"}")
       fi
     done <<< "${package_dirs}"
@@ -97,10 +97,10 @@ classify_path() {
       # CPU worker image; they are not imported by the managed API service.
       add_classification none
       ;;
-    apps/api|apps/api/*|infrastructure/managed-episode/images/api.Dockerfile)
+    apps/api|apps/api/*|features/whiteboard/api/*|platform/objectstorage/*|platform/synctokens/*|platform/utilities/*|platform/ratelimit/*|platform/httpcontract/*|go.mod|go.sum|infrastructure/managed-episode/images/api.Dockerfile)
       add_classification api
       ;;
-    apps/sync|apps/sync/*|infrastructure/managed-episode/images/sync.Dockerfile)
+    apps/sync|apps/sync/*|features/whiteboard/sync/*|infrastructure/managed-episode/images/sync.Dockerfile)
       add_classification sync
       ;;
     infrastructure/managed-episode/quadlet/chalk-redis.container.in)
@@ -122,7 +122,7 @@ classify_path() {
     infrastructure/managed-episode/*)
       add_classification shared
       ;;
-    .github/workflows/ci.yml|CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
+    features/whiteboard/*|platform/rendering/*|.github/workflows/ci.yml|CHANGELOG.md|GLOSSARY.md|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|product.yaml|contract|contract/*|packages|packages/*|sdks|sdks/*|apps/web|apps/web/*|apps/docs|apps/docs/*|apps/mobile|apps/mobile/*|scripts/dev|scripts/dev/*)
       add_classification none
       ;;
     *)
@@ -152,7 +152,7 @@ if [[ "${paths_present}" == true ]]; then
       continue
     # The deployed renderer includes chalk-react and its chalk-client dependency,
     # not the React Native SDK. Keep whole package inputs, including manifests.
-    elif [[ "${path}" == apps/api/go.mod || "${path}" == apps/api/go.sum || "${path}" == package.json || "${path}" == pnpm-lock.yaml || "${path}" == pnpm-workspace.yaml || "${path}" == apps/recording-renderer/* || "${path}" == infrastructure/recorder/images/cpu/* || "${path}" == packages/* || "${path}" == sdks/typescript/client/* || "${path}" == sdks/typescript/react/* ]]; then
+    elif [[ "${path}" == go.mod || "${path}" == go.sum || "${path}" == package.json || "${path}" == pnpm-lock.yaml || "${path}" == pnpm-workspace.yaml || "${path}" == apps/recording-renderer/* || "${path}" == infrastructure/recorder/images/cpu/* || "${path}" == packages/* || "${path}" == sdks/typescript/client/* || "${path}" == sdks/typescript/react/* || "${path}" == features/whiteboard/packages/* || "${path}" == features/whiteboard/sdk/client/* || "${path}" == features/whiteboard/sdk/react/* || "${path}" == features/whiteboard/web/recording/* || "${path}" == platform/rendering/* ]]; then
       recorder_image_affected=true
     else
       for directory in "${recorder_package_dirs[@]}"; do

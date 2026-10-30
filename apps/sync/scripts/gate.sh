@@ -53,6 +53,7 @@ run "Elixir version" elixir --version
 run "Dependencies" mix deps.get --check-locked
 run "Format check" mix format --check-formatted
 run "Compile (warnings as errors)" env MIX_ENV=test mix compile --warnings-as-errors
+run "Feature dependencies" node ../../scripts/features/check.mjs elixir
 
 if [[ "$command" == "basic" ]]; then
   printf '\nSync server basic gate passed.\n'

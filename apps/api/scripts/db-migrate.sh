@@ -39,4 +39,14 @@ case "${command}" in
     ;;
 esac
 
-go tool goose -dir db/migrations postgres "${database_url}" "${command}" "$@"
+migration_bundle="$(mktemp -d)"
+trap 'rm -rf -- "$migration_bundle"' EXIT
+for migration in db/migrations/*.sql ../../features/whiteboard/api/db/migrations/*.sql; do
+  destination="$migration_bundle/${migration##*/}"
+  if [[ -e "$destination" ]]; then
+    echo "Duplicate migration filename: ${migration##*/}" >&2
+    exit 1
+  fi
+  cp "$migration" "$destination"
+done
+go tool goose -dir "$migration_bundle" postgres "${database_url}" "${command}" "$@"

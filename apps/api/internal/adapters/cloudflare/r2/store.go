@@ -13,9 +13,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
-
 	"github.com/q9labs/chalk/apps/api/internal/config"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 const region = "auto"

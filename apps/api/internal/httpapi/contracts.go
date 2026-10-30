@@ -1,63 +1,11 @@
 package httpapi
 
-import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
-
-type APIAuth string
-
-const (
-	APIAuthCookieOrBearer   APIAuth = "session_or_bearer"
-	APIAuthSessionOrBearer          = APIAuthCookieOrBearer
-	APIAuthParticipantMedia APIAuth = "participant_media"
-	APIAuthParticipantSync  APIAuth = "participant_sync"
+import (
+	"github.com/q9labs/chalk/features/whiteboard/api"
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
-type APISchemaRef struct {
-	Name string
-	Type any
-}
-
-type APIHeaderContract struct {
-	Name     string
-	Type     string
-	Required bool
-}
-
-type APIResponseContract struct {
-	Status  int
-	Schema  *APISchemaRef
-	Headers []APIHeaderContract
-}
-
-type APIParameterContract struct {
-	Name      string
-	In        string
-	Type      string
-	Required  bool
-	Pattern   string
-	MinLength int
-	MaxLength int
-	// CodePointLength marks a length the server counts in Unicode code points, not bytes.
-	CodePointLength bool
-	ItemsType       string
-	Enum            []string
-}
-
-type APIRouteContract struct {
-	Description    string
-	OperationID    string
-	Method         string
-	Path           string
-	MountPath      string
-	Auth           APIAuth
-	RateLimit      ratelimit.Policy
-	BodyLimitBytes int64
-	Parameters     []APIParameterContract
-	Request        *APISchemaRef
-	Responses      []APIResponseContract
-	Errors         []APIError
-}
-
-func PreviewRouteContracts() []APIRouteContract {
+func PreviewRouteContracts() []httpcontract.APIRouteContract {
 	endpoints := make([]RouteEndpoint, 0)
 	endpoints = append(endpoints, problemReportEndpoints(nil, nil, RateLimitOptions{})...)
 	endpoints = append(endpoints, cancelParticipantJoinEndpoint(nil, nil))
@@ -74,7 +22,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
-	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
+	endpoints = append(endpoints, FromSpec(whiteboardfiles.FileEndpoint(nil, nil)))
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil, nil)...)
 
@@ -83,8 +31,8 @@ func PreviewRouteContracts() []APIRouteContract {
 	return routeContracts(endpoints)
 }
 
-func routeContracts(endpoints []RouteEndpoint) []APIRouteContract {
-	contracts := make([]APIRouteContract, 0, len(endpoints))
+func routeContracts(endpoints []RouteEndpoint) []httpcontract.APIRouteContract {
+	contracts := make([]httpcontract.APIRouteContract, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		contracts = append(contracts, endpoint.RouteContract())
 	}

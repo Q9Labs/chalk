@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

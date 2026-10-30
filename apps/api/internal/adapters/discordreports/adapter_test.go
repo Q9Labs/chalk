@@ -9,11 +9,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"testing"
 	"unicode/utf16"
 
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"testing"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestWebhookDestinations(t *testing.T) {

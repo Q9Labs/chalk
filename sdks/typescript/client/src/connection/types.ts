@@ -16,10 +16,10 @@ import type {
   ChalkSyncV1CollaborationCapability,
 } from "../collaboration/types";
 import type { ChalkChatFileTransport } from "../chat-files/types";
-import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../whiteboard/types";
+import type { ChalkWhiteboardSummary, ChalkWhiteboardV1Transport } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 import type { V1AdmissionPolicy, V1AdmissionTarget, V1Capability } from "../sync/v1-types";
 
-export { ChalkWhiteboardV1Error } from "../whiteboard/types";
+export { ChalkWhiteboardV1Error } from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 export type {
   ChalkChatAttachment,
   ChalkChatMessage,
@@ -49,7 +49,7 @@ export type {
   ChalkWhiteboardV1Operation,
   ChalkWhiteboardV1Transport,
   ChalkWhiteboardV1UpdateInput,
-} from "../whiteboard/types";
+} from "../../../../../features/whiteboard/sdk/client/src/whiteboard/types";
 
 export const CONNECTION_STATES = ["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"] as const;
 

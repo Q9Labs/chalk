@@ -15,14 +15,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/ratelimit"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // A length written with this extension counts Unicode code points, as the server does.
@@ -80,7 +81,7 @@ func main() {
 	}
 }
 
-func newGenerator(routes []httpapi.APIRouteContract) *generator {
+func newGenerator(routes []httpcontract.APIRouteContract) *generator {
 	gen := &generator{
 		schemaNames: schemaNames(routes),
 		doc: openAPIDoc{
@@ -139,7 +140,7 @@ func newGenerator(routes []httpapi.APIRouteContract) *generator {
 	return gen
 }
 
-func schemaNames(routes []httpapi.APIRouteContract) map[reflect.Type]string {
+func schemaNames(routes []httpcontract.APIRouteContract) map[reflect.Type]string {
 	names := make(map[reflect.Type]string)
 	for _, route := range routes {
 		if route.Request != nil {
@@ -154,7 +155,7 @@ func schemaNames(routes []httpapi.APIRouteContract) map[reflect.Type]string {
 	return names
 }
 
-func (g *generator) addRoute(route httpapi.APIRouteContract) {
+func (g *generator) addRoute(route httpcontract.APIRouteContract) {
 	if route.Path == "" || route.Method == "" {
 		return
 	}
@@ -171,15 +172,15 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	}
 
 	switch route.Auth {
-	case httpapi.APIAuthSessionOrBearer:
+	case httpcontract.APIAuthSessionOrBearer:
 		operation["security"] = []map[string][]string{
 			{"sessionOrBearer": {}},
 		}
-	case httpapi.APIAuthParticipantMedia:
+	case httpcontract.APIAuthParticipantMedia:
 		operation["security"] = []map[string][]string{
 			{"participantMediaBearer": {}},
 		}
-	case httpapi.APIAuthParticipantSync:
+	case httpcontract.APIAuthParticipantSync:
 		operation["security"] = []map[string][]string{
 			{"participantSyncBearer": {}},
 		}
@@ -219,7 +220,7 @@ func (g *generator) addRoute(route httpapi.APIRouteContract) {
 	g.doc.Paths[route.Path][method] = operation
 }
 
-func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
+func (g *generator) responses(route httpcontract.APIRouteContract) map[string]any {
 	responses := make(map[string]any)
 	for _, response := range route.Responses {
 		body := map[string]any{
@@ -257,7 +258,7 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 	return responses
 }
 
-func headers(headers []httpapi.APIHeaderContract) map[string]any {
+func headers(headers []httpcontract.APIHeaderContract) map[string]any {
 	result := make(map[string]any, len(headers))
 	for _, header := range headers {
 		result[header.Name] = map[string]any{
@@ -270,18 +271,18 @@ func headers(headers []httpapi.APIHeaderContract) map[string]any {
 	return result
 }
 
-func rateLimitResponseHeaders(includeRetryAfter bool) []httpapi.APIHeaderContract {
-	responseHeaders := []httpapi.APIHeaderContract{
+func rateLimitResponseHeaders(includeRetryAfter bool) []httpcontract.APIHeaderContract {
+	responseHeaders := []httpcontract.APIHeaderContract{
 		{Name: ratelimit.HeaderLimit, Type: "integer", Required: true},
 		{Name: ratelimit.HeaderRemaining, Type: "integer", Required: true},
 	}
 	if includeRetryAfter {
-		responseHeaders = append(responseHeaders, httpapi.APIHeaderContract{Name: ratelimit.HeaderRetryAfter, Type: "integer", Required: true})
+		responseHeaders = append(responseHeaders, httpcontract.APIHeaderContract{Name: ratelimit.HeaderRetryAfter, Type: "integer", Required: true})
 	}
 	return responseHeaders
 }
 
-func (g *generator) parameters(parameters []httpapi.APIParameterContract) []map[string]any {
+func (g *generator) parameters(parameters []httpcontract.APIParameterContract) []map[string]any {
 	result := make([]map[string]any, 0, len(parameters))
 	for _, parameter := range parameters {
 		result = append(result, map[string]any{
@@ -294,7 +295,7 @@ func (g *generator) parameters(parameters []httpapi.APIParameterContract) []map[
 	return result
 }
 
-func (g *generator) parameterSchema(parameter httpapi.APIParameterContract) map[string]any {
+func (g *generator) parameterSchema(parameter httpcontract.APIParameterContract) map[string]any {
 	if parameter.Type == "string" {
 		if name, ok := idSchemaName("", parameter.Name); ok {
 			return schemaReference(name)
@@ -326,15 +327,15 @@ func (g *generator) parameterSchema(parameter httpapi.APIParameterContract) map[
 	return schema
 }
 
-func groupErrors(errors []httpapi.APIError) map[int][]httpapi.APIError {
-	grouped := make(map[int][]httpapi.APIError)
+func groupErrors(errors []httpcontract.APIError) map[int][]httpcontract.APIError {
+	grouped := make(map[int][]httpcontract.APIError)
 	for _, err := range errors {
 		grouped[err.Status] = append(grouped[err.Status], err)
 	}
 	return grouped
 }
 
-func errorCodes(errors []httpapi.APIError) []string {
+func errorCodes(errors []httpcontract.APIError) []string {
 	codes := make([]string, 0, len(errors))
 	for _, err := range errors {
 		codes = append(codes, err.Code)
@@ -362,7 +363,7 @@ func operationSummary(operationID string) string {
 	return strings.ToUpper(summary[:1]) + strings.ToLower(summary[1:])
 }
 
-func (g *generator) schemaRef(ref httpapi.APISchemaRef, request bool) map[string]any {
+func (g *generator) schemaRef(ref httpcontract.APISchemaRef, request bool) map[string]any {
 	if _, ok := g.doc.Components.Schemas[ref.Name]; !ok {
 		g.doc.Components.Schemas[ref.Name] = g.schemaFromType(reflect.TypeOf(ref.Type), request, ref.Name)
 	}

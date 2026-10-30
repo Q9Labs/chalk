@@ -6,10 +6,11 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/q9labs/chalk/apps/api/internal/tenantpurge"
 )
 
 func TestShortBackupAuthenticatedBeforeImages(t *testing.T) {

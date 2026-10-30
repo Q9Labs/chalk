@@ -5,8 +5,8 @@ on:
     paths:
       - infrastructure/observability/production-alerts/**
       - .github/workflows/production-alerts.yml
-      - apps/api/go.mod
-      - apps/api/go.sum
+      - go.mod
+      - go.sum
 
 permissions:
   contents: read
@@ -32,8 +32,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Test collector and Discord rendering
         working-directory: apps/api
         env:

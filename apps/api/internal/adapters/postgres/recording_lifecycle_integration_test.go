@@ -16,7 +16,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestRecordingLifecyclePublishesAndReplaysSyncOperations(t *testing.T) {

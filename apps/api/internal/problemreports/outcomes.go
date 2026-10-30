@@ -1,6 +1,6 @@
 package problemreports
 
-import "github.com/q9labs/chalk/apps/api/internal/utilities"
+import "github.com/q9labs/chalk/platform/utilities"
 
 // Outcome is the closed set of terminal submission results. No input becomes a label.
 type Outcome uint8

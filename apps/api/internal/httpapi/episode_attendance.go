@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/q9labs/chalk/platform/httpcontract"
 )
 
 type attendanceParticipantResponse struct {
@@ -42,7 +44,7 @@ func getEpisodeAttendanceEndpoint(service EpisodeLifecycleService, authorizer Te
 			})
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Auth(httpcontract.APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "EpisodeAttendance", episodeAttendanceResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorEpisodeNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }

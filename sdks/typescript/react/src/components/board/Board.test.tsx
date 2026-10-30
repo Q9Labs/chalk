@@ -5,11 +5,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support/preview-client";
 import { Board, type BoardProps } from "./Board";
-import * as CursorModule from "../../../../../../packages/whiteboard/src/react/board/BoardCursors";
+import * as CursorModule from "../../../../../../features/whiteboard/packages/canvas/src/react/board/BoardCursors";
 import { SpaceStage } from "../stage/SpaceStage";
-import * as BoardMenuModule from "../../../../../../packages/whiteboard/src/react/board/BoardMenu";
-import { BoardToastContext } from "../../../../../../packages/whiteboard/src/react/board/board-toasts";
-import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+import * as BoardMenuModule from "../../../../../../features/whiteboard/packages/canvas/src/react/board/BoardMenu";
+import { BoardToastContext } from "../../../../../../features/whiteboard/packages/canvas/src/react/board/board-toasts";
+import type { WhiteboardViewProps } from "../../../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/WhiteboardView";
 import { ChalkWhiteboardV1Client, type ChalkWhiteboardV1ClientOptions, type Capability, type ChalkWhiteboardView } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "@q9labsai/chalk-whiteboard/react";
 

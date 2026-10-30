@@ -6,7 +6,7 @@ if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
 
-mapfile -t go_files < <(find . -name '*.go' -not -path './vendor/*' | sort)
+mapfile -t go_files < <(find . ../../features/whiteboard/api ../../platform -name '*.go' -not -path './vendor/*' | sort)
 
 if ((${#go_files[@]} == 0)); then
   echo "No Go files to format."

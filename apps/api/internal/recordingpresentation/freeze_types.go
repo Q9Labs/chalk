@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const AssetManifestSchemaVersion = "recording_presentation_assets.v1"

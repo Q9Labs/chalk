@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func cleanupRecordingAdmissionFixture(ctx context.Context, pool *pgxpool.Pool, tenantID utilities.ID) error {

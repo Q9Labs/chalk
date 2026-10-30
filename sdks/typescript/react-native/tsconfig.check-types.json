@@ -3,17 +3,17 @@
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
-    "rootDir": "../../../",
+    "rootDir": "../../..",
     "types": ["node"],
     "paths": {
       "@q9labsai/chalk-client": ["../client/src/index.ts"],
       "@q9labsai/chalk-client/effect": ["../client/src/effect.ts"],
       "@q9labsai/chalk-client/invites": ["../client/src/public-invites/index.ts"],
-      "@q9labsai/chalk-whiteboard/embedded": ["../../../packages/whiteboard/src/embedded/index.ts"],
+      "@q9labsai/chalk-whiteboard/embedded": ["../../../features/whiteboard/packages/canvas/src/embedded/index.ts"],
       "@q9labsai/facehash": ["../../../packages/facehash/src/index.native.ts"],
       "@q9labsai/facehash/react-native": ["../../../packages/facehash/src/index.native.ts"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"]
+  "include": ["src/**/*", "../../../features/whiteboard/sdk/react-native/src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "../../../features/whiteboard/sdk/react-native/src/**/*.test.ts", "../../../features/whiteboard/sdk/react-native/src/**/*.test.tsx"]
 }

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type SecretProtector interface {

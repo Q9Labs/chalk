@@ -7,13 +7,14 @@ const workspaceNodeModules = path.resolve(__dirname, "../../node_modules");
 const chalkClientRoot = path.resolve(__dirname, "../../sdks/typescript/client");
 const sdkReactNativeRoot = path.resolve(__dirname, "../../sdks/typescript/react-native");
 const facehashRoot = path.resolve(__dirname, "../../packages/facehash");
-const whiteboardRoot = path.resolve(__dirname, "../../packages/whiteboard");
+const whiteboardFeatureRoot = path.resolve(__dirname, "../../features/whiteboard");
+const whiteboardRoot = path.join(whiteboardFeatureRoot, "packages/canvas");
 const sdkNodeModules = path.resolve(__dirname, "../../sdks/typescript/react-native/node_modules");
 const escapePathForRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Keep Metro focused on the app and the workspace packages it imports.
 // Watching the entire monorepo makes cold iOS development bundles unnecessarily slow.
-config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardRoot];
+config.watchFolders = [workspaceNodeModules, chalkClientRoot, sdkReactNativeRoot, facehashRoot, whiteboardFeatureRoot];
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 // Native modules must load once. pnpm links the SDK its own copies of its peers, so Metro skips
 // those and resolves every one from the app.

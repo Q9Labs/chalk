@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { encodeEmbeddedWhiteboardMessage } from "@q9labsai/chalk-whiteboard/embedded";
 import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { EXCALIDRAW_ASSET_ROOT, MATHJAX_ASSET_ROOT } from "../lib/whiteboard-asset-versions";
+import { EXCALIDRAW_ASSET_ROOT, MATHJAX_ASSET_ROOT } from "../../../../features/whiteboard/web/whiteboard-asset-versions";
 import { startCallHarness } from "./browser-harness";
 
 let origin: string;
@@ -14,7 +14,7 @@ let stop: (() => Promise<void>) | undefined;
 let browser: Browser;
 
 beforeAll(async () => {
-  await promisify(execFile)(process.execPath, [resolve(import.meta.dirname, "../../../../packages/whiteboard/scripts/build-embedded.mjs")]);
+  await promisify(execFile)(process.execPath, [resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/scripts/build-embedded.mjs")]);
   // Each browser suite owns its harness and cleanup independently.
   // fallow-ignore-next-line code-duplication
   ({ origin, stop } = await startCallHarness(Number(process.env.CHALK_CALL_HARNESS_PORT ?? 0)));
@@ -74,8 +74,8 @@ it("loads call, board, sticky note, text and math assets from our origin", async
     fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, status: font.status })));
     if (process.env.ASSET_PROOF_DIR) await page.screenshot({ path: resolve(process.env.ASSET_PROOF_DIR, "board.png") });
     await page.keyboard.press("Escape");
-    const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/react/mathjax-renderer.ts")}`;
-    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
+    const mathModule = `/@fs/${resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/src/react/mathjax-renderer.ts")}`;
+    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/src/assets.ts")}`;
     await page.addScriptTag({
       type: "module",
       content: `import { renderLatexToSvg } from ${JSON.stringify(mathModule)};
@@ -126,8 +126,8 @@ it("keeps SVG export on our origin when a local font is missing", async () => {
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     await page.goto(`${origin}/asset-font-probe`);
-    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/src/assets.ts")}`;
-    const excalidrawModule = `/@fs/${resolve(import.meta.dirname, "../../../../packages/whiteboard/tests/font-export.fixture.ts")}`;
+    const assetsModule = `/@fs/${resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/src/assets.ts")}`;
+    const excalidrawModule = `/@fs/${resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/tests/font-export.fixture.ts")}`;
     await page.addScriptTag({
       type: "module",
       content: `import { configureWhiteboardAssets } from ${JSON.stringify(assetsModule)};
@@ -166,7 +166,7 @@ it("loads the embedded renderer entry with local fonts and no CDN requests", asy
     const page = await context.newPage();
     page.on("console", (message) => messages.push(message.text()));
     page.on("pageerror", (error) => failures.push(error.message));
-    const url = pathToFileURL(resolve(import.meta.dirname, "../../../../packages/whiteboard/dist/embedded/chalk-whiteboard/index.html"));
+    const url = pathToFileURL(resolve(import.meta.dirname, "../../../../features/whiteboard/packages/canvas/dist/embedded/chalk-whiteboard/index.html"));
     url.searchParams.set("journeyId", "assets-test");
     url.searchParams.set("rendererGeneration", "assets-generation");
     await page.goto(url.href);

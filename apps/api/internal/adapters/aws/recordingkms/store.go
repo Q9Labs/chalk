@@ -11,7 +11,6 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func (r EpisodeLifecycleRepository) checkLiveEpisodeLimit(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID) error {

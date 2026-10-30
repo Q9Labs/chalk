@@ -298,28 +298,6 @@ defmodule ChalkSync.Retention.SQL do
     """
   end
 
-  def delete_whiteboard_operation_receipts,
-    do: delete_rows("sync_whiteboard_operation_receipts")
-
-  def delete_whiteboard_permissions, do: delete_rows("sync_whiteboard_permissions")
-  def delete_whiteboard_draw_policies, do: delete_rows("sync_whiteboard_draw_policies")
-
-  def delete_whiteboard_draw_policy_receipts,
-    do: delete_rows("sync_whiteboard_draw_policy_receipts")
-
-  def delete_whiteboard_elements, do: delete_rows("sync_whiteboard_elements")
-
-  def delete_whiteboard_scenes do
-    """
-    with deleted as (
-      delete from sync_whiteboard_scenes
-      where tenant_id = $1 and episode_id = $2
-      returning pg_column_size(sync_whiteboard_scenes)::bigint as encoded_bytes
-    )
-    select count(*)::bigint, coalesce(sum(encoded_bytes), 0)::bigint from deleted
-    """
-  end
-
   def delete_terminal_external_operations do
     """
     with deleted as (

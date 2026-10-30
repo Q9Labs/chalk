@@ -2,13 +2,14 @@ package httpapi
 
 import (
 	"context"
+	"net/http"
+	"testing"
+
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"net/http"
-	"testing"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type renderSettingMembership struct{ role memberships.Role }

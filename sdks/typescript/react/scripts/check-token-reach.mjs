@@ -7,6 +7,7 @@ import { colorSource, literalColorPattern, namedColorMatches } from "../../../..
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const componentRoot = resolve(scriptDir, "../src/components");
+const whiteboardComponents = resolve(scriptDir, "../../../../features/whiteboard/sdk/react/src/components");
 const baselinePath = join(scriptDir, "token-reach-baseline.json");
 const patterns = [
   ["literal", literalColorPattern],
@@ -21,8 +22,10 @@ const patterns = [
 export async function findTokenViolations(root = componentRoot, approvedExceptions = defaultExceptions) {
   const violations = [];
   const seen = new Set();
-  for (const file of await sourceFiles(root)) {
-    const sourcePath = relative(root, file).replaceAll("\\", "/");
+  const roots = root === componentRoot ? [root, whiteboardComponents] : [root];
+  for (const file of (await Promise.all(roots.map(sourceFiles))).flat()) {
+    // Keep the original component-relative keys for existing exceptions/baselines.
+    const sourcePath = relative(file.startsWith(`${whiteboardComponents}/`) ? whiteboardComponents : root, file).replaceAll("\\", "/");
     seen.add(sourcePath);
     const text = withoutExceptions(sourcePath, colorSource(await readFile(file, "utf8"), file), approvedExceptions);
     const withoutClosedTokens = text.replace(/(?:bg|text|border(?:-[xysetblr])?|ring(?:-offset)?|fill|stroke|outline|shadow|decoration|divide|from|via|to|accent|caret)-(?:\[var\(--chalk-[a-z-]+\)\]|\(--chalk-[a-z-]+\))/giu, (match) => " ".repeat(match.length));

@@ -27,8 +27,10 @@ test("React Native token check catches raw colors while allowing theme tokens an
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "src"));
   const component = join(root, "src", "example.tsx");
+  const featureRoot = join(root, "feature-src");
+  await mkdir(featureRoot);
   const scanner = resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs");
-  const run = () => spawnSync(process.execPath, [scanner], { cwd: root, encoding: "utf8" });
+  const run = () => spawnSync(process.execPath, [scanner, join(root, "src"), featureRoot], { cwd: root, encoding: "utf8" });
   await writeFile(component, 'const style = { color: tokens.text, backgroundColor: "hsl(1, 2%, 3%)" };\nconst icon = <Icon fill="red" />;\n');
   const bad = run();
   assert.equal(bad.status, 1);
@@ -36,6 +38,10 @@ test("React Native token check catches raw colors while allowing theme tokens an
   assert.match(bad.stderr, /fill="red"/u);
   await writeFile(component, 'const style = { color: tokens.text };\nconst icon = <Icon fill="currentColor" stroke="none" />;\n');
   assert.equal(run().status, 0);
+  await writeFile(join(featureRoot, "whiteboard.tsx"), 'const style = { color: "hotpink" };\n');
+  const external = run();
+  assert.equal(external.status, 1);
+  assert.match(external.stderr, /whiteboard.tsx.*hotpink/u);
 });
 
 async function fixture(t, files) {
@@ -111,7 +117,7 @@ const style = { "backgroundColor": "oklch(50% .2 30)", tintColor: "rebeccapurple
 const icon = <Icon fill={"navy"} stroke="currentColor" />;
 `,
   });
-  const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs")], { cwd: root, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs"), join(root, "src")], { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /oklch\(/u);
   assert.match(result.stderr, /rebeccapurple/u);
@@ -121,6 +127,6 @@ const icon = <Icon fill={"navy"} stroke="currentColor" />;
 
 test("Native permits token-valued identifiers whose names are CSS colors", async (t) => {
   const root = await fixture(t, { "src/example.tsx": "const red = tokens.danger; const style = { color: red, backgroundColor: navy }; const icon = <Icon fill={blue} />;" });
-  const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs")], { cwd: root, encoding: "utf8" });
+  const result = spawnSync(process.execPath, [resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs"), join(root, "src")], { cwd: root, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
 });

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 func TestResponseCollectionsEncodeEmptyArrays(t *testing.T) {

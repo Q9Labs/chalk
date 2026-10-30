@@ -12,8 +12,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/synctokens"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type ParticipantMediaIssuer interface {
@@ -270,7 +271,7 @@ func issueAccessGrantEndpoint(
 			return response, nil
 		},
 	).
-		Auth(APIAuthSessionOrBearer).
+		Auth(httpcontract.APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(accessGrantParameters()...).
 		RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).
@@ -305,8 +306,8 @@ func accessGrantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, u
 	return tenantID, spaceID, episodeID, participantID, err
 }
 
-func accessGrantParameters() []APIParameterContract {
-	return []APIParameterContract{
+func accessGrantParameters() []httpcontract.APIParameterContract {
+	return []httpcontract.APIParameterContract{
 		{Name: "tenant_id", In: "path", Type: "string", Required: true},
 		{Name: "space_id", In: "path", Type: "string", Required: true},
 		{Name: "episode_id", In: "path", Type: "string", Required: true},

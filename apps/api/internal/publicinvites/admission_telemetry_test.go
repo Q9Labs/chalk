@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -14,8 +15,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type admissionLogExporter struct {

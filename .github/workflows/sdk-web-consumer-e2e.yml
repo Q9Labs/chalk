@@ -3,26 +3,34 @@ name: Packed web SDK consumer
 on:
   pull_request:
     paths:
+      - features/whiteboard/**
+      - platform/**
+      - go.mod
+      - go.sum
       - ".github/actions/setup-playwright/**"
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
       - "packages/facehash/**"
       - "packages/recording-presentation/**"
       - "packages/ui/**"
-      - "packages/whiteboard/**"
+      - "features/whiteboard/packages/canvas/**"
       - "sdks/typescript/client/**"
       - "sdks/typescript/react/**"
       - "tools/sdk-web-consumer-e2e/**"
   push:
     branches: [main, master]
     paths:
+      - features/whiteboard/**
+      - platform/**
+      - go.mod
+      - go.sum
       - ".github/actions/setup-playwright/**"
       - ".github/workflows/sdk-web-consumer-e2e.yml"
       - "packages/assets/**"
       - "packages/facehash/**"
       - "packages/recording-presentation/**"
       - "packages/ui/**"
-      - "packages/whiteboard/**"
+      - "features/whiteboard/packages/canvas/**"
       - "sdks/typescript/client/**"
       - "sdks/typescript/react/**"
       - "tools/sdk-web-consumer-e2e/**"

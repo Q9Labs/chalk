@@ -4,15 +4,18 @@ FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /src
-COPY --from=api_source . ./
+COPY --from=api_source go.mod go.sum ./
+COPY --from=api_source apps/api ./apps/api
+COPY --from=api_source features/whiteboard/api ./features/whiteboard/api
+COPY --from=api_source platform ./platform
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
-    go build -trimpath -ldflags='-s -w' -o /out/recorder-fleet-controller ./cmd/recorder-fleet-controller
+    go build -trimpath -ldflags='-s -w' -o /out/recorder-fleet-controller ./apps/api/cmd/recorder-fleet-controller
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
-    go build -trimpath -ldflags='-s -w' -o /out/recorder-fleet-issuer ./cmd/recorder-fleet-issuer
+    go build -trimpath -ldflags='-s -w' -o /out/recorder-fleet-issuer ./apps/api/cmd/recorder-fleet-issuer
 FROM scratch
 ARG RELEASE_ID
 ARG SOURCE_REVISION

@@ -2,10 +2,11 @@ package postgres
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"os"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func accountTenantIntegrationPool(t *testing.T) *pgxpool.Pool {

@@ -13,7 +13,7 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestPacedAudioVideoCaptureAndVideoPLI(t *testing.T) {

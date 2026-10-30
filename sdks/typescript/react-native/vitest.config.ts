@@ -1,12 +1,15 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 export default defineConfig({
+  test: { include: ["src/**/*.test.{ts,tsx}", "test/**/*.test.{ts,tsx}", "../../../features/whiteboard/sdk/react-native/src/**/*.test.{ts,tsx}"] },
   resolve: {
     alias: [
+      { find: /^react-native$/, replacement: fileURLToPath(import.meta.resolve("react-native")) },
+      { find: /^@cloudflare\/react-native-webrtc$/, replacement: fileURLToPath(import.meta.resolve("@cloudflare/react-native-webrtc")) },
       { find: "@q9labsai/chalk-client/effect", replacement: fileURLToPath(new URL("../client/src/effect.ts", import.meta.url)) },
       { find: "@q9labsai/chalk-client/invites", replacement: fileURLToPath(new URL("../client/src/public-invites/index.ts", import.meta.url)) },
       { find: "@q9labsai/chalk-client", replacement: fileURLToPath(new URL("../client/src/index.ts", import.meta.url)) },
-      { find: "@q9labsai/chalk-whiteboard/embedded", replacement: fileURLToPath(new URL("../../../packages/whiteboard/src/embedded/index.ts", import.meta.url)) },
+      { find: "@q9labsai/chalk-whiteboard/embedded", replacement: fileURLToPath(new URL("../../../features/whiteboard/packages/canvas/src/embedded/index.ts", import.meta.url)) },
       { find: "expo-crypto", replacement: fileURLToPath(new URL("./test/expo-crypto.ts", import.meta.url)) },
       { find: "@q9labsai/facehash/react-native", replacement: fileURLToPath(new URL("../../../packages/facehash/src/index.native.ts", import.meta.url)) },
     ],

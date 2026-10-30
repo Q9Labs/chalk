@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/dist
+**/_build
+**/deps
+**/.artifacts
+**/coverage
+**/.private
+**/.logs

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/recordingkeys"
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
+	"github.com/q9labs/chalk/platform/objectstorage"
 )
 
 const MaxRecordingObjectUploadBytes = 24 << 20

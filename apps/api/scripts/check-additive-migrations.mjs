@@ -2,7 +2,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const migrationPath = "apps/api/db/migrations";
+const migrationPaths = ["apps/api/db/migrations", "features/whiteboard/api/db/migrations"];
 const marker = /^--\s*chalk:removed-in\s+#\d+\s*$/;
 
 // Keep comments separate from SQL, including inside PostgreSQL dollar-quoted bodies.
@@ -87,7 +87,9 @@ try {
     git(["fetch", "--no-tags", ...(shallow ? ["--unshallow"] : []), "origin", "master:refs/remotes/origin/master"]);
   }
   const base = git(["merge-base", baseRef, "HEAD"]).trim();
-  const files = git(["diff", "--name-only", "--diff-filter=A", "--no-renames", "-z", base, "--", migrationPath])
+  // Git's rename detection identifies byte-identical historical migrations as moves,
+  // so relocating one does not incorrectly reclassify it as new destructive SQL.
+  const files = git(["diff", "--name-only", "--diff-filter=A", "--find-renames=100%", "-z", base, "--", ...migrationPaths])
     .split("\0")
     .filter((file) => file.endsWith(".sql"));
   let failures = 0;

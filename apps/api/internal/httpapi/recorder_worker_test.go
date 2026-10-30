@@ -20,9 +20,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpresentation"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	"github.com/q9labs/chalk/apps/api/internal/workerresources"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 const (
@@ -297,7 +298,7 @@ func TestRecorderWorkerCapturePlanWaitErrorResponsesAndLogs(t *testing.T) {
 					t.Fatalf("expected empty response, got %s", response.Body.String())
 				}
 			} else {
-				var result struct{ Error APIError }
+				var result struct{ Error httpcontract.APIError }
 				if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil || result.Error.Code != test.code {
 					t.Fatalf("error response = %s, decode error = %v", response.Body.String(), err)
 				}

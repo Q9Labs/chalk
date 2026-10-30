@@ -13,18 +13,19 @@ RUN CGO_ENABLED=0 GOARCH=$TARGETARCH GOOS=$TARGETOS \
 
 FROM --platform=$TARGETPLATFORM ${ELIXIR_IMAGE} AS build
 ENV MIX_ENV=prod
-WORKDIR /src
+WORKDIR /src/apps/sync
 
 COPY --from=healthcheck /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
 RUN mix local.hex --force && mix local.rebar --force
-COPY --from=sync_source mix.exs mix.lock ./
+COPY --from=sync_source apps/sync/mix.exs apps/sync/mix.lock ./
 RUN mix deps.get --only prod && mix deps.compile
 
-COPY --from=sync_source config ./config
-COPY --from=sync_source lib ./lib
+COPY --from=sync_source apps/sync/config ./config
+COPY --from=sync_source apps/sync/lib ./lib
+COPY --from=sync_source features/whiteboard/sync /src/features/whiteboard/sync
 RUN mix compile --warnings-as-errors && \
     mix release --path /out/chalk_sync
 

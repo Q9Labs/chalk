@@ -11,7 +11,7 @@ const sourceLanguages = [
   ["ts", "TypeScript"],
   ["tsx", "Tsx"],
 ];
-const appSources = ["apps/**/src/**", "packages/**/src/**", "sdks/typescript/**/src/**"];
+const appSources = ["apps/**/src/**", "packages/**/src/**", "sdks/typescript/**/src/**", "features/**/src/**", "features/*/web/**", "platform/**/*.ts"];
 const tests = ["**/*.test.*", "**/*.spec.*"];
 const pattern = (value) => ({ pattern: value });
 const anyPattern = (...values) => ({ any: values.map(pattern) });
@@ -47,7 +47,7 @@ addSourceRule(
       },
     ],
   },
-  { files: ["sdks/typescript/react/**", "sdks/typescript/react-native/**"], ignores: [...tests, "**/__tests__/**", "**/test/**", "**/tests/**", "**/dist/**", "**/node_modules/**"] },
+  { files: ["sdks/typescript/react/**", "sdks/typescript/react-native/**", "features/whiteboard/sdk/react/**", "features/whiteboard/sdk/react-native/**"], ignores: [...tests, "**/__tests__/**", "**/test/**", "**/tests/**", "**/dist/**", "**/node_modules/**"] },
 );
 
 const dynamicCodeExclusions = [...tests, "**/__tests__/**", "**/test/**", "**/dist/**", "**/coverage/**", "**/node_modules/**"];
@@ -109,7 +109,7 @@ addSourceRule(
     ],
   },
   {
-    files: ["packages/assets/src/**", "sdks/typescript/client/src/**", "sdks/typescript/react/src/**", "sdks/typescript/react-native/src/**", "packages/whiteboard/src/**"],
+    files: ["packages/assets/src/**", "sdks/typescript/client/src/**", "sdks/typescript/react/src/**", "sdks/typescript/react-native/src/**", "features/whiteboard/packages/canvas/src/**", "features/whiteboard/sdk/**/src/**"],
   },
 );
 

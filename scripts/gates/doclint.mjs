@@ -60,7 +60,7 @@ function localExists(file, target, repoPath = true) {
   }
   if (!repoPath) return existsSync(path.resolve(root, path.dirname(file), clean));
   let owner = path.dirname(file);
-  while (owner !== "." && !existsSync(path.join(root, owner, "package.json")) && !existsSync(path.join(root, owner, "go.mod")) && !existsSync(path.join(root, owner, "mix.exs"))) owner = path.dirname(owner);
+  while (owner !== "." && !/^apps\/[^/]+$/.test(owner) && !existsSync(path.join(root, owner, "package.json")) && !existsSync(path.join(root, owner, "go.mod")) && !existsSync(path.join(root, owner, "mix.exs"))) owner = path.dirname(owner);
   return [path.dirname(file), owner, "."].some((base) => existsSync(path.resolve(root, base, clean)));
 }
 function isRepoPath(value) {

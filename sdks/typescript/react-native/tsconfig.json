@@ -2,12 +2,12 @@
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../../..",
     "declaration": true,
     "declarationMap": false,
     "emitDeclarationOnly": true,
     "noEmit": false,
-    "composite": true,
+    "composite": false,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "paths": {
@@ -18,7 +18,11 @@
       "@q9labsai/facehash/react-native": ["../../../packages/facehash/src/index.native.ts"]
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
-  "references": [{ "path": "../../../packages/facehash" }]
+  "include": ["src/**/*", "../../../features/whiteboard/sdk/react-native/src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "../../../features/whiteboard/sdk/react-native/src/**/*.test.ts", "../../../features/whiteboard/sdk/react-native/src/**/*.test.tsx"],
+  "references": [
+    {
+      "path": "../../../packages/facehash"
+    }
+  ]
 }

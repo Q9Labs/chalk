@@ -2,9 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/platform/ratelimit"
 )
 
 func TestEpisodeHistoryReadsDoNotExhaustMutationBudget(t *testing.T) {

@@ -6,9 +6,11 @@ Docs explain product intent, domain decisions, and operational judgment; verify 
 
 Put shared behavior in packages first, then wire it into apps. Don't fix SDK behavior only in a demo. This repo is public: keep production identifiers, customer details, private runbooks, and raw debug artifacts out of Git.
 
+See [feature layout](docs/features.md) before adding a cross-language feature.
+
 ## Architecture
 
-- The Go API keeps domain logic and public `/v1` routes under `apps/api/internal`; operational routes such as `/healthz` stay unversioned. Keep media and sync providers behind their ports and adapters. For API changes, use the [Go conventions](apps/api/docs/code-standards.md), [route workflow](apps/api/docs/route-workflow.md), and [database workflow](apps/api/docs/database-workflow.md) as relevant. Database removals must keep the previous release runnable.
+- The Go API keeps domain logic and public `/v1` routes under `apps/api/internal` and feature-owned code under `features/whiteboard/api`; operational routes such as `/healthz` stay unversioned. Keep media and sync providers behind their ports and adapters. For API changes, use the [Go conventions](apps/api/docs/code-standards.md), [route workflow](apps/api/docs/route-workflow.md), and [database workflow](apps/api/docs/database-workflow.md) as relevant. Database removals must keep the previous release runnable.
 - The Elixir Sync server uses Postgres as the durable authority; local coordinators, queues, presence, and SDK replicas are disposable. Preserve the tenant-and-Episode authority and transaction boundaries, bound retained work and data, and treat socket loss as presence rather than a durable lifecycle event. Protocol v1 is the production surface. Read the [Sync README](apps/sync/README.md) before changing its protocol, lifecycle, or deployment behavior.
 - After changing a contract, route, migration, or other generator input, run `pnpm run regen`. Use `pnpm run check:generated` to find stale output. See [contract codegen](docs/contract-codegen.md).
 - For observability or service-monitoring changes, follow [observability](docs/observability.md). Preserve journey and trace context, keep sensitive data out of telemetry, and update the journey ledger and observability proof when a user-visible lifecycle changes.

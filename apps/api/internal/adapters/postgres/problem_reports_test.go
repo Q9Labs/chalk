@@ -3,9 +3,10 @@ package postgres
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
-	"testing"
 )
 
 func TestReportJourneyDatabaseFailures(t *testing.T) {

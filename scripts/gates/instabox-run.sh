@@ -19,9 +19,12 @@ sudo mount --bind "$scratch" /tmp
 trap 'sudo umount /tmp && rm -rf -- "$scratch"' EXIT
 export TMPDIR=/tmp
 export GOTOOLCHAIN=auto
-if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null; then
+# Node's automatic heap limit is 2 GB on this 8-GB snapshot; declaration
+# bundling needs more. Gate lanes/builds remain single-worker.
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
+if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null || ! command -v psql >/dev/null; then
   sudo apt-get update -qq
-  sudo apt-get install -y -qq ruby lsof
+  sudo apt-get install -y -qq ruby lsof postgresql-client
 fi
 pnpm install --frozen-lockfile
 if ((browser)); then

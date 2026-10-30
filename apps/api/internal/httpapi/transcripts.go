@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type RecordingObjectService interface {
@@ -60,8 +61,8 @@ func tenantTranscriptIDsRequest(r *http.Request) (utilities.ID, utilities.ID, er
 	return tenantID, transcriptID, nil
 }
 
-func transcriptReadErrors(extra ...APIError) []APIError {
-	return append([]APIError{
+func transcriptReadErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,
 		apiErrorServiceUnavailable,
@@ -70,8 +71,8 @@ func transcriptReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func transcriptWriteErrors(extra ...APIError) []APIError {
-	return append([]APIError{
+func transcriptWriteErrors(extra ...httpcontract.APIError) []httpcontract.APIError {
+	return append([]httpcontract.APIError{
 		apiErrorUnauthenticated,
 		apiErrorForbidden,
 		apiErrorServiceUnavailable,

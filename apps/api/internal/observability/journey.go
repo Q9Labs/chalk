@@ -5,12 +5,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type journeyContextKey struct{}

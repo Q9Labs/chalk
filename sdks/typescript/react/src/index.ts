@@ -18,8 +18,8 @@ export type {
   RecordingSourceStatus,
   RecordingTranscriptStatus,
 } from "./components/recording-history/RecordingHistoryPanel";
-export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "./components/whiteboard-view/RecordingWhiteboardView";
-export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "./components/whiteboard-view/RecordingWhiteboardView";
+export { RecordingWhiteboardView, loadRecordingWhiteboardFiles, parseRecordingWhiteboardStateV1, recordingWhiteboardBinaryFile, recordingWhiteboardFileAssetId, recordingWhiteboardFileIds } from "../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/RecordingWhiteboardView";
+export type { RecordingWhiteboardBinaryFileInput, RecordingWhiteboardFileReference, RecordingWhiteboardFileResolver, RecordingWhiteboardStateV1, RecordingWhiteboardViewProps } from "../../../../features/whiteboard/sdk/react/src/components/whiteboard-view/RecordingWhiteboardView";
 export { Logo } from "./components/logo/Logo";
 export type { LogoProps, LogoVariant } from "./components/logo/Logo";
 export type { ChalkTheme, ChalkThemeTokens } from "./theme";

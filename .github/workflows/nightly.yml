@@ -36,8 +36,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Pin green master and select the current release baseline
         id: plan
         env:

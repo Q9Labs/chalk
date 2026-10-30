@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type shutdownReadinessControl struct {

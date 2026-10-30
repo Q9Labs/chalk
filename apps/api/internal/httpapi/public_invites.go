@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -18,7 +16,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -26,13 +25,13 @@ import (
 )
 
 var (
-	apiErrorPublicInviteUnavailable  = APIError{Status: http.StatusNotFound, Code: "space_public_invite.unavailable", Message: "Public Space invite is unavailable"}
-	apiErrorAdmissionRequestNotFound = APIError{Status: http.StatusNotFound, Code: "admission_request.not_found", Message: "Admission request not found"}
-	apiErrorArrivalUnavailable       = APIError{Status: http.StatusNotFound, Code: "arrival.unavailable", Message: "Public Space arrival is unavailable"}
-	apiErrorInvalidArrivalHandle     = APIError{Status: http.StatusBadRequest, Code: "arrival.invalid_handle", Message: "Invalid arrival handle"}
-	apiErrorInvalidPublicInviteToken = APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid public invite token"}
-	apiErrorMediaProofExpired        = APIError{Status: http.StatusConflict, Code: "access.media_proof_expired", Message: "Media proof expired; replace the media connection"}
-	apiErrorMediaProofRejected       = APIError{Status: http.StatusUnauthorized, Code: "access.media_proof_rejected", Message: "Media proof was rejected"}
+	apiErrorPublicInviteUnavailable  = httpcontract.APIError{Status: http.StatusNotFound, Code: "space_public_invite.unavailable", Message: "Public Space invite is unavailable"}
+	apiErrorAdmissionRequestNotFound = httpcontract.APIError{Status: http.StatusNotFound, Code: "admission_request.not_found", Message: "Admission request not found"}
+	apiErrorArrivalUnavailable       = httpcontract.APIError{Status: http.StatusNotFound, Code: "arrival.unavailable", Message: "Public Space arrival is unavailable"}
+	apiErrorInvalidArrivalHandle     = httpcontract.APIError{Status: http.StatusBadRequest, Code: "arrival.invalid_handle", Message: "Invalid arrival handle"}
+	apiErrorInvalidPublicInviteToken = httpcontract.APIError{Status: http.StatusBadRequest, Code: "request.invalid", Message: "Invalid public invite token"}
+	apiErrorMediaProofExpired        = httpcontract.APIError{Status: http.StatusConflict, Code: "access.media_proof_expired", Message: "Media proof expired; replace the media connection"}
+	apiErrorMediaProofRejected       = httpcontract.APIError{Status: http.StatusUnauthorized, Code: "access.media_proof_rejected", Message: "Media proof was rejected"}
 )
 
 var (
@@ -320,7 +319,7 @@ func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer
 		}
 		return newPublicAdmissionRequestPageResponse(page), nil
 	}).UserAuth().RateLimit(authenticatedReadRateLimit).
-		Parameters(tenantIDParameter(), spaceIDParameter(), APIParameterContract{Name: "state", In: "query", Type: "string", Required: false, Enum: []string{"pending"}}).
+		Parameters(tenantIDParameter(), spaceIDParameter(), httpcontract.APIParameterContract{Name: "state", In: "query", Type: "string", Required: false, Enum: []string{"pending"}}).
 		Responds(http.StatusOK, "PublicAdmissionRequestPage", publicAdmissionRequestPageResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_list"))
 }
@@ -399,7 +398,7 @@ func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(idempotencyKeyParameter(), APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: false}).RequestBody("SpacePublicInviteArrivalRequest", struct {
+		Parameters(idempotencyKeyParameter(), httpcontract.APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: false}).RequestBody("SpacePublicInviteArrivalRequest", struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
 	}{}).Responds(http.StatusCreated, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
@@ -421,7 +420,7 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
 	}).RateLimit(authenticatedReadRateLimit).
-		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
+		Parameters(httpcontract.APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.status"))
 }
 
@@ -436,7 +435,7 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 		}
 		return newPublicAccessGrantResponse(grant), nil
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
+		Parameters(httpcontract.APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
 		MediaProof             string `json:"media_proof"`
 		ReplaceMediaConnection bool   `json:"replace_media_connection"`
 	}{}).Responds(http.StatusCreated, "AccessGrant", publicAccessGrantResponse{}).
@@ -454,7 +453,7 @@ func leavePublicInviteArrivalEndpoint(service PublicInviteService, origin func(h
 		}
 		return struct{}{}, service.Leave(ctx, publicinvites.PublicInviteLeaveInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native})
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RespondsNoBody(http.StatusNoContent).WriteWith(writePublicLeave).
+		Parameters(httpcontract.APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RespondsNoBody(http.StatusNoContent).WriteWith(writePublicLeave).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(publicInviteTelemetry("public.leave"))
 	if origin != nil {
 		endpoint = endpoint.Middleware(origin)
@@ -624,19 +623,19 @@ func decodePublicInviteLeaveRequest(r *http.Request) (publicInviteLeaveRequest, 
 	return request, nil
 }
 
-func publicInviteManagementErrors() []APIError {
-	return []APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidTenantID, apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorAdmissionRequestNotFound, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorRateLimited, apiErrorInternal}
+func publicInviteManagementErrors() []httpcontract.APIError {
+	return []httpcontract.APIError{apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidRequest, apiErrorInvalidTenantID, apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorAdmissionRequestNotFound, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorRateLimited, apiErrorInternal}
 }
 
-func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+func publicInvitePublicErrors() []httpcontract.APIError {
+	return []httpcontract.APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
-func publicInviteRefreshErrors() []APIError {
+func publicInviteRefreshErrors() []httpcontract.APIError {
 	return append(publicInvitePublicErrors(), apiErrorMediaProofExpired, apiErrorMediaProofRejected)
 }
 
-func publicInviteEndpointAPIError(err error) (APIError, bool) {
+func publicInviteEndpointAPIError(err error) (httpcontract.APIError, bool) {
 	if errors.Is(err, tenantlimits.ErrLiveEpisodeLimitReached) {
 		return apiErrorTenantLiveEpisodeLimit, true
 	}
@@ -890,8 +889,8 @@ func setGuestCookie(w http.ResponseWriter, arrivalHandle, credential string) {
 	http.SetCookie(w, &http.Cookie{Name: publicGuestCookiePrefix + arrivalHandle, Value: credential, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
 }
 
-func requestHandleParameter() APIParameterContract {
-	return APIParameterContract{Name: "request_handle", In: "path", Type: "string", Required: true, Pattern: `^[A-Za-z0-9_-]{16,128}$`, MinLength: 16, MaxLength: 128}
+func requestHandleParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "request_handle", In: "path", Type: "string", Required: true, Pattern: `^[A-Za-z0-9_-]{16,128}$`, MinLength: 16, MaxLength: 128}
 }
 
 func newPublicInviteResponse(managed publicinvites.ManagedInvite) publicInviteResponse {

@@ -10,7 +10,8 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
-	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/ratelimit"
 )
 
 type ProblemReportService interface {
@@ -29,8 +30,8 @@ type problemReportSent struct {
 const reportBodyLimitBytes = 12*(problemreports.MaxDescriptionCodePoints+problemreports.MaxDiagnosticsCodePoints) + 1024
 
 var (
-	apiErrorReportsUnavailable = APIError{Status: http.StatusServiceUnavailable, Code: "reports.unavailable", Message: "Problem reports are unavailable"}
-	apiErrorReportDelivery     = APIError{Status: http.StatusBadGateway, Code: "reports.delivery_failed", Message: "Your report could not be sent. Try again"}
+	apiErrorReportsUnavailable = httpcontract.APIError{Status: http.StatusServiceUnavailable, Code: "reports.unavailable", Message: "Problem reports are unavailable"}
+	apiErrorReportDelivery     = httpcontract.APIError{Status: http.StatusBadGateway, Code: "reports.delivery_failed", Message: "Your report could not be sent. Try again"}
 	reportParticipantLimit     = ratelimit.Policy{Name: "problem_reports.participant", Limit: 3, Window: time.Hour}
 	reportIPLimit              = ratelimit.Policy{Name: "problem_reports.ip", Limit: 30, Window: time.Hour}
 	reportAccountLimit         = ratelimit.Policy{Name: "problem_reports.account", Limit: 100, Window: time.Hour}
@@ -75,7 +76,7 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 
 			return problemReportSent{Sent: true}, nil
 		},
-	).Auth(APIAuthParticipantMedia).
+	).Auth(httpcontract.APIAuthParticipantMedia).
 		Parameters(tenantIDParameter()).
 		Middleware(observeReportOutcomes(), limitReportIP(limits), requireReportParticipant(verifier)).
 		RateLimit(reportParticipantLimit).
@@ -83,7 +84,7 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 		RequestBodyWithLimit("ProblemReportRequest", problemreports.Report{}, reportBodyLimitBytes).
 		Responds(http.StatusOK, "ProblemReportSent", problemReportSent{}).
 		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorInternal).
-		MapErrors(func(err error) (APIError, bool) {
+		MapErrors(func(err error) (httpcontract.APIError, bool) {
 			switch {
 			case errors.Is(err, problemreports.ErrInvalid):
 				return apiErrorInvalidRequest, true
@@ -94,13 +95,13 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 			case errors.Is(err, problemreports.ErrDelivery):
 				return apiErrorReportDelivery, true
 			default:
-				return APIError{}, false
+				return httpcontract.APIError{}, false
 			}
 		})
 	return []RouteEndpoint{availability, submit}
 }
 
-func problemReportDecodeError(err error) APIError {
+func problemReportDecodeError(err error) httpcontract.APIError {
 	var maxBytes *http.MaxBytesError
 	if errors.As(err, &maxBytes) {
 		return apiErrorPayloadTooLarge

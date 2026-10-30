@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func mountTranscriptWorkerRoutes(r chi.Router, service TranscriptWorkerService, authorizer WorkloadAuthorizer, manifests ManifestAuthority, chunks ChunkAuthority, results ResultAuthority) {

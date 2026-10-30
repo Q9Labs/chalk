@@ -4,6 +4,10 @@ name: Release contracts
 on:
   pull_request:
     paths:
+      - features/whiteboard/**
+      - platform/**
+      - go.mod
+      - go.sum
       - .github/workflows/ci.yml
       - .github/workflows/nightly.yml
       - .github/workflows/promote.yml
@@ -85,8 +89,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version-file: apps/api/go.mod
-          cache-dependency-path: apps/api/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - uses: pnpm/action-setup@v4
         with:
           version: 12.8.1

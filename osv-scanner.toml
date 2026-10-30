@@ -1,7 +1,7 @@
 [[IgnoredVulns]]
 id = "GHSA-gcqx-w48m-w2h4"
 ignoreUntil = 2026-11-28
-reason = "deepmerge 4.3.1 has no released fix (npm latest checked 2026-10-28). Every locked copy comes through @expo/config 55.0.11, used by Expo CLI, Metro/prebuild and expo-constants build scripts from apps/mobile and sdks/typescript/react-native. Its only deepmerge calls are mergeConfigModifications in build/Config.js, merging local app config and plugin options; Chalk does not import deepmerge or @expo/config in runtime code. Attacker-controlled merge inputs cannot reach these build-time calls. Revisit if runtime usage or untrusted config inputs are added, or upstream ships a fix. Evidence: https://github.com/TehShrike/deepmerge/issues/273."
+reason = "deepmerge 4.3.1 has no released fix (npm latest checked 2026-10-28). Every locked copy comes through @expo/config 55.0.11, used by Expo CLI, Metro/prebuild and expo-constants build scripts from apps/mobile, sdks/typescript/react-native, and the relocated features/whiteboard native SDK sources. Its only deepmerge calls are mergeConfigModifications in build/Config.js, merging local app config and plugin options; Chalk does not import deepmerge or @expo/config in runtime code. Attacker-controlled merge inputs cannot reach these build-time calls. Revisit if runtime usage or untrusted config inputs are added, or upstream ships a fix. Evidence: https://github.com/TehShrike/deepmerge/issues/273."
 
 [[IgnoredVulns]]
 id = "GHSA-86w9-cpqp-85rv"
@@ -34,3 +34,9 @@ reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, wh
 id = "GHSA-9qmh-m7c6-f92p"
 ignoreUntil = 2026-11-22
 reason = "toml 4.2.0 is locked only as a dependency of effect 4.0.0-beta.102, whose unstable/cli Primitive.fileParse is the sole importer. Chalk never imports effect/unstable/cli or toml, so no Chalk service, SDK or browser bundle parses TOML; the advisories are parser DoS and need attacker-supplied TOML. The fix is toml 5.0.1, a major version effect does not yet accept. Revisit when effect moves to toml 5, or if Chalk starts using effect's CLI or parsing TOML."
+
+# Follows the unchanged Go dependency set into the root module.
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-11-24
+reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. Call analysis with govulncheck -scan=symbol -show=verbose ./... on 2026-10-24 reports no vulnerable calls or imported vulnerable packages; Chalk does not import openpgp. Revisit if openpgp usage is added or OSV publishes a fix path."

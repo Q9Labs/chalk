@@ -4,7 +4,8 @@ import (
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func decodeCreateEpisodeRequest(r *http.Request) (createEpisodeEndpointRequest, error) {
@@ -121,10 +122,10 @@ func decodeSetDeadlineRequest(r *http.Request) (setDeadlineEndpointRequest, erro
 	return setDeadlineEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RequestKey: r.Header.Get(idempotencyKeyHeader), Body: body}, nil
 }
 
-func idempotencyKeyParameter() APIParameterContract {
-	return APIParameterContract{Name: idempotencyKeyHeader, In: "header", Type: "string", Required: true, Pattern: `^[A-Za-z0-9_-]+$`, MinLength: 16, MaxLength: 128}
+func idempotencyKeyParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: idempotencyKeyHeader, In: "header", Type: "string", Required: true, Pattern: `^[A-Za-z0-9_-]+$`, MinLength: 16, MaxLength: 128}
 }
 
-func participantIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "participant_id", In: "path", Type: "string", Required: true}
+func participantIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "participant_id", In: "path", Type: "string", Required: true}
 }

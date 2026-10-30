@@ -13,7 +13,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
-	"github.com/q9labs/chalk/apps/api/internal/synctokens"
+	"github.com/q9labs/chalk/platform/synctokens"
 )
 
 func TestPublicationParticipantsUseAuthenticatedReplacementBeforeRepublish(t *testing.T) {

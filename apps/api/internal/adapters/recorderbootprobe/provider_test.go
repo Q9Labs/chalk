@@ -10,8 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
-	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	"io"
 	"math/big"
 	"net/http"
@@ -21,6 +19,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 func TestEvidenceCopyDoesNotChangeSignedBootstrapInput(t *testing.T) {

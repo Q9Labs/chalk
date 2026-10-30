@@ -1,7 +1,7 @@
 package transcripts
 
 import (
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func prepareCreateInput(input *CreateInput) error {

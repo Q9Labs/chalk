@@ -32,6 +32,8 @@ const taskIds = [
 // Format is always on so documentation-only changes are still checked.
 const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
+  "features",
+  "platform",
   "apps/api",
   "apps/sync",
   "apps/recording-renderer",
@@ -87,7 +89,7 @@ const emptyScopeLane = lanes.custom({
 });
 
 export default defineGate({
-  workspaceRoots: ["apps", "infrastructure", "packages", "sdks/typescript", "tools"],
+  workspaceRoots: ["apps", "infrastructure", "packages", "sdks/typescript", "tools", "features", "platform"],
   targets: { web: ["apps/web", ...sharedTargetRoots], mobile: ["apps/mobile", ...sharedTargetRoots] },
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],

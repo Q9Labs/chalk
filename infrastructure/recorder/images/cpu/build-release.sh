@@ -19,7 +19,7 @@ while (($# > 0)); do
 done
 
 [[ "$(id -u)" == "0" ]] || { echo "build-release must run as root" >&2; exit 1; }
-[[ "$source_root" == /* && -f "$source_root/package.json" && -f "$source_root/apps/api/go.mod" ]] || usage
+[[ "$source_root" == /* && -f "$source_root/package.json" && -f "$source_root/go.mod" ]] || usage
 [[ "$output_path" == /* && ! -e "$output_path" ]] || usage
 [[ "$release_id" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] || usage
 if find "$source_root/apps/recording-renderer" -maxdepth 1 -type f -name '.env*' -print -quit | grep -q .; then

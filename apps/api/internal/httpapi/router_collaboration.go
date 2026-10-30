@@ -1,6 +1,9 @@
 package httpapi
 
-import "github.com/go-chi/chi/v5"
+import (
+	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/features/whiteboard/api"
+)
 
 func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
 	recordingEntranceEndpoint(options.RecordingEntrance, options.TenantAuthz).Mount(r, options.RateLimit)
@@ -24,6 +27,6 @@ func mountLiveParticipantRoutes(r chi.Router, options Options) {
 
 	r.Group(func(r chi.Router) {
 		mountChatAttachmentRoutes(r, options.ChatAttachments, options.ChatParticipants, options.RateLimit)
-		mountWhiteboardFileRoutes(r, options.WhiteboardFiles, options.WhiteboardParticipants, options.RateLimit)
+		FromSpec(whiteboardfiles.FileEndpoint(options.WhiteboardFiles, options.WhiteboardParticipants)).Mount(r, options.RateLimit)
 	})
 }

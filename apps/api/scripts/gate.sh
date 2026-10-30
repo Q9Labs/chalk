@@ -30,13 +30,13 @@ Checks:
   - gofmt check, non-mutating
   - go mod tidy -diff
   - go tool sqlc vet
-  - go test -vet=off ./... and lifecycle smoke test in one lane
+  - go test -vet=off ./... ../../features/whiteboard/api/... ../../platform/... and lifecycle smoke test in one lane
   - migration validation proofs in one PostgreSQL lane
-  - go vet ./..., staticcheck, and govulncheck in parallel lanes
+  - go vet ./... ../../features/whiteboard/api/... ../../platform/..., staticcheck, and govulncheck in parallel lanes
 
 Optional:
   CHALK_API_RACE=1 apps/api/scripts/gate.sh
-    Also runs: go test -race -vet=off ./...
+    Also runs: go test -race -vet=off ./... ../../features/whiteboard/api/... ../../platform/...
 
 Notes:
   This gate prepends /usr/local/go/bin when present, sets
@@ -104,12 +104,12 @@ run_lane_command() {
 }
 
 database_tests_and_lifecycle() {
-  run_lane_command "Tests" go test -vet=off ./... || return "$?"
+  run_lane_command "Tests" go test -vet=off ./... ../../features/whiteboard/api/... ../../platform/... || return "$?"
   run_lane_command "Lifecycle smoke test" ./scripts/smoke-lifecycle.mjs || return "$?"
 }
 
 run_race_tests() {
-  run "Race tests" go test -race -vet=off ./...
+  run "Race tests" go test -race -vet=off ./... ../../features/whiteboard/api/... ../../platform/...
 }
 
 database_lane_cleanup() {
@@ -213,7 +213,7 @@ printf '\n==> Format check\n'
 go_files=()
 while IFS= read -r go_file; do
   go_files[${#go_files[@]}]="${go_file}"
-done < <(find . -name '*.go' -not -path './vendor/*' | sort)
+done < <(find . ../../features/whiteboard/api ../../platform -name '*.go' -not -path './vendor/*' | sort)
 if ((${#go_files[@]} > 0)); then
   unformatted="$(gofmt -l "${go_files[@]}")"
   if [[ -n "$unformatted" ]]; then
@@ -227,9 +227,10 @@ fi
 
 run "Module tidy check" go mod tidy -diff
 run "sqlc vet" go tool sqlc vet
+run "Feature dependencies" node "${repository_root}/scripts/features/check.mjs" go
 
-start_lane "go vet" run_lane_command "go vet" go vet ./...
-start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./...
+start_lane "go vet" run_lane_command "go vet" go vet ./... ../../features/whiteboard/api/... ../../platform/...
+start_lane "Staticcheck" run_lane_command "Staticcheck" go tool staticcheck ./... ../../features/whiteboard/api/... ../../platform/...
 start_lane "Vulnerability check" run_lane_command "Vulnerability check" "${repository_root}/scripts/gates/govulncheck.sh"
 
 completed_lanes=0

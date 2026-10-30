@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestClaimAdmissionClosedDrainsBeforeReadinessRefresh(t *testing.T) {

@@ -1,0 +1,39 @@
+{
+  "name": "whiteboard",
+  "ownership": {
+    "space": "living scene and draw configuration",
+    "episode": "frozen activity and recording artifacts"
+  },
+  "public": {
+    "go": "features/whiteboard/api",
+    "typescript": "@q9labsai/chalk-whiteboard and the existing Chalk SDK exports",
+    "elixir": "ChalkSync.WhiteboardV1.Protocol and transport adapter"
+  },
+  "dependencies": {
+    "go": ["platform/objectstorage", "platform/synctokens", "platform/utilities", "platform/httpcontract"],
+    "typescript": [
+      "sdks/typescript/client",
+      "sdks/typescript/react/src/utils",
+      "sdks/typescript/react-native/src/primitives/toast",
+      "sdks/typescript/react-native/src/space-client",
+      "packages/facehash",
+      "platform/rendering",
+      "scripts/rewrite-declaration-specifiers.mjs",
+      "sdks/typescript/react/src/headless.ts",
+      "tools/contract-fixture-proof/src/emitters/elixir-layout.mjs",
+      "apps/web/scripts/prepare-vendor-store.ts"
+    ],
+    "elixir": [
+      "apps/sync/lib/chalk_sync/auth",
+      "apps/sync/lib/chalk_sync/database.ex",
+      "apps/sync/lib/chalk_sync/episodes",
+      "apps/sync/lib/chalk_sync/observability.ex",
+      "apps/sync/lib/chalk_sync/stateholder",
+      "apps/sync/lib/chalk_sync/sync_postgres.ex",
+      "apps/sync/lib/chalk_sync/transport/socket_close.ex",
+      "apps/sync/lib/chalk_sync/transport/socket_context.ex",
+      "apps/sync/lib/chalk_sync/uuid.ex"
+    ]
+  },
+  "assets": ["apps/mobile/assets/fonts", "packages/ui/src/styles/index.css", "apps/web/public/_headers"]
+}

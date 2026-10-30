@@ -5,11 +5,15 @@ name: Mobile CI
 on:
   pull_request:
     paths:
+      - features/whiteboard/**
+      - platform/**
+      - go.mod
+      - go.sum
       - apps/mobile/**
       - sdks/typescript/react-native/**
       - sdks/typescript/client/**
       - packages/facehash/**
-      - packages/whiteboard/**
+      - features/whiteboard/packages/canvas/**
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - package.json
@@ -19,11 +23,15 @@ on:
     branches:
       - master
     paths:
+      - features/whiteboard/**
+      - platform/**
+      - go.mod
+      - go.sum
       - apps/mobile/**
       - sdks/typescript/react-native/**
       - sdks/typescript/client/**
       - packages/facehash/**
-      - packages/whiteboard/**
+      - features/whiteboard/packages/canvas/**
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - package.json

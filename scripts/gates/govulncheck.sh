@@ -2,6 +2,9 @@
 # Runs govulncheck for the Go module in the current directory.
 set -euo pipefail
 
+# The root module includes the API, feature implementation and shared platform.
+cd "$(git rev-parse --show-toplevel)"
+
 if [[ -z "${GATE_VULN_BASE_REF:-}" ]]; then
   exec go tool govulncheck ./...
 fi
@@ -15,13 +18,16 @@ if node "${compare}" govulncheck "${report_directory}/head.json" >/dev/null; the
   exit 0
 fi
 
-module_path="$(git rev-parse --show-prefix)"
 base="$(git merge-base "${GATE_VULN_BASE_REF}" HEAD)"
-if ! git cat-file -e "${base}:${module_path}go.mod" 2>/dev/null; then
+if git cat-file -e "${base}:go.mod" 2>/dev/null; then
+  module_path=""
+elif git cat-file -e "${base}:apps/api/go.mod" 2>/dev/null; then
+  module_path="apps/api/"
+else
   node "${compare}" govulncheck "${report_directory}/head.json"
   exit
 fi
 mkdir "${report_directory}/base"
-git -C "$(git rev-parse --show-toplevel)" archive "${base}" ${module_path:+"${module_path}"} | tar -x -C "${report_directory}/base"
+git archive "${base}" | tar -x -C "${report_directory}/base"
 (cd "${report_directory}/base/${module_path}" && go tool govulncheck -format json ./...) > "${report_directory}/base.json"
 node "${compare}" govulncheck "${report_directory}/head.json" "${report_directory}/base.json"

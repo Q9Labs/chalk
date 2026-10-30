@@ -7,8 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type createWebhookBody struct {
@@ -261,18 +262,18 @@ func parseIfMatch(value string) (int, error) {
 	return revision, nil
 }
 
-func webhookEndpointIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "endpoint_id", In: "path", Type: "string", Required: true}
+func webhookEndpointIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "endpoint_id", In: "path", Type: "string", Required: true}
 }
-func webhookDeliveryIDParameter() APIParameterContract {
-	return APIParameterContract{Name: "delivery_id", In: "path", Type: "string", Required: true}
+func webhookDeliveryIDParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "delivery_id", In: "path", Type: "string", Required: true}
 }
-func webhookDeliveryFilterParameters() []APIParameterContract {
-	return []APIParameterContract{
+func webhookDeliveryFilterParameters() []httpcontract.APIParameterContract {
+	return []httpcontract.APIParameterContract{
 		{Name: "state", In: "query", Type: "array", ItemsType: "string", Enum: []string{"pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"}},
 		{Name: "event_type", In: "query", Type: "array", ItemsType: "string", Enum: []string{"endpoint.test", "episode.ended", "episode.started", "participant.joined", "participant.left", "recording.completed", "recording.failed", "recording.started", "space.archived", "space.created", "space.restored", "space.updated", "transcript.completed", "transcript.failed", "transcript.started"}},
 	}
 }
-func ifMatchParameter() APIParameterContract {
-	return APIParameterContract{Name: "If-Match", In: "header", Type: "string", Required: true, Pattern: `^"[1-9][0-9]*"$`}
+func ifMatchParameter() httpcontract.APIParameterContract {
+	return httpcontract.APIParameterContract{Name: "If-Match", In: "header", Type: "string", Required: true, Pattern: `^"[1-9][0-9]*"$`}
 }

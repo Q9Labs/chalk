@@ -8,9 +8,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/httpcontract"
+	"github.com/q9labs/chalk/platform/objectstorage"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 type transcriptDocumentRequest struct {
@@ -77,7 +78,7 @@ func transcriptDocumentEndpoint(service TranscriptArtifactService, objects Recor
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
-	}).Auth(APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+	}).Auth(httpcontract.APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
 }
 
 func decodeTranscriptDocumentRequest(r *http.Request) (transcriptDocumentRequest, error) {
@@ -122,7 +123,7 @@ func newTranscriptDocumentResponse(transcript transcripts.Transcript, document t
 	return response
 }
 
-func transcriptDocumentAPIError(err error) (APIError, bool) {
+func transcriptDocumentAPIError(err error) (httpcontract.APIError, bool) {
 	if apiErr, ok := transcriptArtifactAPIError(err); ok {
 		return apiErr, true
 	}
@@ -132,5 +133,5 @@ func transcriptDocumentAPIError(err error) (APIError, bool) {
 	if errors.Is(err, transcripts.ErrDocumentTooLarge) || errors.Is(err, transcripts.ErrInvalidDocument) {
 		return apiErrorInternal, true
 	}
-	return APIError{}, false
+	return httpcontract.APIError{}, false
 }

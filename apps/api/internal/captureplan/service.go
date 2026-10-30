@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // Repository is the persistence boundary for desired-state plan snapshots.

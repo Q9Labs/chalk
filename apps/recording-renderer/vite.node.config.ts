@@ -2,12 +2,15 @@ import { cp, mkdir, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const source = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
-const excalidrawRoot = dirname(createRequire(source("../../packages/whiteboard/package.json")).resolve("@excalidraw/excalidraw"));
+const excalidrawRoot = dirname(createRequire(source("../../features/whiteboard/packages/canvas/package.json")).resolve("@excalidraw/excalidraw"));
 
 export default defineConfig({
+  test: {
+    include: ["src/**/*.test.ts", "../../features/whiteboard/web/recording/**/*.test.ts"],
+  },
   build: {
     ssr: true,
     outDir: "dist/node",
@@ -30,8 +33,8 @@ export default defineConfig({
       async closeBundle() {
         const fonts = source("dist/node/fonts");
         await mkdir(join(fonts, "Figtree"), { recursive: true });
-        for (const file of await readdir(source("src/compose/font-assets"))) {
-          if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
+        for (const file of await readdir(source("../../platform/rendering/font-assets"))) {
+          if (file.endsWith(".woff2")) await cp(join(source("../../platform/rendering/font-assets"), file), join(fonts, "Figtree", file));
         }
         for (const folder of ["Excalifont", "Virgil", "Cascadia", "Nunito", "Lilita", "ComicShanns", "Liberation", "Assistant"]) {
           await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });
@@ -43,7 +46,7 @@ export default defineConfig({
     alias: {
       "@q9labsai/recording-presentation": source("../../packages/recording-presentation/src/index.ts"),
       "@q9labsai/chalk-react/headless": source("../../sdks/typescript/react/src/headless.ts"),
-      "@q9labsai/chalk-whiteboard": source("../../packages/whiteboard/src/index.ts"),
+      "@q9labsai/chalk-whiteboard": source("../../features/whiteboard/packages/canvas/src/index.ts"),
     },
     tsconfigPaths: true,
   },

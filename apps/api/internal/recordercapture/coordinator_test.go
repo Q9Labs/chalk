@@ -14,7 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 var coordinatorNow = time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)

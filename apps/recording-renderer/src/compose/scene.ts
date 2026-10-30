@@ -2,12 +2,7 @@ import { choosePrimary, DEFAULT_GRID_OPTIONS, DEFAULT_SPOTLIGHT_OPTIONS, fitGrid
 import { createRecordingPresentationCursor, type RecordingPresentationParticipantV1, type RecordingPresentationSnapshotV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
 import type { DecodedMediaIndexV1, DecodedVisualSourceV1 } from "../decoded-media.js";
 
-export interface Rect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
+import type { Rect } from "@chalk/rendering/geometry";
 
 export interface SceneParticipant {
   readonly id: string;

@@ -98,8 +98,8 @@ evidence:
 ```bash
 node scripts/recorder/source-fingerprint.mjs \
   --scope apps/api/internal/adapters/pion \
-  --scope apps/api/go.mod \
-  --scope apps/api/go.sum
+  --scope go.mod \
+  --scope go.sum
 ```
 
 ## Media evidence

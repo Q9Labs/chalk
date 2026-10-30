@@ -13,8 +13,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input episodes.CreateEpisodeInput) (episodes.Episode, error) {

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func TestConcurrentAdmissionCollectionKeepsWinningMediaBinding(t *testing.T) {

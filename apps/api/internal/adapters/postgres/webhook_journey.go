@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 func insertWebhookJourneyEvent(ctx context.Context, tx pgx.Tx, eventID, journeyID utilities.ID, sequence int64, name, state string, parentID utilities.ID, traceID, spanID string, attributes map[string]any) error {

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"

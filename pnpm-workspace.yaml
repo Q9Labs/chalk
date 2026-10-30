@@ -1,5 +1,8 @@
 packages:
   - packages/*
+  - platform/rendering
+  - features/*
+  - features/*/packages/*
   - sdks/typescript/*
   - tools/*
   - apps/transcription-dispatcher

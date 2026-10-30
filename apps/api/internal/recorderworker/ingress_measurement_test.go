@@ -28,7 +28,7 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/pion"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/platform/utilities"
 )
 
 // This opt-in harness retains headers and salted fingerprints by default.
