@@ -1869,12 +1869,24 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   defp cursor, do: %{"type" => "cursor", "x" => 1, "y" => 2}
 
+  defp test_episode_id do
+    case Process.get(:whiteboard_socket_episode_id) do
+      nil ->
+        episode_id = UUID.generate()
+        Process.put(:whiteboard_socket_episode_id, episode_id)
+        episode_id
+
+      episode_id ->
+        episode_id
+    end
+  end
+
   defp identity do
     %Identity{
       episode: %EpisodeKey{
         tenant_id: "30000000-0000-4000-8000-000000000003",
         space_id: "40000000-0000-4000-8000-000000000004",
-        episode_id: "50000000-0000-4000-8000-000000000005"
+        episode_id: test_episode_id()
       },
       participant_id: @participant_id,
       participant_generation: 1
