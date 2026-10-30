@@ -210,6 +210,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#socket?.close(1000, "client stopped");
     this.#socket = null;
     this.#phase = { phase: "stopped" };
+    this.#options.mediaPlane?.remotePublicationsChanged?.([]);
     this.#rejectEphemeral("client_stopped");
     this.#collaborationState.disconnect("client_stopped");
     this.#localPublications = [];
@@ -710,7 +711,7 @@ export class V1SyncClient implements V1CollaborationClient {
           previous.find((candidate) => mediaKey(candidate) === mediaKey(item)),
           item,
         );
-      if (!this.#mediaEnded()) this.#options.mediaPlane?.remotePublicationsChanged?.();
+      if (!this.#mediaEnded()) this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
     } else {
       this.#presence = { projectionId: frame.projection_id, sequence: 0, items: frame.items.map(presenceItem) };
       this.#presenceEventEvidence.clear();
@@ -736,7 +737,7 @@ export class V1SyncClient implements V1CollaborationClient {
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
       if (!this.#mediaEnded() && item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
-        this.#options.mediaPlane?.remotePublicationsChanged?.();
+        this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
       }
     } else {
       if (this.#acceptProjectionDuplicate(this.#presence, this.#presenceEventEvidence, frame)) return;
@@ -844,6 +845,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#commandScheduler.disconnect();
     this.#media = null;
     this.#presence = null;
+    this.#options.mediaPlane?.remotePublicationsChanged?.([]);
     this.#rejectRequests("disconnected_before_delivery");
     this.#collaborationState.disconnect("disconnected_before_delivery");
     if (!this.#started || this.#phase.phase === "terminal") return;
