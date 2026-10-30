@@ -30,7 +30,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </svg>
   );
   const trigger = (
-    <button ref={triggerRef} type="button" data-part="call-name" aria-label="Call details" className="chalk-call-name">
+    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name">
       <span dir="auto">{spaceName}</span>
       <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
         {timer}
@@ -58,7 +58,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
           <>
-            <button ref={triggerRef} type="button" data-call-link-trigger data-part="call-name" className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+            <button ref={triggerRef} type="button" data-call-link-trigger data-part="call-name" title={spaceName} className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
               <span dir="auto">{spaceName}</span>
               {chevron}
             </button>
