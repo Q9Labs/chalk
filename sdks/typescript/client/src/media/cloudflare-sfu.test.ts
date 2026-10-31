@@ -290,6 +290,44 @@ it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add wh
   }
 });
 
+it("publishes again when the registry no longer lists an enabled microphone publication", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const localAdds = () => harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const addsBefore = localAdds();
+
+    harness.transport.localPublications.delete(oldId!);
+    await harness.client.refreshRemotePublications();
+
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    expect([...harness.transport.localPublications.keys()]).not.toContain(oldId);
+    expect(localAdds()).toBe(addsBefore + 1);
+    expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("keeps a listed microphone publication when the registry lists it", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const addsBefore = harness.transport.addInputs.length;
+
+    await harness.client.refreshRemotePublications();
+
+    expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+    expect(harness.transport.addInputs).toHaveLength(addsBefore);
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
@@ -2148,7 +2186,10 @@ describe("remote publication recovery", () => {
         harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
         await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
         // The server drops the replaced connection's publications and advances its sequence.
-        harness.transport.localPublications.clear();
+        // Publications of the live connection stay listed: an unlisted one is published again, which has its own test.
+        for (const id of harness.transport.localPublications.keys()) {
+          if (parseCloudflareSFUPublicationID(id).connectionId === "connection-1") harness.transport.localPublications.delete(id);
+        }
         harness.transport.snapshot = publicationSnapshot(1, 2, "remote|missing");
         const remoteAttempts = () => vi.mocked(harness.transport.addTracks).mock.calls.filter(([input]) => input.tracks.some((track) => track.location === "remote")).length;
         const attemptsBeforeRetry = remoteAttempts();

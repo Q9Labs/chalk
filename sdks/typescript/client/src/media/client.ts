@@ -49,6 +49,7 @@ const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
+const REPUBLISH_COOLDOWN_MS = 30_000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
@@ -70,6 +71,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #locallyPausedSources = new Map<MediaPublicationSource, LocalPublicationRetirementCause>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
+  readonly #lastRepublishAt = new Map<MediaPublicationSource, number>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -243,6 +245,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const transport = this.#requireTransport();
       const authoritative = await this.#signal(() => transport.listPublications());
       this.#requireGeneration(generation);
+      await this.#republishUnlistedLocalPublications(authoritative, generation);
       await this.#reconcileRemotePublications(authoritative, generation);
       this.#requireGeneration(generation);
       if (!this.#remotePullIncomplete) this.#pollFailures = 0;
@@ -251,6 +254,31 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     } finally {
       this.#finishPublicationPoll(generation);
+    }
+  }
+  // The registry drops a publication when listeners keep failing to pull it.
+  // A publisher that still believes it is sending must publish again, so
+  // listeners get a new publication ID instead of retrying a dead one.
+  async #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
+    const unlisted = [...this.#localTracks.values()].filter(
+      (state) =>
+        (state.source === "microphone" || state.source === "camera") &&
+        state.enabled &&
+        state.desiredEnabled &&
+        state.providerPublicationId !== null &&
+        !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId) &&
+        Date.now() - (this.#lastRepublishAt.get(state.source) ?? Number.NEGATIVE_INFINITY) >= REPUBLISH_COOLDOWN_MS,
+    );
+    for (const state of unlisted) {
+      this.#lastRepublishAt.set(state.source, Date.now());
+      try {
+        // Lists again, so a snapshot that predates the publish cannot trigger a republish.
+        await this.#retireUnavailableLocalPublication(state);
+        this.#requireGeneration(generation);
+        if (state.providerPublicationId === null && this.#localTracks.get(state.source) === state) await this.#enablePreparedTrack(state);
+      } catch (error) {
+        if (generation === this.#generation && !this.#stopped) this.#reportError(error);
+      }
     }
   }
   #finishPublicationPoll(generation: number): void {
