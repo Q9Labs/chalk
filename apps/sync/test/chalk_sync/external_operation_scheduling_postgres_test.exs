@@ -99,8 +99,15 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
           started = System.monotonic_time(:millisecond)
           command_id = "leave_" <> ChalkSync.UUID.generate()
 
-          {:ok, operation} = Operation.new(command_id, :participant_leave, %{})
-          assert {:ok, _} = Postgres.begin_operation(identity, operation)
+          client =
+            Client.send_json(client, %{
+              "type" => "operation",
+              "command_id" => command_id,
+              "name" => "participant_leave",
+              "payload" => %{}
+            })
+
+          client = await_pending(client, command_id)
           send(observer, {:accepted, self()})
 
           await_left(client, identity.participant_id)
@@ -207,16 +214,39 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     client
   end
 
+  defp await_pending(client, command_id) do
+    case Client.recv(client) do
+      {:json,
+       %{
+         "type" => "retryable_error",
+         "command_id" => ^command_id,
+         "code" => "external_operation_pending"
+       }, client} ->
+        client
+
+      {:json, %{"type" => "event"} = frame, client} ->
+        client
+        |> acknowledge(frame)
+        |> await_pending(command_id)
+
+      other ->
+        flunk("Leave was not accepted: #{inspect(other)}")
+    end
+  end
+
+  defp acknowledge(client, frame) do
+    Client.send_json(client, %{
+      "type" => "delivery_ack",
+      "stream" => "control",
+      "revision" => frame["revision"],
+      "state_digest" => frame["resulting_state_digest"]
+    })
+  end
+
   defp await_left(client, participant_id) do
     case Client.recv(client, 90_000) do
       {:json, %{"type" => "event"} = frame, client} ->
-        client =
-          Client.send_json(client, %{
-            "type" => "delivery_ack",
-            "stream" => "control",
-            "revision" => frame["revision"],
-            "state_digest" => frame["resulting_state_digest"]
-          })
+        client = acknowledge(client, frame)
 
         if frame["name"] == "participant_left" and
              frame["payload"]["participant_id"] == participant_id,
