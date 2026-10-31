@@ -102,11 +102,9 @@ export class ViewerLayerPolicy {
 
   #detectSenderLimit(fps: number | undefined): boolean {
     // If clean, settled l samples buy no frame rate, keep h's resolution.
-    if (this.#frameRateProbe === undefined || fps === undefined || fps <= 0 || fps > this.#frameRateProbe * 1.25) {
-      this.#unimprovedSamples = 0;
-      return false;
-    }
-    return ++this.#unimprovedSamples >= FRAME_RATE_COMPARISON_SAMPLES;
+    if (this.#frameRateProbe !== undefined && fps !== undefined && fps > 0 && fps <= this.#frameRateProbe * 1.25) return ++this.#unimprovedSamples >= FRAME_RATE_COMPARISON_SAMPLES;
+    this.#unimprovedSamples = 0;
+    return false;
   }
 
   #drop(byNetwork: boolean, frameRate?: number): ViewerLayer {
