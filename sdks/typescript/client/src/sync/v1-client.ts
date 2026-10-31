@@ -109,6 +109,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
+  #lastHeardAt: number | null = null;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
@@ -237,6 +238,10 @@ export class V1SyncClient implements V1CollaborationClient {
     // Without negotiation, Sync confirmed the entry at hello.
     if (!this.#entryNegotiated) return;
     this.#send({ type: "entered" });
+  }
+  /** Wall-clock time of the last frame decoded from Sync, or null before the first. */
+  lastHeardAt(): number | null {
+    return this.#lastHeardAt;
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -509,6 +514,7 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
+      this.#lastHeardAt = this.#now();
       await this.#handleFrame(frame);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();

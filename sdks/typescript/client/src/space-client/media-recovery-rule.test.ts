@@ -224,4 +224,83 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       client.dispose();
     }
   });
+
+  // The bounded variant: with no stop evidence, a drop under LONG_DROP_MS resumes without a tap, and a drop of that length or more is a turn-off.
+  describe("after Sync lost the publication with no stop evidence", () => {
+    const longDropMs = 60_000;
+
+    async function dropAndRecover(source: Source, downMs: number, items: readonly object[] = []) {
+      const heardAt = Date.now();
+      let now = heardAt;
+      const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+      const scenario = recoveryScenario(source, { sync: { lastHeardAt: () => heardAt } });
+      const { client, platform, setEnabled } = scenario;
+      try {
+        await client.join({ microphone: false, camera: false });
+        await setEnabled(true);
+        await enterRecovery({ platform, client });
+        now = heardAt + downMs;
+        platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items } });
+        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+        await tick(20);
+      } catch (cause) {
+        client.dispose();
+        clock.mockRestore();
+        throw cause;
+      }
+      return {
+        ...scenario,
+        finish: () => {
+          client.dispose();
+          clock.mockRestore();
+        },
+      };
+    }
+
+    it.each(sources)("%s: a drop of 59.9 s keeps it on and resumes without a tap", async (source) => {
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs - 100);
+      try {
+        expect(track.enabled).toBe(true);
+        confirmPublication(platform, track, source);
+        expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a drop of 60 s turns it off like a tap", async (source) => {
+      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs);
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "user_pause");
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a long drop leaves it on when Sync still lists the publication", async (source) => {
+      const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs * 5, [item]);
+      try {
+        expect(track.enabled).toBe(true);
+        confirmPublication(platform, track, source);
+        expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "user_pause");
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a host stop newer than the intent pauses it whatever the drop length", async (source) => {
+      const { track, setLocalSourceIntent, finish } = await dropAndRecover(source, 1_000, [hostStop(source, 9)]);
+      try {
+        await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
+        expect(track.enabled).toBe(false);
+      } finally {
+        finish();
+      }
+    });
+  });
 });

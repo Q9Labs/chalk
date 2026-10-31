@@ -419,19 +419,21 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
-    {next, result} = enable_publication(state, identity, authority, source, target)
+    key = {authority.participant_id, Atom.to_string(source)}
 
-    if source in [:camera, :microphone, :screen] and
-         result["outcome"] in ["confirmed", "satisfied"] do
-      key = {authority.participant_id, Atom.to_string(source)}
+    # The on answers only the host stop that exists before the grant. A stop committed after it is newer and stays.
+    case Stateholder.media_stops(state.episode) do
+      {:ok, stops} ->
+        {next, result} = enable_publication(state, identity, authority, source, target)
 
-      case Stateholder.set_media_pause(identity, source, nil) do
-        :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
-        {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
-        {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
-      end
-    else
-      {next, result}
+        if result["outcome"] in ["confirmed", "satisfied"] do
+          clear_answered(next, identity, source, key, Map.get(stops, key), result, target)
+        else
+          {next, result}
+        end
+
+      {:retryable, reason} ->
+        {state, live_result(target, :retryable_failure, reason)}
     end
   end
 
@@ -468,6 +470,26 @@ defmodule ChalkSync.Live.Episode do
       {next, live_result(target, :confirmed)}
     end
   end
+
+  defp clear_answered(next, identity, source, key, answered_stop, result, target) do
+    with :ok <- Stateholder.set_media_pause(identity, source, nil),
+         :ok <- answer_stop(identity, source, answered_stop) do
+      stops =
+        if answered_stop && Map.get(next.media_stops, key, answered_stop) <= answered_stop,
+          do: Map.delete(next.media_stops, key),
+          else: next.media_stops
+
+      {%{next | media_pauses: Map.delete(next.media_pauses, key), media_stops: stops}, result}
+    else
+      {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
+      {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
+    end
+  end
+
+  defp answer_stop(_identity, _source, nil), do: :ok
+
+  defp answer_stop(identity, source, revision),
+    do: Stateholder.answer_media_stop(identity, source, revision)
 
   defp enable_publication(state, identity, authority, source, target) do
     with {module, adapter} <- media_plane(authority) || {:error, :dependency_unavailable},

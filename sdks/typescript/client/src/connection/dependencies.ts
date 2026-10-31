@@ -40,6 +40,8 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly restartTransport?: () => void;
   readonly stop: () => void;
   readonly getSnapshot: () => V1EpisodeSnapshot;
+  /** Wall-clock time of the last frame Sync sent on this client, or null before the first. */
+  readonly lastHeardAt?: () => number | null;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
   readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;

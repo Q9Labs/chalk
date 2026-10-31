@@ -149,6 +149,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:set_media_pause, identity, source, publication_id})
 
   @impl ChalkSync.Stateholder
+  def answer_media_stop(%Identity{} = identity, source, through_revision),
+    do: GenServer.call(__MODULE__, {:answer_media_stop, identity, source, through_revision})
+
+  @impl ChalkSync.Stateholder
   def begin_role_transition(identity, command, _publications),
     do: decide_command(identity, command)
 
@@ -269,9 +273,34 @@ defmodule ChalkSync.Stateholder.Memory do
 
               pauses = update_media_pauses(state.media_pauses, pause_key, publication_id)
 
-              stops = answer_media_stop(state.media_stops, pause_key, publication_id)
+              :ets.insert(@episodes, {key, %{state | media_pauses: pauses}})
+              :ok
 
-              :ets.insert(@episodes, {key, %{state | media_pauses: pauses, media_stops: stops}})
+            error ->
+              error
+          end
+
+        [] ->
+          {:retryable, :dependency_unavailable}
+      end
+
+    {:reply, reply, server_state}
+  end
+
+  def handle_call({:answer_media_stop, identity, source, through_revision}, _from, server_state) do
+    key = EpisodeKey.authority_key(identity.episode)
+
+    reply =
+      case :ets.lookup(@episodes, key) do
+        [{^key, state}] ->
+          case memory_participant_authority(
+                 state,
+                 identity.participant_id,
+                 identity.participant_generation
+               ) do
+            {:ok, _authority} ->
+              stops = answer_media_stop(state.media_stops, identity, source, through_revision)
+              :ets.insert(@episodes, {key, %{state | media_stops: stops}})
               :ok
 
             error ->
@@ -541,11 +570,15 @@ defmodule ChalkSync.Stateholder.Memory do
     {:reply, reply, server_state}
   end
 
-  # A newly accepted on answers the host stop.
-  defp answer_media_stop(stops, _pause_key, publication_id) when not is_nil(publication_id),
-    do: stops
+  # A newly accepted on answers the host stops it followed; a newer stop stays.
+  defp answer_media_stop(stops, identity, source, through_revision) do
+    key = {identity.participant_id, Atom.to_string(source)}
 
-  defp answer_media_stop(stops, pause_key, nil), do: Map.delete(stops, pause_key)
+    case Map.fetch(stops, key) do
+      {:ok, revision} when revision <= through_revision -> Map.delete(stops, key)
+      _newer_or_absent -> stops
+    end
+  end
 
   defp update_media_pauses(pauses, key, publication_id) when is_binary(publication_id),
     do: Map.put(pauses, key, publication_id)
