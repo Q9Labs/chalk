@@ -133,6 +133,18 @@ hasn't received yet. The client never makes a decision the server also makes.
 Permission checks in the client only change what the screen shows; the server's
 answer is the only one that counts.
 
+Media controls split the decision by direction, so the device and the server
+never decide the same thing:
+
+- Turning media off, such as muting the microphone, turning the camera off or
+  stopping a screen share, is the device's decision. The device stops the track
+  and the capture at once, then tells Sync, and resends until Sync shows it
+  off. Sync accepts every off, so there is nothing to roll back.
+- Turning media on is the server's decision. The control shows a pending state
+  until Sync shows the media live, and shows the reason when Sync refuses, such
+  as a host mute.
+- After a reconnect, the device resends its offs and takes every on from Sync.
+
 ## Data
 
 A feature owns its tables. Its migrations and queries live in its `db/`
@@ -190,6 +202,32 @@ compares live state with code and reports anything changed by hand.
 
 Production identifiers stay out of Git, as [AGENTS.md](../AGENTS.md) requires.
 Code refers to them through private deployment inputs.
+
+## Tracing
+
+Every operation is a trace, and the request ID is the trace ID. Each device
+also has a session: one run of a Chalk app on one device, from opening the tab
+or launching the app until it closes. A reload in the same tab keeps the
+session. On mobile, a new session starts after 30 minutes in the background,
+never during a call. A session covers dashboard use, API calls before a call
+and any number of joins, so every problem a user can report falls inside one.
+
+- The session ID travels with the trace context on every request and Sync
+  connection, so server spans and logs carry it too. It uses the OpenTelemetry
+  attribute `session.id`.
+- Users see the session ID as their reference in help screens and problem
+  reports, and diagnostic uploads are stored under it.
+- Space, Episode, participant and recording IDs are attributes on spans, not a
+  separate way to correlate.
+- Every call to an outside provider gets its own span, which records the
+  provider's request ID.
+- Work without a user session, such as webhook delivery or a recording render,
+  is found by trace ID and its domain IDs.
+
+A session is never an Episode, even though the dashboard lists ended Episodes
+as "Past sessions". Until the session ID ships,
+[observability](observability.md) describes the IDs in use, including the
+journey ID.
 
 ## Deleting a feature
 
