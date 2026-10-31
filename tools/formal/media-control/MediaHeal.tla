@@ -99,8 +99,10 @@ FaultsLeft == bud.pl + bud.ll + bud.pf + bud.rd + bud.pd + bud.sr + bud.loss + b
 NoSnap == [ver |-> -1, list |-> [g \in Gens |-> "none"], grant |-> FALSE, ack |-> 0]
 SyncSnapshot == [ver |-> ver, list |-> list, grant |-> grant, ack |-> lastSeq]
 
-Desired(l) == {g \in Gens : view[l].list[g] = "on"}
-Rising(l, g) == recvUp[l] /\ g \in pulled[l] /\ g \notin subLost[l] /\ g \in sfu /\ g \notin stale
+\* The roster item is enabled only while a live publication exists and Sync holds no pause (apply_media_pauses).
+Desired(l) == {g \in Gens : view[l].grant /\ view[l].list[g] = "on"}
+\* Packets rise only while the microphone captures.
+Rising(l, g) == cap /\ recvUp[l] /\ g \in pulled[l] /\ g \notin subLost[l] /\ g \in sfu /\ g \notin stale
 Backoff(f) == IF RetryCap THEN Min(2 ^ (f - 1), CapTicks) ELSE 2 ^ (f - 1)
 GaveUp(l, g) == GiveUpAfter > 0 /\ pair[l][g].fails >= GiveUpAfter
 Olds(g) == {h \in Gens : h # g /\ list[h] = "on"}
@@ -493,15 +495,15 @@ P4h_PublisherAgrees ==
 
 \* S5. The heal loop pulls a publication only if its roster shows it on.
 S5_PullOnlyListed ==
-  [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => view[l].list[g] = "on" ]_vars
+  [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => g \in Desired(l) ]_vars
 
 \* S5b. Against Sync itself, not the listener's roster. Expected VIOLATED: the roster is stale.
 S5b_PullOnlyIfSyncListsOn ==
-  [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => list[g] = "on" ]_vars
+  [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => list[g] = "on" /\ grant ]_vars
 
 \* S5c. A pulled publication that Sync lists as off or dead is eventually dropped.
 S5c_UndesiredDropped ==
-  \A l \in Listeners, g \in Gens : <>[](list[g] \in {"off", "dead"} /\ recvUp[l] => g \notin pulled[l])
+  \A l \in Listeners, g \in Gens : <>[]((list[g] \in {"off", "dead"} \/ ~grant) /\ recvUp[l] => g \notin pulled[l])
 
 \* P6. Retry spacing stays within the cap, so a listener does not wait long between pulls.
 P6_RetrySpacing == \A l \in Listeners, g \in Gens : pair[l][g].wait <= CapTicks
@@ -510,7 +512,7 @@ P6_RetrySpacing == \A l \in Listeners, g \in Gens : pair[l][g].wait <= CapTicks
 \* connected is eventually pulled with packets rising, and stays so.
 P5_EveryOnPublicationHeard ==
   \A l \in Listeners, g \in Gens :
-    (<>[](list[g] = "on" /\ syncUp)) => <>[]Rising(l, g)
+    (<>[](list[g] = "on" /\ grant /\ syncUp)) => <>[]Rising(l, g)
 
 \* P5src. The same at the level of the user's intent, so that marking a publication
 \* dead cannot satisfy P5 by making it vacuous: if the publisher keeps the microphone

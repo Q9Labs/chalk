@@ -1,6 +1,6 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 18:30:46.
+Finished computing initial states: 1 distinct state generated at 2026-11-01 04:06:51.
 Error: Invariant W4_PausedByRecovery is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -61,7 +61,7 @@ State 1: <Initial predicate>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 2: <Next line 410, col 6 to line 410, col 20 of module MediaHeal>
+State 2: <Next line 412, col 6 to line 412, col 20 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -119,7 +119,7 @@ State 2: <Next line 410, col 6 to line 410, col 20 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 3: <Next line 419, col 6 to line 419, col 24 of module MediaHeal>
+State 3: <Next line 421, col 6 to line 421, col 24 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -177,7 +177,7 @@ State 3: <Next line 419, col 6 to line 419, col 24 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 4: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
+State 4: <Next line 425, col 28 to line 425, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -235,7 +235,7 @@ State 4: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 5: <Next line 441, col 6 to line 441, col 21 of module MediaHeal>
+State 5: <Next line 443, col 6 to line 443, col 21 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -293,7 +293,7 @@ State 5: <Next line 441, col 6 to line 441, col 21 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 6: <Next line 435, col 6 to line 435, col 24 of module MediaHeal>
+State 6: <Next line 437, col 6 to line 437, col 24 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -351,7 +351,7 @@ State 6: <Next line 435, col 6 to line 435, col 24 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 7: <Next line 418, col 6 to line 418, col 30 of module MediaHeal>
+State 7: <Next line 420, col 6 to line 420, col 30 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -409,6 +409,6 @@ State 7: <Next line 418, col 6 to line 418, col 30 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-2671 states generated, 998 distinct states found, 575 states left on queue.
-The depth of the complete state graph search is 7.
-Finished in 00s at (2026-10-31 18:30:46)
+4290 states generated, 1503 distinct states found, 807 states left on queue.
+The depth of the complete state graph search is 9.
+Finished in 00s at (2026-11-01 04:06:51)

@@ -3,9 +3,10 @@
 import { readFileSync } from "node:fs";
 
 const [traceFile, specArg] = process.argv.slice(2);
-// Heal runs (names contain "heal") are checked against MediaHeal.tla, the others against MediaControl.tla.
-const specFile = specArg ?? new URL(/heal/.test(traceFile) ? "MediaHeal.tla" : "MediaControl.tla", import.meta.url).pathname;
 const text = readFileSync(traceFile, "utf8");
+// The trace names its module ("of module MediaHeal"); the spec sits next to this script.
+const moduleName = text.match(/of module (\w+)/)?.[1];
+const specFile = specArg ?? new URL(`${moduleName ?? "MediaControl"}.tla`, import.meta.url).pathname;
 const specLines = readFileSync(specFile, "utf8").split("\n");
 const actionAt = (line, col, endCol) =>
   specLines[line - 1]
