@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createConvergenceScenario, enterRecovery } from "../../tests/helpers/media-convergence";
-import type { createCoreTestPlatform } from "./core.test.helpers";
+import { createConvergenceScenario, enterRecovery, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
+import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
+import { createSpaceClientForPlatform } from "./space-client";
 
 // The decided media control rule: turning media off is the device's decision and never fails.
 // The device stops capture at once, tells Sync, and resends until Sync accepts the off.
@@ -74,7 +75,8 @@ describe("an off that never reached Sync stays owed", () => {
     }
   });
 
-  it.each(sources)("keeps resending a %s off until Sync accepts one", async (source) => {
+  // Screen share also resends on its own projection check, so its send count is not exact.
+  it.each(["microphone", "camera"] as const)("keeps resending a %s off until Sync accepts one", async (source) => {
     const scenario = await liveThenLostOff(source);
     try {
       scenario.command.mockRejectedValueOnce(lost());
@@ -129,6 +131,8 @@ describe("the on path still belongs to Sync", () => {
       await vi.waitFor(() => expect(scenario.command.mock.calls.filter(([enabled]) => enabled)).toHaveLength(2));
       // Screen share shows its own capture, so only the device sources are gated on Sync here.
       if (source !== "screen") expect(uiState(scenario, source)).not.toBe("enabled");
+      // The media plane re-enables the track when it publishes again.
+      scenario.track.enabled = true;
       projectOn(scenario, source);
       await on;
       if (source !== "screen") await vi.waitFor(() => expect(uiState(scenario, source)).toBe("enabled"));
@@ -146,6 +150,50 @@ describe("the on path still belongs to Sync", () => {
       if (source !== "screen") expect(uiState(scenario, source)).not.toBe("enabled");
     } finally {
       scenario.client.dispose();
+    }
+  });
+});
+
+describe("an off that never reached Sync survives a replaced Sync connection", () => {
+  it.each((["microphone", "camera"] as const).flatMap((source) => [false, true].map((failedAttempt) => ({ source, failedAttempt }))))("resends a lost $source off to the replacement Sync (a failed recovery attempt first: $failedAttempt)", async ({ source, failedAttempt }) => {
+    const first = createCoreTestPlatform();
+    const next = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+    const command = vi.fn(async (_enabled: boolean) => receipt);
+    let creations = 0;
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...first,
+        dependencies: {
+          ...first.dependencies,
+          mediaDevices: { getUserMedia: async () => mediaStream(track) },
+          createSyncClient: () => {
+            const attempt = creations++;
+            if (attempt === 0) return { ...first.sync, setMicrophoneEnabled: command, setCameraEnabled: command };
+            // A failed attempt unbinds the ports before the next one binds, which is when the old result used to be wiped.
+            if (failedAttempt && attempt === 1) return { ...next.sync, start: async () => Promise.reject(new Error("recovery attempt failed")) };
+            return { ...next.sync, setMicrophoneEnabled: command, setCameraEnabled: command };
+          },
+        },
+      },
+    );
+    const set = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
+    try {
+      await client.join({ microphone: false, camera: false });
+      await set(true);
+      project(first, source, true, track);
+      project(next, source, true, track);
+      command.mockRejectedValueOnce(lost());
+      await expect(set(false)).rejects.toBeDefined();
+      expect(command.mock.calls.filter(([enabled]) => !enabled)).toHaveLength(1);
+      first.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+      await vi.waitFor(() => expect(creations).toBe(failedAttempt ? 3 : 2), { timeout: 10000 });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"), { timeout: 10000 });
+      await vi.waitFor(() => expect(command.mock.calls.filter(([enabled]) => !enabled)).toHaveLength(2), { timeout: 3000 });
+      expect(command.mock.calls.filter(([enabled]) => enabled)).toHaveLength(1);
+    } finally {
+      client.dispose();
     }
   });
 });

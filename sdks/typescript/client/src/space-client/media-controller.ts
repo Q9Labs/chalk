@@ -30,6 +30,10 @@ type SourceWorker = {
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
 };
+/** The user turned the source off and the send to Sync failed, so Sync may still show it on. */
+function owesRemoteOff(state: SourceWorker): boolean {
+  return !state.desired.enabled && state.result.revision === state.desired.revision && state.result.status === "failed" && state.result.cleanup;
+}
 function sourceWorker(enabled: boolean): SourceWorker {
   return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null, capturePause: "none" };
 }
@@ -450,7 +454,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const state = this.#sources[source];
       if (state.result.revision === intent.revision && state.result.status === "failed") {
         yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
-        if (state.result.revision === intent.revision && state.result.status === "failed") state.result.cleanup = false;
+        if (state.result.revision === intent.revision && state.result.status === "failed") {
+          // Sync accepted the resent off, so nothing is owed any more. A failed enable keeps its failure for the caller.
+          if (intent.enabled) state.result.cleanup = false;
+          else state.result = { revision: intent.revision, status: "confirmed" };
+        }
         return;
       }
       const operation = source === "screen" ? this.#prepareScreen(ports, intent) : this.#prepareDevice(ports, source, intent);
@@ -604,7 +612,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
-      state.result = { revision: state.desired.revision, status: "confirmed" };
+      // An off that Sync never accepted stays owed across connections; the resume resends it.
+      if (!owesRemoteOff(state)) state.result = { revision: state.desired.revision, status: "confirmed" };
       state.pause = null;
       state.serverSequence = -1;
       // Revocation belongs to the action, not a disposable connection or Sync client.
@@ -699,9 +708,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const state = this.#sources[source];
       // Pending user enables own their readiness wait. Recovery never replays one
       // or sends participant-wide cleanup for a failed enable on another client.
-      if (source !== "screen" && (state.desired.enabled || state.result.revision === state.desired.revision)) continue;
-      this.#fork(this.#serialize(source, this.#work(source)).pipe(Effect.ignore));
+      // An off is the device's decision: it is resent until Sync accepts it.
+      if (source !== "screen" && (state.desired.enabled || (state.result.revision === state.desired.revision && !owesRemoteOff(state)))) continue;
+      this.#runWork(source);
     }
+  }
+  /** Each Sync snapshot retries an off whose send failed while the connection stayed up. */
+  #retryFailedOffs(): void {
+    if (!this.#syncLive) return;
+    for (const source of MEDIA_SOURCES) if (owesRemoteOff(this.#sources[source]) && !this.#pendingSources.has(source)) this.#runWork(source);
+  }
+  #runWork(source: MediaSource): void {
+    this.#fork(this.#serialize(source, this.#work(source)).pipe(Effect.ignore));
   }
   #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(
@@ -1167,6 +1185,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
+      this.#retryFailedOffs();
       this.#notifyCapturePauses(ports);
       this.#publish();
     });

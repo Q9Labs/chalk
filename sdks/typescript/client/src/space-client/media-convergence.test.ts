@@ -34,7 +34,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused through recovery", async (source) => {
+  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused and resends it through recovery", async (source) => {
     const localTargets: boolean[] = [];
     const { platform, command, client, setEnabled, track } = createConvergenceScenario(source, {
       media: {
@@ -53,12 +53,8 @@ describe("SpaceClient media convergence", () => {
       expect(localTargets).toEqual([false]);
       await enterRecovery({ platform, client });
       command.mockClear();
-      if (source === "screen") await resumeWithOff({ platform, command });
-      else {
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-        expect(command).not.toHaveBeenCalled();
-      }
+      // The off is the device's decision: recovery resends it until Sync accepts one, and never sends an on.
+      await resumeWithOff({ platform, command });
       expect(localTargets).not.toContain(true);
       expect(track.enabled).toBe(false);
       command.mockClear();
