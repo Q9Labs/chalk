@@ -3,6 +3,7 @@ import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
 import { withRequestContext } from "../session";
+import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
@@ -10,6 +11,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const credential = requireCredential(options);
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
+  const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -86,6 +88,20 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       await request("renegotiate", {
         method: "POST",
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription }),
+      });
+    },
+    uploadCallStats: async (stats: CallStatsRequest) => {
+      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+      if (!token.trim()) return;
+      await withDeadline(timeoutMs, async (signal) => {
+        const response = await fetch(statsPath, {
+          method: "POST",
+          signal,
+          keepalive: true,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(stats),
+        });
+        if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
       });
     },
     listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => {

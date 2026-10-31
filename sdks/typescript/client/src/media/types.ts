@@ -59,6 +59,8 @@ export type CloudflareSFUSignalingTransport = {
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /** Best-effort per-call stats upload; transports without it simply report nothing. */
+  readonly uploadCallStats?: (stats: import("./call-stats").CallStatsRequest) => Promise<void>;
 };
 export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;

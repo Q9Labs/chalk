@@ -6,6 +6,7 @@ import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { matchRemotePullTracks } from "./remote-track-response";
+import { createCallStatsCollector } from "./call-stats";
 import { CloudflareSFUError } from "./types";
 import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
@@ -105,6 +106,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
+  readonly #callStats = createCallStatsCollector({ upload: async (stats) => this.#transport?.uploadCallStats?.(stats) });
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
@@ -513,6 +515,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
+    void this.#callStats.flush();
     this.#receiveProgress.expect([], this.#participantId);
     this.#subscribedPublicationIds.clear();
     this.#generation++;
@@ -1231,6 +1234,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
+        this.#callStats.observe(report);
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);
