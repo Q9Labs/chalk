@@ -162,7 +162,7 @@ try {
     allBrowsers.push(browser);
     const origin = Date.now();
     for (let index = 0; index < 4; index++) {
-      const admission = await chalk.participants.admit(fixtureSpace.id, episode.id, { name: index === 0 ? 'Synthetic teacher' : `Synthetic student ${index}`, role: index === 0 ? 'owner' : 'participant' });
+      const admission = await chalk.participants.admit(fixtureSpace.id, episode.id, { name: index === 0 ? 'Synthetic teacher' : `Synthetic student ${index}`, role: index === 0 ? 'owner' : 'collaborator' });
       let access = admission.access;
       assert.ok(access, 'synthetic participant must be admitted');
       connections[index].add(access.media.client_payload.connectionId);
