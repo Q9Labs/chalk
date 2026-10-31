@@ -229,6 +229,25 @@ as "Past sessions". Until the session ID ships,
 [observability](observability.md) describes the IDs in use, including the
 journey ID.
 
+## The `chalk` command
+
+Agents read the architecture through one developer command instead of
+rebuilding it from the folders by hand. It reads the same imports and traces
+the gates read, so it can't drift from them.
+
+- `chalk graph` prints the feature dependency graph. Given a diff, it lists the
+  features the change touches and the features that depend on them, and CI
+  uses the same list to choose which feature tests to run.
+- `chalk lifecycle` prints the stages of join, reconnect and leave and the
+  hooks in each stage. Given a session ID, it shows how long each hook took and
+  which one failed.
+- `chalk trace` takes a session, trace or domain ID and prints the matching
+  spans and logs from the apps, the API and Sync in time order. The shells tag
+  every span and log with the feature that produced it, so a trace shows when
+  work crosses from one feature to another.
+- `chalk new feature <name>` creates a feature folder with its `AGENTS.md`,
+  the parts it asks for and its line in each shell's feature list.
+
 ## Deleting a feature
 
 Deleting a feature means deleting its folder and its line in each shell's
