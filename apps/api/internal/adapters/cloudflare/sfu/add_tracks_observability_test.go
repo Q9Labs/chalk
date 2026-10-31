@@ -27,8 +27,50 @@ const (
 var addTracksRecordFields = []string{
 	"time", "level", "msg", "event",
 	"space_id", "episode_id", "provider_session_id",
-	"track_count", "track_kinds", "sdp_type", "sdp_rid_count", "simulcast_track_count",
+	"track_count", "track_kinds", "track_error_kinds", "sdp_type", "sdp_rid_count", "simulcast_track_count",
 	"upstream_latency_ms", "outcome", "http_status", "provider_code", "retry",
+}
+
+func TestAddTracksLogsBoundedPerTrackErrorKinds(t *testing.T) {
+	adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"publisher","trackName":"private-track","errorCode":"empty_track_error","errorDescription":"private provider detail"}]}`)
+	logs := captureAddTracksLogs(t)
+	response, err := adapter.AddTracks(context.Background(), mediaplane.TracksRequest{ConnectionID: "receiver", Tracks: []mediaplane.Track{{Location: "remote", SessionID: "publisher", TrackName: "private-track"}}})
+	if err == nil || len(response.TrackErrors) != 1 {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+	record := addTracksRecord(t, logs)
+	kinds, ok := record["track_error_kinds"].([]any)
+	if !ok || len(kinds) != 1 || kinds[0] != "empty_track_error" {
+		t.Fatalf("track_error_kinds = %+v", record["track_error_kinds"])
+	}
+	for _, forbidden := range []string{"private-track", "private provider detail", "publisher"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("private per-track field logged: %s", forbidden)
+		}
+	}
+}
+
+func TestAddTracksCanonicalizesProviderControlledErrorKinds(t *testing.T) {
+	for _, test := range []struct{ raw, kind string }{
+		{"Transport_Error", "transport_error"},
+		{" CLIENT_CANCELED ", "client_canceled"},
+		{"private arbitrary provider text", "unknown"},
+		{"audio@example.invalid", "unknown"},
+	} {
+		t.Run(test.kind, func(t *testing.T) {
+			adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"publisher","trackName":"audio","errorCode":"`+test.raw+`"}]}`)
+			logs := captureAddTracksLogs(t)
+			_, _ = adapter.AddTracks(context.Background(), mediaplane.TracksRequest{ConnectionID: "receiver", Tracks: []mediaplane.Track{{Location: "remote", SessionID: "publisher", TrackName: "audio"}}})
+			record := addTracksRecord(t, logs)
+			kinds, ok := record["track_error_kinds"].([]any)
+			if !ok || len(kinds) != 1 || kinds[0] != test.kind {
+				t.Fatalf("track_error_kinds = %+v", record["track_error_kinds"])
+			}
+			if strings.Contains(logs.String(), test.raw) {
+				t.Fatal("raw code reached telemetry")
+			}
+		})
+	}
 }
 
 func TestAddTracksRecordsUpstreamTimeout(t *testing.T) {

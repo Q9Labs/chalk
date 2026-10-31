@@ -61,6 +61,40 @@ frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
 later reconnects. The whiteboard socket does not carry the ID yet.
 
+### Compare call quality by connection type
+
+The SDK summarises WebRTC stats on the device every 10 seconds and uploads them
+under the session ID: about every minute while a call is open and once at leave,
+through `POST /v1/tenants/{tenant_id}/call-stats`. A call stops producing
+summaries after 360 (about an hour), a batch holds at most 30, a failed upload is
+dropped, and the API allows 30 uploads per participant per ten minutes. Each
+summary becomes one `sdk.call_stats` API log line with the session ID, Space,
+Episode, a hashed participant ID, and these fields: `connection_type` (`udp`,
+`tcp`, `turn`, `unknown`), `rtt_ms`, `send_loss_pct`, `recv_loss_pct`,
+`send_jitter_ms`, `recv_jitter_ms`, `send_bitrate_kbps`, `recv_bitrate_kbps`,
+`send_layer` (`h`, `m`, `l`: the highest layer that sent during the window),
+`recv_height`, `freeze_count`, and `freeze_ms`. Candidate types come from the
+selected candidate pair. The body has no IP address, SDP, or free text. The API
+adds `country` (the edge's country code), `client_family`, and `client_os` from
+the request, so calls compare by region and platform without storing an address.
+
+```apl
+['<api-log-dataset>']
+| where ['attributes.event'] == "sdk.call_stats"
+| summarize
+    samples = count(),
+    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
+    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
+    loss_p50 = percentile(todouble(['attributes.recv_loss_pct']), 50),
+    loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
+    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count()
+  by ['attributes.connection_type']
+```
+
+Add `by ['attributes.country']` to compare regions. Field paths follow the
+dataset's log mapping, so match them to how `sdk.connection_report` appears there.
+Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback
@@ -157,6 +191,90 @@ redacts SDP and unknown error codes, filters descriptions, and drops unknown
 fields. `omittedTracks` reports omitted entries. Use it to build a sanitized
 fixture after a new occurrence; a documentation-based fixture alone does not
 prove the shape of an earlier production failure.
+
+### Listeners missing active audio publications
+
+The API samples active Cloudflare SFU Episodes every five seconds, independently
+of client requests. Each other participant's enabled `microphone` or
+`screen_audio` publication starts a listener/publication grace window when first
+observed. After more than 15 seconds without a successful pull, it emits
+`media.listener_publication_unpulled` once for that pair. `step` is
+`no_pull_attempted` or `pull_failed`; `error_kind` is a bounded per-track provider
+code, `request_failed`, or `missing_result`. Success requires an exact returned
+remote track identity and receiving MID, not merely an HTTP 200. A later failure
+does not downgrade `pull_succeeded` on the same listener connection. This proves
+provider pull acceptance, not received audio packets or completed renegotiation.
+
+Affected Episodes emit `media.listener_publication_summary` at most once a minute
+with `no_pull_attempted_count`, `pull_failed_count`, `pull_succeeded_count`, and
+`overdue_count`. Healthy Episodes remain silent. Paused publications do not age;
+closed/replaced publications and departed listeners are removed. Listener
+connection replacement resets pull progress. The one-shot marker survives pauses
+and listener connection replacement for a retained pair. Episode end removes
+state on the next sample; shutdown clears it too. These process-local diagnostics
+reset on API restart and assume pulls for an Episode reach the same API process.
+
+Pull observations do not read the database or write logs. They retain bounded,
+hashed publication-identity results, including pulls completed before the first
+sample. Results are keyed by listener generation and connection and expire after
+two minutes. Results bind to the request's publication reference when available,
+otherwise to an in-memory identity snapshot captured before the SFU provider call
+and fed by committed publication writes.
+The write hook performs no extra reads or logging and cannot fail the publication
+write when diagnostic capacity is exhausted. The sampler also refreshes identity
+snapshots; an older incarnation/sequence cannot overwrite a newer commit. These
+snapshots retain at most 128 Episodes and 128 hashed identities per Episode and
+expire after two minutes without a refresh. After a process restart, a pull
+without a known identity remains bounded pending evidence until the first
+sample; it is matched only if no publication write for that Episode intervened.
+Reusing a publisher connection and track name therefore does not transfer
+success to a replacement publication, even if it commits during an in-flight pull.
+Episode reconciliation and event collection share one per-Episode lock; payloads
+are emitted after unlocking, so a slow log sink does not hold up pull observations.
+
+Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
+`publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant
+ID and the complete publication reference, respectively). Publication references
+can encode client-supplied track names and MIDs, so they are never logged raw or
+reversibly encoded. No identity labels, raw error text, credentials, SDP or media
+payloads are added. The existing
+`cloudflare_sfu.add_tracks` log also includes up to 16 normalized
+`track_error_kinds`, without remote track names or remote session IDs.
+
+Retained state is capped at 128 Episodes, 128 participants and 128 publication
+entries per Episode, and 1024 pairs per Episode. Publication references above
+4096 bytes are ignored. Pending pull results are also capped at 1024 per Episode,
+with at most 128 distinct remote tracks retained from each request.
+A truncated Episode summary marks `truncated=true`;
+Episode overflow or read failures emit the rate-limited
+`media.listener_publication_sampling_incomplete` event. After two minutes without
+a fresh sample, stale state is discarded rather than diagnosing from old data.
+Caps and failed reads can leave coverage incomplete. Discovery and evaluation
+are sampled, so a newly visible pair normally logs roughly 15–25 seconds later.
+The fake-time regressions live in
+`apps/api/internal/mediapublications/receive_health_test.go`.
+
+#### Alarm
+
+The [listener audio check](../infrastructure/listener-audio-alert/README.md)
+runs every five minutes against a ten-minute Axiom window. At least one
+`media.listener_publication_unpulled` event pages Oncall, with one incident per
+Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
+key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
+contain only aggregate counts; the query projects only `episode_id`, `signal` and
+`events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
+`CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` and the existing
+`ONCALL_WEBHOOK_URL`. `CHALK_AXIOM_LOG_DATASET` must be the production API log
+dataset, the same one the production Axiom monitors use as `LOG_DATASET`.
+The query does not filter by environment: pointing it at a dataset that also
+holds nightly logs would page for nightly. A fired alert fails the run so GitHub
+sends a failed-run email. Because `media.listener_publication_unpulled` is
+one-shot per pair, a stuck Episode stops firing roughly ten minutes after its
+last new event. A webhook-only drill never reads Axiom.
+The `listener-audio` scope must also be registered for Chalk in Oncall's registry
+outside this repo. #721 will add `sdk.connection_report` with
+`['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not
+included yet. GitHub scheduling can delay the roughly five-minute paging target.
 
 ### Background-tab and presence-expiry evidence
 

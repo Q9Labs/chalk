@@ -1,0 +1,14 @@
+{
+  "status": { "isPartial": false },
+  "tables": [
+    {
+      "name": "0",
+      "fields": [
+        { "name": "episode_id", "type": "string" },
+        { "name": "signal", "type": "string" },
+        { "name": "events", "type": "integer" }
+      ],
+      "columns": [[], [], []]
+    }
+  ]
+}
