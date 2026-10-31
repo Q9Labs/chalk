@@ -20,6 +20,7 @@ func TestReceiveCloseVerifiesEveryMIDBeforeMutation(t *testing.T) {
 		{"receiver", `[{"mid":"1","location":"remote"}]`, true},
 		{"publisher", `[{"mid":"1","location":"local"}]`, false},
 		{"unknown", `[]`, false},
+		{"ambiguous", `[{"mid":"1","location":"remote"},{"mid":"1","location":"local"}]`, false},
 		{"mixed", `[{"mid":"1","location":"remote"},{"mid":"2","location":"local"}]`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {

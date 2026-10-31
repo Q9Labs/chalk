@@ -319,14 +319,17 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 			return mediaplane.CloseTracksResponse{}, err
 		}
 		for _, requested := range input.Tracks {
-			remote := false
+			matches := 0
 			for _, track := range session.Tracks {
-				if track.Mid == requested.Mid && track.Location == "remote" {
-					remote = true
-					break
+				if track.Mid != requested.Mid {
+					continue
 				}
+				if track.Location != "remote" {
+					return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest
+				}
+				matches++
 			}
-			if !remote {
+			if matches != 1 {
 				return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest
 			}
 		}
