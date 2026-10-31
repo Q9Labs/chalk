@@ -1,7 +1,7 @@
 # Real-call proofs
 
 `pnpm prod:proof` runs all release proofs, including a forced camera layer switch.
-Every real-call plan keeps both clients through scheduled credential refresh and
+Every recording plan keeps both clients through scheduled credential refresh and
 their original five-minute expiry, then checks received audio/video progress and
 requires SDK end-for-everyone without a cleanup fallback. The dashboard-specific
 shared-browser owner flow is independently required by the `dashboard-engine` Gate lane.
@@ -19,12 +19,28 @@ pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
+pnpm prod:proof leave
+pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
 ```
 
 Install `op` (local configuration only), FFmpeg (`ffmpeg`/`ffprobe`), and ImageMagick (`magick`).
 Signed webhook proofs use a temporary Webhook.site receiver. Voice generation uses macOS `say` (Samantha), or Linux `espeak`.
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
+
+The Leave plan runs the integrity-verified published 5.2.6 client and the candidate
+on the same host and backend. It compares five ordinary baseline samples with
+five ordinary and five publications-403 candidate samples, and independently
+reproduces the old client's premature peer close. It does not start recording.
+The separate comparison session uses the actual restored 2ec22c54 production
+backend for the old SDK and staging for the candidate. Supply production's
+CHALK*PROOF*\* environment mapping as JSON in CHALK_PROOF_BASELINE_ENV, with
+credentials injected only at runtime. Promote requires that session's captured
+median and encrypted evidence hash, and uses the captured median for its limit.
+The [5.3.1 promote plan](../../docs/releases/5.3.1-promote-plan.md) defines the
+relative latency gate and the controlled HTTP fault; protocol acknowledgements
+and real SFU cleanup are never mocked. Private comparison and socket evidence
+is retained for every sample. Hosted proof files remain in memory until encrypted.
 
 ## Manual hosted integrator proof
 

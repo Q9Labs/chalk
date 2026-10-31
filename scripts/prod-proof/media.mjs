@@ -3,15 +3,16 @@ import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
+import { installLeaveObservation } from "./leave-observation.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-async function sdkBundle() {
+async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
   const result = await build({
     stdin: {
-      contents: `import {createSpaceClient} from './sdks/typescript/client/src/index.ts';
+      contents: `import {createSpaceClient} from ${JSON.stringify(entry)};
 window.proofJoin=async(space,baseUrl,displayName)=>{
  const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
@@ -20,6 +21,7 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
       sourcefile: "proof.ts",
     },
     logLevel: "silent",
+    nodePaths: [new URL("../../sdks/typescript/client/node_modules", import.meta.url).pathname],
     bundle: true,
     write: false,
     format: "iife",
@@ -27,8 +29,8 @@ window.proofJoin=async(space,baseUrl,displayName)=>{
   });
   return result.outputFiles[0].text;
 }
-export async function launchGuests(run, space, episode, speech, origin, tones = false, guestCount = 2) {
-  const bundle = await sdkBundle();
+export async function launchGuests(run, space, episode, speech, origin, tones = false, guestCount = 2, options = {}) {
+  const bundle = await sdkBundle(options.sdkEntry);
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
@@ -74,6 +76,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const browser = await chromium.connect(server.wsEndpoint());
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
       await context.addInitScript(installFixture, { speech, guest, tones });
+      if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       const page = await context.newPage();
       const network = [];
       networks[guest] = network;
@@ -339,6 +342,23 @@ function receivedStreamMoved(rows, current) {
   if (!previous) return false;
   if (!(current.bytesReceived > previous.bytesReceived)) return false;
   return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
+}
+export async function waitForMediaProgress(pages) {
+  let before = await stats(pages);
+  let evidence;
+  await waitFor(
+    "initial bidirectional audio and video progress",
+    async () => {
+      const after = await stats(pages);
+      const ready = after.length === 2 && after.every((rows, guest) => ["audio", "video"].every((kind) => rows.some((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === { audio: "microphone", video: "camera" }[kind] && receivedStreamMoved(before[guest], row))));
+      if (ready) evidence = { before, after };
+      before = after;
+      return ready;
+    },
+    30_000,
+    1000,
+  );
+  return evidence;
 }
 export function checkMediaProgress(before, after) {
   check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");

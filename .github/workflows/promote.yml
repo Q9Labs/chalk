@@ -1,6 +1,19 @@
 name: Promote newest held nightly
 on:
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact held release revision approved for promotion
+        type: string
+        required: true
+      leave_baseline_median_ms:
+        description: Same-session 5.2.6 production Leave median in milliseconds
+        type: string
+        required: true
+      leave_baseline_evidence_sha256:
+        description: SHA-256 of the encrypted baseline comparison evidence
+        type: string
+        required: true
 permissions:
   contents: read
   actions: read
@@ -26,6 +39,9 @@ jobs:
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
+          LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
+          LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
         run: python3 scripts/releases/release.py select
   approve:
     needs: select
@@ -99,11 +115,14 @@ jobs:
       web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
     secrets: inherit
   proof:
-    needs: release
+    needs: [select, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: smoke transcript
+      proofs: leave smoke transcript
+      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
+      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
     secrets: inherit
   rollback:
     needs: [select, approve, release, proof]

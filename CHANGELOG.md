@@ -13,6 +13,13 @@ The React Native SDK adds `parseChalkInviteLink`, which reads short links, bare
 codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
 `parseInviteCode`.
 
+## 5.3.1
+
+- Keep the PeerConnection open until durable Leave confirmation when a background media-publications request is rejected, while stopping camera and microphone capture immediately.
+- Fix tooling advisories in glob, minimatch, and node-forge without adding them to runtime dependencies.
+- Gate staging and promotion on real-SFU Leave acknowledgements compared with the same-session 5.2.6 baseline, including a publications-403 fault.
+- Advance the seven synchronized Chalk SDK packages to 5.3.1.
+
 ## 5.3.0
 
 - Stop local media and fire `onLeft` immediately when leaving an Episode, while allowing up to 40 seconds for the durable Leave acknowledgement during provider cleanup.
