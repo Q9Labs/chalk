@@ -5,6 +5,34 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.UUID
 
+  @operation_names Map.new(
+                     [
+                       :admit_participant,
+                       :deny_admission,
+                       :admission_request_expired,
+                       :mute_participant,
+                       :stop_participant_camera,
+                       :stop_participant_screen_share,
+                       :remove_participant,
+                       :start_recording,
+                       :stop_recording,
+                       :recording_capture_ready,
+                       :recording_capture_stopped,
+                       :recording_capture_failed,
+                       :participant_leave,
+                       :end_episode,
+                       :tenant_assign_roles,
+                       :tenant_set_deadline,
+                       :tenant_end_episode,
+                       :role_transition_cleanup,
+                       :role_transition_source_stop
+                     ],
+                     &{Atom.to_string(&1), &1}
+                   )
+                   |> Map.put("maximum_episode_duration_expired", :maximum_duration_expired)
+  @sources %{"microphone" => :microphone, "camera" => :camera, "screen" => :screen}
+  @statuses %{"pending" => :pending, "applied" => :applied, "failed" => :failed}
+
   def from_row([
         _tenant_id,
         _space_id,
@@ -41,7 +69,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
       request_fingerprint: fingerprint,
       name: external_operation_name(name),
       payload: payload,
-      status: String.to_existing_atom(status),
+      status: Map.fetch!(@statuses, status),
       attempt_count: attempt_count,
       actor_kind: Map.get(payload, "actorKind", if(actor_id, do: "participant")),
       actor_id: Map.get(payload, "actorId", Scope.nullable_uuid(actor_id)),
@@ -49,7 +77,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
       actor_generation: actor_generation,
       target_participant_id: Scope.nullable_uuid(target_id),
       target_participant_generation: target_generation,
-      source: source && String.to_existing_atom(source),
+      source: source && Map.fetch!(@sources, source),
       recording_id: Scope.nullable_uuid(recording_id),
       deadline_generation: deadline_generation,
       journey_id: Scope.nullable_uuid(journey_id),
@@ -64,8 +92,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
     }
   end
 
-  defp external_operation_name("maximum_episode_duration_expired"), do: :maximum_duration_expired
-  defp external_operation_name(name), do: String.to_existing_atom(name)
+  defp external_operation_name(name), do: Map.fetch!(@operation_names, name)
 
   defp failure_reason(nil), do: nil
 

@@ -232,12 +232,28 @@ defmodule ChalkSync.DurableLeavePostgresTest do
         fixture,
         unquote(outcome),
         unquote(kind),
-        unquote(source)
+        unquote(source),
+        "confirmed"
       )
     end
   end
 
-  defp assert_account_reentry(connection, fixture, outcome, kind, source) do
+  @tag timeout: 180_000
+  test "ambiguous stale media retries below the limit and settles at exhaustion", %{
+    connection: connection,
+    fixture: fixture
+  } do
+    assert_account_reentry(
+      connection,
+      fixture,
+      :confirmed,
+      :mute_participant,
+      "microphone",
+      "ambiguous"
+    )
+  end
+
+  defp assert_account_reentry(connection, fixture, outcome, kind, source, media_outcome) do
     episode = fixture.episode
     account = UUID.generate()
 
@@ -291,7 +307,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
             {:release, result} -> result
           end
         else
-          "confirmed"
+          media_outcome
         end
 
       if result == "confirmed" do
@@ -397,14 +413,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert {^episode, old_mute} =
              Enum.find(operations, fn {_, op} -> op.external_operation_id == mute_id end)
 
-    assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
-               episode,
-               old_mute,
-               {MediaPlane, adapter},
-               nil,
-               &Postgres.finalize_operation/3
-             )
+    settle_old_media(connection, episode, old_mute, adapter, media_outcome)
 
     assert_receive {:provider_call, ^mute_id, mute_payload, _}, 5_000
     assert mute_payload["effect"] == "media.revoke_publication"
@@ -424,6 +433,22 @@ defmodule ChalkSync.DurableLeavePostgresTest do
                "select outcome, rejection_reason, count(*) over() from sync_command_receipts where external_operation_id=$1",
                [UUID.dump!(mute_id)]
              ).rows
+
+    assert [[0]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_publication_fences where external_operation_id=$1",
+               [UUID.dump!(mute_id)]
+             ).rows
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(mute_id)]
+    )
+
+    assert {:ok, remaining} = Postgres.claim_operations(64)
+    refute Enum.any?(remaining, fn {_, op} -> op.external_operation_id == mute_id end)
 
     refute_receive {:provider_call, _, _, _}, 0
 
@@ -482,6 +507,45 @@ defmodule ChalkSync.DurableLeavePostgresTest do
                "select count(*) from webhook_events where tenant_id=$1 and resource_id=$2 and event_name='participant.left'",
                [UUID.dump!(episode.tenant_id), UUID.dump!(current.participant_id)]
              ).rows
+  end
+
+  defp settle_old_media(connection, episode, operation, adapter, "ambiguous") do
+    id = operation.external_operation_id
+    assert operation.attempt_count < 100
+    assert :pending = execute_media(episode, operation, adapter)
+
+    assert {:error, :stale_participant_generation} =
+             Postgres.finalize_operation(episode, id, {:ambiguous, :provider})
+
+    assert {:ok, %{status: :pending}} = Postgres.read_operation(episode, id)
+    assert_receive {:provider_call, ^id, _, _}, 5_000
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99,next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, operations} = Postgres.claim_operations(64)
+
+    assert {^episode, %{attempt_count: 100} = retry} =
+             Enum.find(operations, fn {_, op} -> op.external_operation_id == id end)
+
+    assert :terminal_failure = execute_media(episode, retry, adapter)
+  end
+
+  defp settle_old_media(_connection, episode, operation, adapter, "confirmed") do
+    assert :confirmed = execute_media(episode, operation, adapter)
+  end
+
+  defp execute_media(episode, operation, adapter) do
+    ExternalOperationConsumer.execute_operation(
+      episode,
+      operation,
+      {MediaPlane, adapter},
+      nil,
+      &Postgres.finalize_operation/3
+    )
   end
 
   defp account_join(episode, account, key) do
