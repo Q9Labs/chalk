@@ -104,6 +104,35 @@ it("starts receive health timing and pull state afresh after peer replacement", 
   }
 });
 
+it("retains receive health after automatic pull recovery with an unchanged cursor", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const h = createHarness({ replaceMediaConnection, onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    const addTracks = h.transport.addTracks.bind(h.transport);
+    vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+      if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+      return addTracks(input);
+    });
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone" }] };
+    await h.client.refreshRemotePublications();
+    expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    expect(h.client.getSnapshot().cursor).toMatchObject({ incarnation: 1, sequence: 1 });
+    const pulls = remotePullCount(h);
+    await h.client.refreshRemotePublications();
+    expect(remotePullCount(h)).toBe(pulls);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "track_received", duration_ms: 15000 }));
+    expect(events).toContainEqual({ event: "audio_receive_summary", receive_counts: { track_received: 1 } });
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
   harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
