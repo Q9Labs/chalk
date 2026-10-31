@@ -8,9 +8,23 @@ const summaries = report.versions.map(run => {
   const pairs = Array.from({ length: 4 }, (_, listener) => Array.from({ length: 4 }, (_, speaker) => ({ listener, speaker, lostSeconds: 0, expectedSeconds: 0, audibleSeconds: 0 }))).flat().filter(pair => pair.listener !== pair.speaker);
   const audibleSamples = [];
   let lastT = 0;
+  let lastAudible = new Set();
+  const expectedSeconds = (speaker, from, to) => {
+    let enabled = true;
+    let cursor = from;
+    let seconds = 0;
+    for (const action of run.actions.filter(action => action.kind === 'mic' && action.participant === speaker)) {
+      if (action.t <= from) enabled = action.enabled;
+      else if (action.t < to) {
+        if (enabled) seconds += action.t - cursor;
+        cursor = action.t;
+        enabled = action.enabled;
+      }
+    }
+    return seconds + (enabled ? to - cursor : 0);
+  };
   for (const sample of run.samples) {
     const audible = new Set();
-    const dt = sample.t - lastT;
     for (const state of sample.states) for (const track of state.tracks) {
       const key = `${state.listener}:${track.speaker}:${track.track}`;
       const before = previous.get(key);
@@ -20,12 +34,14 @@ const summaries = report.versions.map(run => {
     }
     audibleSamples.push({ t: sample.t, audible });
     // Exclude initial subscription warmup; include recovery and action latency.
-    if (lastT >= 10) for (const pair of pairs) if (sample.expected[pair.speaker]) {
-      pair.expectedSeconds += dt;
-      if (audible.has(`${pair.listener}:${pair.speaker}`)) pair.audibleSeconds += dt;
-      else pair.lostSeconds += dt;
+    if (sample.t > 10) for (const pair of pairs) {
+      const exposure = expectedSeconds(pair.speaker, Math.max(10, lastT), sample.t);
+      pair.expectedSeconds += exposure;
+      if (lastAudible.has(`${pair.listener}:${pair.speaker}`)) pair.audibleSeconds += exposure;
+      else pair.lostSeconds += exposure;
     }
     lastT = sample.t;
+    lastAudible = audible;
   }
   const unmutes = [];
   for (const action of run.actions.filter(action => action.kind === 'mic' && action.enabled)) {
