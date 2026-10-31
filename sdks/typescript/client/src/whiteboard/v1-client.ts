@@ -927,10 +927,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
   }
 
-  #releaseOperationRetryToSnapshotFlush(operationId: string): void {
+  #releaseOperationRetryToSnapshotFlush(operationId: string, entry: OperationEntry): void {
     this.#awaitingOperationIds.delete(operationId);
     const change = this.#accessChange(operationId);
     if (change?.state === "sent") change.state = "ready";
+    if (!change) this.#scheduleOperationRetry(operationId, entry);
   }
 
   /**
@@ -986,7 +987,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         this.#operationRetryTimers.delete(operationId);
         if (this.#phase !== "live" || this.#sentEntry(operationId) !== entry) return;
         if (this.#snapshots.size > 0) {
-          this.#releaseOperationRetryToSnapshotFlush(operationId);
+          this.#releaseOperationRetryToSnapshotFlush(operationId, entry);
           return;
         }
         this.#sendOperation(entry.pending.frame);

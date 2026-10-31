@@ -512,6 +512,42 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("retries a drawing after a non-recoverable snapshot failure", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      const requestId = sockets[0]?.requestId();
+      if (typeof requestId !== "string") throw new Error("missing snapshot request");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: requestId, operation: "request_snapshot", code: "storage_unavailable", recoverable: false, message: "Storage failed." });
+      await expect(snapshot).rejects.toMatchObject({ code: "storage_unavailable", recoverable: false });
+      await settle();
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
     const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
