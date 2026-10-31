@@ -1,12 +1,14 @@
 package digitalocean
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -233,6 +235,210 @@ func TestRecorderFleetDeleteRechecksExactOwnership(t *testing.T) {
 	}
 }
 
+func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
+	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
+	ensureRequest := recorderFleetEnsureRequest()
+	snapshotName := ensureRequest.Name + "-bootstrap-evidence"
+	prefix := "chalk-recorder-capture-nightly-"
+	snapshot := func(id int64, name, createdAt string) map[string]any {
+		return map[string]any{"id": id, "name": name, "created_at": createdAt, "resource_type": "droplet"}
+	}
+	scenarios := []bootstrapEvidenceTestScenario{
+		{
+			name: "create snapshot and wait", now: now, evidenceUntil: now.Add(time.Hour), wantPending: true,
+			wantPosts: 1,
+			wantCalls: []string{
+				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots",
+				"GET /v2/droplets/789/actions", "POST /v2/droplets/789/actions",
+			},
+		},
+		{
+			name: "snapshot action in progress", now: now, evidenceUntil: now.Add(time.Hour), wantPending: true,
+			actions: []map[string]any{{"type": "snapshot", "status": "in-progress"}},
+			wantCalls: []string{
+				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots", "GET /v2/droplets/789/actions",
+			},
+		},
+		{
+			name: "preserve and prune owned snapshots", now: now, evidenceUntil: now.Add(time.Hour),
+			dropletSnapshots: []map[string]any{snapshot(4, snapshotName, "2026-09-04T00:00:00Z")},
+			accountSnapshotPages: [][]map[string]any{
+				{
+					snapshot(1, prefix+"1-old-bootstrap-evidence", "2026-09-01T00:00:00Z"),
+					snapshot(2, prefix+"2-bootstrap-evidence", "2026-09-02T00:00:00Z"),
+				},
+				{
+					snapshot(3, prefix+"3-bootstrap-evidence", "2026-09-03T00:00:00Z"),
+					snapshot(4, snapshotName, "2026-09-04T00:00:00Z"),
+					snapshot(99, "chalk-recorder-render-nightly-9-other-bootstrap-evidence", "2026-08-01T00:00:00Z"),
+					snapshot(100, "human-bootstrap-evidence", "2026-08-01T00:00:00Z"),
+				},
+			},
+			wantDelete: true, wantPruned: []string{"1"},
+			wantCalls: []string{
+				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots",
+				"GET /v2/snapshots", "GET /v2/snapshots",
+				"DELETE /v2/snapshots/1", "DELETE /v2/droplets/789",
+			},
+		},
+		{
+			name: "deadline passed", now: now, evidenceUntil: now.Add(-time.Second), wantDelete: true,
+			wantCalls: []string{"GET /v2/droplets/789", "DELETE /v2/droplets/789"},
+		},
+		{
+			name: "zero deadline retains current calls", now: now, wantDelete: true,
+			wantCalls: []string{"GET /v2/droplets/789", "DELETE /v2/droplets/789"},
+		},
+		{
+			name: "snapshot list forbidden", now: now, evidenceUntil: now.Add(time.Hour), wantPending: true,
+			dropletSnapshotsStatus: http.StatusForbidden,
+			wantCalls:              []string{"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots"},
+		},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			api := &bootstrapEvidenceTestServer{t: t, scenario: scenario, ensureRequest: ensureRequest}
+			api.server = httptest.NewTLSServer(api)
+			defer api.server.Close()
+			var logs bytes.Buffer
+			previousLogger := slog.Default()
+			slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+			defer slog.SetDefault(previousLogger)
+
+			adapter := recorderFleetAdapterWithNow(t, api.server, "secret-token", scenario.now)
+			request := recorderfleet.DeleteNodeRequest{
+				ProviderID: "789", Name: ensureRequest.Name, RequiredTags: ensureRequest.RequiredTags,
+				EvidenceUntil: scenario.evidenceUntil,
+			}
+			err := adapter.DeleteNode(t.Context(), request)
+			if scenario.wantPending != errors.Is(err, recorderfleet.ErrNodeEvidencePending) || !scenario.wantPending && err != nil {
+				t.Fatalf("delete error = %v, want pending %t", err, scenario.wantPending)
+			}
+			if scenario.wantDelete != api.deletedDroplet {
+				t.Fatalf("droplet deleted = %t, want %t", api.deletedDroplet, scenario.wantDelete)
+			}
+			if api.actionPosts != scenario.wantPosts || !slices.Equal(api.deletedSnapshots, scenario.wantPruned) {
+				t.Fatalf("snapshot posts/prunes = %d/%v, want %d/%v", api.actionPosts, api.deletedSnapshots, scenario.wantPosts, scenario.wantPruned)
+			}
+			if !slices.Equal(api.calls, scenario.wantCalls) {
+				t.Fatalf("API calls = %v, want %v", api.calls, scenario.wantCalls)
+			}
+			if scenario.name == "preserve and prune owned snapshots" &&
+				(strings.Count(logs.String(), "recorder.bootstrap_evidence_preserved") != 1 || !strings.Contains(logs.String(), "snapshot_id=4")) {
+				t.Fatalf("preservation log = %q", logs.String())
+			}
+			if scenario.name == "deadline passed" &&
+				(!strings.Contains(logs.String(), "recorder.bootstrap_evidence_skipped") || !strings.Contains(logs.String(), "reason=deadline")) {
+				t.Fatalf("deadline log = %q", logs.String())
+			}
+			if scenario.name == "snapshot list forbidden" &&
+				(!strings.Contains(logs.String(), "operation=list_droplet_snapshots") || !strings.Contains(logs.String(), "http_status=403") ||
+					strings.Contains(logs.String(), "secret-token") || strings.Contains(logs.String(), "provider body")) {
+				t.Fatalf("bounded API error log = %q", logs.String())
+			}
+		})
+	}
+}
+
+type bootstrapEvidenceTestScenario struct {
+	name                   string
+	now                    time.Time
+	evidenceUntil          time.Time
+	dropletSnapshots       []map[string]any
+	dropletSnapshotsStatus int
+	actions                []map[string]any
+	accountSnapshotPages   [][]map[string]any
+	wantPending            bool
+	wantDelete             bool
+	wantPosts              int
+	wantPruned             []string
+	wantCalls              []string
+}
+
+type bootstrapEvidenceTestServer struct {
+	t                *testing.T
+	server           *httptest.Server
+	scenario         bootstrapEvidenceTestScenario
+	ensureRequest    recorderfleet.EnsureNodeRequest
+	calls            []string
+	deletedSnapshots []string
+	actionPosts      int
+	deletedDroplet   bool
+}
+
+func (api *bootstrapEvidenceTestServer) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	api.calls = append(api.calls, request.Method+" "+request.URL.Path)
+	switch {
+	case request.Method == http.MethodGet && request.URL.Path == "/v2/droplets/789":
+		writeJSON(api.t, writer, http.StatusOK, map[string]any{"droplet": dropletResponse(api.ensureRequest, 789)})
+	case request.Method == http.MethodGet && request.URL.Path == "/v2/droplets/789/snapshots":
+		api.serveDropletSnapshots(writer)
+	case request.Method == http.MethodGet && request.URL.Path == "/v2/droplets/789/actions":
+		writeJSON(api.t, writer, http.StatusOK, map[string]any{"actions": api.scenario.actions})
+	case request.Method == http.MethodPost && request.URL.Path == "/v2/droplets/789/actions":
+		api.serveCreateSnapshot(writer, request)
+	case request.Method == http.MethodGet && request.URL.Path == "/v2/snapshots":
+		api.serveAccountSnapshots(writer, request)
+	case request.Method == http.MethodDelete && strings.HasPrefix(request.URL.Path, "/v2/snapshots/"):
+		api.deletedSnapshots = append(api.deletedSnapshots, strings.TrimPrefix(request.URL.Path, "/v2/snapshots/"))
+		writer.WriteHeader(http.StatusNoContent)
+	case request.Method == http.MethodDelete && request.URL.Path == "/v2/droplets/789":
+		api.deletedDroplet = true
+		writer.WriteHeader(http.StatusNoContent)
+	default:
+		api.t.Errorf("unexpected request %s %s", request.Method, request.URL.String())
+		writer.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (api *bootstrapEvidenceTestServer) serveDropletSnapshots(writer http.ResponseWriter) {
+	if api.scenario.dropletSnapshotsStatus != 0 {
+		writer.WriteHeader(api.scenario.dropletSnapshotsStatus)
+		_, _ = writer.Write([]byte("provider body contains private detail"))
+		return
+	}
+	writeJSON(api.t, writer, http.StatusOK, map[string]any{"snapshots": api.scenario.dropletSnapshots, "links": map[string]any{"pages": map[string]any{}}})
+}
+
+func (api *bootstrapEvidenceTestServer) serveCreateSnapshot(writer http.ResponseWriter, request *http.Request) {
+	api.actionPosts++
+	var body struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(request.Body).Decode(&body); err != nil || body.Type != "snapshot" || body.Name != api.ensureRequest.Name+"-bootstrap-evidence" {
+		api.t.Errorf("snapshot request body = %+v, error %v", body, err)
+	}
+	writeJSON(api.t, writer, http.StatusCreated, map[string]any{"action": map[string]any{"type": body.Type, "status": "in-progress"}})
+}
+
+func (api *bootstrapEvidenceTestServer) serveAccountSnapshots(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Query().Get("resource_type") != "droplet" {
+		api.t.Errorf("snapshot resource_type = %q", request.URL.Query().Get("resource_type"))
+	}
+	if api.scenario.accountSnapshotPages == nil {
+		api.t.Errorf("unexpected account snapshot listing")
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
+	page, _ := strconv.Atoi(request.URL.Query().Get("page"))
+	if page == 0 {
+		page = 1
+	}
+	if page > len(api.scenario.accountSnapshotPages) {
+		api.t.Errorf("unexpected snapshot page %d", page)
+		writer.WriteHeader(http.StatusNotFound)
+		return
+	}
+	links := map[string]any{"pages": map[string]any{}}
+	if page < len(api.scenario.accountSnapshotPages) {
+		links = map[string]any{"pages": map[string]any{
+			"next": api.server.URL + "/v2/snapshots?page=" + strconv.Itoa(page+1) + "&per_page=200&resource_type=droplet",
+		}}
+	}
+	writeJSON(api.t, writer, http.StatusOK, map[string]any{"snapshots": api.scenario.accountSnapshotPages[page-1], "links": links})
+}
+
 func TestRecorderFleetErrorsNeverExposeTokenOrProviderBody(t *testing.T) {
 	secret := "never-log-this-token"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -291,12 +497,16 @@ func TestRecorderFleetInspectNodeReturnsFreshExactInventoryAndExclusivePublicIP(
 }
 
 func recorderFleetAdapter(t *testing.T, server *httptest.Server, token string) *RecorderFleet {
+	return recorderFleetAdapterWithNow(t, server, token, time.Now())
+}
+
+func recorderFleetAdapterWithNow(t *testing.T, server *httptest.Server, token string, now time.Time) *RecorderFleet {
 	t.Helper()
 	adapter, err := NewRecorderFleet(RecorderFleetConfig{
 		PresignArchive: func(context.Context, recorderfleet.ArchiveSpec) (string, error) {
 			return "https://example.invalid/archive", nil
 		},
-		Token: token, BaseURL: server.URL, HTTPClient: server.Client(),
+		Token: token, BaseURL: server.URL, HTTPClient: server.Client(), Now: func() time.Time { return now },
 		Environment: "nightly", Role: workeridentity.RoleCapture,
 		OwnerTag: "chalk-recorder-owned", ProjectID: "project-1", VPCUUID: "vpc-1", SSHKeyIDs: []int64{17},
 	})

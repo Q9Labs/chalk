@@ -266,6 +266,12 @@ logs, or a tracked file.
 
 ### Retained boot diagnostics and cold qualification
 
+Failed-bootstrap fleet nodes retain a `<name>-bootstrap-evidence` snapshot, with
+only the newest three for this fleet kept. To inspect one, create a Droplet from
+the snapshot with the diagnostic SSH key, then read `/var/log/cloud-init-output.log`
+and `journalctl -u chalk-recorder-*`; the snapshot may contain the node's one-time
+bootstrap environment, so delete it after use.
+
 Create a separately owned boot probe whose name starts with
 `chalk-recorder-diagnostic-`, with the `chalk-recorder-diagnostic` tag present
 **in its original provider create payload**, alongside the normal environment,
