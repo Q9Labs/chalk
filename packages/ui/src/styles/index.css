@@ -1497,6 +1497,7 @@
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
 .chalk-frame {
+  container: chalk-call / inline-size;
   position: relative;
   width: 100%;
   height: 100%;
@@ -1692,7 +1693,7 @@
 [data-chalk] .chalk-menu-item:focus-visible {
   outline-offset: -2px;
 }
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-frame-header,
   .chalk-header {
     height: 52px;
@@ -1851,7 +1852,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-frame-dock {
     padding: 0 22px;
     justify-content: space-between;
@@ -1927,7 +1928,7 @@
     0 0 0 1px var(--chalk-line),
     0 12px 32px rgba(0, 0, 0, 0.12);
 }
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-header-title {
     flex: 1;
     justify-content: space-between;

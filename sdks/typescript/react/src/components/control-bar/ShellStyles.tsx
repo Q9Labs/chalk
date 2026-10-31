@@ -395,7 +395,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 [data-chalk-theme="light"] .chalk-shell-reactions {
   box-shadow: var(--chalk-shadow);
 }
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-shell-details-heading {display:none;}
   .chalk-shell-detail-action {min-height:48px;}
   .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
@@ -470,7 +470,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   border-radius: 50%;
   background: var(--chalk-danger);
 }
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-shell-recording {
     display: none;
   }
@@ -559,7 +559,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-reactions-expanded .chalk-shell-raise {
   grid-column: 1/-1;
 }
-@media (max-width: 640px) {
+@container chalk-call (max-width: 640px) {
   .chalk-shell-reactions {
     flex-wrap: wrap;
     justify-content: center;
