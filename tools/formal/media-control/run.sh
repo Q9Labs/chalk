@@ -111,7 +111,7 @@ done < "${RUNS_FILE:-$here/runs.txt}"
 
 # Heal model: MediaHeal.tla, one row per run in heal-runs.txt.
 #   name | check | expect | KEY=VALUE overrides of the default constants (no spaces inside a value)
-heal_defaults="Listeners={l1} Pub=pub MaxGen=4 MaxToggle=2 MaxPubLost=1 MaxListenerLost=1 MaxPullFail=1 MaxRecvDown=1 MaxPubDrop=1 MaxSfuRebuild=1 MaxLoss=1 MaxFaults=2 DeadThreshold=2 CapTicks=2 FlatTicks=2 FailSat=4 GiveUpAfter=0 RetryCap=TRUE FlatDrop=TRUE RecvReconnect=TRUE DeadPath=TRUE PublisherSelfDetect=FALSE MuteKeepsPublication=TRUE StaleLoss=TRUE RecoveryPause=\"item\" LazyClose=TRUE SfuExpiresStale=TRUE"
+heal_defaults="Listeners={l1} Pub=pub MaxGen=4 MaxToggle=2 MaxPubLost=1 MaxListenerLost=1 MaxPullFail=1 MaxRecvDown=1 MaxPubDrop=1 MaxSfuRebuild=1 MaxLoss=1 MaxHostMute=0 MaxFaults=2 DeadThreshold=2 CapTicks=2 FlatTicks=2 FailSat=4 GiveUpAfter=0 RetryCap=TRUE FlatDrop=TRUE RecvReconnect=TRUE DeadPath=TRUE PublisherSelfDetect=FALSE MuteKeepsPublication=TRUE StaleLoss=TRUE RecoveryPause=\"grant\" LazyClose=TRUE SfuExpiresStale=TRUE"
 heal_summary="$here/results/heal-summary.md"
 machine=$(scutil --get ComputerName 2>/dev/null || hostname)
 {
@@ -121,7 +121,7 @@ machine=$(scutil --get ComputerName 2>/dev/null || hostname)
 
 while IFS='|' read -r name check expect overrides; do
   name=$(echo "$name" | xargs); [ -z "$name" ] || [[ "$name" == \#* ]] && continue
-  check=$(echo "$check" | xargs); expect=$(echo "$expect" | xargs); overrides=$(echo "$overrides" | xargs)
+  check=$(echo "$check" | xargs); expect=$(echo "$expect" | xargs); overrides=$(echo "$overrides" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
   if [ "$#" -gt 0 ]; then
     printf '%s\n' "$@" | grep -qx "$name" || continue
   elif [[ "$name" == deep-* && -z "${DEEP:-}" ]]; then continue; fi
@@ -132,8 +132,10 @@ while IFS='|' read -r name check expect overrides; do
 INVARIANT P1_MutedNeverCaptures
 INVARIANT GenSupply
 INVARIANT P6_RetrySpacing
+PROPERTY P1b_OnlyUserCaptures
 PROPERTY P2_OffSurvivesReconnect
 PROPERTY S5_PullOnlyListed"; symmetry=yes ;;
+    P1d) checks="PROPERTY P1d_HostMuteStopsCapture" ;;
     P4h) checks="PROPERTY P4h_PublisherAgrees" ;;
     P5) checks="PROPERTY P5_EveryOnPublicationHeard" ;;
     P5src) checks="PROPERTY P5src_MicrophoneHeard" ;;
@@ -143,6 +145,8 @@ PROPERTY S5_PullOnlyListed"; symmetry=yes ;;
     W1) checks="INVARIANT W1_Heard" ;;
     W2) checks="INVARIANT W2_DeadThenRepublished" ;;
     W3) checks="INVARIANT W3_FlatThenRepulled" ;;
+    W4) checks="INVARIANT W4_PausedByRecovery" ;;
+    W5) checks="INVARIANT W5_DeadWhileOffline" ;;
     *) echo "unknown check '$check' in run $name" >&2; exit 2 ;;
   esac
 

@@ -35,6 +35,7 @@ CONSTANTS
   MaxPubDrop,             \* publisher Sync-link drops, in total
   MaxSfuRebuild,          \* publisher SFU-session rebuilds, in total
   MaxLoss,                \* messages the network may lose, in total
+  MaxHostMute,            \* Sync revokes the publisher's grant (a moderation pause), in total
   MaxFaults,              \* faults of all kinds together (keeps joint faults small)
   DeadThreshold,          \* failed pulls of one gone track before the API reports it dead
   CapTicks,               \* retry delay cap in heal ticks (about 1 s)
@@ -49,7 +50,8 @@ CONSTANTS
   MuteKeepsPublication,   \* TRUE = off keeps the publication (#716); FALSE = off retires it
   StaleLoss,              \* TRUE = a lost track may also linger at the SFU without packets
   RecoveryPause,          \* "item" = SDK today: after a reconnect pause the device if Sync's item for it is not enabled;
-                          \* "grant" = pause only if Sync's grant is off (moderation); "none" = never
+                          \* "grant" = proposed: pause only if Sync has seen this on-revision and its grant is off (moderation);
+                          \* "none" = never pause on recovery
   LazyClose,              \* TRUE = retiring a publication leaves its track at the SFU until a separate close call
   SfuExpiresStale         \* TRUE = the SFU eventually expires a track that gets no packets (Cloudflare: 30 s)
 
@@ -92,7 +94,7 @@ vars  == <<pubv, syncv, ver, sfuv, chan, lsv, bud>>
 ----------------------------------------------------------------------------
 Min(a, b) == IF a < b THEN a ELSE b
 
-FaultsLeft == bud.pl + bud.ll + bud.pf + bud.rd + bud.pd + bud.sr + bud.loss < MaxFaults
+FaultsLeft == bud.pl + bud.ll + bud.pf + bud.rd + bud.pd + bud.sr + bud.loss + bud.hm < MaxFaults
 
 NoSnap == [ver |-> -1, list |-> [g \in Gens |-> "none"], grant |-> FALSE, ack |-> 0]
 SyncSnapshot == [ver |-> ver, list |-> list, grant |-> grant, ack |-> lastSeq]
@@ -112,7 +114,7 @@ Remember == IF recovering >= 0 THEN recovering ELSE IF want THEN seq ELSE -1
 ItemEnabled(m) == m.grant /\ \E g \in Gens : m.list[g] = "on"
 PauseNeeded(m) ==
   CASE RecoveryPause = "item" -> ~ItemEnabled(m)
-    [] RecoveryPause = "grant" -> ~m.grant
+    [] RecoveryPause = "grant" -> ~m.grant /\ m.ack >= seq
     [] OTHER -> FALSE
 
 Init ==
@@ -126,7 +128,7 @@ Init ==
   /\ recvUp = [l \in Listeners |-> TRUE] /\ pulled = [l \in Listeners |-> {}]
   /\ subLost = [l \in Listeners |-> {}]
   /\ pair = [l \in Listeners |-> [g \in Gens |-> FreshPair]]
-  /\ bud = [pl |-> 0, ll |-> 0, pf |-> 0, rd |-> 0, pd |-> 0, sr |-> 0, loss |-> 0]
+  /\ bud = [pl |-> 0, ll |-> 0, pf |-> 0, rd |-> 0, pd |-> 0, sr |-> 0, loss |-> 0, hm |-> 0]
 
 ----------------------------------------------------------------------------
 (* PUBLISHER *)
@@ -193,7 +195,8 @@ RecvSnap(r) ==
   /\ rmsg[r].ver > view[r].ver /\ (r = Pub => syncUp)
   /\ view' = [view EXCEPT ![r] = rmsg[r]]
   /\ offSt' = IF r = Pub /\ rmsg[r].ack >= seq /\ ~want THEN "none" ELSE offSt
-  /\ UNCHANGED <<want, cap, seq, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, rmsg, lsv, bud>>
+  /\ cap' = IF r = Pub /\ want /\ ~rmsg[r].grant /\ rmsg[r].ack >= seq THEN FALSE ELSE cap
+  /\ UNCHANGED <<want, seq, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, rmsg, lsv, bud>>
 
 ----------------------------------------------------------------------------
 (* SYNC AND API *)
@@ -224,6 +227,13 @@ Admit ==
        /\ pubGen' = g /\ nextGen' = g + 1
   /\ pubReq' = FALSE
   /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubSfuUp, recovering, lastSeq, grant, deadMsg, obs, chan, lsv, bud>>
+
+\* A host mute: Sync revokes the grant of an on-revision it has seen. The publication stays listed.
+HostMute ==
+  /\ bud.hm < MaxHostMute /\ FaultsLeft /\ grant /\ lastSeq >= 1
+  /\ grant' = FALSE
+  /\ bud' = [bud EXCEPT !.hm = @ + 1]
+  /\ UNCHANGED <<pubv, list, lastSeq, nextGen, deadMsg, sfuv, chan, lsv>>
 
 SyncSend(r) ==
   /\ (r = Pub => syncUp) /\ rmsg[r] # SyncSnapshot
@@ -409,6 +419,7 @@ Next ==
   \/ SyncRecvOn /\ Stamp
   \/ SyncRecvOff /\ Stamp
   \/ Admit /\ Stamp
+  \/ HostMute /\ Stamp
   \/ \E r \in Recipients : SyncSend(r) /\ Stamp
   \/ \E g \in Gens : SyncRecvDead(g) /\ Stamp
   \/ \E l \in Listeners : HealReconnect(l) /\ Stamp
@@ -466,6 +477,12 @@ GenSupply == ~(pubReq /\ grant /\ pubGen = 0 /\ pubSfuUp /\ nextGen > MaxGen)
 \* P1. A muted publisher never captures. No heal or republish step turns capture on.
 P1_MutedNeverCaptures == cap => want
 
+\* P1b. Only the user turns capture on: no heal, republish or recovery step does.
+P1b_OnlyUserCaptures == [][ (~cap /\ cap') => (~want /\ want') ]_vars
+
+\* P1d. A host mute that Sync has applied stops capture, also when it arrives during a reconnect.
+P1d_HostMuteStopsCapture == <>[](syncUp /\ want /\ ~grant /\ lastSeq >= seq => ~cap)
+
 \* P2. An off is never lost across a publisher reconnect.
 P2_OffSurvivesReconnect ==
   [][ (~syncUp /\ syncUp') => ((~want' /\ lastSeq' < seq') => offSt' \in {"queued", "sent"}) ]_vars
@@ -500,7 +517,7 @@ P5_EveryOnPublicationHeard ==
 \* on and stays connected, every listener eventually hears some live publication.
 P5src_MicrophoneHeard ==
   \A l \in Listeners :
-    (<>[](want /\ syncUp)) => <>[](cap /\ \E g \in Gens : list[g] = "on" /\ Rising(l, g))
+    (<>[](want /\ syncUp /\ bud.hm = 0)) => <>[](cap /\ \E g \in Gens : list[g] = "on" /\ Rising(l, g))
 
 ----------------------------------------------------------------------------
 (* WITNESSES. Each is expected to be VIOLATED: the violation proves the state is reachable. *)
@@ -510,9 +527,7 @@ W2_DeadThenRepublished ==
   ~(\E g, h \in Gens : g < h /\ list[g] = "dead" /\ list[h] = "on" /\ \E l \in Listeners : Rising(l, h))
 W3_FlatThenRepulled ==
   \A l \in Listeners, g \in Gens : ~(g \in pulled[l] /\ g \in subLost[l] /\ pair[l][g].flat >= FlatTicks)
+\* The recovery pause: the device wants the microphone on but has stopped capture.
 W4_PausedByRecovery == ~(want /\ ~cap)
 W5_DeadWhileOffline == ~(want /\ ~syncUp /\ recovering >= 0 /\ \E g \in Gens : list[g] = "dead")
-W6_DeadNoneOn == ~(want /\ recovering >= 0 /\ \E g \in Gens : list[g] = "dead" /\ ~(\E h \in Gens : list[h] = "on"))
-W7_PauseEnabled == ~(want /\ recovering >= 0 /\ syncUp /\ rmsg[Pub].ver >= 0 /\ PauseNeeded(rmsg[Pub]))
-W8_PauseSnap == ~(want /\ recovering >= 0 /\ rmsg[Pub].ver >= 0 /\ PauseNeeded(rmsg[Pub]))
 =======================================================================
