@@ -8,6 +8,7 @@ import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationK
 import { matchRemotePullTracks } from "./remote-track-response";
 import { createCallStatsCollector } from "./call-stats";
 import { CloudflareSFUError } from "./types";
+import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
   CloudflareSFUBootstrap,
@@ -1333,7 +1334,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
-    return create({ iceServers: [{ urls: bootstrap.stunServer }], bundlePolicy: "max-bundle" });
+    return create({ iceServers: iceServersFor(bootstrap), bundlePolicy: "max-bundle" });
   }
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
     try {

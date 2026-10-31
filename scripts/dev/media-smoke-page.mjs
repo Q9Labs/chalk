@@ -1,5 +1,15 @@
-export function createMediaSmokeInitScript() {
+// iceProof forces relay-only ICE through one TURN transport: "relay-udp",
+// "relay-tcp" or "relay-tls". Anything else leaves the SDK's ICE config alone.
+const ICE_PROOF_URLS = {
+  "relay-udp": { scheme: "turn:", transport: "udp", port: "3478" },
+  "relay-tcp": { scheme: "turn:", transport: "tcp", port: "3478" },
+  "relay-tls": { scheme: "turns:", transport: "tcp", port: "443" },
+};
+
+export function createMediaSmokeInitScript({ iceProof } = {}) {
+  const filter = ICE_PROOF_URLS[iceProof] ?? null;
   return String.raw`(() => {
+    const iceFilter = ${JSON.stringify(filter)};
     const state = {
       rtcConnections: new Set(),
       remoteTracks: new Map(),
@@ -26,6 +36,32 @@ export function createMediaSmokeInitScript() {
               packetsReceived: Number.isFinite(entry.packetsReceived) ? entry.packetsReceived : 0,
               packetsSent: Number.isFinite(entry.packetsSent) ? entry.packetsSent : 0,
             });
+          });
+        }
+        return rows;
+      },
+      selectedCandidates: async () => {
+        const rows = [];
+        for (const rtcConnection of state.rtcConnections) {
+          const report = await rtcConnection.getStats();
+          const byId = new Map();
+          report.forEach((entry) => byId.set(entry.id, entry));
+          const transport = Array.from(byId.values()).find((entry) => entry.type === "transport" && entry.selectedCandidatePairId);
+          const pair = transport ? byId.get(transport.selectedCandidatePairId) : undefined;
+          if (!pair) continue;
+          const local = byId.get(pair.localCandidateId);
+          const remote = byId.get(pair.remoteCandidateId);
+          rows.push({
+            pairState: pair.state,
+            localCandidateType: local?.candidateType,
+            localProtocol: local?.protocol,
+            localRelayProtocol: local?.relayProtocol,
+            localUrlScheme: typeof local?.url === "string" ? local.url.split(":")[0] : undefined,
+            localUrlPort: typeof local?.url === "string" ? (local.url.match(/:(\d+)/) || [])[1] : undefined,
+            remoteCandidateType: remote?.candidateType,
+            remoteProtocol: remote?.protocol,
+            requestedIceServerUrls: rtcConnection.__chalkIceUrls || [],
+            iceTransportPolicy: rtcConnection.__chalkIceTransportPolicy,
           });
         }
         return rows;
@@ -108,7 +144,16 @@ export function createMediaSmokeInitScript() {
     if (typeof OriginalRtcConnection === "function") {
       window.RTCPeerConnection = new Proxy(OriginalRtcConnection, {
         construct(target, args) {
-          const rtcConnection = Reflect.construct(target, args);
+          const configuration = { ...(args[0] || {}) };
+          if (iceFilter) {
+            configuration.iceTransportPolicy = "relay";
+            configuration.iceServers = (configuration.iceServers || [])
+              .map((server) => ({ ...server, urls: [].concat(server.urls).filter((url) => url.startsWith(iceFilter.scheme) && url.includes(":" + iceFilter.port) && (iceFilter.scheme === "turns:" || url.includes("transport=" + iceFilter.transport))) }))
+              .filter((server) => server.urls.length > 0);
+          }
+          const rtcConnection = Reflect.construct(target, [configuration, ...args.slice(1)]);
+          rtcConnection.__chalkIceUrls = (configuration.iceServers || []).flatMap((server) => [].concat(server.urls));
+          rtcConnection.__chalkIceTransportPolicy = configuration.iceTransportPolicy || "all";
           attachRtcConnection(rtcConnection);
           return rtcConnection;
         },

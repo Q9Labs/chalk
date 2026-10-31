@@ -1,8 +1,15 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
+export type CloudflareSFUIceServer = {
+  readonly urls: readonly string[];
+  readonly username?: string;
+  readonly credential?: string;
+};
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
+  /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
+  readonly iceServers?: readonly CloudflareSFUIceServer[];
 };
 export type CloudflareSFUSessionDescription = {
   readonly type: "offer" | "answer";
