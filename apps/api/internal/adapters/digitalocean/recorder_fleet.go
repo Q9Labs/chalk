@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -39,6 +40,7 @@ type RecorderFleetConfig struct {
 	Token          string
 	BaseURL        string
 	HTTPClient     *http.Client
+	Now            func() time.Time
 	Environment    string
 	Role           workeridentity.Role
 	OwnerTag       string
@@ -62,6 +64,7 @@ type RecorderFleet struct {
 	projectID      string
 	role           workeridentity.Role
 	token          string
+	now            func() time.Time
 	vpcUUID        string
 	sshKeyIDs      []int64
 }
@@ -85,12 +88,15 @@ func NewRecorderFleet(config RecorderFleetConfig) (*RecorderFleet, error) {
 	if config.RequestBudget == nil {
 		config.RequestBudget = NewRequestBudget()
 	}
+	if config.Now == nil {
+		config.Now = time.Now
+	}
 	return &RecorderFleet{
 		budget:         config.RequestBudget,
 		slotsPerNode:   config.SlotsPerNode,
 		presignArchive: config.PresignArchive, baseURL: baseURL, client: config.HTTPClient, environment: config.Environment,
 		gpu: config.GPU, ownerTag: config.OwnerTag, projectID: config.ProjectID,
-		role: config.Role, token: config.Token, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
+		role: config.Role, token: config.Token, now: config.Now, vpcUUID: config.VPCUUID, sshKeyIDs: append([]int64(nil), config.SSHKeyIDs...),
 	}, nil
 }
 
@@ -291,7 +297,162 @@ func (a *RecorderFleet) DeleteNode(ctx context.Context, request recorderfleet.De
 			return recorderfleet.ErrInventoryDrift
 		}
 	}
+	if !request.EvidenceUntil.IsZero() {
+		if a.now().Before(request.EvidenceUntil) {
+			if err := a.ensureBootstrapEvidence(ctx, response.Droplet); err != nil {
+				return err
+			}
+		} else {
+			slog.WarnContext(ctx, "recorder bootstrap evidence deadline elapsed",
+				"event", "recorder.bootstrap_evidence_skipped",
+				"provider_id", request.ProviderID,
+				"node_name", request.Name,
+				"reason", "deadline",
+			)
+		}
+	}
 	return a.doJSON(ctx, http.MethodDelete, "/v2/droplets/"+strconv.FormatInt(providerID, 10), nil, nil, nil, http.StatusNoContent)
+}
+
+func (a *RecorderFleet) ensureBootstrapEvidence(ctx context.Context, droplet digitalOceanDroplet) error {
+	snapshotName := droplet.Name + "-bootstrap-evidence"
+	snapshots, err := a.listDropletSnapshots(ctx, droplet.ID)
+	if err != nil {
+		a.logBootstrapEvidenceError(ctx, droplet, "list_droplet_snapshots", err)
+		return recorderfleet.ErrNodeEvidencePending
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.Name == snapshotName {
+			a.pruneBootstrapEvidence(ctx, droplet)
+			slog.InfoContext(ctx, "recorder bootstrap evidence preserved",
+				"event", "recorder.bootstrap_evidence_preserved",
+				"provider_id", strconv.FormatInt(droplet.ID, 10),
+				"node_name", droplet.Name,
+				"snapshot_id", snapshot.ID,
+			)
+			return nil
+		}
+	}
+
+	actions, err := a.listDropletActions(ctx, droplet.ID)
+	if err != nil {
+		a.logBootstrapEvidenceError(ctx, droplet, "list_droplet_actions", err)
+		return recorderfleet.ErrNodeEvidencePending
+	}
+	for _, action := range actions {
+		if action.Type == "snapshot" && action.Status == "in-progress" {
+			return recorderfleet.ErrNodeEvidencePending
+		}
+	}
+
+	input := struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}{Type: "snapshot", Name: snapshotName}
+	path := "/v2/droplets/" + strconv.FormatInt(droplet.ID, 10) + "/actions"
+	if err := a.doJSON(ctx, http.MethodPost, path, nil, input, nil, http.StatusCreated); err != nil {
+		a.logBootstrapEvidenceError(ctx, droplet, "create_snapshot", err)
+		return recorderfleet.ErrNodeEvidencePending
+	}
+	return recorderfleet.ErrNodeEvidencePending
+}
+
+func (a *RecorderFleet) listDropletSnapshots(ctx context.Context, dropletID int64) ([]digitalOceanSnapshot, error) {
+	path := "/v2/droplets/" + strconv.FormatInt(dropletID, 10) + "/snapshots"
+	query := url.Values{"per_page": {strconv.Itoa(dropletsPerPage)}}
+	snapshots := make([]digitalOceanSnapshot, 0)
+	for {
+		var response listSnapshotsResponse
+		if err := a.doJSON(ctx, http.MethodGet, path, query, nil, &response, http.StatusOK); err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, response.Snapshots...)
+		if response.Links.Pages.Next == "" {
+			return snapshots, nil
+		}
+		nextQuery, err := a.snapshotNextPage(response.Links.Pages.Next, path)
+		if err != nil {
+			return nil, err
+		}
+		query = nextQuery
+	}
+}
+
+func (a *RecorderFleet) listDropletActions(ctx context.Context, dropletID int64) ([]digitalOceanAction, error) {
+	path := "/v2/droplets/" + strconv.FormatInt(dropletID, 10) + "/actions"
+	var response listActionsResponse
+	err := a.doJSON(ctx, http.MethodGet, path, url.Values{"per_page": {strconv.Itoa(dropletsPerPage)}}, nil, &response, http.StatusOK)
+	return response.Actions, err
+}
+
+func (a *RecorderFleet) pruneBootstrapEvidence(ctx context.Context, droplet digitalOceanDroplet) {
+	snapshots, err := a.listSnapshots(ctx)
+	if err != nil {
+		a.logBootstrapEvidenceError(ctx, droplet, "prune_list_snapshots", err)
+		return
+	}
+	prefix := "chalk-recorder-" + string(a.role) + "-" + a.environment + "-"
+	owned := make([]digitalOceanSnapshot, 0)
+	for _, snapshot := range snapshots {
+		if snapshot.ResourceType == "droplet" && strings.HasPrefix(snapshot.Name, prefix) && strings.HasSuffix(snapshot.Name, "-bootstrap-evidence") {
+			owned = append(owned, snapshot)
+		}
+	}
+	slices.SortFunc(owned, compareSnapshotCreatedAt)
+	if len(owned) <= 3 {
+		return
+	}
+	for _, snapshot := range owned[3:] {
+		path := "/v2/snapshots/" + strconv.FormatInt(snapshot.ID, 10)
+		if err := a.doJSON(ctx, http.MethodDelete, path, nil, nil, nil, http.StatusNoContent); err != nil {
+			a.logBootstrapEvidenceError(ctx, droplet, "prune_delete_snapshot", err)
+		}
+	}
+}
+
+func (a *RecorderFleet) listSnapshots(ctx context.Context) ([]digitalOceanSnapshot, error) {
+	path := "/v2/snapshots"
+	query := url.Values{"per_page": {strconv.Itoa(dropletsPerPage)}, "resource_type": {"droplet"}}
+	snapshots := make([]digitalOceanSnapshot, 0)
+	for {
+		var response listSnapshotsResponse
+		if err := a.doJSON(ctx, http.MethodGet, path, query, nil, &response, http.StatusOK); err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, response.Snapshots...)
+		if response.Links.Pages.Next == "" {
+			return snapshots, nil
+		}
+		nextQuery, err := a.snapshotNextPage(response.Links.Pages.Next, path)
+		if err != nil {
+			return nil, err
+		}
+		query = nextQuery
+	}
+}
+
+func (a *RecorderFleet) snapshotNextPage(next, expectedPath string) (url.Values, error) {
+	parsed, err := url.Parse(next)
+	if err != nil || parsed.Scheme != a.baseURL.Scheme || parsed.Host != a.baseURL.Host ||
+		parsed.User != nil || parsed.Fragment != "" || parsed.Path != expectedPath {
+		return nil, recorderfleet.ErrProviderUnavailable
+	}
+	return parsed.Query(), nil
+}
+
+func (a *RecorderFleet) logBootstrapEvidenceError(ctx context.Context, droplet digitalOceanDroplet, operation string, err error) {
+	status := 0
+	var statusError *digitalOceanHTTPStatusError
+	if errors.As(err, &statusError) {
+		status = statusError.status
+	}
+	slog.WarnContext(ctx, "recorder bootstrap evidence operation failed",
+		"event", "recorder.bootstrap_evidence_pending",
+		"provider_id", strconv.FormatInt(droplet.ID, 10),
+		"node_name", droplet.Name,
+		"operation", operation,
+		"http_status", status,
+	)
 }
 
 func (a *RecorderFleet) validateKey(key recorderfleet.PoolKey) error {
@@ -474,18 +635,18 @@ func (a *RecorderFleet) sendJSON(ctx context.Context, method, path string, query
 			deadline = now.Add(5 * time.Second)
 		}
 		a.budget.retryAt = maxTime(a.budget.retryAt, deadline)
-		return fmt.Errorf("%w: DigitalOcean status 429", &recorderfleet.ProviderRateLimitError{RetryAt: deadline})
+		return &digitalOceanHTTPStatusError{status: http.StatusTooManyRequests, err: fmt.Errorf("%w: DigitalOcean status 429", &recorderfleet.ProviderRateLimitError{RetryAt: deadline})}
 	}
 	if remaining := rateLimitNumber(response.Header.Get("RateLimit-Remaining")); remaining != nil && *remaining == 0 {
 		a.budget.retryAt = maxTime(a.budget.retryAt, rateLimitReset(response.Header.Get("RateLimit-Reset")))
 	}
 	if response.StatusCode == http.StatusNotFound {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
-		return errNotFound
+		return &digitalOceanHTTPStatusError{status: http.StatusNotFound, err: errNotFound}
 	}
 	if response.StatusCode != expectedStatus {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
-		return fmt.Errorf("%w: DigitalOcean status %d", recorderfleet.ErrProviderUnavailable, response.StatusCode)
+		return &digitalOceanHTTPStatusError{status: response.StatusCode, err: fmt.Errorf("%w: DigitalOcean status %d", recorderfleet.ErrProviderUnavailable, response.StatusCode)}
 	}
 	if output == nil {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maximumResponseBytes))
@@ -667,6 +828,31 @@ type retrieveDropletResponse struct {
 	Droplet digitalOceanDroplet `json:"droplet"`
 }
 
+type digitalOceanSnapshot struct {
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	CreatedAt    string `json:"created_at"`
+	ResourceType string `json:"resource_type"`
+}
+
+type listSnapshotsResponse struct {
+	Snapshots []digitalOceanSnapshot `json:"snapshots"`
+	Links     struct {
+		Pages struct {
+			Next string `json:"next"`
+		} `json:"pages"`
+	} `json:"links"`
+}
+
+type digitalOceanAction struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+}
+
+type listActionsResponse struct {
+	Actions []digitalOceanAction `json:"actions"`
+}
+
 type digitalOceanFirewall struct {
 	ID         string   `json:"id"`
 	DropletIDs []int64  `json:"droplet_ids"`
@@ -695,6 +881,32 @@ type projectResourcesResponse struct {
 		Status string `json:"status"`
 		URN    string `json:"urn"`
 	} `json:"resources"`
+}
+
+type digitalOceanHTTPStatusError struct {
+	status int
+	err    error
+}
+
+func (err *digitalOceanHTTPStatusError) Error() string { return err.err.Error() }
+func (err *digitalOceanHTTPStatusError) Unwrap() error { return err.err }
+
+func compareSnapshotCreatedAt(left, right digitalOceanSnapshot) int {
+	leftTime, _ := time.Parse(time.RFC3339Nano, left.CreatedAt)
+	rightTime, _ := time.Parse(time.RFC3339Nano, right.CreatedAt)
+	if leftTime.After(rightTime) {
+		return -1
+	}
+	if leftTime.Before(rightTime) {
+		return 1
+	}
+	if left.ID > right.ID {
+		return -1
+	}
+	if left.ID < right.ID {
+		return 1
+	}
+	return 0
 }
 
 var errNotFound = errors.New("DigitalOcean resource not found")

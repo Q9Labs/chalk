@@ -555,16 +555,7 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 	}
 	switch managed.Phase {
 	case PhaseIdentityRevoked, PhaseDeleting:
-		// Preserve the exact observed ownership tags rather than reconstructing
-		// mutable release configuration for a stale node.
-		request := DeleteNodeRequest{ProviderID: node.ProviderID, Name: node.Name, RequiredTags: append([]string(nil), node.Tags...)}
-		if err := r.provider.DeleteNode(ctx, request); err != nil {
-			return state, Result{}, fmt.Errorf("delete recorder fleet node: %w", errors.Join(ErrProviderUnavailable, err))
-		}
-		managed.Phase = PhaseDeleting
-		state.Nodes[node.ProviderID] = managed
-		state, err := r.save(ctx, state)
-		return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
+		return r.deleteRevokedNode(ctx, state, managed, node, now)
 	case PhaseDraining:
 		if managed.Identity != nil {
 			if err := r.bootstrap.RevokeIdentity(ctx, *managed.Identity); err != nil {
@@ -608,6 +599,27 @@ func (r *Reconciler) advanceDrain(ctx context.Context, state Journal, managed Ma
 		state, err := r.save(ctx, state)
 		return state, Result{Action: ActionAdmissionClosed, ProviderNodeID: node.ProviderID}, err
 	}
+}
+
+func (r *Reconciler) deleteRevokedNode(ctx context.Context, state Journal, managed ManagedNode, node Node, now time.Time) (Journal, Result, error) {
+	if err := r.provider.DeleteNode(ctx, r.deleteNodeRequest(managed, node, now)); err != nil {
+		if errors.Is(err, ErrNodeEvidencePending) {
+			return state, Result{Action: ActionNone, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, nil
+		}
+		return state, Result{}, fmt.Errorf("delete recorder fleet node: %w", errors.Join(ErrProviderUnavailable, err))
+	}
+	managed.Phase = PhaseDeleting
+	state.Nodes[node.ProviderID] = managed
+	state, err := r.save(ctx, state)
+	return state, Result{Action: ActionNodeDeleted, ProviderNodeID: node.ProviderID, BootstrapDiagnostic: managed.BootstrapDiagnostic}, err
+}
+
+func (r *Reconciler) deleteNodeRequest(managed ManagedNode, node Node, now time.Time) DeleteNodeRequest {
+	request := DeleteNodeRequest{ProviderID: node.ProviderID, Name: node.Name, RequiredTags: append([]string(nil), node.Tags...)}
+	if managed.Identity == nil && now.Sub(node.CreatedAt) > r.config.StartupTimeout {
+		request.EvidenceUntil = node.CreatedAt.Add(r.config.StartupTimeout + bootstrapEvidenceWindow)
+	}
+	return request
 }
 
 func (r *Reconciler) finish(ctx context.Context, state Journal, nodes map[string]Node, observed map[string]NodeObservation, demand Demand, now time.Time, result Result, priorErr error) (Result, error) {
