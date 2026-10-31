@@ -1,5 +1,6 @@
 import { Deferred, Effect, Fiber } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ManualClock } from "../../tests/helpers/manual-clock";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { parseParsedAccessGrant } from "../access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
@@ -13,6 +14,45 @@ import { track } from "../space-client/capture.test.helpers";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  { name: "waits through the server's provider cleanup budget", delay: 35_000, acknowledged: true },
+  { name: "still fails when durable cleanup exceeds the client budget", delay: 40_001, acknowledged: false },
+])("durable Leave $name", async ({ delay, acknowledged }) => {
+  const platform = createCoreTestPlatform();
+  const clock = new ManualClock();
+  clock.advance(Date.now());
+  const acknowledgement = Promise.withResolvers<Awaited<ReturnType<typeof platform.sync.leave>>>();
+  const leaveSync = vi.spyOn(platform.sync, "leave").mockImplementation(() => acknowledgement.promise);
+  const client = createSpaceClientForPlatform(
+    { space: "leave-proof", getAccess: async () => opaqueAccessGrant(1) },
+    {
+      dependencies: {
+        ...platform.dependencies,
+        clock: { now: () => clock.now(), setTimeout: (callback, delay) => clock.setTimeout(callback, delay), clearTimeout: (handle) => clock.clearTimeout(handle) },
+        cancelPendingAdmission: async () => false,
+      },
+    },
+  );
+  let leaving: Promise<boolean> | undefined;
+  try {
+    await client.join({ microphone: false, camera: false });
+    leaving = client.leave().then(
+      () => true,
+      () => false,
+    );
+    await vi.waitFor(() => expect(leaveSync).toHaveBeenCalledOnce());
+    clock.advance(delay);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    acknowledgement.resolve({ type: "ack", command_id: "leave", outcome: "satisfied", revision: 2, state_digest: "digest" });
+    expect(await leaving).toBe(acknowledged);
+    expect(client.getSnapshot().connection.status).toBe("left");
+  } finally {
+    acknowledgement.resolve({ type: "ack", command_id: "leave", outcome: "satisfied", revision: 2, state_digest: "digest" });
+    await leaving;
+    client.dispose();
+  }
+});
 
 describe("ConnectionLifecycle Episode snapshot", () => {
   it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
