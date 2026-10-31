@@ -29,6 +29,7 @@ const builds = {
 const conditions = {
   open: { netem: null, kill: false },
   netem: { netem: "delay 150ms 30ms loss 1.5%", kill: false },
+  kill: { netem: null, kill: true },
   netemKill: { netem: "delay 150ms 30ms loss 1.5%", kill: true },
   slow: { netem: "delay 250ms 40ms loss 2%", kill: false },
 };
@@ -209,6 +210,11 @@ async function runBuild(name) {
   await build({ entryPoints: [`${serverRoot}/sdks/typescript/client/src/server/index.ts`], bundle: true, outfile: serverClientFile, platform: "node", format: "esm", nodePaths: [resolve(root, "node_modules"), resolve(root, "sdks/typescript/client/node_modules")] });
   const { createChalkServerClient, getAccessRefreshState } = await import(serverClientFile);
 
+  const syncDir = `${serverRoot}/apps/sync`;
+  const prod = { ...process.env, MIX_ENV: "prod" };
+  execFileSync("mix", ["deps.get"], { cwd: syncDir, env: prod, stdio: "ignore" });
+  execFileSync("mix", ["compile"], { cwd: syncDir, env: prod, stdio: "ignore" });
+  execFileSync("go", ["build", "-o", "/dev/null", "./cmd"], { cwd: `${serverRoot}/apps/api`, stdio: "ignore" });
   console.log(`Starting server for ${name}.`);
   await runtime.start();
   assert.equal(runtime.status().state, "ready");
@@ -250,7 +256,7 @@ async function runBuild(name) {
 async function runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName }) {
   const space = await chalk.spaces.create({ name: `Silence ${name}`, slug: `sr-${name.replaceAll(/\W/gu, "-")}-${conditionName.toLowerCase()}-${Date.now()}`, mediaPlane: "cf_sfu", defaultEpisodeDurationSeconds: 3600, maximumEpisodeDurationSeconds: 7200, lingerWindowSeconds: 600 });
   const episode = await chalk.episodes.create(space.id, {});
-  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.SR_CHROMIUM || undefined, args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
   allBrowsers.push(browser);
   const origin = Date.now();
   const ids = new Map();
