@@ -437,7 +437,9 @@ function strictCommand(value: Record<string, unknown>): boolean {
 function strictCollaborationsHelloExtension(value: unknown): boolean {
   return exactObject(value, ["name", "chat_cursor"]) && ["collaboration_v1", "collaboration_v2"].includes(String(value.name)) && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
-function strictHello(value: Record<string, unknown>): boolean {
+function strictHello(hello: Record<string, unknown>): boolean {
+  const { baggage, ...value } = hello;
+  if (baggage !== undefined && !(typeof baggage === "string" && boundedCorrelationString(baggage, 47, 47) && /^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(baggage))) return false;
   const base = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams"]);
   const extended = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);
   if ((!base && !extended) || !exactObject(value.streams, ["control", "media", "presence", "requests"])) return false;

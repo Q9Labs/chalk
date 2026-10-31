@@ -4,7 +4,7 @@ import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import { parseParsedAccessGrant } from "../../../client/src/access/grant";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../../../client/src/space-client/core.test.helpers";
 
-const mocks = vi.hoisted(() => ({ platform: vi.fn() }));
+const mocks = vi.hoisted(() => ({ platform: vi.fn(() => ({ subscribe: vi.fn(), getSnapshot: vi.fn() })) }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({ RTCPeerConnection: vi.fn(), mediaDevices: {} }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.platform }));
