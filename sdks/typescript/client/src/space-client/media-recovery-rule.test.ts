@@ -9,6 +9,15 @@ const live = (platform: Scenario["platform"]) => ({ ...platform.sync.getSnapshot
 const mediaPhase = (platform: Scenario["platform"], phase: "recovering" | "live") =>
   platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase, peerConnectionState: phase === "live" ? "connected" : "connecting", iceConnectionState: phase === "live" ? "connected" : "checking" }, failure: null });
 
+// The media plane publishes after recovery and Sync lists it: a source the recovery kept wanted-on confirms.
+function confirmPublication(platform: Scenario["platform"], track: MediaStreamTrack, source: Source): void {
+  const publication = { participantId: "participant-1", source, enabled: true, publicationId: "publication-2" };
+  platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
+  platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 1, items: [publication] } });
+}
+
+const hostStop = (source: Source, offRevision: number) => ({ participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "host" as const, offRevision });
+
 function recoveryScenario(source: Source, overrides: Parameters<typeof createConvergenceScenario>[1] = {}) {
   const setLocalSourceIntent = vi.fn(async () => {});
   const closeForcedLocalPublication = vi.fn(async () => undefined);
@@ -29,7 +38,8 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       await tick(20);
       expect(track.enabled).toBe(true);
-      expect(client.getSnapshot().media.local[source].state).not.toBe("disabled");
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
       expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
       expect(closeForcedLocalPublication).not.toHaveBeenCalled();
     } finally {
@@ -60,7 +70,8 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       release.resolve();
       expect(await enabling).toBe("enabled");
       expect(track.enabled).toBe(true);
-      expect(client.getSnapshot().media.local[source].state).not.toBe("disabled");
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
       expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
     } finally {
       release.resolve();
@@ -82,9 +93,114 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       await tick(20);
       expect(track.enabled).toBe(true);
-      expect(client.getSnapshot().media.local[source].state).not.toBe("disabled");
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
       expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
       expect(closeForcedLocalPublication).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The host mutes while the device is gone. Sync tells the client in one of two ways, and recovery pauses on either.
+  it.each(sources)("a host stop replayed while the %s device was gone pauses it", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitMediaPause({ source, revision: 9 });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a host stop in the recovered snapshot pauses the %s source when replay was lost", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 9)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a host stop during %s recovery, after the snapshot, pauses it", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      expect(track.enabled).toBe(true);
+      platform.emitMediaPause({ source, revision: 9 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The stop is not newer than the user's own On, so the user's later intent wins.
+  it.each(sources)("a host stop the %s intent already answered does not pause it again", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      platform.emitMediaPause({ source, revision: 20 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      await setEnabled(true);
+      setLocalSourceIntent.mockClear();
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 20)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a stop newer than the %s intent pauses it", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      platform.emitMediaPause({ source, revision: 20 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 21)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // A device pause the Sync held for this device is the device's own answer, not the host's.
+  it.each(sources)("a device pause on the %s item is no evidence the host turned it off", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      const item = { participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "self" as const };
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [item] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(track.enabled).toBe(true);
     } finally {
       client.dispose();
     }

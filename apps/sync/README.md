@@ -319,3 +319,26 @@ from the admitted participant's tenant-scoped database row. Device type is a
 best-effort user-agent hint. These fields do not change the canonical control
 digest. Sockets without the query retain the previous exact presence shape;
 new SDKs also accept presence from older servers without these optional hints.
+
+## Media off reasons
+
+New web SDKs opt into the reason a media item is off with the
+`media_off_reason=1` WebSocket query. A media item that is `enabled: false` may
+then carry `off_reason`:
+
+- `host`: a host mute, camera stop or screen stop committed. The item also
+  carries `off_revision`, the control revision of that stop event. Sync stores
+  the stop in `sync_media_stops` in the same transaction as the event and
+  projects it even when the media plane lists no publication, so a client that
+  missed the stop event (replay beyond retention, a fresh Sync process, a
+  snapshot fallback) still sees it. A later accepted on for the same source
+  clears the stop.
+- `self`: the device paused the source itself (a Sync-held device pause).
+- `dead`: reserved for a tombstone Sync writes on purpose. It never means the
+  user or host turned the source off.
+
+A plain tombstone, a source with no publication yet, and every other item carry
+no reason. A missing reason means no evidence, never "off". Sockets without the
+query keep the exact earlier four-key item shape, and new SDKs accept items from
+older servers that never send the fields. The fields do not change the canonical
+control digest.

@@ -172,8 +172,16 @@ function renderTypeScript(contract) {
     "    default: return false;",
     "  }",
     "}",
+    "function validMediaOffReason(item: Record<string, unknown>): boolean {",
+    "  if (!Object.hasOwn(item, 'off_reason')) return !Object.hasOwn(item, 'off_revision');",
+    "  if (item.enabled !== false) return false;",
+    "  if (item.off_reason === 'host') return Number.isInteger(item.off_revision) && (item.off_revision as number) > 0;",
+    "  return (item.off_reason === 'self' || item.off_reason === 'dead') && !Object.hasOwn(item, 'off_revision');",
+    "}",
     "function strictProjectionItem(value: unknown, stream: unknown): boolean {",
-    "  if (stream === 'media') return exactObject(value, " + JSON.stringify(contract.projectionFrames.mediaSnapshot.items.exactFields) + ");",
+    "  if (stream === 'media') return isObject(value) && exactObject(value, [..." +
+      JSON.stringify(contract.projectionFrames.mediaSnapshot.items.exactFields) +
+      ", ...(Object.hasOwn(value, 'off_reason') ? ['off_reason'] : []), ...(Object.hasOwn(value, 'off_revision') ? ['off_revision'] : [])]) && validMediaOffReason(value);",
     "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
       JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
       ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : [])]);",
@@ -411,7 +419,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: " +
       renderLiteralUnion(contract.projectionFrames.mediaSnapshot.items.source) +
-      ", enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(Schema.makeFilter((item) => !item.enabled || item.publication_id !== null ? undefined : { path: [], issue: 'enabled requires a publication_id' }));",
+      ", enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)), off_reason: Schema.optional(Schema.Literals(['host', 'self', 'dead'])), off_revision: Schema.optional(PositiveIntegerSchema) }).check(Schema.makeFilter((item) => !item.enabled || item.publication_id !== null ? undefined : { path: [], issue: 'enabled requires a publication_id' }));",
   );
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +

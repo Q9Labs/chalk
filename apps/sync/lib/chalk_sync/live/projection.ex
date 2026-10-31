@@ -157,10 +157,14 @@ defmodule ChalkSync.Live.Projection do
   defp validate_items(_stream, _items), do: {:error, :invalid_stream}
 
   defp valid_item?(:media, item) do
-    exact_keys?(item, ["participant_id", "source", "enabled", "publication_id"]) and
+    exact_keys?(
+      item,
+      ["participant_id", "source", "enabled", "publication_id"] ++
+        Enum.filter(["off_reason", "off_revision"], &Map.has_key?(item, &1))
+    ) and
       item["source"] in ["microphone", "camera", "screen"] and
       is_boolean(item["enabled"]) and canonical_uuid?(item["participant_id"]) and
-      valid_publication(item["enabled"], item["publication_id"])
+      valid_publication(item["enabled"], item["publication_id"]) and valid_off_reason?(item)
   end
 
   defp valid_item?(:presence, item) do
@@ -191,6 +195,17 @@ defmodule ChalkSync.Live.Projection do
     do: is_integer(revision) and revision > 0
 
   defp valid_admission_hint?(_item), do: true
+
+  # A reason says why an item is off, so only an off item can carry one.
+  # A host stop carries the control revision of its stop event; no other reason does.
+  defp valid_off_reason?(%{"off_reason" => "host", "off_revision" => revision} = item),
+    do: item["enabled"] == false and is_integer(revision) and revision > 0
+
+  defp valid_off_reason?(%{"off_reason" => reason} = item) when reason in ["self", "dead"],
+    do: item["enabled"] == false and not Map.has_key?(item, "off_revision")
+
+  defp valid_off_reason?(item),
+    do: not Map.has_key?(item, "off_reason") and not Map.has_key?(item, "off_revision")
 
   defp valid_publication(true, value), do: is_binary(value) and byte_size(value) in 1..256
   defp valid_publication(false, nil), do: true
@@ -228,8 +243,11 @@ defmodule ChalkSync.Live.Projection do
     end
   end
 
+  # A removed item keeps no reason: nothing says why it went away.
   defp tombstone(:media, item) do
-    %{item | "enabled" => false, "publication_id" => nil}
+    item
+    |> Map.drop(["off_reason", "off_revision"])
+    |> Map.merge(%{"enabled" => false, "publication_id" => nil})
   end
 
   defp tombstone(:presence, item) do

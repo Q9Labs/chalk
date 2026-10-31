@@ -772,7 +772,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!resumed) return;
     if (this.#ports) {
       const snapshot = this.#ports.sync.getSnapshot();
-      this.#pauseRecoveredIntents(this.#ports, snapshot);
+      this.#pauseIntentsTheHostStopped(this.#ports, snapshot);
       this.#oweOffsSyncStillShows(snapshot);
     }
     this.#resumePendingActions();
@@ -1309,12 +1309,20 @@ class MediaControllerRuntime implements MediaControllerEffects {
     // a projection that may never have confirmed the publication before loss.
     this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
-  #pauseRecoveredIntents(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
+  /**
+   * Recovery pauses a source only when Sync's own state says the host turned it off after the user's intent: the snapshot item carries
+   * `off_reason: "host"` with a newer stop revision. A missing item, a plain tombstone, a device pause and a dead tombstone are no
+   * evidence, so a source with no publication yet stays wanted-on. A replayed stop event reaches `#subscribePauses` the same way.
+   */
+  #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
     const recovering = this.#recovering;
     this.#recovering = null;
     for (const [source, revision] of recovering ?? []) {
-      const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
-      if (!current?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
+      const stop = ownProjection(snapshot, source);
+      const state = this.#sources[source];
+      if (stop?.offReason !== "host" || stop.offRevision === undefined || stop.offRevision <= state.desired.controlRevision) continue;
+      state.serverSequence = Math.max(state.serverSequence, stop.offRevision);
+      this.#pausePublication(ports, source, revision, "moderation_pause");
     }
   }
   #subscribeSync(ports: ConnectionPorts): () => void {

@@ -1133,6 +1133,9 @@
         "kind": "array",
         "maxItems": 1500,
         "exactFields": ["participant_id", "source", "enabled", "publication_id"],
+        "optionalFields": ["off_reason", "off_revision"],
+        "offReason": ["host", "self", "dead"],
+        "negotiation": "media_off_reason=1 WebSocket query opts into off_reason and off_revision; omitted for older clients. off_reason only on an off item; host carries off_revision (the control revision of the stop event), self and dead carry none. Absence means no evidence, never off.",
         "participantId": "uuid",
         "source": ["microphone", "camera", "screen"],
         "enabled": {

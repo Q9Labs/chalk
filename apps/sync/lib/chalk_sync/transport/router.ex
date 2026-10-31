@@ -49,6 +49,7 @@ defmodule ChalkSync.Transport.Router do
               participant_devices: conn.query_params["participant_devices"] == "1",
               participant_device_admissions:
                 conn.query_params["participant_device_admissions"] in ["1", "2"],
+              media_off_reason: conn.query_params["media_off_reason"] == "1",
               participant_self_identity:
                 conn.query_params["participant_device_admissions"] == "2",
               entry_generation: entry_generation(conn.query_params["entry_generation"]),

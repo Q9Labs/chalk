@@ -58,6 +58,7 @@ defmodule ChalkSync.Transport.SocketV1 do
        entry_timer: nil,
        entry_confirmation: Map.get(opts, :entry_confirmation, false),
        participant_self_identity: Map.get(opts, :participant_self_identity, false),
+       media_off_reason: Map.get(opts, :media_off_reason, false),
        participant_devices: Map.get(opts, :participant_devices, false),
        participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
        requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
@@ -721,6 +722,7 @@ defmodule ChalkSync.Transport.SocketV1 do
     frame
     |> own_identity_projection(state)
     |> device_projection(device_hint_keys(state))
+    |> media_projection(state)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
   end
@@ -750,6 +752,19 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: %{frame | "item" => Map.drop(item, keys)}
 
   defp device_projection(frame, _keys), do: frame
+
+  # Off reasons are opt-in so earlier SDKs keep their exact media wire shape.
+  @off_reason_keys ["off_reason", "off_revision"]
+
+  defp media_projection(frame, %{media_off_reason: true}), do: frame
+
+  defp media_projection(%{"stream" => "media", "items" => items} = frame, _state),
+    do: %{frame | "items" => Enum.map(items, &Map.drop(&1, @off_reason_keys))}
+
+  defp media_projection(%{"stream" => "media", "item" => item} = frame, _state),
+    do: %{frame | "item" => Map.drop(item, @off_reason_keys)}
+
+  defp media_projection(frame, _state), do: frame
 
   defp device_type(nil), do: nil
 

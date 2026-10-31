@@ -1359,9 +1359,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp projection_item_limit(_stream), do: -1
   defp valid_projection_item?("media", %{"participant_id" => id, "source" => source,
       "enabled" => enabled, "publication_id" => publication_id} = item), do: exact_keys?(item,
-      ["participant_id", "source", "enabled", "publication_id"]) and valid_uuid?(id) and
+      ["participant_id", "source", "enabled", "publication_id"] ++ Enum.filter(["off_reason",
+      "off_revision"], &Map.has_key?(item, &1))) and valid_uuid?(id) and
       source in @media_sources and is_boolean(enabled) and (is_nil(publication_id) or
-      bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id))
+      bounded_string?(publication_id, 1, 256)) and (not enabled or
+      not is_nil(publication_id)) and valid_media_off_reason?(item)
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
@@ -1373,6 +1375,13 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false
+  defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision,
+      "enabled" => false}), do: valid_positive_integer?(revision)
+  defp valid_media_off_reason?(%{"off_reason" => reason,
+      "enabled" => false} = item) when reason in ["self", "dead"], do: not Map.has_key?(item,
+      "off_revision")
+  defp valid_media_off_reason?(item), do: not Map.has_key?(item, "off_reason") and
+      not Map.has_key?(item, "off_revision")
 
   defp valid_live_target_result?(%{"operation_id" => id, "name" => name, "outcome" => outcome,
       "error_code" => error_code} = frame), do: correlation_exact_keys?(frame, ["type",

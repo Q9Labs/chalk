@@ -290,6 +290,23 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
+  def media_stops(%EpisodeKey{} = episode) do
+    case Postgrex.query(
+           Database.connection(episode),
+           MediaPausesSQL.list_stops(),
+           Scope.episode(episode),
+           timeout: 1_000
+         ) do
+      {:ok, %{rows: rows}} -> MediaPauses.decode_stop_rows(rows)
+      {:error, _reason} -> {:retryable, :dependency_unavailable}
+    end
+  rescue
+    _exception -> {:retryable, :dependency_unavailable}
+  catch
+    :exit, _reason -> {:retryable, :dependency_unavailable}
+  end
+
+  @impl ChalkSync.Stateholder
   def set_media_pause(%Identity{} = identity, source, publication_id)
       when source in [:microphone, :camera, :screen] do
     case Postgrex.transaction(

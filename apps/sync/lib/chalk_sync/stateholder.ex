@@ -73,6 +73,8 @@ defmodule ChalkSync.Stateholder do
   @callback participant_devices(EpisodeKey.t()) :: {:ok, [map()]} | {:retryable, atom()}
   @callback media_pauses(EpisodeKey.t()) ::
               {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
+  @callback media_stops(EpisodeKey.t()) ::
+              {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
   @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
               :ok | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
@@ -126,6 +128,11 @@ defmodule ChalkSync.Stateholder do
   @spec media_pauses(EpisodeKey.t()) ::
           {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
   def media_pauses(%EpisodeKey{} = episode), do: impl().media_pauses(episode)
+
+  @doc "Host stops no device has answered with a new on yet, as `{participant_id, source} => event revision`."
+  @spec media_stops(EpisodeKey.t()) ::
+          {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
+  def media_stops(%EpisodeKey{} = episode), do: impl().media_stops(episode)
 
   @spec set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
           :ok | {:error, atom()} | {:retryable, atom()}

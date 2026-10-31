@@ -1171,6 +1171,29 @@ describe("V1SyncClient", () => {
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
+  it("asks Sync for media off reasons and reads them from the media projection", async () => {
+    const { client, socket, urls } = await liveClient();
+    expect(new URL(urls[0]!).searchParams.get("media_off_reason")).toBe("1");
+    const stop = { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null, off_reason: "host", off_revision: 7 } as const;
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: stop });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: null, offReason: "host", offRevision: 7 }]);
+  });
+  it("reads a media item from an earlier Sync that sends no off reason as no evidence", async () => {
+    const { client, socket } = await liveClient();
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null } });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: null }]);
+  });
+  it("recovers on a media item whose off reason does not fit its shape", async () => {
+    const { client, socket } = await liveClient();
+    const recovering = snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null, off_reason: "host" } });
+    await recovering;
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
+  });
   it("retries a retained remote publication when its paused projection resumes", async () => {
     const { client, socket, mediaPlane } = await liveClient();
     const before = mediaPlane.changed;
