@@ -149,6 +149,40 @@ function browserInstrumentation({ frequency }) {
     constructor(...args) {
       super(...args);
       window.matrixPeers.push(this);
+      const born = performance.now();
+      const line = (this.srTimeline = [["created", 0]]);
+      const mark = (name) => line.push([name, Math.round(performance.now() - born)]);
+      this.srMark = mark;
+      this.addEventListener("icegatheringstatechange", () => mark(`gathering:${this.iceGatheringState}`));
+      this.addEventListener("iceconnectionstatechange", () => mark(`ice:${this.iceConnectionState}`));
+      this.addEventListener("connectionstatechange", () => mark(`conn:${this.connectionState}`));
+      this.addEventListener("track", () => mark("track"));
+      this.addEventListener("icecandidate", (event) => mark(event.candidate ? `candidate:${event.candidate.type}` : "candidate:end"));
+      let dtls = false;
+      let packets = false;
+      const timer = setInterval(async () => {
+        if (this.connectionState === "closed" || (dtls && packets)) return clearInterval(timer);
+        try {
+          (await this.getStats()).forEach((stat) => {
+            if (!dtls && stat.type === "transport" && stat.dtlsState === "connected") {
+              dtls = true;
+              mark("dtls:connected");
+            }
+            if (!packets && stat.type === "inbound-rtp" && stat.packetsReceived > 0) {
+              packets = true;
+              mark("first-rtp");
+            }
+          });
+        } catch {} // the connection closed between ticks
+      }, 50);
+    }
+    setLocalDescription(description) {
+      this.srMark(`setLocal:${description?.type ?? "implicit"}`);
+      return super.setLocalDescription(description);
+    }
+    setRemoteDescription(description) {
+      this.srMark(`setRemote:${description?.type}`);
+      return super.setRemoteDescription(description);
     }
   };
   navigator.mediaDevices.getUserMedia = async (constraints) => {
@@ -503,6 +537,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     run.wallMinusMonotonicMs = Date.now() - startWall - (performance.now() - start);
     run.sessionsPerParticipant = connections.map((set) => set.size);
+    run.peerTimelines = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.matrixPeers.map((pc) => pc.srTimeline)).catch(() => [])));
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(() => undefined);
   } finally {
     await browser.close().catch(() => undefined);
