@@ -232,12 +232,34 @@ defmodule ChalkSync.DurableLeavePostgresTest do
         fixture,
         unquote(outcome),
         unquote(kind),
-        unquote(source)
+        unquote(source),
+        "confirmed"
       )
     end
   end
 
-  defp assert_account_reentry(connection, fixture, outcome, kind, source) do
+  for {kind, source} <- [
+        mute_participant: "microphone",
+        stop_participant_camera: "camera",
+        stop_participant_screen_share: "screen"
+      ] do
+    @tag timeout: 180_000
+    test "account reentry isolates terminal failure of old #{kind}", %{
+      connection: connection,
+      fixture: fixture
+    } do
+      assert_account_reentry(
+        connection,
+        fixture,
+        :confirmed,
+        unquote(kind),
+        unquote(source),
+        "terminal_failure"
+      )
+    end
+  end
+
+  defp assert_account_reentry(connection, fixture, outcome, kind, source, media_outcome) do
     episode = fixture.episode
     account = UUID.generate()
 
@@ -291,7 +313,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
             {:release, result} -> result
           end
         else
-          "confirmed"
+          Map.get(%{mute_id => media_outcome}, id, "confirmed")
         end
 
       if result == "confirmed" do
@@ -397,7 +419,38 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert {^episode, old_mute} =
              Enum.find(operations, fn {_, op} -> op.external_operation_id == mute_id end)
 
-    assert :confirmed =
+    assert old_mute.attempt_count < 100
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_publication_fences
+        (tenant_id, space_id, episode_id, participant_id, participant_generation, source,
+         external_operation_id, expires_at)
+      values ($1, $2, $3, $4, $5, $6, $7, now() + interval '5 minutes')
+      """,
+      [
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.episode_id),
+        UUID.dump!(old.participant_id),
+        old.participant_generation,
+        source,
+        UUID.dump!(mute_id)
+      ]
+    )
+
+    assert [[1]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_publication_fences where external_operation_id=$1",
+               [UUID.dump!(mute_id)]
+             ).rows
+
+    expected_media_result =
+      %{"confirmed" => :confirmed, "terminal_failure" => :terminal_failure}[media_outcome]
+
+    assert ^expected_media_result =
              ExternalOperationConsumer.execute_operation(
                episode,
                old_mute,
@@ -415,13 +468,26 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
              Postgres.read_operation(episode, mute_id)
 
+    media_settlement =
+      %{
+        "confirmed" => {:confirmed, :provider},
+        "terminal_failure" => {:failed, :provider_rejected}
+      }[media_outcome]
+
     assert {:ok, %{result: :failed, delivery: :duplicate}} =
-             Postgres.finalize_operation(episode, mute_id, {:confirmed, :provider})
+             Postgres.finalize_operation(episode, mute_id, media_settlement)
 
     assert [["rejected", "external_operation_failed", 1]] =
              Postgrex.query!(
                connection,
                "select outcome, rejection_reason, count(*) over() from sync_command_receipts where external_operation_id=$1",
+               [UUID.dump!(mute_id)]
+             ).rows
+
+    assert [[0]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_publication_fences where external_operation_id=$1",
                [UUID.dump!(mute_id)]
              ).rows
 
