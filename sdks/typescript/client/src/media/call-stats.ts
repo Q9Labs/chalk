@@ -36,7 +36,7 @@ export function createCallStatsCollector(options: { readonly upload: (request: C
   let produced = 0;
   let uploading: Promise<void> | null = null;
   let baseline: Baseline | null = null;
-  const gauges = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges() };
+  const gauges: Windowed = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges() };
   let latest: RTCStatsReport | null = null;
 
   const closeWindow = (at: number): void => {
@@ -84,51 +84,38 @@ export function createCallStatsCollector(options: { readonly upload: (request: C
   };
 }
 
-function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges }): CallStatsSample {
+type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges };
+
+function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed): CallStatsSample {
   const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
-  const sentPackets = delta("outbound-rtp", "packetsSent");
-  const sentLost = delta("remote-inbound-rtp", "packetsLost");
-  const recvPackets = delta("inbound-rtp", "packetsReceived");
-  const recvLost = delta("inbound-rtp", "packetsLost");
-  const sentBytes = delta("outbound-rtp", "bytesSent");
-  const recvBytes = delta("inbound-rtp", "bytesReceived");
-  const freezeSeconds = delta("inbound-rtp", "totalFreezesDuration", "video");
-  const freezeCount = delta("inbound-rtp", "freezeCount", "video");
   const pair = selectedPair(report);
   const local = pair ? (report.get(String(pair.localCandidateId)) as Stat | undefined) : undefined;
   const remote = pair ? (report.get(String(pair.remoteCandidateId)) as Stat | undefined) : undefined;
-  const sample: CallStatsSample = {
+  // Absent measurements stay undefined, which JSON leaves out of the upload.
+  return {
     elapsed_ms: Math.min(Math.round(elapsedMs), MAX_ELAPSED_MS),
     window_ms: Math.round(windowMs),
     connection_type: connectionType(local),
+    local_candidate_type: candidateType(local),
+    remote_candidate_type: candidateType(remote),
+    relay_protocol: relayProtocol(local),
+    rtt_ms: scaled(mean(gauges.rtt), 1000, 60000),
+    send_bitrate_kbps: scaled(delta("outbound-rtp", "bytesSent"), 8 / windowMs, 100000),
+    send_loss_pct: lossPct(delta("remote-inbound-rtp", "packetsLost"), delta("outbound-rtp", "packetsSent")),
+    send_jitter_ms: scaled(mean(gauges.sendJitter), 1000, 60000),
+    send_layer: sendLayer(report, baseline),
+    recv_bitrate_kbps: scaled(delta("inbound-rtp", "bytesReceived"), 8 / windowMs, 100000),
+    recv_loss_pct: lossPct(delta("inbound-rtp", "packetsLost"), delta("inbound-rtp", "packetsReceived")),
+    recv_jitter_ms: scaled(mean(gauges.recvJitter), 1000, 60000),
+    recv_height: scaled(recvHeight(report), 1, 4320),
+    freeze_count: scaled(delta("inbound-rtp", "freezeCount", "video"), 1, 10000),
+    freeze_ms: scaled(delta("inbound-rtp", "totalFreezesDuration", "video"), 1000, 600000),
   };
-  const localType = candidateType(local);
-  const remoteType = candidateType(remote);
-  if (localType) sample.local_candidate_type = localType;
-  if (remoteType) sample.remote_candidate_type = remoteType;
-  if (local?.candidateType === "relay") {
-    const relay = relayProtocol(local);
-    if (relay) sample.relay_protocol = relay;
-  }
-  const rtt = mean(gauges.rtt);
-  if (rtt !== null) sample.rtt_ms = clampInt(rtt * 1000, 60000);
-  if (sentBytes !== null) sample.send_bitrate_kbps = clampInt((sentBytes * 8) / windowMs, 100000);
-  const sendLoss = lossPct(sentLost, sentPackets);
-  if (sendLoss !== null) sample.send_loss_pct = sendLoss;
-  const sendJitter = mean(gauges.sendJitter);
-  if (sendJitter !== null) sample.send_jitter_ms = clampInt(sendJitter * 1000, 60000);
-  const layer = sendLayer(report, baseline);
-  if (layer) sample.send_layer = layer;
-  if (recvBytes !== null) sample.recv_bitrate_kbps = clampInt((recvBytes * 8) / windowMs, 100000);
-  const recvLoss = lossPct(recvLost, recvPackets);
-  if (recvLoss !== null) sample.recv_loss_pct = recvLoss;
-  const recvJitter = mean(gauges.recvJitter);
-  if (recvJitter !== null) sample.recv_jitter_ms = clampInt(recvJitter * 1000, 60000);
-  const height = recvHeight(report);
-  if (height !== null) sample.recv_height = clampInt(height, 4320);
-  if (freezeCount !== null) sample.freeze_count = clampInt(freezeCount, 10000);
-  if (freezeSeconds !== null) sample.freeze_ms = clampInt(freezeSeconds * 1000, 600000);
-  return sample;
+}
+
+/** `value * factor` as a whole number within `0..max`; undefined when nothing was measured. */
+function scaled(value: number | null, factor: number, max: number): number | undefined {
+  return value === null ? undefined : clampInt(value * factor, max);
 }
 
 function stats(report: RTCStatsReport, type: string, kind?: string): Stat[] {
@@ -168,10 +155,9 @@ function sumDelta(report: RTCStatsReport, baseline: Baseline, type: string, fiel
   return seen ? total : null;
 }
 
-function lossPct(lost: number | null, delivered: number | null): number | null {
-  if (lost === null || delivered === null) return null;
+function lossPct(lost: number | null, delivered: number | null): number | undefined {
+  if (lost === null || delivered === null || lost + delivered <= 0) return undefined;
   const total = lost + delivered;
-  if (total <= 0) return null;
   return Math.min(100, Math.round((lost / total) * 10_000) / 100);
 }
 
@@ -192,7 +178,7 @@ function addGauge(gauge: Gauges, value: unknown): void {
   gauge.count++;
 }
 
-function addGauges(report: RTCStatsReport, gauges: { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges }): void {
+function addGauges(report: RTCStatsReport, gauges: Windowed): void {
   const pair = selectedPair(report);
   addGauge(gauges.rtt, pair?.currentRoundTripTime);
   for (const stat of stats(report, "remote-inbound-rtp")) addGauge(gauges.sendJitter, stat.jitter);
@@ -225,8 +211,8 @@ function candidateType(candidate: Stat | undefined): NonNullable<CallStatsSample
   return type === "host" || type === "srflx" || type === "prflx" || type === "relay" ? type : undefined;
 }
 
-function relayProtocol(local: Stat): CallStatsSample["relay_protocol"] | undefined {
-  const protocol = local.relayProtocol;
+function relayProtocol(local: Stat | undefined): CallStatsSample["relay_protocol"] | undefined {
+  const protocol = local?.relayProtocol;
   return protocol === "udp" || protocol === "tcp" || protocol === "tls" ? protocol : undefined;
 }
 
