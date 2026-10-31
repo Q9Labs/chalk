@@ -163,8 +163,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
           send(observer, {:accepted, self()})
 
           await_left(client, identity.participant_id)
-          finished = System.monotonic_time(:millisecond)
-          {identity.episode.episode_id, finished - started, finished}
+          {identity.episode.episode_id, System.monotonic_time(:millisecond) - started}
         end)
       end
 
@@ -198,8 +197,6 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     results = Task.await_many(tasks, 100_000)
     last_ack = results |> Enum.map(&elem(&1, 1)) |> Enum.max()
     other_ack = results |> List.last() |> elem(1)
-    other_finished = results |> List.last() |> elem(2)
-    class_finished = results |> Enum.take(10) |> Enum.map(&elem(&1, 2)) |> Enum.max()
 
     calls = drain_calls([])
 
@@ -222,7 +219,8 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     assert active == 0
     assert peak in 1..8
     assert episode_peak == 1
-    assert other_finished < class_finished
+    assert {:cleanup_finished, _, last_episode} = List.last(calls)
+    assert last_episode == class.episode.episode_id
     assert last_ack < 2 * delay + 8 * fast_delay + 5_000
     assert other_ack < delay + 2_000
     assert {:ok, []} = Postgres.claim_operations(8)
