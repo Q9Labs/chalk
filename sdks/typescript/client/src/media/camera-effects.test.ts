@@ -3,7 +3,7 @@ import { cameraEffectFailure } from "./camera-effects";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient } from "../space-client/capture.test.helpers";
 import { track, stream } from "../space-client/capture.test.helpers";
-import { createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, configureCameraEffectProvider } from "./camera-effects";
+import { cameraBackgroundAvailable, createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, configureCameraEffectProvider } from "./camera-effects";
 
 const model = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
 afterEach(() => {
@@ -250,5 +250,28 @@ describe("camera effects ownership", () => {
       complete({ close: model.close });
       client.dispose();
     }
+  });
+});
+
+describe("camera background recovery after a blocked model", () => {
+  const files = { wasmRoot: "/camera-effects/wasm", modelUrl: "/camera-effects/model.tflite" };
+  it("fails capture closed while the saved model is blocked, then captures after the choice is cleared", async () => {
+    const first = browser();
+    first.source.getSettings = () => ({ deviceId: "camera-blocked", width: 640, height: 360 });
+    vi.stubGlobal("HTMLCanvasElement", class {});
+    configureCameraEffectProvider(files, () => model.create());
+    await setCameraBackground("camera-blocked", "blur");
+    model.create.mockRejectedValueOnce(new Error("model request blocked"));
+    await expect(processCameraStream(stream([first.source]))).rejects.toThrow();
+    expect(first.source.readyState).toBe("ended");
+    expect(getCameraBackground("camera-blocked")).toBe("blur");
+    await setCameraBackground("camera-blocked", "none");
+    const second = browser();
+    second.source.getSettings = () => ({ deviceId: "camera-blocked", width: 640, height: 360 });
+    await processCameraStream(stream([second.source]));
+    expect(cameraBackgroundAvailable("camera-blocked")).toBe(true);
+    expect(second.output.readyState).toBe("live");
+    expect(model.create).toHaveBeenCalledOnce();
+    second.output.stop();
   });
 });
