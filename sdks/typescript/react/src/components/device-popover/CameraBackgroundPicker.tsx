@@ -1,5 +1,5 @@
-import { loadCameraBackgroundControls, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
-import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { loadCameraBackgroundControls, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { use, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
 type Controls = Awaited<ReturnType<typeof loadCameraBackgroundControls>>;
 type MenuItemProps = { readonly checked: boolean; readonly disabled: boolean; readonly closeOnClick: boolean; readonly onClick: () => void; readonly children: ReactNode };
@@ -10,16 +10,11 @@ export interface CameraBackgroundMenu {
   readonly Item: ComponentType<MenuItemProps>;
 }
 
+let loadedControls: Promise<Controls> | undefined;
+
 export function CameraBackgroundPicker({ deviceId, menu }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu }) {
-  const [controls, setControls] = useState<Controls>();
-  useEffect(() => {
-    let current = true;
-    void loadCameraBackgroundControls().then((loaded) => current && setControls(loaded));
-    return () => {
-      current = false;
-    };
-  }, []);
-  return controls ? <Options controls={controls} deviceId={deviceId} menu={menu} /> : null;
+  loadedControls ??= loadCameraBackgroundControls();
+  return <Options controls={use(loadedControls)} deviceId={deviceId} menu={menu} />;
 }
 
 function Options({ controls, deviceId, menu: { Label, Item } }: { readonly controls: Controls; readonly deviceId: string; readonly menu: CameraBackgroundMenu }) {
@@ -35,7 +30,7 @@ function Options({ controls, deviceId, menu: { Label, Item } }: { readonly contr
     setBusy(true);
     setFailed(false);
     try {
-      await controls.setCameraBackground(deviceId, background);
+      await setCameraBackground(deviceId, background);
     } catch {
       setFailed(true);
     } finally {

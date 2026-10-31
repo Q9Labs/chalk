@@ -1,13 +1,12 @@
 import { CameraBackgroundPreferences, type CameraBackground } from "./camera-background-settings";
 import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from "./camera-background-images";
 import { createCameraEffectsTrack as createTrack } from "./camera-effects-track";
-import { fallbacks, markCameraEffectFailure, notifyCameraBackground } from "./camera-effects";
-import type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack } from "./camera-effects-track";
+import type { CameraEffectStore, CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack } from "./camera-effects-track";
 
 export { CAMERA_BACKGROUND_OPTIONS };
 
-export function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
-  return createTrack(source, files, createSegmenter, onSlow, markCameraEffectFailure, CAMERA_BACKGROUND_IMAGES);
+export function createEffectsTrack(store: CameraEffectStore, source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
+  return createTrack(source, files, createSegmenter, onSlow, store.markFailure, CAMERA_BACKGROUND_IMAGES);
 }
 
 const preferences = new CameraBackgroundPreferences();
@@ -35,13 +34,13 @@ export function cameraBackgroundAvailable(deviceId: string): boolean {
 }
 
 /** Serialize rapid choices; load everything before changing any live canvas. */
-export function setCameraBackground(deviceId: string, background: CameraBackground): Promise<void> {
+export function setBackground(store: CameraEffectStore, deviceId: string, background: CameraBackground): Promise<void> {
   return enqueue(deviceId, async () => {
     const commits = await Promise.all([...(sessions.get(deviceId) ?? [])].map((session) => session.prepare(background)));
     for (const commit of commits) commit();
     preferences.set(deviceId, background);
-    fallbacks.delete(deviceId);
-    notifyCameraBackground();
+    store.fallbacks.delete(deviceId);
+    store.notify();
   });
 }
 
@@ -57,7 +56,7 @@ function enqueue(deviceId: string, action: () => Promise<void>): Promise<void> {
 }
 
 /** Capture boundary: only this processed track reaches preview or the SFU. */
-export async function processCameraStream(stream: MediaStream, assets: CameraEffectsAssets | undefined, provider: CameraEffectsProvider | undefined, signal?: AbortSignal): Promise<MediaStream> {
+export async function processStream(store: CameraEffectStore, stream: MediaStream, assets: CameraEffectsAssets | undefined, provider: CameraEffectsProvider | undefined, signal?: AbortSignal): Promise<MediaStream> {
   let session: CameraEffectsTrack | undefined;
   const cancel = () => {
     session?.track.stop();
@@ -73,11 +72,11 @@ export async function processCameraStream(stream: MediaStream, assets: CameraEff
   const deviceId = source.getSettings().deviceId ?? "default";
   signal?.addEventListener("abort", cancel, { once: true });
   try {
-    const captured = await createCameraEffectsTrack(source, assets, provider, (fps) => {
+    const captured = await createEffectsTrack(store, source, assets, provider, (fps) => {
       for (const active of sessions.get(deviceId) ?? []) active.usePlainCamera();
       preferences.set(deviceId, "none");
-      fallbacks.set(deviceId, fps);
-      notifyCameraBackground();
+      store.fallbacks.set(deviceId, fps);
+      store.notify();
     });
     session = captured;
     signal?.throwIfAborted();
