@@ -280,6 +280,86 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              ).rows
   end
 
+  for kind <- [:remove_participant, :mute_participant],
+      outcome <- [:confirmed, :retry_exhausted] do
+    @tag :actor_departure_settlement
+    test "accepted #{kind} settles #{outcome} after its actor Leaves", %{
+      connection: connection,
+      fixture: fixture
+    } do
+      kind = unquote(kind)
+      outcome = unquote(outcome)
+      [actor, target] = fixture.identities
+      SyncPostgres.seed_webhook_endpoint(fixture, connection, ["participant.left"])
+
+      {:ok, action} =
+        Operation.new("actor_departure_action_01", kind, %{
+          "participantId" => target.participant_id
+        })
+
+      assert {:ok, %{result: :pending, external_operation_id: action_id}} =
+               Postgres.begin_operation(actor, action)
+
+      {:ok, leave} = Operation.new("actor_departure_leave_001", :participant_leave, %{})
+      assert {:ok, %{result: :applied}} = Postgres.begin_operation(actor, leave)
+
+      {:ok, later_action} =
+        Operation.new("actor_departure_action_02", kind, %{
+          "participantId" => target.participant_id
+        })
+
+      assert {:ok, %{result: :rejected, reason: :participant_inactive}} =
+               Postgres.begin_operation(actor, later_action)
+
+      settlement =
+        if outcome == :confirmed,
+          do: {:confirmed, :provider},
+          else: {:failed, :retry_exhausted}
+
+      expected_status = if outcome == :confirmed, do: :applied, else: :failed
+
+      assert {:ok, %{result: ^expected_status}} =
+               Postgres.finalize_operation(fixture.episode, action_id, settlement)
+
+      assert {:ok, %{result: ^expected_status, delivery: :duplicate}} =
+               Postgres.finalize_operation(fixture.episode, action_id, settlement)
+
+      removed = kind == :remove_participant and outcome == :confirmed
+      target_status = if removed, do: "left", else: "active"
+      operation_status = Atom.to_string(expected_status)
+      receipt_outcome = if outcome == :confirmed, do: "committed", else: "rejected"
+
+      assert [[^target_status, ^operation_status, ^receipt_outcome, 0]] =
+               Postgrex.query!(
+                 connection,
+                 """
+                 select participant.status, operation.status, receipt.outcome,
+                   count(fence.external_operation_id)
+                 from participants participant
+                 join sync_external_operations operation on operation.external_operation_id=$1
+                 join sync_command_receipts receipt using(external_operation_id)
+                 left join sync_publication_fences fence
+                   on fence.external_operation_id=operation.external_operation_id
+                 where participant.id=$2
+                 group by participant.status,operation.status,receipt.outcome
+                 """,
+                 [UUID.dump!(action_id), UUID.dump!(target.participant_id)]
+               ).rows
+
+      webhook_count = if removed, do: 1, else: 0
+
+      assert [[^webhook_count]] =
+               Postgrex.query!(
+                 connection,
+                 """
+                 select count(*) from webhook_events
+                 where tenant_id=$1 and resource_id=$2 and event_name='participant.left'
+                 """,
+                 [UUID.dump!(fixture.episode.tenant_id), UUID.dump!(target.participant_id)]
+               ).rows
+    end
+  end
+
   defp claim_cleanup(id) do
     assert {:ok, operations} = Postgres.claim_operations(64)
 
