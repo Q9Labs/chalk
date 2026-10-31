@@ -126,7 +126,7 @@ it("falls back to one connection rebuild when targeted receive retirement fails"
       receiver = h;
       await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
       await reviewSubscribe(h);
-      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => reviewStats(h, (source) => (source === "microphone" ? 10 : Date.now())));
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => reviewStats(h, (source) => (source === "screen" ? 10 : Date.now())));
       vi.spyOn(h.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("receive close unavailable", "signaling_failed", { status: 503 }));
       await vi.advanceTimersByTimeAsync(30_000);
       expect(replacements).toBe(1);
@@ -137,7 +137,7 @@ it("falls back to one connection rebuild when targeted receive retirement fails"
   );
 });
 
-it("formerly flowing DTX audio records a partial packet freeze", async () => {
+it("formerly flowing DTX audio is re-pulled until it flows and records a partial packet freeze", async () => {
   await withTimedHarness(
     async (h) => {
       await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
@@ -152,7 +152,8 @@ it("formerly flowing DTX audio records a partial packet freeze", async () => {
       });
       const pulls = h.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(70_000);
-      expect(h.transport.addInputs).toHaveLength(pulls + 3);
+      expect(h.transport.addInputs.length).toBeGreaterThanOrEqual(pulls + 5);
+      expect(h.peers).toHaveLength(1);
       expect(h.client.getSnapshot().receiveStalls).toEqual(expect.arrayContaining([expect.objectContaining({ event: "receive_stalled", scope: "partial" })]));
     },
     { replaceMediaConnection: async () => bootstrap("replacement") },
@@ -198,10 +199,12 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       expect(original.closed).toBe(false);
       const causes = harness.transport.addInputs.slice(originalPulls).filter((input) => input.replacementCause !== undefined);
       expect(causes).toEqual([]);
-      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: expect.any(Array) })]);
-      expect(harness.transport.closeInputs[0]!.tracks).toHaveLength(all ? 2 : 1);
+      expect(harness.transport.closeInputs.length).toBeGreaterThan(0);
+      expect(harness.transport.closeInputs.every((input) => input.receiveOnly)).toBe(true);
+      expect(new Set(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.source)))).toEqual(new Set(all ? ["microphone", "camera"] : ["microphone"]));
       if (!all) {
-        expect(harness.transport.addInputs).toHaveLength(originalPulls + 1);
+        // Audio is re-pulled every time it stays flat; only the video publication keeps the single re-pull budget.
+        expect(harness.transport.addInputs.length).toBeGreaterThan(originalPulls + 1);
         expect((harness.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
       }
     },
@@ -223,7 +226,8 @@ it.each(["audio", "video", "dtx-audio"] as const)("handles a pull before its fir
       expect(harness.peers).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(5000);
       expect(harness.peers).toHaveLength(1);
-      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true })]);
+      if (mode === "video") expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true })]);
+      else expect(harness.transport.closeInputs.length).toBeGreaterThan(0);
       await vi.advanceTimersByTimeAsync(25_000);
       expect(harness.peers.length).toBeGreaterThan(1);
     },
@@ -251,7 +255,7 @@ it.each(["publisher-muted", "video-disabled", "dtx", "hidden", "pull-grace", "si
         });
         if (mode === "hidden") vi.stubGlobal("document", { visibilityState: "hidden" });
         const pulls = harness.transport.addInputs.length;
-        await vi.advanceTimersByTimeAsync(mode === "pull-grace" ? 19_000 : 45_000);
+        await vi.advanceTimersByTimeAsync(mode === "pull-grace" ? 2_500 : 45_000);
         expect(harness.peers).toHaveLength(1);
         expect(harness.transport.addInputs).toHaveLength(pulls);
       },
@@ -2439,7 +2443,8 @@ function reviewReplacement(h: ReturnType<typeof createHarness>, connectionId: st
   return bootstrap(connectionId);
 }
 function reviewPublications() {
-  return (["microphone", "camera"] as const).map((source, i) => ({ participantId: i ? "healthy-publisher" : "bad-publisher", source, publicationId: versionedPublicationID(i ? "healthy" : "bad", String(i), source) }));
+  // The stalled publisher is a screen share: audio is healed without a budget, so the #673 budgets are proved on video.
+  return (["screen", "camera"] as const).map((source, i) => ({ participantId: i ? "healthy-publisher" : "bad-publisher", source, publicationId: versionedPublicationID(i ? "healthy" : "bad", String(i), source) }));
 }
 async function reviewSubscribe(h: ReturnType<typeof createHarness>) {
   const publications = reviewPublications();
@@ -2519,13 +2524,14 @@ describe("viewer layer switching", () => {
       const originalStats = stats.getMockImplementation()!;
       stats.mockImplementation(async () => {
         const report = await originalStats();
-        for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "microphone")) Object.assign(report.get(p.track.id)!, { packetsReceived: 300 });
+        for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "screen")) Object.assign(report.get(p.track.id)!, { packetsReceived: 300 });
         return report;
       });
       h.peers[0]!.availableOutgoingBitrate = 300_000;
       await vi.advanceTimersByTimeAsync(9000);
       expect(update).toHaveBeenCalledTimes(1);
-      expect(stats.mock.calls.length - samples).toBe(9);
+      // Receive sampling runs on its own 500 ms tick, besides the one-second adaptation tick.
+      expect(stats.mock.calls.length - samples).toBeGreaterThanOrEqual(9);
       expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
       expect(
         h.peers[0]!.getSenders()
@@ -2703,7 +2709,7 @@ describe("layer switching with receive-stall recovery", () => {
     }
   });
 
-  it.each(["microphone", "camera"] as const)("does not recover an intentionally disabled %s while layer switches retry", async (source) => {
+  it.each(["screen", "camera"] as const)("does not recover an intentionally disabled %s while layer switches retry", async (source) => {
     await withTimedHarness(async (h) => {
       await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
       await reviewSubscribe(h);
@@ -2815,6 +2821,7 @@ it.each([false, true])("a persistent partial stall exhausts two fallback rebuild
   }
 });
 it.each(["microphone", "camera"] as const)("an intentionally paused %s stays excluded while publication discovery is delayed", async (pausedSource) => {
+  const remoteSource = pausedSource === "microphone" ? "screen" : "camera";
   let replacements = 0;
   await withTimedHarness(
     async (h) => {
@@ -2826,14 +2833,14 @@ it.each(["microphone", "camera"] as const)("an intentionally paused %s stays exc
         let frozenAt: number | undefined;
         vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async function (this: FakePeerConnection) {
           if (publisher.peers.includes(this)) return new Map();
-          return reviewStats(h, (source) => (source !== pausedSource ? Date.now() : Math.min(Date.now(), frozenAt ?? Infinity)));
+          return reviewStats(h, (source) => (source !== remoteSource ? Date.now() : Math.min(Date.now(), frozenAt ?? Infinity)));
         });
         await vi.advanceTimersByTimeAsync(4000);
         const closes = publisher.transport.closeInputs.length;
         await publisher.client.pauseLocalCapture(pausedSource);
         expect(publisher.peers[0]!.getSenders()[pausedSource === "microphone" ? 0 : 1]!.track).toBeNull();
         expect(publisher.transport.closeInputs).toHaveLength(closes);
-        h.client.remotePublicationsChanged(reviewPublications().map((publication) => ({ ...publication, enabled: publication.source !== pausedSource })));
+        h.client.remotePublicationsChanged(reviewPublications().map((publication) => ({ ...publication, enabled: publication.source !== remoteSource })));
         frozenAt = Date.now();
         await vi.advanceTimersByTimeAsync(9000);
         expect(replacements).toBe(0);
@@ -4169,8 +4176,178 @@ it("a re-pull whose final renegotiation fails still falls back for the retired a
       });
       await vi.advanceTimersByTimeAsync(120_000);
       expect(replacements, "A failed re-pull after retiring the receiver must use its available fallback budget").toBeGreaterThan(0);
-      expect(h.client.getSnapshot().remoteTracks.find((p) => p.source === "microphone")?.track.readyState).toBe("live");
+      expect(h.client.getSnapshot().remoteTracks.find((p) => p.source === "screen")?.track.readyState).toBe("live");
     },
     { replaceMediaConnection: async () => reviewReplacement(receiver, `retired-fallback-${++replacements}`) },
   );
+});
+
+describe("listener audio reconcile loop", () => {
+  const speaker = (id: string) => ({ participantId: `speaker-${id}`, source: "microphone" as const, publicationId: versionedPublicationID(`speaker-${id}`, id, "microphone") });
+  function desire(h: ReturnType<typeof createHarness>, ids: readonly string[]) {
+    const publications = ids.map(speaker);
+    h.transport.snapshot = { incarnation: 1, sequence: h.transport.snapshot.sequence + 1, publications };
+    h.client.remotePublicationsChanged(publications.map((publication) => ({ ...publication, enabled: true })));
+  }
+  /** Packets advance only while `flowing()` is true, for whichever receiver is current. */
+  function receivePackets(h: ReturnType<typeof createHarness>, flowing: () => boolean) {
+    let packets = 10;
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      if (flowing()) packets += 50;
+      const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: packets, codecId: "codec" }));
+      const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+      return new Map<string, RTCStats>([...rows.map((row) => [row.id, row] as const), ["codec", codec]]);
+    });
+  }
+  const pulls = (h: ReturnType<typeof createHarness>) => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "remote")).length;
+
+  it("pulls an enabled microphone that appears within one reconcile tick of the poll and hears it", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      receivePackets(h, () => true);
+      await vi.advanceTimersByTimeAsync(2000);
+      desire(h, ["a"]);
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(h.client.getSnapshot().remoteTracks.map((track) => track.source)).toEqual(["microphone"]);
+      expect(h.client.getSnapshot().receiveStalls ?? []).toEqual([]);
+    });
+  });
+
+  it("keeps retrying a refused pull about every second without giving up, then hears the speaker", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      receivePackets(h, () => true);
+      h.transport.failRemotePullCount = 40;
+      const attempts: number[] = [];
+      const add = h.transport.addTracks.bind(h.transport);
+      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+        if (input.tracks.some((track) => track.location === "remote")) attempts.push(Date.now());
+        return add(input);
+      });
+      desire(h, ["a"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.client.getSnapshot().remoteTracks.map((track) => track.source)).toEqual(["microphone"]);
+      expect(attempts.length).toBeGreaterThan(40);
+      const gaps = attempts.slice(1).map((at, index) => at - attempts[index]!);
+      expect(Math.max(...gaps)).toBeLessThanOrEqual(1500);
+    });
+  });
+
+  it("stops pulling once the publication is gone", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      receivePackets(h, () => true);
+      h.transport.failRemotePullCount = 1000;
+      desire(h, ["a"]);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(pulls(h)).toBeGreaterThan(5);
+      desire(h, []);
+      await vi.advanceTimersByTimeAsync(1500);
+      const settled = pulls(h);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(pulls(h)).toBe(settled);
+    });
+  });
+
+  it("re-pulls audio that stays flat and stops once packets flow again", async () => {
+    let flowing = true;
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      receivePackets(h, () => flowing);
+      desire(h, ["a", "b"]);
+      await vi.advanceTimersByTimeAsync(5000);
+      const heard = h.client.getSnapshot().remoteTracks.map((track) => track.track);
+      const before = pulls(h);
+      flowing = false;
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(pulls(h)).toBeGreaterThan(before);
+      expect(h.client.getSnapshot().remoteTracks.some((track) => !heard.includes(track.track))).toBe(true);
+      flowing = true;
+      await vi.advanceTimersByTimeAsync(5000);
+      const healed = pulls(h);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(pulls(h)).toBe(healed);
+    });
+  });
+
+  it("reconnects the receive session when no desired audio flows, backing off while it stays silent", async () => {
+    let replacements = 0;
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        receivePackets(h, () => false);
+        desire(h, ["a", "b"]);
+        await vi.advanceTimersByTimeAsync(7000);
+        expect(replacements).toBe(0);
+        await vi.advanceTimersByTimeAsync(8000);
+        expect(replacements).toBe(1);
+        expect(h.transport.addInputs.filter((input) => input.replacementCause === "receive_stalled")).not.toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(replacements).toBeLessThanOrEqual(4);
+        expect(h.client.getSnapshot().remoteTracks.map((track) => track.source)).toEqual(["microphone", "microphone"]);
+      },
+      { replaceMediaConnection: async () => bootstrap(`silent-${++replacements}`) },
+    );
+  });
+
+  it("does not reconnect the receive session when only one of several speakers is silent", async () => {
+    let replacements = 0;
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        desire(h, ["a", "b"]);
+        let packets = 10;
+        vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+          packets += 50;
+          const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.participantId === "speaker-a" ? 10 : packets, codecId: "codec" }));
+          const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+          return new Map<string, RTCStats>([...rows.map((row) => [row.id, row] as const), ["codec", codec]]);
+        });
+        await vi.advanceTimersByTimeAsync(90_000);
+        expect(replacements).toBe(0);
+        expect(pulls(h)).toBeGreaterThan(10);
+      },
+      { replaceMediaConnection: async () => bootstrap(`one-silent-${++replacements}`) },
+    );
+  });
+
+  it("pulls speaker B within about a second while speaker A's pull waits on a session that never connects", async () => {
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream());
+        const pullStarts: number[] = [];
+        const add = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) pullStarts.push(Date.now());
+          return add(input);
+        });
+        desire(h, ["a"]);
+        await vi.advanceTimersByTimeAsync(1000);
+        const appeared = Date.now();
+        desire(h, ["a", "b"]);
+        await vi.advanceTimersByTimeAsync(1500);
+        const next = pullStarts.find((at) => at >= appeared);
+        expect(next).toBeDefined();
+        expect(next! - appeared).toBeLessThanOrEqual(1100);
+      },
+      { autoConnect: false },
+    );
+  });
+
+  it("replaces a receive connection that never connected before its first pull", async () => {
+    let replacements = 0;
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream());
+        receivePackets(h, () => true);
+        await vi.advanceTimersByTimeAsync(9000);
+        desire(h, ["a"]);
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(replacements).toBe(1);
+        expect(h.transport.addInputs.filter((input) => input.replacementCause === "dormant_connection")).not.toHaveLength(0);
+        expect(h.client.getSnapshot().remoteTracks.map((track) => track.source)).toEqual(["microphone"]);
+      },
+      { replaceMediaConnection: async () => bootstrap(`dormant-${++replacements}`) },
+    );
+  });
 });
