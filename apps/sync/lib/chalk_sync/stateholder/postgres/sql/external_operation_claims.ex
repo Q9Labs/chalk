@@ -50,7 +50,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
         ) as barriers_before
       from sync_external_operations
       where status = 'pending' and operation_name <> 'role_transition_cleanup'
-        and not (#{local_operation("sync_external_operations")})
+        and not (#{recording_callback("sync_external_operations")})
     ), eligible as (
       select external_operation_id, next_attempt_at, attempt_count, created_at,
         row_number() over (
@@ -64,7 +64,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
         and attempt_count < 100
         and #{operation_filter}
         and (
-          #{local_operation("sync_external_operations")}
+          #{recording_callback("sync_external_operations")}
           or (
             pending_order.barriers_before = 0
             and (
@@ -150,13 +150,11 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   end
 
   # Capture callbacks must be able to finish the recording operation that an
-  # Episode end is waiting for. Local decisions serialize on the control row.
-  defp local_operation(table) do
+  # Episode end is waiting for. Other decisions retain the Episode barrier.
+  defp recording_callback(table) do
     """
     #{table}.operation_name in (
-      'admit_participant', 'deny_admission', 'admission_request_expired',
-      'tenant_set_deadline', 'recording_capture_ready',
-      'recording_capture_stopped', 'recording_capture_failed'
+      'recording_capture_ready', 'recording_capture_stopped', 'recording_capture_failed'
     )
     """
   end
