@@ -50,7 +50,7 @@ jobs:
           node-version-file: .tool-versions
       - name: Read egress and notify Oncall
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_EGRESS_ACCOUNT_ID }}
           CLOUDFLARE_ANALYTICS_TOKEN: ${{ secrets.CLOUDFLARE_ANALYTICS_TOKEN }}
           ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
           EGRESS_CHECK_DRILL: ${{ inputs.drill }}
