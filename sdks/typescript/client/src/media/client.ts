@@ -844,24 +844,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #pullWithRecovery(desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     const pending = this.#pendingRemotePulls(desired);
     const stalled = pending.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
-    if (stalled.length) {
-      if (stalled.every((publication) => this.#receiveProgress.canRepull(publication.publicationId))) {
-        for (const publication of stalled) this.#receiveProgress.reserveRepull(publication.publicationId);
-        try {
-          const retired = await this.#retireStalledReceivers(stalled, generation);
-          if (!retired.length) return [];
-          const pulled = await this.#pullBatch(retired, generation);
-          if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
-          for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
-          return pulled;
-        } catch (error) {
-          this.#requireGeneration(generation);
-          if (!this.#replaceMediaConnection) throw error;
-        }
-      }
-      if (!this.#replaceMediaConnection || !this.#receiveProgress.reserveRebuild()) return [];
-      return this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "receive_stalled");
-    }
+    if (stalled.length) return this.#recoverStalledRemotePublications(stalled, desired, cursor, generation);
     const publications = pending;
     try {
       return await this.#pull(publications, generation);
@@ -873,6 +856,24 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
     }
+  }
+  async #recoverStalledRemotePublications(stalled: readonly CloudflareSFUPublication[], desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+    if (stalled.every((publication) => this.#receiveProgress.canRepull(publication.publicationId))) {
+      for (const publication of stalled) this.#receiveProgress.reserveRepull(publication.publicationId);
+      try {
+        const retired = await this.#retireStalledReceivers(stalled, generation);
+        if (!retired.length) return [];
+        const pulled = await this.#pullBatch(retired, generation);
+        if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
+        for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
+        return pulled;
+      } catch (error) {
+        this.#requireGeneration(generation);
+        if (!this.#replaceMediaConnection) throw error;
+      }
+    }
+    if (!this.#replaceMediaConnection || !this.#receiveProgress.reserveRebuild()) return [];
+    return this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "receive_stalled");
   }
   async #retireStalledReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFUPublication[]> {
     return this.#serializeSDP(async () => {

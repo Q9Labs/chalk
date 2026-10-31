@@ -150,15 +150,25 @@ try {
     const clientEntry = `${sdkRoot}/client/src/index.ts`;
     const effectEntry = `${sdkRoot}/client/src/effect.ts`;
     const aliases = {
-      "matrix-client-effect": effectEntry,
-      "matrix-react-context": `${sdkRoot}/react/src/bindings/context.tsx`,
-      "matrix-react-hooks": `${sdkRoot}/react/src/bindings/hooks.ts`,
-      "matrix-react-controls": `${sdkRoot}/react/src/components/control-bar/control-bar-behavior.ts`,
+      "@q9labsai/chalk-client/effect": effectEntry,
       "@q9labsai/chalk-client": clientEntry,
     };
     const built = await build({
-      entryPoints: [resolve(root, "scripts/dev/receive-partial-page.jsx")],
+      entryPoints: [resolve(root, "tools/sdk-web-consumer-e2e/consumer/receive-partial.jsx")],
       alias: aliases,
+      plugins: [
+        {
+          name: "pinned-react-controls",
+          setup(builder) {
+            const sources = {
+              "../../../sdks/typescript/react/src/bindings/context": `${sdkRoot}/react/src/bindings/context.tsx`,
+              "../../../sdks/typescript/react/src/bindings/hooks": `${sdkRoot}/react/src/bindings/hooks.ts`,
+              "../../../sdks/typescript/react/src/components/control-bar/control-bar-behavior": `${sdkRoot}/react/src/components/control-bar/control-bar-behavior.ts`,
+            };
+            builder.onResolve({ filter: /^\.\.\/\.\.\/\.\.\/sdks\/typescript\/react\/src\// }, ({ path }) => (sources[path] ? { path: sources[path] } : undefined));
+          },
+        },
+      ],
       nodePaths: [resolve(root, "node_modules"), resolve(root, "sdks/typescript/client/node_modules"), resolve(root, "sdks/typescript/react/node_modules"), resolve(root, "tools/sdk-web-consumer-e2e/node_modules")],
       bundle: true,
       write: false,
