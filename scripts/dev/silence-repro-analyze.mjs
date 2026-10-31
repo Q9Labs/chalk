@@ -117,6 +117,7 @@ files.forEach((file, fileIndex) => {
       condition: run.condition,
       runs: 0,
       errored: 0,
+      stalled: 0,
       pairs: 0,
       silent: 0,
       slow: 0,
@@ -141,6 +142,10 @@ files.forEach((file, fileIndex) => {
     cells.set(key, cell);
     cell.runs++;
     cell.shas.add(`${run.serverSha?.slice(0, 9)}/${run.sdkSha?.slice(0, 9)}`);
+    if (run.stalls?.length) {
+      cell.stalled++; // the box froze mid-room; its timings are not comparable
+      continue;
+    }
     if (run.error || !run.samples.length) {
       cell.errored++;
       continue;
@@ -223,7 +228,8 @@ const rows = [...cells.values()].sort((a, b) => `${a.build}|${a.condition}`.loca
 const summaries = rows.map((cell) => ({
   build: cell.build,
   condition: cell.condition,
-  rooms: cell.runs - cell.errored,
+  rooms: cell.runs - cell.errored - cell.stalled,
+  stalledRooms: cell.stalled,
   erroredRooms: cell.errored,
   unmutes: cell.clusters.length,
   pairs: cell.pairs,
@@ -263,7 +269,7 @@ if (asJson) {
     );
   for (const s of summaries) {
     console.log(
-      `\n${s.build} | ${s.condition}: first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}`,
+      `\n${s.build} | ${s.condition}: rooms dropped for a stall ${s.stalledRooms}, errored ${s.erroredRooms}, first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}`,
     );
     for (const [stage, count] of Object.entries(s.stagesSilent)) console.log(`  silent pairs by furthest stage: ${stage}: ${count}`);
   }

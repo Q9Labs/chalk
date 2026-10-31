@@ -113,6 +113,16 @@ const setNetem = (profile) => {
   tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "ip", "prio", "2", "u32", "match", "ip", "protocol", "17", "0xff", "action", "mirred", "egress", "redirect", "dev", "ifb0");
   tc("qdisc", "add", "dev", "ifb0", "root", "netem", ...profile.ingress.split(" "));
 };
+// Packets and drops the two netem qdiscs handled, as proof the shaping saw the room's media.
+const shapedPackets = () => {
+  const stats = (dev) => {
+    const text = execFileSync("sudo", ["tc", "-s", "qdisc", "show", "dev", dev], { encoding: "utf8" });
+    const netem = text.slice(text.indexOf("qdisc netem"));
+    const match = /Sent \d+ bytes (\d+) pkt \(dropped (\d+)/u.exec(netem);
+    return match ? { packets: Number(match[1]), dropped: Number(match[2]) } : null;
+  };
+  return { egress: stats(defaultInterface()), ingress: stats("ifb0") };
+};
 const clearNetem = () => {
   const dev = defaultInterface();
   for (const args of [
@@ -313,6 +323,7 @@ async function runBuild(name) {
           run.error = error.message;
           console.log(`Run failed ${name}/${conditionName}/${runIndex}: ${error.message}`);
         } finally {
+          if (condition.profile) run.shaped = shapedPackets();
           clearNetem();
         }
         await save();
@@ -474,7 +485,11 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         }),
       );
       run.samples.push({ t: (performance.now() - start) / 1000, atMs: Date.now() - origin, states });
+      // The cloud box sometimes freezes for tens of seconds; the analyzer drops rooms that recorded a stall.
+      const sleepStart = performance.now();
       await sleep(1000);
+      const overrunMs = performance.now() - sleepStart - 1000;
+      if (overrunMs > 3000) (run.stalls ??= []).push({ t: (sleepStart - start) / 1000, overrunMs: Math.round(overrunMs) });
     }
     run.wallMinusMonotonicMs = Date.now() - startWall - (performance.now() - start);
     run.sessionsPerParticipant = connections.map((set) => set.size);
