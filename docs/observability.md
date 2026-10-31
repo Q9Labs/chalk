@@ -369,7 +369,8 @@ The TypeScript Connection SDK keeps the latest 64 connection events in memory
 from construction, without installing a recorder. A failed join, terminal
 connection failure, or exhausted recovery freezes one report and posts it to
 `POST /v1/tenants/{tenant_id}/connection-reports`. Successful joins, normal leaves,
-and successful recovery do not upload it. Sync socket opens/closes include codes
+and successful recovery do not trigger failure reports; listener health summaries
+can still upload during a healthy call. Sync socket opens/closes include codes
 and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
@@ -437,11 +438,85 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+Listener audio receive health uses the same report endpoint, not a second
+diagnostic channel. It tracks desired remote `microphone` and `screen_audio`
+publications, never camera or local capture. Two event names also serve as report
+triggers:
+
+- `audio_receive_stuck`: Warn-level `sdk.connection_report`, sharing the
+  participant failure cooldown with join/recovery failures and projection
+  mismatches.
+- `audio_receive_summary`: Info-level `sdk.connection_report`, not alerting.
+  The event buffer retains only the latest summary. Summaries have their own
+  per-reporter spacing of at most one new report per five minutes; they neither
+  use nor consume the participant failure cooldown. Summary uploads contain only
+  `audio_receive_*` events. A failure replaces an unsent summary or queues after
+  an in-flight summary, so a pending summary cannot suppress the failure.
+
+The `receive_state` ladder records the furthest consecutive stage observed:
+
+```text
+announced → pull_requested → pull_failed / pull_succeeded → track_received → bytes_flowing → element_bound → playing
+```
+
+`pull_failed` is the failed branch of a pull, not a prerequisite for success.
+Read the state with the companion fields, rather than treating an attached track
+or a resolved `play()` promise alone as proof of audible audio:
+
+| Furthest state   | Interpretation                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                               |
+| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                  |
+| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                           |
+| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                      |
+| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path. |
+| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                    |
+| `element_bound`  | Audio is progressing and an element is bound, but the element is paused. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path.                     |
+| `playing`        | Audio is progressing and the bound element is not paused. This does not prove the output device is audible or its volume is nonzero.                                                           |
+
+Companion fields are bounded labels: `track_state` is `live`, `muted`, or `ended`;
+`element_state` is `paused` or `playing`; `play_result` is `ok`,
+`NotAllowedError`, `AbortError`, or `unknown`. Rejected playback contributes only
+that label, never raw error text. Summaries carry `receive_counts`, a fixed-key
+object with optional counts from 0 to 10000 for each ladder state plus
+`projection_off`. A disabled remote track (`track.enabled === false`) counts as
+`projection_off` instead of a ladder state and never triggers a stuck event;
+re-enabling it restarts its stuck clock. Projection gating is not bypassed.
+
+Sampling runs every five seconds, using one `getStats()` call on the receive peer
+connection per sample regardless of audio track count, and no call when no audio
+publications are tracked. This is the receive-health sampler's budget; other
+media monitors can sample stats independently. The tracker produces a summary
+every twelve samples (normally sixty seconds), while the reporter applies the
+five-minute upload spacing. A non-playing publication becomes stuck only after
+strictly more than ten seconds since announcement or the last healthy sample
+(not at ten seconds). Each unhealthy episode reports once and re-arms only after
+`playing`, with a lifetime cap of eight stuck events per media session. The
+timer stops on media stop, including leave/dispose; results arriving after
+disposal are ignored.
+
+These observations change no user-visible lifecycle or durable journey boundary,
+so they add no journey-ledger event. Diagnostic proof is covered by
+`sdks/typescript/client/src/media/audio-receive-health.test.ts`,
+`sdks/typescript/client/src/media/cloudflare-sfu.test.ts`,
+`sdks/typescript/client/src/connection/report.test.ts`,
+`sdks/typescript/client/src/space-client/audio-observation.test.ts`,
+`sdks/typescript/react/src/components/audio-output/AudioOutput.test.tsx`, and
+`apps/api/internal/httpapi/connection_reports_test.go`. These test state/timing,
+sampling disposal, pull failures, report spacing/priority/privacy, synchronous
+element observation, playback rejection/cleanup, and API validation/log levels.
+They do not constitute a real-browser audible-playback proof. The production
+alert query in
+`infrastructure/observability/production-alerts/connection-reports.apl` selects
+only `join_failed`, `recovery_exhausted`, and `media_projection_mismatch` triggers;
+neither receive-health trigger currently matches it.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync
 readiness: those can be the failure being reported. Identity comes exclusively
-from that verified credential. The `sdk.connection_report` warning includes
+from that verified credential. The `sdk.connection_report` log (Info for
+`audio_receive_summary`, Warn for other triggers) includes
 `tenant_id`, `space_id`, `episode_id`, SHA-256 `participant_id_hash` (the same
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
@@ -470,9 +545,10 @@ error messages never enter the log.
 
 There are no tokens, names, emails, IP addresses, URLs, peer close reasons, error
 messages, media contents, or arbitrary payloads in the report body. The SDK
-allows one report per participant per minute across connections in the same
-module instance; the API enforces six per participant per ten minutes through
-its existing limiter. The SDK holds one pending report while offline, retries a
+allows one failure report per participant per minute across connections in the
+same module instance; summaries use their separate spacing described above.
+The API enforces six reports per participant per ten minutes through its existing
+limiter, including summaries. The SDK holds one pending report while offline, retries a
 transport failure once on a later browser `online` event, bounds each upload to
 five seconds, and discards it on disposal. An `online` event during an active
 upload is retained for that retry if the upload subsequently fails. An HTTP response, including rejection,
