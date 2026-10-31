@@ -342,3 +342,9 @@ no reason. A missing reason means no evidence, never "off". Sockets without the
 query keep the exact earlier four-key item shape, and new SDKs accept items from
 older servers that never send the fields. The fields do not change the canonical
 control digest.
+
+Apply `20261031120000_sync_media_stops` before Sync. Every live registration reads
+`sync_media_stops`, so the compatibility floor `minimum_compatible_sync_migration`
+is that version: a database without the table fails readiness with
+`incompatible_database_migration` and Sync does not serve. A rollback leaves the
+table in place.
