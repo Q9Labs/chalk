@@ -220,7 +220,7 @@ try {
           if (action.kind === 'offline') {
             offline = action.enabled;
             // Playwright offline alone does not block UDP WebRTC; CDP network only is insufficient.
-            execFileSync('iptables', ['-w', action.enabled ? '-I' : '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
+            execFileSync('sudo', ['iptables', '-w', action.enabled ? '-I' : '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
             await participants[2].context.setOffline(action.enabled);
           } else {
             if (action.kind === 'mic') intents[action.participant] = action.enabled;
@@ -238,7 +238,7 @@ try {
       if (run.samples.length % 30 === 0) { await save(); console.log(`SDK ${version}: ${Math.round(t)} seconds, ${run.actions.length} actions.`); }
       await sleep(1000);
     }
-    if (offline) execFileSync('iptables', ['-w', '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
+    if (offline) execFileSync('sudo', ['iptables', '-w', '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
     run.sessionsPerParticipant = connections.map(connections => connections.size);
     await save();
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(error => run.faults.push({ kind: 'leave', message: error.message }));
@@ -253,7 +253,7 @@ try {
   throw error;
 } finally {
   // Our machine has no other browser/workload; remove only our exact firewall rule if present.
-  try { execFileSync('iptables', ['-w', '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP'], { stdio: 'ignore' }); } catch {}
+  try { execFileSync('sudo', ['iptables', '-w', '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP'], { stdio: 'ignore' }); } catch {}
   await Promise.all(allBrowsers.map(browser => browser.close()));
   await runtime.stop();
   if (http) await new Promise(resolve => http.close(resolve));
