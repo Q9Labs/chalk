@@ -27,11 +27,7 @@ export function currentSessionId(): string | undefined {
 export function newSessionId(): string {
   const random = globalThis.crypto;
   if (typeof random?.randomUUID === "function") return random.randomUUID();
-  const bytes = random.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (digit) => (Number(digit) ^ (random.getRandomValues(new Uint8Array(1))[0]! & (15 >> (Number(digit) / 4)))).toString(16));
 }
 
 /**
@@ -49,16 +45,21 @@ function browserSession(): string | undefined {
     /* Blocked storage keeps the ID for this page load only. */
   }
   const tab = tabToken();
-  const stored = storage?.getItem(STORAGE_KEY) ?? undefined;
-  const sameTab = tab === undefined || storage?.getItem(TAB_KEY) === tab;
-  browserId = stored && SESSION_ID.test(stored) && sameTab ? stored : newSessionId();
+  browserId = storedSession(storage, tab) ?? newSessionId();
   try {
-    if (browserId !== stored) storage?.setItem(STORAGE_KEY, browserId);
+    storage?.setItem(STORAGE_KEY, browserId);
     if (tab !== undefined) storage?.setItem(TAB_KEY, tab);
   } catch {
     /* A full or blocked store is not a request failure. */
   }
   return browserId;
+}
+
+/** The stored ID, when it is a session ID and was stored by this tab. */
+function storedSession(storage: Storage | undefined, tab: string | undefined): string | undefined {
+  const stored = storage?.getItem(STORAGE_KEY) ?? undefined;
+  if (!stored || !SESSION_ID.test(stored)) return undefined;
+  return tab === undefined || storage?.getItem(TAB_KEY) === tab ? stored : undefined;
 }
 
 /** The token that names this tab in `window.name`, which survives reloads but is empty in a duplicated tab. Undefined when the app owns `window.name`. */
@@ -81,7 +82,8 @@ export function sessionBaggage(): string | undefined {
 export function requestContextHeaders(): Record<string, string> {
   const baggage = sessionBaggage();
   if (!baggage) return {};
-  return { baggage, traceparent: `00-${newSessionId().replaceAll("-", "")}-${newSessionId().replaceAll("-", "").slice(0, 16)}-01` };
+  const trace = newSessionId().replaceAll("-", "");
+  return { baggage, traceparent: `00-${trace}-${trace.slice(16)}-01` };
 }
 
 /** Wraps a fetch so every request carries the session; headers the caller already set win. Use only for Chalk API origins. */

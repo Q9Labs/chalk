@@ -478,7 +478,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
-      const baggage = legacyHelloServers.has(this.#serverKey()) ? undefined : sessionBaggage();
+      const baggage = legacyHelloServers.has(this.#options.url) ? undefined : sessionBaggage();
       const hello = {
         type: "hello",
         protocol: 1,
@@ -899,13 +899,6 @@ export class V1SyncClient implements V1CollaborationClient {
     socket.close(CLIENT_RESTART_CLOSE_CODE, reason);
     this.#disconnected(socket, retryNow);
   }
-  #serverKey(): string {
-    try {
-      return new URL(this.#options.url).origin;
-    } catch {
-      return this.#options.url;
-    }
-  }
   /**
    * A Sync that predates the session ID rejects any hello with an unknown `baggage` field before welcome. The first
    * rejection marks that server as legacy, so the retry and every later reconnect send the hello without it.
@@ -913,7 +906,7 @@ export class V1SyncClient implements V1CollaborationClient {
   #legacyHelloRejected(socket: V1Socket): boolean {
     if (this.#baggageHelloSocket !== socket) return false;
     this.#baggageHelloSocket = null;
-    legacyHelloServers.add(this.#serverKey());
+    legacyHelloServers.add(this.#options.url);
     return true;
   }
   #recoverDigestMismatch(): void {
