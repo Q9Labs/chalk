@@ -60,10 +60,17 @@ const summaries = report.versions.map(run => {
     const key = `${operation}:${event.status}`;
     statusCounts[key] = (statusCounts[key] || 0) + 1;
   }
+  const providerStatusCounts = {};
+  for (const failure of run.providerFailures ?? []) {
+    const operation = failure.operation === 'add_tracks' ? Number(failure.request_local_track_count) > 0 ? 'publish' : 'pull' : failure.operation;
+    const key = `${operation}:${failure.http_status}`;
+    providerStatusCounts[key] = (providerStatusCounts[key] || 0) + 1;
+  }
   return {
     version: run.version, sdkRevision: run.sdkRevision, completed: run.completed ?? null,
     sessionsPerParticipant: run.sessionsPerParticipant ?? [], measuredSeconds: lastT,
     apiStatusCounts: statusCounts,
+    providerStatusCounts,
     pairs, lostPairSeconds: pairs.reduce((sum, pair) => sum + pair.lostSeconds, 0),
     medianUnmuteSeconds: median, maxUnmuteSeconds: latencies.at(-1) ?? null,
     neverAudible: unmutes.filter(unmute => unmute.seconds === null && !unmute.pending).length,
