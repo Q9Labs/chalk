@@ -48,8 +48,8 @@ const summaries = report.versions.map(run => {
     const nextMute = run.actions.find(other => other.t > action.t && other.kind === 'mic' && other.participant === action.participant && !other.enabled);
     const deadline = nextMute?.t ?? lastT;
     for (let listener = 0; listener < 4; listener++) if (listener !== action.participant) {
-      const first = audibleSamples.find(sample => sample.t >= action.t && sample.t < deadline && sample.audible.has(`${listener}:${action.participant}`));
-      unmutes.push({ listener, speaker: action.participant, actionT: action.t, seconds: first ? first.t - action.t : null, observationSeconds: deadline - action.t, actionError: action.error ?? null });
+      const first = audibleSamples.find(sample => sample.t >= action.t && (nextMute ? sample.t < deadline : sample.t <= deadline) && sample.audible.has(`${listener}:${action.participant}`));
+      unmutes.push({ listener, speaker: action.participant, actionT: action.t, seconds: first ? first.t - action.t : null, pending: !first && !nextMute && !run.completed, observationSeconds: deadline - action.t, actionError: action.error ?? null });
     }
   }
   const latencies = unmutes.flatMap(unmute => unmute.seconds === null ? [] : [unmute.seconds]).sort((a, b) => a - b);
@@ -66,7 +66,8 @@ const summaries = report.versions.map(run => {
     apiStatusCounts: statusCounts,
     pairs, lostPairSeconds: pairs.reduce((sum, pair) => sum + pair.lostSeconds, 0),
     medianUnmuteSeconds: median, maxUnmuteSeconds: latencies.at(-1) ?? null,
-    neverAudible: unmutes.filter(unmute => unmute.seconds === null).length,
+    neverAudible: unmutes.filter(unmute => unmute.seconds === null && !unmute.pending).length,
+    pendingUnmuteObservations: unmutes.filter(unmute => unmute.pending).length,
     unmuteListenerObservations: unmutes.length, unmutes,
     actionErrors: run.actions.filter(action => action.error), faults: run.faults,
     sampleErrors: run.samples.flatMap(sample => sample.states.filter(state => state.error).map(state => ({ t: sample.t, listener: state.listener, error: state.error }))),
