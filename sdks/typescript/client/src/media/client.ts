@@ -49,6 +49,7 @@ type LocalRecovery = {
   readonly state: LocalTrackState;
   readonly deadPublicationId: string | null;
   relist: boolean;
+  retiring: boolean;
   attempt: number;
   timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   running: boolean;
@@ -153,12 +154,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   localPublicationWithdrawn(publicationId: string): void {
-    const owned = [...this.#ownedPublications].find(
-      (publication) =>
-        publication.lifecycle.kind === "confirmed" &&
-        publication.lifecycle.handle.publicationId === publicationId &&
-        publication.state.providerPublicationId === publicationId,
-    );
+    const owned = [...this.#ownedPublications].find((publication) => publication.lifecycle.kind === "confirmed" && publication.lifecycle.handle.publicationId === publicationId && publication.state.providerPublicationId === publicationId);
     const state = owned?.state;
     if (!state || !state.desiredEnabled || this.#localTracks.get(state.source) !== state) return;
     this.#beginLocalRecovery(state, publicationId, false);
@@ -296,7 +292,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#canBeginLocalRecovery(state)) return;
     const now = Date.now();
     const delayMs = this.#recoveryStartDelay(state.source, now);
-    const recovery: LocalRecovery = { state, deadPublicationId, relist, attempt: 0, timer: undefined, running: false };
+    const recovery: LocalRecovery = { state, deadPublicationId, relist, retiring: false, attempt: 0, timer: undefined, running: false };
     this.#localRecoveries.set(state.source, recovery);
     this.#scheduleLocalRecovery(recovery, delayMs);
   }
@@ -332,25 +328,39 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #attemptLocalRecovery(recovery: LocalRecovery): Promise<void> {
-    const { state, deadPublicationId } = recovery;
-    if (recovery.relist && deadPublicationId !== null) {
-      const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
-      if (!this.#canRecover(recovery) || state.providerPublicationId !== deadPublicationId || !state.desiredEnabled) return;
-      if (authoritative.publications.some((publication) => publication.publicationId === deadPublicationId)) {
-        this.#dropLocalRecovery(state.source, recovery);
-        return;
-      }
-      recovery.relist = false;
-    }
-    if (!this.#canRecover(recovery) || (deadPublicationId !== null && state.providerPublicationId !== deadPublicationId) || !state.desiredEnabled) return;
-    if (deadPublicationId !== null && state.providerPublicationId === deadPublicationId) this.#pauseLocalSource(state.source, "discovery_absent");
-    if (this.#hasRetiringLocalPublications(state.source)) {
-      await this.#retireLocalRecoveryPublications(state.source);
-      if (this.#discardUnrecoverableIntent(recovery)) return;
-    }
-    const published = await this.#enablePreparedTrack(state);
+    if (!(await this.#relistLocalRecoveryIfNeeded(recovery)) || !this.#canContinueLocalRecovery(recovery)) return;
+    this.#retireDeadLocalPublication(recovery);
+    if (await this.#retireLocalRecoveryIfNeeded(recovery)) return;
+    const published = await this.#enablePreparedTrack(recovery.state);
     if (this.#discardUnrecoverableIntent(recovery)) return;
     if (!this.#settleLocalRecovery(recovery, published)) this.#scheduleLocalRecoveryRetry(recovery);
+  }
+  async #relistLocalRecoveryIfNeeded(recovery: LocalRecovery): Promise<boolean> {
+    const { state, deadPublicationId } = recovery;
+    if (!recovery.relist || deadPublicationId === null) return true;
+    const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
+    if (!this.#canRecover(recovery) || state.providerPublicationId !== deadPublicationId || !state.desiredEnabled) return false;
+    if (authoritative.publications.some((publication) => publication.publicationId === deadPublicationId)) {
+      this.#dropLocalRecovery(state.source, recovery);
+      return false;
+    }
+    recovery.relist = false;
+    return true;
+  }
+  #canContinueLocalRecovery(recovery: LocalRecovery): boolean {
+    if (!this.#canRecover(recovery) || recovery.retiring) return this.#canRecover(recovery);
+    if (recovery.deadPublicationId !== null && recovery.state.providerPublicationId !== recovery.deadPublicationId) return false;
+    return recovery.state.desiredEnabled;
+  }
+  #retireDeadLocalPublication(recovery: LocalRecovery): void {
+    if (recovery.retiring || recovery.deadPublicationId === null || recovery.state.providerPublicationId !== recovery.deadPublicationId) return;
+    recovery.retiring = true;
+    this.#pauseLocalSource(recovery.state.source, "discovery_absent");
+  }
+  async #retireLocalRecoveryIfNeeded(recovery: LocalRecovery): Promise<boolean> {
+    if (!this.#hasRetiringLocalPublications(recovery.state.source)) return false;
+    await this.#retireLocalRecoveryPublications(recovery.state.source);
+    return this.#discardUnrecoverableIntent(recovery);
   }
   async #retryLocalRecovery(recovery: LocalRecovery, error: unknown): Promise<void> {
     if (this.#discardUnrecoverableIntent(recovery)) return;
