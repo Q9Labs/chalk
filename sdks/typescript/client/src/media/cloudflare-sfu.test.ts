@@ -2697,6 +2697,7 @@ class FakePeerConnection extends EventTarget {
   refuseSenderParameters = false;
   receiveDTX = false;
   readonly #receivers = new Map<string, RTCRtpReceiver>();
+  readonly #remoteTransceivers: RTCRtpTransceiver[] = [];
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];
   }
@@ -2731,7 +2732,7 @@ class FakePeerConnection extends EventTarget {
     return this.#transceivers.map((transceiver) => transceiver.sender);
   }
   getTransceivers(): RTCRtpTransceiver[] {
-    return this.#transceivers;
+    return [...this.#transceivers, ...this.#remoteTransceivers];
   }
   close(): void {
     this.closed = true;
@@ -2749,6 +2750,7 @@ class FakePeerConnection extends EventTarget {
   }
   emitTrack(mid: string, track: FakeTrack): void {
     this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
+    this.#remoteTransceivers.push({ mid, receiver: this.#receivers.get(mid), stop: () => track.stop() } as unknown as RTCRtpTransceiver);
     const event = new Event("track");
     Object.defineProperties(event, {
       track: { value: track as unknown as MediaStreamTrack },

@@ -28,6 +28,7 @@ type sfuRenegotiateRequest struct {
 }
 
 type sfuCloseTracksRequest struct {
+	ReceiveOnly        bool                           `json:"receive_only,omitempty"`
 	ConnectionID       string                         `json:"connection_id"`
 	SessionDescription *mediaplane.SessionDescription `json:"session_description,omitempty"`
 	Tracks             []sfuCloseTrackRequest         `json:"tracks"`
@@ -313,6 +314,12 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			tracks := make([]mediaplane.CloseTrack, 0, len(request.Body.Tracks))
 			for _, track := range request.Body.Tracks {
 				tracks = append(tracks, mediaplane.CloseTrack{Mid: track.Mid, Source: track.Source, PublicationID: track.PublicationID})
+			}
+			if request.Body.ReceiveOnly {
+				return service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
+					Provider: service.Provider(), ConnectionID: request.Body.ConnectionID,
+					Tracks: tracks, Force: true, ReceiveOnly: true,
+				})
 			}
 			if publications == nil {
 				return mediaplane.CloseTracksResponse{}, mediapublications.ErrUnavailable

@@ -73,6 +73,7 @@ const MAX_RECEIVE_OBSERVATIONS = 32;
 export class ReceiveStallRecovery {
   readonly #detector = new ReceiveStallDetector();
   readonly #attempts = new Map<string, number>();
+  readonly #repulled = new Set<string>();
   readonly #identities = new Map<string, CloudflareSFURemoteTrack>();
   #expected = new Set<string>();
   #screens = new Set<string>();
@@ -117,13 +118,30 @@ export class ReceiveStallRecovery {
     return this.#stalled.has(publicationId);
   }
 
-  canRebuild(): boolean {
-    return this.#active.length > 0 && this.#active.every((id) => this.#stalled.has(id) && (this.#attempts.get(id) ?? 0) < MAX_RECEIVE_REBUILDS);
+  canRepull(id: string): boolean {
+    return this.#stalled.has(id) && !this.#repulled.has(id);
+  }
+
+  reserveRepull(id: string): boolean {
+    if (!this.canRepull(id)) return false;
+    this.#repulled.add(id);
+    return true;
+  }
+
+  restarted(id: string): void {
+    this.#detector.forget(id);
+    this.#stalled.delete(id);
+  }
+
+  canRebuild(id?: string): boolean {
+    return this.#active.some((active) => (id === undefined || id === active) && this.#stalled.has(active) && (this.#attempts.get(active) ?? 0) < MAX_RECEIVE_REBUILDS);
   }
 
   reserveRebuild(): boolean {
     if (!this.canRebuild()) return false;
-    for (const id of this.#active) this.#attempts.set(id, (this.#attempts.get(id) ?? 0) + 1);
+    for (const id of this.#active) {
+      if (this.canRebuild(id)) this.#attempts.set(id, (this.#attempts.get(id) ?? 0) + 1);
+    }
     return true;
   }
 
@@ -139,7 +157,10 @@ export class ReceiveStallRecovery {
     this.#active = active.map((publication) => publication.publicationId);
     const samples = active.flatMap((publication) => receivePacketSample(connection, report, publication) ?? []);
     const { stalled, advanced, resumed } = this.#detector.sample(now, samples);
-    for (const id of resumed) this.#attempts.delete(id);
+    for (const id of resumed) {
+      this.#attempts.delete(id);
+      this.#repulled.delete(id);
+    }
     const newlyStalled = stalled.filter((id) => !this.#stalled.has(id));
     this.#stalled = new Set(stalled);
     if (newlyStalled.length) this.#record(now);
@@ -161,6 +182,7 @@ export class ReceiveStallRecovery {
     this.#detector.forget(id);
     this.#stalled.delete(id);
     this.#attempts.delete(id);
+    this.#repulled.delete(id);
   }
 
   #record(now: number): void {
