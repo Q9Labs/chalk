@@ -299,6 +299,23 @@ func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
 			},
 		},
 		{
+			name: "numeric snapshot ID tie-break", now: now, evidenceUntil: now.Add(time.Hour),
+			dropletSnapshots: []map[string]any{snapshot(int64(12), snapshotName, "2026-09-04T00:00:00Z")},
+			accountSnapshotPages: [][]map[string]any{{
+				snapshot("9", prefix+"9-bootstrap-evidence", "2026-09-04T00:00:00Z"),
+				snapshot("10", prefix+"10-bootstrap-evidence", "2026-09-04T00:00:00Z"),
+				snapshot("11", prefix+"11-bootstrap-evidence", "2026-09-04T00:00:00Z"),
+				snapshot("12", snapshotName, "2026-09-04T00:00:00Z"),
+				snapshot("13", prefix+"13-bootstrap-evidence", "2026-09-04T00:00:00Z"),
+			}},
+			wantDelete: true, wantPruned: []string{"10", "9"},
+			wantCalls: []string{
+				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots",
+				"GET /v2/snapshots", "DELETE /v2/snapshots/10", "DELETE /v2/snapshots/9",
+				"DELETE /v2/droplets/789",
+			},
+		},
+		{
 			name: "deadline passed", now: now, evidenceUntil: now.Add(-time.Second), wantDelete: true,
 			wantCalls: []string{"GET /v2/droplets/789", "DELETE /v2/droplets/789"},
 		},

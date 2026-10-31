@@ -932,6 +932,12 @@ func compareSnapshotCreatedAt(left, right digitalOceanSnapshot) int {
 	if leftTime.Before(rightTime) {
 		return 1
 	}
+	if len(left.ID) > len(right.ID) {
+		return -1
+	}
+	if len(left.ID) < len(right.ID) {
+		return 1
+	}
 	if left.ID > right.ID {
 		return -1
 	}
