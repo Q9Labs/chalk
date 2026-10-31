@@ -2,6 +2,7 @@ import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnection
 import { ReceiveStallRecovery } from "./receive-stall";
 import { createSilentAudio, type SilentAudio } from "./silent-audio";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
+import { SendStallDetector, sendSamples } from "./send-stall";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
@@ -280,6 +281,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       }
     }
+  }
+  // The SFU can close a track while the browser keeps sending: reports still arrive but its jitter reading freezes.
+  #republishStalledSenders(mids: readonly string[], generation: number): void {
+    for (const mid of mids) {
+      const state = [...this.#localTracks.values()].find((item) => item.transceiver?.mid === mid && item.enabled && item.desiredEnabled && (item.source === "microphone" || item.source === "camera"));
+      if (!state || Date.now() - (this.#lastRepublishAt.get(state.source) ?? Number.NEGATIVE_INFINITY) < REPUBLISH_COOLDOWN_MS) continue;
+      this.#lastRepublishAt.set(state.source, Date.now());
+      this.#republishLostPublication(state, generation).catch((error: unknown) => {
+        if (generation === this.#generation && !this.#stopped) this.#reportError(error);
+      });
+    }
+  }
+  async #republishLostPublication(state: LocalTrackState, generation: number): Promise<void> {
+    this.#pauseLocalSource(state.source, "discovery_absent");
+    await this.#retireOwnedPublications();
+    this.#requireGeneration(generation);
+    if (this.#localTracks.get(state.source) === state) await this.#enablePreparedTrack(state);
   }
   #finishPublicationPoll(generation: number): void {
     if (generation !== this.#generation) return;
@@ -1243,6 +1261,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     let cameraTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const cameraPolicy = new CameraUplinkPolicy();
     const viewerLayers = new ViewerLayerSelector();
+    const sendStalls = new SendStallDetector();
     let observedCamera: LocalTrackState | undefined;
     const current = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "failed" && connection.connectionState !== "closed";
     const adaptCamera = async () => {
@@ -1256,6 +1275,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         const report = await connection.getStats();
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report);
+        this.#republishStalledSenders(sendStalls.sample(performance.now(), sendSamples(report)), generation);
         await this.#adaptViewerLayers(connection, report, viewerLayers, current);
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
