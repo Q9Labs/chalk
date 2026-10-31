@@ -47,9 +47,6 @@ under the request and adds `session.id` to its structured logs. Sync adds it to
 connection spans and logs. Any other value is ignored. The ID is request and
 connection scoped: it is not written to the journey ledger, to Sync frames sent
 back to the client, or to durable lifecycle rows.
-Rejected origins emit a `cors.origin_forbidden` warning and `journey.phase.http`
-attributes for `cors.outcome=forbidden`, `cors.policy`, and a sanitized
-`cors.origin` (IP literals are rendered as `[ip]`).
 
 ```apl
 | where ['session.id'] == "<session-id>"
@@ -63,6 +60,14 @@ CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
 frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
 later reconnects. The whiteboard socket does not carry the ID yet.
+
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
 
 ### Interrupted recording stops and missing provider tracks
 
