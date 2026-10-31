@@ -119,6 +119,7 @@ export type CloudflareSFUClientOptions = {
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
+  readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };
