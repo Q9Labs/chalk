@@ -9,6 +9,8 @@ const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
+  // After Leave the access grant is gone, so the closing stats upload reuses the last token a request got.
+  let lastToken = "";
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
   const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
@@ -18,6 +20,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     try {
       const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
       if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+      lastToken = token;
       return await withDeadline(timeoutMs, async (signal) => {
         const startedAt = performance.now();
         const response = await fetch(`${mediaPath}/${path}`, {
@@ -91,7 +94,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       });
     },
     uploadCallStats: async (stats: CallStatsRequest) => {
-      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal)).catch(() => lastToken);
       if (!token.trim()) return;
       await withDeadline(timeoutMs, async (signal) => {
         const response = await fetch(statsPath, {

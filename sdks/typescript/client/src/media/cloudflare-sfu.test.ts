@@ -1654,6 +1654,21 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
   });
+  it("uploads call stats with the last token once the access grant is gone", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
+    let granted = true;
+    const credential = async () => {
+      if (!granted) throw new Error("access grant released");
+      return "media-token";
+    };
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    await transport.listPublications();
+    granted = false;
+    await transport.uploadCallStats?.({ version: 1, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" }] });
+    const [url, init] = fetch.mock.calls[1] ?? [];
+    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer media-token");
+  });
   it("sends replacement diagnostics in an optional query without changing legacy bodies or CORS headers", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", bearerToken: "media-token", tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
