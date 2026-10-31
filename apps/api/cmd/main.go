@@ -506,6 +506,7 @@ func run() error {
 			MediaTokens:        participantMediaIssuer,
 			MediaProof:         participantMediaVerifier,
 			MediaProofRecovery: participantMediaRecoveryVerifier,
+			ManagedTenantID:    managedTenantID,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite access port: %w", err)
