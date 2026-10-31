@@ -1217,7 +1217,7 @@ type SyncEpisodeControl struct {
 }
 
 type SyncExternalOperation struct {
-	AcceptanceOrder             int64              `json:"acceptance_order"`
+	AcceptanceOrder             pgtype.Int8        `json:"acceptance_order"`
 	TenantID                    pgtype.UUID        `json:"tenant_id"`
 	SpaceID                     pgtype.UUID        `json:"space_id"`
 	EpisodeID                   pgtype.UUID        `json:"episode_id"`
