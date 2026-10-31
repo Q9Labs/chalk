@@ -133,7 +133,7 @@ it("formerly flowing DTX audio records a partial packet freeze", async () => {
       const pulls = h.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(70_000);
       expect(h.transport.addInputs).toHaveLength(pulls + 3);
-      expect((h.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
+      expect(h.client.getSnapshot().receiveStalls).toEqual(expect.arrayContaining([expect.objectContaining({ event: "receive_stalled", scope: "partial" })]));
     },
     { replaceMediaConnection: async () => bootstrap("replacement") },
   );

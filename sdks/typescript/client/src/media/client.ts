@@ -848,10 +848,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (stalled.every((publication) => this.#receiveProgress.canRepull(publication.publicationId))) {
         for (const publication of stalled) this.#receiveProgress.reserveRepull(publication.publicationId);
         try {
-          await this.#retireStalledReceivers(stalled, generation);
-          const pulled = await this.#pullBatch(stalled, generation);
-          if (pulled?.length !== stalled.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
-          for (const publication of stalled) this.#receiveProgress.restarted(publication.publicationId);
+          const retired = await this.#retireStalledReceivers(stalled, generation);
+          if (!retired.length) return [];
+          const pulled = await this.#pullBatch(retired, generation);
+          if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
+          for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
           return pulled;
         } catch (error) {
           this.#requireGeneration(generation);
@@ -873,11 +874,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
     }
   }
-  async #retireStalledReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<void> {
-    await this.#serializeSDP(async () => {
+  async #retireStalledReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFUPublication[]> {
+    return this.#serializeSDP(async () => {
       this.#requireGeneration(generation);
+      const stalled = publications.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
+      if (!stalled.length) return [];
       const connection = this.#connection;
-      const receivers = publications.map((publication) => {
+      const receivers = stalled.map((publication) => {
         const remote = [...this.#remoteTracks.values()].find((track) => track.publicationId === publication.publicationId);
         const transceiver = connection.getTransceivers().find((item) => item.receiver.track === remote?.track);
         if (!transceiver || transceiver.mid === null) throw new CloudflareSFUError("The stalled receiver has no negotiated MID", "media_failed");
@@ -887,6 +890,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: receivers.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
       this.#requireGeneration(generation);
       for (const { transceiver } of receivers) transceiver.stop();
+      return stalled;
     });
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
