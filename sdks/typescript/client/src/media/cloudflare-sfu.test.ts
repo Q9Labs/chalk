@@ -617,6 +617,46 @@ it.each(["microphone", "camera"] as const)("resets %s withdrawal backoff after 1
   });
 });
 
+it("judge736: a reconnect cannot strand the next dead publication behind stale recovery intent", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("judge-mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const first = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    h.transport.withdrawPublication(first);
+    h.client.localPublicationWithdrawn(first);
+    await h.client.restart(bootstrap("judge-reconnect"));
+    const second = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    expect(second).not.toBe(first);
+    await vi.advanceTimersByTimeAsync(0);
+    h.transport.withdrawPublication(second);
+    h.client.localPublicationWithdrawn(second);
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect([...h.transport.localPublications.keys()]).toHaveLength(1);
+    expect(h.client.getSnapshot().localTracks[0]!.publicationId).not.toBe(second);
+  });
+});
+
+it("judge736: a reconnect cannot strand the next dead camera publication behind stale recovery intent", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("judge-cam", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const first = h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId!;
+    h.transport.withdrawPublication(first);
+    h.client.localPublicationWithdrawn(first);
+    await h.client.restart(bootstrap("judge-reconnect-camera"));
+    const second = h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId!;
+    expect(second).not.toBe(first);
+    await vi.advanceTimersByTimeAsync(0);
+    h.transport.withdrawPublication(second);
+    h.client.localPublicationWithdrawn(second);
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect([...h.transport.localPublications.keys()]).toHaveLength(1);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId).not.toBe(second);
+  });
+});
+
 it("review736: recovers repeated replacement deaths through the short backoff", async () => {
   await withTimedHarness(
     async (h) => {
