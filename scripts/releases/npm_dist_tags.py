@@ -10,6 +10,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = "https://registry.npmjs.org/"
+VERIFY_ATTEMPTS = 6
+VERIFY_DELAY_SECONDS = 10
 
 
 def package_names():
@@ -38,7 +40,7 @@ def read_latest(package):
     )
     output = result.stdout + result.stderr
     if result.returncode:
-        if "E404" in output or "404" in output:
+        if "E404" in output:
             return None
         raise RuntimeError(f"npm view failed for {package} with exit code {result.returncode}.")
     try:
@@ -98,6 +100,49 @@ def write_summary(rows):
             summary.write(f"| {package} | {previous} | {found} | {action} |\n")
 
 
+def verify_latest(package, version):
+    found = None
+    for attempt in range(VERIFY_ATTEMPTS):
+        try:
+            found = read_latest(package)
+        except RuntimeError:
+            found = None
+        if found == version:
+            return found
+        if attempt + 1 < VERIFY_ATTEMPTS:
+            time.sleep(VERIFY_DELAY_SECONDS)
+    return found
+
+
+def restore_package(package, version):
+    if version is None:
+        print(f"Warning: no previous npm latest recorded for {package}; skipping.")
+        return (package, "null", "not checked", "skipped (no previous latest)"), True
+    if not isinstance(version, str):
+        raise RuntimeError(f"Previous npm latest for {package} must be a string or null.")
+    try:
+        found = read_latest(package)
+    except RuntimeError as error:
+        print(f"Could not read npm latest for {package}: {error}", file=sys.stderr)
+        return (package, version, "unavailable", "failed to read latest"), False
+    if found == version:
+        return (package, version, found, "unchanged"), True
+    result = subprocess.run(
+        ["npm", "dist-tag", "add", f"{package}@{version}", "latest"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        print(f"npm dist-tag add failed for {package} (exit code {result.returncode}).", file=sys.stderr)
+        return (package, version, found if found is not None else "null", "restore failed"), False
+    found = verify_latest(package, version)
+    if found != version:
+        print(f"npm latest verification failed for {package}.", file=sys.stderr)
+        return (package, version, found if found is not None else "null", "verification failed"), False
+    return (package, version, found, "restored"), True
+
+
 def restore(previous):
     if not isinstance(previous, dict):
         raise RuntimeError("PREVIOUS_NPM_LATEST must be a JSON object.")
@@ -105,48 +150,9 @@ def restore(previous):
     rows = []
     failed = False
     for package, version in previous.items():
-        if version is None:
-            print(f"Warning: no previous npm latest recorded for {package}; skipping.")
-            rows.append((package, "null", "not checked", "skipped (no previous latest)"))
-            continue
-        if not isinstance(version, str):
-            raise RuntimeError(f"Previous npm latest for {package} must be a string or null.")
-        try:
-            found = read_latest(package)
-        except RuntimeError as error:
-            print(f"Could not read npm latest for {package}: {error}", file=sys.stderr)
-            rows.append((package, version, "unavailable", "failed to read latest"))
-            failed = True
-            continue
-        action = "unchanged"
-        if found != version:
-            result = subprocess.run(
-                ["npm", "dist-tag", "add", f"{package}@{version}", "latest"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode:
-                print(f"npm dist-tag add failed for {package} (exit code {result.returncode}).", file=sys.stderr)
-                rows.append((package, version, found if found is not None else "null", "restore failed"))
-                failed = True
-                continue
-            action = "restored"
-            for attempt in range(5):
-                try:
-                    found = read_latest(package)
-                except RuntimeError:
-                    found = None
-                if found == version:
-                    break
-                if attempt < 4:
-                    time.sleep(0.5)
-            if found != version:
-                print(f"npm latest verification failed for {package}.", file=sys.stderr)
-                rows.append((package, version, found if found is not None else "null", "verification failed"))
-                failed = True
-                continue
-        rows.append((package, version, found if found is not None else "null", action))
+        row, ok = restore_package(package, version)
+        rows.append(row)
+        failed |= not ok
     write_summary(rows)
     return not failed
 
