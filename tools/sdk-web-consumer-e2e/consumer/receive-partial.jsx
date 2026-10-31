@@ -33,17 +33,6 @@ function Controls() {
       <button id="mic" onClick={controls.surfaceProps.onToggleMute}>
         Microphone
       </button>
-      <button id="camera" onClick={controls.surfaceProps.onToggleVideo}>
-        Camera
-      </button>
-      <button
-        id="moderator"
-        onClick={() => {
-          void client.participants.mute(window.matrixMuteTarget).catch((error) => window.matrixErrors.push({ kind: "moderator", message: error.message }));
-        }}
-      >
-        Mute student
-      </button>
       <output>{media.local.microphone.state}</output>
     </>
   );
