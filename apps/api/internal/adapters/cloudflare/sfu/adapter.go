@@ -130,6 +130,7 @@ type Adapter struct {
 	client            httpClient
 	forcedCloseClient httpClient
 	captureReplay     *captureReplayRegistry
+	turn              *TurnCredentials
 }
 
 type ConnectionMetadata struct {
@@ -275,15 +276,15 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 		participantRef = input.ParticipantName
 	}
 
-	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID), nil
+	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
-func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
 	}
 
-	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
+	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
@@ -1050,7 +1051,7 @@ func (a Adapter) providerMetadata() map[string]string {
 	}
 }
 
-func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string) mediaplane.Join {
+func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderCloudflareSFU,
 		ParticipantRef: participantRef,
@@ -1059,6 +1060,7 @@ func (a Adapter) joinForConnection(episodeRef string, participantRef string, con
 			"provider":     string(mediaplane.ProviderCloudflareSFU),
 			"episodeRef":   episodeRef,
 			"stunServer":   stunServer,
+			"iceServers":   iceServers,
 			"syncOwner":    syncOwner,
 		},
 		Metadata: a.providerMetadata(),
