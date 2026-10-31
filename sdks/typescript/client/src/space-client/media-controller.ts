@@ -160,7 +160,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
   #disposed = false;
-  #recovering: ReadonlyMap<MediaSource, number> | null = null;
+  #recovering: ReadonlySet<MediaSource> | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -1307,7 +1307,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
-    this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
+    this.#recovering ??= new Set(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled));
   }
   /**
    * Recovery pauses a source only when Sync's own state says the host turned it off after the user's intent: the snapshot item carries
@@ -1317,12 +1317,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
     const recovering = this.#recovering;
     this.#recovering = null;
-    for (const [source, revision] of recovering ?? []) {
+    for (const source of recovering ?? []) {
       const stop = ownProjection(snapshot, source);
       const state = this.#sources[source];
       if (stop?.offReason !== "host" || stop.offRevision === undefined || stop.offRevision <= state.desired.controlRevision) continue;
       state.serverSequence = Math.max(state.serverSequence, stop.offRevision);
-      this.#pausePublication(ports, source, revision, "moderation_pause");
+      this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
     }
   }
   #subscribeSync(ports: ConnectionPorts): () => void {

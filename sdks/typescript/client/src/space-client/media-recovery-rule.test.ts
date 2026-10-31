@@ -189,6 +189,25 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     }
   });
 
+  // The user turns the source off and on again while the session is gone; the stop is newer than that last intent, so it still pauses it.
+  it.each(sources)("a host stop newer than a %s intent made during the reconnect pauses that intent", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      await setEnabled(false);
+      const again = setEnabled(true).catch(() => undefined);
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 9)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await again;
+      await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
+      expect(track.enabled).toBe(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
   // A device pause the Sync held for this device is the device's own answer, not the host's.
   it.each(sources)("a device pause on the %s item is no evidence the host turned it off", async (source) => {
     const { client, platform, track, setEnabled } = recoveryScenario(source);
