@@ -8,7 +8,16 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims, as: SQL
   alias ChalkSync.UUID
 
-  @dispatch_lease_ttl_ms 30_000
+  @minimum_dispatch_lease_ttl_ms 30_000
+  # 3s prepare-entry-leave transaction + 3s finalization transaction + 5s safety.
+  @dispatch_lease_safety_margin_ms 11_000
+
+  def dispatch_lease_ttl_ms do
+    adapter_timeout_ms =
+      Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 35_000)
+
+    max(@minimum_dispatch_lease_ttl_ms, adapter_timeout_ms + @dispatch_lease_safety_margin_ms)
+  end
 
   def claim_operations(connection, limit, excluded_episodes, episode_limit, owner_id) do
     owner_id = UUID.dump!(owner_id)
@@ -21,7 +30,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
           owner_id,
           Enum.map(excluded_episodes, &UUID.dump!/1),
           episode_limit,
-          @dispatch_lease_ttl_ms
+          dispatch_lease_ttl_ms()
         ],
         timeout: 2_000
       ).rows
@@ -54,7 +63,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
       UUID.dump!(episode.episode_id),
       UUID.dump!(owner_id),
       fence,
-      @dispatch_lease_ttl_ms
+      dispatch_lease_ttl_ms()
     ]
 
     case Postgrex.query(

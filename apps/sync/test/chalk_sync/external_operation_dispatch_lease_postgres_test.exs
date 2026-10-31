@@ -129,6 +129,90 @@ defmodule ChalkSync.ExternalOperationDispatchLeasePostgresTest do
     assert :ok = Postgres.release_dispatch_lease(episode, second.dispatch_lease)
   end
 
+  test "a provider call within the adapter timeout keeps the Episode lease", %{
+    connection: connection
+  } do
+    seed = fixture(connection, 3)
+    [actor, target, _ender] = seed.identities
+    mute_id = Helpers.queue(actor, :mute_participant, %{"participantId" => target.participant_id})
+    _leave_id = Helpers.queue(actor, :participant_leave)
+    Helpers.expire_fences(connection, seed)
+
+    owner_a = UUID.generate()
+    owner_b = UUID.generate()
+    assert {:ok, [{episode, first}]} = Postgres.claim_operations(1, [], 64, owner_a)
+    assert first.external_operation_id == mute_id
+    lease = first.dispatch_lease
+
+    adapter_timeout_ms =
+      Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 35_000)
+
+    assert [[remaining_ms]] =
+             Postgrex.query!(
+               connection,
+               """
+               select (extract(epoch from (expires_at - now())) * 1000)::bigint
+               from sync_episode_dispatch_leases
+               where tenant_id = $1 and episode_id = $2 and owner_id = $3 and fence = $4
+               """,
+               [
+                 UUID.dump!(episode.tenant_id),
+                 UUID.dump!(episode.episode_id),
+                 UUID.dump!(owner_a),
+                 lease.fence
+               ]
+             ).rows
+
+    assert remaining_ms > adapter_timeout_ms + 3_000
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_episode_dispatch_leases
+      set expires_at = expires_at - interval '31 seconds'
+      where tenant_id = $1 and episode_id = $2 and owner_id = $3 and fence = $4
+      """,
+      [
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.episode_id),
+        UUID.dump!(owner_a),
+        lease.fence
+      ]
+    )
+
+    assert {:ok, []} = Postgres.claim_operations(32, [], 64, owner_b)
+
+    assert {:ok, _decision} =
+             Postgres.finalize_operation(episode, mute_id, {:confirmed, :provider}, lease)
+
+    assert_pending_count(connection, seed, 1)
+    assert :ok = Postgres.release_dispatch_lease(episode, lease)
+  end
+
+  test "overlapping claims by one owner share the live fence", %{connection: connection} do
+    seed = fixture(connection, 3)
+    [actor, target, _ender] = seed.identities
+    mute_id = Helpers.queue(actor, :mute_participant, %{"participantId" => target.participant_id})
+    leave_id = Helpers.queue(actor, :participant_leave)
+    Helpers.expire_fences(connection, seed)
+
+    owner_id = UUID.generate()
+    assert {:ok, [{episode, first}]} = Postgres.claim_operations(1, [], 64, owner_id)
+    assert {:ok, [{^episode, second}]} = Postgres.claim_operations(1, [], 64, owner_id)
+    assert [first.external_operation_id, second.external_operation_id] == [mute_id, leave_id]
+    assert first.dispatch_lease.fence == second.dispatch_lease.fence
+
+    assert {:ok, _decision} =
+             Postgres.finalize_operation(
+               episode,
+               first.external_operation_id,
+               {:confirmed, :provider},
+               first.dispatch_lease
+             )
+
+    assert :ok = Postgres.release_dispatch_lease(episode, second.dispatch_lease)
+  end
+
   test "finishing and releasing the first batch hands later work to the next owner", %{
     connection: connection
   } do

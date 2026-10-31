@@ -47,7 +47,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       on conflict (tenant_id, episode_id) do update
       set
         owner_id = excluded.owner_id,
-        fence = excluded.fence,
+        fence = case
+          when current_lease.owner_id = excluded.owner_id
+            and current_lease.expires_at > now()
+            then current_lease.fence
+          else excluded.fence
+        end,
         expires_at = excluded.expires_at
       where current_lease.expires_at <= now()
         or current_lease.owner_id = excluded.owner_id
