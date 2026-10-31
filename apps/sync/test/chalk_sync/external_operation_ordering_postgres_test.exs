@@ -101,6 +101,54 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     assert_pending_count(connection, seed, 1)
   end
 
+  test "runtime table grants can allocate acceptance order without sequence privileges", %{
+    connection: connection
+  } do
+    seed = fixture(connection, 2)
+    [actor, target] = seed.identities
+    source_id = queue(actor, :mute_participant, %{"participantId" => target.participant_id})
+    role = "leave_order_" <> String.replace(UUID.generate(), "-", "")
+
+    assert {:error, :verified} =
+             Postgrex.transaction(connection, fn transaction ->
+               Postgrex.query!(transaction, "create role #{role}", [])
+               Postgrex.query!(transaction, "grant usage on schema public to #{role}", [])
+
+               Postgrex.query!(
+                 transaction,
+                 "grant select, insert on sync_external_operations to #{role}",
+                 []
+               )
+
+               Postgrex.query!(transaction, "set local role #{role}", [])
+
+               %{rows: [[order]]} =
+                 Postgrex.query!(
+                   transaction,
+                   """
+                   insert into sync_external_operations (
+                     tenant_id, space_id, episode_id, external_operation_id, request_key,
+                     request_fingerprint, operation_name, actor_participant_id, actor_generation,
+                     target_participant_id, target_participant_generation, source, payload, fence_active
+                   )
+                   select tenant_id, space_id, episode_id, $2, $3,
+                     request_fingerprint, operation_name, actor_participant_id, actor_generation,
+                     target_participant_id, target_participant_generation, source, payload, fence_active
+                   from sync_external_operations where external_operation_id = $1
+                   returning acceptance_order
+                   """,
+                   [
+                     UUID.dump!(source_id),
+                     UUID.dump!(UUID.generate()),
+                     "runtime_" <> UUID.generate()
+                   ]
+                 )
+
+               assert is_integer(order) and order > 0
+               Postgrex.rollback(transaction, :verified)
+             end)
+  end
+
   defp fixture(connection, count) do
     seed =
       SyncPostgres.seed_episode(connection, count, %{}, %{

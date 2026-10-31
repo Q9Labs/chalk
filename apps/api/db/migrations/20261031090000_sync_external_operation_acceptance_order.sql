@@ -1,6 +1,4 @@
 -- +goose Up
-create sequence sync_external_operation_acceptance_order_seq as bigint;
-
 alter table sync_external_operations add column acceptance_order bigint;
 
 -- Historical acceptance cannot be reconstructed from transaction timestamps.
@@ -16,14 +14,13 @@ set acceptance_order = ordered.position
 from ordered
 where operation.external_operation_id = ordered.external_operation_id;
 
-select setval('sync_external_operation_acceptance_order_seq',
+alter table sync_external_operations
+    alter column acceptance_order set not null,
+    alter column acceptance_order add generated always as identity;
+
+select setval(pg_get_serial_sequence('sync_external_operations', 'acceptance_order'),
     coalesce((select max(acceptance_order) from sync_external_operations), 0) + 1, false);
 
-alter table sync_external_operations
-    alter column acceptance_order set default nextval('sync_external_operation_acceptance_order_seq'),
-    alter column acceptance_order set not null;
-alter sequence sync_external_operation_acceptance_order_seq
-    owned by sync_external_operations.acceptance_order;
 create unique index sync_external_operations_acceptance_order_key
     on sync_external_operations(acceptance_order);
 
