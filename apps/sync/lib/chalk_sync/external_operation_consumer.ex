@@ -28,6 +28,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   @max_attempts 100
   @local_operations [
     :admit_participant,
+    :participant_leave,
     :deny_admission,
     :admission_request_expired,
     :tenant_set_deadline,
@@ -257,7 +258,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
               :stop_participant_camera,
               :stop_participant_screen_share,
               :remove_participant,
-              :participant_leave,
+              :participant_leave_cleanup,
               :role_transition_source_stop
             ] do
     invoke_media_plane(media_plane, episode, operation, timeout_ms)
@@ -288,7 +289,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     do: revoke_arguments(adapter, episode, operation, operation.source)
 
   defp media_arguments(adapter, episode, %{name: name} = operation)
-       when name in [:remove_participant, :participant_leave] do
+       when name in [:remove_participant, :participant_leave_cleanup] do
     {:remove_participant,
      [adapter, operation.external_operation_id, episode, operation.target_participant_id]}
   end

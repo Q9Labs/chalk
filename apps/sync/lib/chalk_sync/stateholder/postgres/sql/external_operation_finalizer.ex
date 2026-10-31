@@ -91,7 +91,10 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
   def complete_external_participant do
     """
     update participants
-    set status = 'left', left_at = now(), last_left_reason = 'left', updated_at = now()
+    set status = 'left', left_at = case when $6::boolean then (
+      select created_at from sync_external_operations
+      where tenant_id=$1 and space_id=$2 and episode_id=$3 and external_operation_id=$8
+    ) else now() end, last_left_reason = 'left', updated_at = now()
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and id = $4 and generation = $5 and status = 'leaving'
       and (not $6::boolean or not exists (
@@ -266,6 +269,25 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       and participant_event_count < 250000
       and participant_event_bytes + $9 <= 2147483648
     returning control_revision
+    """
+  end
+
+  def insert_leave_cleanup do
+    """
+    insert into sync_external_operations (
+      tenant_id, space_id, episode_id, external_operation_id, request_key,
+      request_fingerprint, operation_name, target_participant_id,
+      target_participant_generation, payload, fence_active,
+      journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
+      producing_traceparent, producing_tracestate
+    )
+    select tenant_id, space_id, episode_id, $5, $5::uuid::text,
+      request_fingerprint, 'participant_leave_cleanup', target_participant_id,
+      target_participant_generation, jsonb_build_object('departureOperationId', $4::uuid), false,
+      journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
+      producing_traceparent, producing_tracestate
+    from sync_external_operations
+    where tenant_id=$1 and space_id=$2 and episode_id=$3 and external_operation_id=$4
     """
   end
 

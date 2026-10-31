@@ -458,3 +458,13 @@ accepted API report log lines, matching Sync close evidence, the actual report
 bodies, and trace correlation. It checks reconnect delivery, caps/redaction,
 normal-call silence, and clean rejoin. The harness owns and stops its browser,
 servers, and disposable database.
+
+Explicit Leave confirms after the Postgres departure transaction, before provider
+teardown. The existing `sync.external_operation.accepted` journey remains the
+Leave acceptance boundary. The transaction writes `participant.left` to the
+webhook outbox with its occurrence time taken from Leave acceptance, alongside
+the committed receipt and a `participant_leave_cleanup` external operation.
+Cleanup inherits the journey and trace context, so its provider span and retained
+terminal failure can be inspected separately from the confirmed Leave. The
+Postgres durable Leave proof blocks a fake cleanup provider and checks the
+receipt, attendance timestamp, and webhook while that provider is still blocked.

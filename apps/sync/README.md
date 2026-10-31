@@ -104,8 +104,14 @@ Episode creation writes the product Episode and revision-zero control row in
 one synchronous Postgres transaction. Admission produces bounded lifecycle
 intents. Removal, explicit Leave, capability recovery, deadline expiry, Recording,
 and Episode end reserve idempotent external operations under the same Episode
-control lock, execute provider effects outside the transaction, and finalize
-durable facts only after confirmation. Opening or losing a socket never directly
+control lock. Explicit Leave commits its departure, authority revocation, event,
+receipt, webhook outbox record, and a generation-scoped cleanup operation in one
+transaction. The departure timestamp is Leave acceptance time. Cleanup uses the
+existing external-operation leases and bounded retries; exhaustion is retained as
+a failed cleanup without changing attendance or the committed receipt. A newer
+entry already awaiting confirmation can defer or supersede an older Leave.
+Other provider operations execute effects outside the transaction and finalize
+durable facts after confirmation. Opening or losing a socket never directly
 creates a durable join or leave.
 
 A v1 socket renews one shared Postgres **Episode** lease at entry and on each
@@ -131,8 +137,7 @@ without renewal, the API scheduler reserves an ordinary participant leave under
 the same Episode authority lock as renewal. A legacy joined participant that never
 opens its first Sync socket has no lease; its join timestamp starts a separate
 600-second grace. The runtime recovery floor still applies in both cases.
-Sync performs media cleanup, records
-`left_at`, and emits `participant.left`; the existing attendance endpoint reports
+Sync records `left_at` and emits `participant.left` before asynchronous media cleanup; the existing attendance endpoint reports
 the departure. Reconnect before reservation renews the lease and cancels expiry.
 A lease-aware Sync session witness and startup recovery floor prevent inference
 during Sync/database outages. This does not require a new client heartbeat.
