@@ -42,6 +42,7 @@ type SpaceIntegration =
     };
 type SpaceEventCallbacks = {
   readonly onJoined?: () => void;
+  /** Local media has stopped; await client.leave() separately for durable confirmation. */
   readonly onLeft?: () => void;
   readonly onEpisodeEnded?: (event: ClientEventMap["episodeEnded"]) => void;
   readonly onParticipantJoined?: (event: ClientEventMap["participantJoined"]) => void;
@@ -215,7 +216,7 @@ function SpaceExperience(
     const previous = previousStatus.current;
     if (hasObservedStatus.current) {
       if (connection.status === "live" && previous !== "live" && previous !== "reconnecting") props.onJoined?.();
-      if (connection.status === "left" && previous !== "left") props.onLeft?.();
+      if ((connection.status === "leaving" || connection.status === "left") && previous !== "leaving" && previous !== "left") props.onLeft?.();
     }
     previousStatus.current = connection.status;
     hasObservedStatus.current = true;

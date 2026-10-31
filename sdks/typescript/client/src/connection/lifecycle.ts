@@ -26,7 +26,8 @@ type MediaRecoveryAttempt = {
 };
 // A 10s dial can fail and retry before the overall join gives up.
 const START_TIMEOUT_MS = 30000;
-const LEAVE_TIMEOUT_MS = 5000;
+// Sync's provider worker allows 35s for durable cleanup; leave time for its acknowledgement too.
+const LEAVE_TIMEOUT_MS = 40000;
 const RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5000;
@@ -598,6 +599,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
             return;
           }
+          yield* Effect.sync(() => model.mediaBindingCleanup?.());
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();

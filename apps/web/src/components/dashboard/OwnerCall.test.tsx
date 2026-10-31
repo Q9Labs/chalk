@@ -9,14 +9,14 @@ import { OwnerCall } from "./OwnerCall";
 import { DashboardRequestError } from "../../lib/dashboard/client";
 import { requireParsedAccessGrant } from "../../../../../sdks/typescript/client/src/access/grant";
 
-const mocks = vi.hoisted(() => ({ createClient: vi.fn(), dashboardAction: vi.fn() }));
+const mocks = vi.hoisted(() => ({ createClient: vi.fn(), dashboardAction: vi.fn(), navigate: vi.fn() }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.createClient }));
 vi.mock("@q9labsai/chalk-react", async () => ({ Chalk: (await import("../../../../../sdks/typescript/react/src/components/chalk/Chalk")).Chalk }));
 vi.mock("../../../../../sdks/typescript/react/src/components/space-view/SpaceView", async () => {
   const { SpaceHeader } = await import("../../../../../sdks/typescript/react/src/components/space-header/SpaceHeader");
   return { SpaceView: (props: Omit<React.ComponentProps<typeof SpaceHeader>, "spaceName">) => <SpaceHeader {...props} spaceName="Camera test" /> };
 });
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("./AppShell", () => ({
   useSession: () => ({ profile: { name: "Owner" } }),
   useLoad: () => ({ state: { kind: "ready", data: { inviteUrl: "https://chalk.test/invite", call: { name: "Camera test" } } } }),
@@ -25,6 +25,58 @@ vi.mock("../site/theme", () => ({ useSiteTheme: () => ({ theme: "dark", setTheme
 vi.mock("../../lib/dashboard/client", async (original) => ({ ...(await original<typeof import("../../lib/dashboard/client")>()), act: mocks.dashboardAction }));
 vi.mock("../../lib/chalk-access", () => ({ publicAPIBaseURL: () => "https://api.chalk.test" }));
 vi.mock("../../lib/problem-reports", async (original) => ({ ...(await original<typeof import("../../lib/problem-reports")>()), useProblemReports: () => true }));
+
+it.each(["confirmed", "unconfirmed"] as const)("navigates immediately and clears the retry identity only after %s departure", async (outcome) => {
+  window.sessionStorage.clear();
+  const platform = terminalTestPlatform();
+  let resolveDeparture = () => {};
+  let rejectDeparture: (error: Error) => void = () => {};
+  const departure = new Promise<void>((resolve, reject) => {
+    resolveDeparture = resolve;
+    rejectDeparture = reject;
+  });
+  platform.leave.mockImplementation(async () => {
+    await departure;
+    return { type: "ack", command_id: "leave", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" };
+  });
+  const clients: ReturnType<typeof createSpaceClientForPlatform>[] = [];
+  mocks.dashboardAction.mockResolvedValue({ access: opaqueAccessGrant(1) });
+  mocks.createClient.mockImplementation((options) => {
+    const client = createSpaceClientForPlatform(options, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
+    clients.push(client);
+    return client;
+  });
+  let leaving: Promise<boolean> | undefined;
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    const client = clients[0];
+    if (!client) throw new Error("Owner client missing");
+    await act(async () => vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live")));
+    const joinKey = window.sessionStorage.getItem("chalk.owner-join::space-1");
+    expect(joinKey).not.toBeNull();
+    await act(async () => {
+      leaving = client.leave().then(
+        () => true,
+        () => false,
+      );
+      await vi.waitFor(() => expect(platform.leave).toHaveBeenCalledOnce());
+    });
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/dashboard/call/$spaceId", params: { spaceId: "space-1" } });
+    expect(window.sessionStorage.getItem("chalk.owner-join::space-1")).toBe(joinKey);
+    await act(async () => cleanup());
+    expect(platform.syncStopped).not.toHaveBeenCalled();
+    if (outcome === "confirmed") resolveDeparture();
+    else rejectDeparture(new Error("Durable departure failed"));
+    expect(await leaving).toBe(outcome === "confirmed");
+    await vi.waitFor(() => expect(platform.syncStopped).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(window.sessionStorage.getItem("chalk.owner-join::space-1")).toBe(outcome === "confirmed" ? null : joinKey));
+  } finally {
+    resolveDeparture();
+    await leaving;
+    await act(async () => cleanup());
+    vi.clearAllMocks();
+  }
+});
 
 it("keeps an open owner report editable with Send disabled when the five-minute proof expires", async () => {
   vi.useFakeTimers();
