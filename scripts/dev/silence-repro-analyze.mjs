@@ -11,6 +11,7 @@
 import { readFileSync } from "node:fs";
 
 const DEADLINE = 15;
+const TOGGLE_DEADLINE = 7;
 const LEVEL = 0.01;
 const SLOW = 5;
 const BOOTSTRAPS = 4000;
@@ -170,9 +171,10 @@ files.forEach((file, fileIndex) => {
         if (action.kind !== "unmute" || action.error) return;
         const next = actions[i + 1]?.t ?? Infinity;
         const end = Math.min(next, lastT + 1e-6);
-        if (end - action.t < DEADLINE) return; // censored: the run or the next mute came before the deadline
+        const deadline = run.toggle ? TOGGLE_DEADLINE : DEADLINE; // toggle rooms hold the mic open for 8 s only
+        if (end - action.t < deadline) return; // censored: the run or the next mute came before the deadline
         cell.unmutes++;
-        const enabled = run.samples.find((sample) => sample.t >= action.t && sample.t <= action.t + DEADLINE && sample.states[speaker]?.mic === "enabled");
+        const enabled = run.samples.find((sample) => sample.t >= action.t && sample.t <= action.t + deadline && sample.states[speaker]?.mic === "enabled");
         if (!enabled) {
           cell.neverEnabled++; // the publisher itself never reached enabled: not a listener-side failure
           return;
@@ -184,7 +186,7 @@ files.forEach((file, fileIndex) => {
           const series = audibleSeries(run, listener, speaker);
           const firstAudible = run.samples.findIndex((sample, index) => series[index] && sample.t >= enabled.t && sample.t < end);
           const heard = firstAudible === -1 ? null : run.samples[firstAudible].t - enabled.t;
-          const silent = heard === null || heard > DEADLINE;
+          const silent = heard === null || heard > deadline;
           const episodes = silentEpisodes(run, series, enabled.t, end);
           const worst = episodes.reduce((max, episode) => Math.max(max, episode.end - episode.start), 0);
           const bucket = action.first ? cell.first : cell.again;
@@ -204,7 +206,7 @@ files.forEach((file, fileIndex) => {
             cluster.silent++;
             let best = 0;
             run.samples.forEach((sample) => {
-              if (sample.t >= enabled.t && sample.t <= enabled.t + DEADLINE) best = Math.max(best, stageAt(sample, listener, speaker));
+              if (sample.t >= enabled.t && sample.t <= enabled.t + deadline) best = Math.max(best, stageAt(sample, listener, speaker));
             });
             const label = stages[Math.min(best, 5)];
             cell.stagesSilent.set(label, (cell.stagesSilent.get(label) ?? 0) + 1);

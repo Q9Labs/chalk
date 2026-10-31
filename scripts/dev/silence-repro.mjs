@@ -35,7 +35,8 @@ const profiles = {
 // kill: the publisher's tracks are force-closed at the SFU 5 s after first publish.
 // listener-kill: every listener's pulled track of each speaker is force-closed once, mid-call.
 // pull503: the browser's remote-pull requests fail with 503 media.unavailable at a fixed rate.
-const faults = ["kill", "listener-kill", "pull503"];
+// toggle: after the first unmute every speaker mutes for 4 s and unmutes for 8 s, repeatedly, so each unmute is a fresh publication.
+const faults = ["kill", "listener-kill", "pull503", "toggle"];
 // A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
 const conditionOf = (name) => {
   const parts = name.split("+");
@@ -305,6 +306,7 @@ async function runBuild(name) {
           kill: condition.faults.includes("kill"),
           listenerKill: condition.faults.includes("listener-kill"),
           pull503: condition.faults.includes("pull503") ? pull503Rate : 0,
+          toggle: condition.faults.includes("toggle"),
           runIndex,
           started: new Date().toISOString(),
           network: [],
@@ -443,7 +445,11 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {
       schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
-      schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
+      if (run.toggle) {
+        for (let mute = 30 + speaker * 3; mute + 12 <= runSeconds; mute += 12) schedule.push({ at: mute, participant: speaker, kind: "mute" }, { at: mute + 4, participant: speaker, kind: "unmute", first: false });
+      } else {
+        schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
+      }
     }
     schedule.sort((a, b) => a.at - b.at);
     run.speakerCount = speakerCount;
