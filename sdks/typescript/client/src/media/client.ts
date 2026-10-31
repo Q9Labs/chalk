@@ -51,8 +51,12 @@ const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
-// Cloudflare expires tracks after 30 seconds without RTP. A detached sender
-// sends none, so leave time for the resume operation. Microphones send silence instead.
+const VIEWER_LAYER_BATCH_SIZE = 16;
+// Adaptation uses at most 12 of the participant's 60 call-control writes/minute.
+const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
+// Cloudflare expires tracks after 30 seconds without RTP. Detached senders
+// send none, so leave time for resume instead of trusting Chalk's registry;
+// microphones send silence instead of detaching.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -82,6 +86,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
   readonly #receiveProgress = new ReceiveStallRecovery();
+  readonly #viewerLayerPending = new Map<string, ViewerLayerChange>();
+  #viewerLayerUpdating = false;
+  #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
   #remoteParticipantIds: ReadonlySet<string> | null = null;
   #remoteParticipantRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
@@ -1102,29 +1109,57 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const failures = Math.min(previous.failures + 1, 6);
     this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
-  async #adaptViewerLayers(connection: RTCPeerConnection, report: RTCStatsReport, selector: ViewerLayerSelector, current: () => boolean): Promise<void> {
+  #adaptViewerLayers(connection: RTCPeerConnection, report: RTCStatsReport, selector: ViewerLayerSelector, current: () => boolean): void {
     if (!this.#transport?.updateTracks || !this.#canObserveReceiveProgress(connection)) return;
+    const now = performance.now();
     const cameras = [...this.#remoteTracks.values()].filter(({ source, track }) => source === "camera" && track.readyState === "live");
-    for (const change of selector.sample(performance.now(), report, cameras)) {
-      const mid = connection.getTransceivers().find((transceiver) => transceiver.receiver.track === change.track)?.mid;
-      if (!mid) continue;
-      const switched = await this.#requestViewerLayer(this.#transport, mid, change);
+    this.#queueViewerLayers(selector.sample(now, report, cameras));
+    if (this.#viewerLayerUpdating || now < this.#viewerLayerUpdateAt) return;
+    const batch = [...this.#viewerLayerPending.values()]
+      .flatMap((change) => {
+        const mid = connection.getTransceivers().find((transceiver) => transceiver.receiver.track === change.track)?.mid;
+        return mid === null || mid === undefined ? [] : [{ change, mid }];
+      })
+      .slice(0, VIEWER_LAYER_BATCH_SIZE);
+    if (!batch.length) return;
+    this.#viewerLayerUpdating = true;
+    this.#viewerLayerUpdateAt = now + VIEWER_LAYER_UPDATE_INTERVAL_MS;
+    void this.#requestViewerLayers(this.#transport, batch).then((failed) => {
+      this.#viewerLayerUpdating = false;
       if (!current()) return;
-      if (switched) selector.applied(change);
-      else selector.failed(change, performance.now());
-    }
+      for (const { change } of batch) {
+        const pending = this.#viewerLayerPending.get(change.publicationId);
+        if (pending?.track === change.track && pending.layer === change.layer) this.#viewerLayerPending.delete(change.publicationId);
+        if (failed.has(change.publicationId)) selector.failed(change, performance.now());
+        else selector.applied(change);
+      }
+    });
+  }
+  #queueViewerLayers(changes: readonly ViewerLayerChange[]): void {
+    const active = new Set(changes.map(({ publicationId }) => publicationId));
+    for (const id of this.#viewerLayerPending.keys()) if (!active.has(id)) this.#viewerLayerPending.delete(id);
+    for (const change of changes) this.#viewerLayerPending.set(change.publicationId, change);
   }
   // A layer switch is an optimization: when the SFU refuses it, the pulled layer keeps playing.
-  async #requestViewerLayer(transport: CloudflareSFUSignalingTransport, mid: string, change: ViewerLayerChange): Promise<boolean> {
-    const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+  async #requestViewerLayers(transport: CloudflareSFUSignalingTransport, batch: readonly { readonly change: ViewerLayerChange; readonly mid: string }[]): Promise<ReadonlySet<string>> {
     try {
       const response = await transport.updateTracks?.({
         connectionId: this.#bootstrap.connectionId,
-        tracks: [{ location: "remote", mid, sessionId: connectionId, trackName, simulcast: { preferredRid: change.layer, priorityOrdering: "none", ridNotAvailable: "asciibetical" } }],
+        tracks: batch.map(({ change, mid }) => {
+          const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+          return { location: "remote", mid, sessionId: connectionId, trackName, simulcast: { preferredRid: change.layer, priorityOrdering: "none", ridNotAvailable: "asciibetical" } };
+        }),
       });
-      return !response?.trackErrors?.length;
+      return new Set(
+        batch
+          .filter(({ change }) => {
+            const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+            return response?.trackErrors?.some((error) => error.connectionId === connectionId && error.trackName === trackName);
+          })
+          .map(({ change }) => change.publicationId),
+      );
     } catch {
-      return false;
+      return new Set(batch.map(({ change }) => change.publicationId));
     }
   }
   #canObserveReceiveProgress(connection: RTCPeerConnection): boolean {
@@ -1259,7 +1294,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         const report = await connection.getStats();
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report);
-        await this.#adaptViewerLayers(connection, report, viewerLayers, current);
+        this.#adaptViewerLayers(connection, report, viewerLayers, current);
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);
@@ -1273,6 +1308,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const dispose = () => {
       if (disposed) return;
       disposed = true;
+      this.#viewerLayerPending.clear();
       if (cameraTimer !== undefined) globalThis.clearTimeout(cameraTimer);
       connection.removeEventListener("connectionstatechange", capture);
       connection.removeEventListener("iceconnectionstatechange", capture);

@@ -42,11 +42,20 @@
         "pattern": "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$"
       }
     },
+    "helloOnlyFields": {
+      "baggage": {
+        "kind": "string",
+        "minBytes": 47,
+        "maxBytes": 47,
+        "format": "w3c-baggage-session-id",
+        "pattern": "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      }
+    },
     "acceptedOn": {
       "hello": "client-to-server",
       "serverFrames": "server-to-client"
     },
-    "upgradeHeaders": ["x-chalk-journey-id", "traceparent", "tracestate"],
+    "upgradeHeaders": ["x-chalk-journey-id", "traceparent", "tracestate", "baggage"],
     "rule": "propagate_from_first_observed_layer_to_every_downstream_frame"
   },
   "limits": {

@@ -2,10 +2,11 @@ import type { MediaPublicationSource } from "./plane";
 import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
+import { withRequestContext } from "../session";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
-  const fetch = options.fetch ?? globalThis.fetch;
+  const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
