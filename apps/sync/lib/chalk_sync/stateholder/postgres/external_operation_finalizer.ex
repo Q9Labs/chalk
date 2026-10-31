@@ -62,7 +62,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
       :ok ->
         case Recording.validate_capture_epoch(connection, episode, external) do
           :ok -> finalize_pending_operation(connection, episode, external, state, outcome)
-          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+          {:error, reason} -> settle_capture_error(connection, episode, external, reason)
         end
 
       {:error, reason} ->
@@ -87,6 +87,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp settle_stale_media(connection, episode, external, _state, _outcome, reason),
     do: settle_exhausted_authority(connection, episode, external, reason)
+
+  defp settle_capture_error(connection, episode, external, :stale_recording_fence = reason)
+       when external.attempt_count >= @max_attempts,
+       do: settle_obsolete(connection, episode, external, reason)
+
+  defp settle_capture_error(connection, _episode, _external, reason),
+    do: Postgrex.rollback(connection, {:error, reason})
 
   defp settle_leave_cleanup(connection, episode, external, {:confirmed, :provider}) do
     mark_external_applied(connection, episode, external, nil, nil)

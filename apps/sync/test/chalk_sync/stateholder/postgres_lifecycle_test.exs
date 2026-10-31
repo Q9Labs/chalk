@@ -780,6 +780,158 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              recording_capture_rows(fixture, ready_operation_id)
   end
 
+  test "exhausted stale capture notifications settle without changing the Recording", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = UUID.generate()
+
+    {:ok, start} =
+      Operation.new("exhausted_capture_start", :start_recording, %{
+        "recordingId" => recording_id
+      })
+
+    assert {:ok, %{external_operation_id: start_id}} =
+             Postgres.begin_operation(hd(fixture.identities), start)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, start_id, {:confirmed, :recording})
+
+    stale_id = UUID.generate()
+
+    stale_operations = [
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        "exhausted_stale_ready",
+        recording_id,
+        stale_id,
+        1
+      ),
+      insert_trusted_capture_stopped(
+        connection,
+        fixture,
+        "exhausted_stale_stopped",
+        recording_id,
+        stale_id,
+        1
+      ),
+      insert_trusted_capture_failure(
+        connection,
+        fixture,
+        "exhausted_stale_failed",
+        recording_id,
+        stale_id
+      )
+    ]
+
+    valid_id =
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        "exhausted_valid_ready",
+        recording_id,
+        start_id,
+        1
+      )
+
+    for {id, source} <- Enum.zip(stale_operations, ["microphone", "camera", "screen"]) do
+      assert {:error, :stale_recording_fence} =
+               Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+      assert {:ok, %{status: :pending}} = Postgres.read_operation(fixture.episode, id)
+
+      Postgrex.query!(
+        connection,
+        """
+        insert into sync_publication_fences
+          (tenant_id, space_id, episode_id, participant_id, participant_generation, source,
+           external_operation_id, expires_at)
+        select tenant_id, space_id, episode_id, id, generation, $2, $3, now() + interval '5 minutes'
+        from participants where id=$1
+        """,
+        [UUID.dump!(hd(fixture.identities).participant_id), source, UUID.dump!(id)]
+      )
+    end
+
+    for id <- [valid_id | stale_operations] do
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set attempt_count=99, next_attempt_at=now() where external_operation_id=$1",
+        [UUID.dump!(id)]
+      )
+    end
+
+    assert {:ok, claimed} = Postgres.claim_local_operations(64)
+
+    for id <- [valid_id | stale_operations] do
+      assert {_, %{attempt_count: 100}} =
+               Enum.find(claimed, fn {_, operation} -> operation.external_operation_id == id end)
+    end
+
+    recording_sql = """
+    select to_jsonb(recording), control.folded_state
+    from sync_recordings recording
+    join sync_episode_control control using (tenant_id, episode_id)
+    where recording.tenant_id=$1 and recording.episode_id=$2 and recording.recording_id=$3
+    """
+
+    recording_before = query_rows(fixture, recording_sql, [UUID.dump!(recording_id)])
+
+    events_before =
+      query_rows(
+        fixture,
+        "select count(*) from sync_control_events where tenant_id=$1 and episode_id=$2",
+        []
+      )
+
+    for id <- stale_operations do
+      assert {:ok, %{result: :failed, delivery: :original}} =
+               Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+      assert {:ok, %{status: :failed, last_error_code: :stale_recording_fence}} =
+               Postgres.read_operation(fixture.episode, id)
+
+      assert {:ok, %{result: :failed, delivery: :duplicate}} =
+               Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+      assert [[0]] =
+               Postgrex.query!(
+                 connection,
+                 "select count(*) from sync_publication_fences where external_operation_id=$1",
+                 [UUID.dump!(id)]
+               ).rows
+
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+        [UUID.dump!(id)]
+      )
+    end
+
+    assert ^recording_before = query_rows(fixture, recording_sql, [UUID.dump!(recording_id)])
+
+    assert ^events_before =
+             query_rows(
+               fixture,
+               "select count(*) from sync_control_events where tenant_id=$1 and episode_id=$2",
+               []
+             )
+
+    assert {:ok, reclaimed} = Postgres.claim_local_operations(64)
+
+    refute Enum.any?(reclaimed, fn {_, operation} ->
+             operation.external_operation_id in stale_operations
+           end)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, valid_id, {:confirmed, :local})
+
+    assert [["applied", "recording", 1]] = recording_capture_rows(fixture, valid_id)
+  end
+
   test "trusted stale readiness is rejected without blocking an internally prepared callback", %{
     connections: connections
   } do
