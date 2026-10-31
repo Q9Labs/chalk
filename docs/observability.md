@@ -273,6 +273,11 @@ from an edge rejection; an empty reason must not be labeled as a server timeout.
 telemetry events, not public error codes. Retries can still succeed within the
 startup budget.
 
+Sync connection spans, the three lifecycle events, and their stdout lines also
+carry `session.id` when the client sent one in W3C `baggage` on the upgrade or
+the `hello` frame. Search stdout for it to find every connection of one device
+session. Sync never echoes it on frames or stores it with lifecycle records.
+
 ### Automatic browser connection reports
 
 When the SDK replaces an SFU binding, its first track-signaling attempt includes
