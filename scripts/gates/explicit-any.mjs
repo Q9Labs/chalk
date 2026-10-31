@@ -43,7 +43,7 @@ function run() {
   // Read syntax, not lint diagnostics: disable comments and lint config cannot hide a type ban.
   const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" })
     .split("\0")
-    .filter((file) => existsSync(resolve(root, file)) && /\.(?:[cm]?ts|tsx)$/u.test(file) && !/(?:^|\/)(?:generated|openapi-generated)\//u.test(file) && !/(?:^|\/)routeTree\.gen\.ts$/u.test(file));
+    .filter((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) && !/(?:^|\/)(?:generated|openapi-generated)\//u.test(file) && !/(?:^|\/)routeTree\.gen\.ts$/u.test(file) && existsSync(resolve(root, file)));
   if (!files.length) throw new Error("No TypeScript source files were found.");
   const findings = files.flatMap((file) => findExplicitAny(file, readFileSync(resolve(root, file), "utf8")));
 
