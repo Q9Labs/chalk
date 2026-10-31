@@ -1,0 +1,255 @@
+TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+Warning: The set Sources has been defined to be a symmetry set but contains less than two elements.
+(Use the -nowarning option to disable this warning.)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-10-31 14:46:59.
+Error: Action property P2_OffSurvivesReconnect is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 0)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 0)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "none")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 2: <Next line 293, col 25 to line 293, col 42 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 1)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> TRUE)
+/\ pubs = {}
+/\ cap = (mic :> TRUE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 1)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> TRUE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "none")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 3: <Next line 294, col 25 to line 294, col 43 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 2)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 2)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 1)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "sent")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 4: <Next line 297, col 25 to line 297, col 46 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 2)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 2)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 1)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "failed")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 5: <Next line 302, col 25 to line 302, col 40 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 2)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 2)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 0)
+/\ viewAck = (mic :> 0)
+/\ loss = 1
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "failed")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 6: <Next line 310, col 6 to line 310, col 22 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 2)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = FALSE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 1
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 0)
+/\ viewAck = (mic :> 0)
+/\ loss = 1
+/\ cfails = 0
+/\ reconciled = FALSE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "failed")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 7: <Next line 311, col 6 to line 311, col 27 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 2)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = TRUE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 1
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 0)
+/\ viewAck = (mic :> 0)
+/\ loss = 1
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "failed")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+668 states generated, 287 distinct states found, 136 states left on queue.
+The depth of the complete state graph search is 8.
+Finished in 00s at (2026-10-31 14:46:59)

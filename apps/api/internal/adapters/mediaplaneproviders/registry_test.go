@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -191,5 +194,61 @@ func assertResolution(t *testing.T, got, want providercontracts.Resolution) {
 	got.Duration = 0
 	if got != want {
 		t.Fatalf("resolution = %#v, want %#v", got, want)
+	}
+}
+
+func TestTurnCredentialsAreMintedOnceAcrossResolutions(t *testing.T) {
+	var mints atomic.Int32
+	cloudflare := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mints.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"iceServers":[{"urls":["turns:turn.test:443?transport=tcp"],"username":"user","credential":"secret"}]}`))
+	}))
+	defer cloudflare.Close()
+	registry := NewRegistry(Config{ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{
+		RealtimeAppID: "app", RealtimeAppSecret: "secret", RealtimeBaseURL: cloudflare.URL, RequestTimeout: time.Second,
+		TurnKeyID: "key", TurnAPIToken: "token",
+	}})
+	resume := func(service *mediaplane.Service, allowRelay bool) []mediaplane.ICEServer {
+		join, err := service.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{
+			Provider: service.Provider(), Episode: mediaplane.Episode{Provider: service.Provider(), Ref: "episode"}, ExternalParticipantID: "p", ConnectionRef: "c", AllowRelay: allowRelay,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
+	}
+	process := registry.processConfig
+
+	first, err := registry.newService(mediaplane.ProviderCloudflareSFU, process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := registry.newService(mediaplane.ProviderCloudflareSFU, process)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resume(first, true); got[len(got)-1].Username != "user" {
+		t.Fatalf("a relay-allowed join must carry TURN credentials, got %+v", got)
+	}
+	resume(second, true)
+	if mints.Load() != 1 {
+		t.Fatalf("two resolutions must share one mint, got %d", mints.Load())
+	}
+	if got := resume(first, false); len(got) != 1 || got[0].Username != "" {
+		t.Fatalf("a join without relay allowance must get STUN only, got %+v", got)
+	}
+
+	tenantManaged := process
+	tenantManaged.TurnKeyID, tenantManaged.TurnAPIToken = "", ""
+	tenant, err := registry.newService(mediaplane.ProviderCloudflareSFU, tenantManaged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resume(tenant, true); len(got) != 1 || got[0].Username != "" {
+		t.Fatalf("a tenant-managed Cloudflare account must get STUN only, got %+v", got)
+	}
+	if mints.Load() != 1 {
+		t.Fatalf("STUN-only joins must not mint, got %d mints", mints.Load())
 	}
 }

@@ -1,3 +1,4 @@
+import type { CloudflareSFUIceServer } from "../media/types";
 import { decodeBase64Url } from "./base64-url";
 declare const syncCredentialBrand: unique symbol;
 declare const mediaCredentialBrand: unique symbol;
@@ -26,6 +27,7 @@ export type ParticipantMediaAccess = {
   readonly clientPayload: {
     readonly connectionId: string;
     readonly stunServer: string;
+    readonly iceServers?: readonly CloudflareSFUIceServer[];
   };
 };
 export type ParsedAccessGrant = {
@@ -173,16 +175,30 @@ function parseMediaAccess(value: unknown): ParticipantMediaAccess {
         clientPayload: {
           connectionId: requireNonEmptyString(payload.connectionId),
           stunServer: requireNonEmptyString(payload.stunServer),
+          ...(payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) }),
         },
       };
     default:
       throw new AccessGrantError();
   }
 }
-function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, string>> {
+function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
+  if (!Array.isArray(value)) throw new AccessGrantError();
+  return value.map((entry): CloudflareSFUIceServer => {
+    if (!isRecord(entry) || !Array.isArray(entry.urls) || entry.urls.length === 0) throw new AccessGrantError();
+    const urls = entry.urls.map(requireNonEmptyString);
+    if (entry.username === undefined && entry.credential === undefined) return { urls };
+    return { urls, username: requireNonEmptyString(entry.username), credential: requireNonEmptyString(entry.credential) };
+  });
+}
+function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<string, unknown>> {
   switch (value.provider) {
     case "cloudflare_sfu":
-      return { connectionId: value.clientPayload.connectionId, stunServer: value.clientPayload.stunServer };
+      return {
+        connectionId: value.clientPayload.connectionId,
+        stunServer: value.clientPayload.stunServer,
+        ...(value.clientPayload.iceServers ? { iceServers: value.clientPayload.iceServers } : {}),
+      };
   }
 }
 function requireCredential(value: unknown, audience: "chalk-sync" | "chalk-media"): string {
