@@ -143,6 +143,18 @@ type createSessionResponse struct {
 	SessionID string `json:"sessionId"`
 }
 
+type inspectSessionResponse struct {
+	Tracks []struct {
+		Location  string `json:"location"`
+		Mid       string `json:"mid"`
+		TrackName string `json:"trackName"`
+		Status    string `json:"status"`
+		SessionID string `json:"sessionId"`
+	} `json:"tracks"`
+	ErrorCode        string `json:"errorCode"`
+	ErrorDescription string `json:"errorDescription"`
+}
+
 type tracksRequest struct {
 	SessionDescription *mediaplane.SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks             []providerTrack                `json:"tracks"`
@@ -307,6 +319,33 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	result := response.toMediaPlane()
 	logAddTracksCall(ctx, input, result.TrackErrors, time.Since(started), statusCode, err)
 	return result, err
+}
+
+func (a Adapter) InspectSession(ctx context.Context, connectionID string) (mediaplane.SessionState, error) {
+	var response inspectSessionResponse
+	statusCode, err := a.requestStatus(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(connectionID)), nil, &response, "get_session")
+	if err != nil {
+		var failure providerFailure
+		if errors.As(err, &failure) && (failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone) {
+			return mediaplane.SessionState{Found: false}, nil
+		}
+		return mediaplane.SessionState{}, err
+	}
+	code := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(response.ErrorCode), "-", "_"))
+	if code == "session_not_found" || code == "connection_not_found" {
+		return mediaplane.SessionState{Found: false}, nil
+	}
+	if strings.TrimSpace(response.ErrorCode) != "" {
+		return mediaplane.SessionState{}, newProviderResponseFailure("get_session", failureStageTopLevel, statusCode, response.ErrorCode, response.ErrorDescription, len(response.Tracks), 0)
+	}
+	tracks := make([]mediaplane.SessionTrack, 0, len(response.Tracks))
+	for _, track := range response.Tracks {
+		tracks = append(tracks, mediaplane.SessionTrack{
+			Location: track.Location, Mid: track.Mid, TrackName: track.TrackName,
+			Active: !strings.EqualFold(strings.TrimSpace(track.Status), "inactive"),
+		})
+	}
+	return mediaplane.SessionState{Found: true, Tracks: tracks}, nil
 }
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
