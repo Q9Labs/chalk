@@ -871,11 +871,6 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
         start_operation_id
       )
 
-    # The pending start occupies the first Episode wave. Its claim lease makes
-    # the independent capture-failure callback eligible on the next wave.
-    assert {:ok, [{_, %{external_operation_id: ^start_operation_id}}]} =
-             Postgres.claim_operations(64)
-
     assert {:ok, claimed} = Postgres.claim_operations(64)
 
     assert {episode, failure_operation} =

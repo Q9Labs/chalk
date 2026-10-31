@@ -21,6 +21,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.Telemetry
 
   @max_concurrency 8
+  @default_page_size 32
   @default_max_backoff_ms 5_000
   @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
@@ -54,11 +55,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
     poll_interval_ms = Keyword.fetch!(options, :poll_interval_ms)
 
     state = %{
-      page_size: min(Keyword.get(options, :page_size, @max_concurrency), @max_concurrency),
+      page_size: Keyword.get(options, :page_size, @default_page_size),
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
-      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/1),
+      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/3),
       media_plane: Keyword.get(options, :media_plane),
       recording_plane: Keyword.get(options, :recording_plane),
       last_success_at_ms: nil,
@@ -66,7 +67,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
       confirmed_count: 0,
       terminal_failure_count: 0,
       retained_pending_count: 0,
-      active_work: nil
+      active_work: %{},
+      claim_work: nil,
+      poll_timer: nil
     }
 
     send(self(), :poll)
@@ -77,59 +80,145 @@ defmodule ChalkSync.ExternalOperationConsumer do
   def handle_call(:health, _from, state), do: {:reply, health_snapshot(state), state}
 
   @impl GenServer
-  def handle_info(:poll, %{active_work: nil} = state) do
-    owner = self()
-    work_id = make_ref()
-    worker_state = %{state | active_work: nil}
+  def handle_info(:poll, state) do
+    state = %{state | poll_timer: nil}
+    slots = @max_concurrency - map_size(state.active_work)
 
-    {pid, monitor_ref} =
-      spawn_monitor(fn ->
-        send(owner, {:poll_result, work_id, self(), poll(worker_state)})
-      end)
+    if is_nil(state.claim_work) and slots > 0 do
+      owner = self()
+      excluded = Enum.map(Map.keys(state.active_work), & &1.episode_id)
 
-    active_work = %{
-      id: work_id,
-      pid: pid,
-      monitor_ref: monitor_ref,
-      started_at_ms: System.monotonic_time(:millisecond)
-    }
+      work =
+        start_worker(fn ->
+          result = state.claim_operations.(state.page_size, excluded, slots)
+          send(owner, {:claimed, self(), result})
+        end)
 
-    {:noreply, %{state | active_work: active_work}}
+      {:noreply, %{state | claim_work: work}}
+    else
+      {:noreply, schedule_poll(state, state.poll_interval_ms)}
+    end
   end
 
-  def handle_info(:poll, state), do: {:noreply, state}
+  def handle_info({:claimed, pid, result}, %{claim_work: %{pid: pid} = work} = state) do
+    Process.demonitor(work.monitor_ref, [:flush])
+    state = %{state | claim_work: nil}
 
-  def handle_info(
-        {:poll_result, work_id, pid, {delay, next}},
-        %{active_work: %{id: work_id, pid: pid, monitor_ref: monitor_ref}}
-      ) do
-    Process.demonitor(monitor_ref, [:flush])
-    Process.send_after(self(), :poll, delay)
-    {:noreply, %{next | active_work: nil}}
+    case result do
+      {:ok, operations} ->
+        Telemetry.execute([:external_operation, :poll], %{count: length(operations)}, %{
+          outcome: :success
+        })
+
+        owner = self()
+
+        active =
+          operations
+          |> Enum.group_by(fn {episode, _operation} -> episode end)
+          |> Enum.reduce(state.active_work, fn {episode, operations}, active ->
+            work = start_episode(episode, operations, state, owner)
+
+            Map.put(active, episode, work)
+          end)
+
+        next = %{
+          state
+          | active_work: active,
+            last_success_at_ms: now_ms(),
+            consecutive_failures: 0
+        }
+
+        {:noreply, schedule_poll(next, state.poll_interval_ms)}
+
+      {:retryable, reason} ->
+        Logger.warning("sync external operation discovery unavailable: reason=#{reason}")
+        {:noreply, worker_failed(state)}
+    end
   end
 
-  def handle_info(
-        {:DOWN, monitor_ref, :process, pid, reason},
-        %{active_work: %{pid: pid, monitor_ref: monitor_ref}} = state
-      ) do
-    Telemetry.execute([:external_operation, :poll], %{}, %{outcome: :failure})
-    Logger.warning("sync external operation worker stopped: reason=#{inspect(reason)}")
+  def handle_info({:operation_result, episode, pid, result}, state) do
+    case state.active_work[episode] do
+      %{pid: ^pid} = work ->
+        next =
+          state
+          |> Map.put(:last_success_at_ms, now_ms())
+          |> Map.put(
+            :active_work,
+            Map.put(state.active_work, episode, %{work | started_at_ms: now_ms()})
+          )
+          |> record_result(result)
 
-    next = %{state | active_work: nil, consecutive_failures: state.consecutive_failures + 1}
-    Process.send_after(self(), :poll, backoff(next))
-    {:noreply, next}
+        {:noreply, next}
+
+      _ ->
+        {:noreply, state}
+    end
   end
 
-  def handle_info({:poll_result, _work_id, _pid, _result}, state), do: {:noreply, state}
-  def handle_info({:DOWN, _monitor_ref, :process, _pid, _reason}, state), do: {:noreply, state}
+  def handle_info({:episode_complete, episode, pid}, state) do
+    case state.active_work[episode] do
+      %{pid: ^pid, monitor_ref: reference} ->
+        Process.demonitor(reference, [:flush])
+        next = %{state | active_work: Map.delete(state.active_work, episode)}
+        {:noreply, schedule_poll(next, 0)}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:DOWN, reference, :process, pid, reason}, state) do
+    cond do
+      match?(%{pid: ^pid, monitor_ref: ^reference}, state.claim_work) ->
+        Logger.warning("sync external operation claim stopped: reason=#{inspect(reason)}")
+        {:noreply, worker_failed(%{state | claim_work: nil})}
+
+      episode =
+          Enum.find_value(state.active_work, fn {episode, work} ->
+            if work.pid == pid and work.monitor_ref == reference, do: episode
+          end) ->
+        Logger.warning("sync external operation worker stopped: reason=#{inspect(reason)}")
+        next = %{state | active_work: Map.delete(state.active_work, episode)}
+        {:noreply, worker_failed(next)}
+
+      true ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:claimed, _pid, _result}, state), do: {:noreply, state}
 
   @impl GenServer
-  def terminate(_reason, %{active_work: nil}), do: :ok
+  def terminate(_reason, state) do
+    for work <- [state.claim_work | Map.values(state.active_work)], not is_nil(work) do
+      Process.demonitor(work.monitor_ref, [:flush])
+      Process.exit(work.pid, :shutdown)
+    end
 
-  def terminate(_reason, %{active_work: %{pid: pid, monitor_ref: monitor_ref}}) do
-    Process.demonitor(monitor_ref, [:flush])
-    Process.exit(pid, :shutdown)
     :ok
+  end
+
+  defp start_episode(episode, operations, state, owner) do
+    start_worker(fn ->
+      execute_episode(episode, operations, state, owner)
+      send(owner, {:episode_complete, episode, self()})
+    end)
+  end
+
+  defp start_worker(function) do
+    {pid, reference} = spawn_monitor(function)
+    %{pid: pid, monitor_ref: reference, started_at_ms: now_ms()}
+  end
+
+  defp schedule_poll(state, delay) do
+    if state.poll_timer, do: Process.cancel_timer(state.poll_timer)
+    %{state | poll_timer: Process.send_after(self(), :poll, delay)}
+  end
+
+  defp worker_failed(state) do
+    Telemetry.execute([:external_operation, :poll], %{}, %{outcome: :failure})
+    next = %{state | consecutive_failures: state.consecutive_failures + 1}
+    schedule_poll(next, backoff(next))
   end
 
   @doc false
@@ -175,82 +264,46 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   defp prepare_entry_leave(_episode, _operation), do: :ready
 
-  defp poll(state) do
-    case state.claim_operations.(state.page_size) do
-      {:ok, operations} ->
-        {counts, failures} = execute_page(operations, state)
+  defp execute_episode(episode, operations, state, owner) do
+    # Keep the master's claimed batch together and ordered within the Episode.
+    # Discovery continues for other Episodes while this worker awaits the provider.
+    Enum.each(operations, fn {^episode, operation} ->
+      started_at = System.monotonic_time()
 
-        Telemetry.execute(
-          [:external_operation, :poll],
-          %{count: length(operations)},
-          %{outcome: if(failures == 0, do: :success, else: :operation_failure)}
+      result =
+        execute_operation(
+          episode,
+          operation,
+          state.media_plane,
+          state.recording_plane,
+          &Stateholder.finalize_operation/3,
+          state.adapter_timeout_ms
         )
 
-        consecutive_failures = if failures == 0, do: 0, else: state.consecutive_failures + 1
-
-        next =
-          state
-          |> Map.put(:last_success_at_ms, System.monotonic_time(:millisecond))
-          |> Map.put(:consecutive_failures, consecutive_failures)
-          |> increment_counts(counts)
-
-        delay =
-          if length(operations) == state.page_size and failures == 0,
-            do: 0,
-            else: backoff(next)
-
-        {delay, next}
-
-      {:retryable, reason} ->
-        Telemetry.execute([:external_operation, :poll], %{}, %{outcome: :failure})
-        Logger.warning("sync external operation discovery unavailable: reason=#{reason}")
-        next = %{state | consecutive_failures: state.consecutive_failures + 1}
-        {backoff(next), next}
-    end
-  end
-
-  defp execute_page(operations, state) do
-    # A wave contains one eligible operation per Episode. No claimed operation
-    # waits behind another provider call on this node.
-    operations
-    |> Task.async_stream(
-      fn {episode, operation} ->
-        started_at = System.monotonic_time()
-
-        result =
-          execute_operation(
-            episode,
-            operation,
-            state.media_plane,
-            state.recording_plane,
-            &Stateholder.finalize_operation/3,
-            state.adapter_timeout_ms
-          )
-
-        report_result(operation.name, result, started_at)
-        result
-      end,
-      max_concurrency: state.page_size,
-      ordered: false,
-      timeout: :infinity
-    )
-    |> Enum.reduce({%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
-      {:ok, result}, {counts, failures} ->
-        case result do
-          :confirmed ->
-            {%{counts | confirmed: counts.confirmed + 1}, failures}
-
-          :terminal_failure ->
-            {%{counts | terminal_failure: counts.terminal_failure + 1}, failures}
-
-          :pending ->
-            {%{counts | pending: counts.pending + 1}, failures}
-
-          :finalization_failure ->
-            {counts, failures + 1}
-        end
+      report_result(operation.name, result, started_at)
+      send(owner, {:operation_result, episode, self(), result})
     end)
   end
+
+  defp record_result(state, :confirmed),
+    do: %{state | confirmed_count: state.confirmed_count + 1, consecutive_failures: 0}
+
+  defp record_result(state, :terminal_failure),
+    do: %{
+      state
+      | terminal_failure_count: state.terminal_failure_count + 1,
+        consecutive_failures: 0
+    }
+
+  defp record_result(state, :pending),
+    do: %{
+      state
+      | retained_pending_count: state.retained_pending_count + 1,
+        consecutive_failures: 0
+    }
+
+  defp record_result(state, :finalization_failure),
+    do: %{state | consecutive_failures: state.consecutive_failures + 1}
 
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
        when name in @local_operations,
@@ -579,17 +632,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
     end
   end
 
-  defp increment_counts(state, counts) do
-    %{
-      state
-      | confirmed_count: state.confirmed_count + counts.confirmed,
-        terminal_failure_count: state.terminal_failure_count + counts.terminal_failure,
-        retained_pending_count: state.retained_pending_count + counts.pending
-    }
-  end
-
   defp health_snapshot(state) do
-    now_ms = System.monotonic_time(:millisecond)
+    now_ms = now_ms()
+    work = Enum.reject([state.claim_work | Map.values(state.active_work)], &is_nil/1)
 
     %{
       last_success_at_ms: state.last_success_at_ms,
@@ -597,17 +642,14 @@ defmodule ChalkSync.ExternalOperationConsumer do
       confirmed_count: state.confirmed_count,
       terminal_failure_count: state.terminal_failure_count,
       retained_pending_count: state.retained_pending_count,
-      active_work: not is_nil(state.active_work),
-      active_work_age_ms: active_work_age_ms(state.active_work, now_ms),
+      active_work: work != [],
+      active_work_age_ms:
+        if(work != [], do: Enum.max(Enum.map(work, &max(now_ms - &1.started_at_ms, 0)))),
       active_work_timeout_ms: state.adapter_timeout_ms + @worker_completion_grace_ms
     }
   end
 
-  defp active_work_age_ms(nil, _now_ms), do: nil
-
-  defp active_work_age_ms(active_work, now_ms) do
-    max(now_ms - active_work.started_at_ms, 0)
-  end
+  defp now_ms, do: System.monotonic_time(:millisecond)
 
   defp backoff(state) do
     backoff_delay(

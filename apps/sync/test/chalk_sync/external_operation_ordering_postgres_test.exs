@@ -101,6 +101,38 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     assert_pending_count(connection, seed, 1)
   end
 
+  test "one claimant retains the actor's accepted work, Leave and Episode end in order", %{
+    connection: connection
+  } do
+    seed = fixture(connection, 3)
+    [actor, target, ender] = seed.identities
+    mute_id = queue(actor, :mute_participant, %{"participantId" => target.participant_id})
+    leave_id = queue(actor, :participant_leave)
+    expire_fences(connection, seed)
+    end_id = queue(ender, :end_episode)
+
+    assert {:ok, first_node} = Postgres.claim_operations(32)
+
+    assert Enum.map(first_node, fn {_, operation} -> operation.external_operation_id end) ==
+             [mute_id, leave_id, end_id]
+
+    # Splitting this batch lets another node finish Leave before the actor's
+    # publication change, which would then fail its finalization authority check.
+    assert {:ok, []} = Postgres.claim_operations(32)
+
+    for {episode, operation} <- first_node do
+      assert {:ok, _} =
+               Postgres.finalize_operation(
+                 episode,
+                 operation.external_operation_id,
+                 {:confirmed, :provider}
+               )
+    end
+
+    assert_ended(connection, seed)
+    assert_pending_count(connection, seed, 0)
+  end
+
   test "runtime table grants can allocate acceptance order without sequence privileges", %{
     connection: connection
   } do

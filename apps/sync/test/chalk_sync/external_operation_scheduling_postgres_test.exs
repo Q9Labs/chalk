@@ -51,7 +51,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     end
   end
 
-  test "a class backlog cannot fill the claim wave ahead of another Episode", %{
+  test "an active class is excluded from discovery for a free Episode worker", %{
     connection: connection
   } do
     class = fixture(connection, 40)
@@ -64,11 +64,14 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
       assert {:ok, _} = Postgres.begin_operation(identity, operation)
     end
 
-    assert {:ok, operations} = Postgres.claim_operations(8)
-    assert length(operations) == 2
+    assert {:ok, first} = Postgres.claim_operations(32)
+    assert length(first) == 32
+    assert Enum.all?(first, fn {episode, _} -> episode == class.episode end)
 
-    assert MapSet.new(Enum.map(operations, fn {episode, _} -> episode.episode_id end)) ==
-             MapSet.new([class.episode.episode_id, other.episode.episode_id])
+    assert {:ok, [{episode, _operation}]} =
+             Postgres.claim_operations(32, [class.episode.episode_id], 1)
+
+    assert episode == other.episode
   end
 
   @tag timeout: 120_000
