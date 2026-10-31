@@ -131,6 +131,7 @@ files.forEach((file, fileIndex) => {
       stagesSilent: new Map(),
       pulls: 0,
       trackErrors: 0,
+      errorShapes: new Map(),
       s503: 0,
       injected503: 0,
       listenerKills: 0,
@@ -158,7 +159,10 @@ files.forEach((file, fileIndex) => {
     for (const entry of run.network) {
       if (entry.method === "POST" && entry.locations === "remote") {
         cell.pulls++;
-        if (entry.trackErrors?.length) cell.trackErrors++;
+        if (entry.trackErrors?.length) {
+          cell.trackErrors++;
+          for (const shape of entry.trackErrorShape ?? []) cell.errorShapes.set(shape, (cell.errorShapes.get(shape) ?? 0) + 1);
+        }
       }
       if (entry.status === 503) cell.s503++;
     }
@@ -254,6 +258,7 @@ const summaries = rows.map((cell) => ({
   reUnmuteSilent: `${cell.again.silent}/${cell.again.pairs}`,
   pulls: cell.pulls,
   pullsWithTrackErrors: cell.trackErrors,
+  trackErrorShapes: Object.fromEntries(cell.errorShapes),
   injected503: cell.injected503,
   listenerKills: `${cell.listenerKillsClosed}/${cell.listenerKills}`,
   publisherKills: cell.kills,

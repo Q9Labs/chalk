@@ -425,7 +425,23 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
             locations: input?.tracks?.map((track) => track.location).join(",") ?? null,
             connectionNumber: connectionId ? [...connections[index]].indexOf(connectionId) + 1 : null,
             errorCode: body.code ?? body.error?.code ?? body.errorCode ?? null,
-            trackErrorText: body.tracks?.filter((track) => track.errorCode || track.errorDescription).map((track) => `${track.errorCode ?? ""} ${String(track.errorDescription ?? "").slice(0, 100)}`),
+            trackErrorShape: (body.trackErrors ?? [])
+              .map((track) =>
+                JSON.stringify(
+                  Object.fromEntries(
+                    Object.entries(track ?? {})
+                      .filter(([key]) => !/id$/iu.test(key) && key !== "trackName")
+                      .map(([key, value]) => [
+                        key,
+                        String(value)
+                          .replace(/[0-9a-zA-Z_-]{20,}/gu, "<id>")
+                          .slice(0, 120),
+                      ]),
+                  ),
+                ),
+              )
+              .slice(0, 3),
+            bodyKeys: Object.keys(body).sort(),
             trackErrors: (body.trackErrors ?? body.tracks?.filter((track) => track.errorCode || track.errorDescription))?.map((track) => track.code ?? track.errorCode ?? "unknown"),
           };
           run.network.push(entry);
