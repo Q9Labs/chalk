@@ -1,7 +1,7 @@
 defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.ExternalOperationDispatchTestHelpers, as: Helpers
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -92,6 +92,17 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     # Deterministic crash: do not execute/finalize this committed final claim.
     # Moving its lease into the past models restart after the lease expires.
     expire_fences(connection, seed)
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_episode_dispatch_leases
+      set expires_at = now() - interval '1 second'
+      where tenant_id = $1 and episode_id = $2
+      """,
+      [UUID.dump!(seed.episode.tenant_id), UUID.dump!(seed.episode.episode_id)]
+    )
+
     _end_id = queue(ender, :end_episode)
 
     drain_operations()
@@ -182,73 +193,42 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
   end
 
   defp fixture(connection, count) do
-    seed =
-      SyncPostgres.seed_episode(connection, count, %{}, %{
-        participants: List.duplicate(%{role: "owner"}, count)
-      })
+    seed = Helpers.fixture(connection, count)
 
     on_exit(fn -> SyncPostgres.cleanup(connection, seed.episode) end)
     seed
   end
 
-  defp queue(identity, name, payload \\ %{}) do
-    {:ok, operation} = Operation.new("judge_" <> UUID.generate(), name, payload)
-    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(identity, operation)
-    assert is_binary(id)
-    id
-  end
+  defp queue(identity, name, payload \\ %{}), do: Helpers.queue(identity, name, payload)
 
-  defp expire_fences(connection, seed) do
-    Postgrex.query!(
-      connection,
-      "update sync_publication_fences set created_at=now()-interval '2 hours', expires_at=now()-interval '1 hour' where episode_id=$1",
-      [UUID.dump!(seed.episode.episode_id)]
-    )
-
-    Postgrex.query!(
-      connection,
-      "update sync_external_operations set next_attempt_at=now()-interval '1 hour' where episode_id=$1",
-      [UUID.dump!(seed.episode.episode_id)]
-    )
-  end
+  defp expire_fences(connection, seed), do: Helpers.expire_fences(connection, seed)
 
   defp drain_operations do
     for _ <- 1..3 do
       assert {:ok, operations} = Postgres.claim_operations(8)
 
-      for {episode, operation} <- operations do
-        assert {:ok, _} =
-                 Postgres.finalize_operation(
-                   episode,
-                   operation.external_operation_id,
-                   {:confirmed, :provider}
-                 )
-      end
+      Enum.each(Enum.group_by(operations, &elem(&1, 0)), fn {episode, episode_operations} ->
+        finalize_episode_operations(episode, episode_operations)
+      end)
     end
   end
 
-  defp assert_pending_count(connection, seed, count) do
-    %{rows: [[^count]]} =
-      Postgrex.query!(
-        connection,
-        "select count(*) from sync_external_operations where episode_id=$1 and status='pending'",
-        [UUID.dump!(seed.episode.episode_id)]
-      )
+  defp finalize_episode_operations(episode, episode_operations) do
+    Enum.each(episode_operations, fn {_episode, operation} ->
+      assert {:ok, _} =
+               Postgres.finalize_operation(
+                 episode,
+                 operation.external_operation_id,
+                 {:confirmed, :provider}
+               )
+    end)
+
+    {_episode, first_operation} = hd(episode_operations)
+    assert :ok = Postgres.release_dispatch_lease(episode, first_operation.dispatch_lease)
   end
 
-  defp assert_ended(connection, seed) do
-    %{rows: [["ended"]]} =
-      Postgrex.query!(connection, "select status from episodes where id=$1", [
-        UUID.dump!(seed.episode.episode_id)
-      ])
+  defp assert_pending_count(connection, seed, count),
+    do: Helpers.assert_pending_count(connection, seed, count)
 
-    %{rows: [[1]]} =
-      Postgrex.query!(
-        connection,
-        "select count(*) from sync_control_events where episode_id=$1 and event_name='participant_left'",
-        [UUID.dump!(seed.episode.episode_id)]
-      )
-
-    assert {:ok, []} = Postgres.claim_operations(8)
-  end
+  defp assert_ended(connection, seed), do: Helpers.assert_ended(connection, seed)
 end

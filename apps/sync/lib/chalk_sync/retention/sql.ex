@@ -217,6 +217,7 @@ defmodule ChalkSync.Retention.SQL do
   def delete_recordings, do: delete_rows("sync_recordings")
   def delete_screen_share_leases, do: delete_rows("sync_screen_share_leases")
   def delete_publication_fences, do: delete_rows("sync_publication_fences")
+  def delete_episode_dispatch_leases, do: delete_rows("sync_episode_dispatch_leases")
 
   def delete_publication_grant_reservations,
     do: delete_rows("sync_publication_grant_reservations")

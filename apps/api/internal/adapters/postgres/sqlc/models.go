@@ -1216,6 +1216,14 @@ type SyncEpisodeControl struct {
 	UpdatedAt                                        pgtype.Timestamptz `json:"updated_at"`
 }
 
+type SyncEpisodeDispatchLease struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	EpisodeID pgtype.UUID        `json:"episode_id"`
+	OwnerID   pgtype.UUID        `json:"owner_id"`
+	Fence     int64              `json:"fence"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
 type SyncExternalOperation struct {
 	AcceptanceOrder             pgtype.Int8        `json:"acceptance_order"`
 	TenantID                    pgtype.UUID        `json:"tenant_id"`
