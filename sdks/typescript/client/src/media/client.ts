@@ -832,10 +832,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #isDueForPull(key: string, publication: CloudflareSFUPublication, now: number): boolean {
     if (now - (this.#firstSeenRemote.get(publication.publicationId) ?? Number.NEGATIVE_INFINITY) < this.#newPublicationPullDelayMs) return false;
-    if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) {
-      if (!this.#receiveProgress.canRepull(publication.publicationId) && !(this.#replaceMediaConnection && this.#receiveProgress.canRebuild(publication.publicationId))) return false;
-    }
+    if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId && !this.#mayPullAttachedPublication(publication.publicationId)) return false;
     return (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) <= now;
+  }
+  #mayPullAttachedPublication(publicationId: string): boolean {
+    return this.#receiveProgress.canRepull(publicationId) || (this.#replaceMediaConnection !== undefined && this.#receiveProgress.canRebuild(publicationId));
   }
   #nextRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
     if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
