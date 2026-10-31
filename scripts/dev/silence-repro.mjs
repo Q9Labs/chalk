@@ -23,6 +23,8 @@ const builds = {
   "5.2.6": { serverRev: "origin/master", sdkRev: "2ec22c54b", npm: "5.2.6" },
   master: { serverRev: "origin/master", sdkRev: "origin/master" },
   pr716: { serverRev: "origin/master", sdkRev: "origin/fix/mic-mute-keeps-publication" },
+  // #716 + #736 + the listener loop + #735, server and SDK together.
+  proof: { serverRev: "origin/diag/silence-proof-build", sdkRev: "origin/diag/silence-proof-build" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
 // Per-direction impairment (RTT = egress + ingress delay). Only the default interface is shaped, so browser-to-local
