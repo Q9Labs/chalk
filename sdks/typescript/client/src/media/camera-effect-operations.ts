@@ -1,6 +1,38 @@
-import { cameraEffectsSupported, createCameraEffectsTrack, fallbacks, notifyCameraBackground, pending, preferences, sessions } from "./camera-effects";
-import type { CameraBackground } from "./camera-background-settings";
+import { CameraBackgroundPreferences, type CameraBackground } from "./camera-background-settings";
+import { CAMERA_BACKGROUND_IMAGES, CAMERA_BACKGROUND_OPTIONS } from "./camera-background-images";
+import { createCameraEffectsTrack as createTrack } from "./camera-effects-track";
+import { fallbacks, markCameraEffectFailure, notifyCameraBackground } from "./camera-effects";
 import type { CameraEffectsAssets, CameraEffectsProvider, CameraEffectsTrack } from "./camera-effects-track";
+
+export { CAMERA_BACKGROUND_OPTIONS };
+
+export function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
+  return createTrack(source, files, createSegmenter, onSlow, markCameraEffectFailure, CAMERA_BACKGROUND_IMAGES);
+}
+
+const preferences = new CameraBackgroundPreferences();
+const sessions = new Map<string, Set<CameraEffectsTrack>>();
+const pending = new Map<string, Promise<void>>();
+let supported: boolean | undefined;
+
+export function cameraEffectsSupported(): boolean {
+  if (typeof document === "undefined" || typeof HTMLCanvasElement === "undefined") return false;
+  if (supported !== undefined) return supported;
+  const environment: { readonly MediaStreamTrackProcessor?: unknown; readonly MediaStreamTrackGenerator?: unknown; readonly VideoFrame?: unknown } = globalThis;
+  if (typeof environment.MediaStreamTrackProcessor !== "function" || typeof environment.MediaStreamTrackGenerator !== "function" || typeof environment.VideoFrame !== "function") return (supported = false);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("webgl2");
+  supported = context !== null;
+  context?.getExtension("WEBGL_lose_context")?.loseContext();
+  return supported;
+}
+
+export function getCameraBackground(deviceId: string): CameraBackground {
+  return preferences.get(deviceId);
+}
+export function cameraBackgroundAvailable(deviceId: string): boolean {
+  return cameraEffectsSupported() && (sessions.get(deviceId)?.size ?? 0) > 0;
+}
 
 /** Serialize rapid choices; load everything before changing any live canvas. */
 export function setCameraBackground(deviceId: string, background: CameraBackground): Promise<void> {
@@ -35,7 +67,7 @@ export async function processCameraStream(stream: MediaStream, assets: CameraEff
     cancel();
     signal.throwIfAborted();
   }
-  if (!cameraEffectsSupported() || !assets || !provider) return stream;
+  if (!assets || !provider || !cameraEffectsSupported()) return stream;
   const source = stream.getVideoTracks()[0];
   if (!source) return stream;
   const deviceId = source.getSettings().deviceId ?? "default";
