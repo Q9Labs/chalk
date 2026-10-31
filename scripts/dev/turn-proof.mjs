@@ -21,7 +21,6 @@ import { dirname, join, resolve } from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { createMediaSmokeInitScript } from "./media-smoke-page.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -89,7 +88,7 @@ try {
 } finally {
   await browser.close();
   if (fixture) {
-    await retireLocalFixture(fixture).catch((error) => {
+    await retireFixture().catch((error) => {
       report.cleanupError = error instanceof Error ? error.message : String(error);
     });
   }
@@ -163,20 +162,39 @@ function withName(inviteURL, name) {
   return url.toString();
 }
 
+// The fixture needs only tenants:write and spaces:write: it never lists Tenants.
 async function createFixtureInvite() {
   const apiOrigin = manifest.urls?.api;
   if (!apiOrigin) throw new Error("the runtime manifest has no API URL");
-  fixture = { apiOrigin, systemToken: apiToken, runtimeId: manifest.runtimeId ?? "turn-proof", marker: `tp${Date.now().toString(36)}` };
-  const { tenantId, spaceId } = await bootstrapLocalSpace({ ...fixture, fixtureMarker: fixture.marker });
-  const response = await fetch(`${apiOrigin}/v1/tenants/${tenantId}/spaces/${spaceId}/public-invite`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${apiToken}`, "content-type": "application/json" },
-    body: JSON.stringify({ enabled: true }),
+  const marker = `tp${Date.now().toString(36)}`;
+  const name = `TURN proof ${marker}`;
+  const tenant = await api("POST", "/v1/tenants", {
+    name,
+    default_media_plane: "cf_sfu",
+    media_plane_provider_config: { enabled: true, provider: "cf_sfu", mode: "chalk_managed" },
   });
-  if (!response.ok) throw new Error(`enabling the public invite answered ${response.status}`);
-  const { canonical_url: canonicalURL } = await response.json();
-  if (typeof canonicalURL !== "string") throw new Error("the public invite response has no canonical_url");
-  return canonicalURL;
+  fixture = { name, tenantPath: `/v1/tenants/${tenant.id}` };
+  const space = await api("POST", `${fixture.tenantPath}/spaces`, { name, slug: marker, media_plane: "cf_sfu" }, { "Idempotency-Key": `turn-proof-${marker}` });
+  fixture.invitePath = `${fixture.tenantPath}/spaces/${space.id}/public-invite`;
+  const invite = await api("PATCH", fixture.invitePath, { enabled: true });
+  if (typeof invite.canonical_url !== "string") throw new Error("the public invite response has no canonical_url");
+  return invite.canonical_url;
+}
+
+// The API has no Tenant delete. Disabling the invite is what stops the Space from being joinable; the rename marks it spent.
+async function retireFixture() {
+  if (fixture.invitePath) await api("PATCH", fixture.invitePath, { enabled: false });
+  await api("PATCH", fixture.tenantPath, { name: `${fixture.name} retired` });
+}
+
+async function api(method, path, body, headers = {}) {
+  const response = await fetch(new URL(path, manifest.urls.api), {
+    method,
+    headers: { Authorization: `Bearer ${apiToken}`, ...(body ? { "content-type": "application/json" } : {}), ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) throw new Error(`${method} ${path.replace(/[0-9a-f-]{36}/g, ":id")} answered ${response.status}`);
+  return response.status === 204 ? {} : response.json();
 }
 
 async function mintShortCredential(ttl) {
