@@ -447,6 +447,71 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("does not resend an operation from its retry timer while a snapshot is in flight", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("clears a pending retry timer when the snapshot flush resends its operation", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.advance(50);
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
     const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
@@ -598,6 +663,44 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
       expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked", "picked", false, "everyone", true]);
       await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined, undefined, undefined]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("defers a head access-change retry until a snapshot completes without overtaking it", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock, { retryDelayMs: 100 });
+    const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
+    const first = client.setDrawPolicy("hosts");
+    void first.catch(() => undefined);
+    let later: Promise<void> | undefined;
+    try {
+      await settle();
+      const firstFrame = sent()[0];
+      sockets[0]?.receive({ type: "operation_error", correlation_id: firstFrame.operation_id, operation: "set_draw_policy", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      later = client.setDrawPolicy("picked");
+      void later.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(sent()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts"]);
+
+      commit(sockets[0], firstFrame.operation_id, "2");
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts", "picked"]);
+      commit(sockets[0], sent()[2]!.operation_id, "3");
+      await expect(Promise.all([first, later])).resolves.toEqual([undefined, undefined]);
     } finally {
       await client.stopSceneSubscription();
     }

@@ -921,9 +921,16 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (head) head.state = "sent";
     const entries = [...operations, ...(head ? [head.entry] : [])].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     for (const entry of entries) {
+      this.#clearOperationRetryTimer(entry.pending.operationId);
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
       this.#sendOperation(entry.pending.frame);
     }
+  }
+
+  #releaseOperationRetryToSnapshotFlush(operationId: string): void {
+    this.#awaitingOperationIds.delete(operationId);
+    const change = this.#accessChange(operationId);
+    if (change?.state === "sent") change.state = "ready";
   }
 
   /**
@@ -977,7 +984,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const timer = this.#clock().setTimeout(
       () => {
         this.#operationRetryTimers.delete(operationId);
-        if (this.#phase === "live" && this.#sentEntry(operationId) === entry) this.#sendOperation(entry.pending.frame);
+        if (this.#phase !== "live" || this.#sentEntry(operationId) !== entry) return;
+        if (this.#snapshots.size > 0) {
+          this.#releaseOperationRetryToSnapshotFlush(operationId);
+          return;
+        }
+        this.#sendOperation(entry.pending.frame);
       },
       this.#options.retryDelayMs ?? Math.min(100 * 2 ** Math.min(entry.retries - 1, 4), 2_000),
     );
