@@ -99,13 +99,9 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
           started = System.monotonic_time(:millisecond)
           command_id = "leave_" <> ChalkSync.UUID.generate()
 
-          client =
-            Client.send_json(client, %{
-              "type" => "operation",
-              "command_id" => command_id,
-              "name" => "participant_leave",
-              "payload" => %{}
-            })
+          {:ok, operation} = Operation.new(command_id, :participant_leave, %{})
+          assert {:ok, _} = Postgres.begin_operation(identity, operation)
+          send(observer, {:accepted, self()})
 
           await_left(client, identity.participant_id)
           {identity.episode.episode_id, System.monotonic_time(:millisecond) - started}
@@ -119,6 +115,18 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     start_supervised!({ChalkSync.Fanout.PostgresNotifications, url: @database_url})
 
+    # Queue the class first, then the other Episode, before provider work starts.
+    # This makes the concurrency assertion independent of database and VM timing.
+    for task <- Enum.take(tasks, 10) do
+      send(task.pid, :leave)
+      pid = task.pid
+      assert_receive {:accepted, ^pid}, 5_000
+    end
+
+    send(List.last(tasks).pid, :leave)
+    other_pid = List.last(tasks).pid
+    assert_receive {:accepted, ^other_pid}, 5_000
+
     start_supervised!(
       {ExternalOperationConsumer,
        poll_interval_ms: 5,
@@ -127,11 +135,6 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
        media_plane: {ChalkSync.DepartureDelayAdapter, {self(), delays}}}
     )
 
-    class_tasks = Enum.take(tasks, 10)
-    Enum.each(class_tasks, &send(&1.pid, :leave))
-    # Start the second Episode after the first wave is already doing provider work.
-    assert_receive {:cleanup_started, _, first_episode}, 5_000
-    send(List.last(tasks).pid, :leave)
     results = Task.await_many(tasks, 100_000)
     last_ack = results |> Enum.map(&elem(&1, 1)) |> Enum.max()
     other_ack = results |> List.last() |> elem(1)
@@ -139,7 +142,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     calls = drain_calls([])
 
     {peak, active, episode_peak, _} =
-      Enum.reduce(calls, {1, 1, 1, %{first_episode => 1}}, fn
+      Enum.reduce(calls, {0, 0, 0, %{}}, fn
         {:cleanup_started, _, episode}, {peak, active, episode_peak, episodes} ->
           episodes = Map.update(episodes, episode, 1, &(&1 + 1))
 

@@ -1759,7 +1759,7 @@ alter table sync_lifecycle_intents
     on delete restrict;
 
 create table sync_external_operations (
-    acceptance_order bigint generated always as identity,
+    acceptance_order bigint not null generated always as identity,
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
