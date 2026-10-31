@@ -9,6 +9,8 @@ export const CALL_STATS_WINDOW_MS = 10_000;
 export const CALL_STATS_UPLOAD_SAMPLES = 6;
 /** The API rejects larger batches. */
 export const CALL_STATS_MAX_BATCH = 30;
+/** The API rejects a window longer than this and drops the whole batch, so a longer gap (a stalled tab, a sleeping device) is skipped. */
+export const CALL_STATS_MAX_WINDOW_MS = 60_000;
 /** Per-call cap: about an hour of samples. Later windows are dropped. */
 export const CALL_STATS_CALL_CAP = 360;
 
@@ -46,7 +48,7 @@ export function createCallStatsCollector(options: { readonly upload: (request: C
     const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
-    if (produced >= CALL_STATS_CALL_CAP) return;
+    if (windowMs > CALL_STATS_MAX_WINDOW_MS || produced >= CALL_STATS_CALL_CAP) return;
     produced++;
     buffer.push(sample);
     if (buffer.length > CALL_STATS_MAX_BATCH) buffer = buffer.slice(-CALL_STATS_MAX_BATCH);
@@ -88,6 +90,7 @@ type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges };
 
 function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed): CallStatsSample {
   const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
+  const recvLost = delta("inbound-rtp", "packetsLost");
   const pair = selectedPair(report);
   const local = pair ? (report.get(String(pair.localCandidateId)) as Stat | undefined) : undefined;
   const remote = pair ? (report.get(String(pair.remoteCandidateId)) as Stat | undefined) : undefined;
@@ -105,7 +108,7 @@ function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number,
     send_jitter_ms: scaled(mean(gauges.sendJitter), 1000, 60000),
     send_layer: sendLayer(report, baseline),
     recv_bitrate_kbps: scaled(delta("inbound-rtp", "bytesReceived"), 8 / windowMs, 100000),
-    recv_loss_pct: lossPct(delta("inbound-rtp", "packetsLost"), delta("inbound-rtp", "packetsReceived")),
+    recv_loss_pct: lossPct(recvLost, sum(recvLost, delta("inbound-rtp", "packetsReceived"))),
     recv_jitter_ms: scaled(mean(gauges.recvJitter), 1000, 60000),
     recv_height: scaled(recvHeight(report), 1, 4320),
     freeze_count: scaled(delta("inbound-rtp", "freezeCount", "video"), 1, 10000),
@@ -155,10 +158,14 @@ function sumDelta(report: RTCStatsReport, baseline: Baseline, type: string, fiel
   return seen ? total : null;
 }
 
-function lossPct(lost: number | null, delivered: number | null): number | undefined {
-  if (lost === null || delivered === null || lost + delivered <= 0) return undefined;
-  const total = lost + delivered;
+/** Lost packets as a share of `total`, the packets that were sent (or that arrived plus were lost). */
+function lossPct(lost: number | null, total: number | null): number | undefined {
+  if (lost === null || total === null || total <= 0) return undefined;
   return Math.min(100, Math.round((lost / total) * 10_000) / 100);
+}
+
+function sum(a: number | null, b: number | null): number | null {
+  return a === null || b === null ? null : a + b;
 }
 
 function newGauges(): Gauges {

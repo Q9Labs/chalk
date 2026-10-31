@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { CALL_STATS_CALL_CAP, CALL_STATS_WINDOW_MS, createCallStatsCollector, type CallStatsRequest } from "./call-stats";
+import { CALL_STATS_CALL_CAP, CALL_STATS_MAX_WINDOW_MS, CALL_STATS_WINDOW_MS, createCallStatsCollector, type CallStatsRequest } from "./call-stats";
 
 type Stat = Record<string, unknown>;
 const report = (stats: readonly Stat[]): RTCStatsReport => new Map(stats.map((stat) => [String(stat.id), stat])) as unknown as RTCStatsReport;
 
-function frame(second: number, options: { lost?: number; type?: "host" | "relay"; layer?: "h" | "l" } = {}): RTCStatsReport {
+function frame(second: number, options: { lost?: number; sent?: number; type?: "host" | "relay"; layer?: "h" | "l" } = {}): RTCStatsReport {
   const layer = options.layer ?? "h";
   return report([
     { id: "T", type: "transport", selectedCandidatePairId: "P" },
     { id: "P", type: "candidate-pair", localCandidateId: "L", remoteCandidateId: "R", currentRoundTripTime: 0.05 },
     { id: "L", type: "local-candidate", candidateType: options.type ?? "host", protocol: "udp", ...(options.type === "relay" ? { relayProtocol: "tls" } : {}) },
     { id: "R", type: "remote-candidate", candidateType: "srflx", address: "203.0.113.9" },
-    { id: "O", type: "outbound-rtp", kind: "video", rid: layer, packetsSent: second * 100, bytesSent: second * 125_000 },
+    { id: "O", type: "outbound-rtp", kind: "video", rid: layer, packetsSent: second * (options.sent ?? 100), bytesSent: second * 125_000 },
     { id: "RI", type: "remote-inbound-rtp", kind: "video", packetsLost: second * (options.lost ?? 0), jitter: 0.004 },
     { id: "I", type: "inbound-rtp", kind: "video", packetsReceived: second * 90, packetsLost: second * 10, bytesReceived: second * 250_000, jitter: 0.01, frameHeight: 720, freezeCount: second > 5 ? 2 : 0, totalFreezesDuration: second > 5 ? 1.5 : 0 },
   ]);
@@ -55,8 +55,28 @@ describe("call stats collector", () => {
   it("reports relay candidates as turn and never carries an address", async () => {
     const { collector, uploads } = run(10, { type: "relay", lost: 2, layer: "l" });
     await collector.flush();
-    expect(uploads[0]?.samples[0]).toMatchObject({ connection_type: "turn", relay_protocol: "tls", send_layer: "l", send_loss_pct: 1.96 });
+    expect(uploads[0]?.samples[0]).toMatchObject({ connection_type: "turn", relay_protocol: "tls", send_layer: "l", send_loss_pct: 2 });
     expect(JSON.stringify(uploads)).not.toContain("203.0.113.9");
+  });
+
+  it("reports send loss against the packets sent", async () => {
+    const { collector, uploads } = run(10, { lost: 100 });
+    await collector.flush();
+    expect(uploads[0]?.samples[0]?.send_loss_pct).toBe(100);
+  });
+
+  it("skips a window longer than the API accepts and resumes with the next one", async () => {
+    let clock = 0;
+    const uploads: CallStatsRequest[] = [];
+    const collector = createCallStatsCollector({ now: () => clock, upload: async (request) => void uploads.push(request) });
+    for (const second of [0, 5, 70, 80]) {
+      clock = second * 1000;
+      collector.observe(frame(second));
+    }
+    await collector.flush();
+    const windows = uploads.flatMap((request) => request.samples.map((sample) => sample.window_ms));
+    expect(windows).toEqual([10_000]);
+    expect(Math.max(...windows)).toBeLessThanOrEqual(CALL_STATS_MAX_WINDOW_MS);
   });
 
   it("flushes a partial window of at least one second and skips shorter ones", async () => {
