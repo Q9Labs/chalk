@@ -52,6 +52,58 @@ it("reports a remote track error as a stuck pull failure", async () => {
   }
 });
 
+it.each(["microphone", "screen_audio"] as const)("suppresses disabled %s projections without a pulled track and restarts their clock", async (source) => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source, publicationId: `remote-connection|${source}` };
+    const projection = { ...publication, source: source === "screen_audio" ? ("screen" as const) : source, publicationId: null, enabled: false };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    h.transport.failedRemoteTrackNames.set(source, "not_available");
+    h.client.remotePublicationsChanged([projection]);
+    await h.client.refreshRemotePublications();
+    expect(h.client.getSnapshot().remoteTracks).toEqual([]);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(events).toEqual([{ event: "audio_receive_summary", receive_counts: { projection_off: 1 } }]);
+    h.client.remotePublicationsChanged([{ ...projection, enabled: true }]);
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "pull_failed", duration_ms: 15000 }));
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it("starts receive health timing and pull state afresh after peer replacement", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone" }] };
+    h.transport.failedRemoteTrackNames.set("microphone", "not_available");
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(10000);
+    h.transport.failedRemoteTrackNames.clear();
+    await h.client.restart(bootstrap("connection-2"));
+    await h.client.refreshRemotePublications();
+    expect(h.peers).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    const stuck = events.filter((event) => event.event === "audio_receive_stuck");
+    expect(stuck).toEqual([expect.objectContaining({ receive_state: "track_received", duration_ms: 15000 })]);
+    expect(stuck[0]?.media_error_kind).toBeUndefined();
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
   harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
