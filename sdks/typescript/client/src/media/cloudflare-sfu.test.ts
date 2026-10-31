@@ -3040,6 +3040,9 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
 
 it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
   const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  const localMicrophonePublicationIds = () =>
+    [...harness.transport.localPublications.values()].filter((item) => item.source === "microphone").map((item) => item.publicationId).sort();
+  const localAddCount = () => harness.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local")).length;
   let expire: (() => void) | undefined;
   const schedule = platform.dependencies.clock.setTimeout;
   const timer = vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => {
@@ -3052,6 +3055,11 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
   try {
     await client.join({ microphone: true, camera: false });
     await client.media.setMicrophoneEnabled(false);
+    const publicationIdsAfterMute = localMicrophonePublicationIds();
+    const localAddsAfterMute = localAddCount();
+    expect(publicationIdsAfterMute).not.toHaveLength(0);
+    expect(publishedMicrophone()).toBe(true);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")?.enabled ?? false).toBe(false);
     await startSwap();
     const enabled = enable();
     await vi.waitFor(() => expect(expire).toBeTypeOf("function"));
@@ -3075,7 +3083,13 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(command).not.toHaveBeenCalledWith(true);
     expect(track.enabled).toBe(false);
-    expect(publishedMicrophone()).toBe(false);
+    if (ending === "call-ended") {
+      expect(publishedMicrophone()).toBe(false);
+    } else {
+      expect(localMicrophonePublicationIds()).toEqual(publicationIdsAfterMute);
+      expect(localAddCount()).toBe(localAddsAfterMute);
+      expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")?.enabled ?? false).toBe(false);
+    }
     expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
   } finally {
     timer.mockRestore();
