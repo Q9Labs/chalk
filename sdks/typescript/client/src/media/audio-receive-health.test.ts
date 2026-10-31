@@ -144,6 +144,52 @@ describe("AudioReceiveHealth", () => {
     expect(h.events[0]?.duration_ms).toBe(10001);
   });
 
+  it("remembers a disabled projection even when re-enabled between samples", async () => {
+    const h = harness();
+    const p = publication();
+    h.tracker.roster([p]);
+    h.tracker.start();
+    await vi.advanceTimersByTimeAsync(10000);
+    h.tracker.projection([{ ...p, enabled: false }]);
+    await vi.advanceTimersByTimeAsync(1000);
+    h.tracker.projection([{ ...p, enabled: true }]);
+    await vi.advanceTimersByTimeAsync(14000);
+    expect(h.events).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.events[0]).toMatchObject({ event: "audio_receive_stuck", receive_state: "announced", duration_ms: 15000 });
+  });
+
+  it("uses authoritative projection state instead of the track fallback", async () => {
+    const h = harness();
+    const p = remote();
+    p.track.enabled = false;
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.projection([{ ...p, enabled: true }]);
+    h.tracker.start();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(h.events[0]).toMatchObject({ event: "audio_receive_stuck", receive_state: "announced" });
+  });
+
+  it("ignores stats from a replaced peer connection", async () => {
+    const h = harness();
+    let connection = h.options.connection();
+    const tracker = new AudioReceiveHealth({ ...h.options, connection: () => connection });
+    tracker.roster([publication()]);
+    let resolve: (stats: RTCStatsReport) => void = () => {};
+    h.getStats.mockReturnValueOnce(
+      new Promise<RTCStatsReport>((done) => {
+        resolve = done;
+      }),
+    );
+    const sample = tracker.sample();
+    connection = { getStats: h.getStats } as unknown as RTCPeerConnection;
+    vi.setSystemTime(15000);
+    resolve(new Map() as unknown as RTCStatsReport);
+    await sample;
+    expect(h.events).toEqual([]);
+  });
+
   it("summarizes audio states every twelve samples with one stats request per sample", async () => {
     const h = harness();
     const off = remote("off");
