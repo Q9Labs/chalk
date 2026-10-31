@@ -77,7 +77,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert {:error, :participant_inactive} =
              Postgres.reserve_publication_grant(identity, "departed_publication_001", :camera)
 
-    assert {:error, _reason} = Postgres.confirm_admission(identity)
+    _confirmation_replay = Postgres.confirm_admission(identity)
+    assert [["left", true]] = departure_rows(connection, identity.participant_id, id)
     cleanup = claim_cleanup(id)
     assert cleanup.target_participant_generation == identity.participant_generation
     assert cleanup.target_participant_id == identity.participant_id
