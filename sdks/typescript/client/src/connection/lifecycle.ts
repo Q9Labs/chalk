@@ -599,7 +599,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
             return;
           }
-          yield* Effect.sync(() => model.mediaBindingCleanup?.());
+          yield* Effect.sync(() => {
+            for (const { track } of model.media?.getSnapshot().localTracks ?? []) {
+              track.enabled = false;
+              track.stop();
+            }
+          });
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();

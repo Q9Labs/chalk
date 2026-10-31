@@ -7,6 +7,7 @@ import { createSpaceClientForPlatform } from "../../../../client/src/space-clien
 import { control, terminalTestPlatform } from "../../../../client/src/space-client/terminal.test.helpers";
 import { Chalk } from "./Chalk";
 import { CloudflareSFUError } from "../../../../client/src/media";
+import { track } from "../../../../client/src/space-client/capture.test.helpers";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -25,7 +26,17 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       return { type: "ack", command_id: "leave", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" };
     });
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
-    const onLeft = vi.fn(() => expect(platform.stopped).toHaveBeenCalledOnce());
+    const microphone = track("audio");
+    const camera = track("video");
+    platform.stopped.mockImplementation(() => {
+      microphone.stop();
+      camera.stop();
+    });
+    const onLeft = vi.fn(() => {
+      expect(microphone.readyState).toBe("ended");
+      expect(camera.readyState).toBe("ended");
+      expect(platform.stopped).not.toHaveBeenCalled();
+    });
     const error = vi.fn();
     client.on("error", error);
     const container = document.createElement("div");
@@ -38,6 +49,13 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       await act(async () => {
         await client.join({ microphone: false, camera: false });
         platform.emitSync({ ...platform.sync.getSnapshot(), control });
+        platform.media.emit({
+          ...platform.media.getSnapshot(),
+          localTracks: [
+            { source: "microphone", enabled: true, publicationId: "microphone", track: microphone },
+            { source: "camera", enabled: true, publicationId: "camera", track: camera },
+          ],
+        });
       });
       let settled = false;
       await act(async () => {
@@ -62,11 +80,13 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
         .leave()
         .catch(() => undefined)
         .finally(() => client.dispose());
+      expect(platform.stopped).not.toHaveBeenCalled();
       expect(platform.syncStopped).not.toHaveBeenCalled();
       if (outcome === "confirmed") departure.resolve();
       else departure.reject(new Error("Durable departure failed"));
       expect(await leaving).toBe(outcome === "confirmed");
       await cleanup;
+      expect(platform.stopped).toHaveBeenCalledOnce();
       expect(platform.syncStopped).toHaveBeenCalledOnce();
       expect(onLeft).toHaveBeenCalledOnce();
       if (outcome === "confirmed") expect(error).not.toHaveBeenCalled();
