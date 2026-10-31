@@ -1497,6 +1497,7 @@
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
 .chalk-frame {
+  container: chalk-call / inline-size;
   position: relative;
   width: 100%;
   height: 100%;
@@ -1735,6 +1736,49 @@
     border-radius: 24px 24px 0 0;
   }
 }
+@container chalk-call (max-width: 640px) {
+  .chalk-frame-header,
+  .chalk-header {
+    height: 52px;
+  }
+  .chalk-header {
+    padding: 0 20px;
+  }
+  .chalk-header-layout {
+    display: none;
+  }
+  .chalk-stage-layout,
+  .chalk-frame:has(.chalk-drawer[data-state="open"]) .chalk-stage-layout {
+    inset: 52px 8px 106px;
+  }
+  .chalk-frame-dock {
+    bottom: 42px;
+    height: 52px;
+  }
+  .chalk-frame-regular {
+    display: none;
+  }
+  .chalk-frame-compact {
+    display: block;
+  }
+  .chalk-menu-item {
+    min-height: 48px;
+  }
+  .chalk-toasts {
+    --chalk-toast-top: 52px;
+    --chalk-toast-lift: 110px;
+  }
+  .chalk-drawer {
+    inset: auto 0 0;
+    width: 100%;
+    max-height: calc(100% - 52px);
+    height: 70%;
+    border-radius: 24px 24px 0 0;
+  }
+  .chalk-drawer-content {
+    border-radius: 24px 24px 0 0;
+  }
+}
 @media (pointer: coarse) {
   .chalk-icon-button {
     min-width: 44px;
@@ -1862,6 +1906,17 @@
     height: 52px;
   }
 }
+@container chalk-call (max-width: 640px) {
+  .chalk-frame-dock {
+    padding: 0 22px;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .chalk-icon-button[data-chalk-size="lg"] {
+    width: 52px;
+    height: 52px;
+  }
+}
 
 .chalk-drawer {
   background: var(--chalk-surface);
@@ -1928,6 +1983,26 @@
     0 12px 32px rgba(0, 0, 0, 0.12);
 }
 @media (max-width: 640px) {
+  .chalk-header-title {
+    flex: 1;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .chalk-call-name-phone {
+    gap: 4px;
+    height: 44px;
+    padding: 0 6px;
+    margin-left: -6px;
+    transition: all 0s ease;
+  }
+  .chalk-call-name-phone > svg {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+}
+@container chalk-call (max-width: 640px) {
   .chalk-header-title {
     flex: 1;
     justify-content: space-between;

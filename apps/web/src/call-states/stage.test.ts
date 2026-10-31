@@ -484,7 +484,7 @@ it("keeps a live share selectable when a phone guest pins the board", async () =
   }
 });
 
-// Full windows, calls embedded in taller host pages, and a short and narrow call in a taller and wider page. The header still picks its phone layout from the window, so the wider page stays phone-sized.
+// Full windows, calls embedded in taller host pages, and a short and narrow call in taller and wider pages, where the header picks its phone layout from the call's width.
 const noticeCalls = [
   ...[
     { width: 640, height: 320 },
@@ -497,6 +497,7 @@ const noticeCalls = [
   ].map(({ width, height }) => ({ name: `${width}x${height}`, width, height, embed: "" })),
   ...[390, 640, 844].map((width) => ({ name: `${width}x320 embed`, width, height: 844, embed: "320" })),
   { name: "300x320 embed in 600x760", width: 600, height: 760, embed: "300x320" },
+  { name: "300x320 embed in 1024x768", width: 1024, height: 768, embed: "300x320" },
 ];
 const LONG_CALL_NAME = "Year 11 chemistry revision for the whole of 11B with Ms Rahman, Mr Okafor, the lab technicians and every parent who asked to listen in";
 // Device errors, an error carrying a long link and error token, and joins from people with long unbroken names. The new content and the narrow call also carry a long call name.

@@ -5,6 +5,9 @@ export function ShellStyles() {
     </style>
   );
 }
+/** Phone rules follow a narrow window, or a narrow call inside a wider window. */
+const phoneRules = (rules: string) => `@media (max-width: 640px) {${rules}}
+@container chalk-call (max-width: 640px) {${rules}}`;
 const CALL_SHELL_CSS = `.chalk-shell-dock {
   display: flex;
   align-items: center;
@@ -395,7 +398,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 [data-chalk-theme="light"] .chalk-shell-reactions {
   box-shadow: var(--chalk-shadow);
 }
-@media (max-width: 640px) {
+${phoneRules(`
   .chalk-shell-details-heading {display:none;}
   .chalk-shell-detail-action {min-height:48px;}
   .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
@@ -447,7 +450,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   .chalk-shell-detail-action {
     min-height: 48px;
   }
-}
+`)}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-split button {
     transition: none;
@@ -470,11 +473,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   border-radius: 50%;
   background: var(--chalk-danger);
 }
-@media (max-width: 640px) {
+${phoneRules(`
   .chalk-shell-recording {
     display: none;
   }
-}
+`)}
 .chalk-shell-people-pill {
   display: flex;
   align-items: center;
@@ -559,7 +562,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-reactions-expanded .chalk-shell-raise {
   grid-column: 1/-1;
 }
-@media (max-width: 640px) {
+${phoneRules(`
   .chalk-shell-reactions {
     flex-wrap: wrap;
     justify-content: center;
@@ -581,7 +584,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
     width: 44px;
     height: 44px;
   }
-}
+`)}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-emoji,
   .chalk-shell-people-pill {
