@@ -303,11 +303,9 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
-	logAddTracksCall(ctx, input, time.Since(started), statusCode, err)
-	if err != nil {
-		return response.toMediaPlane(), err
-	}
-	return response.toMediaPlane(), nil
+	result := response.toMediaPlane()
+	logAddTracksCall(ctx, input, result.TrackErrors, time.Since(started), statusCode, err)
+	return result, err
 }
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
