@@ -616,7 +616,7 @@ func (r *Reconciler) deleteRevokedNode(ctx context.Context, state Journal, manag
 
 func (r *Reconciler) deleteNodeRequest(managed ManagedNode, node Node, now time.Time) DeleteNodeRequest {
 	request := DeleteNodeRequest{ProviderID: node.ProviderID, Name: node.Name, RequiredTags: append([]string(nil), node.Tags...)}
-	if managed.Identity == nil && now.Sub(node.CreatedAt) > r.config.StartupTimeout {
+	if managed.Identity == nil && !node.CreatedAt.IsZero() && now.Sub(node.CreatedAt) > r.config.StartupTimeout {
 		request.EvidenceUntil = node.CreatedAt.Add(r.config.StartupTimeout + bootstrapEvidenceWindow)
 	}
 	return request
