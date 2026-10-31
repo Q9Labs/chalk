@@ -418,12 +418,12 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
     },
   });
 }
-function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, string>> {
+function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, unknown>> {
   switch (media.provider) {
     case "cloudflare_sfu": {
-      const { connectionId, stunServer } = media.client_payload;
+      const { connectionId, stunServer, iceServers } = media.client_payload;
       if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
-      return { connectionId, stunServer };
+      return { connectionId, stunServer, ...(iceServers === undefined ? {} : { iceServers }) };
     }
     default:
       throw invalidResponse(201);

@@ -157,6 +157,7 @@ type RemoteTrackObserver interface {
 type Service struct {
 	repository      Repository
 	absenceEvidence *remoteTrackAbsenceEvidence
+	receiveHealth   *receiveHealth
 }
 
 func NewService(repository Repository) Service {
@@ -164,7 +165,7 @@ func NewService(repository Repository) Service {
 }
 
 func newService(repository Repository, now func() time.Time) Service {
-	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now)}
+	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now)}
 }
 
 func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {

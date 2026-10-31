@@ -14,7 +14,7 @@ import (
 // logAddTracksCall records one structured line per add-tracks call so a single
 // failed publish shows where the time went. It never logs SDP bodies, track
 // names, remote session IDs, credentials or client addresses.
-func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, latency time.Duration, statusCode int, err error) {
+func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, trackErrors []mediaplane.TrackError, latency time.Duration, statusCode int, err error) {
 	outcome, providerCode := "ok", ""
 	level := slog.LevelInfo
 	if err != nil {
@@ -24,6 +24,10 @@ func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, laten
 		if errors.As(err, &failure) {
 			outcome, providerCode = string(failure.stage), failure.providerCode
 		}
+	}
+	errorKinds := make([]string, 0, min(len(trackErrors), 16))
+	for _, failure := range trackErrors[:min(len(trackErrors), 16)] {
+		errorKinds = append(errorKinds, failure.Code)
 	}
 	slog.Default().Log(
 		ctx,
@@ -35,6 +39,7 @@ func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, laten
 		"provider_session_id", input.ConnectionID,
 		"track_count", len(input.Tracks),
 		"track_kinds", addTracksKinds(input.Tracks),
+		"track_error_kinds", errorKinds,
 		"sdp_type", addTracksSDPType(input.SessionDescription),
 		"sdp_rid_count", addTracksRIDCount(input.SessionDescription),
 		"simulcast_track_count", addTracksSimulcastCount(input.Tracks),

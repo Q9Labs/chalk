@@ -71,6 +71,8 @@ const (
 	CloudflareRealtimeAppID     = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
 	CloudflareRealtimeAppSecret = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
 	CloudflareRealtimeBaseURL   = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
+	CloudflareTurnKeyID         = "CHALK_CLOUDFLARE_TURN_KEY_ID"
+	CloudflareTurnAPIToken      = "CHALK_CLOUDFLARE_TURN_API_TOKEN"
 
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 	DefaultMediaPlane                  = "CHALK_DEFAULT_MEDIA_PLANE"
@@ -161,6 +163,10 @@ type CloudflareRealtimeConfig struct {
 	RealtimeAppID     string
 	RealtimeAppSecret string
 	RealtimeBaseURL   string
+	// TurnKeyID and TurnAPIToken are optional and set together. Without them
+	// clients get STUN only.
+	TurnKeyID    string
+	TurnAPIToken string
 
 	RequestTimeout time.Duration
 }
@@ -446,8 +452,13 @@ func Load() (Config, error) {
 		RealtimeAppID:     envOrDefault(CloudflareRealtimeAppID, ""),
 		RealtimeAppSecret: envOrDefault(CloudflareRealtimeAppSecret, ""),
 		RealtimeBaseURL:   realtimeBaseURL,
+		TurnKeyID:         envOrDefault(CloudflareTurnKeyID, ""),
+		TurnAPIToken:      envOrDefault(CloudflareTurnAPIToken, ""),
 
 		RequestTimeout: cloudflareRealtimeRequestTimeout,
+	}
+	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
+		return Config{}, err
 	}
 	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
 		return Config{}, err
@@ -582,6 +593,13 @@ func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, process
 		}
 	default:
 		return fmt.Errorf("%s must be %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+	return nil
+}
+
+func validateTurnProcessConfig(processConfig CloudflareRealtimeConfig) error {
+	if (strings.TrimSpace(processConfig.TurnKeyID) == "") != (strings.TrimSpace(processConfig.TurnAPIToken) == "") {
+		return fmt.Errorf("%s and %s must be set together", CloudflareTurnKeyID, CloudflareTurnAPIToken)
 	}
 	return nil
 }

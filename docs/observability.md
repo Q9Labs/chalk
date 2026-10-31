@@ -124,6 +124,11 @@ HTTP 200 acceptance rules are unchanged. The regression in
 checks the recorded logs and span events against provider responses with
 credential-shaped fields.
 
+When the API cannot mint Cloudflare TURN credentials it logs
+`cloudflare_turn.credentials_failed` at warning level with the failure cause and
+no credential, and the join continues with STUN only. A sustained stream of this
+event means clients behind strict networks cannot connect.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
@@ -152,6 +157,48 @@ redacts SDP and unknown error codes, filters descriptions, and drops unknown
 fields. `omittedTracks` reports omitted entries. Use it to build a sanitized
 fixture after a new occurrence; a documentation-based fixture alone does not
 prove the shape of an earlier production failure.
+
+### Listeners missing active audio publications
+
+The API samples active Cloudflare SFU Episodes every five seconds, independently
+of client requests. Each other participant's enabled `microphone` or
+`screen_audio` publication starts a listener/publication grace window when first
+observed. After more than 15 seconds without a successful pull, it emits
+`media.listener_publication_unpulled` once for that pair. `step` is
+`no_pull_attempted` or `pull_failed`; `error_kind` is a bounded per-track provider
+code, `request_failed`, or `missing_result`. Success requires an exact returned
+remote track identity and receiving MID, not merely an HTTP 200. A later failure
+does not downgrade `pull_succeeded` on the same listener connection. This proves
+provider pull acceptance, not received audio packets or completed renegotiation.
+
+Affected Episodes emit `media.listener_publication_summary` at most once a minute
+with `no_pull_attempted_count`, `pull_failed_count`, `pull_succeeded_count`, and
+`overdue_count`. Healthy Episodes remain silent. Paused publications do not age;
+closed/replaced publications and departed listeners are removed. Listener
+connection replacement resets pull progress. The one-shot marker survives pauses
+and listener connection replacement for a retained pair. Episode end removes
+state on the next sample; shutdown clears it too. These process-local diagnostics
+reset on API restart and assume pulls for an Episode reach the same API process.
+
+Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
+`publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant
+ID and the complete publication reference, respectively). Publication references
+can encode client-supplied track names and MIDs, so they are never logged raw or
+reversibly encoded. No identity labels, raw error text, credentials, SDP or media
+payloads are added. The existing
+`cloudflare_sfu.add_tracks` log also includes up to 16 normalized
+`track_error_kinds`, without remote track names or remote session IDs.
+
+Retained state is capped at 128 Episodes, 128 participants and 128 publication
+entries per Episode, and 1024 pairs per Episode. Publication references above
+4096 bytes are ignored. A truncated Episode summary marks `truncated=true`;
+Episode overflow or read failures emit the rate-limited
+`media.listener_publication_sampling_incomplete` event. After two minutes without
+a fresh sample, stale state is discarded rather than diagnosing from old data.
+Caps and failed reads can leave coverage incomplete. Discovery and evaluation
+are sampled, so a newly visible pair normally logs roughly 15–25 seconds later.
+The fake-time regressions live in
+`apps/api/internal/mediapublications/receive_health_test.go`.
 
 ### Background-tab and presence-expiry evidence
 

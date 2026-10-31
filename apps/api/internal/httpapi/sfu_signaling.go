@@ -168,6 +168,13 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		SpaceID:            request.SpaceID.String(),
 		EpisodeID:          request.EpisodeID.String(),
 	})
+	if observer, ok := publications.(mediapublications.ListenerPullObserver); ok {
+		observer.ObserveListenerPull(ctx, mediapublications.ListenerPullInput{
+			ReceiveHealthEpisode: mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID},
+			ParticipantID:        request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
+			ConnectionID: request.Body.ConnectionID, Requested: request.Body.Tracks, Response: response, Err: err,
+		})
+	}
 	if err != nil {
 		observation, observed := remoteTrackObservationForFailure(request, err)
 		if observed {

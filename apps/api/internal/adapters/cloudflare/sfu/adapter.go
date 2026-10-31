@@ -130,6 +130,7 @@ type Adapter struct {
 	client            httpClient
 	forcedCloseClient httpClient
 	captureReplay     *captureReplayRegistry
+	turn              *TurnCredentials
 }
 
 type ConnectionMetadata struct {
@@ -275,15 +276,15 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 		participantRef = input.ParticipantName
 	}
 
-	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID), nil
+	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
-func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
 	}
 
-	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
+	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
@@ -303,11 +304,9 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
-	logAddTracksCall(ctx, input, time.Since(started), statusCode, err)
-	if err != nil {
-		return response.toMediaPlane(), err
-	}
-	return response.toMediaPlane(), nil
+	result := response.toMediaPlane()
+	logAddTracksCall(ctx, input, result.TrackErrors, time.Since(started), statusCode, err)
+	return result, err
 }
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
@@ -872,8 +871,10 @@ func normalizedProviderCode(code string) string {
 		return "rate_limited"
 	case "timeout", "request_timeout", "deadline_exceeded":
 		return "timeout"
-	case "transport_error", "client_canceled":
-		return code
+	case "transport_error":
+		return "transport_error"
+	case "client_canceled":
+		return "client_canceled"
 	case "plane_unavailable":
 		return "plane_unavailable"
 	case "invalid_json":
@@ -1050,7 +1051,7 @@ func (a Adapter) providerMetadata() map[string]string {
 	}
 }
 
-func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string) mediaplane.Join {
+func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderCloudflareSFU,
 		ParticipantRef: participantRef,
@@ -1059,6 +1060,7 @@ func (a Adapter) joinForConnection(episodeRef string, participantRef string, con
 			"provider":     string(mediaplane.ProviderCloudflareSFU),
 			"episodeRef":   episodeRef,
 			"stunServer":   stunServer,
+			"iceServers":   iceServers,
 			"syncOwner":    syncOwner,
 		},
 		Metadata: a.providerMetadata(),
