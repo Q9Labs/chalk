@@ -1,13 +1,6 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
-Running breadth-first search Model-Checking with fp 24 and seed -1225292957430109035 with 10 workers on 10 cores with 5461MB heap and 64MB offheap memory [pid: 21274] (Mac OS X 26.6.2 aarch64, Homebrew 17.0.20.1 64bit, MSBDiskFPSet, DiskStateQueue).
-Starting... (2026-10-31 14:23:55)
 Computing initial states...
 Finished computing initial states: 1 distinct state generated at 2026-10-31 14:23:55.
-Progress(11) at 2026-10-31 14:23:58: 87,415 states generated (87,415 s/min), 15,066 distinct states found (15,066 ds/min), 6,599 states left on queue.
-Progress(26) at 2026-10-31 14:24:58: 8,219,420 states generated (8,132,005 s/min), 1,007,602 distinct states found (992,536 ds/min), 164,461 states left on queue.
-Progress(30) at 2026-10-31 14:25:58: 16,889,803 states generated (8,670,383 s/min), 1,925,475 distinct states found (917,873 ds/min), 228,971 states left on queue.
-Progress(34) at 2026-10-31 14:26:58: 25,556,523 states generated (8,666,720 s/min), 2,770,580 distinct states found (845,105 ds/min), 255,506 states left on queue.
-Progress(37) at 2026-10-31 14:27:58: 34,518,118 states generated (8,961,595 s/min), 3,565,732 distinct states found (795,152 ds/min), 217,566 states left on queue.
 Model checking completed. No error has been found.
   Estimates of the probability that TLC did not check all reachable states
   because two distinct states had the same fingerprint:

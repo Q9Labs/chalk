@@ -1,13 +1,9 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
-Running breadth-first search Model-Checking with fp 118 and seed 7831364753129153068 with 10 workers on 10 cores with 5461MB heap and 64MB offheap memory [pid: 96586] (Mac OS X 26.6.2 aarch64, Homebrew 17.0.20.1 64bit, MSBDiskFPSet, DiskStateQueue).
-Starting... (2026-10-31 14:16:17)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
 Finished computing initial states: 1 distinct state generated at 2026-10-31 14:16:17.
 Checking temporal properties for the current state space with 10594 total distinct states at (2026-10-31 14:16:20)
 Finished checking temporal properties in 00s at 2026-10-31 14:16:20
-Progress(13) at 2026-10-31 14:16:20: 61,187 states generated (61,187 s/min), 14,593 distinct states found (14,593 ds/min), 3,998 states left on queue.
-Progress(31) at 2026-10-31 14:16:41: 1,328,652 states generated, 224,087 distinct states found, 0 states left on queue.
 Checking temporal properties for the complete state space with 224087 total distinct states at (2026-10-31 14:16:41)
 Finished checking temporal properties in 03s at 2026-10-31 14:16:44
 Model checking completed. No error has been found.

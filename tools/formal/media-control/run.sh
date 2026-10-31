@@ -85,7 +85,7 @@ CFG
       -noTE -metadir "$work/states" -config "$cfg" "$here/MediaControl.tla" > "$work/$name.log" 2>&1) || true
   seconds=$(( $(date +%s) - start ))
 
-  grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path)" "$work/$name.log" > "$here/results/$name.txt"
+  grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path|Running breadth-first|Starting\.\.\.|Progress\()" "$work/$name.log" > "$here/results/$name.txt"
   if grep -q "Model checking completed. No error has been found" "$work/$name.log"; then outcome=pass
   elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated" "$work/$name.log"; then outcome=violated
   else outcome=error; fi
@@ -96,11 +96,12 @@ CFG
   [ -z "$depth" ] && depth=$(grep -E "^The depth of the complete state graph search is|Depth" "$work/$name.log" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
 
   want_outcome=$([ "$expect" = pass ] && echo pass || echo violated)
-  verdict=$([ "$outcome" = "$want_outcome" ] && echo ok || { status=1; echo MISMATCH; })
+  verdict=ok
+  if [ "$outcome" != "$want_outcome" ]; then verdict=MISMATCH; status=1; fi
   echo "$name: expected $expect, got $outcome ($verdict)  states $gen, distinct $dist, ${seconds}s"
   echo "| $name | $check | $sources | $seq | $drops | $loss | $mutes | $cfails | $rule | $ui | $sfu | $expect | $outcome | $gen | $dist | ${depth:-} | $seconds |" >> "$work/summary.md"
 done < "${RUNS_FILE:-$here/runs.txt}"
 
-# A partial run (rows named on the command line) must not overwrite the full summary.
-if [ "$#" -eq 0 ]; then cp "$work/summary.md" "$summary"; fi
+# A partial run (rows named on the command line, or a RUNS_FILE) must not overwrite the full summary.
+if [ "$#" -eq 0 ] && [ -z "${RUNS_FILE:-}" ]; then cp "$work/summary.md" "$summary"; fi
 exit $status

@@ -1,11 +1,8 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
-Running breadth-first search Model-Checking with fp 27 and seed 784660108590010719 with 10 workers on 10 cores with 5461MB heap and 64MB offheap memory [pid: 1350] (Mac OS X 26.6.2 aarch64, Homebrew 17.0.20.1 64bit, MSBDiskFPSet, DiskStateQueue).
-Starting... (2026-10-31 14:17:20)
 Warning: The set Sources has been defined to be a symmetry set but contains less than two elements.
 (Use the -nowarning option to disable this warning.)
 Computing initial states...
 Finished computing initial states: 1 distinct state generated at 2026-10-31 14:17:20.
-Progress(15) at 2026-10-31 14:17:23: 355,116 states generated (355,116 s/min), 80,410 distinct states found (80,410 ds/min), 22,444 states left on queue.
 Model checking completed. No error has been found.
   Estimates of the probability that TLC did not check all reachable states
   because two distinct states had the same fingerprint:

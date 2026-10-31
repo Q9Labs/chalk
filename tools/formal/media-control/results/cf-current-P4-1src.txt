@@ -1,10 +1,7 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
-Running breadth-first search Model-Checking with fp 130 and seed 438493440999988137 with 10 workers on 10 cores with 5461MB heap and 64MB offheap memory [pid: 99946] (Mac OS X 26.6.2 aarch64, Homebrew 17.0.20.1 64bit, MSBDiskFPSet, DiskStateQueue).
-Starting... (2026-10-31 14:17:15)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
 Finished computing initial states: 1 distinct state generated at 2026-10-31 14:17:15.
-Progress(15) at 2026-10-31 14:17:15: 1,128 states generated, 362 distinct states found, 0 states left on queue.
 Checking temporal properties for the complete state space with 362 total distinct states at (2026-10-31 14:17:15)
 Error: Temporal property P4_Converges was violated.
 
