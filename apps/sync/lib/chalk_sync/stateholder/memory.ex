@@ -269,11 +269,7 @@ defmodule ChalkSync.Stateholder.Memory do
 
               pauses = update_media_pauses(state.media_pauses, pause_key, publication_id)
 
-              # A newly accepted on answers the host stop.
-              stops =
-                if publication_id,
-                  do: state.media_stops,
-                  else: Map.delete(state.media_stops, pause_key)
+              stops = answer_media_stop(state.media_stops, pause_key, publication_id)
 
               :ets.insert(@episodes, {key, %{state | media_pauses: pauses, media_stops: stops}})
               :ok
@@ -544,6 +540,12 @@ defmodule ChalkSync.Stateholder.Memory do
 
     {:reply, reply, server_state}
   end
+
+  # A newly accepted on answers the host stop.
+  defp answer_media_stop(stops, _pause_key, publication_id) when not is_nil(publication_id),
+    do: stops
+
+  defp answer_media_stop(stops, pause_key, nil), do: Map.delete(stops, pause_key)
 
   defp update_media_pauses(pauses, key, publication_id) when is_binary(publication_id),
     do: Map.put(pauses, key, publication_id)
