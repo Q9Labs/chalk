@@ -6,6 +6,7 @@ import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
+import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
@@ -97,6 +98,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const pendingRef = useRef<PendingArrival | null>(null);
   const cancelRequested = useRef(false);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
+  const retryAfterRelease = useRef(false);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
     active.current = true;
@@ -294,13 +296,30 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       (cause: unknown) => {
         if (cancelled || !active.current) return;
         setError(neutralMessage(cause));
-        void finish().catch(() => undefined);
+        void finish().then(
+          () => reloadAfterChunkLoadFailure(cause),
+          () => undefined,
+        );
       },
     );
     return () => {
       cancelled = true;
     };
   }, [callSurface, finish, spaceAccess]);
+  useEffect(() => {
+    if (!retryAfterRelease.current || spaceAccess) return;
+    retryAfterRelease.current = false;
+    start();
+  }, [spaceAccess, start]);
+  const askAgain = () => {
+    if (!spaceAccess) return start();
+    // An arrival whose call could not load must be released before a new one is requested.
+    retryAfterRelease.current = true;
+    void finish().catch((cause: unknown) => {
+      retryAfterRelease.current = false;
+      setError(neutralMessage(cause));
+    });
+  };
   const renderSurface = () => {
     if (terminal && callSurface) {
       const { StatusSurface } = callSurface;
@@ -389,7 +408,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           ) : preparing || (spaceAccess && !error) || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
             <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable && !spaceAccess ? { label: "Ask again", onClick: () => start() } : undefined} />
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: askAgain } : undefined} />
           ) : (
             <NameNeeded
               spaceName={callName}

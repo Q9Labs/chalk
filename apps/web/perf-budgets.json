@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage now loads the admitted call (LocalSpace, the Chalk call UI, the SDK client and media stack, problem reporting and the status and report surfaces) from SpaceCall after the participant presses Join, so the route measures 216.451 KiB, down from 469.914 KiB on master; 217 is the smallest whole-KiB limit above it. The call-scenario JS limit still measures the full call, which this change does not shrink, so it and all other limits stay unchanged.",
+  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage now loads the admitted call (LocalSpace, the Chalk call UI, the SDK client and media stack, problem reporting and the status and report surfaces) from SpaceCall after the participant presses Join, so the route measures 216.503 KiB, down from 469.914 KiB on master; 217 is the smallest whole-KiB limit above it. The call-scenario JS limit still measures the full call, which this change does not shrink, so it and all other limits stay unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
