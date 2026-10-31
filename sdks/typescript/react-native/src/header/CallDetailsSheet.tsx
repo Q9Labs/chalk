@@ -1,3 +1,4 @@
+import { currentSessionId } from "@q9labsai/chalk-client";
 import { setStringAsync } from "expo-clipboard";
 import type { RefObject } from "react";
 import { Platform, Pressable, Share, StyleSheet, View } from "react-native";
@@ -39,6 +40,7 @@ const SCHEMES = [
  */
 export function CallDetailsSheet({ open, onClose, callName, inviteLink, returnFocusRef }: CallDetailsSheetProps): React.JSX.Element {
   const preferences = usePreferences();
+  const sessionId = currentSessionId();
   const layout = useDeviceLayout();
   // `.dev .infop` keeps its top 58 pt under the safe area on a phone too, so the sheet runs from there to the bottom edge.
   const heightRatio = (layout.height - layout.insets.top - DETAILS_TOP) / layout.height;
@@ -55,7 +57,23 @@ export function CallDetailsSheet({ open, onClose, callName, inviteLink, returnFo
         <MenuRow end={<SegmentedControl<ColorScheme> accessibilityLabel="Appearance" onChange={preferences.setColorScheme} options={SCHEMES} size="compact" testID="details.appearance" value={preferences.colorScheme} />} label="Appearance" />
         <MenuRow end={<Switch accessibilityLabel="Sounds" onValueChange={preferences.setSoundsEnabled} testID="details.sounds" value={preferences.soundsEnabled} />} label="Sounds" />
       </Section>
+      {sessionId ? <SessionSection sessionId={sessionId} /> : null}
     </BottomSheet>
+  );
+}
+
+function SessionSection({ sessionId }: { readonly sessionId: string }): React.JSX.Element {
+  const { colors } = useTheme();
+  return (
+    <Section>
+      <MenuSection label="Session ID" />
+      <View style={[styles.link, { backgroundColor: colors.hover }]} testID="details.session">
+        <ChalkText numberOfLines={1} selectable style={styles.linkText} variant="bodyMedium">
+          {sessionId}
+        </ChalkText>
+        <CopyButton accessibilityLabel="Copy session ID" announcement="Session ID copied" onCopy={() => setStringAsync(sessionId).then(() => undefined)} testID="details.session.copy" />
+      </View>
+    </Section>
   );
 }
 

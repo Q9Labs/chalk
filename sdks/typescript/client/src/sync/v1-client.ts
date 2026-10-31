@@ -4,6 +4,7 @@ import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
+import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
@@ -472,10 +473,12 @@ export class V1SyncClient implements V1CollaborationClient {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
+      const baggage = sessionBaggage();
       const hello = {
         type: "hello",
         protocol: 1,
         ...(this.#options.traceparent ? { traceparent: this.#options.traceparent } : {}),
+        ...(baggage ? { baggage } : {}),
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },
