@@ -54,7 +54,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     poll_interval_ms = Keyword.fetch!(options, :poll_interval_ms)
 
     state = %{
-      page_size: min(Keyword.get(options, :page_size, @max_concurrency), @max_concurrency),
+      page_size: min(Keyword.get(options, :page_size, 32), 32),
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
@@ -210,32 +210,35 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp execute_page(operations, state) do
-    # Claim only a runnable wave: waiting behind another adapter must not consume
-    # a claim's 60-second lease. PostgreSQL excludes conflicting operations.
     operations
+    |> Enum.group_by(fn {episode, _operation} -> episode end)
+    |> Map.values()
     |> Task.async_stream(
-      fn {episode, operation} ->
-        started_at = System.monotonic_time()
+      fn episode_operations ->
+        Enum.map(episode_operations, fn {episode, operation} ->
+          started_at = System.monotonic_time()
 
-        result =
-          execute_operation(
-            episode,
-            operation,
-            state.media_plane,
-            state.recording_plane,
-            &Stateholder.finalize_operation/3,
-            state.adapter_timeout_ms
-          )
+          result =
+            execute_operation(
+              episode,
+              operation,
+              state.media_plane,
+              state.recording_plane,
+              &Stateholder.finalize_operation/3,
+              state.adapter_timeout_ms
+            )
 
-        report_result(operation.name, result, started_at)
-        result
+          report_result(operation.name, result, started_at)
+          result
+        end)
       end,
-      max_concurrency: state.page_size,
+      max_concurrency: @max_concurrency,
       ordered: false,
       timeout: :infinity
     )
+    |> Enum.flat_map(fn {:ok, results} -> results end)
     |> Enum.reduce({%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
-      {:ok, result}, {counts, failures} ->
+      result, {counts, failures} ->
         case result do
           :confirmed ->
             {%{counts | confirmed: counts.confirmed + 1}, failures}

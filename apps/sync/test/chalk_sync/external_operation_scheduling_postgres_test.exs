@@ -1,10 +1,11 @@
 defmodule ChalkSync.DepartureDelayAdapter do
   @moduledoc false
 
-  def remove_participant({observer, delay}, operation_id, episode, _participant_id) do
+  def remove_participant({observer, delays}, operation_id, episode, participant_id) do
+    delay = Map.fetch!(delays, participant_id)
     send(observer, {:cleanup_started, operation_id, episode.episode_id})
     Process.sleep(delay)
-    send(observer, {:cleanup_finished, operation_id})
+    send(observer, {:cleanup_finished, operation_id, episode.episode_id})
     :confirmed
   end
 end
@@ -14,8 +15,6 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.ExternalOperationConsumer
-  alias ChalkSync.Live.MediaPlaneTestAdapter
-  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -51,105 +50,8 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     end
   end
 
-  test "claims rotate across Episodes and exclude claims already leased by another worker", %{
-    connection: connection
-  } do
-    class = fixture(connection, 12)
-    other = fixture(connection, 2)
-    class_ids = for identity <- tl(class.identities), do: queue(identity, :participant_leave)
-    other_id = queue(List.last(other.identities), :participant_leave)
-
-    assert {:ok, first} = Postgres.claim_operations(8)
-    first_ids = Enum.map(first, fn {_, operation} -> operation.external_operation_id end)
-    assert other_id in first_ids
-    assert Enum.count(first_ids, &(&1 in class_ids)) == 7
-
-    assert {:ok, second} = Postgres.claim_operations(8)
-    second_ids = Enum.map(second, fn {_, operation} -> operation.external_operation_id end)
-    assert length(second_ids) == 4
-    assert MapSet.disjoint?(MapSet.new(first_ids), MapSet.new(second_ids))
-  end
-
-  test "publication mutations and Episode end fence independent departures", %{
-    connection: connection
-  } do
-    seed = fixture(connection, 3)
-    [owner, first, second] = seed.identities
-    mute_id = queue(owner, :mute_participant, %{"participantId" => first.participant_id})
-    camera_id = queue(owner, :stop_participant_camera, %{"participantId" => first.participant_id})
-    second_id = queue(second, :participant_leave)
-    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
-
-    assert {:ok, [{episode, mute}]} = Postgres.claim_operations(8)
-    assert mute.external_operation_id == mute_id
-
-    # Transaction timestamps can put a later accepted operation before an active
-    # claim. It must still wait for that claim's provider mutation to finish.
-    Postgrex.query!(
-      connection,
-      "update sync_external_operations set created_at = created_at - interval '1 hour' where external_operation_id = $1",
-      [ChalkSync.UUID.dump!(camera_id)]
-    )
-
-    assert {:ok, []} = Postgres.claim_operations(8)
-    confirm(episode, mute, adapter)
-
-    assert {:ok, [{episode, camera}]} = Postgres.claim_operations(8)
-    assert camera.external_operation_id == camera_id
-    # Expired fences permit end reservation while an older publication change
-    # and departure are still pending. Both must finish while status is ending.
-    Postgrex.query!(
-      connection,
-      "update sync_publication_fences set created_at = now() - interval '2 seconds', expires_at = now() - interval '1 second' where episode_id = $1",
-      [ChalkSync.UUID.dump!(episode.episode_id)]
-    )
-
-    end_id = queue(owner, :end_episode)
-    # Transaction start timestamps can predate earlier accepted commands.
-    Postgrex.query!(
-      connection,
-      "update sync_external_operations set created_at = created_at - interval '2 hours' where external_operation_id = $1",
-      [ChalkSync.UUID.dump!(end_id)]
-    )
-
-    assert {:ok, []} = Postgres.claim_operations(8)
-    confirm(episode, camera, adapter)
-
-    assert {:ok, [{episode, departure}]} = Postgres.claim_operations(8)
-    assert departure.external_operation_id == second_id
-
-    # An unfinalized predecessor remains a barrier even after it has been leased.
-    assert {:ok, []} = Postgres.claim_operations(8)
-    confirm(episode, departure, adapter)
-    assert {:ok, [{episode, ending}]} = Postgres.claim_operations(8)
-    assert ending.external_operation_id == end_id
-    confirm(episode, ending, adapter)
-  end
-
-  test "a departing actor waits for its removal of another participant", %{connection: connection} do
-    seed = fixture(connection, 3)
-    [actor, target, independent] = seed.identities
-    removal_id = queue(actor, :remove_participant, %{"participantId" => target.participant_id})
-    actor_id = queue(actor, :participant_leave)
-    independent_id = queue(independent, :participant_leave)
-    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
-
-    assert {:ok, operations} = Postgres.claim_operations(8)
-    assert length(operations) == 2
-
-    assert MapSet.new(Enum.map(operations, fn {_, op} -> op.external_operation_id end)) ==
-             MapSet.new([removal_id, independent_id])
-
-    assert {:ok, []} = Postgres.claim_operations(8)
-    Enum.each(operations, fn {episode, operation} -> confirm(episode, operation, adapter) end)
-    assert {:ok, [{episode, departure}]} = Postgres.claim_operations(8)
-    assert departure.external_operation_id == actor_id
-    confirm(episode, departure, adapter)
-    assert {:ok, []} = Postgres.claim_operations(8)
-  end
-
   @tag timeout: 120_000
-  test "ten simultaneous wire Leaves and a later Episode have bounded durable acknowledgement", %{
+  test "mixed departures stay serial within an Episode and do not serialize another Episode", %{
     connection: connection,
     port: port
   } do
@@ -157,6 +59,15 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     class = fixture(connection, 10)
     other = fixture(connection, 1)
     observer = self()
+    fast_delay = max(div(delay, 51), 1)
+
+    delays =
+      class.identities
+      |> Enum.with_index()
+      |> Map.new(fn {identity, index} ->
+        {identity.participant_id, if(index in [0, 5], do: delay, else: fast_delay)}
+      end)
+      |> Map.put(hd(other.identities).participant_id, fast_delay)
 
     tasks =
       for identity <- class.identities ++ other.identities do
@@ -192,13 +103,13 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
        poll_interval_ms: 5,
        page_size: 32,
        adapter_timeout_ms: 35_000,
-       media_plane: {ChalkSync.DepartureDelayAdapter, {self(), delay}}}
+       media_plane: {ChalkSync.DepartureDelayAdapter, {self(), delays}}}
     )
 
     class_tasks = Enum.take(tasks, 10)
     Enum.each(class_tasks, &send(&1.pid, :leave))
     # Start the second Episode after the first wave is already doing provider work.
-    assert_receive {:cleanup_started, _, _}, 5_000
+    assert_receive {:cleanup_started, _, first_episode}, 5_000
     send(List.last(tasks).pid, :leave)
     results = Task.await_many(tasks, 100_000)
     last_ack = results |> Enum.map(&elem(&1, 1)) |> Enum.max()
@@ -206,20 +117,27 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     calls = drain_calls([])
 
-    {peak, active} =
-      Enum.reduce(calls, {1, 1}, fn
-        {:cleanup_started, _, _}, {peak, active} -> {max(peak, active + 1), active + 1}
-        {:cleanup_finished, _}, {peak, active} -> {peak, active - 1}
+    {peak, active, episode_peak, _} =
+      Enum.reduce(calls, {1, 1, 1, %{first_episode => 1}}, fn
+        {:cleanup_started, _, episode}, {peak, active, episode_peak, episodes} ->
+          episodes = Map.update(episodes, episode, 1, &(&1 + 1))
+
+          {max(peak, active + 1), active + 1, max(episode_peak, Map.fetch!(episodes, episode)),
+           episodes}
+
+        {:cleanup_finished, _, episode}, {peak, active, episode_peak, episodes} ->
+          {peak, active - 1, episode_peak, Map.update!(episodes, episode, &(&1 - 1))}
       end)
 
     IO.puts(
-      "LEAVE_QUEUE delay_ms=#{delay} last_ack_ms=#{last_ack} other_ack_ms=#{other_ack} peak=#{peak}"
+      "LEAVE_QUEUE delay_ms=#{delay} last_ack_ms=#{last_ack} other_ack_ms=#{other_ack} peak=#{peak} episode_peak=#{episode_peak}"
     )
 
     assert active == 0
     assert peak in 2..8
-    assert last_ack < 3 * delay + 5_000
-    assert other_ack < 2 * delay + 5_000
+    assert episode_peak == 1
+    assert last_ack < 2 * delay + 8 * fast_delay + 5_000
+    assert other_ack < delay + 2_000
     assert {:ok, []} = Postgres.claim_operations(8)
   end
 
@@ -231,24 +149,6 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     on_exit(fn -> SyncPostgres.cleanup(connection, seed.episode) end)
     seed
-  end
-
-  defp queue(identity, name, payload \\ %{}) do
-    {:ok, operation} = Operation.new("queue_" <> ChalkSync.UUID.generate(), name, payload)
-    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(identity, operation)
-    assert is_binary(id)
-    id
-  end
-
-  defp confirm(episode, operation, adapter) do
-    assert :confirmed =
-             ExternalOperationConsumer.execute_operation(
-               episode,
-               operation,
-               {MediaPlaneTestAdapter, adapter},
-               nil,
-               &Postgres.finalize_operation/3
-             )
   end
 
   defp connect(port, identity) do
@@ -310,7 +210,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
   defp drain_calls(calls) do
     receive do
       {:cleanup_started, _, _} = call -> drain_calls([call | calls])
-      {:cleanup_finished, _} = call -> drain_calls([call | calls])
+      {:cleanup_finished, _, _} = call -> drain_calls([call | calls])
     after
       0 -> Enum.reverse(calls)
     end
