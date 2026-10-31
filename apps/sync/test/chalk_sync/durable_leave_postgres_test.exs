@@ -165,6 +165,79 @@ defmodule ChalkSync.DurableLeavePostgresTest do
            end)
   end
 
+  test "a rejoin is admitted while old cleanup is pending and survives its completion", %{
+    connection: connection,
+    fixture: fixture
+  } do
+    fixture = SyncPostgres.seed_admission_request(connection, fixture)
+    identity = List.last(fixture.identities)
+    {:ok, leave} = Operation.new("durable_rejoin_leave_001", :participant_leave, %{})
+
+    assert {:ok, %{result: :applied, external_operation_id: id}} =
+             Postgres.begin_operation(identity, leave)
+
+    cleanup = claim_cleanup(id)
+
+    {:ok, admission} =
+      Operation.new("durable_rejoin_admit_001", :admit_participant, %{
+        "admissionRequestId" => fixture.admission_request_id
+      })
+
+    assert {:ok, %{external_operation_id: admission_id}} =
+             Postgres.begin_operation(hd(fixture.identities), admission)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, admission_id, {:confirmed, :local})
+
+    assert :confirmed = execute(fixture.episode, cleanup, nil)
+
+    assert [["active"]] =
+             Postgrex.query!(connection, "select status from participants where id=$1", [
+               UUID.dump!(fixture.admission_participant_id)
+             ]).rows
+
+    assert [["left", true]] = departure_rows(connection, identity.participant_id, id)
+  end
+
+  test "a crash on the last cleanup claim can still settle exhaustion", %{
+    connection: connection,
+    fixture: fixture
+  } do
+    identity = List.last(fixture.identities)
+    {:ok, leave} = Operation.new("durable_last_claim_0001", :participant_leave, %{})
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(identity, leave)
+    cleanup = claim_cleanup(id)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99,next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(cleanup.external_operation_id)]
+    )
+
+    assert %{attempt_count: 100} = claim_cleanup(id)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(cleanup.external_operation_id)]
+    )
+
+    reclaimed = claim_cleanup(id)
+    assert reclaimed.attempt_count == 100
+
+    assert :terminal_failure =
+             ExternalOperationConsumer.execute_operation(
+               fixture.episode,
+               reclaimed,
+               nil,
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :failed}} =
+             Postgres.read_operation(fixture.episode, cleanup.external_operation_id)
+  end
+
   test "departure and cleanup roll back together before commit", %{
     connection: connection,
     fixture: fixture
@@ -178,9 +251,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
     on_exit(fn -> Application.delete_env(:chalk_sync, :external_operation_fault_hook) end)
 
-    assert_raise RuntimeError, "transaction interrupted", fn ->
-      Postgres.begin_operation(identity, leave)
-    end
+    assert {:retryable, :decision_unavailable} = Postgres.begin_operation(identity, leave)
 
     assert [["active"]] =
              Postgrex.query!(connection, "select status from participants where id=$1", [

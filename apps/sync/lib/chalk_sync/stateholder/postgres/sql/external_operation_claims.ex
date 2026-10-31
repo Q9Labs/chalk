@@ -37,7 +37,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
-        and attempt_count < 100
+        and (attempt_count < 100 or operation_name = 'participant_leave_cleanup')
         and #{operation_filter}
         and (
           (
@@ -92,7 +92,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     ), claimed as (
       update sync_external_operations operation
       set
-        attempt_count = operation.attempt_count + 1,
+        attempt_count = least(operation.attempt_count + 1, 100),
         next_attempt_at = now() + interval '60 seconds'
       from candidates
       where operation.external_operation_id = candidates.external_operation_id

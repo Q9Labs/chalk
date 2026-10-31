@@ -153,7 +153,16 @@ defmodule ChalkSync.ExternalOperationConsumer do
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
     result =
-      dispatch_with_context(episode, operation, media_plane, recording_plane, adapter_timeout_ms)
+      if operation.name == :participant_leave_cleanup and operation.attempt_count >= @max_attempts,
+        do: {:terminal_failure, :retry_exhausted},
+        else:
+          dispatch_with_context(
+            episode,
+            operation,
+            media_plane,
+            recording_plane,
+            adapter_timeout_ms
+          )
 
     case result do
       {:confirmed, authority} ->
