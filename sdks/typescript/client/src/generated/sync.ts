@@ -109,11 +109,20 @@ export const SyncProtocolMetadata = {
         pattern: "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$",
       },
     },
+    helloOnlyFields: {
+      baggage: {
+        kind: "string",
+        minBytes: 47,
+        maxBytes: 47,
+        format: "w3c-baggage-session-id",
+        pattern: "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      },
+    },
     acceptedOn: {
       hello: "client-to-server",
       serverFrames: "server-to-client",
     },
-    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
+    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate", "baggage"],
     rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
   },
   externalIntents: [
@@ -428,7 +437,9 @@ function strictCommand(value: Record<string, unknown>): boolean {
 function strictCollaborationsHelloExtension(value: unknown): boolean {
   return exactObject(value, ["name", "chat_cursor"]) && ["collaboration_v1", "collaboration_v2"].includes(String(value.name)) && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
-function strictHello(value: Record<string, unknown>): boolean {
+function strictHello(hello: Record<string, unknown>): boolean {
+  const { baggage, ...value } = hello;
+  if (baggage !== undefined && !(typeof baggage === "string" && boundedCorrelationString(baggage, 47, 47) && /^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(baggage))) return false;
   const base = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams"]);
   const extended = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);
   if ((!base && !extended) || !exactObject(value.streams, ["control", "media", "presence", "requests"])) return false;
@@ -725,10 +736,11 @@ export const TraceparentSchema = boundedUtf8String(55, 55).check(
 export const TracestateSchema = boundedUtf8String(512, 1).check(
   Schema.makeFilter((value) => (new RegExp("^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$", "u").test(value) ? undefined : { path: [], issue: "must be a valid bounded W3C tracestate" })),
 );
+export const BaggageSchema = boundedUtf8String(47, 47).check(Schema.makeFilter((value) => (/^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value) ? undefined : { path: [], issue: "must be the single W3C baggage member session.id=<lowercase UUID>" })));
 export const SyncCorrelationFieldsSchema = Schema.Struct({ journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) });
 export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
-const HelloCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };
-const ServerCorrelationFields = { ...HelloCorrelationFields };
+const ServerCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };
+const HelloCorrelationFields = { ...ServerCorrelationFields, baggage: Schema.optional(BaggageSchema) };
 export const StateDigestSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{64}$/u.test(value) ? undefined : { path: [], issue: "must be a lowercase hexadecimal SHA-256 digest" })));
 export const UnsignedDecimalSchema = Schema.String.check(Schema.makeFilter((value) => (/^(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : { path: [], issue: "must be an unsigned decimal integer" })));
 export const CommandIdSchema = boundedUtf8String(64).check(Schema.makeFilter((value) => (textEncoder.encode(value).byteLength >= 16 ? undefined : { path: [], issue: "must meet the command ID minimum byte length" })));

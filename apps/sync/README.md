@@ -104,8 +104,14 @@ Episode creation writes the product Episode and revision-zero control row in
 one synchronous Postgres transaction. Admission produces bounded lifecycle
 intents. Removal, explicit Leave, capability recovery, deadline expiry, Recording,
 and Episode end reserve idempotent external operations under the same Episode
-control lock, execute provider effects outside the transaction, and finalize
-durable facts only after confirmation. Opening or losing a socket never directly
+control lock. Explicit Leave commits its departure, authority revocation, event,
+receipt, webhook outbox record, and a generation-scoped cleanup operation in one
+transaction. The departure timestamp is Leave acceptance time. Cleanup uses the
+existing external-operation leases and bounded retries; exhaustion is retained as
+a failed cleanup without changing attendance or the committed receipt. A newer
+entry already awaiting confirmation can defer or supersede an older Leave.
+Other provider operations execute effects outside the transaction and finalize
+durable facts after confirmation. Opening or losing a socket never directly
 creates a durable join or leave.
 
 A v1 socket renews one shared Postgres **Episode** lease at entry and on each
@@ -131,8 +137,7 @@ without renewal, the API scheduler reserves an ordinary participant leave under
 the same Episode authority lock as renewal. A legacy joined participant that never
 opens its first Sync socket has no lease; its join timestamp starts a separate
 600-second grace. The runtime recovery floor still applies in both cases.
-Sync performs media cleanup, records
-`left_at`, and emits `participant.left`; the existing attendance endpoint reports
+Sync records `left_at` and emits `participant.left` before asynchronous media cleanup; the existing attendance endpoint reports
 the departure. Reconnect before reservation renews the lease and cancels expiry.
 A lease-aware Sync session witness and startup recovery floor prevent inference
 during Sync/database outages. This does not require a new client heartbeat.
@@ -252,7 +257,10 @@ Its measurements are `%{count: 1}` and its metadata contains `event`, `stage`
 (`root`, `phase`, or `terminal`), `journey_id`, and bounded `attributes`.
 BEAM health uses `[:chalk_sync, :runtime, :health]` with memory, process, and
 run-queue measurements. Logger events include the journey and, when tracing is
-enabled, the trace and span identifiers. Tokens, space ids, participant ids,
+enabled, the trace and span identifiers. When the connection supplied a session
+(below), telemetry metadata has `session_id`, spans have the `session.id`
+attribute, stdout lifecycle lines have a `"session.id"` field, and Logger
+metadata has `session_id`. Tokens, space ids, participant ids,
 command ids, and raw revisions are never observability dimensions.
 
 Client and server protocol frames may carry these optional top-level fields
@@ -270,6 +278,22 @@ without changing frame semantics:
 same headers plus `x-chalk-journey-id`; browser clients that cannot set upgrade
 headers send the three fields on `hello`. The server forwards valid context on
 its response frames and creates a journey at v1 sync ingress when one is absent.
+
+A session is one run of a Chalk app on one device. It is not an Episode. Its ID
+travels as W3C baggage with the OpenTelemetry attribute name `session.id`:
+
+```json
+{ "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c" }
+```
+
+`baggage` is accepted on `hello` only, and the upgrade request may carry the same
+text in a `baggage` header. The contract allows exactly one 47-byte member,
+`session.id=<lowercase UUID>`. The server reads the header first and the `hello`
+field when the header has no valid session. For the header it finds the
+`session.id` member among other W3C baggage members and ignores the rest. A
+missing or malformed value is ignored, so it never rejects a connection. The
+session is connection-scoped: it is never emitted on server frames or written to
+journey, lifecycle, or external-operation records.
 
 ## Verification
 

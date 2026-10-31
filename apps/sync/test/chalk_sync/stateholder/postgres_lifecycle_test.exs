@@ -555,7 +555,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              Postgrex.query!(
                connection,
                FinalizerSQL.complete_external_participant(),
-               params ++ [false, nil]
+               params ++ [false, nil, nil]
              )
 
     assert [[^first, last_leave, "left"]] =
@@ -1440,34 +1440,25 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     {:ok, operation} = Operation.new("webhook_rollback_01", :participant_leave, %{})
 
-    assert {:ok, %{result: :pending} = pending} =
-             Postgres.begin_operation(fixture.identity, operation)
-
     Application.put_env(:chalk_sync, :external_operation_fault_hook, fn point, _context ->
       if point == :after_webhook_production, do: raise("injected webhook rollback")
     end)
 
     try do
       assert {:retryable, :decision_unavailable} =
-               Postgres.finalize_operation(
-                 fixture.episode,
-                 pending.external_operation_id,
-                 leave_outcome(fixture.identity)
-               )
+               Postgres.begin_operation(fixture.identity, operation)
     after
       Application.delete_env(:chalk_sync, :external_operation_fault_hook)
     end
 
-    assert [["leaving", "pending", 2, 0, 0]] =
+    assert [["active", 0, 2, 0, 0]] =
              query_rows(
                fixture,
                """
-               select p.status, o.status, c.control_revision,
+               select p.status, (select count(*) from sync_external_operations o where o.tenant_id=$1), c.control_revision,
                  (select count(*) from webhook_events e where e.tenant_id = $1),
                  (select count(*) from webhook_deliveries d where d.tenant_id = $1)
                from participants p
-               join sync_external_operations o
-                 on o.tenant_id = p.tenant_id and o.target_participant_id = p.id
                join sync_episode_control c
                  on c.tenant_id = p.tenant_id and c.episode_id = p.episode_id
                where p.tenant_id = $1 and p.episode_id = $2 and p.id = $3
@@ -1477,12 +1468,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
 
     refute_receive {:webhook_metric, _event, _measurements, _metadata}, 50
 
-    assert {:ok, %{result: :applied}} =
-             Postgres.finalize_operation(
-               fixture.episode,
-               pending.external_operation_id,
-               leave_outcome(fixture.identity)
-             )
+    assert {:ok, %{result: :applied}} = Postgres.begin_operation(fixture.identity, operation)
 
     assert_receive {:webhook_metric, [:chalk, :sync, :webhook, :production], %{count: 1},
                     %{
@@ -1495,11 +1481,7 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
                     %{api_version: 1, event_name: "participant.left", outcome: :queued}}
 
     assert {:ok, %{result: :applied, delivery: :duplicate}} =
-             Postgres.finalize_operation(
-               fixture.episode,
-               pending.external_operation_id,
-               leave_outcome(fixture.identity)
-             )
+             Postgres.begin_operation(fixture.identity, operation)
 
     refute_receive {:webhook_metric, _event, _measurements, _metadata}, 50
   end

@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   @moduledoc false
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
@@ -32,19 +33,71 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
       external.status != :pending ->
         ExternalOperationDecision.build(external, :duplicate)
 
+      ExternalOperation.leave_cleanup?(external) ->
+        settle_leave_cleanup(connection, episode, external, outcome)
+
       stale_maximum_duration?(external, policy) ->
         settle_stale_maximum_duration(connection, episode, external)
 
       true ->
-        with {:ok, state} <- Control.validate_fold(episode, control, policy),
-             :ok <- validate_finalization_authority(connection, episode, external, policy),
-             :ok <- Recording.validate_capture_epoch(connection, episode, external) do
-          finalize_pending_operation(connection, episode, external, state, outcome)
-        else
-          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+        case Control.validate_fold(episode, control, policy) do
+          {:ok, state} ->
+            finalize_with_authority(connection, episode, external, state, policy, outcome)
+
+          {:error, reason} ->
+            Postgrex.rollback(connection, {:error, reason})
         end
     end
   end
+
+  defp finalize_with_authority(connection, episode, external, state, policy, outcome) do
+    case validate_finalization_authority(connection, episode, external, policy) do
+      :ok ->
+        case Recording.validate_capture_epoch(connection, episode, external) do
+          :ok -> finalize_pending_operation(connection, episode, external, state, outcome)
+          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+        end
+
+      {:error, reason} ->
+        settle_stale_media(connection, episode, external, state, outcome, reason)
+    end
+  end
+
+  defp settle_stale_media(connection, episode, %{name: name} = external, state, outcome, reason)
+       when name in [:mute_participant, :stop_participant_camera, :stop_participant_screen_share] and
+              reason in [:participant_inactive, :stale_participant_generation] do
+    case outcome do
+      {:confirmed, :provider} ->
+        finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+
+      {:failed, failure} when is_atom(failure) ->
+        finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+
+      _ ->
+        Postgrex.rollback(connection, {:error, reason})
+    end
+  end
+
+  defp settle_stale_media(connection, _episode, _external, _state, _outcome, reason),
+    do: Postgrex.rollback(connection, {:error, reason})
+
+  defp settle_leave_cleanup(connection, episode, external, {:confirmed, :provider}) do
+    mark_external_applied(connection, episode, external, nil, nil)
+    ExternalOperationDecision.build(%{external | status: :applied}, :original)
+  end
+
+  defp settle_leave_cleanup(connection, episode, external, {:failed, reason})
+       when is_atom(reason) do
+    mark_external_failed(connection, episode, external, Atom.to_string(reason))
+
+    ExternalOperationDecision.build(
+      %{external | status: :failed, last_error_code: reason},
+      :original
+    )
+  end
+
+  defp settle_leave_cleanup(connection, _episode, _external, _outcome),
+    do: Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
 
   defp stale_maximum_duration?(%{name: :maximum_duration_expired} = external, policy) do
     external.deadline_generation != policy.deadline_generation ||
@@ -78,8 +131,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp validate_finalization_authority(connection, episode, external, policy) do
     with :ok <- validate_finalization_episode(external, policy),
-         :ok <- validate_finalization_participant(connection, episode, external, :actor),
-         :ok <- validate_finalization_participant(connection, episode, external, :target) do
+         :ok <- validate_finalization_target(connection, episode, external) do
       validate_finalization_deadline(external, policy)
     end
   end
@@ -98,25 +150,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
 
-  defp validate_finalization_participant(_connection, _episode, external, field)
-       when field == :actor and is_nil(external.actor_participant_id),
-       do: :ok
+  defp validate_finalization_target(_connection, _episode, %{target_participant_id: nil}),
+    do: :ok
 
-  defp validate_finalization_participant(_connection, _episode, external, field)
-       when field == :target and is_nil(external.target_participant_id),
-       do: :ok
+  defp validate_finalization_target(connection, episode, external) do
+    generation = external.target_participant_generation
 
-  defp validate_finalization_participant(connection, episode, external, field) do
-    {participant_id, generation} =
-      case field do
-        :actor ->
-          {external.actor_participant_id, external.actor_generation}
-
-        :target ->
-          {external.target_participant_id, external.target_participant_generation}
-      end
-
-    case Authority.lock_participant(connection, episode, participant_id) do
+    case Authority.lock_participant(connection, episode, external.target_participant_id) do
       %{generation: ^generation, status: status}
       when status in ["active", "leaving", "joining"] ->
         :ok
@@ -155,6 +195,15 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp validate_finalization_deadline(_external, _policy), do: :ok
+
+  defp finalize_pending_operation(
+         connection,
+         episode,
+         %{name: :participant_leave} = external,
+         state,
+         {:confirmed, :local}
+       ),
+       do: finalize_confirmed_operation(connection, episode, external, state)
 
   defp finalize_pending_operation(
          connection,
@@ -383,6 +432,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         webhook_object =
           update_external_products(connection, episode, external, event, next_state)
 
+        enqueue_leave_cleanup(connection, episode, external)
         PublicationFences.delete(connection, episode, external)
         mark_external_applied(connection, episode, external, event_id, event.revision)
 
@@ -412,6 +462,17 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
     end
   end
+
+  defp enqueue_leave_cleanup(connection, episode, %{name: :participant_leave} = external) do
+    Postgrex.query!(
+      connection,
+      SQL.insert_leave_cleanup(),
+      Scope.episode(episode) ++
+        [Scope.uuid(external.external_operation_id), Scope.uuid(UUID.generate())]
+    )
+  end
+
+  defp enqueue_leave_cleanup(_connection, _episode, _external), do: :ok
 
   defp finalize_admission_approval(
          connection,
@@ -781,7 +842,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
           Scope.uuid(external.target_participant_id),
           external.target_participant_generation,
           external.name == :participant_leave,
-          external.payload["entryGeneration"]
+          external.payload["entryGeneration"],
+          Scope.uuid(external.external_operation_id)
         ]
 
     case Postgrex.query!(connection, SQL.complete_external_participant(), params).rows do

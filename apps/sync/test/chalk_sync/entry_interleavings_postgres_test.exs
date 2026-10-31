@@ -87,14 +87,14 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
             {:retry, [:admit, :recover, :confirm], [:confirm_old, :accept_old, :finalize_old]}
           ],
           steps <- interleave(entry, old),
-          before?(steps, :admit, :finalize_old),
+          before?(steps, :admit, :accept_old),
           do: %{name: name, initial: initial, confirmation: confirmation, steps: steps}
 
     legacy_scenarios =
       for version <- ["5.0.0", "5.1.0"],
           frame <- ["reconnect_hello", "retry_hello"],
           steps <- interleave([:published_hello], [:accept_old, :finalize_old]),
-          before?(steps, :published_hello, :finalize_old),
+          before?(steps, :published_hello, :accept_old),
           do: %{
             name: :legacy_reentry,
             initial: version,
@@ -106,7 +106,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
     scenarios = scenarios ++ legacy_scenarios
     failures = scenarios |> Enum.shuffle() |> Enum.flat_map(&run_scenario(&1, context))
     sdk_steps = interleave([:upgrade, :reconnect], [:refresh, :accept_old, :finalize_old])
-    sdk_steps = Enum.filter(sdk_steps, &before?(&1, :reconnect, :finalize_old))
+    sdk_steps = Enum.filter(sdk_steps, &before?(&1, :reconnect, :accept_old))
     bridge = start_bridge()
 
     sdk_failures =
@@ -221,7 +221,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
 
   defp execute(:accept_old, state, _scenario, _context) do
     case Postgres.begin_operation(state.older, state.operation) do
-      {:ok, %{result: :pending, external_operation_id: id}} ->
+      {:ok, %{result: result, external_operation_id: id}} when result in [:pending, :applied] ->
         %{state | operation_id: id, step: :accept_old}
 
       {:ok, %{result: :rejected}} ->
@@ -321,8 +321,12 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
           operation = if actual.status == "leaving", do: state.operation, else: fresh
 
           case Postgres.begin_operation(current, operation) do
-            {:retryable, _reason} -> Postgrex.rollback(transaction, :probe_retry)
-            decision -> assert {:ok, %{result: :pending}} = decision
+            {:retryable, _reason} ->
+              Postgrex.rollback(transaction, :probe_retry)
+
+            decision ->
+              assert {:ok, %{result: result}} = decision
+              assert result in [:pending, :applied]
           end
 
           Postgrex.rollback(transaction, :probe_complete)
@@ -361,7 +365,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
 
   defp current_leave(current, %{bridge: bridge} = context) do
     result = rpc(bridge, %{step: :leave})
-    assert result["operationReply"] == "retryable_error"
+    assert result["operationReply"] == "ack"
 
     assert [[id, generation]] =
              Postgrex.query!(
@@ -381,7 +385,7 @@ defmodule ChalkSync.EntryInterleavingsPostgresTest do
   defp current_leave(current, _context) do
     {:ok, operation} = Operation.new("interleaving_current_leave_0001", :participant_leave, %{})
 
-    assert {:ok, %{result: :pending, external_operation_id: id}} =
+    assert {:ok, %{result: :applied, external_operation_id: id}} =
              Postgres.begin_operation(current, operation)
 
     id

@@ -8,6 +8,7 @@ Put shared behavior in packages first, then wire it into apps. Don't fix SDK beh
 
 ## Architecture
 
+- Chalk is moving to one folder per feature. Read [feature architecture](docs/architecture.md) before adding a feature, moving code into `features/`, or adding code to `foundation/`.
 - The Go API keeps domain logic and public `/v1` routes under `apps/api/internal`; operational routes such as `/healthz` stay unversioned. Keep media and sync providers behind their ports and adapters. For API changes, use the [Go conventions](apps/api/docs/code-standards.md), [route workflow](apps/api/docs/route-workflow.md), and [database workflow](apps/api/docs/database-workflow.md) as relevant. Database removals must keep the previous release runnable.
 - The Elixir Sync server uses Postgres as the durable authority; local coordinators, queues, presence, and SDK replicas are disposable. Preserve the tenant-and-Episode authority and transaction boundaries, bound retained work and data, and treat socket loss as presence rather than a durable lifecycle event. Protocol v1 is the production surface. Read the [Sync README](apps/sync/README.md) before changing its protocol, lifecycle, or deployment behavior.
 - After changing a contract, route, migration, or other generator input, run `pnpm run regen`. Use `pnpm run check:generated` to find stale output. See [contract codegen](docs/contract-codegen.md).

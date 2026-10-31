@@ -191,12 +191,12 @@ defmodule ChalkSync.LegacyEntryPostgresTest do
 
     client = Client.send_json(client, frame)
 
-    assert {%{"type" => "retryable_error", "code" => "external_operation_pending"}, client} =
+    assert {%{"type" => "ack", "outcome" => "committed"}, client} =
              receive_response(client, command_id)
 
     client = Client.send_json(client, frame)
 
-    assert {%{"type" => "retryable_error", "code" => "external_operation_pending"}, _client} =
+    assert {%{"type" => "ack", "outcome" => "committed"}, _client} =
              receive_response(client, command_id)
 
     assert [[operation_id, "3"]] =

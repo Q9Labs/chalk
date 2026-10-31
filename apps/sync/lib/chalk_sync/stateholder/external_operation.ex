@@ -40,4 +40,9 @@ defmodule ChalkSync.Stateholder.ExternalOperation do
   ]
 
   @type t :: %__MODULE__{}
+  @doc false
+  def leave_cleanup?(%__MODULE__{name: :remove_participant, payload: payload}),
+    do: is_binary(payload["departureOperationId"])
+
+  def leave_cleanup?(_operation), do: false
 end

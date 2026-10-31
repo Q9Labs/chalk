@@ -523,7 +523,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     insert_pending_operation_receipt(connection, identity, operation, external)
 
     increment_pending_receipt_capacity(connection, identity.episode, accepted_state.revision)
-    ExternalOperationDecision.build(external, :original)
+    finalize_local_leave(connection, identity.episode, external)
   end
 
   defp persist_internal_operation_acceptance(
@@ -537,8 +537,26 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     external = build_external_operation(nil, operation, context)
     insert_external_operation(connection, episode, external, context, operation.observed_context)
     _accepted_state = persist_pre_call_authority(connection, episode, external, state, context)
-    ExternalOperationDecision.build(external, :original)
+    finalize_local_leave(connection, episode, external)
   end
+
+  defp finalize_local_leave(connection, episode, %{name: :participant_leave} = external) do
+    case JoinSeats.prepare_leave(connection, episode, external.external_operation_id) do
+      :ready ->
+        ExternalOperationFinalizer.finalize_transaction(
+          connection,
+          episode,
+          external.external_operation_id,
+          {:confirmed, :local}
+        )
+
+      :pending ->
+        ExternalOperationDecision.build(external, :original)
+    end
+  end
+
+  defp finalize_local_leave(_connection, _episode, external),
+    do: ExternalOperationDecision.build(external, :original)
 
   def persist_new_internal_operation(connection, episode, operation, policy, state) do
     with :ok <- validate_internal_operation(operation),

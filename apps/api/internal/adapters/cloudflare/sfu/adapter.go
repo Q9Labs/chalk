@@ -175,6 +175,14 @@ type addTrackResult struct {
 	ErrorDescription string `json:"errorDescription"`
 }
 
+type updateTracksResponse struct {
+	ErrorCode                      string           `json:"errorCode"`
+	ErrorDescription               string           `json:"errorDescription"`
+	Tracks                         []addTrackResult `json:"tracks"`
+	RequiresImmediateRenegotiation bool             `json:"requiresImmediateRenegotiation"`
+	requestedTracks                []providerTrack
+}
+
 type renegotiateRequest struct {
 	SessionDescription mediaplane.SessionDescription `json:"sessionDescription"`
 }
@@ -303,9 +311,53 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	return response.toMediaPlane(), nil
 }
 
+// UpdateTracks changes the simulcast layer of remote subscriptions in place.
+// Cloudflare answers with requiresImmediateRenegotiation=false, so no SDP moves.
+func (a Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
+	tracks := make([]providerTrack, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast})
+	}
+	response := updateTracksResponse{requestedTracks: tracks}
+	if err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/update", url.PathEscape(input.ConnectionID)), tracksRequest{Tracks: tracks}, &response, "update_tracks"); err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	return mediaplane.TracksResponse{Tracks: response.mediaPlaneTracks(), RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation}, nil
+}
+
 func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidProvider
+	}
+	if input.ReceiveOnly {
+		// The participant grant already binds this session to the caller. Verify
+		// the MID's direction so this path cannot bypass publication retirement.
+		var session struct {
+			Tracks []struct {
+				Mid      string `json:"mid"`
+				Location string `json:"location"`
+			} `json:"tracks"`
+		}
+		if err := a.request(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(input.ConnectionID)), nil, &session, "get_session"); err != nil {
+			return mediaplane.CloseTracksResponse{}, err
+		}
+		for _, requested := range input.Tracks {
+			matches := 0
+			for _, track := range session.Tracks {
+				if track.Mid != requested.Mid {
+					continue
+				}
+				if track.Location != "remote" {
+					return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest
+				}
+				matches++
+			}
+			if matches != 1 {
+				return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest
+			}
+		}
+		input.Force = true
+		input.SessionDescription = nil
 	}
 
 	providerTracks := make([]closeTrack, 0, len(input.Tracks))
@@ -477,6 +529,36 @@ func (r *closeTracksResponse) providerError(operation string) error {
 	return nil
 }
 
+func (r *updateTracksResponse) providerError(operation string) error {
+	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
+		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+	}
+	requested := make(map[string]struct{}, len(r.requestedTracks))
+	for _, track := range r.requestedTracks {
+		requested[track.Mid] = struct{}{}
+	}
+	for _, track := range r.Tracks {
+		if _, ok := requested[strings.TrimSpace(track.Mid)]; !ok {
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+		}
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+		}
+	}
+	if len(r.Tracks) != len(r.requestedTracks) {
+		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+	}
+	return nil
+}
+
+func (r updateTracksResponse) mediaPlaneTracks() []mediaplane.Track {
+	tracks := make([]mediaplane.Track, 0, len(r.Tracks))
+	for _, track := range r.Tracks {
+		tracks = append(tracks, mediaplane.Track{Location: "remote", Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID})
+	}
+	return tracks
+}
+
 func (r *addTracksResponse) providerError(operation string) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
 		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
@@ -638,7 +720,7 @@ func addTrackResultFailed(track addTrackResult) bool {
 
 func closedTrackAbsent(code string) bool {
 	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "session_not_found", "connection_not_found", "track_already_closed", "track_not_found":
+	case "session_not_found", "connection_not_found", "track_already_closed", "track_not_found", "close_track_error":
 		return true
 	default:
 		return false
@@ -672,7 +754,7 @@ func newProviderFailure(operation string, stage providerFailureStage, statusCode
 
 func normalizedOperation(operation string) string {
 	switch operation {
-	case "add_tracks", "close_tracks", "create_connection", "renegotiate", "verify_connection":
+	case "add_tracks", "close_tracks", "create_connection", "renegotiate", "update_tracks", "verify_connection":
 		return operation
 	default:
 		return "unknown"
@@ -681,7 +763,7 @@ func normalizedOperation(operation string) string {
 
 func connectionOperation(operation string) bool {
 	switch operation {
-	case "add_tracks", "close_tracks", "renegotiate", "verify_connection":
+	case "add_tracks", "close_tracks", "renegotiate", "update_tracks", "verify_connection":
 		return true
 	default:
 		return false

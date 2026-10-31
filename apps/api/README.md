@@ -367,7 +367,9 @@ CHALK_API_OTLP_ENDPOINT=https://otel.example.com:4318
 environments. The runtime emits Go runtime metrics, HTTP server spans, database
 operation spans, Redis rate-limit spans, and Cloudflare media-plane request
 spans. It propagates W3C `traceparent` and mirrors or creates the lowercase
-`x-chalk-journey-id` response header. Request bodies and operation content are
+`x-chalk-journey-id` response header. A valid `baggage: session.id=<uuid>` request
+header becomes the `session.id` attribute on every span of the request and a field
+on its log lines; anything else in `baggage` is ignored. Request bodies and operation content are
 never included in traces or logs.
 
 `CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.

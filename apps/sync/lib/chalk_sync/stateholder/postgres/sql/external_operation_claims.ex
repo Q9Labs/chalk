@@ -19,6 +19,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   def claim_local_operations do
     claim_operations_where("""
     operation_name in (
+      'participant_leave',
       'deny_admission',
       'admission_request_expired',
       'tenant_set_deadline',
@@ -36,7 +37,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
-        and attempt_count < 100
+        and (attempt_count < 100 or (operation_name = 'remove_participant' and payload ? 'departureOperationId'))
         and #{operation_filter}
         and (
           (
@@ -54,7 +55,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
           or (
-            operation_name in ('remove_participant', 'participant_leave')
+            operation_name in ('remove_participant')
             and not exists (
               select 1
               from sync_publication_grant_reservations reservation
@@ -80,7 +81,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
           or (
             source is null
             and operation_name not in (
-              'remove_participant', 'participant_leave',
+              'remove_participant',
               'end_episode', 'tenant_end_episode', 'maximum_duration_expired'
             )
           )
@@ -91,7 +92,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     ), claimed as (
       update sync_external_operations operation
       set
-        attempt_count = operation.attempt_count + 1,
+        attempt_count = least(operation.attempt_count + 1, 100),
         next_attempt_at = now() + interval '60 seconds'
       from candidates
       where operation.external_operation_id = candidates.external_operation_id

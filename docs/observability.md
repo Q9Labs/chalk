@@ -28,6 +28,39 @@ When a Participant joined without a knock, check the journey root named
 that asked for direct admission leaves `"admission": "direct"` in its
 attributes. Policy admissions carry no `admission` attribute.
 
+### Follow a user's session
+
+A session is one run of a Chalk app on one device: a browser tab, or an app launch
+on mobile. The SDK shows its ID in Call details as "Session ID" and adds it to
+problem-report diagnostics, so a user can quote it. It is the OpenTelemetry
+attribute `session.id`, never an Episode or a Cloudflare or dashboard `sessionId`.
+
+A tab keeps its session across reloads, and a new tab, including a duplicated tab,
+starts a new one. Mobile
+starts a session at launch and another after 30 minutes in the background, never
+while a call is open. Server-side SDK clients have no session.
+
+The SDK sends `baggage: session.id=<uuid>` with a `traceparent` on every Chalk API
+request, and the same `baggage` text in the Sync `hello` frame (browsers cannot set
+upgrade headers). The API copies a valid lowercase UUID onto every span started
+under the request and adds `session.id` to its structured logs. Sync adds it to
+connection spans and logs. Any other value is ignored. The ID is request and
+connection scoped: it is not written to the journey ledger, to Sync frames sent
+back to the client, or to durable lifecycle rows.
+
+```apl
+| where ['session.id'] == "<session-id>"
+```
+
+Run it in the API log and Sync trace datasets to see everything one device did,
+including requests before a join and across several joins.
+
+Deploy the API and Sync before the SDK. The API must allow the `Baggage` header in
+CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
+frame, then close 1009), so the SDK retries once at once without it, remembers
+that server for the rest of the page or app run, and sends the legacy `hello` on
+later reconnects. The whiteboard socket does not carry the ID yet.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback
@@ -252,6 +285,11 @@ from an edge rejection; an empty reason must not be labeled as a server timeout.
 telemetry events, not public error codes. Retries can still succeed within the
 startup budget.
 
+Sync connection spans, the three lifecycle events, and their stdout lines also
+carry `session.id` when the client sent one in W3C `baggage` on the upgrade or
+the `hello` frame. Search stdout for it to find every connection of one device
+session. Sync never echoes it on frames or stores it with lifecycle records.
+
 ### Automatic browser connection reports
 
 When the SDK replaces an SFU binding, its first track-signaling attempt includes
@@ -463,3 +501,13 @@ accepted API report log lines, matching Sync close evidence, the actual report
 bodies, and trace correlation. It checks reconnect delivery, caps/redaction,
 normal-call silence, and clean rejoin. The harness owns and stops its browser,
 servers, and disposable database.
+
+Explicit Leave confirms after the Postgres departure transaction, before provider
+teardown. The existing `sync.external_operation.accepted` journey remains the
+Leave acceptance boundary. The transaction writes `participant.left` to the
+webhook outbox with its occurrence time taken from Leave acceptance, alongside
+the committed receipt and a `remove_participant` cleanup operation identified by its departure operation ID.
+Cleanup inherits the journey and trace context, so its provider span and retained
+terminal failure can be inspected separately from the confirmed Leave. The
+Postgres durable Leave proof blocks a fake cleanup provider and checks the
+receipt, attendance timestamp, and webhook while that provider is still blocked.
