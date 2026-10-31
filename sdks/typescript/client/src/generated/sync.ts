@@ -734,9 +734,7 @@ export const TraceparentSchema = boundedUtf8String(55, 55).check(
 export const TracestateSchema = boundedUtf8String(512, 1).check(
   Schema.makeFilter((value) => (new RegExp("^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$", "u").test(value) ? undefined : { path: [], issue: "must be a valid bounded W3C tracestate" })),
 );
-export const BaggageSchema = boundedUtf8String(47, 47).check(
-  Schema.makeFilter((value) => (new RegExp("^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "u").test(value) ? undefined : { path: [], issue: "must be the single W3C baggage member session.id=<lowercase UUID>" })),
-);
+export const BaggageSchema = boundedUtf8String(47, 47).check(Schema.makeFilter((value) => (/^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value) ? undefined : { path: [], issue: "must be the single W3C baggage member session.id=<lowercase UUID>" })));
 export const SyncCorrelationFieldsSchema = Schema.Struct({ journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) });
 export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
 const ServerCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };

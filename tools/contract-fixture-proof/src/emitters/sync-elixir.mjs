@@ -68,7 +68,7 @@ function renderElixir(contract) {
     "  @uuid ~r/\\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\z/i",
     "  @traceparent ~r/\\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\\z/",
     "  @tracestate ~r/\\A[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\x2f-]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*\\z/",
-    `  @baggage ~r/${contract.correlation.helloOnlyFields.baggage.pattern.replace("^", "\\A").replace("$", "\\z")}/`,
+    `  @baggage ~r/${contract.correlation.helloOnlyFields.baggage.pattern.replace(/^\^/u, "\\A").replace(/\$$/u, "\\z")}/`,
     "  @digest ~r/\\A[0-9a-f]{64}\\z/",
     "",
     "  def protocol_version, do: @protocol_version",
