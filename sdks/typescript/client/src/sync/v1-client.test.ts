@@ -432,7 +432,7 @@ describe("V1SyncClient", () => {
       expect(last.enabled).toBe(false);
       socket.receive({ type: "live_target_result", operation_id: last.operation_id, name: "set_microphone_enabled", outcome: "terminal_failure", error_code: "capability_denied" });
       await expect(off).resolves.toMatchObject({ message: "capability_denied" });
-      expect({ trackEnabled: track.enabled, localTargets }).toEqual({ trackEnabled: false, localTargets: [false] });
+      expect({ trackEnabled: track.enabled, localTargets }).toEqual({ trackEnabled: false, localTargets: [] });
     } finally {
       client.dispose();
       sync.stop();
