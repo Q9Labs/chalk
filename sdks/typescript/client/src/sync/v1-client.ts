@@ -143,6 +143,10 @@ export class V1SyncClient implements V1CollaborationClient {
       sendIfLive: (frame) => this.#sendIfLive(frame),
       stateChanged: () => this.#emit(),
       ackHeadIsProven: (ack) => this.#ackHeadIsProven(ack),
+      controlHead: () => {
+        const control = this.#requireControl();
+        return { revision: control.revision, state_digest: control.stateDigest };
+      },
     });
     this.#liveTargets = new V1LiveTargetCoordinator({
       mediaPlane: options.mediaPlane,
