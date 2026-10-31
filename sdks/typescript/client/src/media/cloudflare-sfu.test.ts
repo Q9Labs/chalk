@@ -329,6 +329,29 @@ it("keeps a listed microphone publication when the registry lists it", async () 
   }
 });
 
+it.each([
+  { name: "freezes", frozen: true, republished: true },
+  { name: "keeps moving", frozen: false, republished: false },
+])("publishes again when the SFU jitter reading $name while the microphone keeps sending", async ({ frozen, republished }) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+    const startedAt = Date.now();
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      return new Map<string, unknown>([
+        ["out", { type: "outbound-rtp", kind: "audio", mid, remoteId: "in", packetsSent: seconds * 50 }],
+        ["in", { type: "remote-inbound-rtp", kind: "audio", roundTripTimeMeasurements: seconds, jitter: frozen ? 0.005 : 0.003 + seconds / 1000 }],
+      ]) as unknown as RTCStatsReport;
+    });
+    const localAdds = () => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const before = localAdds();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(localAdds()).toBe(republished ? before + 1 : before);
+    expect(h.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+  });
+});
+
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
