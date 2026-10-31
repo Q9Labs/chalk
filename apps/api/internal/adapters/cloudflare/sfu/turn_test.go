@@ -172,3 +172,10 @@ func TestIceServersRejectResponseWithoutTurnServer(t *testing.T) {
 		t.Fatalf("a response with no TURN credentials must fall back, got %+v", servers)
 	}
 }
+
+func TestTurnReuseWindowLeavesALongCallMargin(t *testing.T) {
+	const longestCall = 8 * time.Hour
+	if remaining := turnCredentialTTL - turnCredentialReuse; remaining < longestCall {
+		t.Fatalf("a reused credential keeps only %s of life, want at least %s", remaining, longestCall)
+	}
+}

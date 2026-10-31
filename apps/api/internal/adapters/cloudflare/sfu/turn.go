@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	// Cloudflare expires a TURN allocation's refresh when the credential
-	// expires, so the TTL must outlast the longest call.
+	// A relayed call stops refreshing its allocation once its credential
+	// expires (measured with a 60 second credential), so the TTL must outlast
+	// the longest call.
 	turnCredentialTTL = 12 * time.Hour
 	// A minted credential is shared by joins for this long, so every client
 	// still receives at least turnCredentialTTL minus this window.
