@@ -1,0 +1,24 @@
+# name | check | sources | MaxSeq | MaxDrops | MaxLoss | MaxHostMutes | MaxCloseFails | ReconnectRule | OptimisticUi | sfu | expect
+# Decided rule, Cloudflare SFU: all four properties hold.
+cf-decided-safety-1src  | safety | mic          | 3 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
+cf-decided-live-1src    | P4     | mic          | 3 | 1 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
+cf-decided-live-1src-d2 | P4     | mic          | 2 | 2 | 2 | 1 | 1 | decided | FALSE | cloudflare | pass
+# Decided rule, own SFU (state in the room authority): all four properties hold.
+own-decided-safety-1src | safety | mic          | 3 | 2 | 2 | 1 | 0 | decided | FALSE | own        | pass
+own-decided-live-1src   | P4     | mic          | 3 | 1 | 2 | 1 | 0 | decided | FALSE | own        | pass
+# Current SDK reconnect behavior: P2 and P4 fail, P1 and P3 hold.
+cf-current-P2-1src      | P2     | mic          | 2 | 1 | 1 | 0 | 0 | current | FALSE | cloudflare | violated
+cf-current-P4-1src      | P4     | mic          | 2 | 0 | 1 | 0 | 0 | current | FALSE | cloudflare | violated
+cf-current-P4-drop-1src | P4     | mic          | 3 | 1 | 1 | 0 | 0 | current | FALSE | cloudflare | violated
+cf-current-P1-1src      | P1     | mic          | 3 | 2 | 2 | 1 | 1 | current | FALSE | cloudflare | pass
+cf-current-P3-1src      | P3     | mic          | 3 | 2 | 2 | 1 | 1 | current | FALSE | cloudflare | pass
+# Deliberately broken models: P1 and P3 must fail on them.
+mutant-adoptSync-P1     | P1     | mic          | 2 | 1 | 1 | 0 | 0 | adoptSync | FALSE | cloudflare | violated
+mutant-optimisticUi-P3  | P3     | mic          | 1 | 0 | 0 | 0 | 0 | decided | TRUE  | cloudflare | violated
+# Witnesses: the states the properties talk about are reachable.
+witness-on              | W1     | mic          | 2 | 0 | 0 | 0 | 0 | decided | FALSE | cloudflare | violated
+witness-hostmute        | W2     | mic          | 2 | 0 | 0 | 1 | 0 | decided | FALSE | cloudflare | violated
+# Several sources sharing the links and budgets (slow; run with DEEP=1).
+deep-cf-decided-live-2src   | P4     | mic,cam     | 1 | 1 | 1 | 1 | 1 | decided | FALSE | cloudflare | pass
+deep-cf-decided-safety-2src | safety | mic,cam     | 2 | 1 | 1 | 1 | 1 | decided | FALSE | cloudflare | pass
+deep-cf-decided-safety-3src | safety | mic,cam,scr | 1 | 1 | 1 | 1 | 1 | decided | FALSE | cloudflare | pass
