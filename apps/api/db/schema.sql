@@ -1890,6 +1890,22 @@ alter table sync_external_operations
     add constraint sync_external_operations_pending_order_check
     check (status <> 'pending' or acceptance_order is not null);
 
+create function assign_sync_external_operation_order() returns trigger
+language plpgsql
+set search_path = pg_catalog, public
+as $$
+begin
+    new.acceptance_order := next_sync_external_operation_order();
+    return new;
+end;
+$$;
+
+create trigger sync_external_operation_requeue_order
+before update of status on sync_external_operations
+for each row
+when (new.status = 'pending' and new.acceptance_order is null)
+execute function assign_sync_external_operation_order();
+
 create unique index sync_external_operations_parent_source_key
     on sync_external_operations(tenant_id, episode_id, parent_external_operation_id, source)
     where parent_external_operation_id is not null;
