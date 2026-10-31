@@ -156,6 +156,65 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
 
   def validate_capture_epoch(_connection, _episode, _external), do: :ok
 
+  def capture_source_pending?(connection, episode, %{name: name, payload: payload})
+      when name in [:recording_capture_ready, :recording_capture_failed] do
+    recording_id = payload["recordingId"]
+    start_id = payload["startOperationId"]
+    start_uuid = Scope.uuid(start_id)
+
+    case lock(connection, episode, recording_id) do
+      [[status, _generation, metadata, ^start_uuid, stop_id]] ->
+        valid_recording =
+          if name == :recording_capture_ready do
+            status == "starting" and is_nil(stop_id) and
+              is_integer(payload["captureEpoch"]) and
+              payload["captureEpoch"] >= capture_epoch(metadata)
+          else
+            status in ["starting", "recording", "stopping"]
+          end
+
+        valid_recording and
+          pending_source?(connection, episode, start_id, :start_recording, recording_id)
+
+      _ ->
+        false
+    end
+  end
+
+  def capture_source_pending?(connection, episode, %{
+        name: :recording_capture_stopped,
+        payload: payload
+      }) do
+    recording_id = payload["recordingId"]
+    stop_id = payload["stopOperationId"]
+
+    if is_binary(stop_id) do
+      stop_uuid = Scope.uuid(stop_id)
+
+      case lock(connection, episode, recording_id) do
+        [[status, _generation, metadata, _start_id, ^stop_uuid]]
+        when status in ["stopping", "stopped"] ->
+          is_integer(payload["captureEpoch"]) and
+            payload["captureEpoch"] >= capture_epoch(metadata) and
+            pending_source?(connection, episode, stop_id, :stop_recording, recording_id)
+
+        _ ->
+          false
+      end
+    else
+      false
+    end
+  end
+
+  def capture_source_pending?(_connection, _episode, _external), do: false
+
+  defp pending_source?(connection, episode, id, name, recording_id) do
+    match?(
+      %{name: ^name, status: :pending, recording_id: ^recording_id},
+      lock_external_operation(connection, episode, id)
+    )
+  end
+
   def stopped?(connection, episode, recording_id) do
     match?(
       [["stopped", _generation, _metadata, _start_id, _stop_id]],

@@ -780,6 +780,77 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              recording_capture_rows(fixture, ready_operation_id)
   end
 
+  test "exhausted capture readiness waits for its pending Recording start", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = UUID.generate()
+
+    {:ok, start} =
+      Operation.new("pending_exhausted_start", :start_recording, %{"recordingId" => recording_id})
+
+    assert {:ok, %{external_operation_id: start_id}} =
+             Postgres.begin_operation(hd(fixture.identities), start)
+
+    ready_id =
+      insert_trusted_capture_ready(
+        connection,
+        fixture,
+        "pending_exhausted_ready",
+        recording_id,
+        start_id,
+        1
+      )
+
+    assert_exhausted_callback_waits(connection, fixture, ready_id)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, start_id, {:confirmed, :recording})
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, ready_id, {:confirmed, :local})
+
+    assert [["applied", "recording", 1]] = recording_capture_rows(fixture, ready_id)
+  end
+
+  test "exhausted capture completion waits for its pending Recording stop", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1, artifact_policy("manual"))
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    recording_id = activate_recording(connection, fixture, "pending_exhausted_stop", 1)
+
+    {:ok, stop} =
+      Operation.new("pending_exhausted_stop", :stop_recording, %{"recordingId" => recording_id})
+
+    assert {:ok, %{external_operation_id: stop_id}} =
+             Postgres.begin_operation(hd(fixture.identities), stop)
+
+    stopped_id =
+      insert_trusted_capture_stopped(
+        connection,
+        fixture,
+        "pending_exhausted_stopped",
+        recording_id,
+        stop_id,
+        1
+      )
+
+    assert_exhausted_callback_waits(connection, fixture, stopped_id)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, stop_id, {:confirmed, :recording})
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(fixture.episode, stopped_id, {:confirmed, :local})
+
+    assert [["applied", "applied", "stop_recording", "stopped", "active", "stopped", 1, 1]] =
+             recording_stop_rows(fixture, stopped_id, stop_id)
+  end
+
   test "exhausted stale capture notifications settle without changing the Recording", %{
     connections: connections
   } do
@@ -1636,6 +1707,35 @@ defmodule ChalkSync.Stateholder.PostgresLifecycleTest do
              Postgres.begin_operation(fixture.identity, operation)
 
     refute_receive {:webhook_metric, _event, _measurements, _metadata}, 50
+  end
+
+  defp assert_exhausted_callback_waits(connection, fixture, id) do
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_local_operations(64)
+
+    assert {_, %{attempt_count: 100}} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    assert {:error, :stale_recording_fence} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :local})
+
+    assert {:ok, %{status: :pending}} = Postgres.read_operation(fixture.episode, id)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, reclaimed} = Postgres.claim_local_operations(64)
+
+    assert {_, %{attempt_count: 100}} =
+             Enum.find(reclaimed, fn {_, op} -> op.external_operation_id == id end)
   end
 
   defp insert_trusted_capture_ready(

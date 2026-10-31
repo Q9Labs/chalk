@@ -89,8 +89,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     do: settle_exhausted_authority(connection, episode, external, reason)
 
   defp settle_capture_error(connection, episode, external, :stale_recording_fence = reason)
-       when external.attempt_count >= @max_attempts,
-       do: settle_obsolete(connection, episode, external, reason)
+       when external.attempt_count >= @max_attempts do
+    if Recording.capture_source_pending?(connection, episode, external) do
+      Postgrex.rollback(connection, {:error, reason})
+    else
+      settle_obsolete(connection, episode, external, reason)
+    end
+  end
 
   defp settle_capture_error(connection, _episode, _external, reason),
     do: Postgrex.rollback(connection, {:error, reason})
