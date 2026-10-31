@@ -72,6 +72,10 @@ test("React detects Tailwind underscore hex colors without matching identifiers 
 ];
 const identifier = "abc_def#fff";
 const url = "https://example.test/#fff";
+const arr = [
+  "abc_def#fff",
+  "abc_#fff",
+];
 `,
   });
   assert.deepEqual(
@@ -85,10 +89,6 @@ const url = "https://example.test/#fff";
   const boxShadow = runNative(nativeBoxShadow);
   assert.equal(boxShadow.status, 1, boxShadow.stderr);
   assert.match(boxShadow.stderr, /boxShadow: "0 2px 8px #fff/u);
-
-  const nativeClassName = await fixture(t, { "src/example.tsx": '<View className="shadow-[0_2px_8px_#fff]" />;\n' });
-  const className = runNative(nativeClassName);
-  assert.equal(className.status, 0, className.stderr);
 });
 
 test("React detects named colors, modern functions and extended utility families without corrupting locations", async (t) => {

@@ -44,7 +44,11 @@ export async function findTokenViolations(root = componentRoot, approvedExceptio
 
 function isUnderscoreIdentifierColor(source, match) {
   if (!match[0].startsWith("#") || source[match.index - 1] !== "_") return false;
-  return source.lastIndexOf("[", match.index) <= source.lastIndexOf("]", match.index);
+  const token = source
+    .slice(0, match.index)
+    .split(/[\s"'`]/u)
+    .at(-1);
+  return token.lastIndexOf("[") <= token.lastIndexOf("]");
 }
 
 export function compareBaseline(violations, baseline) {
