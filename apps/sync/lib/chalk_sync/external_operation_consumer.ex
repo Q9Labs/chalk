@@ -20,7 +20,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Telemetry
 
-  @default_page_size 32
+  @max_concurrency 8
   @default_max_backoff_ms 5_000
   @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
@@ -54,7 +54,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     poll_interval_ms = Keyword.fetch!(options, :poll_interval_ms)
 
     state = %{
-      page_size: Keyword.get(options, :page_size, @default_page_size),
+      page_size: min(Keyword.get(options, :page_size, @max_concurrency), @max_concurrency),
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
@@ -210,8 +210,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp execute_page(operations, state) do
-    Enum.reduce(operations, {%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
-      {episode, operation}, {counts, failures} ->
+    # Claim only a runnable wave: waiting behind another adapter must not consume
+    # a claim's 60-second lease. PostgreSQL excludes conflicting operations.
+    operations
+    |> Task.async_stream(
+      fn {episode, operation} ->
         started_at = System.monotonic_time()
 
         result =
@@ -225,7 +228,14 @@ defmodule ChalkSync.ExternalOperationConsumer do
           )
 
         report_result(operation.name, result, started_at)
-
+        result
+      end,
+      max_concurrency: state.page_size,
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Enum.reduce({%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
+      {:ok, result}, {counts, failures} ->
         case result do
           :confirmed ->
             {%{counts | confirmed: counts.confirmed + 1}, failures}
@@ -589,8 +599,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
       retained_pending_count: state.retained_pending_count,
       active_work: not is_nil(state.active_work),
       active_work_age_ms: active_work_age_ms(state.active_work, now_ms),
-      active_work_timeout_ms:
-        state.page_size * state.adapter_timeout_ms + @worker_completion_grace_ms
+      active_work_timeout_ms: state.adapter_timeout_ms + @worker_completion_grace_ms
     }
   end
 

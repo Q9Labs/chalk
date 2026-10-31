@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sort"
+	"sync"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -112,16 +113,33 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		connectionIDs = append(connectionIDs, connectionID)
 	}
 	sort.Strings(connectionIDs)
-	allAlreadyClosed := true
-	for _, connectionID := range connectionIDs {
-		connectionTargets := connections[connectionID]
-		tracks := make([]mediaplane.CloseTrack, 0, len(connectionTargets))
-		for _, target := range connectionTargets {
-			tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
-		}
-		closed, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
+	// Distinct SFU sessions have independent mutation state. Keep each session's
+	// tracks in one request, and commit publication observations serially below.
+	closedConnections := make([]mediaplane.CloseTracksResponse, len(connectionIDs))
+	closeErrors := make([]error, len(connectionIDs))
+	slots := make(chan struct{}, 4)
+	var workers sync.WaitGroup
+	for index, connectionID := range connectionIDs {
+		slots <- struct{}{}
+		workers.Go(func() {
+			defer func() { <-slots }()
+			connectionTargets := connections[connectionID]
+			tracks := make([]mediaplane.CloseTrack, 0, len(connectionTargets))
+			for _, target := range connectionTargets {
+				tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
+			}
+			closedConnections[index], closeErrors[index] = e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
+				Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
+			})
 		})
+	}
+	workers.Wait()
+
+	allAlreadyClosed := true
+	var failure *ExecutionResult
+	for index, connectionID := range connectionIDs {
+		connectionTargets := connections[connectionID]
+		closed, err := closedConnections[index], closeErrors[index]
 		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			closed.AlreadyClosed = true
 			err = nil
@@ -129,7 +147,10 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		if err != nil {
 			result := providerExecutionFailure(err)
 			slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
-			return result
+			if failure == nil {
+				failure = &result
+			}
+			continue
 		}
 		allAlreadyClosed = allAlreadyClosed && closed.AlreadyClosed
 		for _, target := range connectionTargets {
@@ -139,9 +160,14 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 				MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
 			}); err != nil {
 				slog.WarnContext(ctx, "Provider media cleanup observation failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "record_closed_publication", "error_code", "observation_update_failed")
-				return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
+				if failure == nil {
+					failure = &ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
+				}
 			}
 		}
+	}
+	if failure != nil {
+		return *failure
 	}
 	if allAlreadyClosed {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}

@@ -2,6 +2,7 @@ package providerbridge
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -85,9 +86,14 @@ func TestReplacementPublishingPreservesOtherSourcesForCleanup(t *testing.T) {
 	}
 }
 
-type cleanupSourceCloser struct{ tracks int }
+type cleanupSourceCloser struct {
+	mu     sync.Mutex
+	tracks int
+}
 
 func (c *cleanupSourceCloser) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.tracks += len(input.Tracks)
 	return mediaplane.CloseTracksResponse{}, nil
 }

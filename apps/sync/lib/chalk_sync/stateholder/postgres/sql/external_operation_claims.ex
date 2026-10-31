@@ -31,13 +31,36 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
 
   defp claim_operations_where(operation_filter) do
     """
-    with candidates as (
-      select external_operation_id
+    with eligible as (
+      select external_operation_id, next_attempt_at, attempt_count, created_at,
+        row_number() over (
+          partition by tenant_id, episode_id
+          order by next_attempt_at, attempt_count, created_at, external_operation_id
+        ) as episode_position
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
         and attempt_count < 100
         and #{operation_filter}
+        and (
+          #{local_operation("sync_external_operations")}
+          or not exists (
+            select 1
+            from sync_external_operations predecessor
+            where predecessor.tenant_id = sync_external_operations.tenant_id
+              and predecessor.episode_id = sync_external_operations.episode_id
+              and predecessor.status = 'pending'
+              and predecessor.operation_name <> 'role_transition_cleanup'
+              and not (#{local_operation("predecessor")})
+              and (predecessor.created_at, predecessor.external_operation_id)
+                < (sync_external_operations.created_at, sync_external_operations.external_operation_id)
+              and (
+                sync_external_operations.operation_name not in ('participant_leave', 'remove_participant')
+                or predecessor.operation_name not in ('participant_leave', 'remove_participant')
+                or predecessor.target_participant_id is not distinct from sync_external_operations.target_participant_id
+              )
+          )
+        )
         and (
           (
             source is not null
@@ -85,8 +108,14 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
         )
-      order by next_attempt_at, attempt_count, created_at, external_operation_id
-      for update skip locked
+    ), candidates as (
+      select operation.external_operation_id, eligible.episode_position
+      from sync_external_operations operation
+      join eligible using (external_operation_id)
+      where operation.status = 'pending' and operation.next_attempt_at <= now()
+      order by eligible.episode_position, eligible.next_attempt_at, eligible.attempt_count,
+        eligible.created_at, operation.external_operation_id
+      for update of operation skip locked
       limit $1
     ), claimed as (
       update sync_external_operations operation
@@ -99,7 +128,21 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     )
     select #{ExternalOperationColumns.columns("claimed")}
     from claimed
-    order by next_attempt_at, attempt_count, created_at, external_operation_id
+    join candidates using (external_operation_id)
+    order by candidates.episode_position, claimed.next_attempt_at, claimed.attempt_count,
+      claimed.created_at, claimed.external_operation_id
+    """
+  end
+
+  # Capture callbacks must be able to finish the recording operation that an
+  # Episode end is waiting for. Local decisions serialize on the control row.
+  defp local_operation(table) do
+    """
+    #{table}.operation_name in (
+      'admit_participant', 'deny_admission', 'admission_request_expired',
+      'tenant_set_deadline', 'recording_capture_ready',
+      'recording_capture_stopped', 'recording_capture_failed'
+    )
     """
   end
 end
