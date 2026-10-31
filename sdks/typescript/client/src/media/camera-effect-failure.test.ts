@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ConnectionReporter, type ConnectionReport } from "../connection/report";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient, stream, track } from "../space-client/capture.test.helpers";
@@ -42,5 +42,54 @@ it("carries a failed processor through camera termination into the bounded repor
     expect(JSON.stringify(reports)).not.toContain(camera.id);
   } finally {
     client.dispose();
+  }
+});
+
+it("stops captured tracks when camera controls fail to load", async () => {
+  vi.resetModules();
+  const failure = new Error("original controls chunk failure");
+  vi.doMock("./camera-effect-operations", async () => {
+    throw failure;
+  });
+  try {
+    const { configureCameraEffectProvider, processCameraStream } = await import("./camera-effects");
+    configureCameraEffectProvider({ wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
+      throw new Error("Unexpected segmenter creation");
+    });
+    const video = track("video");
+    const audio = track("audio");
+    const rejection = await processCameraStream(stream([video, audio])).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(rejection).toMatchObject({ cause: failure });
+    expect(video.readyState).toBe("ended");
+    expect(audio.readyState).toBe("ended");
+  } finally {
+    vi.doUnmock("./camera-effect-operations");
+    vi.resetModules();
+  }
+});
+
+it("stops the source when camera effects controls fail to load", async () => {
+  vi.resetModules();
+  const failure = new Error("original controls chunk failure");
+  vi.doMock("./camera-effect-operations", async () => {
+    throw failure;
+  });
+  try {
+    const { openCameraEffectsTrack } = await import("./camera-effects");
+    const source = track("video");
+    const rejection = await openCameraEffectsTrack(source, { wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
+      throw new Error("Unexpected segmenter creation");
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(rejection).toMatchObject({ cause: failure });
+    expect(source.readyState).toBe("ended");
+  } finally {
+    vi.doUnmock("./camera-effect-operations");
+    vi.resetModules();
   }
 });
