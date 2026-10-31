@@ -174,6 +174,14 @@ type addTrackResult struct {
 	ErrorDescription string `json:"errorDescription"`
 }
 
+type updateTracksResponse struct {
+	ErrorCode                      string           `json:"errorCode"`
+	ErrorDescription               string           `json:"errorDescription"`
+	Tracks                         []addTrackResult `json:"tracks"`
+	RequiresImmediateRenegotiation bool             `json:"requiresImmediateRenegotiation"`
+	requestedTracks                []providerTrack
+}
+
 type renegotiateRequest struct {
 	SessionDescription mediaplane.SessionDescription `json:"sessionDescription"`
 }
@@ -300,6 +308,20 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		return response.toMediaPlane(), err
 	}
 	return response.toMediaPlane(), nil
+}
+
+// UpdateTracks changes the simulcast layer of remote subscriptions in place.
+// Cloudflare answers with requiresImmediateRenegotiation=false, so no SDP moves.
+func (a Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
+	tracks := make([]providerTrack, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast})
+	}
+	response := updateTracksResponse{requestedTracks: tracks}
+	if err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/update", url.PathEscape(input.ConnectionID)), tracksRequest{Tracks: tracks}, &response, "update_tracks"); err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	return mediaplane.TracksResponse{Tracks: response.mediaPlaneTracks(), RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation}, nil
 }
 
 func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
@@ -506,6 +528,36 @@ func (r *closeTracksResponse) providerError(operation string) error {
 	return nil
 }
 
+func (r *updateTracksResponse) providerError(operation string) error {
+	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
+		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+	}
+	requested := make(map[string]struct{}, len(r.requestedTracks))
+	for _, track := range r.requestedTracks {
+		requested[track.Mid] = struct{}{}
+	}
+	for _, track := range r.Tracks {
+		if _, ok := requested[strings.TrimSpace(track.Mid)]; !ok {
+			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+		}
+		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
+			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+		}
+	}
+	if len(r.Tracks) != len(r.requestedTracks) {
+		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+	}
+	return nil
+}
+
+func (r updateTracksResponse) mediaPlaneTracks() []mediaplane.Track {
+	tracks := make([]mediaplane.Track, 0, len(r.Tracks))
+	for _, track := range r.Tracks {
+		tracks = append(tracks, mediaplane.Track{Location: "remote", Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID})
+	}
+	return tracks
+}
+
 func (r *addTracksResponse) providerError(operation string) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
 		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
@@ -701,7 +753,7 @@ func newProviderFailure(operation string, stage providerFailureStage, statusCode
 
 func normalizedOperation(operation string) string {
 	switch operation {
-	case "add_tracks", "close_tracks", "create_connection", "renegotiate", "verify_connection":
+	case "add_tracks", "close_tracks", "create_connection", "renegotiate", "update_tracks", "verify_connection":
 		return operation
 	default:
 		return "unknown"
@@ -710,7 +762,7 @@ func normalizedOperation(operation string) string {
 
 func connectionOperation(operation string) bool {
 	switch operation {
-	case "add_tracks", "close_tracks", "renegotiate", "verify_connection":
+	case "add_tracks", "close_tracks", "renegotiate", "update_tracks", "verify_connection":
 		return true
 	default:
 		return false

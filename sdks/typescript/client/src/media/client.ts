@@ -1,6 +1,7 @@
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { ReceiveStallRecovery } from "./receive-stall";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
+import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
@@ -1038,6 +1039,31 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const failures = Math.min(previous.failures + 1, 6);
     this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
+  async #adaptViewerLayers(connection: RTCPeerConnection, report: RTCStatsReport, selector: ViewerLayerSelector, current: () => boolean): Promise<void> {
+    if (!this.#transport?.updateTracks || !this.#canObserveReceiveProgress(connection)) return;
+    const cameras = [...this.#remoteTracks.values()].filter(({ source, track }) => source === "camera" && track.readyState === "live");
+    for (const change of selector.sample(performance.now(), report, cameras)) {
+      const mid = connection.getTransceivers().find((transceiver) => transceiver.receiver.track === change.track)?.mid;
+      if (!mid) continue;
+      const switched = await this.#requestViewerLayer(this.#transport, mid, change);
+      if (!current()) return;
+      if (switched) selector.applied(change);
+      else selector.failed(change, performance.now());
+    }
+  }
+  // A layer switch is an optimization: when the SFU refuses it, the pulled layer keeps playing.
+  async #requestViewerLayer(transport: CloudflareSFUSignalingTransport, mid: string, change: ViewerLayerChange): Promise<boolean> {
+    const { connectionId, trackName } = parseCloudflareSFUPublicationID(change.publicationId);
+    try {
+      const response = await transport.updateTracks?.({
+        connectionId: this.#bootstrap.connectionId,
+        tracks: [{ location: "remote", mid, sessionId: connectionId, trackName, simulcast: { preferredRid: change.layer, priorityOrdering: "none", ridNotAvailable: "asciibetical" } }],
+      });
+      return !response?.trackErrors?.length;
+    } catch {
+      return false;
+    }
+  }
   #canObserveReceiveProgress(connection: RTCPeerConnection): boolean {
     return this.#started && connectionIsLive(connection) && (typeof document === "undefined" || document.visibilityState !== "hidden");
   }
@@ -1156,6 +1182,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     let disposed = false;
     let cameraTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const cameraPolicy = new CameraUplinkPolicy();
+    const viewerLayers = new ViewerLayerSelector();
     let observedCamera: LocalTrackState | undefined;
     const current = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "failed" && connection.connectionState !== "closed";
     const adaptCamera = async () => {
@@ -1169,6 +1196,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         const report = await connection.getStats();
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report);
+        await this.#adaptViewerLayers(connection, report, viewerLayers, current);
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);

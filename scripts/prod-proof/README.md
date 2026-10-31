@@ -277,10 +277,13 @@ pnpm prod:proof cleanup <run-id>
 
 Cleanup uses the bootstrap key and fresh bounded requests, revokes the saved run
 key first, ends Episodes, archives Spaces, and deletes Transcripts, webhook
-catchers, and disables the permanent endpoint. Ownership is published atomically
+catchers, and disables the permanent endpoint only when this run's ownership
+record shows it used that endpoint. Ownership is published atomically
 with a same-directory temporary file and rename, preserving the key when adding
 the catcher. Normal cleanup uses in-memory IDs too. A corrupt file is reported,
-but independent Space/Episode cleanup and configured-endpoint disabling still run.
+but independent Space/Episode cleanup still runs. A run that never exposed a
+webhook leaves the endpoint untouched: cleanup rotates its secret, which would
+break another run's signature verification.
 The workflow's `always()` step uses this file even on cancellation.
 It is safe to repeat. No API-key or webhook inventory scope is required.
 
@@ -289,7 +292,7 @@ proof-labelled Episodes older than two hours and archives their Spaces, never
 archiving a Space containing a fresh or foreign Episode. Run keys expire within
 55 minutes and need no sweep. An owned empty Space is archived once the Space itself
 is older than two hours; fresh Spaces and Spaces with fresh or foreign Episodes
-are preserved. Every run immediately revokes the previous webhook secret through
+are preserved. Every run that exposes a webhook immediately revokes the previous webhook secret through
 `rotate-secret`, then PATCHes the same endpoint to its catcher URL and enables it.
 Rotation supplies the PATCH revision without a read scope. Cleanup rotates again
 to recover the current revision and PATCHes `enabled: false`; it never deletes or
