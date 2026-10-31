@@ -76,23 +76,25 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     seed = fixture(connection, 3)
     [owner, first, second] = seed.identities
     mute_id = queue(owner, :mute_participant, %{"participantId" => first.participant_id})
-    first_id = queue(first, :participant_leave)
+    camera_id = queue(owner, :stop_participant_camera, %{"participantId" => first.participant_id})
     second_id = queue(second, :participant_leave)
-    end_id = queue(owner, :end_episode)
     {:ok, adapter} = MediaPlaneTestAdapter.start_link()
 
     assert {:ok, [{episode, mute}]} = Postgres.claim_operations(8)
     assert mute.external_operation_id == mute_id
     confirm(episode, mute, adapter)
 
-    assert {:ok, departures} = Postgres.claim_operations(8)
+    assert {:ok, [{episode, camera}]} = Postgres.claim_operations(8)
+    assert camera.external_operation_id == camera_id
+    confirm(episode, camera, adapter)
 
-    assert Enum.sort(Enum.map(departures, fn {_, op} -> op.external_operation_id end)) ==
-             Enum.sort([first_id, second_id])
+    assert {:ok, [{episode, departure}]} = Postgres.claim_operations(8)
+    assert departure.external_operation_id == second_id
+    end_id = queue(owner, :end_episode)
 
     # An unfinalized predecessor remains a barrier even after it has been leased.
     assert {:ok, []} = Postgres.claim_operations(8)
-    Enum.each(departures, fn {key, operation} -> confirm(key, operation, adapter) end)
+    confirm(episode, departure, adapter)
     assert {:ok, [{episode, ending}]} = Postgres.claim_operations(8)
     assert ending.external_operation_id == end_id
     confirm(episode, ending, adapter)

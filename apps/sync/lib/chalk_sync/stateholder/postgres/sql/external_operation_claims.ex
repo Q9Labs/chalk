@@ -31,34 +31,47 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
 
   defp claim_operations_where(operation_filter) do
     """
-    with eligible as (
+    with pending_order as (
+      select external_operation_id,
+        row_number() over (
+          partition by tenant_id, episode_id order by created_at, external_operation_id
+        ) as episode_pending_position,
+        row_number() over (
+          partition by tenant_id, episode_id, target_participant_id
+          order by created_at, external_operation_id
+        ) as participant_pending_position,
+        count(*) filter (
+          where operation_name not in ('participant_leave', 'remove_participant')
+        ) over (
+          partition by tenant_id, episode_id order by created_at, external_operation_id
+          rows between unbounded preceding and 1 preceding
+        ) as barriers_before
+      from sync_external_operations
+      where status = 'pending' and operation_name <> 'role_transition_cleanup'
+        and not (#{local_operation("sync_external_operations")})
+    ), eligible as (
       select external_operation_id, next_attempt_at, attempt_count, created_at,
         row_number() over (
           partition by tenant_id, episode_id
           order by next_attempt_at, attempt_count, created_at, external_operation_id
         ) as episode_position
       from sync_external_operations
+      left join pending_order using (external_operation_id)
       where status = 'pending'
         and next_attempt_at <= now()
         and attempt_count < 100
         and #{operation_filter}
         and (
           #{local_operation("sync_external_operations")}
-          or not exists (
-            select 1
-            from sync_external_operations predecessor
-            where predecessor.tenant_id = sync_external_operations.tenant_id
-              and predecessor.episode_id = sync_external_operations.episode_id
-              and predecessor.status = 'pending'
-              and predecessor.operation_name <> 'role_transition_cleanup'
-              and not (#{local_operation("predecessor")})
-              and (predecessor.created_at, predecessor.external_operation_id)
-                < (sync_external_operations.created_at, sync_external_operations.external_operation_id)
-              and (
-                sync_external_operations.operation_name not in ('participant_leave', 'remove_participant')
-                or predecessor.operation_name not in ('participant_leave', 'remove_participant')
-                or predecessor.target_participant_id is not distinct from sync_external_operations.target_participant_id
+          or (
+            pending_order.barriers_before = 0
+            and (
+              pending_order.episode_pending_position = 1
+              or (
+                operation_name in ('participant_leave', 'remove_participant')
+                and pending_order.participant_pending_position = 1
               )
+            )
           )
         )
         and (
