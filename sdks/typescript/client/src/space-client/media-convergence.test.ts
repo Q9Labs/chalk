@@ -165,7 +165,8 @@ describe("SpaceClient media convergence", () => {
       if (!newerStop) for (const result of results) expect(result).toMatchObject({ code: "connection.invalid_state" });
       expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
       command.mockClear();
-      await resumeWithOff({ platform, command }, source === "screen" || newerStop);
+      // The user's off is owed to Sync even when a later enable was rejected.
+      await resumeWithOff({ platform, command });
     } finally {
       finishPause();
       client.dispose();
@@ -182,7 +183,7 @@ describe("SpaceClient media convergence", () => {
       await expect(setEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
       await enterRecovery({ platform, client });
       command.mockReset().mockResolvedValue({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
-      await resumeWithOff({ platform, command }, source === "screen");
+      await resumeWithOff({ platform, command });
     } finally {
       client.dispose();
     }

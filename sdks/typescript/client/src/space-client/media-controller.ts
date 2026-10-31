@@ -21,22 +21,36 @@ type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
 type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly controlRevision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
 type SourceResult = { readonly revision: number; readonly status: "confirmed" } | { readonly revision: number; readonly status: "failed"; readonly cause: unknown; cleanup: boolean };
+type OffDebt = "none" | "owed" | "sent";
 type SourceWorker = {
   desired: MediaIntent;
   result: SourceResult;
   initialRevision: number;
   localEnabled: boolean;
   pause: Promise<void> | null;
-  /** The user turned the source off and Sync has not shown it off since. The device resends until it does. */
-  offOwed: boolean;
+  /** See "The owed off" below. */
+  offDebt: OffDebt;
   offRetry: { timer: unknown; delayMs: number; running: boolean };
   serverSequence: number;
   forcedRevision: number | null;
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
 };
+/*
+ * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
+ * (`offDebt`) on the source until Sync is known to have it. Two rules hold it together:
+ *  1. A user off makes the debt "owed". It leaves "owed" only when Sync accepts an off ("sent"), Sync shows the source off
+ *     (or on with a publication this device never paused), Sync accepts a newer on ("none"), or the client is disposed.
+ *     A failed or rejected on, a reset after a failed Sync connection and a reconnect leave it untouched. A "sent" off
+ *     that a later snapshot still shows on with our paused publication becomes "owed" again.
+ *  2. Every resend of the debt after the user's own first attempt (reconnect replay, timer retry, snapshot retry) goes
+ *     through `#resendOwedOff`, which holds the ownership check, the "Sync already off" skip, and the one-in-flight rule.
+ */
+function locallyOff(state: SourceWorker): boolean {
+  return !state.desired.enabled || !state.localEnabled;
+}
 function owesRemoteOff(state: SourceWorker): boolean {
-  return !state.desired.enabled && state.offOwed;
+  return state.offDebt === "owed" && locallyOff(state);
 }
 function sourceWorker(enabled: boolean): SourceWorker {
   return {
@@ -45,7 +59,7 @@ function sourceWorker(enabled: boolean): SourceWorker {
     initialRevision: 0,
     localEnabled: enabled,
     pause: null,
-    offOwed: false,
+    offDebt: "none",
     offRetry: { timer: null, delayMs: OFF_RETRY_INITIAL_MS, running: false },
     serverSequence: -1,
     forcedRevision: null,
@@ -305,6 +319,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   dispose(): void {
     this.#disposed = true;
     this.#cancelOffRetries();
+    for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
     this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
     this.#cancelCaptures();
@@ -407,8 +422,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return Effect.suspend(() => {
       if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
-      this.#sources[source].offOwed = !enabled;
-      if (enabled) this.#cancelOffRetry(source);
+      if (!enabled) this.#sources[source].offDebt = "owed";
+      else this.#cancelOffRetry(source);
       const ready =
         enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
           ? this.#waitForLive(source, desired.revision).pipe(
@@ -474,15 +489,14 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
       const state = this.#sources[source];
-      if (state.result.revision === intent.revision && state.result.status === "failed") {
+      if (state.result.revision === intent.revision && (state.result.status === "failed" || owesRemoteOff(state))) {
+        // This revision already ran (or its result was reset). Only the off is left to send, whatever the revision wants.
         yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
+        state.offDebt = "sent";
         if (state.result.revision === intent.revision && state.result.status === "failed") {
-          // Sync accepted the resent off, so nothing is owed any more. A failed enable keeps its failure for the caller.
+          // A failed enable keeps its failure for the caller.
           if (intent.enabled) state.result.cleanup = false;
-          else {
-            state.result = { revision: intent.revision, status: "confirmed" };
-            state.offOwed = false;
-          }
+          else state.result = { revision: intent.revision, status: "confirmed" };
         }
         return;
       }
@@ -491,7 +505,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       if (state.desired.revision !== intent.revision) return;
       if (Exit.isSuccess(result)) {
         state.result = { revision: intent.revision, status: "confirmed" };
-        if (!intent.enabled) state.offOwed = false;
+        state.offDebt = intent.enabled ? "none" : "sent";
         state.localEnabled = state.forcedRevision === intent.revision ? false : intent.enabled;
       } else {
         const cause = yield* Effect.flip(result);
@@ -738,44 +752,44 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #resumePendingActions(): void {
     for (const source of MEDIA_SOURCES) {
-      const state = this.#sources[source];
-      state.offRetry.delayMs = OFF_RETRY_INITIAL_MS;
-      // Pending user enables own their readiness wait. Recovery never replays one
-      // or sends participant-wide cleanup for a failed enable on another client.
-      // An off is the device's decision: it is resent until Sync shows it.
-      if (source !== "screen" && (state.desired.enabled || (state.result.revision === state.desired.revision && !owesRemoteOff(state)))) continue;
-      this.#runWork(source);
+      this.#sources[source].offRetry.delayMs = OFF_RETRY_INITIAL_MS;
+      // Screen share replays its unfinished stop; every source repays an owed off. Pending user enables own their readiness wait.
+      if (source === "screen" && !owesRemoteOff(this.#sources[source])) this.#runWork(source);
+      else this.#resendOwedOff(source);
     }
   }
   /** After a reconnect, Sync's snapshot decides: a source the device turned off but Sync still shows on, with the publication the device paused, is an off to resend. */
   #oweOffsSyncStillShows(snapshot: SyncSnapshot): void {
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
-      if (state.desired.enabled || state.pausedPublicationId === null) continue;
-      if (ownProjection(snapshot, source)?.publicationId === state.pausedPublicationId) state.offOwed = true;
+      if (state.offDebt !== "sent" || state.pausedPublicationId === null) continue;
+      if (ownProjection(snapshot, source)?.publicationId === state.pausedPublicationId) state.offDebt = "owed";
     }
   }
-  /** Background retries skip an off when Sync shows the source off, or on with a publication this device never paused (another device's). A resume always sends, as Sync's target can differ from its projection. */
-  #settleOff(source: MediaSource): boolean {
-    const state = this.#sources[source];
+  /** Sync needs no off from this device: it shows the source off, or on with a publication this device never paused (another device's). */
+  #syncNeedsNoOff(source: MediaSource): boolean {
     const snapshot = this.#ports?.sync.getSnapshot();
-    if (!snapshot?.media || !owesRemoteOff(state) || state.offRetry.running || this.#pendingSources.has(source)) return false;
+    if (!snapshot?.media) return false;
     const item = ownProjection(snapshot, source);
-    if (item?.enabled && (state.pausedPublicationId === null || item.publicationId === state.pausedPublicationId)) return false;
-    state.offOwed = false;
-    state.result = { revision: state.desired.revision, status: "confirmed" };
-    this.#cancelOffRetry(source);
-    return true;
+    // A source Sync has no item for is unknown, not off: a recovered projection starts empty.
+    if (!item) return false;
+    return !item.enabled || (this.#sources[source].pausedPublicationId !== null && item.publicationId !== this.#sources[source].pausedPublicationId);
   }
-  /** A Sync snapshot retries an owed off now, unless one attempt for that source is already queued or running. */
-  #retryOffs(): void {
-    for (const source of MEDIA_SOURCES) this.#retryOff(source);
-  }
-  #retryOff(source: MediaSource): void {
+  /** The one place an owed off is resent after the user's own attempt. At most one is in flight per source, and none while a user action on the source is pending. */
+  #resendOwedOff(source: MediaSource): void {
     const state = this.#sources[source];
-    if (!this.#syncLive || this.#disposed || !owesRemoteOff(state) || state.offRetry.running || this.#pendingSources.has(source) || this.#settleOff(source)) return;
+    if (!this.#syncLive || this.#disposed || !owesRemoteOff(state) || state.offRetry.running || this.#pendingSources.has(source)) return;
     this.#cancelOffRetry(source);
+    if (this.#syncNeedsNoOff(source)) {
+      state.offDebt = "none";
+      state.result = { revision: state.desired.revision, status: "confirmed" };
+      return;
+    }
     this.#runWork(source);
+  }
+  /** A Sync snapshot repays an owed off now, unless an attempt for that source is already queued or running. */
+  #retryOffs(): void {
+    for (const source of MEDIA_SOURCES) this.#resendOwedOff(source);
   }
   #runWork(source: MediaSource): void {
     const retry = this.#sources[source].offRetry;
@@ -803,7 +817,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#syncLive || this.#disposed || retry.timer !== null) return;
     retry.timer = this.#connection.scheduleUnsafe(() => {
       retry.timer = null;
-      this.#retryOff(source);
+      this.#resendOwedOff(source);
     }, retry.delayMs);
     retry.delayMs = Math.min(retry.delayMs * 2, OFF_RETRY_MAX_MS);
   }

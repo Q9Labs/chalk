@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConvergenceScenario, enterRecovery, mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
@@ -320,6 +320,7 @@ describe("an off stays owed until Sync shows the source off", () => {
       scenario.command.mockRejectedValue(lost());
       await scenario.setEnabled(false).catch(() => undefined);
       for (let snapshot = 0; snapshot < 500; snapshot++) projectOn(scenario, "microphone");
+      await vi.waitFor(() => expect(offs(scenario.command)).toBe(2));
       await drain();
       expect(offs(scenario.command)).toBe(2);
     } finally {
@@ -328,6 +329,13 @@ describe("an off stays owed until Sync shows the source off", () => {
   });
 
   describe("on a quiet healthy connection", () => {
+    beforeEach(() => {
+      // Advancing fake timers lets the client send its connection diagnostics, a real request that the unit network guard rejects.
+      vi.stubGlobal("fetch", async () => new Response(null, { status: 204 }));
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
     /** Under fake timers every await needs the clock to move, so each step runs the promise while the clock ticks. */
     const step = async <T>(promise: Promise<T>, tickMs = 20): Promise<T> => {
       const result = promise.then(
