@@ -105,6 +105,13 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     )
 
     end_id = queue(owner, :end_episode)
+    # Transaction start timestamps can predate earlier accepted commands.
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set created_at = created_at - interval '2 hours' where external_operation_id = $1",
+      [ChalkSync.UUID.dump!(end_id)]
+    )
+
     assert {:ok, []} = Postgres.claim_operations(8)
     confirm(episode, camera, adapter)
 
