@@ -351,6 +351,37 @@ it.each([
   });
 });
 
+it("publishes anew on unmute when the SFU stopped serving the track while the microphone was muted", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const original = h.client.getSnapshot().localTracks.find((item) => item.source === "microphone")!.publicationId;
+      const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+      await h.client.pauseLocalCapture("microphone");
+      await h.client.clearPreparedLocalTrack("microphone");
+      expect(h.transport.localPublications.has(original!)).toBe(true);
+      const mutedAt = Date.now();
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+        const seconds = Math.floor((Date.now() - mutedAt) / 1000);
+        return new Map<string, unknown>([
+          ["out", { type: "outbound-rtp", kind: "audio", mid, remoteId: "in", packetsSent: seconds * 50 }],
+          ["in", { type: "remote-inbound-rtp", kind: "audio", roundTripTimeMeasurements: seconds, jitter: 0.005 }],
+        ]) as unknown as RTCStatsReport;
+      });
+      const addsBefore = h.transport.addInputs.length;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(h.transport.closeInputs).toHaveLength(1);
+      h.client.prepareLocalTrack("microphone", new FakeTrack("mic-2", "audio") as unknown as MediaStreamTrack);
+      await h.client.setLocalSourceIntent("microphone", true);
+      await h.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true });
+      const now = h.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+      expect(now).toMatchObject({ enabled: true });
+      expect(h.transport.addInputs).toHaveLength(addsBefore + 1);
+    },
+    { createSilentAudio: async () => ({ track: new FakeTrack("silence", "audio") as unknown as MediaStreamTrack, dispose: vi.fn() }) },
+  );
+});
+
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
