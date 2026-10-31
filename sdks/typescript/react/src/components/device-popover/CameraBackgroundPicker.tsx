@@ -1,5 +1,5 @@
-import { CAMERA_BACKGROUND_OPTIONS, cameraBackgroundAvailable, getCameraBackground, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
-import { useState, useSyncExternalStore } from "react";
+import { cameraBackgroundAvailable, getCameraBackground, loadCameraBackgroundOptions, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
 
 export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string }) {
@@ -10,6 +10,17 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
   );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [options, setOptions] = useState<Awaited<ReturnType<typeof loadCameraBackgroundOptions>>>([]);
+  useEffect(() => {
+    let current = true;
+    loadCameraBackgroundOptions().then(
+      (loaded) => current && setOptions(loaded),
+      () => current && setFailed(true),
+    );
+    return () => {
+      current = false;
+    };
+  }, []);
   if (!cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
     setBusy(true);
@@ -25,7 +36,7 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
   return (
     <>
       <ChalkMenuLabel>Background</ChalkMenuLabel>
-      {CAMERA_BACKGROUND_OPTIONS.map((option) => (
+      {options.map((option) => (
         <ChalkMenuItem
           key={option.id}
           checked={selected === option.id}

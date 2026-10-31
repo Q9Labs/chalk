@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CameraBackgroundPreferences, CAMERA_BACKGROUND_OPTIONS, isCameraBackground } from "./camera-background-settings";
+import { CameraBackgroundPreferences, isCameraBackground } from "./camera-background-settings";
+import { CAMERA_BACKGROUND_OPTIONS } from "./camera-background-images";
 
 describe("camera background preferences", () => {
   function storage() {
