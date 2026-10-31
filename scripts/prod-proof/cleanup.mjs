@@ -103,14 +103,15 @@ async function cleanupWebhook(call, config, known, base, attempt) {
       check(endpoint.enabled === false, "Webhook endpoint not disabled");
     });
   }
-  if (known.webhook?.catcherId) {
-    const { catcherId } = known.webhook;
-    await attempt("webhook-catcher", catcherId, async () => {
-      const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
-      await response.body?.cancel();
-      check([response.ok, response.status === 404].some(Boolean), "Catcher deletion failed");
-    });
-  }
+  await deleteCatcher(config, attempt, known.webhook?.catcherId);
+}
+async function deleteCatcher(config, attempt, catcherId) {
+  if (!catcherId) return;
+  await attempt("webhook-catcher", catcherId, async () => {
+    const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+    await response.body?.cancel();
+    check([response.ok, response.status === 404].some(Boolean), "Catcher deletion failed");
+  });
 }
 async function readOwnership(directory) {
   try {
