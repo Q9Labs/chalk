@@ -252,7 +252,10 @@ Its measurements are `%{count: 1}` and its metadata contains `event`, `stage`
 (`root`, `phase`, or `terminal`), `journey_id`, and bounded `attributes`.
 BEAM health uses `[:chalk_sync, :runtime, :health]` with memory, process, and
 run-queue measurements. Logger events include the journey and, when tracing is
-enabled, the trace and span identifiers. Tokens, space ids, participant ids,
+enabled, the trace and span identifiers. When the connection supplied a session
+(below), telemetry metadata has `session_id`, spans have the `session.id`
+attribute, stdout lifecycle lines have a `"session.id"` field, and Logger
+metadata has `session_id`. Tokens, space ids, participant ids,
 command ids, and raw revisions are never observability dimensions.
 
 Client and server protocol frames may carry these optional top-level fields
@@ -270,6 +273,22 @@ without changing frame semantics:
 same headers plus `x-chalk-journey-id`; browser clients that cannot set upgrade
 headers send the three fields on `hello`. The server forwards valid context on
 its response frames and creates a journey at v1 sync ingress when one is absent.
+
+A session is one run of a Chalk app on one device. It is not an Episode. Its ID
+travels as W3C baggage with the OpenTelemetry attribute name `session.id`:
+
+```json
+{ "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c" }
+```
+
+`baggage` is accepted on `hello` only, and the upgrade request may carry the same
+text in a `baggage` header. The contract allows exactly one 47-byte member,
+`session.id=<lowercase UUID>`. The server reads the header first and the `hello`
+field when the header has no valid session. For the header it finds the
+`session.id` member among other W3C baggage members and ignores the rest. A
+missing or malformed value is ignored, so it never rejects a connection. The
+session is connection-scoped: it is never emitted on server frames or written to
+journey, lifecycle, or external-operation records.
 
 ## Verification
 
