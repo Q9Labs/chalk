@@ -870,8 +870,10 @@ func normalizedProviderCode(code string) string {
 		return "rate_limited"
 	case "timeout", "request_timeout", "deadline_exceeded":
 		return "timeout"
-	case "transport_error", "client_canceled":
-		return code
+	case "transport_error":
+		return "transport_error"
+	case "client_canceled":
+		return "client_canceled"
 	case "plane_unavailable":
 		return "plane_unavailable"
 	case "invalid_json":

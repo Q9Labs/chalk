@@ -50,6 +50,28 @@ func TestAddTracksLogsBoundedPerTrackErrorKinds(t *testing.T) {
 	}
 }
 
+func TestAddTracksCanonicalizesProviderControlledErrorKinds(t *testing.T) {
+	for _, test := range []struct{ raw, kind string }{
+		{"Transport_Error", "transport_error"},
+		{" CLIENT_CANCELED ", "client_canceled"},
+		{"private arbitrary provider text", "unknown"},
+	} {
+		t.Run(test.kind, func(t *testing.T) {
+			adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"publisher","trackName":"audio","errorCode":"`+test.raw+`"}]}`)
+			logs := captureAddTracksLogs(t)
+			_, _ = adapter.AddTracks(context.Background(), mediaplane.TracksRequest{ConnectionID: "receiver", Tracks: []mediaplane.Track{{Location: "remote", SessionID: "publisher", TrackName: "audio"}}})
+			record := addTracksRecord(t, logs)
+			kinds, ok := record["track_error_kinds"].([]any)
+			if !ok || len(kinds) != 1 || kinds[0] != test.kind {
+				t.Fatalf("track_error_kinds = %+v", record["track_error_kinds"])
+			}
+			if strings.Contains(logs.String(), test.raw) {
+				t.Fatal("raw code reached telemetry")
+			}
+		})
+	}
+}
+
 func TestAddTracksRecordsUpstreamTimeout(t *testing.T) {
 	release := make(chan struct{})
 	provider := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

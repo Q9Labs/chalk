@@ -52,7 +52,7 @@ func (r ProviderOperationRepository) ListReceiveHealthEpisodes(ctx context.Conte
 
 func (q *providerOperationQueries) ListReceiveHealthEpisodes(ctx context.Context, limit int) ([]mediapublications.ReceiveHealthEpisode, error) {
 	rows, err := q.db.Query(ctx, `select tenant_id, space_id, id from episodes
-where status = 'active' and media_plane_binding->>'provider' = 'cf_sfu'
+where status = 'active' and config_snapshot->'media_plane_binding'->>'provider' = 'cf_sfu'
 order by id limit $1`, limit)
 	if err != nil {
 		return nil, err
