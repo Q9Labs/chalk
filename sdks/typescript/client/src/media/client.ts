@@ -1,4 +1,4 @@
-import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
+import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { ReceiveStallRecovery } from "./receive-stall";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
@@ -8,6 +8,7 @@ import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationK
 import { matchRemotePullTracks } from "./remote-track-response";
 import { CloudflareSFUError } from "./types";
 import { classifyMediaFailure } from "./failure-diagnostics";
+import { SilentAudioSource } from "./silent-audio";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -50,8 +51,7 @@ const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
-// Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
-// resume operation rather than trusting Chalk's registry as provider liveness.
+// Cloudflare expires video tracks after 30 seconds without RTP.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -67,6 +67,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #failureOwners = new WeakMap<Error, { readonly generation: number; readonly connectionId: string }>();
   readonly #locallyPausedSources = new Map<MediaPublicationSource, LocalPublicationRetirementCause>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
+  readonly #silentAudio = new SilentAudioSource();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
@@ -262,19 +263,30 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#enablePublicationTarget({ ...target, source: "screen_audio" });
   }
   async #pausePublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
+    if (target.source === "microphone" && this.#locallyPausedSources.get("microphone") === "user_pause") {
+      return this.#pauseUserMutedMicrophone();
+    }
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind === "result" && resolved.result.outcome !== "satisfied") return resolved.result;
     const outcome = resolved.kind === "state" && resolved.value.enabled ? "confirmed" : "satisfied";
-    if (target.source !== "screen" && this.#locallyPausedSources.get(target.source) === "capture_cleanup") {
-      // Sync acknowledges unavailable capture without revoking its retained
-      // publication. Explicit Off first records user_pause and still retires.
-      await this.pauseLocalCapture(target.source);
-      return { outcome, errorCode: null };
-    }
+    const captureCleanup = this.#pauseCaptureCleanupTarget(target, outcome);
+    if (captureCleanup) return captureCleanup;
     this.#pauseLocalSource(target.source);
     try {
       await this.#retireOwnedPublications();
       return { outcome, errorCode: null };
+    } catch (error) {
+      return mediaTargetFailure(error);
+    }
+  }
+  #pauseCaptureCleanupTarget(target: MediaPlaneTarget, outcome: MediaPlaneOutcome): Promise<MediaPlaneResult> | null {
+    if (target.source === "screen" || this.#locallyPausedSources.get(target.source) !== "capture_cleanup") return null;
+    return this.pauseLocalCapture(target.source).then(() => ({ outcome, errorCode: null }));
+  }
+  async #pauseUserMutedMicrophone(): Promise<MediaPlaneResult> {
+    try {
+      await this.#silenceMicrophone();
+      return { outcome: "satisfied", errorCode: null };
     } catch (error) {
       return mediaTargetFailure(error);
     }
@@ -307,10 +319,45 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (enabled) this.#locallyPausedSources.delete(item);
       else this.#locallyPausedSources.set(item, cause);
     }
+    if (!enabled && source === "microphone" && cause === "user_pause") return this.#silenceMicrophone();
     if (!enabled) this.#pauseLocalSource(source, cause);
     return enabled ? Promise.resolve() : this.#retireOwnedPublications();
   }
+  async #silenceMicrophone(): Promise<void> {
+    const state = this.#localTracks.get("microphone");
+    if (!state) return;
+    const publication = [...this.#ownedPublications].find((item) => item.state.source === "microphone" && item.transceiver === state.transceiver && item.connection === this.#connection && item.lifecycle.kind === "confirmed" && item.lifecycle.handle.publicationId === state.providerPublicationId);
+    if (!state.transceiver || !state.providerPublicationId || !publication) {
+      this.#pauseLocalSource("microphone", "user_pause");
+      await this.#retireOwnedPublications();
+      return;
+    }
+    state.desiredEnabled = false;
+    state.enabled = false;
+    state.track.enabled = false;
+    const silentTrack = this.#silentAudio.track();
+    if (!silentTrack) {
+      this.#publishSnapshot();
+      this.#emitLocal();
+      return;
+    }
+    try {
+      await this.#boundPeerOperation(state.transceiver.sender.replaceTrack(silentTrack));
+    } catch {
+      this.#pauseLocalSource("microphone", "user_pause");
+      await this.#retireOwnedPublications();
+      return;
+    }
+    state.track.stop();
+    this.#localTracks.delete("microphone");
+    this.#publishSnapshot();
+    this.#emitLocal();
+  }
   async closeForcedLocalPublication(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): Promise<void> {
+    if (source === "microphone" && cause === "user_pause") {
+      await this.setLocalSourceIntent(source, false, cause);
+      return;
+    }
     const connection = this.#connection;
     const generationAtClose = this.#generation;
     const sources = localSourceGroup(source);
@@ -507,6 +554,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
+    this.#silentAudio.close();
     this.#receiveProgress.expect([], this.#participantId);
     this.#subscribedPublicationIds.clear();
     this.#generation++;
@@ -594,13 +642,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
-    for (const publication of this.#ownedPublications) {
-      if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
+    const silentTrack = state.source === "microphone" ? this.#silentAudio.track() : null;
+    if (!silentTrack) {
+      for (const publication of this.#ownedPublications) {
+        if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
+      }
     }
     state.desiredEnabled = false;
     state.track.enabled = false;
     // Queue the detach before notifying consumers, but never wait to expose off.
-    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
+    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(silentTrack)) : Promise.resolve();
     state.enabled = false;
     this.#publishSnapshot();
     this.#emitLocal();
@@ -658,8 +709,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const publications: OwnedLocalPublication[] = [];
     try {
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
-      await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
+      const deferPublication = !wasLive && this.#requireTransport().markPublicationsAvailable !== undefined;
+      const response = await this.#negotiateLocalPublications(connection, connectionId, publications, generation, deferPublication);
       if (!wasLive) await this.#waitForConnection(connection, generation);
+      await this.#markPublicationsAvailable(response, publications, generation, connectionId);
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       this.#settleLocalPublications(publications);
@@ -673,6 +726,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } finally {
       void this.#retireOwnedPublications();
     }
+  }
+  async #markPublicationsAvailable(response: CloudflareSFUTracksResponse, publications: readonly OwnedLocalPublication[], generation: number, connectionId: string): Promise<void> {
+    if (!response.publicationsPending) return;
+    const tracks = publications.flatMap((publication) => (publication.lifecycle.kind === "confirmed" ? [{ source: publication.state.source, publicationId: publication.lifecycle.handle.publicationId }] : []));
+    if (!tracks.length) return;
+    const transport = this.#requireTransport();
+    if (!transport.markPublicationsAvailable) return;
+    await this.#signal(() => transport.markPublicationsAvailable!({ connectionId, tracks }), { generation, connectionId });
   }
   async #prepareLocalPublication(connection: RTCPeerConnection, state: LocalTrackState, generation: number): Promise<OwnedLocalPublication> {
     const transceiver = state.transceiver ?? this.#addLocalTransceiver(connection, state);
@@ -702,7 +763,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return connection.addTransceiver(state.track, { direction: "sendonly" });
     }
   }
-  async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number): Promise<void> {
+  async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number, deferPublication: boolean): Promise<CloudflareSFUTracksResponse> {
     let sessionDescription: Awaited<ReturnType<typeof createLocalOffer>>;
     try {
       sessionDescription = await createLocalOffer(connection);
@@ -727,10 +788,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
-    const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks }), { generation, connectionId });
+    const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks, deferPublication }), { generation, connectionId });
     this.#recordLocalPublicationHandles(publications, response.tracks);
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
+    return response;
   }
   #recordLocalPublicationHandles(publications: readonly OwnedLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
     for (const publication of publications) {

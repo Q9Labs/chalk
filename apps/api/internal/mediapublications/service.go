@@ -63,6 +63,7 @@ type RecordInput struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	ConnectionID          string
+	Pending               bool
 	Tracks                []PublishedTrack
 }
 
@@ -362,7 +363,7 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 		publication := provideroperations.Publication{
 			ParticipantID: input.ParticipantID,
 			Source:        track.Source,
-			Enabled:       true,
+			Enabled:       !input.Pending,
 			PublicationID: references[index].PublicationID,
 		}
 		publications[publicationKey(publication.ParticipantID, publication.Source)] = publication

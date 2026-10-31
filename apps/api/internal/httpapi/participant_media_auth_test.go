@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -127,11 +129,75 @@ func TestParticipantMediaAddTracksLabelsProviderCallWithRouteIDs(t *testing.T) {
 	}
 }
 
+func TestParticipantMediaDeferredTracksStayHiddenUntilAvailable(t *testing.T) {
+	subject := participantMediaSubject(t)
+	plane := &addTracksRouteFixture{response: mediaplane.TracksResponse{Tracks: []mediaplane.Track{{Mid: "0", TrackName: "microphone-track"}}}}
+	registry := &publicationRouteRegistryFixture{}
+	router := chi.NewRouter()
+	router.Use(requireParticipantMedia(&participantMediaVerifierStub{subject: subject}, &activeParticipantAuthorizerStub{}))
+	sfuAddTracksEndpoint(plane, plane, plane, plane, registry).Mount(router, RateLimitOptions{})
+
+	path := fmt.Sprintf("/tenants/%s/spaces/%s/episodes/%s/participants/%s/media/sfu/tracks?defer_publication=true", subject.TenantID, subject.SpaceID, subject.EpisodeID, subject.ParticipantID)
+	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"location":"local","mid":"0","source":"microphone","trackName":"microphone-track"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if !registry.recordInput.Pending || registry.recordInput.ParticipantID != subject.ParticipantID {
+		t.Fatalf("record input = %+v", registry.recordInput)
+	}
+	if !strings.Contains(response.Body.String(), `"publicationsPending":true`) || !strings.Contains(response.Body.String(), `"publication_id":"connection-123|microphone-track"`) {
+		t.Fatalf("deferred response = %s", response.Body.String())
+	}
+}
+
+func TestMarkSFUPublicationsAvailableAuthorizesAndChecksConnectionReferences(t *testing.T) {
+	subject := participantMediaSubject(t)
+	registry := &publicationRouteRegistryFixture{}
+	plane := &addTracksRouteFixture{}
+	router := chi.NewRouter()
+	router.Use(requireParticipantMedia(&participantMediaVerifierStub{subject: subject}, &activeParticipantAuthorizerStub{}))
+	sfuPublicationsAvailableEndpoint(plane, plane, plane, plane, registry).Mount(router, RateLimitOptions{})
+	path := fmt.Sprintf("/tenants/%s/spaces/%s/episodes/%s/participants/%s/media/sfu/publications/available", subject.TenantID, subject.SpaceID, subject.EpisodeID, subject.ParticipantID)
+	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"source":"microphone","publication_id":"connection-123|microphone-track"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != `{"accepted":true}`+"\n" {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if len(registry.availabilityInputs) != 1 || registry.availabilityInputs[0].ParticipantID != subject.ParticipantID || !registry.availabilityInputs[0].Enabled {
+		t.Fatalf("availability inputs = %+v", registry.availabilityInputs)
+	}
+
+	registry.availabilityInputs = nil
+	request = httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"source":"microphone","publication_id":"another-connection|microphone-track"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || len(registry.availabilityInputs) != 0 {
+		t.Fatalf("mismatched reference status = %d, availability inputs = %+v", response.Code, registry.availabilityInputs)
+	}
+
+	wrongParticipantPath := strings.Replace(path, subject.ParticipantID.String(), "55555555-5555-4555-8555-555555555555", 1)
+	request = httptest.NewRequest(http.MethodPost, wrongParticipantPath, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"source":"microphone","publication_id":"connection-123|microphone-track"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || len(registry.availabilityInputs) != 0 {
+		t.Fatalf("wrong participant status = %d, availability inputs = %+v", response.Code, registry.availabilityInputs)
+	}
+}
+
 type addTracksRouteFixture struct {
 	SpaceService
 	TenantService
 	mediaplane.Plane
-	request mediaplane.TracksRequest
+	request  mediaplane.TracksRequest
+	response mediaplane.TracksResponse
 }
 
 func (*addTracksRouteFixture) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
@@ -149,9 +215,31 @@ func (f *addTracksRouteFixture) Resolve(context.Context, tenants.Tenant, spaces.
 }
 func (f *addTracksRouteFixture) AddTracks(_ context.Context, request mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	f.request = request
-	return mediaplane.TracksResponse{}, nil
+	return f.response, nil
 }
 func (*addTracksRouteFixture) Renegotiate(context.Context, mediaplane.RenegotiateRequest) error {
+	return nil
+}
+
+type publicationRouteRegistryFixture struct {
+	mediapublications.Registry
+	recordInput        mediapublications.RecordInput
+	availabilityInputs []mediapublications.AvailabilityInput
+}
+
+func (f *publicationRouteRegistryFixture) RecordPublishedTracks(_ context.Context, input mediapublications.RecordInput) ([]mediapublications.PublishedReference, error) {
+	f.recordInput = input
+	references := make([]mediapublications.PublishedReference, 0, len(input.Tracks))
+	for _, track := range input.Tracks {
+		references = append(references, mediapublications.PublishedReference{
+			Source: track.Source, MID: track.MID, TrackName: track.TrackName, PublicationID: input.ConnectionID + "|" + track.TrackName,
+		})
+	}
+	return references, nil
+}
+
+func (f *publicationRouteRegistryFixture) RecordPublicationAvailability(_ context.Context, input mediapublications.AvailabilityInput) error {
+	f.availabilityInputs = append(f.availabilityInputs, input)
 	return nil
 }
 

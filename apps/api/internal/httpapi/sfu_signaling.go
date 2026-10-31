@@ -48,6 +48,7 @@ type sfuCloseTrackRequest struct {
 
 type sfuTracksEndpointRequest struct {
 	AllowPartialRemoteTracks bool
+	DeferPublication         bool
 	ReplacementCause         string
 	TenantID                 utilities.ID
 	SpaceID                  utilities.ID
@@ -84,11 +85,33 @@ type sfuRenegotiateResponse struct {
 	Accepted bool `json:"accepted"`
 }
 
+type sfuPublicationAvailabilityResponse struct {
+	Accepted bool `json:"accepted"`
+}
+
 type sfuPublicationsEndpointRequest struct {
 	TenantID      utilities.ID
 	SpaceID       utilities.ID
 	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
+}
+
+type sfuPublicationAvailabilityRequest struct {
+	ConnectionID string                            `json:"connection_id"`
+	Tracks       []sfuPublicationAvailabilityTrack `json:"tracks"`
+}
+
+type sfuPublicationAvailabilityTrack struct {
+	Source        string `json:"source"`
+	PublicationID string `json:"publication_id"`
+}
+
+type sfuPublicationAvailabilityEndpointRequest struct {
+	TenantID      utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
+	ParticipantID utilities.ID
+	Body          sfuPublicationAvailabilityRequest
 }
 
 type sfuPublicationResponse struct {
@@ -123,6 +146,7 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuPublicationsAvailableEndpoint(spaces, episodeLookup, tenants, media, publications),
 	}
 }
 
@@ -140,6 +164,7 @@ func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tena
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(append(tenantSpaceEpisodeParticipantParameters(),
 			APIParameterContract{Name: "allow_partial_remote_tracks", In: "query", Type: "boolean"},
+			APIParameterContract{Name: "defer_publication", In: "query", Type: "boolean"},
 			APIParameterContract{Name: "replacement_cause", In: "query", Type: "string", Enum: observability.MediaReplacementCauses()},
 		)...).
 		RequestBody("CloudflareSFUTracksRequest", sfuTracksRequest{}).
@@ -208,13 +233,14 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		if publications == nil {
 			return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
 		}
-		references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
+		references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Pending: request.DeferPublication, Tracks: published})
 		if err != nil {
 			return mediaplane.TracksResponse{}, err
 		}
 		if err := attachPublishedReferences(&response, references); err != nil {
 			return mediaplane.TracksResponse{}, err
 		}
+		response.PublicationsPending = request.DeferPublication
 	}
 	return response, nil
 }
@@ -450,6 +476,59 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
+func sfuPublicationsAvailableEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationAvailabilityEndpointRequest, sfuPublicationAvailabilityResponse] {
+	return Post(
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications/available",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications/available",
+		"markCloudflareSFUPublicationsAvailable",
+		decodeSFUPublicationAvailabilityRequest,
+		func(ctx context.Context, request sfuPublicationAvailabilityEndpointRequest) (sfuPublicationAvailabilityResponse, error) {
+			if request.Body.ConnectionID == "" || len(request.Body.Tracks) < 1 || len(request.Body.Tracks) > 16 {
+				return sfuPublicationAvailabilityResponse{}, apiErrorInvalidRequest
+			}
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+				return sfuPublicationAvailabilityResponse{}, err
+			}
+			if _, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID); err != nil {
+				return sfuPublicationAvailabilityResponse{}, err
+			}
+			if publications == nil {
+				return sfuPublicationAvailabilityResponse{}, mediapublications.ErrUnavailable
+			}
+			for _, track := range request.Body.Tracks {
+				if !validPublicationAvailabilityTrack(request.Body.ConnectionID, track) {
+					return sfuPublicationAvailabilityResponse{}, apiErrorInvalidRequest
+				}
+				err := publications.RecordPublicationAvailability(ctx, mediapublications.AvailabilityInput{
+					TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
+					Source: track.Source, PublicationID: track.PublicationID, Enabled: true,
+				})
+				if err != nil {
+					return sfuPublicationAvailabilityResponse{}, err
+				}
+			}
+			return sfuPublicationAvailabilityResponse{Accepted: true}, nil
+		},
+	).
+		Auth(APIAuthParticipantMedia).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		RequestBody("CloudflareSFUPublicationsAvailableRequest", sfuPublicationAvailabilityRequest{}).
+		Responds(http.StatusOK, "CloudflareSFUPublicationsAvailableResponse", sfuPublicationAvailabilityResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+func validPublicationAvailabilityTrack(connectionID string, track sfuPublicationAvailabilityTrack) bool {
+	switch track.Source {
+	case "microphone", "camera", "screen", "screen_audio":
+	default:
+		return false
+	}
+	reference, err := mediapublications.ParseReference(track.PublicationID)
+	return err == nil && reference.ConnectionID == connectionID
+}
+
 func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
@@ -527,7 +606,7 @@ func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, er
 	if err != nil {
 		return sfuTracksEndpointRequest{}, err
 	}
-	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true", ReplacementCause: request.URL.Query().Get("replacement_cause")}, nil
+	return sfuTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body, AllowPartialRemoteTracks: request.URL.Query().Get("allow_partial_remote_tracks") == "true", DeferPublication: request.URL.Query().Get("defer_publication") == "true", ReplacementCause: request.URL.Query().Get("replacement_cause")}, nil
 }
 
 func decodeSFURenegotiateRequest(request *http.Request) (sfuRenegotiateEndpointRequest, error) {
@@ -560,6 +639,21 @@ func decodeSFUPublicationsRequest(request *http.Request) (sfuPublicationsEndpoin
 		return sfuPublicationsEndpointRequest{}, err
 	}
 	return sfuPublicationsEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID}, nil
+}
+
+func decodeSFUPublicationAvailabilityRequest(request *http.Request) (sfuPublicationAvailabilityEndpointRequest, error) {
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
+	if err != nil {
+		return sfuPublicationAvailabilityEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[sfuPublicationAvailabilityRequest](request)
+	if err != nil {
+		return sfuPublicationAvailabilityEndpointRequest{}, err
+	}
+	if body.ConnectionID == "" || len(body.Tracks) < 1 || len(body.Tracks) > 16 {
+		return sfuPublicationAvailabilityEndpointRequest{}, apiErrorInvalidRequest
+	}
+	return sfuPublicationAvailabilityEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
 }
 
 func tenantSpaceEpisodeParticipantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {

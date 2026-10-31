@@ -58,3 +58,38 @@ func TestPublicationAvailabilityPreservesIdentityAndStillAllowsRealClose(t *test
 		t.Fatalf("real close retained identity: snapshot=%+v error=%v", snapshot, err)
 	}
 }
+
+func TestPendingPublicationKeepsIdentityWhileDisabled(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(&reconciliationRepositoryStub{})
+	tenantID := reconciliationTestID(t, "11111111-1111-4111-8111-111111111111")
+	episodeID := reconciliationTestID(t, "22222222-2222-4222-8222-222222222222")
+	participantID := reconciliationTestID(t, "33333333-3333-4333-8333-333333333333")
+	references, err := service.RecordPublishedTracks(ctx, RecordInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1,
+		ConnectionID: "publisher-connection", Pending: true,
+		Tracks: []PublishedTrack{{Source: "microphone", MID: "0", TrackName: "microphone-track"}},
+	})
+	if err != nil {
+		t.Fatalf("record pending publication: %v", err)
+	}
+	snapshot, err := service.Latest(ctx, tenantID, episodeID)
+	if err != nil || len(snapshot.Publications) != 1 {
+		t.Fatalf("read pending publication: snapshot=%+v error=%v", snapshot, err)
+	}
+	publication := snapshot.Publications[0]
+	if publication.Enabled || publication.PublicationID != references[0].PublicationID {
+		t.Fatalf("pending publication = %+v, reference = %+v", publication, references[0])
+	}
+	otherParticipantID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	if err := service.RecordPublicationAvailability(ctx, AvailabilityInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: otherParticipantID,
+		Source: "microphone", PublicationID: publication.PublicationID, Enabled: true,
+	}); err != nil {
+		t.Fatalf("ignore another participant's publication: %v", err)
+	}
+	snapshot, err = service.Latest(ctx, tenantID, episodeID)
+	if err != nil || snapshot.Publications[0].Enabled {
+		t.Fatalf("other participant exposed pending publication: snapshot=%+v error=%v", snapshot, err)
+	}
+}

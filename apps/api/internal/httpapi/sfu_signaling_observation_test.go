@@ -49,6 +49,31 @@ func TestSFUTracksDecoderRequiresExplicitPartialReplyQuery(t *testing.T) {
 	}
 }
 
+func TestSFUTracksDecoderReadsDeferredPublicationQuery(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/tracks?defer_publication=true", strings.NewReader(`{"connection_id":"publisher","tracks":[]}`))
+	route := chi.NewRouteContext()
+	for _, name := range []string{"tenant_id", "space_id", "episode_id", "participant_id"} {
+		route.URLParams.Add(name, "11111111-1111-4111-8111-111111111111")
+	}
+	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, route))
+	decoded, err := decodeSFUTracksRequest(request)
+	if err != nil || !decoded.DeferPublication {
+		t.Fatalf("defer publication query = %t, error = %v", decoded.DeferPublication, err)
+	}
+}
+
+func TestPublicationAvailabilityRejectsMismatchedConnectionAndInvalidSource(t *testing.T) {
+	if validPublicationAvailabilityTrack("connection-1", sfuPublicationAvailabilityTrack{Source: "microphone", PublicationID: "connection-2|track"}) {
+		t.Fatal("publication from a different connection was accepted")
+	}
+	if validPublicationAvailabilityTrack("connection-1", sfuPublicationAvailabilityTrack{Source: "unknown", PublicationID: "connection-1|track"}) {
+		t.Fatal("unknown source was accepted")
+	}
+	if !validPublicationAvailabilityTrack("connection-1", sfuPublicationAvailabilityTrack{Source: "microphone", PublicationID: "connection-1|track"}) {
+		t.Fatal("matching publication was rejected")
+	}
+}
+
 func TestRemoteTrackObservationUsesOnlyRequestedMissingIdentities(t *testing.T) {
 	request := sfuTracksEndpointRequest{
 		TenantID:  remoteObservationTestID(t, "11111111-1111-4111-8111-111111111111"),

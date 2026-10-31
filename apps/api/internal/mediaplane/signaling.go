@@ -44,6 +44,7 @@ type TracksResponse struct {
 	Tracks                         []Track             `json:"tracks,omitempty"`
 	TrackErrors                    []TrackError        `json:"trackErrors,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+	PublicationsPending            bool                `json:"publicationsPending,omitempty"`
 }
 
 type TrackError struct {
