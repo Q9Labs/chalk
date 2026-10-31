@@ -334,7 +334,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
   }
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" || this.#replacingMediaConnection() ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+  }
+  /** Sync is live and only the media connection is being replaced, e.g. while another source moves to a fresh SFU connection. */
+  #replacingMediaConnection(): boolean {
+    const { state, connection } = this.#connection.getSnapshot();
+    return state === "live" && connection.sync === "healthy" && (connection.media === "connecting" || connection.media === "recovering");
   }
   #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     return this.#act("screen", true, options);
