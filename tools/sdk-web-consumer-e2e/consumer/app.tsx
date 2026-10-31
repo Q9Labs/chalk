@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { ToastLayeringFixture } from "./toast-layering";
 
 import { bindFixtureMediaClient, FixtureMediaClient } from "./media-client";
-import { fixtureClock, fixtureMediaDevices, resourceCounts } from "./resource-ledger";
+import { fixtureClock, fixtureMediaDevices, resourceCounts, interruptMicrophone, peerStates } from "./resource-ledger";
 import { bindFixtureSyncClient, FixtureSyncClient } from "./sync-client";
 
 type Harness = {
@@ -27,7 +27,12 @@ type Harness = {
   readonly setDisplayName: SpaceClient["participants"]["renameSelf"];
   readonly snapshot: () => ReturnType<typeof publicSnapshot>;
   readonly resources: typeof resourceCounts;
-  readonly accessRequests: () => number;
+  readonly peerStates: typeof peerStates;
+  readonly accessReasons: () => readonly string[];
+  readonly agreementSnapshot: () => SpaceSnapshot;
+  readonly interruptMicrophone: typeof interruptMicrophone;
+  readonly connectionHistory: () => readonly string[];
+  readonly connectionErrorHistory: () => readonly string[];
   readonly previewCommandContract?: PreviewClientCommand;
 };
 
@@ -37,7 +42,7 @@ declare global {
   }
 }
 
-let accessRequests = 0;
+const accessReasons: string[] = [];
 const socketBaseURL = location.origin.replace(/^http/u, "ws");
 const fixtureUser = new URL(location.href).searchParams.get("fixtureUser");
 const createFixtureSpaceClient: typeof createSpaceClient = (options) =>
@@ -57,7 +62,7 @@ const client = createFixtureSpaceClient({
   space: "fixture-space",
   baseUrl: location.origin,
   getAccess: async (context) => {
-    accessRequests += 1;
+    accessReasons.push(context.reason);
     const accessURL = fixtureUser ? `/api/chalk/access?fixtureUser=${encodeURIComponent(fixtureUser)}` : "/api/chalk/access";
     const response = await fetch(accessURL, {
       method: "POST",
@@ -70,7 +75,23 @@ const client = createFixtureSpaceClient({
 });
 
 function installHarness(nextClient: SpaceClient): void {
+  const history: string[] = [];
+  const errors: string[] = [];
+  function recordChange(items: string[], value: string): void {
+    if (items.at(-1) !== value) items.push(value);
+  }
+  nextClient.subscribe(() => {
+    const connection = nextClient.getSnapshot().connection;
+    const status = connection.status;
+    recordChange(history, status);
+    const code = connection.lastError?.code;
+    if (code) recordChange(errors, code);
+  });
   window.__chalk = {
+    connectionHistory: () => history,
+    connectionErrorHistory: () => errors,
+    agreementSnapshot: () => nextClient.getSnapshot(),
+    interruptMicrophone,
     join: () => joinFromHarness(nextClient),
     leave: nextClient.leave,
     dispose: () => nextClient.dispose(),
@@ -88,7 +109,8 @@ function installHarness(nextClient: SpaceClient): void {
     setDisplayName: nextClient.participants.renameSelf,
     snapshot: () => publicSnapshot(nextClient.getSnapshot()),
     resources: resourceCounts,
-    accessRequests: () => accessRequests,
+    peerStates,
+    accessReasons: () => accessReasons,
   };
 }
 

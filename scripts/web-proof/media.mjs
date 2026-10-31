@@ -1,8 +1,10 @@
 import { installFixture } from "../prod-proof/fixture.mjs";
+import { installAgreementProbe } from "./agreement.mjs";
 
 // Keep fake capture in the browser, while the real app owns joining and playback.
 export function webMediaFixture(guest) {
   return `(() => {
+    (${installAgreementProbe.toString()})();
     if (!navigator.mediaDevices) return;
     // Entrance requests preview audio before a gesture. Resume every generated
     // context on the user's click, including one whose first resume is pending.

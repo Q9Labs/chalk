@@ -154,7 +154,17 @@ test("e2e child receives temporary access, never bootstrap or unrelated credenti
   const permanent = "chalk_sk_permanent_test_key";
   const config = { api_key: permanent, tenant_id: "proof-tenant", api_url: "https://api.example.invalid", web_url: "https://web.example.invalid", proof_origin: "https://proof.example.invalid", webhook_service_url: "https://webhook.example.invalid", webhook_endpoint_id: "bootstrap-endpoint" };
   const environment = childEnvironment(
-    { ...process.env, CHALK_PROOF_API_KEY: permanent, CHALK_PROOF_FUTURE_SECRET: "future-secret", CHALK_PROOF_CONFIG_SOURCE: "env", CHALK_PROOF_WEBHOOK_ENDPOINT_ID: config.webhook_endpoint_id, GITHUB_TOKEN: "github-test-token", NODE_OPTIONS: "--invalid-test-option", CHALK_E2E_API_KEY: "stale-key" },
+    {
+      ...process.env,
+      CHALK_PROOF_API_KEY: permanent,
+      CHALK_PROOF_FUTURE_SECRET: "future-secret",
+      CHALK_PROOF_CONFIG_SOURCE: "env",
+      CHALK_PROOF_WEBHOOK_ENDPOINT_ID: config.webhook_endpoint_id,
+      CHALK_PROOF_WEBKIT: "1",
+      GITHUB_TOKEN: "github-test-token",
+      NODE_OPTIONS: "--invalid-test-option",
+      CHALK_E2E_API_KEY: "stale-key",
+    },
     { config, apiKey: "chalk_sk_temporary_test_key", invite: "/space/proof#invite", directory: "/tmp/proof", runId: "web-test", webUrl: config.web_url },
   );
   assert.equal(environment.CHALK_PROOF_API_KEY, undefined);
@@ -164,8 +174,9 @@ test("e2e child receives temporary access, never bootstrap or unrelated credenti
   assert.equal(received.CHALK_E2E_API_KEY, "chalk_sk_temporary_test_key");
   assert.deepEqual(
     Object.keys(received).filter((name) => name.startsWith("CHALK_PROOF_")),
-    ["CHALK_PROOF_WEB_URL"],
+    ["CHALK_PROOF_WEBKIT", "CHALK_PROOF_WEB_URL"],
   );
+  assert.equal(received.CHALK_PROOF_WEBKIT, "1");
   for (const name of ["GITHUB_TOKEN", "NODE_OPTIONS"]) assert.equal(received[name], undefined);
   assert.equal(Object.values(received).includes(permanent), false);
   assert.equal(received.PATH, process.env.PATH);
