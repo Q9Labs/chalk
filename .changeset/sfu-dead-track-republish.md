@@ -2,4 +2,4 @@
 "@q9labsai/chalk-client": patch
 ---
 
-Republish a local media track promptly when its publication is withdrawn after listeners cannot pull it.
+Keep retrying local media recovery after a publication is withdrawn until a fresh publication is available.
