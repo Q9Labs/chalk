@@ -1,15 +1,15 @@
-// Pinned first-party presets; these immutable files also appear in chalk-assets.
 import type { CameraBackground, CameraBackgroundPreset } from "./camera-background-settings";
+import { CAMERA_BACKGROUND_URLS } from "./camera-background-urls.generated";
 
 type CameraBackgroundImage = { readonly id: CameraBackgroundPreset; readonly label: string; readonly avif: string; readonly image: string };
 
 export const CAMERA_BACKGROUND_IMAGES = {
-  "modern-acoustic-office": { id: "modern-acoustic-office", label: "Office", avif: "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.38e4bc5acdec.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/modern-acoustic-office.7e2e3e0b1f83.webp" },
-  "warm-executive-home-office": { id: "warm-executive-home-office", label: "Home office", avif: "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.4845bdfa8d05.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/warm-executive-home-office.53e4fce337d3.webp" },
-  "bright-creative-studio": { id: "bright-creative-studio", label: "Studio", avif: "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.7abcfb577656.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/bright-creative-studio.fb65d5b296a5.webp" },
-  "garden-terrace-lounge": { id: "garden-terrace-lounge", label: "Garden", avif: "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.ec01ea565f77.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/garden-terrace-lounge.0a6b0d4fdf87.webp" },
-  "soft-abstract-glass": { id: "soft-abstract-glass", label: "Glass", avif: "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.1bd6ec278f69.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/soft-abstract-glass.2fd3949e2036.webp" },
-  "cozy-evening-lounge": { id: "cozy-evening-lounge", label: "Lounge", avif: "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.3668f9fb3ae6.avif", image: "https://assets.chalkmeet.com/ui/backgrounds/cozy-evening-lounge.dc7786d5fdd2.webp" },
+  "modern-acoustic-office": { id: "modern-acoustic-office", label: "Office", ...CAMERA_BACKGROUND_URLS["modern-acoustic-office"] },
+  "warm-executive-home-office": { id: "warm-executive-home-office", label: "Home office", ...CAMERA_BACKGROUND_URLS["warm-executive-home-office"] },
+  "bright-creative-studio": { id: "bright-creative-studio", label: "Studio", ...CAMERA_BACKGROUND_URLS["bright-creative-studio"] },
+  "garden-terrace-lounge": { id: "garden-terrace-lounge", label: "Garden", ...CAMERA_BACKGROUND_URLS["garden-terrace-lounge"] },
+  "soft-abstract-glass": { id: "soft-abstract-glass", label: "Glass", ...CAMERA_BACKGROUND_URLS["soft-abstract-glass"] },
+  "cozy-evening-lounge": { id: "cozy-evening-lounge", label: "Lounge", ...CAMERA_BACKGROUND_URLS["cozy-evening-lounge"] },
 } as const satisfies Record<CameraBackgroundPreset, CameraBackgroundImage>;
 
 export const CAMERA_BACKGROUND_OPTIONS: readonly { readonly id: CameraBackground; readonly label: string; readonly image?: string; readonly avif?: string }[] = [{ id: "none", label: "None" }, { id: "blur", label: "Blur" }, ...Object.values(CAMERA_BACKGROUND_IMAGES)];
