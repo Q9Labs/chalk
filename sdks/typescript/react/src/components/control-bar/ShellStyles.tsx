@@ -227,13 +227,6 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   margin: 10px 6px 2px;
 }
 .chalk-shell-qr-row p {font-size:13px;color:var(--chalk-soft-text);}
-.chalk-shell-qr {
-  width: 112px;
-  height: 112px;
-  flex: none;
-  border-radius: 8px;
-  fill: #111;
-}
 .chalk-shell-diagnostics {
   display: grid;
   grid-template-columns: max-content 1fr;

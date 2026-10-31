@@ -22,3 +22,4 @@ export { useToastClearance, useToasts } from "./primitives/toast/ToastStack";
 export { announce } from "./primitives/announce";
 export { usePressAnimation } from "./motion/press";
 export { Limbo } from "./limbo/Limbo";
+export { QrCode } from "./header/QrCode";
