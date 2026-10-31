@@ -63,6 +63,34 @@ const red = "var(--chalk-danger)"; const style = { color: red, fill: blue, backg
   assert.deepEqual(await findTokenViolations(root), []);
 });
 
+test("React detects Tailwind underscore hex colors without matching identifiers or URLs", async (t) => {
+  const root = await fixture(t, {
+    "arbitrary.tsx": `const examples = [
+  <div className="shadow-[0_2px_8px_#fff]" />,
+  <div className="shadow-[0_0_0_1px_#000_inset]" />,
+  <div className="bg-[linear-gradient(90deg,#123_0%,transparent_100%)]" />,
+];
+const identifier = "abc_def#fff";
+const url = "https://example.test/#fff";
+`,
+  });
+  assert.deepEqual(
+    (await findTokenViolations(root)).map(({ value }) => value),
+    ["#fff", "#000", "#123"],
+  );
+
+  const nativeBoxShadow = await fixture(t, { "src/example.tsx": 'const style = { boxShadow: "0 2px 8px #fff" };\n' });
+  const scanner = resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs");
+  const runNative = (directory) => spawnSync(process.execPath, [scanner], { cwd: directory, encoding: "utf8" });
+  const boxShadow = runNative(nativeBoxShadow);
+  assert.equal(boxShadow.status, 1, boxShadow.stderr);
+  assert.match(boxShadow.stderr, /boxShadow: "0 2px 8px #fff/u);
+
+  const nativeClassName = await fixture(t, { "src/example.tsx": '<View className="shadow-[0_2px_8px_#fff]" />;\n' });
+  const className = runNative(nativeClassName);
+  assert.equal(className.status, 0, className.stderr);
+});
+
 test("React detects named colors, modern functions and extended utility families without corrupting locations", async (t) => {
   const root = await fixture(t, {
     "modern.tsx": `const tokens = "bg-[var(--chalk-text)]";
