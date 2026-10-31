@@ -18,6 +18,7 @@ const { chromium } = requireConsumer('playwright');
 const output = resolve(root, process.env.CHALK_MATRIX_OUTPUT || 'artifacts/th-audio-1030-evening');
 await mkdir(output, { recursive: true });
 const duration = Number(process.env.CHALK_MATRIX_SECONDS || 600);
+const moderatorProbe = process.env.CHALK_MATRIX_MODERATOR === 'true';
 assert.ok(duration >= 60 && duration <= 1200);
 const versions = (process.env.CHALK_MATRIX_VERSIONS || '5.2.4,5.2.5,5.2.6,5.3.1').split(',');
 assert.ok(versions.every(version => Object.hasOwn(revisions, version) && version !== 'server'));
@@ -56,6 +57,7 @@ const report = {
   started: new Date().toISOString(), serverRevision: revisions.server,
   serverDescription: '29 Oct production-tagged source, run locally; dedicated development SFU',
   durationSeconds: duration, sampleIntervalSeconds: 1,
+  profile: moderatorProbe ? 'moderator-retirement' : 'self-mute-camera-outage',
   machine: { cores: execFileSync('nproc', { encoding: 'utf8' }).trim(), uptime: execFileSync('uptime', { encoding: 'utf8' }).trim() },
   versions: [],
 };
@@ -204,15 +206,19 @@ try {
       participants.push({ context, page });
     }
     run.joinSeconds = (Date.now() - origin) / 1000;
+    if (moderatorProbe) await participants[0].page.evaluate(target => { window.matrixMuteTarget = target; }, [...ids].find(([, index]) => index === 1)[0]);
     const start = Date.now();
     // 40 microphone actions, 6 camera toggles, one five-second UDP outage.
     const schedule = [];
-    for (let round = 0; round < 5; round++) for (let index = 0; index < 4; index++) {
+    for (let round = 0; !moderatorProbe && round < 5; round++) for (let index = 0; index < 4; index++) {
       const at = 20 + round * 110 + index * 20;
       schedule.push({ at, participant: index, kind: 'mic', enabled: false }, { at: at + 8, participant: index, kind: 'mic', enabled: true });
     }
-    for (const at of [70, 160, 390]) schedule.push({ at, participant: 0, kind: 'camera', enabled: true }, { at: at + 12, participant: 0, kind: 'camera', enabled: false });
-    schedule.push({ at: 300, participant: 2, kind: 'offline', enabled: true }, { at: 305, participant: 2, kind: 'offline', enabled: false });
+    if (moderatorProbe) schedule.push({ at: 20, participant: 1, kind: 'moderator', enabled: false }, { at: 28, participant: 1, kind: 'mic', enabled: true });
+    else {
+      for (const at of [70, 160, 390]) schedule.push({ at, participant: 0, kind: 'camera', enabled: true }, { at: at + 12, participant: 0, kind: 'camera', enabled: false });
+      schedule.push({ at: 300, participant: 2, kind: 'offline', enabled: true }, { at: 305, participant: 2, kind: 'offline', enabled: false });
+    }
     schedule.sort((a, b) => a.at - b.at);
     let cursor = 0;
     let offline = false;
@@ -229,8 +235,9 @@ try {
             execFileSync('sudo', ['iptables', '-w', action.enabled ? '-I' : '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
             await participants[2].context.setOffline(action.enabled);
           } else {
-            if (action.kind === 'mic') intents[action.participant] = action.enabled;
-            await participants[action.participant].page.locator(`#${action.kind}`).click({ timeout: 3000 });
+            if (action.kind === 'mic' || action.kind === 'moderator') intents[action.participant] = action.enabled;
+            const actor = action.kind === 'moderator' ? 0 : action.participant;
+            await participants[actor].page.locator(`#${action.kind}`).click({ timeout: 3000 });
           }
         } catch (error) { event.error = error.message; }
       }

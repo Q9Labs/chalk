@@ -13,7 +13,7 @@ const summaries = report.versions.map(run => {
     let enabled = true;
     let cursor = from;
     let seconds = 0;
-    for (const action of run.actions.filter(action => action.kind === 'mic' && action.participant === speaker)) {
+    for (const action of run.actions.filter(action => ['mic', 'moderator'].includes(action.kind) && action.participant === speaker)) {
       if (action.t <= from) enabled = action.enabled;
       else if (action.t < to) {
         if (enabled) seconds += action.t - cursor;
@@ -45,7 +45,7 @@ const summaries = report.versions.map(run => {
   }
   const unmutes = [];
   for (const action of run.actions.filter(action => action.kind === 'mic' && action.enabled)) {
-    const nextMute = run.actions.find(other => other.t > action.t && other.kind === 'mic' && other.participant === action.participant && !other.enabled);
+    const nextMute = run.actions.find(other => other.t > action.t && ['mic', 'moderator'].includes(other.kind) && other.participant === action.participant && !other.enabled);
     const deadline = nextMute?.t ?? lastT;
     for (let listener = 0; listener < 4; listener++) if (listener !== action.participant) {
       const first = audibleSamples.find(sample => sample.t >= action.t && (nextMute ? sample.t < deadline : sample.t <= deadline) && sample.audible.has(`${listener}:${action.participant}`));
