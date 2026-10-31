@@ -152,6 +152,7 @@ try {
     const fixtureSpace = await chalk.spaces.create({ name: `Synthetic audio ${version}`, slug: `audio-${version.replaceAll('.', '-')}-${Date.now()}`, mediaPlane: 'cf_sfu', defaultEpisodeDurationSeconds: 3600, maximumEpisodeDurationSeconds: 7200, lingerWindowSeconds: 600 });
     const episode = await chalk.episodes.create(fixtureSpace.id, {});
     const run = { version, sdkRevision: revisions[version], started: new Date().toISOString(), network: [], actions: [], samples: [], faults: [] };
+    const logOffset = (await readFile(config.aggregateLog, 'utf8')).length;
     report.versions.push(run);
     const participants = [];
     const ids = new Map();
@@ -164,6 +165,7 @@ try {
       const admission = await chalk.participants.admit(fixtureSpace.id, episode.id, { name: index === 0 ? 'Synthetic teacher' : `Synthetic student ${index}`, role: index === 0 ? 'owner' : 'participant' });
       let access = admission.access;
       assert.ok(access, 'synthetic participant must be admitted');
+      connections[index].add(access.media.client_payload.connectionId);
       let firstAccess = true;
       let accessQueue = Promise.resolve();
       const context = await browser.newContext({ permissions: ['camera', 'microphone'] });
@@ -173,6 +175,7 @@ try {
         const next = accessQueue.then(async () => {
           if (firstAccess) firstAccess = false;
           else access = await chalk.participants.issueAccess(fixtureSpace.id, episode.id, admission.participant.id, getAccessRefreshState(access), request);
+          connections[index].add(access.media.client_payload.connectionId);
           return access;
         });
         accessQueue = next.catch(() => undefined);
@@ -190,6 +193,8 @@ try {
           operation: input?.tracks?.map(track => track.location).join(',') ?? null,
           connectionNumber: input?.connection_id ? [...connections[index]].indexOf(input.connection_id) + 1 : null,
           hasConnection: Boolean(body.connection_id || body.connectionId), errorCode: body.code ?? body.error?.code ?? null });
+        const trackErrors = body.tracks?.filter(track => track.errorCode || track.errorDescription).map(track => ({ location: track.location, code: track.errorCode ?? null }));
+        if (trackErrors?.length) run.network.at(-1).trackErrors = trackErrors;
       });
       await page.goto(config.urls.web);
       await page.evaluate(config => window.matrixJoin(config), { space: fixtureSpace.slug, baseUrl: config.urls.api, syncUrl: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: `Synthetic ${index}` });
@@ -241,6 +246,11 @@ try {
     }
     if (offline) execFileSync('sudo', ['iptables', '-w', '-D', 'OUTPUT', '-p', 'udp', '-j', 'DROP']);
     run.sessionsPerParticipant = connections.map(connections => connections.size);
+    run.providerFailures = (await readFile(config.aggregateLog, 'utf8')).slice(logOffset).split('\n').filter(line => line.includes('cloudflare_sfu.request_failed')).map(line => {
+      let entry;
+      try { entry = JSON.parse(line.slice(line.indexOf('{'))); } catch { entry = {}; }
+      return Object.fromEntries(['time', 'operation', 'http_status', 'provider_code', 'request_local_track_count', 'request_remote_track_count'].map(key => [key, entry[key] ?? line.match(new RegExp(`\\b${key}=([^ ]+)`))?.[1] ?? null]));
+    });
     await save();
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(error => run.faults.push({ kind: 'leave', message: error.message }));
     await browser.close();
