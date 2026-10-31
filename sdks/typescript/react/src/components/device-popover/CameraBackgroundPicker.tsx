@@ -13,6 +13,7 @@ export interface CameraBackgroundMenu {
 export function CameraBackgroundPicker({ deviceId, menu }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu }) {
   const [controls, setControls] = useState<Controls>();
   const [failed, setFailed] = useState(false);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Load optional controls for this open picker; ignore late results on unmount so reopening can retry failures.
   useEffect(() => {
     let active = true;
     void loadCameraBackgroundControls().then(
