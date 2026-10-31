@@ -336,6 +336,17 @@ and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
 
+Local departure stops media and fires the React `onLeft` callback before durable
+cleanup finishes. The `client.leave()` promise remains the confirmation boundary:
+Sync stays connected for up to 40 seconds awaiting the durable acknowledgement,
+followed by a bounded admission-cancellation fallback. Completion records
+`cleanup_completed`; failure records `cleanup_unconfirmed`, rejects the promise
+and emits `connection.leave_unconfirmed`. Unmount cleanup keeps the client alive
+until that promise settles before disposal. Full-page navigation destroys the
+client context, so its acknowledgement and error callbacks cannot be delivered;
+already accepted durable server cleanup continues independently. This changes no
+durable journey event.
+
 Both transports default to a 60-second foreground recovery budget. Recoverable
 media failures retry throughout that budget, with default delays of 1, 2, 4,
 then 6 seconds (custom delays cannot shorten that ramp or exceed 6 seconds);
