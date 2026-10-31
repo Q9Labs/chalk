@@ -65,20 +65,27 @@ type receivePair struct {
 }
 
 type receiveEpisode struct {
-	mu          sync.Mutex
-	pairs       map[receivePairKey]*receivePair
-	pulls       map[receivePullKey]receivePull
-	lastSeen    time.Time
-	lastSummary time.Time
-	truncated   bool
+	mu           sync.Mutex
+	pairs        map[receivePairKey]*receivePair
+	pulls        map[receivePullKey]receivePull
+	publications map[receivePublicationKey][32]byte
+	lastSeen     time.Time
+	lastSummary  time.Time
+	truncated    bool
 }
 
 type receivePullKey struct {
-	listener   utilities.ID
-	generation int64
-	connection [32]byte
-	publisher  [32]byte
-	track      [32]byte
+	listener    utilities.ID
+	generation  int64
+	connection  [32]byte
+	publisher   [32]byte
+	track       [32]byte
+	publication [32]byte
+}
+
+type receivePublicationKey struct {
+	publisher [32]byte
+	track     [32]byte
 }
 
 type receivePull struct {
@@ -176,13 +183,8 @@ func (s Service) sampleReceiveHealth(ctx context.Context) {
 			h.warn(ctx, h.now())
 			continue
 		}
-		state := h.reconcile(episode, publications, participants)
-		if state != nil {
-			state.mu.Lock()
-			events := h.events(episode, state)
-			state.mu.Unlock()
-			emitReceiveHealthEvents(ctx, events)
-		}
+		events := h.reconcile(episode, publications, participants)
+		emitReceiveHealthEvents(ctx, events)
 	}
 }
 
@@ -230,6 +232,12 @@ func (s Service) ObserveListenerPull(_ context.Context, input ListenerPullInput)
 		}
 		key.publisher = sha256.Sum256([]byte(track.SessionID))
 		key.track = sha256.Sum256([]byte(track.TrackName))
+		key.publication = [32]byte{}
+		if len(track.PublicationID) <= 4096 {
+			if reference, err := ParseReference(track.PublicationID); err == nil && reference.ConnectionID == track.SessionID && reference.TrackName == track.TrackName {
+				key.publication = sha256.Sum256([]byte(track.PublicationID))
+			}
+		}
 		step, kind := listenerPullResult(track, input.Response, input.Err)
 		pulls[key] = receivePull{since: now, step: step, errorKind: kind}
 		if len(pulls) == receiveHealthMaxPublications {
@@ -246,6 +254,9 @@ func (s Service) ObserveListenerPull(_ context.Context, input ListenerPullInput)
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	for key, pull := range pulls {
+		if key.publication == ([32]byte{}) {
+			key.publication = state.publications[receivePublicationKey{publisher: key.publisher, track: key.track}]
+		}
 		previous, exists := state.pulls[key]
 		if !exists && len(state.pulls) >= receiveHealthMaxPairs {
 			state.truncated = true
@@ -304,7 +315,7 @@ func (h *receiveHealth) episode(key ReceiveHealthEpisode) *receiveEpisode {
 	return state
 }
 
-func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provideroperations.Publication, participants []PublicationParticipant) *receiveEpisode {
+func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provideroperations.Publication, participants []PublicationParticipant) []receiveHealthEvent {
 	if len(participants) == 0 {
 		h.mu.Lock()
 		delete(h.episodes, key)
@@ -333,6 +344,7 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 		current[participant.ID] = participant
 	}
 	seen := make(map[receivePairKey]bool)
+	state.publications = make(map[receivePublicationKey][32]byte)
 	for _, publication := range publications {
 		if (publication.Source != "microphone" && publication.Source != "screen_audio") || publication.PublicationID == "" || len(publication.PublicationID) > 4096 {
 			continue
@@ -342,6 +354,9 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 		if err != nil || !present || (reference.HasParticipantGeneration && reference.ParticipantGeneration != publisher.Generation) || (publisher.ConnectionID != "" && reference.ConnectionID != publisher.ConnectionID) {
 			continue
 		}
+		publicationKey := receivePublicationKey{publisher: sha256.Sum256([]byte(reference.ConnectionID)), track: sha256.Sum256([]byte(reference.TrackName))}
+		publicationHash := sha256.Sum256([]byte(publication.PublicationID))
+		state.publications[publicationKey] = publicationHash
 		for _, listener := range participants {
 			if listener.ID == publication.ParticipantID {
 				continue
@@ -368,8 +383,25 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 			}
 			pair.active = publication.Enabled
 			pullKey := receivePullKey{listener: listener.ID, generation: listener.Generation, connection: connection,
-				publisher: sha256.Sum256([]byte(reference.ConnectionID)), track: sha256.Sum256([]byte(reference.TrackName))}
-			if pull, ok := state.pulls[pullKey]; ok && pair.step != "pull_succeeded" {
+				publisher: publicationKey.publisher, track: publicationKey.track, publication: publicationHash}
+			pull, ok := state.pulls[pullKey]
+			delete(state.pulls, pullKey)
+			pullKey.publication = [32]byte{}
+			if pending, exists := state.pulls[pullKey]; exists {
+				delete(state.pulls, pullKey)
+				if !ok {
+					pull = pending
+				} else {
+					if pending.step == "pull_succeeded" {
+						pull.step, pull.errorKind = pending.step, pending.errorKind
+					}
+					if pending.since.Before(pull.since) {
+						pull.since = pending.since
+					}
+				}
+				ok = true
+			}
+			if ok && pair.step != "pull_succeeded" {
 				pair.step, pair.errorKind = pull.step, pull.errorKind
 				if fresh && pull.since.Before(pair.since) {
 					pair.since = pull.since
@@ -382,7 +414,7 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 			delete(state.pairs, key)
 		}
 	}
-	return state
+	return h.events(key, state)
 }
 
 func (h *receiveHealth) events(key ReceiveHealthEpisode, state *receiveEpisode) []receiveHealthEvent {

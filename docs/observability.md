@@ -183,9 +183,12 @@ reset on API restart and assume pulls for an Episode reach the same API process.
 Pull observations do not read the database or write logs. They retain bounded,
 hashed track-identity results until the sampler can match them to a publication,
 including pulls completed before its first sample. Results are keyed by listener
-generation and connection and expire after two minutes. Episode reconciliation
-uses per-Episode locks; log payloads are collected under the lock and emitted
-after unlocking, so a slow log sink does not hold up pull observations.
+generation and connection and expire after two minutes. Results bind to the
+request's publication reference when available, otherwise to the last sampled
+publication identity. Results for tracks not yet sampled are consumed on their
+first match, so a replacement cannot inherit an earlier publication's success.
+Episode reconciliation and event collection share one per-Episode lock; payloads
+are emitted after unlocking, so a slow log sink does not hold up pull observations.
 
 Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
 `publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant

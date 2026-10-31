@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -214,4 +215,113 @@ func TestReceiveHealthConcurrentSamplesAndPulls(t *testing.T) {
 		f.service.sampleReceiveHealth(context.Background())
 	}
 	workers.Wait()
+}
+
+func TestReceiveHealthReconciliationCollectsEventsAtomically(t *testing.T) {
+	f := newReceiveHealthFixture(t)
+	f.now = f.now.Add(16 * time.Second)
+	h := f.service.receiveHealth
+	collecting, pulling, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	h.now = func() time.Time {
+		switch calls.Add(1) {
+		case 2:
+			close(collecting)
+			<-release
+		case 3:
+			close(pulling)
+		}
+		return f.now
+	}
+	reconciled, pulled := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		close(release)
+		awaitReceiveHealth(t, reconciled, "reconciliation did not finish")
+		awaitReceiveHealth(t, pulled, "pull did not finish")
+	})
+	go func() {
+		defer close(reconciled)
+		h.reconcile(f.input.ReceiveHealthEpisode, f.repository.observations[0].Publications, f.repository.participants)
+	}()
+	go func() {
+		defer close(pulled)
+		select {
+		case <-collecting:
+		case <-release:
+			return
+		}
+		f.success()
+	}()
+	awaitReceiveHealth(t, collecting, "reconciliation returned without collecting events")
+	awaitReceiveHealth(t, pulling, "pull did not reach the Episode lock")
+	select {
+	case <-pulled:
+		t.Fatal("pull overtook atomic reconciliation and event collection")
+	default:
+	}
+}
+
+func TestReceiveHealthCachedPullDoesNotCrossPublicationReplacement(t *testing.T) {
+	for _, stage := range []string{"before_sample", "after_sample", "before_first_sample", "mixed_before_first_sample"} {
+		for _, replacement := range []string{"mid", "publisher_generation"} {
+			t.Run(stage+"/"+replacement, func(t *testing.T) {
+				f := newReceiveHealthFixture(t)
+				if stage == "before_first_sample" || stage == "mixed_before_first_sample" {
+					f.service.receiveHealth.clear()
+				}
+				f.success()
+				if stage == "mixed_before_first_sample" {
+					f.input.Requested[0].PublicationID = f.repository.observations[0].Publications[0].PublicationID
+					f.success()
+				}
+				if stage != "before_sample" {
+					f.sample(time.Second)
+				}
+				generation := int64(1)
+				publication := &f.repository.observations[0].Publications[0]
+				reference, err := ParseReference(publication.PublicationID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				mid := "replacement-mid"
+				if replacement == "publisher_generation" {
+					generation++
+					mid = reference.MID
+					f.repository.participants[0].Generation = generation
+				}
+				publication.PublicationID = encodeReference(f.input.Requested[0].SessionID, mid, f.input.Requested[0].TrackName, generation)
+				f.sample(time.Second)
+				f.sample(16 * time.Second)
+				if events := f.events(t, "media.listener_publication_unpulled"); len(events) != 1 || events[0]["step"] != "no_pull_attempted" {
+					t.Fatalf("cached success crossed publication replacement: %+v", events)
+				}
+			})
+		}
+	}
+}
+
+func TestReceiveHealthReplacementPullBeforeSampleUsesPublicationIdentity(t *testing.T) {
+	for _, success := range []bool{false, true} {
+		t.Run(fmt.Sprint(success), func(t *testing.T) {
+			f := newReceiveHealthFixture(t)
+			f.success()
+			publication := &f.repository.observations[0].Publications[0]
+			publication.PublicationID = encodeReference(f.input.Requested[0].SessionID, "replacement-mid", f.input.Requested[0].TrackName, 1)
+			f.input.Requested[0].PublicationID = publication.PublicationID
+			if success {
+				f.success()
+			} else {
+				f.input.Response = mediaplane.TracksResponse{}
+				f.service.ObserveListenerPull(context.Background(), f.input)
+			}
+			f.sample(16 * time.Second)
+			events := f.events(t, "media.listener_publication_unpulled")
+			if success && len(events) != 0 {
+				t.Fatalf("replacement success was lost: %+v", events)
+			}
+			if !success && (len(events) != 1 || events[0]["step"] != "pull_failed") {
+				t.Fatalf("replacement failure inherited an earlier success: %+v", events)
+			}
+		})
+	}
 }
