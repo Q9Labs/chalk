@@ -190,6 +190,37 @@ describe("AudioReceiveHealth", () => {
     expect(h.events).toEqual([]);
   });
 
+  it("retains identities but resets pull failures and timing on replacement", async () => {
+    const h = harness();
+    const p = publication();
+    h.tracker.roster([p]);
+    h.tracker.pullFailed(p.publicationId, "CloudflareSFUError");
+    h.tracker.start();
+    await vi.advanceTimersByTimeAsync(10000);
+    h.tracker.replaced();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(h.events).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "announced", duration_ms: 15000 }]);
+  });
+
+  it("ignores pending stats when replacement starts before the peer changes", async () => {
+    const h = harness();
+    h.tracker.roster([publication()]);
+    let resolve: (stats: RTCStatsReport) => void = () => {};
+    h.getStats.mockReturnValueOnce(
+      new Promise<RTCStatsReport>((done) => {
+        resolve = done;
+      }),
+    );
+    const sample = h.tracker.sample();
+    h.tracker.replaced();
+    vi.setSystemTime(15000);
+    resolve(new Map() as unknown as RTCStatsReport);
+    await sample;
+    expect(h.events).toEqual([]);
+  });
+
   it("summarizes audio states every twelve samples with one stats request per sample", async () => {
     const h = harness();
     const off = remote("off");
