@@ -1758,7 +1758,10 @@ alter table sync_lifecycle_intents
     )
     on delete restrict;
 
+create sequence sync_external_operation_acceptance_order_seq as bigint;
+
 create table sync_external_operations (
+    acceptance_order bigint not null default nextval('sync_external_operation_acceptance_order_seq'),
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
@@ -1876,6 +1879,11 @@ alter table sync_external_operations
     add foreign key (tenant_id, episode_id, parent_external_operation_id)
     references sync_external_operations(tenant_id, episode_id, external_operation_id)
     on delete restrict;
+alter sequence sync_external_operation_acceptance_order_seq
+    owned by sync_external_operations.acceptance_order;
+create unique index sync_external_operations_acceptance_order_key
+    on sync_external_operations(acceptance_order);
+
 create unique index sync_external_operations_parent_source_key
     on sync_external_operations(tenant_id, episode_id, parent_external_operation_id, source)
     where parent_external_operation_id is not null;

@@ -31,8 +31,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
 
   defp claim_operations_where(operation_filter) do
     """
-    with candidates as (
-      select external_operation_id
+    with eligible as (
+      select external_operation_id, next_attempt_at, attempt_count, acceptance_order,
+        row_number() over (
+          partition by tenant_id, episode_id
+          order by acceptance_order
+        ) as episode_position
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
@@ -85,8 +89,13 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
         )
-      order by next_attempt_at, attempt_count, created_at, external_operation_id
-      for update skip locked
+    ), candidates as (
+      select operation.external_operation_id
+      from sync_external_operations operation
+      join eligible using (external_operation_id)
+      where eligible.episode_position = 1
+      order by eligible.next_attempt_at, eligible.attempt_count, eligible.acceptance_order
+      for update of operation skip locked
       limit $1
     ), claimed as (
       update sync_external_operations operation
@@ -99,7 +108,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     )
     select #{ExternalOperationColumns.columns("claimed")}
     from claimed
-    order by next_attempt_at, attempt_count, created_at, external_operation_id
+    order by next_attempt_at, attempt_count, acceptance_order
     """
   end
 end
