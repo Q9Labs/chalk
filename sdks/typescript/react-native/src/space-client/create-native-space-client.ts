@@ -96,13 +96,13 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       initialCameraEnabled: options.camera,
     },
   );
-  client.subscribe(() => session.setCallOpen(CALL_OPEN_STATUSES.has(client.getSnapshot().connection.status)));
+  client.subscribe(() => session.setCallOpen(client, CALL_OPEN_STATUSES.has(client.getSnapshot().connection.status)));
   // A disposed client stops publishing, so a dispose without leave() must clear the open-call mark itself.
   const disposeClient = client.dispose;
   return Object.assign(client, {
     dispose: () => {
       disposeClient.call(client);
-      session.setCallOpen(false);
+      session.setCallOpen(client, false);
     },
   });
 }

@@ -38,28 +38,24 @@ export function newSessionId(): string {
 function browserSession(): string | undefined {
   if (browserId) return browserId;
   if (typeof globalThis.document === "undefined") return undefined;
-  let storage: Storage | undefined;
-  try {
-    storage = globalThis.sessionStorage;
-  } catch {
-    /* Blocked storage keeps the ID for this page load only. */
-  }
   const tab = tabToken();
-  browserId = storedSession(storage, tab) ?? newSessionId();
+  browserId = newSessionId();
   try {
-    storage?.setItem(STORAGE_KEY, browserId);
-    if (tab !== undefined) storage?.setItem(TAB_KEY, tab);
+    const storage = globalThis.sessionStorage;
+    browserId = storedSession(storage, tab) ?? browserId;
+    storage.setItem(STORAGE_KEY, browserId);
+    if (tab !== undefined) storage.setItem(TAB_KEY, tab);
   } catch {
-    /* A full or blocked store is not a request failure. */
+    /* Blocked or full storage keeps the ID in memory for this page load; a session must never break a request. */
   }
   return browserId;
 }
 
 /** The stored ID, when it is a session ID and was stored by this tab. */
-function storedSession(storage: Storage | undefined, tab: string | undefined): string | undefined {
-  const stored = storage?.getItem(STORAGE_KEY) ?? undefined;
+function storedSession(storage: Storage, tab: string | undefined): string | undefined {
+  const stored = storage.getItem(STORAGE_KEY) ?? undefined;
   if (!stored || !SESSION_ID.test(stored)) return undefined;
-  return tab === undefined || storage?.getItem(TAB_KEY) === tab ? stored : undefined;
+  return tab === undefined || storage.getItem(TAB_KEY) === tab ? stored : undefined;
 }
 
 /** The token that names this tab in `window.name`, which survives reloads but is empty in a duplicated tab. Undefined when the app owns `window.name`. */

@@ -78,6 +78,22 @@ describe("web session", () => {
     expect(currentSessionId()).toBe(currentSessionId());
   });
 
+  it("keeps the session in memory and still sends the request when reading or writing storage throws", async () => {
+    const denied = () => {
+      throw new DOMException("denied", "SecurityError");
+    };
+    const { currentSessionId, withRequestContext } = await loadIn({ storage: { getItem: denied, setItem: denied } as unknown as Storage, window: { name: "" } });
+    const send = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null));
+
+    await withRequestContext(send)("https://api.example.test/v1/ping");
+    await withRequestContext(send)("https://api.example.test/v1/ping");
+
+    const [first, second] = send.mock.calls.map(([, init]) => new Headers(init?.headers).get("baggage"));
+    expect(first).toBe(`session.id=${currentSessionId()}`);
+    expect(first).toMatch(/^session\.id=[0-9a-f-]{36}$/);
+    expect(second).toBe(first);
+  });
+
   it("sends baggage and a trace context on each request without overriding the caller's headers", async () => {
     vi.stubGlobal("sessionStorage", tabStorage());
     const { currentSessionId, withRequestContext } = await loadSession();

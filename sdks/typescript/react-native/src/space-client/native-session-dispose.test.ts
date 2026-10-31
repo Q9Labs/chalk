@@ -40,3 +40,23 @@ it("ends the open-call mark when a joining client is disposed without leave()", 
   backgroundFor(NATIVE_SESSION_BACKGROUND_MS);
   expect(session.current()).not.toBe(duringCall);
 });
+
+it("keeps the session through a long background stay when another client's call is still open", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const session = installNativeSession();
+  const open = () => createNativeSpaceClient({ space: "space-1", getAccess: () => new Promise(() => undefined), baseUrl: "https://api.chalk.test", microphone: false, camera: false });
+  const live = open();
+  const other = open();
+  const joined = [live, other].map((client) => client.join().catch(() => undefined));
+  await vi.waitFor(() => expect([live, other].map((client) => client.getSnapshot().connection.status)).toEqual(["joining", "joining"]));
+
+  other.dispose();
+  const duringCall = session.current();
+  backgroundFor(NATIVE_SESSION_BACKGROUND_MS);
+  expect(session.current()).toBe(duringCall);
+
+  live.dispose();
+  await Promise.all(joined);
+  backgroundFor(NATIVE_SESSION_BACKGROUND_MS);
+  expect(session.current()).not.toBe(duringCall);
+});

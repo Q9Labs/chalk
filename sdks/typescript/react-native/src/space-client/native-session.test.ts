@@ -18,6 +18,7 @@ function harness() {
 }
 
 describe("native session", () => {
+  const call = {};
   it("keeps the session across a short background stay", () => {
     const { session, move } = harness();
     const first = session.current();
@@ -38,10 +39,27 @@ describe("native session", () => {
   it("never starts a new session while a call is open", () => {
     const { session, move } = harness();
     const first = session.current();
-    session.setCallOpen(true);
+    session.setCallOpen(call, true);
     move("background");
     move("active", 2 * NATIVE_SESSION_BACKGROUND_MS);
     expect(session.current()).toBe(first);
+  });
+
+  it("stays in a call until every client's call has closed", () => {
+    const { session, move } = harness();
+    const first = session.current();
+    const other = {};
+    session.setCallOpen(call, true);
+    session.setCallOpen(other, true);
+    session.setCallOpen(call, false);
+    move("background");
+    move("active", 2 * NATIVE_SESSION_BACKGROUND_MS);
+    expect(session.current()).toBe(first);
+
+    session.setCallOpen(other, false);
+    move("background");
+    move("active", NATIVE_SESSION_BACKGROUND_MS);
+    expect(session.current()).not.toBe(first);
   });
 
   it("measures each background stay from its own start", () => {
