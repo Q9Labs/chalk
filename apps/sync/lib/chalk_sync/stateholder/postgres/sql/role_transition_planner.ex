@@ -58,7 +58,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
       external_operation_id = excluded.external_operation_id,
       expires_at = excluded.expires_at,
       created_at = now()
-    where sync_publication_fences.expires_at <= now()
+    where sync_publication_fences.expires_at <= now() or $8
     returning external_operation_id
     """
   end

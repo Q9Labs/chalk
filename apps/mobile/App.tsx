@@ -1,4 +1,5 @@
 import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resolveDevDiagnosticsMode, setDevDiagnosticsConnection, setDevDiagnosticsDevice, setDevDiagnosticsEnvironment } from "@q9labsai/chalk-react-native/diagnostics";
+import { installNativeSession } from "@q9labsai/chalk-react-native/client";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
 import { ChalkUI, useDeviceLayout, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
 import * as SplashScreen from "expo-splash-screen";
@@ -18,6 +19,7 @@ import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spac
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
 import { loadOnboardingState, saveOnboardingState } from "./src/screens/onboarding-store";
 
+installNativeSession();
 void SplashScreen.preventAutoHideAsync();
 
 /** What the app shows: Home, then the name step when there's no name, joining, and the call. */

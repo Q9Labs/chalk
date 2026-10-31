@@ -17,7 +17,8 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationFences do
             Scope.uuid(participant.id),
             participant.generation,
             Atom.to_string(source),
-            operation_id
+            operation_id,
+            external.name == :participant_leave
           ]
 
       case Postgrex.query!(connection, PlannerSQL.insert_publication_fence(), params).rows do

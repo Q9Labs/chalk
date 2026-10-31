@@ -9,6 +9,7 @@ import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
@@ -2388,6 +2389,87 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
 describe("viewer layer switching", () => {
+  const healthyCameraStats = (h: ReturnType<typeof createHarness>) => {
+    for (const camera of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) setVideoRenderSize(camera.track, { width: 480, height: 270 });
+    return vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = performance.now() / 1000;
+      const stats: Map<string, RTCStats> = reviewStats(h, () => Math.floor(seconds * 100));
+      const pair: RTCStats = { id: "pair", type: "candidate-pair", timestamp: performance.now() };
+      Object.assign(pair, { selected: true, state: "succeeded", availableOutgoingBitrate: h.peers.at(-1)!.availableOutgoingBitrate });
+      stats.set(pair.id, pair);
+      for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) Object.assign(stats.get(p.track.id)!, { kind: "video", packetsLost: 0, framesDecoded: seconds * 30, freezeCount: 0 });
+      return stats;
+    });
+  };
+
+  it("batches 32 rejected cameras fairly within the aggregate adaptation budget", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const publications = Array.from({ length: 32 }, (_, i) => ({ participantId: `publisher-${i}`, source: "camera" as const, publicationId: versionedPublicationID(`publisher-${i}`, "0", "camera") }));
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      h.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+      await h.client.refreshRemotePublications();
+      h.transport.failTrackUpdates = true;
+      healthyCameraStats(h);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.transport.updateInputs.length).toBeGreaterThanOrEqual(2);
+      expect(h.transport.updateInputs.length).toBeLessThanOrEqual(12);
+      expect(h.transport.updateInputs.every((input) => input.tracks.length === 16)).toBe(true);
+      expect(new Set(h.transport.updateInputs.slice(0, 2).flatMap((input) => input.tracks.map((track) => track.sessionId))).size).toBe(32);
+    });
+  });
+
+  it("keeps sampling stalls and camera uplink while a single layer batch is pending", async () => {
+    const gate = Promise.withResolvers<CloudflareSFUTracksResponse>();
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      await reviewSubscribe(h);
+      const stats = healthyCameraStats(h);
+      const update = vi.spyOn(h.transport, "updateTracks").mockImplementation(() => gate.promise);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(update).toHaveBeenCalledTimes(1);
+      const samples = stats.mock.calls.length;
+      const originalStats = stats.getMockImplementation()!;
+      stats.mockImplementation(async () => {
+        const report = await originalStats();
+        for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "microphone")) Object.assign(report.get(p.track.id)!, { packetsReceived: 300 });
+        return report;
+      });
+      h.peers[0]!.availableOutgoingBitrate = 300_000;
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(stats.mock.calls.length - samples).toBe(9);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
+      expect(
+        h.peers[0]!.getSenders()
+          .find((sender) => sender.track?.kind === "video")!
+          .getParameters()
+          .encodings.find((encoding) => encoding.rid === "l")!.active,
+      ).toBe(false);
+      gate.reject(new CloudflareSFUError("switch timeout", "signaling_timeout"));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(h.client.getSnapshot().connection.phase).toBe("live");
+    });
+  });
+
+  it("retries only failed members of a layer batch", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const publications = [0, 1].map((i) => ({ participantId: `publisher-${i}`, source: "camera" as const, publicationId: versionedPublicationID(`publisher-${i}`, "0", "camera") }));
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      h.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+      await h.client.refreshRemotePublications();
+      healthyCameraStats(h);
+      vi.spyOn(h.transport, "updateTracks").mockImplementationOnce(async (input) => {
+        h.transport.updateInputs.push(input);
+        return { trackErrors: [{ connectionId: input.tracks[1]!.sessionId!, trackName: input.tracks[1]!.trackName, code: "not_available" }] };
+      });
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(h.transport.updateInputs.map((input) => input.tracks.length)).toEqual([2, 1]);
+      expect(h.transport.updateInputs[1]!.tracks[0]!.sessionId).toBe("publisher-1");
+    });
+  });
+
   const cameraStats = (h: ReturnType<typeof createHarness>) => {
     const camera = h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
     // Frames keep decoding while freezes accumulate, so loss never explains the drop.
@@ -2434,6 +2516,174 @@ describe("viewer layer switching", () => {
     );
   });
 });
+describe("layer switching with receive-stall recovery", () => {
+  const smallCameras = (h: ReturnType<typeof createHarness>) => {
+    for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) setVideoRenderSize(p.track, { width: 480, height: 270 });
+  };
+  const sampleMedia = (h: ReturnType<typeof createHarness>, packets: (source: string, track: MediaStreamTrack) => number) =>
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const report = reviewStats(h, () => 0);
+      for (const p of h.client.getSnapshot().remoteTracks) {
+        const count = packets(p.source, p.track);
+        Object.assign(report.get(p.track.id)!, { packetsReceived: count, ...(p.source === "camera" ? { kind: "video", packetsLost: 0, framesDecoded: Math.floor(count / 4), freezeCount: 0 } : {}) });
+      }
+      return report;
+    });
+
+  it("does not count a three-second packet gap during a layer switch as a stall", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      let gap = false;
+      sampleMedia(h, (source) => Math.floor((source === "camera" && gap ? 5000 : performance.now()) / 10));
+      await vi.advanceTimersByTimeAsync(4000);
+      smallCameras(h);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(h.transport.updateInputs).toMatchObject([{ tracks: [{ simulcast: { preferredRid: "l" } }] }]);
+      gap = true;
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+      gap = false;
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(h.transport.closeInputs).toEqual([]);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+      expect(h.peers).toHaveLength(1);
+    });
+  });
+
+  it("re-applies l on the new receiver MID after a stalled camera is re-pulled", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      smallCameras(h);
+      const original = h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
+      const oldMid = h.peers[0]!.getTransceivers().find((t) => t.receiver.track === original.track)!.mid;
+      sampleMedia(h, (source, track) => Math.floor((source === "camera" && track === original.track ? Math.min(performance.now(), 4000) : performance.now()) / 10));
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(h.transport.updateInputs[0]!.tracks).toMatchObject([{ mid: oldMid, simulcast: { preferredRid: "l" } }]);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const replacement = h.client.getSnapshot().remoteTracks.find((p) => p.publicationId === original.publicationId)!;
+      const newMid = h.peers[0]!.getTransceivers().find((t) => t.receiver.track === replacement.track)!.mid;
+      expect(replacement.track).not.toBe(original.track);
+      expect(newMid).not.toBe(oldMid);
+      expect(h.transport.closeInputs).toMatchObject([{ receiveOnly: true, tracks: [{ mid: oldMid }] }]);
+      expect(h.transport.addInputs.at(-1)!.tracks).toMatchObject([{ simulcast: { preferredRid: "h" } }]);
+      expect(h.transport.updateInputs).toMatchObject([{ tracks: [{ mid: oldMid, simulcast: { preferredRid: "l" } }] }, { tracks: [{ mid: newMid, simulcast: { preferredRid: "l" } }] }]);
+      expect(h.peers).toHaveLength(1);
+    });
+  });
+
+  it("bounds failed re-pull recovery to two rebuilds independently per receiver while layers adapt", async () => {
+    vi.useFakeTimers();
+    const replacements = [0, 0];
+    const failedRepulls = [0, 0];
+    const receivers = replacements.map((_, i) => createHarness({ replaceMediaConnection: async () => reviewReplacement(receivers[i]!, `layer-recovery-${i}-${++replacements[i]!}`) }));
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async function (this: FakePeerConnection) {
+      const h = receivers.find((h) => h.peers.includes(this))!;
+      smallCameras(h);
+      const age = Date.now() - this.bornAt;
+      const report = reviewStats(h, (source) => Math.floor((source === "camera" ? Math.min(age, 4000) : performance.now()) / 10));
+      for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) Object.assign(report.get(p.track.id)!, { kind: "video", packetsLost: 0, framesDecoded: Math.floor(Math.min(age, 4000) / 40), freezeCount: 0 });
+      return report;
+    });
+    try {
+      for (const [i, h] of receivers.entries()) {
+        const close = h.transport.closeTracks.bind(h.transport);
+        vi.spyOn(h.transport, "closeTracks").mockImplementation(async (input) => {
+          if (input.receiveOnly) {
+            h.transport.failNextRemotePull = true;
+            failedRepulls[i]!++;
+          }
+          return close(input);
+        });
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+      }
+      await vi.advanceTimersByTimeAsync(180_000);
+      for (const [i, h] of receivers.entries()) {
+        expect(failedRepulls[i]).toBeGreaterThan(0);
+        expect(replacements[i]).toBe(2);
+        expect(h.transport.updateInputs.length).toBeGreaterThan(0);
+        expect(h.peers).toHaveLength(3);
+        expect(h.peers.filter((peer) => !peer.closed)).toHaveLength(1);
+      }
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(replacements).toEqual([2, 2]);
+    } finally {
+      for (const h of receivers) h.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["microphone", "camera"] as const)("does not recover an intentionally disabled %s while layer switches retry", async (source) => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      smallCameras(h);
+      h.transport.failTrackUpdates = true;
+      let paused = false;
+      sampleMedia(h, (s) => Math.floor((s === source && paused ? 4000 : performance.now()) / 10));
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(h.transport.updateInputs).toHaveLength(1);
+      h.client.remotePublicationsChanged(reviewPublications().map((p) => ({ ...p, enabled: p.source !== source })));
+      paused = true;
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(h.transport.updateInputs.length).toBeGreaterThan(1);
+      expect(h.transport.closeInputs).toEqual([]);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+      expect(h.peers).toHaveLength(1);
+      // The same missing packets must become a stall when the source is expected again.
+      h.client.remotePublicationsChanged(reviewPublications().map((p) => ({ ...p, enabled: true })));
+      await vi.advanceTimersByTimeAsync(24_000);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
+      expect(h.transport.closeInputs).toHaveLength(1);
+    });
+  });
+
+  it("leaves no timers or connection listeners after teardown with completed or pending layer switches", async () => {
+    vi.useFakeTimers();
+    const added = vi.spyOn(FakePeerConnection.prototype, "addEventListener");
+    const removed = vi.spyOn(FakePeerConnection.prototype, "removeEventListener");
+    const clients: ReturnType<typeof createHarness>[] = [];
+    try {
+      for (const pending of [false, true]) {
+        added.mockClear();
+        removed.mockClear();
+        const h = createHarness();
+        clients.push(h);
+        const gate = Promise.withResolvers<CloudflareSFUTracksResponse>();
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        smallCameras(h);
+        sampleMedia(h, () => Math.floor(performance.now() / 10));
+        const update = vi.spyOn(h.transport, "updateTracks");
+        if (pending) update.mockImplementation(() => gate.promise);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBeGreaterThan(0);
+        h.client.stop();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+        for (const event of ["connectionstatechange", "iceconnectionstatechange", "signalingstatechange"] as const) {
+          const listeners = added.mock.calls.filter(([type]) => type === event);
+          expect(listeners).toHaveLength(1);
+          expect(removed.mock.calls.filter(([type]) => type === event)).toEqual(listeners);
+        }
+        gate.resolve({});
+        await vi.advanceTimersByTimeAsync(60_000);
+        expect(vi.getTimerCount()).toBe(0);
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(h.peers[0]!.closed).toBe(true);
+      }
+    } finally {
+      for (const h of clients) h.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+});
+
 it.each([false, true])("a persistent partial stall exhausts two fallback rebuilds on every receiver (brief progress on each connection: %s)", async (briefProgress) => {
   vi.useFakeTimers();
   const origin = Date.now();

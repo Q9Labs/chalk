@@ -3,6 +3,9 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.ProviderBridge.Client
+  alias ChalkSync.ProviderBridge.MediaPlane
+  alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
@@ -211,6 +214,311 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              ]).rows
 
     assert [["left", true]] = departure_rows(connection, identity.participant_id, id)
+  end
+
+  for outcome <- [:confirmed, :retry_exhausted],
+      {kind, source} <- [
+        mute_participant: "microphone",
+        stop_participant_camera: "camera",
+        stop_participant_screen_share: "screen"
+      ] do
+    @tag timeout: 180_000
+    test "account reentry isolates old cleanup and #{kind} on #{outcome}", %{
+      connection: connection,
+      fixture: fixture
+    } do
+      assert_account_reentry(
+        connection,
+        fixture,
+        unquote(outcome),
+        unquote(kind),
+        unquote(source)
+      )
+    end
+  end
+
+  defp assert_account_reentry(connection, fixture, outcome, kind, source) do
+    episode = fixture.episode
+    account = UUID.generate()
+
+    Postgrex.query!(
+      connection,
+      "insert into users(id,name,email) values($1,'Reentry test',$2)",
+      [UUID.dump!(account), account <> "@example.invalid"]
+    )
+
+    on_exit(fn ->
+      SyncPostgres.cleanup(connection, episode)
+      Postgrex.query!(connection, "delete from users where id=$1", [UUID.dump!(account)])
+    end)
+
+    SyncPostgres.seed_webhook_endpoint(fixture, connection, ["participant.left"])
+    old = account_join(episode, account, "reentry_first_join")
+    assert {:ok, old} = Postgres.admit_entry(old, :new)
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(old)
+
+    {:ok, mute} =
+      Operation.new("reentry_old_mute_001", kind, %{
+        "participantId" => old.participant_id
+      })
+
+    assert {:ok, %{result: :pending, external_operation_id: mute_id}} =
+             Postgres.begin_operation(hd(fixture.identities), mute)
+
+    {:ok, leave} = Operation.new("reentry_departure_001", :participant_leave, %{})
+
+    assert {:ok, %{result: :applied, external_operation_id: departure_id} = departure} =
+             Postgres.begin_operation(old, leave)
+
+    cleanup = claim_cleanup(departure_id)
+    assert cleanup.target_participant_id == old.participant_id
+    assert cleanup.target_participant_generation == old.participant_generation
+    assert cleanup.payload["departureOperationId"] == departure_id
+    before_departure = departure_snapshot(connection, episode, old.participant_id, departure_id)
+    assert [[%DateTime{}, "committed", %{}, [%{}], 1, 1, 1]] = before_departure
+
+    owner = self()
+    {:ok, media} = Agent.start_link(fn -> %{} end)
+
+    transport = fn :post, url, _headers, body, _options ->
+      payload = JSON.decode!(body)
+      id = url |> URI.parse() |> Map.fetch!(:path) |> Path.basename()
+      send(owner, {:provider_call, id, payload, self()})
+
+      result =
+        if id == cleanup.external_operation_id do
+          receive do
+            {:release, result} -> result
+          end
+        else
+          "confirmed"
+        end
+
+      if result == "confirmed" do
+        Agent.update(
+          media,
+          &Map.delete(&1, {payload["participant_id"], payload["participant_generation"]})
+        )
+      end
+
+      {:ok, 200, [],
+       JSON.encode!(%{"operation_id" => id, "effect" => payload["effect"], "outcome" => result})}
+    end
+
+    adapter =
+      Client.new!(base_url: "http://localhost:4000", transport: transport) |> MediaPlane.new!()
+
+    task =
+      Task.async(fn ->
+        ExternalOperationConsumer.execute_operation(
+          episode,
+          cleanup,
+          {MediaPlane, adapter},
+          nil,
+          &Postgres.finalize_operation/3,
+          180_000
+        )
+      end)
+
+    assert_receive {:provider_call, cleanup_id, cleanup_payload, provider}, 5_000
+    assert cleanup_id == cleanup.external_operation_id
+    assert cleanup_payload["effect"] == "media.remove_participant"
+    assert cleanup_payload["participant_id"] == old.participant_id
+    assert cleanup_payload["participant_generation"] == old.participant_generation
+
+    current = account_join(episode, account, "reentry_second_join")
+    assert current.participant_id != old.participant_id
+    assert current.participant_generation > old.participant_generation
+    assert {:ok, current} = Postgres.admit_entry(current, :new)
+    assert {:ok, %{result: :applied}} = Postgres.confirm_admission(current)
+
+    Agent.update(
+      media,
+      &Map.put(&1, {current.participant_id, current.participant_generation}, :active)
+    )
+
+    assert {:ok, grant} =
+             Postgres.reserve_publication_grant(current, "reentry_current_camera_001", :camera)
+
+    assert {:ok, %{status: :confirmed, result: :authorized}} =
+             Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)
+
+    {:ok, current_stop} =
+      Operation.new("reentry_current_stop_001", :stop_participant_screen_share, %{
+        "participantId" => current.participant_id
+      })
+
+    assert {:ok, %{result: :pending, external_operation_id: current_stop_id}} =
+             Postgres.begin_operation(hd(fixture.identities), current_stop)
+
+    send(provider, {:release, if(outcome == :confirmed, do: "confirmed", else: "ambiguous")})
+
+    assert Task.await(task, 180_000) ==
+             if(outcome == :confirmed, do: :confirmed, else: :pending)
+
+    if outcome == :retry_exhausted do
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set attempt_count=99,next_attempt_at=now() where external_operation_id=$1",
+        [UUID.dump!(cleanup.external_operation_id)]
+      )
+
+      assert %{attempt_count: 100} = retry = claim_cleanup(departure_id)
+
+      assert :terminal_failure =
+               ExternalOperationConsumer.execute_operation(
+                 episode,
+                 retry,
+                 {MediaPlane, adapter},
+                 nil,
+                 &Postgres.finalize_operation/3
+               )
+    end
+
+    status = if outcome == :confirmed, do: :applied, else: :failed
+
+    settlement =
+      if outcome == :confirmed, do: {:confirmed, :provider}, else: {:failed, :retry_exhausted}
+
+    assert {:ok, %{status: ^status}} =
+             Postgres.read_operation(episode, cleanup.external_operation_id)
+
+    assert {:ok, %{result: ^status, delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, cleanup.external_operation_id, settlement)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(mute_id)]
+    )
+
+    assert {:ok, operations} = Postgres.claim_operations(64)
+
+    assert {^episode, old_mute} =
+             Enum.find(operations, fn {_, op} -> op.external_operation_id == mute_id end)
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               old_mute,
+               {MediaPlane, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert_receive {:provider_call, ^mute_id, mute_payload, _}, 5_000
+    assert mute_payload["effect"] == "media.revoke_publication"
+    assert mute_payload["participant_id"] == old.participant_id
+    assert mute_payload["participant_generation"] == old.participant_generation
+    assert mute_payload["publication_source"] == source
+
+    assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
+             Postgres.read_operation(episode, mute_id)
+
+    assert {:ok, %{result: :failed, delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, mute_id, {:confirmed, :provider})
+
+    assert [["rejected", "external_operation_failed", 1]] =
+             Postgrex.query!(
+               connection,
+               "select outcome, rejection_reason, count(*) over() from sync_command_receipts where external_operation_id=$1",
+               [UUID.dump!(mute_id)]
+             ).rows
+
+    refute_receive {:provider_call, _, _, _}, 0
+
+    assert Agent.get(
+             media,
+             &Map.get(&1, {current.participant_id, current.participant_generation})
+           ) == :active
+
+    assert {:ok, %{generation: current_generation}} =
+             Postgres.participant_authority(
+               episode,
+               current.participant_id,
+               current.participant_generation
+             )
+
+    assert current_generation == current.participant_generation
+
+    assert [["active", "joined", generation, "confirmed", 1]] =
+             Postgrex.query!(
+               connection,
+               """
+               select p.status, s.state, s.generation, r.status,
+                 (select count(*) from sync_publication_fences where participant_id=p.id and participant_generation=p.generation)
+               from participants p join participant_join_seats s on s.participant_id=p.id
+               join sync_publication_grant_reservations r on r.participant_id=p.id and r.participant_generation=p.generation
+               where p.id=$1
+               """,
+               [UUID.dump!(current.participant_id)]
+             ).rows
+
+    assert generation == current.participant_generation
+
+    assert [[current_fence_id]] =
+             Postgrex.query!(
+               connection,
+               "select external_operation_id from sync_publication_fences where participant_id=$1 and participant_generation=$2 and source='screen'",
+               [UUID.dump!(current.participant_id), current.participant_generation]
+             ).rows
+
+    assert UUID.load!(current_fence_id) == current_stop_id
+
+    assert departure_snapshot(connection, episode, old.participant_id, departure_id) ==
+             before_departure
+
+    assert {:ok, %{result: :applied, delivery: :duplicate, event_id: event_id}} =
+             Postgres.begin_operation(old, leave)
+
+    assert event_id == departure.event_id
+
+    assert departure_snapshot(connection, episode, old.participant_id, departure_id) ==
+             before_departure
+
+    assert [[0]] =
+             Postgrex.query!(
+               connection,
+               "select count(*) from webhook_events where tenant_id=$1 and resource_id=$2 and event_name='participant.left'",
+               [UUID.dump!(episode.tenant_id), UUID.dump!(current.participant_id)]
+             ).rows
+  end
+
+  defp account_join(episode, account, key) do
+    {output, status} =
+      System.cmd(
+        "go",
+        ["run", "./tests/sync-reentry", episode.tenant_id, episode.space_id, account, key],
+        cd: Path.expand("../../../api", __DIR__),
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+    result = JSON.decode!(output)
+
+    %Identity{
+      episode: episode,
+      participant_id: result["participant_id"],
+      participant_generation: result["generation"],
+      admission_lifecycle_intent_id: result["intent_id"],
+      role: result["role"],
+      capabilities: result["capabilities"]
+    }
+  end
+
+  defp departure_snapshot(connection, episode, participant_id, departure_id) do
+    Postgrex.query!(
+      connection,
+      """
+      select p.left_at, r.outcome, to_jsonb(r),
+        (select jsonb_agg(to_jsonb(e) order by e.id) from webhook_events e where e.tenant_id=$1 and e.resource_id=$2 and e.event_name='participant.left'),
+        (select count(*) from webhook_events where tenant_id=$1 and resource_id=$2 and event_name='participant.left'),
+        (select count(*) from sync_command_receipts where external_operation_id=$3),
+        (select count(*) from webhook_deliveries d join webhook_events e on e.id=d.event_id where e.tenant_id=$1 and e.resource_id=$2 and e.event_name='participant.left')
+      from participants p join sync_command_receipts r on r.external_operation_id=$3 where p.id=$2
+      """,
+      [UUID.dump!(episode.tenant_id), UUID.dump!(participant_id), UUID.dump!(departure_id)]
+    ).rows
   end
 
   test "a crash on the last cleanup claim can still settle exhaustion", %{

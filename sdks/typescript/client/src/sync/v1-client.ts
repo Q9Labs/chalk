@@ -4,6 +4,7 @@ import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
+import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
@@ -41,6 +42,8 @@ const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+/** Sync servers that rejected a hello carrying `baggage`; they predate the session ID. Kept for the page or app run only. */
+const legacyHelloServers = new Set<string>();
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -112,6 +115,8 @@ export class V1SyncClient implements V1CollaborationClient {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
   #reconnectAttempt = 0;
+  /** The socket whose hello carried baggage and has not been answered by a welcome yet. */
+  #baggageHelloSocket: V1Socket | null = null;
   #episodeEndTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -451,11 +456,12 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
         this.#inbound = this.#inbound.then(() => {
+          const legacyHello = event.code === 1009 && this.#legacyHelloRejected(socket);
           if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
             this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
             this.#emit();
           }
-          this.#disconnected(socket);
+          this.#disconnected(socket, legacyHello);
         });
       }, 0);
     };
@@ -472,10 +478,12 @@ export class V1SyncClient implements V1CollaborationClient {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
+      const baggage = legacyHelloServers.has(this.#options.url) ? undefined : sessionBaggage();
       const hello = {
         type: "hello",
         protocol: 1,
         ...(this.#options.traceparent ? { traceparent: this.#options.traceparent } : {}),
+        ...(baggage ? { baggage } : {}),
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },
@@ -485,6 +493,7 @@ export class V1SyncClient implements V1CollaborationClient {
         },
       } as const;
       const collaborationExtension = this.#collaborationState.helloExtension;
+      this.#baggageHelloSocket = baggage ? socket : null;
       if (!collaborationExtension) {
         this.#send(hello);
       } else {
@@ -504,7 +513,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
-      else this.#recover("invalid_frame");
+      else this.#recover("invalid_frame", error instanceof V1ReplicaError && error.message === "invalid_frame" && this.#legacyHelloRejected(socket));
     }
   }
   async #handleFrame(frame: SyncV1ServerFrame): Promise<void> {
@@ -635,6 +644,7 @@ export class V1SyncClient implements V1CollaborationClient {
     >,
   ): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
+    this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
@@ -844,7 +854,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (evidence.get(frame.sequence) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate projection event");
     return true;
   }
-  #disconnected(socket: V1Socket): void {
+  #disconnected(socket: V1Socket, retryNow = false): void {
     if (socket !== this.#socket) return;
     this.#socket = null;
     this.#clearDial();
@@ -863,6 +873,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     if (!this.#transportAvailable) return;
     this.#clearReconnect();
+    if (retryNow) {
+      this.#reconnectTimer = this.#clock().setTimeout(() => {
+        this.#reconnectTimer = undefined;
+        this.#connect();
+      }, 0);
+      return;
+    }
     const configuredDelay = this.#options.reconnectDelayMs;
     // Cover brief service restarts without a growing gap; sustained failures
     // still back off, and explicitly configured retry policies are unchanged.
@@ -876,11 +893,21 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#connect();
     }, delay);
   }
-  #recover(reason: string): void {
+  #recover(reason: string, retryNow = false): void {
     const socket = this.#socket;
     if (!socket) return;
     socket.close(CLIENT_RESTART_CLOSE_CODE, reason);
-    this.#disconnected(socket);
+    this.#disconnected(socket, retryNow);
+  }
+  /**
+   * A Sync that predates the session ID rejects any hello with an unknown `baggage` field before welcome. The first
+   * rejection marks that server as legacy, so the retry and every later reconnect send the hello without it.
+   */
+  #legacyHelloRejected(socket: V1Socket): boolean {
+    if (this.#baggageHelloSocket !== socket) return false;
+    this.#baggageHelloSocket = null;
+    legacyHelloServers.add(this.#options.url);
+    return true;
   }
   #recoverDigestMismatch(): void {
     const now = this.#clock().now();
