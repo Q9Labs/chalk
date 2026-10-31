@@ -229,6 +229,9 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
         |> acknowledge(frame)
         |> await_pending(command_id)
 
+      {:json, %{"type" => "projection_snapshot"}, client} ->
+        await_pending(client, command_id)
+
       other ->
         flunk("Leave was not accepted: #{inspect(other)}")
     end
