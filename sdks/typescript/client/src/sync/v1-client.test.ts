@@ -1434,6 +1434,33 @@ describe("V1SyncClient", () => {
     await expect(pending).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: terminalHead.revision, state_digest: terminalHead.state_digest });
     expect(client.getSnapshot().connection).toMatchObject({ phase: "terminal", terminalReason: reason });
   });
+  it("settles a live participant_inactive rejection of Leave as a satisfied Leave at the local head", async () => {
+    const { client, socket } = await liveClient();
+    try {
+      const leaving = client.leave({ commandId: commandIds[0] });
+      await settle();
+      socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason: "participant_inactive" });
+      await expect(leaving).resolves.toMatchObject({ delivery: "duplicate", outcome: "satisfied", revision: 1 });
+      expect(client.getSnapshot().pendingCommandCount).toBe(0);
+    } finally {
+      client.stop();
+    }
+  });
+  it.each([
+    { name: "a Leave rejected for another reason", reason: "invalid_state" as const, send: (client: V1SyncClient) => client.leave({ commandId: commandIds[0] }) },
+    { name: "another command rejected as participant_inactive", reason: "participant_inactive" as const, send: (client: V1SyncClient) => client.setHandRaised(true, { commandId: commandIds[0] }) },
+  ])("still rejects $name", async ({ reason, send }) => {
+    const { client, socket } = await liveClient();
+    try {
+      const command = send(client);
+      const rejected = expect(command).rejects.toMatchObject({ message: reason });
+      await settle();
+      socket.receive({ type: "ack", command_id: commandIds[0], delivery: "original", outcome: "rejected", reason });
+      await rejected;
+    } finally {
+      client.stop();
+    }
+  });
   it("retains exact control-event evidence and recovers on conflicting duplicates", async () => {
     await exerciseConflictingControlEvidence();
   });
