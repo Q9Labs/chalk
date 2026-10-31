@@ -1,4 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { MediaPublication, MediaPublicationSource } from "./plane";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
 
 type ReceiveState = NonNullable<ConnectionReportTransportEvent["receive_state"]>;
@@ -9,6 +10,7 @@ type AudioSource = "microphone" | "screen_audio";
 type Observation = { element: HTMLAudioElement; result?: PlayResult };
 type Entry = {
   source: AudioSource;
+  participantId: string;
   since: number;
   pull: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded";
   failure?: FailureKind;
@@ -34,6 +36,7 @@ export class AudioReceiveHealth {
   readonly #options: AudioReceiveHealthOptions;
   readonly #entries = new Map<string, Entry>();
   readonly #elements = new Map<MediaStreamTrack, Set<Observation>>();
+  #projection: Map<string, Set<MediaPublicationSource>> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #disposed = false;
   #sampling = false;
@@ -58,6 +61,21 @@ export class AudioReceiveHealth {
     this.#timer = undefined;
     this.#entries.clear();
     this.#elements.clear();
+    this.#projection = undefined;
+  }
+
+  projection(publications: readonly MediaPublication[]): void {
+    if (this.#disposed) return;
+    this.#projection = new Map();
+    for (const publication of publications) {
+      if (!publication.enabled) continue;
+      const sources = this.#projection.get(publication.participantId) ?? new Set<MediaPublicationSource>();
+      sources.add(publication.source);
+      this.#projection.set(publication.participantId, sources);
+    }
+    for (const entry of this.#entries.values()) {
+      if (!this.#enabled(entry, undefined)) entry.projectionOff = true;
+    }
   }
 
   roster(publications: Iterable<CloudflareSFUPublication>): void {
@@ -67,7 +85,7 @@ export class AudioReceiveHealth {
       if (publication.source !== "microphone" && publication.source !== "screen_audio") continue;
       desired.add(publication.publicationId);
       if (!this.#entries.has(publication.publicationId)) {
-        this.#entries.set(publication.publicationId, { source: publication.source, since: this.#options.now(), pull: "announced", reported: false, projectionOff: false, audioEnergy: false });
+        this.#entries.set(publication.publicationId, { source: publication.source, participantId: publication.participantId, since: this.#options.now(), pull: "announced", reported: false, projectionOff: false, audioEnergy: false });
       }
     }
     for (const id of this.#entries.keys()) {
@@ -127,7 +145,7 @@ export class AudioReceiveHealth {
       const connection = this.#options.connection();
       this.#resetConnection(connection);
       const stats = await readStats(connection);
-      if (this.#disposed) return;
+      if (this.#disposed || connection !== this.#options.connection()) return;
       this.#recordSample(stats);
     } finally {
       this.#sampling = false;
@@ -150,7 +168,7 @@ export class AudioReceiveHealth {
     const now = this.#options.now();
     for (const [id, entry] of this.#entries) {
       const track = tracks.get(id);
-      if (track?.enabled === false) {
+      if (!this.#enabled(entry, track)) {
         entry.projectionOff = true;
         increment(counts, "projection_off");
         continue;
@@ -167,6 +185,12 @@ export class AudioReceiveHealth {
     if (this.#entries.size > 0 && ++this.#samples % 12 === 0) {
       this.#options.onEvent({ event: "audio_receive_summary", receive_counts: counts });
     }
+  }
+
+  #enabled(entry: Entry, track: MediaStreamTrack | undefined): boolean {
+    if (this.#projection === undefined) return track?.enabled !== false;
+    const source = entry.source === "screen_audio" ? "screen" : entry.source;
+    return this.#projection.get(entry.participantId)?.has(source) === true;
   }
 
   #snapshot(entry: Entry, track: MediaStreamTrack | undefined, inbound: Map<string, AudioStats>): Snapshot {

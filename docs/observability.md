@@ -479,8 +479,10 @@ Companion fields are bounded labels: `track_state` is `live`, `muted`, or `ended
 `NotAllowedError`, `AbortError`, or `unknown`. Rejected playback contributes only
 that label, never raw error text. Summaries carry `receive_counts`, a fixed-key
 object with optional counts from 0 to 10000 for each ladder state plus
-`projection_off`. A disabled remote track (`track.enabled === false`) counts as
-`projection_off` instead of a ladder state and never triggers a stuck event;
+`projection_off`. A disabled authoritative remote projection counts as
+`projection_off` even when no track was pulled. Screen audio follows the screen
+projection. Before authoritative projection state is available, the tracker
+falls back to `track.enabled === false`. Disabled publications never trigger a stuck event;
 re-enabling it restarts its stuck clock. Projection gating is not bypassed.
 
 Sampling runs every five seconds, using one `getStats()` call on the receive peer

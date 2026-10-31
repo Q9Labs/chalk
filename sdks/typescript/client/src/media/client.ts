@@ -154,6 +154,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
+    if (projectionState === "unavailable") this.#receiveHealth.projection([]);
+    else if (publications) this.#receiveHealth.projection(publications);
     if (projectionState === "unavailable") this.#receiveProgress.suspend();
     else if (publications) this.#receiveProgress.expect(publications, this.#participantId);
     if (this.#polling) {
@@ -1365,6 +1367,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #disposeConnection(stopSenders: boolean): void {
+    this.#receiveHealth.roster([]);
     this.#receiveProgress.replaced();
     if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
