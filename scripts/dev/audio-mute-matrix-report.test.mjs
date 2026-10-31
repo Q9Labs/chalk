@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-test("measures unmute silence without charging intentional mute time, and requires packets plus audio", async () => {
+test("measures unmute silence without charging intentional mute time, requires packets plus audio, and handles receiver counter resets", async () => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-audio-analysis-"));
   const sample = (t, packets, audioLevel) => ({ t, states: [{ listener: 1, tracks: [{ speaker: 0, track: "tone", packets, audioLevel, readyState: "live", muted: false }] }] });
   const run = {
@@ -19,7 +19,7 @@ test("measures unmute silence without charging intentional mute time, and requir
       { t: 12, participant: 0, kind: "mic", enabled: false },
       { t: 18, participant: 0, kind: "mic", enabled: true },
     ],
-    samples: [sample(0, 10, 1), sample(10, 20, 1), sample(12, 30, 1), sample(18, 30, 0), sample(19, 40, 0), sample(20, 40, 1), sample(21, 50, 1)],
+    samples: [sample(0, 10, 1), sample(10, 20, 1), sample(12, 30, 1), sample(18, 30, 0), sample(19, 40, 0), sample(20, 40, 1), sample(21, 5, 1)],
   };
   try {
     await writeFile(join(directory, "matrix.json"), JSON.stringify({ versions: [run] }));

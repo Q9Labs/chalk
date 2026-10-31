@@ -31,7 +31,8 @@ const summaries = report.versions.map((run) => {
       for (const track of state.tracks) {
         const key = `${state.listener}:${track.speaker}:${track.track}`;
         const before = previous.get(key);
-        const rising = before ? track.packets > before.packets : track.packets > 0;
+        // A replacement receiver can retain its track ID and reset its counter.
+        const rising = track.packets > 0 && (!before || track.packets !== before.packets);
         if (rising && track.audioLevel > 0 && track.readyState === "live" && !track.muted) audible.add(`${state.listener}:${track.speaker}`);
         previous.set(key, track);
       }
