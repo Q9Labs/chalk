@@ -1890,6 +1890,21 @@ alter table sync_external_operations
     add constraint sync_external_operations_pending_order_check
     check (status <> 'pending' or acceptance_order is not null);
 
+create sequence sync_episode_dispatch_fence_seq as bigint;
+
+create function next_sync_episode_dispatch_fence() returns bigint
+    language sql volatile security definer set search_path = pg_catalog
+    return nextval('sync_episode_dispatch_fence_seq'::regclass);
+
+create table sync_episode_dispatch_leases (
+    tenant_id uuid not null,
+    episode_id uuid not null,
+    owner_id uuid not null,
+    fence bigint not null,
+    expires_at timestamptz not null,
+    primary key (tenant_id, episode_id)
+);
+
 create unique index sync_external_operations_parent_source_key
     on sync_external_operations(tenant_id, episode_id, parent_external_operation_id, source)
     where parent_external_operation_id is not null;
