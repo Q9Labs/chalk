@@ -180,6 +180,13 @@ and listener connection replacement for a retained pair. Episode end removes
 state on the next sample; shutdown clears it too. These process-local diagnostics
 reset on API restart and assume pulls for an Episode reach the same API process.
 
+Pull observations do not read the database or write logs. They retain bounded,
+hashed track-identity results until the sampler can match them to a publication,
+including pulls completed before its first sample. Results are keyed by listener
+generation and connection and expire after two minutes. Episode reconciliation
+uses per-Episode locks; log payloads are collected under the lock and emitted
+after unlocking, so a slow log sink does not hold up pull observations.
+
 Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
 `publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant
 ID and the complete publication reference, respectively). Publication references
@@ -191,7 +198,9 @@ payloads are added. The existing
 
 Retained state is capped at 128 Episodes, 128 participants and 128 publication
 entries per Episode, and 1024 pairs per Episode. Publication references above
-4096 bytes are ignored. A truncated Episode summary marks `truncated=true`;
+4096 bytes are ignored. Pending pull results are also capped at 1024 per Episode,
+with at most 128 distinct remote tracks retained from each request.
+A truncated Episode summary marks `truncated=true`;
 Episode overflow or read failures emit the rate-limited
 `media.listener_publication_sampling_incomplete` event. After two minutes without
 a fresh sample, stale state is discarded rather than diagnosing from old data.

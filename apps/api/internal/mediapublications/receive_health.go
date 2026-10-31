@@ -65,10 +65,37 @@ type receivePair struct {
 }
 
 type receiveEpisode struct {
+	mu          sync.Mutex
 	pairs       map[receivePairKey]*receivePair
+	pulls       map[receivePullKey]receivePull
 	lastSeen    time.Time
 	lastSummary time.Time
 	truncated   bool
+}
+
+type receivePullKey struct {
+	listener   utilities.ID
+	generation int64
+	connection [32]byte
+	publisher  [32]byte
+	track      [32]byte
+}
+
+type receivePull struct {
+	since     time.Time
+	step      string
+	errorKind string
+}
+
+type receiveHealthEvent struct {
+	message string
+	args    []any
+}
+
+func emitReceiveHealthEvents(ctx context.Context, events []receiveHealthEvent) {
+	for _, event := range events {
+		slog.WarnContext(ctx, event.message, event.args...)
+	}
 }
 
 type receiveHealth struct {
@@ -112,20 +139,31 @@ func (s Service) sampleReceiveHealth(ctx context.Context) {
 	episodes, err := repository.ListReceiveHealthEpisodes(ctx, receiveHealthMaxEpisodes+1)
 	h := s.receiveHealth
 	h.mu.Lock()
+	states := make(map[ReceiveHealthEpisode]*receiveEpisode, len(h.episodes))
+	for key, state := range h.episodes {
+		states[key] = state
+	}
+	h.mu.Unlock()
 	now := h.now()
 	active := make(map[ReceiveHealthEpisode]bool, len(episodes))
 	for _, episode := range episodes {
 		active[episode] = true
 	}
-	for key, episode := range h.episodes {
-		if (err == nil && !active[key]) || now.Sub(episode.lastSeen) > receiveHealthTTL {
-			delete(h.episodes, key)
+	for key, episode := range states {
+		episode.mu.Lock()
+		expired := now.Sub(episode.lastSeen) > receiveHealthTTL
+		episode.mu.Unlock()
+		if (err == nil && !active[key]) || expired {
+			h.mu.Lock()
+			if h.episodes[key] == episode {
+				delete(h.episodes, key)
+			}
+			h.mu.Unlock()
 		}
 	}
 	if err != nil || len(episodes) > receiveHealthMaxEpisodes {
 		h.warn(ctx, now)
 	}
-	h.mu.Unlock()
 	if err != nil {
 		return
 	}
@@ -135,17 +173,16 @@ func (s Service) sampleReceiveHealth(ctx context.Context) {
 		}
 		publications, participants, err := s.receiveHealthSnapshot(ctx, episode)
 		if err != nil {
-			h.mu.Lock()
 			h.warn(ctx, h.now())
-			h.mu.Unlock()
 			continue
 		}
-		h.mu.Lock()
 		state := h.reconcile(episode, publications, participants)
 		if state != nil {
-			h.emit(ctx, episode, state)
+			state.mu.Lock()
+			events := h.events(episode, state)
+			state.mu.Unlock()
+			emitReceiveHealthEvents(ctx, events)
 		}
-		h.mu.Unlock()
 	}
 }
 
@@ -175,7 +212,7 @@ func (s Service) receiveHealthSnapshot(ctx context.Context, episode ReceiveHealt
 	return publications, participants, err
 }
 
-func (s Service) ObserveListenerPull(ctx context.Context, input ListenerPullInput) {
+func (s Service) ObserveListenerPull(_ context.Context, input ListenerPullInput) {
 	remote := false
 	for _, track := range input.Requested {
 		remote = remote || track.Location == "remote"
@@ -183,34 +220,44 @@ func (s Service) ObserveListenerPull(ctx context.Context, input ListenerPullInpu
 	if !remote {
 		return
 	}
-	publications, participants, err := s.receiveHealthSnapshot(ctx, input.ReceiveHealthEpisode)
-	if err != nil {
+	h := s.receiveHealth
+	now := h.now()
+	key := receivePullKey{listener: input.ParticipantID, generation: input.ParticipantGeneration, connection: sha256.Sum256([]byte(input.ConnectionID))}
+	pulls := make(map[receivePullKey]receivePull)
+	for _, track := range input.Requested {
+		if track.Location != "remote" {
+			continue
+		}
+		key.publisher = sha256.Sum256([]byte(track.SessionID))
+		key.track = sha256.Sum256([]byte(track.TrackName))
+		step, kind := listenerPullResult(track, input.Response, input.Err)
+		pulls[key] = receivePull{since: now, step: step, errorKind: kind}
+		if len(pulls) == receiveHealthMaxPublications {
+			break
+		}
+	}
+	if len(pulls) == 0 {
 		return
 	}
-	h := s.receiveHealth
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	state := h.reconcile(input.ReceiveHealthEpisode, publications, participants)
+	state := h.episode(input.ReceiveHealthEpisode)
 	if state == nil {
 		return
 	}
-	for key, pair := range state.pairs {
-		if key.listener != input.ParticipantID || pair.generation != input.ParticipantGeneration || pair.connection != sha256.Sum256([]byte(input.ConnectionID)) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	for key, pull := range pulls {
+		previous, exists := state.pulls[key]
+		if !exists && len(state.pulls) >= receiveHealthMaxPairs {
+			state.truncated = true
 			continue
 		}
-		reference, err := ParseReference(key.publication)
-		if err != nil {
-			continue
-		}
-		for _, track := range input.Requested {
-			if track.Location != "remote" || track.SessionID != reference.ConnectionID || track.TrackName != reference.TrackName {
+		if exists && now.Sub(previous.since) <= receiveHealthTTL {
+			if previous.step == "pull_succeeded" {
 				continue
 			}
-			step, kind := listenerPullResult(track, input.Response, input.Err)
-			if pair.step != "pull_succeeded" {
-				pair.step, pair.errorKind = step, kind
-			}
+			pull.since = previous.since
 		}
+		state.pulls[key] = pull
 	}
 }
 
@@ -242,23 +289,43 @@ func boundedPullErrorKind(kind string) string {
 	}
 }
 
-func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provideroperations.Publication, participants []PublicationParticipant) *receiveEpisode {
-	now := h.now()
-	if len(participants) == 0 {
-		delete(h.episodes, key)
-		return nil
-	}
+func (h *receiveHealth) episode(key ReceiveHealthEpisode) *receiveEpisode {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	state := h.episodes[key]
 	if state == nil {
 		if len(h.episodes) >= receiveHealthMaxEpisodes {
-			h.warn(context.Background(), now)
 			return nil
 		}
-		state = &receiveEpisode{pairs: make(map[receivePairKey]*receivePair), lastSummary: now}
+		now := h.now()
+		state = &receiveEpisode{pairs: make(map[receivePairKey]*receivePair), pulls: make(map[receivePullKey]receivePull), lastSeen: now, lastSummary: now}
 		h.episodes[key] = state
 	}
+	return state
+}
+
+func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provideroperations.Publication, participants []PublicationParticipant) *receiveEpisode {
+	if len(participants) == 0 {
+		h.mu.Lock()
+		delete(h.episodes, key)
+		h.mu.Unlock()
+		return nil
+	}
+	state := h.episode(key)
+	if state == nil {
+		h.warn(context.Background(), h.now())
+		return nil
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	now := h.now()
+	for key, pull := range state.pulls {
+		if now.Sub(pull.since) > receiveHealthTTL {
+			delete(state.pulls, key)
+		}
+	}
 	state.lastSeen = now
-	state.truncated = len(participants) > receiveHealthMaxParticipants || len(publications) > receiveHealthMaxPublications
+	state.truncated = len(participants) > receiveHealthMaxParticipants || len(publications) > receiveHealthMaxPublications || len(state.pulls) >= receiveHealthMaxPairs
 	participants = participants[:min(len(participants), receiveHealthMaxParticipants)]
 	publications = publications[:min(len(publications), receiveHealthMaxPublications)]
 	current := make(map[utilities.ID]PublicationParticipant, len(participants))
@@ -291,7 +358,8 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 			}
 			seen[pairKey] = true
 			connection := sha256.Sum256([]byte(listener.ConnectionID))
-			if pair.since.IsZero() || pair.generation != listener.Generation || pair.connection != connection {
+			fresh := pair.since.IsZero() || pair.generation != listener.Generation || pair.connection != connection
+			if fresh {
 				pair.since, pair.step, pair.errorKind = now, "no_pull_attempted", ""
 				pair.generation, pair.connection = listener.Generation, connection
 			}
@@ -299,6 +367,14 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 				pair.since = now
 			}
 			pair.active = publication.Enabled
+			pullKey := receivePullKey{listener: listener.ID, generation: listener.Generation, connection: connection,
+				publisher: sha256.Sum256([]byte(reference.ConnectionID)), track: sha256.Sum256([]byte(reference.TrackName))}
+			if pull, ok := state.pulls[pullKey]; ok && pair.step != "pull_succeeded" {
+				pair.step, pair.errorKind = pull.step, pull.errorKind
+				if fresh && pull.since.Before(pair.since) {
+					pair.since = pull.since
+				}
+			}
 		}
 	}
 	for key := range state.pairs {
@@ -309,7 +385,8 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 	return state
 }
 
-func (h *receiveHealth) emit(ctx context.Context, key ReceiveHealthEpisode, state *receiveEpisode) {
+func (h *receiveHealth) events(key ReceiveHealthEpisode, state *receiveEpisode) []receiveHealthEvent {
+	var events []receiveHealthEvent
 	now := h.now()
 	counts := map[string]int{"no_pull_attempted": 0, "pull_failed": 0, "pull_succeeded": 0}
 	overdue := 0
@@ -326,22 +403,28 @@ func (h *receiveHealth) emit(ctx context.Context, key ReceiveHealthEpisode, stat
 			continue
 		}
 		pair.reported = true
-		slog.WarnContext(ctx, "Listener has not pulled an active audio publication",
+		events = append(events, receiveHealthEvent{"Listener has not pulled an active audio publication", []any{
 			"event", "media.listener_publication_unpulled", "tenant_id", key.TenantID.String(), "space_id", key.SpaceID.String(), "episode_id", key.EpisodeID.String(),
 			"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(keyPair.listener.String()))), "publication_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(keyPair.publication))),
-			"step", pair.step, "error_kind", pair.errorKind, "duration_ms", now.Sub(pair.since).Milliseconds())
+			"step", pair.step, "error_kind", pair.errorKind, "duration_ms", now.Sub(pair.since).Milliseconds()}})
 	}
 	if (overdue > 0 || state.truncated) && now.Sub(state.lastSummary) >= receiveHealthSummaryInterval {
 		state.lastSummary = now
-		slog.WarnContext(ctx, "Episode audio publication pull health",
+		events = append(events, receiveHealthEvent{"Episode audio publication pull health", []any{
 			"event", "media.listener_publication_summary", "tenant_id", key.TenantID.String(), "space_id", key.SpaceID.String(), "episode_id", key.EpisodeID.String(),
-			"no_pull_attempted_count", counts["no_pull_attempted"], "pull_failed_count", counts["pull_failed"], "pull_succeeded_count", counts["pull_succeeded"], "overdue_count", overdue, "truncated", state.truncated)
+			"no_pull_attempted_count", counts["no_pull_attempted"], "pull_failed_count", counts["pull_failed"], "pull_succeeded_count", counts["pull_succeeded"], "overdue_count", overdue, "truncated", state.truncated}})
 	}
+	return events
 }
 
 func (h *receiveHealth) warn(ctx context.Context, now time.Time) {
-	if h.lastWarning.IsZero() || now.Sub(h.lastWarning) >= receiveHealthSummaryInterval {
+	h.mu.Lock()
+	warn := h.lastWarning.IsZero() || now.Sub(h.lastWarning) >= receiveHealthSummaryInterval
+	if warn {
 		h.lastWarning = now
+	}
+	h.mu.Unlock()
+	if warn {
 		slog.WarnContext(ctx, "Audio pull health sampling is incomplete", "event", "media.listener_publication_sampling_incomplete")
 	}
 }
