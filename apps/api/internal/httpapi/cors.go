@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -10,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const corsInstrumentationScope = "github.com/q9labs/chalk/apps/api/internal/httpapi/cors"
@@ -71,6 +75,20 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 					outcome = "allowed"
 				}
 				recordCORSDecision(r.Context(), policy, outcome)
+				if !ok {
+					observableOrigin := observableCORSOrigin(origin)
+					trace.SpanFromContext(r.Context()).SetAttributes(
+						attribute.String("cors.outcome", "forbidden"),
+						attribute.String("cors.policy", policy),
+						attribute.String("cors.origin", observableOrigin),
+					)
+					slog.WarnContext(r.Context(), "CORS origin rejected",
+						"event", "cors.origin_forbidden",
+						"cors_origin", observableOrigin,
+						"cors_policy", policy,
+						"http_method", r.Method,
+					)
+				}
 			}
 
 			if r.Method == http.MethodOptions {
@@ -96,6 +114,29 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 			serve.ServeHTTP(w, r)
 		})
 	}
+}
+
+func observableCORSOrigin(origin string) string {
+	if origin == "null" {
+		return origin
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.User != nil || parsed.Opaque != "" {
+		return "invalid"
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "invalid"
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" || len(host) > 253 {
+		return "invalid"
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return scheme + "://[ip]"
+	}
+	return scheme + "://" + host
 }
 
 func requiresTenantOriginLookup(r *http.Request, origin string, allowed map[string]struct{}, options CORSOptions) bool {
