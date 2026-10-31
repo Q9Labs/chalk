@@ -6,6 +6,11 @@ const GB = 1e9;
 export const DAILY_LIMIT_GB = 100;
 export const MONTHLY_THRESHOLDS_GB = [500, 800];
 
+// Oncall's poller registers the same keys for Chalk (scope:app:id). A key that is not
+// on this list is not a check Oncall can confirm.
+const key = (id) => `cloudflare-sfu-turn-egress:chalk:${id}`;
+export const ALERT_KEYS = [key("24h"), ...MONTHLY_THRESHOLDS_GB.map((gb) => key(`month-${gb}gb`))];
+
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $now: Time!) {
   viewer {
@@ -53,7 +58,7 @@ export function evaluate({ dayBytes, monthBytes, dayStartsInMonth }) {
   const incidents = [];
   if (dayBytes >= DAILY_LIMIT_GB * GB) {
     incidents.push({
-      key: "cloudflare-sfu-turn-egress-24h",
+      key: key("24h"),
       detail: `Realtime SFU and TURN sent ${gb(dayBytes)} GB in the last 24 h (limit ${DAILY_LIMIT_GB} GB).`,
     });
   }
@@ -61,7 +66,7 @@ export function evaluate({ dayBytes, monthBytes, dayStartsInMonth }) {
   for (const threshold of MONTHLY_THRESHOLDS_GB) {
     if (monthBytes >= threshold * GB && priorBytes < threshold * GB) {
       incidents.push({
-        key: `cloudflare-sfu-turn-egress-month-${threshold}gb`,
+        key: key(`month-${threshold}gb`),
         detail: `Realtime SFU and TURN sent ${gb(monthBytes)} GB this month, past ${threshold} GB of the 1,000 GB free allowance.`,
       });
     }
@@ -86,7 +91,7 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   log(`SFU+TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
 
   const drill = EGRESS_CHECK_DRILL === "true";
-  const incidents = drill ? [{ key: "cloudflare-sfu-turn-egress-drill", detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }] : evaluate(usage);
+  const incidents = drill ? [{ key: key("24h"), detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }] : evaluate(usage);
   if (incidents.length === 0) return 0;
 
   for (const incident of incidents) log(incident.detail);

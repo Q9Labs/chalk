@@ -28,9 +28,10 @@ secrets `CLOUDFLARE_ANALYTICS_TOKEN` (read-only analytics) and
 `ONCALL_WEBHOOK_URL`. Their values live in 1Password vault `dev`.
 
 Run the workflow by hand with `drill` set to send one marked test to Oncall.
-Oncall acts on a payload only for an app and check in its registry, so the key
-`cloudflare-sfu-turn-egress-*` needs a matching registry entry; until then Oncall
-records the alert as unconfirmed.
+Oncall acts on a payload only for an app and check in its registry. The keys this
+job posts are `cloudflare-sfu-turn-egress:chalk:24h` and `...:month-500gb` and
+`...:month-800gb`, the same ones Oncall's poller registers for Chalk, and a test pins
+them. A drill posts the 24 h key.
 
 ```sh
 node --test infrastructure/cloudflare-egress-alert/egress-check.test.mjs

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluate, oncallPayload, readEgress, run } from "./egress-check.mjs";
+import { ALERT_KEYS, evaluate, oncallPayload, readEgress, run } from "./egress-check.mjs";
 
 const GB = 1e9;
 const quiet = { dayBytes: 5 * GB, monthBytes: 100 * GB, dayStartsInMonth: true };
@@ -11,28 +11,28 @@ test("stays silent below every limit", () => {
 
 test("fires the daily alert at 100 GB in 24 h", () => {
   const [incident] = evaluate({ ...quiet, dayBytes: 100 * GB });
-  assert.equal(incident.key, "cloudflare-sfu-turn-egress-24h");
+  assert.equal(incident.key, "cloudflare-sfu-turn-egress:chalk:24h");
 });
 
 test("fires a monthly alert only on the run that crosses it", () => {
   const crossing = evaluate({ dayBytes: 30 * GB, monthBytes: 510 * GB, dayStartsInMonth: true });
   assert.deepEqual(
     crossing.map((i) => i.key),
-    ["cloudflare-sfu-turn-egress-month-500gb"],
+    ["cloudflare-sfu-turn-egress:chalk:month-500gb"],
   );
   assert.deepEqual(evaluate({ dayBytes: 30 * GB, monthBytes: 540 * GB, dayStartsInMonth: true }), []);
 });
 
 test("fires both monthly alerts when one day crosses both", () => {
   const keys = evaluate({ dayBytes: 400 * GB, monthBytes: 850 * GB, dayStartsInMonth: true }).map((i) => i.key);
-  assert.ok(keys.includes("cloudflare-sfu-turn-egress-24h"));
-  assert.ok(keys.includes("cloudflare-sfu-turn-egress-month-500gb"));
-  assert.ok(keys.includes("cloudflare-sfu-turn-egress-month-800gb"));
+  assert.ok(keys.includes("cloudflare-sfu-turn-egress:chalk:24h"));
+  assert.ok(keys.includes("cloudflare-sfu-turn-egress:chalk:month-500gb"));
+  assert.ok(keys.includes("cloudflare-sfu-turn-egress:chalk:month-800gb"));
 });
 
 test("on the first of the month the whole month-to-date total is new", () => {
   const keys = evaluate({ dayBytes: 600 * GB, monthBytes: 600 * GB, dayStartsInMonth: false }).map((i) => i.key);
-  assert.ok(keys.includes("cloudflare-sfu-turn-egress-month-500gb"));
+  assert.ok(keys.includes("cloudflare-sfu-turn-egress:chalk:month-500gb"));
 });
 
 test("payload follows the Oncall poller shape and marks drills", () => {
@@ -78,7 +78,7 @@ test("run posts to Oncall and exits 1 when a limit is crossed", async () => {
   };
   const code = await run({ env, fetchImpl, now: new Date("2026-10-15T12:00:00Z"), log: () => {} });
   assert.equal(code, 1);
-  assert.equal(posts[0].incidents[0].key, "cloudflare-sfu-turn-egress-24h");
+  assert.equal(posts[0].incidents[0].key, "cloudflare-sfu-turn-egress:chalk:24h");
 });
 
 test("run stays silent and exits 0 below the limits", async () => {
@@ -110,4 +110,30 @@ test("a failed webhook post fails the run", async () => {
 
 test("refuses to run without its inputs", async () => {
   await assert.rejects(run({ env: {}, log: () => {} }), /are required/);
+});
+
+// Oncall's poller test pins these same three strings for Chalk's registered check.
+test("alert keys are the ones Oncall registers for Chalk", () => {
+  const expected = ["cloudflare-sfu-turn-egress:chalk:24h", "cloudflare-sfu-turn-egress:chalk:month-500gb", "cloudflare-sfu-turn-egress:chalk:month-800gb"];
+  assert.deepEqual(ALERT_KEYS, expected);
+  const crossed = evaluate({ dayBytes: 400 * GB, monthBytes: 850 * GB, dayStartsInMonth: true });
+  assert.deepEqual(
+    crossed.map((i) => i.key),
+    expected,
+  );
+});
+
+test("a drill posts a key Oncall registers", async () => {
+  const posts = [];
+  const fetchImpl = (url, init) => {
+    if (url === env.ONCALL_WEBHOOK_URL) {
+      posts.push(JSON.parse(init.body));
+      return new Response("ok");
+    }
+    return graphql(1 * GB, 0)(url, init);
+  };
+  const code = await run({ env: { ...env, EGRESS_CHECK_DRILL: "true" }, fetchImpl, log: () => {} });
+  assert.equal(code, 0);
+  assert.equal(posts[0].drill, true);
+  assert.ok(ALERT_KEYS.includes(posts[0].incidents[0].key));
 });
