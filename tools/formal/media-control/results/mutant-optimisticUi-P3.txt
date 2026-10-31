@@ -1,0 +1,82 @@
+TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+Running breadth-first search Model-Checking with fp 121 and seed -6809877423541703065 with 10 workers on 10 cores with 5461MB heap and 64MB offheap memory [pid: 6441] (Mac OS X 26.6.2 aarch64, Homebrew 17.0.20.1 64bit, MSBDiskFPSet, DiskStateQueue).
+Starting... (2026-10-31 14:18:30)
+Warning: The set Sources has been defined to be a symmetry set but contains less than two elements.
+(Use the -nowarning option to disable this warning.)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-10-31 14:18:31.
+Error: Invariant P3_UiNotAhead is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 0)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> FALSE)
+/\ pubs = {}
+/\ cap = (mic :> FALSE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 0)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> FALSE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "none")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+State 2: <Next line 293, col 25 to line 293, col 42 of module MediaControl>
+/\ viewHm = (mic :> FALSE)
+/\ viewGranted = (mic :> FALSE)
+/\ seq = (mic :> 1)
+/\ sfuUp = TRUE
+/\ sess = 0
+/\ pubReq = (mic :> -1)
+/\ reconnected = FALSE
+/\ syncUp = TRUE
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
+/\ drops = 0
+/\ lastSeq = (mic :> 0)
+/\ intent = (mic :> TRUE)
+/\ pubs = {}
+/\ cap = (mic :> TRUE)
+/\ ver = (mic :> 0)
+/\ viewVer = (mic :> 0)
+/\ onSlot = (mic :> 1)
+/\ viewAck = (mic :> 0)
+/\ loss = 0
+/\ cfails = 0
+/\ reconciled = TRUE
+/\ hostMute = (mic :> FALSE)
+/\ want = (mic :> TRUE)
+/\ viewShown = (mic :> FALSE)
+/\ offState = (mic :> "none")
+/\ mutes = 0
+/\ grant = (mic :> FALSE)
+
+2 states generated, 2 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 2.
+Finished in 00s at (2026-10-31 14:18:31)
