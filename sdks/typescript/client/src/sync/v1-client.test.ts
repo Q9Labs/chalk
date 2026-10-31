@@ -1,8 +1,9 @@
 import { Schema } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import admissionOrder from "../../test/fixtures/admission-order-v1.json";
 import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { SnapshotSchema } from "../generated/sync";
+import { setSessionSource } from "../session";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../space-client/space-client";
 import { decodeV1ClientFrame, decodeV1ServerFrame, encodeV1ClientFrame } from "./v1-codec";
@@ -2302,6 +2303,103 @@ describe("v1 exact decoding and durable state", () => {
       { ...valid, recording: { recording_id: recoveryId, status: "recording", failure_code: "provider_failed" } },
     ];
     for (const snapshot of malformed) await expect(restoreV1Snapshot(snapshot)).rejects.toBeInstanceOf(V1ReplicaError);
+  });
+});
+describe("hello baggage against an older Sync", () => {
+  const baggage = "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c";
+  beforeEach(() => setSessionSource(() => baggage.slice("session.id=".length)));
+  afterEach(() => setSessionSource(() => undefined));
+
+  function connect(host: string) {
+    const clock = new TestClock();
+    const sockets: TestSocket[] = [];
+    const client = new V1SyncClient({
+      url: `ws://${host}/v1/sync`,
+      token: async () => "token",
+      clock,
+      reconnectDelayMs: 1,
+      webSocket: {
+        connect: () => {
+          const socket = new TestSocket();
+          sockets.push(socket);
+          return socket;
+        },
+      },
+    });
+    return { client, clock, sockets };
+  }
+  /** What a Sync that predates `baggage` does with the new hello: an error frame, then close 1009. */
+  async function rejectAsOldSync(socket: TestSocket): Promise<void> {
+    socket.receive({ type: "error", code: "invalid_frame", detail: "invalid frame" });
+    await settle();
+    socket.close(1009, "invalid frame");
+    await settle();
+  }
+
+  it("retries once without baggage and keeps sending the legacy hello on reconnect", async () => {
+    const { client, clock, sockets } = connect("legacy-sync.test");
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      expect(sockets[0]!.frames()[0]).toMatchObject({ type: "hello", baggage });
+      await rejectAsOldSync(sockets[0]!);
+      clock.advance(0);
+      expect(sockets).toHaveLength(2);
+      sockets[1]!.open();
+      await settle();
+      expect(sockets[1]!.frames()[0]).toMatchObject({ type: "hello" });
+      expect(sockets[1]!.frames()[0]).not.toHaveProperty("baggage");
+
+      sockets[1]!.close(1012, "server draining");
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      sockets[2]!.open();
+      await settle();
+      expect(sockets[2]!.frames()[0]).not.toHaveProperty("baggage");
+    } finally {
+      client.stop();
+    }
+  });
+
+  it("does not loop when the legacy hello is rejected too", async () => {
+    const { client, clock, sockets } = connect("legacy-sync-loop.test");
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      await rejectAsOldSync(sockets[0]!);
+      clock.advance(0);
+      sockets[1]!.open();
+      await settle();
+      await rejectAsOldSync(sockets[1]!);
+      clock.advance(0);
+      expect(sockets).toHaveLength(2);
+      clock.advance(1);
+      expect(sockets).toHaveLength(3);
+    } finally {
+      client.stop();
+    }
+  });
+
+  it("keeps sending baggage to a Sync that accepts it, also after a reconnect", async () => {
+    const { client, clock, sockets } = connect("modern-sync.test");
+    try {
+      await client.start();
+      sockets[0]!.open();
+      await settle();
+      expect(sockets[0]!.frames()[0]).toMatchObject({ baggage });
+      sockets[0]!.close(1012, "server draining");
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      sockets[1]!.open();
+      await settle();
+      expect(sockets[1]!.frames()[0]).toMatchObject({ baggage });
+    } finally {
+      client.stop();
+    }
   });
 });
 async function liveClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}, initialState = baseState(), participantId = ownerId, entryConfirmation = true, entryGeneration?: number, ownIdentityId?: string) {
