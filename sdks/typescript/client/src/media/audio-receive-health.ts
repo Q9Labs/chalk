@@ -43,6 +43,7 @@ export class AudioReceiveHealth {
   #samples = 0;
   #stuckEvents = 0;
   #connection: RTCPeerConnection | null = null;
+  #connectionRevision = 0;
 
   constructor(options: AudioReceiveHealthOptions) {
     this.#options = options;
@@ -62,6 +63,21 @@ export class AudioReceiveHealth {
     this.#entries.clear();
     this.#elements.clear();
     this.#projection = undefined;
+  }
+
+  replaced(): void {
+    if (this.#disposed) return;
+    this.#connectionRevision++;
+    for (const entry of this.#entries.values()) {
+      entry.pull = "announced";
+      entry.since = this.#options.now();
+      entry.failure = undefined;
+      entry.reported = false;
+      entry.trackId = undefined;
+      entry.bytes = undefined;
+      entry.energy = undefined;
+      entry.audioEnergy = false;
+    }
   }
 
   projection(publications: readonly MediaPublication[]): void {
@@ -143,9 +159,10 @@ export class AudioReceiveHealth {
     this.#sampling = true;
     try {
       const connection = this.#options.connection();
+      const revision = this.#connectionRevision;
       this.#resetConnection(connection);
       const stats = await readStats(connection);
-      if (this.#disposed || connection !== this.#options.connection()) return;
+      if (this.#disposed || revision !== this.#connectionRevision || connection !== this.#options.connection()) return;
       this.#recordSample(stats);
     } finally {
       this.#sampling = false;
