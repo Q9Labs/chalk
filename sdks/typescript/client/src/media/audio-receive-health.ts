@@ -1,5 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
-import type { MediaPublication, MediaPublicationSource } from "./plane";
+import type { MediaPublication } from "./plane";
 import type { CloudflareSFUPublication, CloudflareSFURemoteTrack } from "./types";
 
 type ReceiveState = NonNullable<ConnectionReportTransportEvent["receive_state"]>;
@@ -10,7 +10,7 @@ type AudioSource = "microphone" | "screen_audio";
 type Observation = { element: HTMLAudioElement; result?: PlayResult };
 type Entry = {
   source: AudioSource;
-  participantId: string;
+  projectionKey: string;
   since: number;
   pull: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded";
   failure?: FailureKind;
@@ -18,8 +18,6 @@ type Entry = {
   projectionOff: boolean;
   trackId?: string;
   bytes?: number;
-  energy?: number;
-  audioEnergy: boolean;
 };
 type Snapshot = Pick<ConnectionReportTransportEvent, "receive_state" | "track_state" | "element_state" | "play_result">;
 
@@ -36,7 +34,7 @@ export class AudioReceiveHealth {
   readonly #options: AudioReceiveHealthOptions;
   readonly #entries = new Map<string, Entry>();
   readonly #elements = new Map<MediaStreamTrack, Set<Observation>>();
-  #projection: Map<string, Set<MediaPublicationSource>> | undefined;
+  #projection: Set<string> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #disposed = false;
   #sampling = false;
@@ -75,19 +73,15 @@ export class AudioReceiveHealth {
       entry.reported = false;
       entry.trackId = undefined;
       entry.bytes = undefined;
-      entry.energy = undefined;
-      entry.audioEnergy = false;
     }
   }
 
   projection(publications: readonly MediaPublication[]): void {
     if (this.#disposed) return;
-    this.#projection = new Map();
+    this.#projection = new Set();
     for (const publication of publications) {
       if (!publication.enabled) continue;
-      const sources = this.#projection.get(publication.participantId) ?? new Set<MediaPublicationSource>();
-      sources.add(publication.source);
-      this.#projection.set(publication.participantId, sources);
+      this.#projection.add(projectionKey(publication.participantId, publication.source));
     }
     for (const entry of this.#entries.values()) {
       if (!this.#enabled(entry, undefined)) entry.projectionOff = true;
@@ -101,7 +95,7 @@ export class AudioReceiveHealth {
       if (publication.source !== "microphone" && publication.source !== "screen_audio") continue;
       desired.add(publication.publicationId);
       if (!this.#entries.has(publication.publicationId)) {
-        this.#entries.set(publication.publicationId, { source: publication.source, participantId: publication.participantId, since: this.#options.now(), pull: "announced", reported: false, projectionOff: false, audioEnergy: false });
+        this.#entries.set(publication.publicationId, { source: publication.source, projectionKey: projectionKey(publication.participantId, publication.source), since: this.#options.now(), pull: "announced", reported: false, projectionOff: false });
       }
     }
     for (const id of this.#entries.keys()) {
@@ -118,22 +112,18 @@ export class AudioReceiveHealth {
     this.#setPull(ids, "pull_succeeded");
   }
 
-  #setPull(ids: Iterable<string>, state: Entry["pull"]): void {
+  #setPull(ids: Iterable<string>, state: Entry["pull"], failure?: FailureKind): void {
     if (this.#disposed) return;
     for (const id of ids) {
       const entry = this.#entries.get(id);
       if (!entry) continue;
       entry.pull = state;
-      entry.failure = undefined;
+      entry.failure = failure;
     }
   }
 
   pullFailed(id: string, kind: FailureKind): void {
-    if (this.#disposed) return;
-    const entry = this.#entries.get(id);
-    if (!entry) return;
-    entry.pull = "pull_failed";
-    entry.failure = kind;
+    this.#setPull([id], "pull_failed", kind);
   }
 
   observeAudioElement(track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } {
@@ -174,7 +164,6 @@ export class AudioReceiveHealth {
     this.#connection = connection;
     for (const entry of this.#entries.values()) {
       entry.bytes = undefined;
-      entry.energy = undefined;
     }
   }
 
@@ -206,8 +195,7 @@ export class AudioReceiveHealth {
 
   #enabled(entry: Entry, track: MediaStreamTrack | undefined): boolean {
     if (this.#projection === undefined) return track?.enabled !== false;
-    const source = entry.source === "screen_audio" ? "screen" : entry.source;
-    return this.#projection.get(entry.participantId)?.has(source) === true;
+    return this.#projection.has(entry.projectionKey);
   }
 
   #snapshot(entry: Entry, track: MediaStreamTrack | undefined, inbound: Map<string, AudioStats>): Snapshot {
@@ -248,7 +236,11 @@ export class AudioReceiveHealth {
   }
 }
 
-type AudioStats = { bytesReceived?: number; totalAudioEnergy?: number; audioLevel?: number };
+type AudioStats = { bytesReceived?: number };
+
+function projectionKey(participantId: string, source: string): string {
+  return `${participantId}\u0000${source === "screen_audio" ? "screen" : source}`;
+}
 
 function audioStats(report: RTCStatsReport | undefined): Map<string, AudioStats> {
   const result = new Map<string, AudioStats>();
@@ -262,14 +254,10 @@ function updateBytes(entry: Entry, track: MediaStreamTrack, stats: AudioStats | 
   if (entry.trackId !== track.id) {
     entry.trackId = track.id;
     entry.bytes = undefined;
-    entry.energy = undefined;
   }
   const bytes = stats?.bytesReceived;
-  const energy = stats?.totalAudioEnergy;
   const flowing = increased(bytes, entry.bytes);
-  entry.audioEnergy = (stats?.audioLevel ?? 0) > 0 || increased(energy, entry.energy);
   entry.bytes = bytes;
-  entry.energy = energy;
   return flowing;
 }
 
@@ -291,12 +279,14 @@ async function readStats(connection: RTCPeerConnection | null): Promise<RTCStats
 }
 
 function boundElement(observations: Set<Observation> | undefined, track: MediaStreamTrack): Observation | undefined {
-  return Array.from(observations ?? [])
-    .filter(({ element }) => {
-      const stream = element.srcObject;
-      return stream !== null && "getTracks" in stream && stream.getTracks().includes(track);
-    })
-    .sort((a, b) => Number(a.element.paused) - Number(b.element.paused))[0];
+  let paused: Observation | undefined;
+  for (const observation of observations ?? []) {
+    const stream = observation.element.srcObject;
+    if (stream === null || !("getTracks" in stream) || !stream.getTracks().includes(track)) continue;
+    if (!observation.element.paused) return observation;
+    paused ??= observation;
+  }
+  return paused;
 }
 
 function playResult(result: unknown): PlayResult {
