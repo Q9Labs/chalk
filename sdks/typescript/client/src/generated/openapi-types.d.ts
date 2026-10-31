@@ -746,6 +746,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** Update cloudflare s f u tracks */
+    put: operations["updateCloudflareSFUTracks"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove": {
     parameters: {
       query?: never;
@@ -1281,7 +1298,28 @@ export interface components {
     CloudflareSFURenegotiateResponse: {
       accepted: boolean;
     };
-    CloudflareSFUTracksAPIResponse: {
+    CloudflareSFUTracksAPIResponse: components["schemas"]["CloudflareSFUUpdateTracksAPIResponse"];
+    CloudflareSFUTracksRequest: {
+      connection_id: string;
+      session_description?: {
+        sdp: string;
+        type: string;
+      } | null;
+      tracks: {
+        location: string;
+        mid?: string;
+        publication_id?: string;
+        sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
+        source?: string;
+        trackName: string;
+      }[];
+    };
+    CloudflareSFUUpdateTracksAPIResponse: {
       requiresImmediateRenegotiation?: boolean;
       sessionDescription?: {
         sdp: string;
@@ -1306,12 +1344,8 @@ export interface components {
         trackName: string;
       }[];
     };
-    CloudflareSFUTracksRequest: {
+    CloudflareSFUUpdateTracksRequest: {
       connection_id: string;
-      session_description?: {
-        sdp: string;
-        type: string;
-      } | null;
       tracks: {
         location: string;
         mid?: string;
@@ -7007,6 +7041,110 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CloudflareSFUCloseTracksAPIResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  updateCloudflareSFUTracks: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloudflareSFUUpdateTracksRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CloudflareSFUUpdateTracksAPIResponse"];
         };
       };
       /** @description Bad Request */

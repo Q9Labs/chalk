@@ -76,6 +76,11 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           ...(input.receiveOnly ? { receive_only: true } : {}),
         }),
       }),
+    updateTracks: async (input) =>
+      request<CloudflareSFUTracksResponse>("tracks/update", {
+        method: "PUT",
+        body: JSON.stringify({ connection_id: input.connectionId, tracks: input.tracks }),
+      }),
     renegotiate: async (input) => {
       await request("renegotiate", {
         method: "POST",

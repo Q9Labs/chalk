@@ -2387,6 +2387,53 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
+describe("viewer layer switching", () => {
+  const cameraStats = (h: ReturnType<typeof createHarness>) => {
+    const camera = h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
+    // Frames keep decoding while freezes accumulate, so loss never explains the drop.
+    vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+      const seconds = performance.now() / 1000;
+      const others = reviewStats(h, () => seconds * 50);
+      for (const p of h.client.getSnapshot().remoteTracks) if (p.source === "camera") others.delete(p.track.id);
+      return new Map([...others, ["camera", { id: "camera", type: "inbound-rtp", kind: "video", timestamp: performance.now(), trackIdentifier: camera.track.id, packetsReceived: seconds * 100, packetsLost: 0, framesDecoded: seconds * 25, freezeCount: seconds > 5 ? Math.floor(seconds) : 0 }]]);
+    });
+    vi.spyOn(h.peers[0]!, "getTransceivers").mockReturnValue([{ mid: "camera-mid", receiver: { track: camera.track } } as unknown as RTCRtpTransceiver]);
+    return camera;
+  };
+
+  it("pulls the lower layer of a camera whose viewer keeps freezing, without rebuilding the connection", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      const camera = cameraStats(h);
+      await vi.advanceTimersByTimeAsync(12_000);
+      const { connectionId, trackName } = parseCloudflareSFUPublicationID(camera.publicationId);
+      expect(h.transport.updateInputs[0]).toEqual({
+        connectionId: "connection-1",
+        tracks: [{ location: "remote", mid: "camera-mid", sessionId: connectionId, trackName, simulcast: { preferredRid: "l", priorityOrdering: "none", ridNotAvailable: "asciibetical" } }],
+      });
+      expect(h.peers).toHaveLength(1);
+    });
+  });
+
+  it("keeps the call running and retries ever more rarely when the SFU rejects a switch", async () => {
+    const errors: unknown[] = [];
+    await withTimedHarness(
+      async (h) => {
+        h.transport.failTrackUpdates = true;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        cameraStats(h);
+        await vi.advanceTimersByTimeAsync(70_000);
+        expect(h.transport.updateInputs.length).toBeGreaterThanOrEqual(3);
+        expect(h.transport.updateInputs.length).toBeLessThanOrEqual(6);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        expect(errors).toEqual([]);
+      },
+      { onError: (error) => errors.push(error) },
+    );
+  });
+});
 it.each([false, true])("a persistent partial stall exhausts two fallback rebuilds on every receiver (brief progress on each connection: %s)", async (briefProgress) => {
   vi.useFakeTimers();
   const origin = Date.now();
@@ -2607,6 +2654,13 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     this.closeInputs.push(input);
     for (const track of input.tracks) this.localPublications.delete(track.publicationId);
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
+  }
+  readonly updateInputs: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0][] = [];
+  failTrackUpdates = false;
+  async updateTracks(input: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0]): Promise<CloudflareSFUTracksResponse> {
+    this.updateInputs.push(input);
+    if (this.failTrackUpdates) throw new CloudflareSFUError("layer switch rejected", "signaling_failed");
+    return { tracks: input.tracks };
   }
   async renegotiate(): Promise<void> {
     if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
