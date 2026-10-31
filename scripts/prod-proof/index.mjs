@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
+import { leaveProof } from "./leave.mjs";
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -8,6 +9,7 @@ import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.
 import { prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = {
+  leave: { media: false, webhooks: false, proofs: ["leave"] },
   all: {
     media: true,
     cameraShare: true,
@@ -46,7 +48,7 @@ const plans = {
     proofs: ["transcript"],
   },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|leave] [--force-layer-switch|--no-layer-switch]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -83,6 +85,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch, plan.rejoin);
   }
   const actions = {
+    leave: () => leaveProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);
       return captured.camera;

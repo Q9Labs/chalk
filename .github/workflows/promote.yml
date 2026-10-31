@@ -103,7 +103,8 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: smoke transcript
+      proofs: leave smoke transcript
+      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit
   rollback:
     needs: [select, approve, release, proof]

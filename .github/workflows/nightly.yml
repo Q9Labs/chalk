@@ -67,7 +67,8 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: nightly
-      proofs: smoke transcript
+      proofs: leave smoke transcript
+      release_sha: ${{ needs.plan.outputs.target_sha }}
     secrets: inherit
   web-e2e:
     needs: [release, proof]
