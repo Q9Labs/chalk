@@ -2823,6 +2823,131 @@ async function restartWithRetainedPublications(harness: ReturnType<typeof create
   }
 }
 
+it.each(["waited", "rapid"] as const)("a %s unmute during a media connection swap publishes with real media and coordinator", (scenario) => unmuteDuringSwap(scenario));
+// Known gap: past the 250 ms lifecycle grace, #pauseRecoveredIntents cancels the unsent click as lost to Sync.
+// The recovery-rule fix (pause only when Sync's own state says off) is owned by a separate PR; drop `.fails` when it lands.
+it.fails("a cross-grace unmute during a media connection swap publishes with real media and coordinator", () => unmuteDuringSwap("cross-grace"));
+
+function createSwapCall() {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("swap-microphone", "audio");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn(async (enabled: boolean) => {
+    const receipt = await coordinator.send("set_microphone_enabled", "microphone", enabled);
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "swap", sequence: command.mock.calls.length, items: [{ participantId: "participant-1", source: "microphone", enabled, publicationId: publication?.publicationId ?? null }] } });
+    return receipt;
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("swap") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+  );
+  const startSwap = async () => {
+    command.mockClear();
+    harness.peers[0].setStates("disconnected", "disconnected");
+    await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+  };
+  const enable = () =>
+    client.media.setMicrophoneEnabled(true).then(
+      () => "enabled",
+      (cause: unknown) => cause,
+    );
+  const publishedMicrophone = () => [...harness.transport.localPublications.values()].some((item) => item.source === "microphone" && item.enabled !== false);
+  const dispose = () => {
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  };
+  return { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose };
+}
+
+async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): Promise<void> {
+  const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
+  try {
+    await client.join({ microphone: true, camera: false });
+    if (scenario !== "rapid") {
+      await client.media.setMicrophoneEnabled(false);
+      expect(track.enabled).toBe(false);
+    }
+    await startSwap();
+    const muted = scenario === "rapid" ? client.media.setMicrophoneEnabled(false).catch((cause: unknown) => cause) : Promise.resolve();
+    const enabled = enable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(command).not.toHaveBeenCalledWith(true);
+    if (scenario === "cross-grace") await new Promise((resolve) => setTimeout(resolve, 400));
+    await harness.client.restart(bootstrap("connection-2"));
+    expect(await enabled).toBe("enabled");
+    await muted;
+    expect(command.mock.calls.at(-1)).toEqual([true]);
+    expect(track.enabled).toBe(true);
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    expect(publication).toMatchObject({ enabled: true });
+    expect(harness.transport.localPublications.has(publication!.publicationId!)).toBe(true);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+  } finally {
+    dispose();
+  }
+}
+
+it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
+  const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  let expire: (() => void) | undefined;
+  const schedule = platform.dependencies.clock.setTimeout;
+  const timer = vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => {
+    if (milliseconds === 10000) {
+      expire = callback;
+      return null;
+    }
+    return schedule(callback, milliseconds);
+  });
+  try {
+    await client.join({ microphone: true, camera: false });
+    await client.media.setMicrophoneEnabled(false);
+    await startSwap();
+    const enabled = enable();
+    await vi.waitFor(() => expect(expire).toBeTypeOf("function"));
+    if (ending === "superseded") await client.media.setMicrophoneEnabled(false);
+    if (ending === "timeout") expire!();
+    if (ending === "call-ended") await client.leave();
+    if (ending === "sync-loss") {
+      // Sync is lost and restored while the swap is still in flight; the pending click settles on restoration.
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await harness.client.restart(bootstrap("connection-2"));
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+    }
+    const outcome = await enabled;
+    if (ending === "superseded") expect(outcome).toBe("enabled");
+    else expect(outcome).toMatchObject({ code: ending === "timeout" ? "media.timeout" : expect.any(String) });
+    if (ending === "superseded" || ending === "timeout") await harness.client.restart(bootstrap("connection-2"));
+    if (ending !== "call-ended") {
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(command).not.toHaveBeenCalledWith(true);
+    expect(track.enabled).toBe(false);
+    expect(publishedMicrophone()).toBe(false);
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+  } finally {
+    timer.mockRestore();
+    dispose();
+  }
+});
+
 function createHarness(
   options: {
     readonly autoConnect?: boolean;

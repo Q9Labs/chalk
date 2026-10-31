@@ -35,6 +35,7 @@ type SourceWorker = {
   forcedRevision: number | null;
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
+  awaitingLive: number | null;
 };
 /*
  * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
@@ -65,7 +66,12 @@ function sourceWorker(enabled: boolean): SourceWorker {
     forcedRevision: null,
     pausedPublicationId: null,
     capturePause: "none",
+    awaitingLive: null,
   };
+}
+/** Joining/offline actions never hold a worker while waiting on the lifecycle queue. */
+function rejectOffline(state: SourceWorker, intent: MediaIntent): void {
+  if (intent.enabled) state.result = { revision: intent.revision, status: "failed", cause: new V1SyncError("Media enable requires a live call", "not_live"), cleanup: !intent.previousEnabled };
 }
 type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
 function ownProjection(snapshot: SyncSnapshot, source: MediaSource) {
@@ -372,8 +378,27 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }).pipe(Effect.ensuring(Effect.sync(() => cleanup())));
     });
   }
+  /** While a user enable waits for the call, its revision belongs to that wait; another source worker must not run it. */
+  #awaitLive(source: MediaSource, revision: number): ClientEffect<void> {
+    const state = this.#sources[source];
+    return Effect.suspend(() => {
+      state.awaitingLive = revision;
+      return this.#waitForLive(source, revision);
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (state.awaitingLive === revision) state.awaitingLive = null;
+        }),
+      ),
+    );
+  }
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" || this.#replacingMediaConnection() ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+  }
+  /** Sync is live and only the media connection is being replaced, e.g. while another source moves to a fresh SFU connection. */
+  #replacingMediaConnection(): boolean {
+    const { state, connection } = this.#connection.getSnapshot();
+    return (state === "live" || state === "reconnecting") && connection.sync === "healthy" && (connection.media === "connecting" || connection.media === "recovering");
   }
   #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     return this.#act("screen", true, options);
@@ -426,7 +451,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       else this.#cancelOffRetry(source);
       const ready =
         enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
-          ? this.#waitForLive(source, desired.revision).pipe(
+          ? this.#awaitLive(source, desired.revision).pipe(
               Effect.tapError((cause) =>
                 Effect.sync(() => {
                   if (this.#sources[source].desired.revision === desired.revision) {
@@ -476,12 +501,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
       state.pause = null;
       const paused = yield* Effect.exit(pause ? foreign(() => pause) : Effect.void);
       if (state.desired.revision !== intent.revision) return;
+      if (state.awaitingLive === intent.revision) return yield* paused;
       const ports = this.#ports;
       const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
       if (state.desired.revision !== intent.revision) return;
       if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
-      // Joining/offline actions never hold a worker while waiting on the lifecycle queue.
-      else if (intent.enabled) state.result = { revision: intent.revision, status: "failed", cause: new V1SyncError("Media enable requires a live call", "not_live"), cleanup: !intent.previousEnabled };
+      else rejectOffline(state, intent);
       yield* paused;
       yield* cleanup;
     });
