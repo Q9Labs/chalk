@@ -311,7 +311,7 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		// the MID's direction so this path cannot bypass publication retirement.
 		var session struct {
 			Tracks []struct {
-				Mid string `json:"mid"`
+				Mid      string `json:"mid"`
 				Location string `json:"location"`
 			} `json:"tracks"`
 		}
@@ -321,9 +321,14 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		for _, requested := range input.Tracks {
 			remote := false
 			for _, track := range session.Tracks {
-				if track.Mid == requested.Mid && track.Location == "remote" { remote = true; break }
+				if track.Mid == requested.Mid && track.Location == "remote" {
+					remote = true
+					break
+				}
 			}
-			if !remote { return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest }
+			if !remote {
+				return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidSignalRequest
+			}
 		}
 		input.Force = true
 		input.SessionDescription = nil

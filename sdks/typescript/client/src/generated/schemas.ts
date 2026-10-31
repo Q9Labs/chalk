@@ -177,6 +177,7 @@ export type CloudflareSFUCloseTracksAPIResponse = typeof CloudflareSFUCloseTrack
 export const CloudflareSFUCloseTracksRequestSchema = Schema.Struct({
   connection_id: Schema.String.check(Schema.isMinLength(1)),
   force: Schema.Boolean,
+  receive_only: Schema.optional(Schema.Boolean),
   session_description: Schema.optional(
     Schema.NullOr(
       Schema.Struct({

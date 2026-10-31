@@ -78,7 +78,7 @@ it.each([false, true])("old close does not retire an already-replaced connection
   );
 });
 
-it("partial stalls keep one receive allocation without a repull", async () => {
+it("re-pulls only a stalled publication and retires its previous receiver", async () => {
   let replacements = 0;
   await withTimedHarness(
     async (h) => {
@@ -86,11 +86,13 @@ it("partial stalls keep one receive allocation without a repull", async () => {
       h.transport.uniqueRemoteMids = true;
       remoteMedia(h);
       await h.client.refreshRemotePublications();
+      const original = h.client.getSnapshot().remoteTracks.find((track) => track.source === "microphone")!.track;
+      const healthy = h.client.getSnapshot().remoteTracks.find((track) => track.source === "camera")!.track;
       let packets = 10;
       vi.mocked(h.peers[0]!.getStats).mockRestore();
       vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
         packets++;
-        const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.source === "microphone" ? 10 : packets, codecId: "codec" }));
+        const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.track === original ? 10 : packets, codecId: "codec" }));
         const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
         return new Map([...rows.map((r) => [r.id, r] as const), ["codec", codec]]);
       });
@@ -99,14 +101,17 @@ it("partial stalls keep one receive allocation without a repull", async () => {
       const livePeers = h.peers.filter((peer) => !peer.closed);
       expect(livePeers).toHaveLength(1);
       expect(
-        livePeers.flatMap((peer) => peer.getReceivers()),
+        livePeers.flatMap((peer) => peer.getReceivers()).filter((receiver) => receiver.track.readyState === "live"),
         "only current receive allocations should remain",
       ).toHaveLength(2);
       expect(h.peers.slice(0, -1).every((peer) => peer.closed)).toBe(true);
       expect(replacements).toBe(0);
+      expect(original.readyState).toBe("ended");
+      expect(h.client.getSnapshot().remoteTracks.find((track) => track.source === "camera")!.track).toBe(healthy);
+      expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ source: "microphone" })] })]);
       const currentConnectionId = "connection-1";
       const livePulls = h.transport.addInputs.filter((input) => input.connectionId === currentConnectionId).flatMap((input) => input.tracks.filter((track) => track.location === "remote"));
-      expect(livePulls.map((track) => track.trackName).sort()).toEqual(["camera", "microphone"]);
+      expect(livePulls.map((track) => track.trackName).sort()).toEqual(["camera", "microphone", "microphone"]);
     },
     { replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`) },
   );
@@ -127,7 +132,7 @@ it("formerly flowing DTX audio records a partial packet freeze", async () => {
       });
       const pulls = h.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(70_000);
-      expect(h.transport.addInputs).toHaveLength(pulls);
+      expect(h.transport.addInputs).toHaveLength(pulls + 1);
       expect((h.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
     },
     { replaceMediaConnection: async () => bootstrap("replacement") },
@@ -169,12 +174,14 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       });
       const originalPulls = harness.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(24_000);
-      expect(harness.peers).toHaveLength(all ? 2 : 1);
-      expect(original.closed).toBe(all);
+      expect(harness.peers).toHaveLength(1);
+      expect(original.closed).toBe(false);
       const causes = harness.transport.addInputs.slice(originalPulls).filter((input) => input.replacementCause !== undefined);
-      expect(causes).toEqual(all ? [expect.objectContaining({ connectionId: "replacement", replacementCause: "receive_stalled" })] : []);
+      expect(causes).toEqual([]);
+      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: expect.any(Array) })]);
+      expect(harness.transport.closeInputs[0]!.tracks).toHaveLength(all ? 2 : 1);
       if (!all) {
-        expect(harness.transport.addInputs).toHaveLength(originalPulls);
+        expect(harness.transport.addInputs).toHaveLength(originalPulls + 1);
         expect((harness.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
       }
     },
@@ -2358,7 +2365,7 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
-it.each([false, true])("a partial stall causes zero rebuilds on every receiver (brief progress on each connection: %s)", async (briefProgress) => {
+it.each([false, true])("a persistent partial stall exhausts two fallback rebuilds on every receiver (brief progress on each connection: %s)", async (briefProgress) => {
   vi.useFakeTimers();
   const origin = Date.now();
   const errors: string[] = [];
@@ -2389,7 +2396,7 @@ it.each([false, true])("a partial stall causes zero rebuilds on every receiver (
     }
     await vi.advanceTimersByTimeAsync(briefProgress ? 120_000 : 600_000);
     for (const [i, h] of receivers.entries()) {
-      expect(replacementTimes[i]!.length).toBe(0);
+      expect(replacementTimes[i]!.length).toBe(2);
       expect(h.peers.filter((peer) => !peer.closed)).toHaveLength(1);
       expect(h.peers.slice(0, -1).every((peer) => peer.closed)).toBe(true);
       expect(h.peers.at(-1)!.getReceivers()).toHaveLength(2);
@@ -2401,7 +2408,7 @@ it.each([false, true])("a partial stall causes zero rebuilds on every receiver (
     vi.useRealTimers();
   }
 });
-it.each(["microphone", "camera"] as const)("retained intentional %s detach causes zero rebuilds while pause projection is delayed", async (pausedSource) => {
+it.each(["microphone", "camera"] as const)("an intentionally paused %s stays excluded while publication discovery is delayed", async (pausedSource) => {
   let replacements = 0;
   await withTimedHarness(
     async (h) => {
@@ -2420,6 +2427,7 @@ it.each(["microphone", "camera"] as const)("retained intentional %s detach cause
         await publisher.client.pauseLocalCapture(pausedSource);
         expect(publisher.peers[0]!.getSenders()[pausedSource === "microphone" ? 0 : 1]!.track).toBeNull();
         expect(publisher.transport.closeInputs).toHaveLength(closes);
+        h.client.remotePublicationsChanged(reviewPublications().map((publication) => ({ ...publication, enabled: publication.source !== pausedSource })));
         frozenAt = Date.now();
         await vi.advanceTimersByTimeAsync(9000);
         expect(replacements).toBe(0);
@@ -2674,6 +2682,7 @@ class FakePeerConnection extends EventTarget {
     transceiver = {
       mid: String(this.#transceivers.length),
       sender,
+      receiver: { track: new FakeTrack("unused-receiver", track.kind) },
       stop: () => {
         if (this.throwOnCleanup) throw new Error("transceiver stop failed");
         this.#activeTransceivers.delete(transceiver);
