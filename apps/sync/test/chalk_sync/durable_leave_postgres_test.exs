@@ -6,6 +6,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
+  alias ChalkSync.TestProcess
   alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
@@ -32,7 +33,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
         do: Application.put_env(:chalk_sync, :database_connections, previous),
         else: Application.delete_env(:chalk_sync, :database_connections)
 
-      Enum.each(connections, &GenServer.stop/1)
+      Enum.each(connections, &TestProcess.stop/1)
     end)
 
     {:ok, connection: hd(connections)}
@@ -65,6 +66,18 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              Postgres.begin_operation(identity, leave)
 
     assert [["left", true]] = departure_rows(connection, identity.participant_id, id)
+
+    assert {:error, :participant_inactive} =
+             Postgres.participant_authority(
+               fixture.episode,
+               identity.participant_id,
+               identity.participant_generation
+             )
+
+    assert {:error, :participant_inactive} =
+             Postgres.reserve_publication_grant(identity, "departed_publication_001", :camera)
+
+    assert {:error, _reason} = Postgres.confirm_admission(identity)
     cleanup = claim_cleanup(id)
     assert cleanup.target_participant_generation == identity.participant_generation
     assert cleanup.target_participant_id == identity.participant_id
@@ -100,7 +113,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              Postgrex.query!(
                connection,
                """
-               select count(*), bool_and(outbox.occurred_at=p.left_at)
+               select count(*), bool_and(outbox.occurred_at=date_trunc('milliseconds',p.left_at))
                from webhook_events outbox join participants p on p.id=$1
                where outbox.tenant_id=p.tenant_id and outbox.event_name='participant.left'
                """,
