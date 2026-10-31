@@ -140,6 +140,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remotePullRetries.delete(publicationId);
     this.remotePublicationsChanged();
   }
+  localPublicationWithdrawn(publicationId: string): void {
+    const owned = [...this.#ownedPublications].some((publication) => publication.lifecycle.kind === "confirmed" && publication.lifecycle.handle.publicationId === publicationId);
+    const prepared = [...this.#localTracks.values()].some((state) => state.providerPublicationId === publicationId);
+    if (owned || prepared) this.remotePublicationsChanged();
+  }
   remoteParticipantsChanged(participantIds: readonly string[]): void {
     this.#remoteParticipantIds = new Set(participantIds);
     this.#remoteParticipantRevision++;
