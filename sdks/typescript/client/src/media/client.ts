@@ -6,6 +6,7 @@ import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { matchRemotePullTracks } from "./remote-track-response";
+import { createCallStatsCollector } from "./call-stats";
 import { CloudflareSFUError } from "./types";
 import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
@@ -105,6 +106,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
+  readonly #callStats = createCallStatsCollector({ upload: async (stats) => this.#transport?.uploadCallStats?.(stats, false) });
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
@@ -513,6 +515,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
+    // Retiring publications clears the transport before a pending upload ends, so the closing batch keeps its own reference.
+    const transport = this.#transport;
+    void this.#callStats.flush(async (stats) => transport?.uploadCallStats?.(stats, true));
     this.#receiveProgress.expect([], this.#participantId);
     this.#subscribedPublicationIds.clear();
     this.#generation++;
@@ -1231,6 +1236,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
+        this.#callStats.observe(report);
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);
@@ -1332,6 +1338,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
     try {
       this.#connection = this.#createPeerConnection(bootstrap);
+      this.#callStats.reset();
       this.#observeConnection(this.#connection, generation, connectionEpoch);
     } catch (error) {
       this.#setFailure(error, "media_failed");

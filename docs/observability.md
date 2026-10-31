@@ -61,6 +61,40 @@ frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
 later reconnects. The whiteboard socket does not carry the ID yet.
 
+### Compare call quality by connection type
+
+The SDK summarises WebRTC stats on the device every 10 seconds and uploads them
+under the session ID: about every minute while a call is open and once at leave,
+through `POST /v1/tenants/{tenant_id}/call-stats`. A call stops producing
+summaries after 360 (about an hour), a batch holds at most 30, a failed upload is
+dropped, and the API allows 30 uploads per participant per ten minutes. Each
+summary becomes one `sdk.call_stats` API log line with the session ID, Space,
+Episode, a hashed participant ID, and these fields: `connection_type` (`udp`,
+`tcp`, `turn`, `unknown`), `rtt_ms`, `send_loss_pct`, `recv_loss_pct`,
+`send_jitter_ms`, `recv_jitter_ms`, `send_bitrate_kbps`, `recv_bitrate_kbps`,
+`send_layer` (`h`, `m`, `l`: the highest layer that sent during the window),
+`recv_height`, `freeze_count`, and `freeze_ms`. Candidate types come from the
+selected candidate pair. The body has no IP address, SDP, or free text. The API
+adds `country` (the edge's country code), `client_family`, and `client_os` from
+the request, so calls compare by region and platform without storing an address.
+
+```apl
+['<api-log-dataset>']
+| where ['attributes.event'] == "sdk.call_stats"
+| summarize
+    samples = count(),
+    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
+    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
+    loss_p50 = percentile(todouble(['attributes.recv_loss_pct']), 50),
+    loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
+    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count()
+  by ['attributes.connection_type']
+```
+
+Add `by ['attributes.country']` to compare regions. Field paths follow the
+dataset's log mapping, so match them to how `sdk.connection_report` appears there.
+Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback

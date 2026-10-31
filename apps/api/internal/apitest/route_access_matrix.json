@@ -139,6 +139,12 @@
     "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
     "body": "{\"version\":1,\"trigger\":\"join_failed\",\"events\":[{\"event\":\"connection_failed\",\"elapsed_ms\":0}]}"
   },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/call-stats",
+    "operation": "uploadCallStats",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"version\":1,\"samples\":[{\"elapsed_ms\":0,\"window_ms\":10000,\"connection_type\":\"udp\"}]}"
+  },
   { "route": "POST /v1/tenants/{tenant_id}/problem-reports", "operation": "sendProblemReport", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
   { "route": "GET /v1/tenants/{tenant_id}/problem-reports/availability", "operation": "getProblemReportAvailability", "credentials": [], "publicReason": "Availability exposes no tenant data.", "body": "" },
   {
