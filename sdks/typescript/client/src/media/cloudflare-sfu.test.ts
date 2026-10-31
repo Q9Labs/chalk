@@ -9,6 +9,7 @@ import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
@@ -2388,6 +2389,87 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
 describe("viewer layer switching", () => {
+  const healthyCameraStats = (h: ReturnType<typeof createHarness>) => {
+    for (const camera of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) setVideoRenderSize(camera.track, { width: 480, height: 270 });
+    return vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = performance.now() / 1000;
+      const stats: Map<string, RTCStats> = reviewStats(h, () => Math.floor(seconds * 100));
+      const pair: RTCStats = { id: "pair", type: "candidate-pair", timestamp: performance.now() };
+      Object.assign(pair, { selected: true, state: "succeeded", availableOutgoingBitrate: h.peers.at(-1)!.availableOutgoingBitrate });
+      stats.set(pair.id, pair);
+      for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) Object.assign(stats.get(p.track.id)!, { kind: "video", packetsLost: 0, framesDecoded: seconds * 30, freezeCount: 0 });
+      return stats;
+    });
+  };
+
+  it("batches 32 rejected cameras fairly within the aggregate adaptation budget", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const publications = Array.from({ length: 32 }, (_, i) => ({ participantId: `publisher-${i}`, source: "camera" as const, publicationId: versionedPublicationID(`publisher-${i}`, "0", "camera") }));
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      h.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+      await h.client.refreshRemotePublications();
+      h.transport.failTrackUpdates = true;
+      healthyCameraStats(h);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(h.transport.updateInputs.length).toBeGreaterThanOrEqual(2);
+      expect(h.transport.updateInputs.length).toBeLessThanOrEqual(12);
+      expect(h.transport.updateInputs.every((input) => input.tracks.length === 16)).toBe(true);
+      expect(new Set(h.transport.updateInputs.slice(0, 2).flatMap((input) => input.tracks.map((track) => track.sessionId))).size).toBe(32);
+    });
+  });
+
+  it("keeps sampling stalls and camera uplink while a single layer batch is pending", async () => {
+    const gate = Promise.withResolvers<CloudflareSFUTracksResponse>();
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      await reviewSubscribe(h);
+      const stats = healthyCameraStats(h);
+      const update = vi.spyOn(h.transport, "updateTracks").mockImplementation(() => gate.promise);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(update).toHaveBeenCalledTimes(1);
+      const samples = stats.mock.calls.length;
+      const originalStats = stats.getMockImplementation()!;
+      stats.mockImplementation(async () => {
+        const report = await originalStats();
+        for (const p of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "microphone")) Object.assign(report.get(p.track.id)!, { packetsReceived: 300 });
+        return report;
+      });
+      h.peers[0]!.availableOutgoingBitrate = 300_000;
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(stats.mock.calls.length - samples).toBe(9);
+      expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
+      expect(
+        h.peers[0]!.getSenders()
+          .find((sender) => sender.track?.kind === "video")!
+          .getParameters()
+          .encodings.find((encoding) => encoding.rid === "l")!.active,
+      ).toBe(false);
+      gate.reject(new CloudflareSFUError("switch timeout", "signaling_timeout"));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(h.client.getSnapshot().connection.phase).toBe("live");
+    });
+  });
+
+  it("retries only failed members of a layer batch", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const publications = [0, 1].map((i) => ({ participantId: `publisher-${i}`, source: "camera" as const, publicationId: versionedPublicationID(`publisher-${i}`, "0", "camera") }));
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      h.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+      await h.client.refreshRemotePublications();
+      healthyCameraStats(h);
+      vi.spyOn(h.transport, "updateTracks").mockImplementationOnce(async (input) => {
+        h.transport.updateInputs.push(input);
+        return { trackErrors: [{ connectionId: input.tracks[1]!.sessionId!, trackName: input.tracks[1]!.trackName, code: "not_available" }] };
+      });
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(h.transport.updateInputs.map((input) => input.tracks.length)).toEqual([2, 1]);
+      expect(h.transport.updateInputs[1]!.tracks[0]!.sessionId).toBe("publisher-1");
+    });
+  });
+
   const cameraStats = (h: ReturnType<typeof createHarness>) => {
     const camera = h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
     // Frames keep decoding while freezes accumulate, so loss never explains the drop.

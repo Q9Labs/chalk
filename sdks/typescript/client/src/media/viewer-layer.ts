@@ -25,6 +25,7 @@ const SETTLE_SAMPLES = 2;
 const FAILED_PROBE_WITHIN_SAMPLES = 30;
 const STABLE_SAMPLES_RESETTING_BACKOFF = 60;
 const MAX_RISE_BACKOFF = 8;
+const FRAME_RATE_COMPARISON_SAMPLES = 3;
 
 export type ViewerLayerSample = {
   /** Fraction of packets lost since the last sample; undefined when no packet arrived or was lost. */
@@ -48,6 +49,9 @@ export class ViewerLayerPolicy {
   #samplesSinceRise = Number.POSITIVE_INFINITY;
   #settling = 0;
   #backoff = 1;
+  #frameRateProbe: number | undefined;
+  #senderFrameRate: number | undefined;
+  #unimprovedSamples = 0;
 
   get layer(): ViewerLayer {
     return this.#layer;
@@ -56,8 +60,10 @@ export class ViewerLayerPolicy {
   /** Drops fast, rises slowly: a failed attempt at h doubles the wait before the next one. */
   sample(sample: ViewerLayerSample): ViewerLayer {
     this.#tileIsSmall = tileIsSmall(this.#tileIsSmall, sample.tileHeight);
-    const health = this.#settling > 0 ? this.#settle() : classify(sample, this.#layer === "h");
-    return this.#layer === "h" ? this.#sampleHigh(health) : this.#sampleLow(health);
+    if (this.#layer === "h" && sample.framesPerSecond !== undefined && sample.framesPerSecond >= MIN_FRAMES_PER_SECOND) this.#senderFrameRate = undefined;
+    const checkFrameRate = this.#layer === "h" && (this.#senderFrameRate === undefined || (sample.framesPerSecond ?? 0) < this.#senderFrameRate * 0.75);
+    const health = this.#settling > 0 ? this.#settle() : classify(sample, checkFrameRate);
+    return this.#layer === "h" ? this.#sampleHigh(health, sample) : this.#sampleLow(health, sample);
   }
 
   #settle(): Health {
@@ -65,12 +71,12 @@ export class ViewerLayerPolicy {
     return "unknown";
   }
 
-  #sampleHigh(health: Health): ViewerLayer {
+  #sampleHigh(health: Health, sample: ViewerLayerSample): ViewerLayer {
     this.#samplesSinceRise++;
     if (this.#tileIsSmall) return this.#drop(false);
     if (health === "bad" || health === "severe") {
       this.#stableSamples = 0;
-      if (health === "severe" || ++this.#badSamples >= DROP_AFTER_BAD_SAMPLES) return this.#drop(true);
+      if (health === "severe" || ++this.#badSamples >= DROP_AFTER_BAD_SAMPLES) return this.#drop(true, !isBad(sample, false) && health !== "severe" ? sample.framesPerSecond : undefined);
       return this.#layer;
     }
     this.#badSamples = 0;
@@ -78,17 +84,30 @@ export class ViewerLayerPolicy {
     return this.#layer;
   }
 
-  #sampleLow(health: Health): ViewerLayer {
+  #sampleLow(health: Health, sample: ViewerLayerSample): ViewerLayer {
     if (this.#tileIsSmall || health !== "good") {
       this.#goodSamples = 0;
+      this.#unimprovedSamples = 0;
       return this.#layer;
     }
+    // Only compare clean, settled samples from both layers. If l buys no frame
+    // rate, keep h's resolution without treating another probe as congestion.
+    const fps = sample.framesPerSecond;
+    if (this.#frameRateProbe !== undefined && fps !== undefined && fps > 0 && fps <= this.#frameRateProbe * 1.25) {
+      if (++this.#unimprovedSamples >= FRAME_RATE_COMPARISON_SAMPLES) {
+        this.#senderFrameRate = this.#frameRateProbe;
+        this.#backoff = 1;
+        return this.#rise();
+      }
+    } else this.#unimprovedSamples = 0;
     const needed = this.#limitedByNetwork ? RISE_AFTER_GOOD_SAMPLES * this.#backoff : RISE_AFTER_TILE_GROWS_SAMPLES;
     if (++this.#goodSamples < needed) return this.#layer;
     return this.#rise();
   }
 
-  #drop(byNetwork: boolean): ViewerLayer {
+  #drop(byNetwork: boolean, frameRate?: number): ViewerLayer {
+    this.#frameRateProbe = frameRate;
+    this.#unimprovedSamples = 0;
     if (byNetwork) {
       if (this.#samplesSinceRise < FAILED_PROBE_WITHIN_SAMPLES) this.#backoff = Math.min(this.#backoff * 2, MAX_RISE_BACKOFF);
       this.#limitedByNetwork = true;
@@ -124,7 +143,7 @@ function isSevere({ lossFraction, freezeSeconds }: ViewerLayerSample): boolean {
 
 // Frames that stop while packets still arrive mean the layer is too heavy;
 // frames that stop with no packets belong to receive-stall recovery.
-// A low frame rate only counts against h: if l is slow too, the sender is the limit and h would not help.
+// Comparing clean frame rates across layers separates sender limits from a heavy h.
 function isBad({ lossFraction, framesPerSecond, newFreezes }: ViewerLayerSample, checkFrameRate: boolean): boolean {
   if (newFreezes > 0 || (lossFraction !== undefined && lossFraction >= BAD_LOSS)) return true;
   return checkFrameRate && lossFraction !== undefined && framesPerSecond !== undefined && framesPerSecond < MIN_FRAMES_PER_SECOND;
@@ -212,30 +231,34 @@ export class ViewerLayerSelector {
   sample(now: number, report: RTCStatsReport, cameras: readonly ViewerLayerCamera[]): readonly ViewerLayerChange[] {
     const rows = [...report.values()] as ViewerStatsRow[];
     const active = new Set(cameras.map((camera) => camera.publicationId));
-    for (const publicationId of this.#views.keys()) {
-      if (!active.has(publicationId)) this.#views.delete(publicationId);
+    for (const [publicationId, view] of this.#views) {
+      if (!active.has(publicationId)) {
+        this.#reader.forget(view.track.id);
+        this.#views.delete(publicationId);
+      }
     }
     const changes: ViewerLayerChange[] = [];
     for (const camera of cameras) {
       const view = this.#view(camera);
       const stats = this.#reader.read(rows, camera.track.id);
       if (!stats) continue;
-      const layer = view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height });
+      // Do not learn from l until the switch actually reached the receiver.
+      const layer = view.policy.layer === view.applied ? view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height }) : view.policy.layer;
       if (layer !== view.applied && now >= view.retryAt) changes.push({ ...camera, layer });
     }
     return changes;
   }
 
-  applied({ publicationId, layer }: ViewerLayerChange): void {
+  applied({ publicationId, track, layer }: ViewerLayerChange): void {
     const view = this.#views.get(publicationId);
-    if (!view) return;
+    if (!view || view.track !== track) return;
     view.applied = layer;
     view.failures = 0;
   }
 
-  failed({ publicationId }: ViewerLayerChange, now: number): void {
+  failed({ publicationId, track }: ViewerLayerChange, now: number): void {
     const view = this.#views.get(publicationId);
-    if (!view) return;
+    if (!view || view.track !== track) return;
     view.retryAt = now + Math.min(MAX_RETRY_DELAY_MS, RETRY_AFTER_FAILED_SWITCH_MS * 2 ** view.failures);
     view.failures++;
   }
@@ -247,6 +270,7 @@ export class ViewerLayerSelector {
       view = { policy: new ViewerLayerPolicy(), track, applied: "h", retryAt: 0, failures: 0 };
       this.#views.set(publicationId, view);
     } else if (view.track !== track) {
+      this.#reader.forget(view.track.id);
       Object.assign(view, { track, applied: "h", retryAt: 0, failures: 0 });
     }
     return view;
