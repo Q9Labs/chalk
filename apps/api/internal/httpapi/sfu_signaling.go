@@ -161,6 +161,18 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
+	var capture mediapublications.ListenerPullCapture
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			if observer, ok := publications.(interface {
+				CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
+			}); ok {
+				capture = observer.CaptureListenerPull(episode)
+			}
+			break
+		}
+	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		SessionDescription: request.Body.SessionDescription,
@@ -170,9 +182,9 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	})
 	if observer, ok := publications.(mediapublications.ListenerPullObserver); ok {
 		observer.ObserveListenerPull(ctx, mediapublications.ListenerPullInput{
-			ReceiveHealthEpisode: mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID},
+			ReceiveHealthEpisode: episode,
 			ParticipantID:        request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
-			ConnectionID: request.Body.ConnectionID, Requested: request.Body.Tracks, Response: response, Err: err,
+			ConnectionID: request.Body.ConnectionID, Capture: capture, Requested: request.Body.Tracks, Response: response, Err: err,
 		})
 	}
 	if err != nil {

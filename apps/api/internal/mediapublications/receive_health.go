@@ -40,9 +40,22 @@ type ListenerPullInput struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	ConnectionID          string
+	Capture               ListenerPullCapture
 	Requested             []mediaplane.Track
 	Response              mediaplane.TracksResponse
 	Err                   error
+}
+
+type ListenerPullCapture struct {
+	snapshot receivePublicationSnapshot
+	captured bool
+}
+
+func (s Service) CaptureListenerPull(episode ReceiveHealthEpisode) ListenerPullCapture {
+	if s.receiveHealth == nil {
+		return ListenerPullCapture{captured: true}
+	}
+	return ListenerPullCapture{snapshot: s.receiveHealth.publicationSnapshot(episode, s.receiveHealth.now()), captured: true}
 }
 
 type ListenerPullObserver interface {
@@ -95,6 +108,7 @@ type receivePublicationEpisodeKey struct {
 type receivePublicationSnapshot struct {
 	incarnation int64
 	sequence    int64
+	commits     uint64
 	updatedAt   time.Time
 	identities  map[receivePublicationKey][32]byte
 }
@@ -103,6 +117,7 @@ type receivePull struct {
 	since     time.Time
 	step      string
 	errorKind string
+	commits   uint64
 }
 
 type receiveHealthEvent struct {
@@ -130,6 +145,14 @@ func newReceiveHealth(now func() time.Time) *receiveHealth {
 
 // Publication identities outlive diagnostic pair resets and never bind at sample time.
 func (h *receiveHealth) recordPublications(input provideroperations.ObservationInput) {
+	h.updatePublications(input, false)
+}
+
+func (h *receiveHealth) recordCommittedPublications(input provideroperations.ObservationInput) {
+	h.updatePublications(input, true)
+}
+
+func (h *receiveHealth) updatePublications(input provideroperations.ObservationInput, committed bool) {
 	if h == nil {
 		return
 	}
@@ -155,23 +178,33 @@ func (h *receiveHealth) recordPublications(input provideroperations.ObservationI
 		}
 	}
 	previous, exists := h.publications[key]
+	if committed {
+		previous.commits++
+	}
 	if exists && (input.Incarnation < previous.incarnation || (input.Incarnation == previous.incarnation && input.Sequence < previous.sequence)) {
+		if committed {
+			h.publications[key] = previous
+		}
 		return
 	}
 	if !exists && len(h.publications) >= receiveHealthMaxEpisodes {
 		return
 	}
-	h.publications[key] = receivePublicationSnapshot{incarnation: input.Incarnation, sequence: input.Sequence, updatedAt: now, identities: identities}
+	h.publications[key] = receivePublicationSnapshot{incarnation: input.Incarnation, sequence: input.Sequence, commits: previous.commits, updatedAt: now, identities: identities}
 }
 
-func (h *receiveHealth) publicationIdentities(episode ReceiveHealthEpisode, now time.Time) map[receivePublicationKey][32]byte {
+func (h *receiveHealth) publicationSnapshot(episode ReceiveHealthEpisode, now time.Time) receivePublicationSnapshot {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	snapshot := h.publications[receivePublicationEpisodeKey{tenant: episode.TenantID, episode: episode.EpisodeID}]
 	if now.Sub(snapshot.updatedAt) > receiveHealthTTL {
-		return nil
+		snapshot.identities = nil
 	}
-	return snapshot.identities
+	return snapshot
+}
+
+func (h *receiveHealth) publicationIdentities(episode ReceiveHealthEpisode, now time.Time) map[receivePublicationKey][32]byte {
+	return h.publicationSnapshot(episode, now).identities
 }
 
 // RunReceiveHealth discovers listeners independently of signaling requests.
@@ -292,7 +325,11 @@ func (s Service) ObserveListenerPull(_ context.Context, input ListenerPullInput)
 	}
 	h := s.receiveHealth
 	now := h.now()
-	identities := h.publicationIdentities(input.ReceiveHealthEpisode, now)
+	capture := input.Capture
+	if !capture.captured {
+		capture = s.CaptureListenerPull(input.ReceiveHealthEpisode)
+	}
+	snapshot := capture.snapshot
 	key := receivePullKey{listener: input.ParticipantID, generation: input.ParticipantGeneration, connection: sha256.Sum256([]byte(input.ConnectionID))}
 	pulls := make(map[receivePullKey]receivePull)
 	for _, track := range input.Requested {
@@ -308,13 +345,13 @@ func (s Service) ObserveListenerPull(_ context.Context, input ListenerPullInput)
 			}
 		}
 		if key.publication == ([32]byte{}) {
-			key.publication = identities[receivePublicationKey{publisher: key.publisher, track: key.track}]
+			key.publication = snapshot.identities[receivePublicationKey{publisher: key.publisher, track: key.track}]
 		}
-		if key.publication == ([32]byte{}) {
+		if key.publication == ([32]byte{}) && snapshot.identities != nil {
 			continue
 		}
 		step, kind := listenerPullResult(track, input.Response, input.Err)
-		pulls[key] = receivePull{since: now, step: step, errorKind: kind}
+		pulls[key] = receivePull{since: now, step: step, errorKind: kind, commits: snapshot.commits}
 		if len(pulls) == receiveHealthMaxPublications {
 			break
 		}
@@ -399,6 +436,7 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 		h.warn(context.Background(), h.now())
 		return nil
 	}
+	snapshot := h.publicationSnapshot(key, h.now())
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	now := h.now()
@@ -456,6 +494,19 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 				publisher: publicationKey.publisher, track: publicationKey.track, publication: publicationHash}
 			pull, ok := state.pulls[pullKey]
 			delete(state.pulls, pullKey)
+			pullKey.publication = [32]byte{}
+			if pending, exists := state.pulls[pullKey]; exists {
+				delete(state.pulls, pullKey)
+				if snapshot.identities != nil && pending.commits == snapshot.commits && snapshot.identities[publicationKey] == publicationHash {
+					if !ok || pending.step == "pull_succeeded" {
+						pull.step, pull.errorKind = pending.step, pending.errorKind
+					}
+					if !ok || pending.since.Before(pull.since) {
+						pull.since = pending.since
+					}
+					ok = true
+				}
+			}
 			if ok && pair.step != "pull_succeeded" {
 				pair.step, pair.errorKind = pull.step, pull.errorKind
 				if fresh && pull.since.Before(pair.since) {

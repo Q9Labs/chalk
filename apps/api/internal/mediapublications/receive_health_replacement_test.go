@@ -172,14 +172,77 @@ func TestReceiveHealthPublicationIdentitiesAreBoundedAndExpire(t *testing.T) {
 
 func TestReceiveHealthUnidentifiedPullCannotCreditLaterPublication(t *testing.T) {
 	f := newReceiveHealthFixture(t)
-	f.service.receiveHealth.clear()
-	clear(f.service.receiveHealth.publications)
+	f.service = newService(f.repository, func() time.Time { return f.now })
 	f.success()
 	f.replacePublication(t)
 	f.sample(time.Second)
 	f.sample(16 * time.Second)
 	if events := f.events(t, "media.listener_publication_unpulled"); len(events) != 1 || events[0]["step"] != "no_pull_attempted" {
 		t.Fatalf("unidentified success crossed publication identity: %+v", events)
+	}
+}
+
+func TestReceiveHealthStartupPullBeforeFirstSnapshot(t *testing.T) {
+	for _, success := range []bool{false, true} {
+		t.Run(fmt.Sprint(success), func(t *testing.T) {
+			f := newReceiveHealthFixture(t)
+			f.service = newService(f.repository, func() time.Time { return f.now })
+			if success {
+				f.success()
+			} else {
+				f.service.ObserveListenerPull(context.Background(), f.input)
+			}
+			f.sample(time.Second)
+			f.sample(16 * time.Second)
+			events := f.events(t, "media.listener_publication_unpulled")
+			if success && len(events) != 0 {
+				t.Fatalf("startup success was lost: %+v", events)
+			}
+			if !success && (len(events) != 1 || events[0]["step"] != "pull_failed" || events[0]["duration_ms"] != float64(17000)) {
+				t.Fatalf("startup failure was lost: %+v", events)
+			}
+		})
+	}
+}
+
+func TestReceiveHealthStartupPullSurvivesAnotherEpisodesCommit(t *testing.T) {
+	f := newReceiveHealthFixture(t)
+	f.service = newService(f.repository, func() time.Time { return f.now })
+	f.success()
+	f.service.receiveHealth.recordCommittedPublications(provideroperations.ObservationInput{
+		TenantID:    f.input.TenantID,
+		EpisodeID:   reconciliationTestID(t, "66666666-6666-4666-8666-666666666666"),
+		Incarnation: 1, Sequence: 1,
+	})
+	f.sample(time.Second)
+	f.sample(16 * time.Second)
+	if events := f.events(t, "media.listener_publication_unpulled"); len(events) != 0 {
+		t.Fatalf("other Episode's commit invalidated the early pull: %+v", events)
+	}
+}
+
+func TestReceiveHealthInFlightReplacementCannotInheritOldPull(t *testing.T) {
+	f := newReceiveHealthFixture(t)
+	f.input.Capture = f.service.CaptureListenerPull(f.input.ReceiveHealthEpisode)
+	f.replacePublication(t)
+	f.success()
+	f.sample(time.Second)
+	f.sample(16 * time.Second)
+	if events := f.events(t, "media.listener_publication_unpulled"); len(events) != 1 || events[0]["step"] != "no_pull_attempted" {
+		t.Fatalf("in-flight old success credited replacement: %+v", events)
+	}
+}
+
+func TestReceiveHealthInFlightReplacementBeforeFirstSnapshot(t *testing.T) {
+	f := newReceiveHealthFixture(t)
+	f.service = newService(f.repository, func() time.Time { return f.now })
+	f.input.Capture = f.service.CaptureListenerPull(f.input.ReceiveHealthEpisode)
+	f.replacePublication(t)
+	f.success()
+	f.sample(time.Second)
+	f.sample(16 * time.Second)
+	if events := f.events(t, "media.listener_publication_unpulled"); len(events) != 1 || events[0]["step"] != "no_pull_attempted" {
+		t.Fatalf("in-flight unknown success credited replacement: %+v", events)
 	}
 }
 

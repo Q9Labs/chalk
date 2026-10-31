@@ -184,14 +184,17 @@ Pull observations do not read the database or write logs. They retain bounded,
 hashed publication-identity results, including pulls completed before the first
 sample. Results are keyed by listener generation and connection and expire after
 two minutes. Results bind to the request's publication reference when available,
-otherwise to an in-memory identity snapshot fed by committed publication writes.
+otherwise to an in-memory identity snapshot captured before the SFU provider call
+and fed by committed publication writes.
 The write hook performs no extra reads or logging and cannot fail the publication
 write when diagnostic capacity is exhausted. The sampler also refreshes identity
 snapshots; an older incarnation/sequence cannot overwrite a newer commit. These
 snapshots retain at most 128 Episodes and 128 hashed identities per Episode and
-expire after two minutes without a refresh. A pull with no known publication
-identity is not credited to a later publication. Reusing a publisher connection
-and track name therefore does not transfer success to a replacement publication.
+expire after two minutes without a refresh. After a process restart, a pull
+without a known identity remains bounded pending evidence until the first
+sample; it is matched only if no publication write for that Episode intervened.
+Reusing a publisher connection and track name therefore does not transfer
+success to a replacement publication, even if it commits during an in-flight pull.
 Episode reconciliation and event collection share one per-Episode lock; payloads
 are emitted after unlocking, so a slow log sink does not hold up pull observations.
 
