@@ -7,7 +7,17 @@ function tabStorage(initial: Record<string, string> = {}): Storage {
   return {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => void values.set(key, value),
+    entries: () => [...values],
   } as Storage;
+}
+
+const entriesOf = (storage: Storage): Record<string, string> => Object.fromEntries((storage as Storage & { entries: () => [string, string][] }).entries());
+
+/** A page load in a tab: the tab's storage and its `window`, whose name survives reloads. */
+function loadIn(tab: { readonly storage: Storage; readonly window: { name: string } }) {
+  vi.stubGlobal("sessionStorage", tab.storage);
+  vi.stubGlobal("window", tab.window);
+  return loadSession();
 }
 
 async function loadSession() {
@@ -20,21 +30,39 @@ describe("web session", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("keeps its ID across a reload in the same tab and gives a new tab its own", async () => {
-    const tab = tabStorage();
-    vi.stubGlobal("sessionStorage", tab);
-    const first = (await loadSession()).currentSessionId();
+    const tab = { storage: tabStorage(), window: { name: "" } };
+    const first = (await loadIn(tab)).currentSessionId();
     expect(first).toMatch(UUID);
 
-    const afterReload = (await loadSession()).currentSessionId();
+    const afterReload = (await loadIn(tab)).currentSessionId();
     expect(afterReload).toBe(first);
 
-    vi.stubGlobal("sessionStorage", tabStorage());
-    expect((await loadSession()).currentSessionId()).not.toBe(first);
+    expect((await loadIn({ storage: tabStorage(), window: { name: "" } })).currentSessionId()).not.toBe(first);
+  });
+
+  it("gives a duplicated tab its own ID although it inherits a copy of sessionStorage", async () => {
+    const original = { storage: tabStorage(), window: { name: "" } };
+    const first = (await loadIn(original)).currentSessionId();
+
+    // Chrome's "Duplicate tab" copies sessionStorage and leaves window.name empty.
+    const duplicate = { storage: tabStorage(entriesOf(original.storage)), window: { name: "" } };
+    const duplicateId = (await loadIn(duplicate)).currentSessionId();
+    expect(duplicateId).toMatch(UUID);
+    expect(duplicateId).not.toBe(first);
+
+    expect((await loadIn(duplicate)).currentSessionId()).toBe(duplicateId);
+    expect((await loadIn(original)).currentSessionId()).toBe(first);
+  });
+
+  it("leaves a window.name the app owns alone and keeps the stored ID", async () => {
+    const tab = { storage: tabStorage(), window: { name: "checkout-frame" } };
+    const first = (await loadIn(tab)).currentSessionId();
+    expect((await loadIn(tab)).currentSessionId()).toBe(first);
+    expect(tab.window.name).toBe("checkout-frame");
   });
 
   it("replaces a stored value that is not a session ID", async () => {
-    vi.stubGlobal("sessionStorage", tabStorage({ "chalk.session.id": "not-a-session" }));
-    expect((await loadSession()).currentSessionId()).toMatch(UUID);
+    expect((await loadIn({ storage: tabStorage({ "chalk.session.id": "not-a-session" }), window: { name: "" } })).currentSessionId()).toMatch(UUID);
   });
 
   it("still has a session when storage is blocked", async () => {

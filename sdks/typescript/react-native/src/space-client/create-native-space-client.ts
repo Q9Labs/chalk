@@ -97,7 +97,14 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
     },
   );
   client.subscribe(() => session.setCallOpen(CALL_OPEN_STATUSES.has(client.getSnapshot().connection.status)));
-  return client;
+  // A disposed client stops publishing, so a dispose without leave() must clear the open-call mark itself.
+  const disposeClient = client.dispose;
+  return Object.assign(client, {
+    dispose: () => {
+      disposeClient.call(client);
+      session.setCallOpen(false);
+    },
+  });
 }
 const CALL_OPEN_STATUSES: ReadonlySet<string> = new Set(["joining", "live", "reconnecting", "leaving"]);
 function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch): NativeMediaClient {

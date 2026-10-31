@@ -35,7 +35,8 @@ on mobile. The SDK shows its ID in Call details as "Session ID" and adds it to
 problem-report diagnostics, so a user can quote it. It is the OpenTelemetry
 attribute `session.id`, never an Episode or a Cloudflare or dashboard `sessionId`.
 
-A tab keeps its session across reloads and a new tab starts a new one. Mobile
+A tab keeps its session across reloads, and a new tab, including a duplicated tab,
+starts a new one. Mobile
 starts a session at launch and another after 30 minutes in the background, never
 while a call is open. Server-side SDK clients have no session.
 

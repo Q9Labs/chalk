@@ -5,6 +5,8 @@
  */
 export const SESSION_ID_KEY = "session.id";
 const STORAGE_KEY = "chalk.session.id";
+const TAB_KEY = "chalk.session.tab";
+const TAB_NAME_PREFIX = "chalk.tab:";
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type SessionSource = () => string | undefined;
@@ -32,7 +34,11 @@ export function newSessionId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** A tab keeps its ID across reloads through sessionStorage; each new tab gets its own. */
+/**
+ * A tab keeps its ID across reloads through sessionStorage; each new tab gets its own. A duplicated tab and a tab opened
+ * by a link with an opener inherit a copy of sessionStorage but not `window.name`, so the stored ID counts only while the
+ * tab's `window.name` token matches the one stored beside it.
+ */
 function browserSession(): string | undefined {
   if (browserId) return browserId;
   if (typeof globalThis.document === "undefined") return undefined;
@@ -42,14 +48,27 @@ function browserSession(): string | undefined {
   } catch {
     /* Blocked storage keeps the ID for this page load only. */
   }
+  const tab = tabToken();
   const stored = storage?.getItem(STORAGE_KEY) ?? undefined;
-  browserId = stored && SESSION_ID.test(stored) ? stored : newSessionId();
+  const sameTab = tab === undefined || storage?.getItem(TAB_KEY) === tab;
+  browserId = stored && SESSION_ID.test(stored) && sameTab ? stored : newSessionId();
   try {
     if (browserId !== stored) storage?.setItem(STORAGE_KEY, browserId);
+    if (tab !== undefined) storage?.setItem(TAB_KEY, tab);
   } catch {
     /* A full or blocked store is not a request failure. */
   }
   return browserId;
+}
+
+/** The token that names this tab in `window.name`, which survives reloads but is empty in a duplicated tab. Undefined when the app owns `window.name`. */
+function tabToken(): string | undefined {
+  const win = globalThis.window;
+  if (!win) return undefined;
+  if (win.name.startsWith(TAB_NAME_PREFIX)) return win.name;
+  if (win.name !== "") return undefined;
+  win.name = `${TAB_NAME_PREFIX}${newSessionId()}`;
+  return win.name;
 }
 
 /** The W3C baggage value that carries the session, or undefined where no app session exists. */
