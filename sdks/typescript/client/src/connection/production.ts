@@ -154,6 +154,7 @@ type BoundMediaClient = Pick<
   | "remotePublicationsChanged"
   | "remoteParticipantsChanged"
   | "remotePublicationResumed"
+  | "localPublicationWithdrawn"
   | "start"
   | "stop"
   | "prepareLocalTrack"
@@ -172,6 +173,7 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     ...(client.remoteParticipantsChanged ? { remoteParticipantsChanged: client.remoteParticipantsChanged.bind(client) } : {}),
     ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
     ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
+    ...(client.localPublicationWithdrawn ? { localPublicationWithdrawn: client.localPublicationWithdrawn.bind(client) } : {}),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
     restart,

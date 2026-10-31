@@ -85,9 +85,25 @@ type CloseTracksResponse struct {
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
 }
 
+type SessionTrack struct {
+	Location  string
+	Mid       string
+	TrackName string
+	Active    bool
+}
+
+type SessionState struct {
+	Found  bool
+	Tracks []SessionTrack
+}
+
 type SignalingPlane interface {
 	AddTracks(context.Context, TracksRequest) (TracksResponse, error)
 	Renegotiate(context.Context, RenegotiateRequest) error
+}
+
+type SessionInspectingPlane interface {
+	InspectSession(context.Context, string) (SessionState, error)
 }
 
 // TrackUpdatingPlane changes how an existing remote subscription is delivered,
@@ -132,6 +148,18 @@ func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (Clo
 	}
 
 	return closing.CloseTracks(ctx, input)
+}
+
+func (s Service) InspectSession(ctx context.Context, connectionID string) (SessionState, error) {
+	inspecting, ok := s.plane.(SessionInspectingPlane)
+	if !ok {
+		return SessionState{}, ErrUnsupportedOperation
+	}
+	trimmed := strings.TrimSpace(connectionID)
+	if trimmed == "" || trimmed != connectionID {
+		return SessionState{}, ErrInvalidSignalRequest
+	}
+	return inspecting.InspectSession(ctx, trimmed)
 }
 
 func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) error {
