@@ -195,7 +195,7 @@ try {
           operation: input?.tracks?.map(track => track.location).join(',') ?? null,
           connectionNumber: input?.connection_id ? [...connections[index]].indexOf(input.connection_id) + 1 : null,
           hasConnection: Boolean(body.connection_id || body.connectionId), errorCode: body.code ?? body.error?.code ?? null });
-        const trackErrors = body.tracks?.filter(track => track.errorCode || track.errorDescription).map(track => ({ location: track.location, code: track.errorCode ?? null }));
+        const trackErrors = body.trackErrors?.map(track => ({ code: track.code ?? null })) ?? body.tracks?.filter(track => track.errorCode || track.errorDescription).map(track => ({ location: track.location, code: track.errorCode ?? null }));
         if (trackErrors?.length) run.network.at(-1).trackErrors = trackErrors;
       });
       await page.goto(config.urls.web);
@@ -256,7 +256,7 @@ try {
     run.providerFailures = (await readFile(config.aggregateLog, 'utf8')).slice(logOffset).split('\n').filter(line => line.includes('cloudflare_sfu.request_failed')).map(line => {
       let entry;
       try { entry = JSON.parse(line.slice(line.indexOf('{'))); } catch { entry = {}; }
-      return Object.fromEntries(['time', 'operation', 'http_status', 'provider_code', 'request_local_track_count', 'request_remote_track_count'].map(key => [key, entry[key] ?? line.match(new RegExp(`\\b${key}=([^ ]+)`))?.[1] ?? null]));
+      return Object.fromEntries(['time', 'operation', 'http_status', 'failure_stage', 'provider_code', 'provider_raw_code', 'request_local_track_count', 'request_remote_track_count'].map(key => [key, entry[key] ?? line.match(new RegExp(`\\b${key}=([^ ]+)`))?.[1] ?? null]));
     });
     await save();
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(error => run.faults.push({ kind: 'leave', message: error.message }));
