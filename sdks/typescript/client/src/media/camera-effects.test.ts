@@ -4,7 +4,7 @@ import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient } from "../space-client/capture.test.helpers";
 import { track, stream } from "../space-client/capture.test.helpers";
 import { openCameraEffectsTrack as createCameraEffectsTrack, getCameraBackgroundFallback, processCameraStream, setCameraBackground, configureCameraEffectProvider } from "./camera-effects";
-import { getCameraBackground } from "./camera-effect-operations";
+import { cameraBackgroundAvailable, getCameraBackground } from "./camera-effect-operations";
 
 const model = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
 afterEach(() => {
@@ -251,5 +251,57 @@ describe("camera effects ownership", () => {
       complete({ close: model.close });
       client.dispose();
     }
+  });
+});
+
+describe("camera background recovery", () => {
+  const files = { wasmRoot: "/camera-effects/wasm", modelUrl: "/camera-effects/model.tflite" };
+  function camera(deviceId: string) {
+    const capture = browser();
+    capture.source.getSettings = () => ({ deviceId, width: 640, height: 360 });
+    vi.stubGlobal("HTMLCanvasElement", class {});
+    configureCameraEffectProvider(files, () => model.create());
+    return capture;
+  }
+  it("releases the camera's queue when capture is cancelled before a saved model loads", async () => {
+    const first = camera("camera-queue");
+    await setCameraBackground("camera-queue", "blur");
+    let complete = (_: { close: () => void }) => {};
+    model.create.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const cancel = new AbortController();
+    const capture = processCameraStream(stream([first.source]), cancel.signal);
+    await vi.waitFor(() => expect(model.create).toHaveBeenCalledOnce());
+    cancel.abort();
+    await expect(capture).rejects.toThrow();
+    expect(first.source.readyState).toBe("ended");
+    await setCameraBackground("camera-queue", "none");
+    const second = camera("camera-queue");
+    await processCameraStream(stream([second.source]));
+    expect(cameraBackgroundAvailable("camera-queue")).toBe(true);
+    expect(second.output.readyState).toBe("live");
+    complete({ close: model.close });
+    await vi.waitFor(() => expect(model.close).toHaveBeenCalledOnce());
+    expect(model.create).toHaveBeenCalledOnce();
+    second.output.stop();
+  });
+  it("keeps a recaptured camera's session when an old output is stopped again", async () => {
+    const first = camera("camera-recapture");
+    await setCameraBackground("camera-recapture", "none");
+    await processCameraStream(stream([first.source]));
+    const old = first.output;
+    old.stop();
+    const second = camera("camera-recapture");
+    await processCameraStream(stream([second.source]));
+    old.stop();
+    expect(cameraBackgroundAvailable("camera-recapture")).toBe(true);
+    await setCameraBackground("camera-recapture", "blur");
+    expect(model.create).toHaveBeenCalledOnce();
+    expect(second.output.getSettings().frameRate).toBe(24);
+    second.output.stop();
   });
 });
