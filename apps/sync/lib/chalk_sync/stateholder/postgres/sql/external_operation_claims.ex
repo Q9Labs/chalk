@@ -94,6 +94,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       from sync_external_operations operation
       join eligible using (external_operation_id)
       where eligible.episode_position = 1
+        and operation.status = 'pending'
+        and operation.next_attempt_at <= now()
+        and operation.attempt_count < 100
       order by eligible.next_attempt_at, eligible.attempt_count, eligible.acceptance_order
       for update of operation skip locked
       limit $1

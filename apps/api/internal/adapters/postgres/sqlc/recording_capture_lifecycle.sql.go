@@ -48,7 +48,7 @@ insert into sync_external_operations (
     false
 )
 on conflict (tenant_id, episode_id, operation_name, request_key) do nothing
-returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+returning acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
 type InsertRecordingCaptureLifecycleOperationParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) InsertRecordingCaptureLifecycleOperation(ctx context.Context, 
 	)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,
@@ -307,7 +308,7 @@ func (q *Queries) LockRecordingCaptureLifecycleAuthority(ctx context.Context, ar
 }
 
 const lockRecordingCaptureLifecycleOperation = `-- name: LockRecordingCaptureLifecycleOperation :one
-select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+select acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where tenant_id = $1
   and space_id = $2
@@ -335,6 +336,7 @@ func (q *Queries) LockRecordingCaptureLifecycleOperation(ctx context.Context, ar
 	)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,

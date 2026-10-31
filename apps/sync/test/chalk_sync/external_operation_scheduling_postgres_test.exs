@@ -15,6 +15,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.ExternalOperationConsumer
+  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -48,6 +49,26 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     else
       :ok
     end
+  end
+
+  test "a class backlog cannot fill the claim wave ahead of another Episode", %{
+    connection: connection
+  } do
+    class = fixture(connection, 40)
+    other = fixture(connection, 2)
+
+    for identity <- tl(class.identities) ++ [List.last(other.identities)] do
+      {:ok, operation} =
+        Operation.new("wave_" <> ChalkSync.UUID.generate(), :participant_leave, %{})
+
+      assert {:ok, _} = Postgres.begin_operation(identity, operation)
+    end
+
+    assert {:ok, operations} = Postgres.claim_operations(8)
+    assert length(operations) == 2
+
+    assert MapSet.new(Enum.map(operations, fn {episode, _} -> episode.episode_id end)) ==
+             MapSet.new([class.episode.episode_id, other.episode.episode_id])
   end
 
   @tag timeout: 120_000
