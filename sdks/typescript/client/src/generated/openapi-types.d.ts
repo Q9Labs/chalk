@@ -249,6 +249,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/call-stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Upload call stats */
+    post: operations["uploadCallStats"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/connection-reports": {
     parameters: {
       query?: never;
@@ -1230,6 +1247,34 @@ export interface components {
     };
     /** Format: uuid */
     AuditLogId: string;
+    CallStatsRequest: {
+      samples: {
+        /** @enum {string} */
+        connection_type: "udp" | "tcp" | "turn" | "unknown";
+        elapsed_ms: number;
+        freeze_count?: number | null;
+        freeze_ms?: number | null;
+        /** @enum {string} */
+        local_candidate_type?: "host" | "srflx" | "prflx" | "relay";
+        recv_bitrate_kbps?: number | null;
+        recv_height?: number | null;
+        recv_jitter_ms?: number | null;
+        recv_loss_pct?: number | null;
+        /** @enum {string} */
+        relay_protocol?: "udp" | "tcp" | "tls";
+        /** @enum {string} */
+        remote_candidate_type?: "host" | "srflx" | "prflx" | "relay";
+        rtt_ms?: number | null;
+        send_bitrate_kbps?: number | null;
+        send_jitter_ms?: number | null;
+        /** @enum {string} */
+        send_layer?: "h" | "m" | "l";
+        send_loss_pct?: number | null;
+        window_ms: number;
+      }[];
+      /** @enum {integer} */
+      version: 1;
+    };
     CancelRecordingPreparationRequest: {
       expected_revision: number;
     };
@@ -4008,6 +4053,96 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  uploadCallStats: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CallStatsRequest"];
+      };
+    };
+    responses: {
+      /** @description No Content */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
         headers: {
           [name: string]: unknown;
         };

@@ -26,7 +26,8 @@ coalesce(case when participants.media_connection_generation = participants.gener
 from participants
 join episodes on episodes.tenant_id = participants.tenant_id and episodes.id = participants.episode_id
 where participants.tenant_id = $1 and participants.episode_id = $2
-  and ` + publicationParticipantEligible + ` and episodes.status = 'active'`
+  and ` + publicationParticipantEligible + ` and episodes.status = 'active'
+order by participants.id`
 	rows, err := q.db.Query(ctx, query, arg.TenantID, arg.EpisodeID)
 	if err != nil {
 		return nil, err
@@ -43,6 +44,29 @@ where participants.tenant_id = $1 and participants.episode_id = $2
 		participants = append(participants, participant)
 	}
 	return participants, rows.Err()
+}
+
+func (r ProviderOperationRepository) ListReceiveHealthEpisodes(ctx context.Context, limit int) ([]mediapublications.ReceiveHealthEpisode, error) {
+	return r.queries.ListReceiveHealthEpisodes(ctx, limit)
+}
+
+func (q *providerOperationQueries) ListReceiveHealthEpisodes(ctx context.Context, limit int) ([]mediapublications.ReceiveHealthEpisode, error) {
+	rows, err := q.db.Query(ctx, `select tenant_id, space_id, id from episodes
+where status = 'active' and config_snapshot->'media_plane_binding'->>'provider' = 'cf_sfu'
+order by id limit $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]mediapublications.ReceiveHealthEpisode, 0)
+	for rows.Next() {
+		var tenant, space, episode pgtype.UUID
+		if err := rows.Scan(&tenant, &space, &episode); err != nil {
+			return nil, err
+		}
+		result = append(result, mediapublications.ReceiveHealthEpisode{TenantID: utilities.IDFromBytes(tenant.Bytes), SpaceID: utilities.IDFromBytes(space.Bytes), EpisodeID: utilities.IDFromBytes(episode.Bytes)})
+	}
+	return result, rows.Err()
 }
 
 type publicationParticipantIdentityParams struct{ TenantID, EpisodeID, ParticipantID pgtype.UUID }

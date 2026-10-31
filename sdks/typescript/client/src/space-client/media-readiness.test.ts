@@ -389,4 +389,58 @@ describe("media readiness", () => {
       timer.mockRestore();
     }
   });
+
+  // The media plane briefly leaves live while another source moves to a fresh SFU connection; Sync stays live.
+  const swapMediaConnection = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering", peerConnectionState: "connecting", iceConnectionState: "checking" }, failure: null });
+  const finishMediaSwap = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live", peerConnectionState: "connected", iceConnectionState: "connected" }, failure: null });
+
+  // The lifecycle itself enters reconnecting once the swap outlasts its 250 ms grace period.
+  it.each([
+    ["microphone", 0],
+    ["camera", 0],
+    ["microphone", 300],
+    ["camera", 300],
+  ] as const)("applies a %s click made %i ms into a media connection replacement", async (source, delayMs) => {
+    const { client, platform, capture, command, setEnabled, track } = createConvergenceScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      swapMediaConnection(platform);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const result = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      const tick = new Promise((resolve) => setTimeout(() => resolve("pending"), 0));
+      expect(await Promise.race([result, tick])).toBe("pending");
+      expect(command).not.toHaveBeenCalled();
+      finishMediaSwap(platform);
+      expect(await result).toBe("enabled");
+      expect(command).toHaveBeenCalledExactlyOnceWith(true);
+      expect(capture).toHaveBeenCalledOnce();
+      expect(track.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("reports a microphone click made during a media connection replacement when the call ends", async () => {
+    const { client, platform, capture, command, setEnabled } = createConvergenceScenario("microphone");
+    try {
+      await client.join({ microphone: false, camera: false });
+      swapMediaConnection(platform);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      const result = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await client.leave();
+      expect(await result).toMatchObject({ code: "connection.invalid_state" });
+      expect(command).not.toHaveBeenCalledWith(true);
+      expect(capture).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
 });

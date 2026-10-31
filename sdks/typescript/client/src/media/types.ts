@@ -1,8 +1,15 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
+export type CloudflareSFUIceServer = {
+  readonly urls: readonly string[];
+  readonly username?: string;
+  readonly credential?: string;
+};
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
+  /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
+  readonly iceServers?: readonly CloudflareSFUIceServer[];
 };
 export type CloudflareSFUSessionDescription = {
   readonly type: "offer" | "answer";
@@ -59,6 +66,12 @@ export type CloudflareSFUSignalingTransport = {
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /**
+   * Best-effort per-call stats upload; transports without it simply report nothing. The `closing`
+   * batch reuses the last token and never asks the credential provider, which could refresh access
+   * for a participant who just left or was evicted.
+   */
+  readonly uploadCallStats?: (stats: import("./call-stats").CallStatsRequest, closing: boolean) => Promise<void>;
 };
 export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;

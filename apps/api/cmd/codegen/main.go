@@ -653,6 +653,26 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 			schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
 		}
 	}
+	if schemaName == "CallStatsRequest" {
+		switch fieldName {
+		case "version":
+			schema["enum"] = []int{1}
+		case "samples":
+			schema["minItems"] = 1
+			schema["maxItems"] = httpapi.CallStatsSampleLimit
+		case "elapsed_ms":
+			schema["minimum"] = 0
+			schema["maximum"] = httpapi.CallStatsMaxElapsedMS
+		case "window_ms":
+			schema["minimum"] = httpapi.CallStatsMinWindowMS
+			schema["maximum"] = httpapi.CallStatsMaxWindowMS
+		default:
+			if maximum := httpapi.CallStatsMaximum(fieldName); maximum > 0 {
+				schema["minimum"] = 0
+				schema["maximum"] = maximum
+			}
+		}
+	}
 	if schemaName == "ProblemReportRequest" {
 		switch fieldName {
 		case "description":
@@ -722,6 +742,9 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "ConnectionReportRequest" {
 		return httpapi.ConnectionReportFieldEnum(fieldName)
+	}
+	if schemaName == "CallStatsRequest" {
+		return httpapi.CallStatsFieldEnum(fieldName)
 	}
 	switch fieldName {
 	case "recording_render_mode":
