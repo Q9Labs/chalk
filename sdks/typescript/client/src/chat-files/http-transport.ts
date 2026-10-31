@@ -54,7 +54,8 @@ function invalidUpload(message: string): never {
 
 function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
   const fetchImplementation = withRequestContext(options.fetch);
-  const baseUrl = options.baseUrl.replace(/\/+$/u, "");
+  let baseUrl = options.baseUrl;
+  while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
   return async function request<T>(operation: ChalkChatFileOperation, path: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
     const headers = new Headers(init.headers);
     try {
