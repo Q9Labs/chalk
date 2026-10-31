@@ -52,6 +52,11 @@ type TrackError struct {
 	Code         string `json:"code"`
 }
 
+type UpdateTracksRequest struct {
+	ConnectionID string
+	Tracks       []Track
+}
+
 type RenegotiateRequest struct {
 	ConnectionID       string
 	SessionDescription SessionDescription
@@ -85,6 +90,12 @@ type SignalingPlane interface {
 	Renegotiate(context.Context, RenegotiateRequest) error
 }
 
+// TrackUpdatingPlane changes how an existing remote subscription is delivered,
+// such as the simulcast layer, without renegotiating the connection.
+type TrackUpdatingPlane interface {
+	UpdateTracks(context.Context, UpdateTracksRequest) (TracksResponse, error)
+}
+
 type TrackClosingPlane interface {
 	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
@@ -98,6 +109,17 @@ func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResp
 		return TracksResponse{}, err
 	}
 	return signaling.AddTracks(ctx, input)
+}
+
+func (s Service) UpdateTracks(ctx context.Context, input UpdateTracksRequest) (TracksResponse, error) {
+	updating, ok := s.plane.(TrackUpdatingPlane)
+	if !ok {
+		return TracksResponse{}, ErrUnsupportedOperation
+	}
+	if err := requireUpdateTracksRequest(&input); err != nil {
+		return TracksResponse{}, err
+	}
+	return updating.UpdateTracks(ctx, input)
 }
 
 func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (CloseTracksResponse, error) {
@@ -154,6 +176,30 @@ func requireTracksRequest(input *TracksRequest) error {
 	}
 	if input.SessionDescription != nil {
 		if err := requireSessionDescription(input.SessionDescription); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// requireUpdateTracksRequest accepts only a remote subscription that names its
+// receiving MID and carries a simulcast policy; local publications cannot change.
+func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
+	connectionID, err := requiredString(input.ConnectionID)
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
+		return ErrInvalidSignalRequest
+	}
+	input.ConnectionID = connectionID
+	for index := range input.Tracks {
+		track := &input.Tracks[index]
+		track.Location = strings.TrimSpace(track.Location)
+		track.Mid = strings.TrimSpace(track.Mid)
+		track.TrackName = strings.TrimSpace(track.TrackName)
+		track.SessionID = strings.TrimSpace(track.SessionID)
+		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || track.Simulcast == nil {
+			return ErrInvalidSignalRequest
+		}
+		if err := requireSimulcastPolicy(track.Simulcast); err != nil {
 			return err
 		}
 	}

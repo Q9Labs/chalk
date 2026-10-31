@@ -22,6 +22,11 @@ type sfuTracksRequest struct {
 	Tracks             []mediaplane.Track             `json:"tracks"`
 }
 
+type sfuUpdateTracksRequest struct {
+	ConnectionID string             `json:"connection_id"`
+	Tracks       []mediaplane.Track `json:"tracks"`
+}
+
 type sfuRenegotiateRequest struct {
 	ConnectionID       string                        `json:"connection_id"`
 	SessionDescription mediaplane.SessionDescription `json:"session_description"`
@@ -49,6 +54,14 @@ type sfuTracksEndpointRequest struct {
 	EpisodeID                utilities.ID
 	ParticipantID            utilities.ID
 	Body                     sfuTracksRequest
+}
+
+type sfuUpdateTracksEndpointRequest struct {
+	TenantID      utilities.ID
+	SpaceID       utilities.ID
+	EpisodeID     utilities.ID
+	ParticipantID utilities.ID
+	Body          sfuUpdateTracksRequest
 }
 
 type sfuRenegotiateEndpointRequest struct {
@@ -107,6 +120,7 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 	return []RouteEndpoint{
 		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuCloseTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
 	}
@@ -436,6 +450,32 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
+func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
+	return Put(
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
+		"updateCloudflareSFUTracks",
+		decodeSFUUpdateTracksRequest,
+		func(ctx context.Context, request sfuUpdateTracksEndpointRequest) (mediaplane.TracksResponse, error) {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
+				return mediaplane.TracksResponse{}, err
+			}
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
+			if err != nil {
+				return mediaplane.TracksResponse{}, err
+			}
+			return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Tracks: request.Body.Tracks})
+		},
+	).
+		Auth(APIAuthParticipantMedia).
+		RateLimit(authenticatedWriteRateLimit).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		RequestBody("CloudflareSFUUpdateTracksRequest", sfuUpdateTracksRequest{}).
+		Responds(http.StatusOK, "CloudflareSFUUpdateTracksAPIResponse", mediaplane.TracksResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
 func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
@@ -464,6 +504,18 @@ func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 		Responds(http.StatusOK, "CloudflareSFURenegotiateResponse", sfuRenegotiateResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
 		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+func decodeSFUUpdateTracksRequest(request *http.Request) (sfuUpdateTracksEndpointRequest, error) {
+	tenantID, spaceID, episodeID, participantID, err := tenantSpaceEpisodeParticipantIDsRequest(request)
+	if err != nil {
+		return sfuUpdateTracksEndpointRequest{}, err
+	}
+	body, err := decodeJSONBody[sfuUpdateTracksRequest](request)
+	if err != nil {
+		return sfuUpdateTracksEndpointRequest{}, err
+	}
+	return sfuUpdateTracksEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, nil
 }
 
 func decodeSFUTracksRequest(request *http.Request) (sfuTracksEndpointRequest, error) {
