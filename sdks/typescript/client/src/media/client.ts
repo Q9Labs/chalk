@@ -106,7 +106,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
-  readonly #callStats = createCallStatsCollector({ upload: async (stats) => this.#transport?.uploadCallStats?.(stats) });
+  readonly #callStats = createCallStatsCollector({ upload: async (stats) => this.#transport?.uploadCallStats?.(stats, false) });
   constructor(options: CloudflareSFUClientOptions) {
     validateClientOptions(options);
     this.#participantId = options.participantId;
@@ -515,7 +515,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
-    void this.#callStats.flush();
+    // Retiring publications clears the transport before a pending upload ends, so the closing batch keeps its own reference.
+    const transport = this.#transport;
+    void this.#callStats.flush(async (stats) => transport?.uploadCallStats?.(stats, true));
     this.#receiveProgress.expect([], this.#participantId);
     this.#subscribedPublicationIds.clear();
     this.#generation++;
@@ -1336,6 +1338,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
     try {
       this.#connection = this.#createPeerConnection(bootstrap);
+      this.#callStats.reset();
       this.#observeConnection(this.#connection, generation, connectionEpoch);
     } catch (error) {
       this.#setFailure(error, "media_failed");

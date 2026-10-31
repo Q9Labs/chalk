@@ -20,18 +20,19 @@ function frame(second: number, options: { lost?: number; sent?: number; type?: "
 function run(seconds: number, options: Parameters<typeof frame>[1] = {}) {
   let clock = 0;
   const uploads: CallStatsRequest[] = [];
-  const collector = createCallStatsCollector({ now: () => clock, upload: async (request) => void uploads.push(request) });
+  const upload = async (request: CallStatsRequest) => void uploads.push(request);
+  const collector = createCallStatsCollector({ now: () => clock, upload });
   for (let second = 0; second <= seconds; second++) {
     clock = second * 1000;
     collector.observe(frame(second, options));
   }
-  return { collector, uploads };
+  return { collector, uploads, flush: () => collector.flush(upload) };
 }
 
 describe("call stats collector", () => {
   it("summarises one window with plausible values", async () => {
-    const { collector, uploads } = run(10);
-    await collector.flush();
+    const { flush, uploads } = run(10);
+    await flush();
     const [sample] = uploads[0]?.samples ?? [];
     expect(uploads[0]?.version).toBe(1);
     expect(sample).toMatchObject({
@@ -53,27 +54,28 @@ describe("call stats collector", () => {
   });
 
   it("reports relay candidates as turn and never carries an address", async () => {
-    const { collector, uploads } = run(10, { type: "relay", lost: 2, layer: "l" });
-    await collector.flush();
+    const { flush, uploads } = run(10, { type: "relay", lost: 2, layer: "l" });
+    await flush();
     expect(uploads[0]?.samples[0]).toMatchObject({ connection_type: "turn", relay_protocol: "tls", send_layer: "l", send_loss_pct: 2 });
     expect(JSON.stringify(uploads)).not.toContain("203.0.113.9");
   });
 
   it("reports send loss against the packets sent", async () => {
-    const { collector, uploads } = run(10, { lost: 100 });
-    await collector.flush();
+    const { flush, uploads } = run(10, { lost: 100 });
+    await flush();
     expect(uploads[0]?.samples[0]?.send_loss_pct).toBe(100);
   });
 
   it("skips a window longer than the API accepts and resumes with the next one", async () => {
     let clock = 0;
     const uploads: CallStatsRequest[] = [];
-    const collector = createCallStatsCollector({ now: () => clock, upload: async (request) => void uploads.push(request) });
+    const upload = async (request: CallStatsRequest) => void uploads.push(request);
+    const collector = createCallStatsCollector({ now: () => clock, upload });
     for (const second of [0, 5, 70, 80]) {
       clock = second * 1000;
       collector.observe(frame(second));
     }
-    await collector.flush();
+    await collector.flush(upload);
     const windows = uploads.flatMap((request) => request.samples.map((sample) => sample.window_ms));
     expect(windows).toEqual([10_000]);
     expect(Math.max(...windows)).toBeLessThanOrEqual(CALL_STATS_MAX_WINDOW_MS);
@@ -81,10 +83,10 @@ describe("call stats collector", () => {
 
   it("flushes a partial window of at least one second and skips shorter ones", async () => {
     const short = run(0);
-    await short.collector.flush();
+    await short.flush();
     expect(short.uploads).toEqual([]);
     const partial = run(3);
-    await partial.collector.flush();
+    await partial.flush();
     expect(partial.uploads[0]?.samples[0]?.window_ms).toBe(3000);
   });
 
@@ -97,32 +99,74 @@ describe("call stats collector", () => {
   it("drops a failed batch without throwing or retrying", async () => {
     let calls = 0;
     let clock = 0;
-    const collector = createCallStatsCollector({
-      now: () => clock,
-      upload: async () => {
-        calls++;
-        throw new Error("offline");
-      },
-    });
+    const upload = async () => {
+      calls++;
+      throw new Error("offline");
+    };
+    const collector = createCallStatsCollector({ now: () => clock, upload });
     for (let second = 0; second <= 10; second++) {
       clock = second * 1000;
       collector.observe(frame(second));
     }
-    await collector.flush();
-    await collector.flush();
+    await collector.flush(upload);
+    await collector.flush(upload);
     expect(calls).toBe(1);
   });
 
   it("stops producing samples at the per-call cap", async () => {
     let clock = 0;
     let total = 0;
-    const collector = createCallStatsCollector({ now: () => clock, upload: async (request) => void (total += request.samples.length) });
+    const upload = async (request: CallStatsRequest) => void (total += request.samples.length);
+    const collector = createCallStatsCollector({ now: () => clock, upload });
     for (let second = 0; second <= (CALL_STATS_CALL_CAP + 20) * 10; second++) {
       clock = second * 1000;
       collector.observe(frame(second));
       await new Promise((resolve) => setImmediate(resolve));
     }
-    await collector.flush();
+    await collector.flush(upload);
     expect(total).toBe(CALL_STATS_CALL_CAP);
+  });
+
+  it("closes the call with the uploader passed to flush even while a periodic upload is in flight", async () => {
+    let clock = 0;
+    const periodic: CallStatsRequest[] = [];
+    const closing: CallStatsRequest[] = [];
+    let finishPeriodic: () => void = () => undefined;
+    const collector = createCallStatsCollector({
+      now: () => clock,
+      upload: (request) => new Promise<void>((resolve) => void (periodic.push(request), (finishPeriodic = resolve))),
+    });
+    for (let second = 0; second <= 65; second++) {
+      clock = second * 1000;
+      collector.observe(frame(second));
+    }
+    expect(periodic).toHaveLength(1);
+    const flushed = collector.flush(async (request) => void closing.push(request));
+    finishPeriodic();
+    await flushed;
+    expect(periodic).toHaveLength(1);
+    expect(closing.flatMap((request) => request.samples)).toHaveLength(1);
+  });
+
+  it("starts the next window fresh after the peer connection is replaced", async () => {
+    let clock = 0;
+    const uploads: CallStatsRequest[] = [];
+    const upload = async (request: CallStatsRequest) => void uploads.push(request);
+    const collector = createCallStatsCollector({ now: () => clock, upload });
+    for (let second = 0; second <= 5; second++) {
+      clock = second * 1000;
+      collector.observe(frame(second));
+    }
+    collector.reset();
+    // The replacement connection reports counters that restarted from zero under new stats IDs.
+    const replaced = (second: number) => report([{ id: "O2", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: second * 100, bytesSent: second * 125_000 }]);
+    for (let second = 6; second <= 16; second++) {
+      clock = second * 1000;
+      collector.observe(replaced(second - 6));
+    }
+    await collector.flush(upload);
+    const samples = uploads.flatMap((request) => request.samples);
+    expect(samples).toHaveLength(1);
+    expect(samples[0]).toMatchObject({ window_ms: 10_000, send_bitrate_kbps: 1000 });
   });
 });

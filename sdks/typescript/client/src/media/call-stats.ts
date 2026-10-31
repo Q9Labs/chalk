@@ -27,11 +27,15 @@ type Gauges = { sum: number; count: number };
 export type CallStatsCollector = {
   /** Feed one `getStats()` report. Cheap; summarises once a window has elapsed. */
   readonly observe: (report: RTCStatsReport) => void;
-  /** Close the open window (if long enough) and upload what is buffered. */
-  readonly flush: () => Promise<void>;
+  /** Close the open window (if long enough) and upload what is buffered with `upload`, once any upload in flight ends. */
+  readonly flush: (upload: Upload) => Promise<void>;
+  /** A new peer connection starts new counters: drop the open window and its baseline, keep what is already buffered. */
+  readonly reset: () => void;
 };
 
-export function createCallStatsCollector(options: { readonly upload: (request: CallStatsRequest) => Promise<void>; readonly now?: () => number }): CallStatsCollector {
+type Upload = (request: CallStatsRequest) => Promise<void>;
+
+export function createCallStatsCollector(options: { readonly upload: Upload; readonly now?: () => number }): CallStatsCollector {
   const now = options.now ?? (() => Date.now());
   const startedAt = now();
   let buffer: CallStatsSample[] = [];
@@ -54,12 +58,11 @@ export function createCallStatsCollector(options: { readonly upload: (request: C
     if (buffer.length > CALL_STATS_MAX_BATCH) buffer = buffer.slice(-CALL_STATS_MAX_BATCH);
   };
 
-  const send = (): Promise<void> => {
+  const send = (upload: Upload): Promise<void> => {
     if (uploading || buffer.length === 0) return uploading ?? Promise.resolve();
     const samples = buffer;
     buffer = [];
-    uploading = options
-      .upload({ version: 1, samples })
+    uploading = upload({ version: 1, samples })
       .catch(() => {
         /* Stats are best effort: a failed batch is dropped, never retried or queued. */
       })
@@ -76,12 +79,17 @@ export function createCallStatsCollector(options: { readonly upload: (request: C
       baseline ??= readBaseline(report, at);
       addGauges(report, gauges);
       if (at - baseline.at >= CALL_STATS_WINDOW_MS) closeWindow(at);
-      if (buffer.length >= CALL_STATS_UPLOAD_SAMPLES) void send();
+      if (buffer.length >= CALL_STATS_UPLOAD_SAMPLES) void send(options.upload);
     },
-    async flush() {
+    async flush(upload) {
       closeWindow(now());
       if (uploading) await uploading;
-      await send();
+      await send(upload);
+    },
+    reset() {
+      baseline = null;
+      latest = null;
+      resetGauges(gauges);
     },
   };
 }

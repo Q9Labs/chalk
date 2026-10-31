@@ -1654,17 +1654,31 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
   });
-  it("uploads call stats with the last token and never asks the credential provider, which can refresh access", async () => {
+  it("uploads periodic call stats with a fresh credential so a hidden tab never reuses an expired one", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
+    const tokens = ["token-1", "token-2"];
+    const credential = vi.fn(async () => tokens.shift() ?? "token-3");
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
+
+    await transport.uploadCallStats?.(stats, false);
+    await transport.uploadCallStats?.(stats, false);
+    const [url, init] = fetch.mock.calls[1] ?? [];
+    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-2");
+    expect(credential).toHaveBeenCalledTimes(2);
+  });
+  it("uploads the closing call stats with the last token and never asks the credential provider, which can refresh access", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
     const credential = vi.fn(async () => "media-token");
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
     const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
 
-    await transport.uploadCallStats?.(stats);
+    await transport.uploadCallStats?.(stats, true);
     expect(fetch).not.toHaveBeenCalled();
 
     await transport.listPublications();
-    await transport.uploadCallStats?.(stats);
+    await transport.uploadCallStats?.(stats, true);
     const [url, init] = fetch.mock.calls[1] ?? [];
     expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer media-token");
@@ -2404,6 +2418,28 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
+it("sends the closing call stats through the transport that was live at leave, even after a receive-only stop clears it", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream());
+    const uploads: { readonly samples: number; readonly closing: boolean }[] = [];
+    let finishPeriodic: () => void = () => undefined;
+    h.transport.uploadCallStats = (stats, closing) => {
+      uploads.push({ samples: stats.samples.length, closing });
+      return closing ? Promise.resolve() : new Promise<void>((resolve) => void (finishPeriodic = resolve));
+    };
+    vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+      const seconds = Date.now() / 1000;
+      return new Map([["O", { id: "O", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: seconds * 100, bytesSent: seconds * 125_000 }]]);
+    });
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(uploads).toEqual([{ samples: 6, closing: false }]);
+
+    h.client.stop();
+    finishPeriodic();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(uploads.at(-1)?.closing).toBe(true);
+  });
+});
 describe("viewer layer switching", () => {
   const healthyCameraStats = (h: ReturnType<typeof createHarness>) => {
     for (const camera of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) setVideoRenderSize(camera.track, { width: 480, height: 270 });
@@ -2847,6 +2883,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly force: boolean;
   }[] = [];
   blockPublicationList = false;
+  uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
   failNextStaleLocalPublish = false;

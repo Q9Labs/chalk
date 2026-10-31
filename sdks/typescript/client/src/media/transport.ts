@@ -9,18 +9,21 @@ const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
-  // Stats are diagnostics: they reuse the last token a request got and never ask the credential provider, which can refresh access.
   let lastToken = "";
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
   const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
+  const freshToken = async (): Promise<string> => {
+    const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+    if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+    lastToken = token;
+    return token;
+  };
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     try {
-      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
-      if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
-      lastToken = token;
+      const token = await freshToken();
       return await withDeadline(timeoutMs, async (signal) => {
         const startedAt = performance.now();
         const response = await fetch(`${mediaPath}/${path}`, {
@@ -93,14 +96,16 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription }),
       });
     },
-    uploadCallStats: async (stats: CallStatsRequest) => {
-      if (!lastToken) return;
+    uploadCallStats: async (stats: CallStatsRequest, closing: boolean) => {
+      // A hidden tab stops signaling, so the cached token can expire during a call. Only the closing batch skips the provider.
+      const token = closing ? lastToken : await freshToken();
+      if (!token) return;
       await withDeadline(timeoutMs, async (signal) => {
         const response = await fetch(statsPath, {
           method: "POST",
           signal,
           keepalive: true,
-          headers: { Authorization: `Bearer ${lastToken}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify(stats),
         });
         if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
