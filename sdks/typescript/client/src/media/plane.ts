@@ -62,6 +62,7 @@ export type MediaPlaneResult = {
 };
 
 export type ClientMediaPlane = {
+  readonly observeAudioElement?: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
   readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;

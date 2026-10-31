@@ -75,6 +75,7 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
 
   const client = {
     media: {
+      observeAudioElement: () => ({ played: () => {}, detach: () => {} }),
       captureCameraPreview: async () => {
         const current = snapshot.media.local.camera.track;
         if (snapshot.media.local.camera.state === "enabled" && current?.enabled && current.readyState === "live") return { track: current, release: () => {} };
