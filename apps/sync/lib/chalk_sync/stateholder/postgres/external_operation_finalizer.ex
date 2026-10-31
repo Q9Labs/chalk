@@ -143,6 +143,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   defp settle_exhausted_authority(connection, _episode, _external, reason),
     do: Postgrex.rollback(connection, {:error, reason})
 
+  defp settle_obsolete(
+         connection,
+         episode,
+         %{name: :role_transition_source_stop} = external,
+         reason
+       ),
+       do: finalize_pending_operation(connection, episode, external, nil, {:failed, reason})
+
   defp settle_obsolete(connection, episode, external, reason) do
     PublicationFences.delete(connection, episode, external)
     mark_external_failed(connection, episode, external, Atom.to_string(reason))

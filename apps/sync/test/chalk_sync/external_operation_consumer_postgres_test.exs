@@ -634,6 +634,130 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
     assert [{:revoke_publication, ^id, _}] = MediaPlaneTestAdapter.calls(adapter)
   end
 
+  test "operation rows decode in a fresh VM without loading consumers" do
+    code = ~S'''
+    try do
+      String.to_existing_atom("role_transition_source_stop")
+      raise "operation atom unexpectedly loaded"
+    rescue
+      ArgumentError -> :ok
+    end
+
+    record = Module.concat(["ChalkSync", "Stateholder", "Postgres", "ExternalOperationRecord"])
+    names = ~w(admit_participant deny_admission admission_request_expired mute_participant
+      stop_participant_camera stop_participant_screen_share remove_participant start_recording
+      stop_recording recording_capture_ready recording_capture_stopped recording_capture_failed
+      participant_leave end_episode tenant_assign_roles tenant_set_deadline tenant_end_episode
+      maximum_episode_duration_expired role_transition_cleanup role_transition_source_stop)
+    for name <- names, status <- ~w(pending applied failed), source <- [nil, "microphone", "camera", "screen"] do
+      row = [nil, nil, nil, <<0::128>>, nil, "key", <<>>, name, nil, nil, nil, nil,
+             source, nil, nil, nil, nil, nil, nil, nil, nil, %{}, status, 0, nil, nil, nil]
+      operation = apply(record, :from_row, [row])
+      expected = if name == "maximum_episode_duration_expired", do: "maximum_duration_expired", else: name
+      unless Atom.to_string(operation.name) == expected and Atom.to_string(operation.status) == status and
+               (is_nil(source) or Atom.to_string(operation.source) == source), do: raise("incorrect decode")
+    end
+    row = [nil, nil, nil, <<0::128>>, nil, "key", <<>>, "not_an_operation", nil, nil, nil, nil,
+           nil, nil, nil, nil, nil, nil, nil, nil, nil, %{}, "pending", 0, nil, nil, nil]
+    try do
+      apply(record, :from_row, [row])
+      raise "unknown operation accepted"
+    rescue
+      KeyError -> :ok
+    end
+    '''
+
+    beam_dir =
+      :code.which(ChalkSync.Stateholder.Postgres.ExternalOperationRecord)
+      |> to_string()
+      |> Path.dirname()
+
+    {output, status} =
+      System.cmd("elixir", ["--erl", "+S 2:2", "-pa", beam_dir, "-e", code],
+        stderr_to_stdout: true
+      )
+
+    assert status == 0, output
+  end
+
+  test "an exhausted role source stop for a departed target settles its role transition", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, promote} =
+      Command.new("consumer_obsolete_role_up", :assign_roles, %{
+        "participantId" => guest.participant_id,
+        "role" => "collaborator"
+      })
+
+    assert {:ok, %{result: :committed}} = Postgres.begin_role_transition(host, promote, [])
+
+    {:ok, demote} =
+      Command.new("consumer_obsolete_role_down", :assign_roles, %{
+        "participantId" => guest.participant_id,
+        "role" => "observer"
+      })
+
+    publications = [%{participant_id: guest.participant_id, source: :microphone, enabled: true}]
+    assert {:ok, _decision} = Postgres.begin_role_transition(host, demote, publications)
+
+    [[child_id, parent_id]] =
+      Postgrex.query!(
+        connection,
+        """
+        select external_operation_id, parent_external_operation_id
+        from sync_external_operations
+        where operation_name = 'role_transition_source_stop' and target_participant_id = $1
+        """,
+        [UUID.dump!(guest.participant_id)]
+      ).rows
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [child_id]
+    )
+
+    Postgrex.query!(connection, "update participants set status='left' where id=$1", [
+      UUID.dump!(guest.participant_id)
+    ])
+
+    child = UUID.load!(child_id)
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100} = external} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == child end)
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    ExternalOperationConsumer.execute_operation(
+      episode,
+      external,
+      {MediaPlaneTestAdapter, adapter},
+      nil,
+      &Postgres.finalize_operation/3
+    )
+
+    assert [["failed", "failed", "rejected"]] =
+             Postgrex.query!(
+               connection,
+               """
+               select child.status, parent.status, receipt.outcome
+               from sync_external_operations child
+               join sync_external_operations parent
+                 on parent.external_operation_id = child.parent_external_operation_id
+               join sync_command_receipts receipt
+                 on receipt.external_operation_id = parent.external_operation_id
+               where child.external_operation_id = $1 and parent.external_operation_id = $2
+               """,
+               [child_id, parent_id]
+             ).rows
+  end
+
   test "migration re-arms exhausted cleanup and its command receipt without replacing identity",
        %{connections: connections} do
     connection = hd(connections)
