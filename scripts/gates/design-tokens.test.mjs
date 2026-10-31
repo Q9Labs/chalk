@@ -72,16 +72,15 @@ test("React detects Tailwind underscore hex colors without matching identifiers 
 ];
 const identifier = "abc_def#fff";
 const url = "https://example.test/#fff";
+const selector = "#abc_def";
 const arr = [
   "abc_def#fff",
   "abc_#fff",
 ];
 `,
+    "selector.css": "#abc_def { color: var(--chalk-text); }\n",
   });
-  assert.deepEqual(
-    (await findTokenViolations(root)).map(({ value }) => value),
-    ["#fff", "#000", "#123"],
-  );
+  assert.deepEqual((await findTokenViolations(root)).map(({ value }) => value).sort(), ["#fff", "#000", "#123"].sort());
 
   const nativeBoxShadow = await fixture(t, { "src/example.tsx": 'const style = { boxShadow: "0 2px 8px #fff" };\n' });
   const scanner = resolve("sdks/typescript/react-native/scripts/check-tokenized-styles.mjs");
