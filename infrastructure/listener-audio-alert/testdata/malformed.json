@@ -1,0 +1,1 @@
+{ "tables": [{ "fields": [{ "name": "episode_id" }, { "name": "signal" }, { "name": "count" }], "columns": [[], ["api_unpulled"], []] }] }

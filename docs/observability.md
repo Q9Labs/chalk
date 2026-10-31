@@ -200,6 +200,22 @@ are sampled, so a newly visible pair normally logs roughly 15–25 seconds later
 The fake-time regressions live in
 `apps/api/internal/mediapublications/receive_health_test.go`.
 
+#### Alarm
+
+The [listener audio check](../infrastructure/listener-audio-alert/README.md)
+runs every five minutes against a ten-minute Axiom window. At least one
+`media.listener_publication_unpulled` event pages Oncall, with one incident per
+Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
+key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
+contain only aggregate counts; the query projects only Episode ID, signal and
+count, and validated UUIDs go only in the Oncall POST body. The workflow requires
+`CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` (the private dataset name)
+and the existing `ONCALL_WEBHOOK_URL`. A webhook-only drill never reads Axiom.
+The `listener-audio` scope must also be registered for Chalk in Oncall's registry
+outside this repo. #721 will add `sdk.connection_report` with
+`['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not
+included yet. GitHub scheduling can delay the roughly five-minute paging target.
+
 ### Background-tab and presence-expiry evidence
 
 Every v1 `sync.websocket.closed` event includes `socket_age_ms` and
