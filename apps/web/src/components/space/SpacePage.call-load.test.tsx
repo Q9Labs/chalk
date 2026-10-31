@@ -22,14 +22,15 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function joinAsAda(): Promise<void> {
+async function joinAsAda(): Promise<ReturnType<typeof render>> {
   window.history.replaceState({}, "", `/space/design-lab#spaceInviteToken=${spacePageTestToken}`);
-  render(<SpacePage slug="design-lab" />);
+  const view = render(<SpacePage slug="design-lab" />);
   await act(async () => {
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ada" } });
     fireEvent.click(screen.getByRole("button", { name: "Join call" }));
   });
   await waitFor(() => expect(screen.getByText(connectionError)).toBeDefined());
+  return view;
 }
 
 it("releases an admitted arrival and offers a retry when the call UI cannot load", async () => {
@@ -51,4 +52,12 @@ it("releases the arrival again before a retry when the first release fails", asy
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "Ask again" })));
   await waitFor(() => expect(mocks.publicClient.arriveBySpacePublicInvite).toHaveBeenCalledTimes(2));
   expect(mocks.prepared.finish.mock.calls.length).toBeGreaterThanOrEqual(2);
+});
+
+it("releases the arrival on unmount when the release after a failed call load failed", async () => {
+  mocks.prepared.finish.mockRejectedValueOnce(new Error("offline"));
+  const view = await joinAsAda();
+  await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledOnce());
+  await act(async () => view.unmount());
+  await waitFor(() => expect(mocks.prepared.finish).toHaveBeenCalledTimes(2));
 });

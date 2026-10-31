@@ -99,6 +99,8 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const cancelRequested = useRef(false);
   const cleanupPromise = useRef<Promise<void> | undefined>(undefined);
   const retryAfterRelease = useRef(false);
+  // The entrance releases an admitted arrival until LocalSpace mounts and takes over its release.
+  const entranceAccess = useRef<SpaceEntryAccess | null>(null);
   const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
   useEffect(() => {
     active.current = true;
@@ -106,6 +108,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       active.current = false;
       const arrival = pendingRef.current;
       if (arrival?.arrival.arrival_handle) void client.leaveSpacePublicInviteArrival(arrival.arrival.arrival_handle).catch(() => undefined);
+      const access = entranceAccess.current;
+      entranceAccess.current = null;
+      if (access) void (cleanupPromise.current ?? Promise.reject(new Error("Not released."))).catch(() => access.finish()).catch(() => undefined);
     };
   }, [client]);
   const complete = useCallback((prepared: SpaceEntryAccess, inviteLink: string | undefined, spaceName: string | undefined) => {
@@ -115,6 +120,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     }
     pendingRef.current = null;
     setPending(null);
+    entranceAccess.current = prepared;
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
   useEffect(() => {
@@ -276,6 +282,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           throw cause;
         }) ?? Promise.resolve();
       const completed = attempt.then(() => {
+        if (!options.keepalive && entranceAccess.current === spaceAccess?.prepared) entranceAccess.current = null;
         if (!options.keepalive && active.current) {
           cleanupPromise.current = undefined;
           setSpaceAccess(null);
@@ -306,6 +313,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelled = true;
     };
   }, [callSurface, finish, spaceAccess]);
+  useEffect(() => {
+    // LocalSpace's effects run before this parent effect, so its unmount release is already in place.
+    if (spaceAccess && callSurface && !terminal && entranceAccess.current === spaceAccess.prepared) entranceAccess.current = null;
+  }, [callSurface, spaceAccess, terminal]);
   useEffect(() => {
     if (!retryAfterRelease.current || spaceAccess) return;
     retryAfterRelease.current = false;
