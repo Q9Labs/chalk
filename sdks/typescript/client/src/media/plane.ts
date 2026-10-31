@@ -72,4 +72,5 @@ export type ClientMediaPlane = {
   readonly remotePublicationsChanged?: (publications?: readonly MediaPublication[], projectionState?: "available" | "unavailable") => void;
   readonly remoteParticipantsChanged?: (participantIds: readonly string[]) => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
+  readonly localPublicationWithdrawn?: (publicationId: string) => void;
 };
