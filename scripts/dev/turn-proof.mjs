@@ -21,6 +21,11 @@ const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 if (manifest.state !== "ready") throw new Error(`runtime is ${manifest.state}, not ready`);
 const holdMs = Number(process.env.TURN_PROOF_HOLD_MS ?? 0);
 
+// With TURN_PROOF_TTL_S, the browsers use a short-lived credential minted from the real TURN endpoint
+// (CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN) instead of the one the API handed out.
+const ttlSeconds = Number(process.env.TURN_PROOF_TTL_S ?? 0);
+const shortCredential = ttlSeconds > 0 ? await mintShortCredential(ttlSeconds) : undefined;
+
 const browser = await chromium.launch({ args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
 const report = { mode, startedAt: new Date().toISOString() };
 const logs = [];
@@ -37,6 +42,7 @@ try {
     await side.page.getByRole("button", { name: "Turn off camera" }).waitFor({ timeout: 30_000 });
   }
   await Promise.all([primary, guest].map((side) => untilRemoteMedia(side.page)));
+  if (shortCredential) report.freshCredentialProbe = await primary.page.evaluate((server) => window.__probeRelay(server), shortCredential.server);
   const before = await Promise.all([primary, guest].map(sample));
   await primary.page.waitForTimeout(5000);
   const after = await Promise.all([primary, guest].map(sample));
@@ -47,6 +53,12 @@ try {
     await primary.page.waitForTimeout(holdMs);
     const late = await Promise.all([primary, guest].map(sample));
     report.receivedAfterHold = { holdMs, deltas: [primary, guest].map((_, index) => delta(after[index], late[index])) };
+    report.selectedCandidatesAfterHold = await Promise.all([primary, guest].map((side) => side.page.evaluate(() => window.__chalkMediaSmoke.selectedCandidates())));
+  }
+  if (shortCredential) {
+    const waitMs = shortCredential.expiresAtMs - Date.now() + 5000;
+    if (waitMs > 0) await primary.page.waitForTimeout(waitMs);
+    report.expiredCredentialProbe = await primary.page.evaluate((server) => window.__probeRelay(server), shortCredential.server);
   }
   report.result = verdict(report);
 } catch (error) {
@@ -69,6 +81,7 @@ process.exitCode = report.result === "passed" ? 0 : 1;
 
 async function join_(url) {
   const context = await browser.newContext({ permissions: ["camera", "microphone"] });
+  if (shortCredential) await context.addInitScript({ content: overrideCredentialScript(shortCredential) });
   await context.addInitScript({ content: createMediaSmokeInitScript({ iceProof: mode }) });
   const page = await context.newPage();
   page.on("console", (message) => {
@@ -114,4 +127,44 @@ function verdict(result) {
   const protocol = mode.replace("relay-", "");
   const relayed = result.selectedCandidates.every((connections) => connections.some((pair) => pair.localCandidateType === "relay" && pair.localRelayProtocol === protocol));
   return relayed ? "passed" : "failed";
+}
+
+async function mintShortCredential(ttl) {
+  const keyId = process.env.CHALK_CLOUDFLARE_TURN_KEY_ID;
+  const token = process.env.CHALK_CLOUDFLARE_TURN_API_TOKEN;
+  if (!keyId || !token) throw new Error("TURN_PROOF_TTL_S needs CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN");
+  const mintedAtMs = Date.now();
+  const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify({ ttl }),
+  });
+  if (!response.ok) throw new Error(`short TURN credential request returned status ${response.status}`);
+  const server = (await response.json()).iceServers.find((entry) => entry.username);
+  return { server: { urls: server.urls.filter((url) => url.startsWith("turn:") && url.includes("transport=udp")).slice(0, 1), username: server.username, credential: server.credential }, expiresAtMs: mintedAtMs + ttl * 1000 };
+}
+
+function overrideCredentialScript({ server }) {
+  return String.raw`(() => {
+    const server = ${JSON.stringify(server)};
+    const Native = window.RTCPeerConnection;
+    window.__NativeRTCPeerConnection = Native;
+    window.RTCPeerConnection = new Proxy(Native, {
+      construct(target, args) {
+        const config = args[0] ?? {};
+        const iceServers = (config.iceServers ?? []).map((entry) => (entry.username ? { ...entry, username: server.username, credential: server.credential } : entry));
+        return Reflect.construct(target, [{ ...config, iceServers }, ...args.slice(1)]);
+      },
+    });
+    window.__probeRelay = (probeServer) =>
+      new Promise((resolve) => {
+        const peer = new Native({ iceServers: [probeServer], iceTransportPolicy: "relay" });
+        const result = { relayCandidates: 0, errors: [] };
+        peer.createDataChannel("probe");
+        peer.onicecandidate = (event) => { if (event.candidate?.type === "relay") result.relayCandidates += 1; };
+        peer.onicecandidateerror = (event) => result.errors.push({ errorCode: event.errorCode, errorText: event.errorText });
+        void peer.createOffer().then((offer) => peer.setLocalDescription(offer));
+        setTimeout(() => { peer.close(); resolve(result); }, 8000);
+      });
+  })();`;
 }
