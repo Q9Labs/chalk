@@ -7,6 +7,7 @@ import { LEAK_JOURNEYS, leakShard, checkLeakShardReports } from "../../apps/web/
 import { classify } from "@q9labsai/gates";
 import gateConfig from "../../gate.config.ts";
 import { ciJobs, createGatePlan, discoverWorkspaces, emptyScopeResult, GatePlanningError, gatePlanOptions, laneEnvironment, laneGroup, laneGroupLanes, laneResult, resolveGateTarget } from "./chalk-gate-plan.mjs";
+import { findExplicitAny } from "./explicit-any.mjs";
 
 function boundaryTask(files, options = {}) {
   return createGatePlan(files, options).tasks.find((task) => task.id === "boundaries");
@@ -32,6 +33,16 @@ test("structural rules include changed manifests and type bans follow TypeScript
   assert.equal(createGatePlan(["apps/web/src/lib/chunkReload.ts"]).tasks.find((task) => task.id === "explicit-any")?.selected, true);
   assert.equal(createGatePlan(["docs/contract-codegen.md"]).tasks.find((task) => task.id === "explicit-any")?.selected, false);
   assert.equal(laneGroup("explicit-any"), "checks");
+});
+
+test("explicit-any lane includes .mts and .cts inputs", () => {
+  for (const file of ["sdks/typescript/client/src/gate-policy-probe.mts", "sdks/typescript/client/src/gate-policy-probe.cts"]) {
+    const findings = findExplicitAny(file, "export type Probe = any;\n");
+    assert.equal(findings.length, 1, file);
+    assert.equal(findings[0].file, file);
+    const task = createGatePlan([file], { scope: "branch", base: "origin/master" }).tasks.find(({ id }) => id === "explicit-any");
+    assert.equal(task?.selected, true, file);
+  }
 });
 
 test("documentation-only changes do not select the package boundary check", () => {
