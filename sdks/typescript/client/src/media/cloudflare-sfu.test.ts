@@ -291,6 +291,98 @@ it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add wh
   }
 });
 
+it("publishes again when the registry no longer lists an enabled microphone publication", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const localAdds = () => harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const addsBefore = localAdds();
+
+    harness.transport.localPublications.delete(oldId!);
+    await harness.client.refreshRemotePublications();
+
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    expect([...harness.transport.localPublications.keys()]).not.toContain(oldId);
+    expect(localAdds()).toBe(addsBefore + 1);
+    expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it("keeps a listed microphone publication when the registry lists it", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const addsBefore = harness.transport.addInputs.length;
+
+    await harness.client.refreshRemotePublications();
+
+    expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+    expect(harness.transport.addInputs).toHaveLength(addsBefore);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each([
+  { name: "freezes", frozen: true, republished: true },
+  { name: "keeps moving", frozen: false, republished: false },
+])("publishes again when the SFU jitter reading $name while the microphone keeps sending", async ({ frozen, republished }) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+    const startedAt = Date.now();
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      return new Map<string, unknown>([
+        ["out", { type: "outbound-rtp", kind: "audio", mid, remoteId: "in", packetsSent: seconds * 50 }],
+        ["in", { type: "remote-inbound-rtp", kind: "audio", roundTripTimeMeasurements: seconds, jitter: frozen ? 0.005 : 0.003 + seconds / 1000 }],
+      ]) as unknown as RTCStatsReport;
+    });
+    const localAdds = () => h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const before = localAdds();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(localAdds()).toBe(republished ? before + 1 : before);
+    expect(h.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+  });
+});
+
+it("publishes anew on unmute when the SFU stopped serving the track while the microphone was muted", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const original = h.client.getSnapshot().localTracks.find((item) => item.source === "microphone")!.publicationId;
+      const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+      await h.client.pauseLocalCapture("microphone");
+      await h.client.clearPreparedLocalTrack("microphone");
+      expect(h.transport.localPublications.has(original!)).toBe(true);
+      const mutedAt = Date.now();
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+        const seconds = Math.floor((Date.now() - mutedAt) / 1000);
+        return new Map<string, unknown>([
+          ["out", { type: "outbound-rtp", kind: "audio", mid, remoteId: "in", packetsSent: seconds * 50 }],
+          ["in", { type: "remote-inbound-rtp", kind: "audio", roundTripTimeMeasurements: seconds, jitter: 0.005 }],
+        ]) as unknown as RTCStatsReport;
+      });
+      const addsBefore = h.transport.addInputs.length;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(h.transport.closeInputs).toHaveLength(1);
+      h.client.prepareLocalTrack("microphone", new FakeTrack("mic-2", "audio") as unknown as MediaStreamTrack);
+      await h.client.setLocalSourceIntent("microphone", true);
+      await h.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true });
+      const now = h.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+      expect(now).toMatchObject({ enabled: true });
+      expect(h.transport.addInputs).toHaveLength(addsBefore + 1);
+    },
+    { createSilentAudio: async () => ({ track: new FakeTrack("silence", "audio") as unknown as MediaStreamTrack, dispose: vi.fn() }) },
+  );
+});
+
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
@@ -942,6 +1034,45 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
   }
 });
 
+it.each(["microphone and camera", "microphone only"] as const)("mute keeps the microphone publication sending silence, so unmute is a local track swap (%s)", async (shape) => {
+  const silence = new FakeTrack("silence", "audio");
+  const dispose = vi.fn();
+  const harness = createHarness({ createSilentAudio: async () => ({ track: silence as unknown as MediaStreamTrack, dispose }) });
+  const microphone = new FakeTrack("microphone", "audio");
+  const withCamera = shape === "microphone and camera";
+  try {
+    await harness.client.start(fakeStream(...(withCamera ? [microphone, new FakeTrack("camera", "video")] : [microphone])));
+    const original = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")!.publicationId;
+    const sessionsBefore = harness.peers.length;
+    const addsBefore = harness.transport.addInputs.length;
+    const sender = harness.peers[0]!.getSenders().find((item) => item.track === (microphone as unknown as MediaStreamTrack))!;
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 5 * 60_000);
+
+    await harness.client.pauseLocalCapture("microphone");
+    await harness.client.clearPreparedLocalTrack("microphone");
+    expect(sender.track).toBe(silence);
+    expect(microphone.readyState).toBe("ended");
+    expect(harness.transport.localPublications.has(original!)).toBe(true);
+
+    // Minutes of mute never age the publication out: silence is still RTP at the provider.
+    const captured = new FakeTrack("microphone-2", "audio");
+    harness.client.prepareLocalTrack("microphone", captured as unknown as MediaStreamTrack);
+    await harness.client.setLocalSourceIntent("microphone", true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(sender.track).toBe(captured);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({ enabled: true, publicationId: original });
+    expect(harness.transport.addInputs).toHaveLength(addsBefore);
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.peers).toHaveLength(sessionsBefore);
+    harness.client.stop();
+    expect(dispose).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+    harness.client.stop();
+  }
+});
+
 it("acknowledges Sync capture unavailability without retiring the retained sender", async () => {
   const harness = createHarness();
   try {
@@ -1514,7 +1645,8 @@ it("keeps a rejected microphone Off paused in the production adapter", async () 
     await expect(client.media.setMicrophoneEnabled(false)).rejects.toBeDefined();
     const local = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
     const senderAttached = harness.peers.some((peer) => peer.getSenders().some((sender) => sender.track?.id === microphone.id));
-    expect({ trackEnabled: microphone.enabled, adapterEnabled: local?.enabled, senderAttached }).toEqual({ trackEnabled: false, adapterEnabled: false, senderAttached: false });
+    // Mute releases the capture, so the adapter no longer lists the microphone as a local track.
+    expect({ trackEnabled: microphone.enabled, adapterEnabled: local?.enabled ?? false, senderAttached }).toEqual({ trackEnabled: false, adapterEnabled: false, senderAttached: false });
   } finally {
     client.dispose();
     harness.client.stop();
@@ -2144,7 +2276,10 @@ describe("remote publication recovery", () => {
         harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
         await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
         // The server drops the replaced connection's publications and advances its sequence.
-        harness.transport.localPublications.clear();
+        // Publications of the live connection stay listed: an unlisted one is published again, which has its own test.
+        for (const id of harness.transport.localPublications.keys()) {
+          if (parseCloudflareSFUPublicationID(id).connectionId === "connection-1") harness.transport.localPublications.delete(id);
+        }
         harness.transport.snapshot = publicationSnapshot(1, 2, "remote|missing");
         const remoteAttempts = () => vi.mocked(harness.transport.addTracks).mock.calls.filter(([input]) => input.tracks.some((track) => track.location === "remote")).length;
         const attemptsBeforeRetry = remoteAttempts();
@@ -2831,7 +2966,8 @@ it.fails("a cross-grace unmute during a media connection swap publishes with rea
 function createSwapCall() {
   const harness = createHarness();
   const platform = createCoreTestPlatform();
-  const track = new FakeTrack("swap-microphone", "audio");
+  const tracks: FakeTrack[] = [];
+  const currentTrack = () => tracks.at(-1)!;
   const coordinator = new V1LiveTargetCoordinator({
     mediaPlane: harness.client,
     requestIds: { next: () => crypto.randomUUID() },
@@ -2854,7 +2990,22 @@ function createSwapCall() {
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("swap") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: {
+          ...platform.dependencies.mediaDevices,
+          getUserMedia: async () => {
+            const track = new FakeTrack(`swap-microphone-${tracks.length + 1}`, "audio");
+            tracks.push(track);
+            return fakeStream(track);
+          },
+        },
+        createMediaClient: () => harness.client,
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
+      },
+    },
   );
   const startSwap = async () => {
     command.mockClear();
@@ -2872,16 +3023,16 @@ function createSwapCall() {
     client.dispose();
     harness.client.stop();
   };
-  return { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose };
+  return { harness, platform, currentTrack, command, client, startSwap, enable, publishedMicrophone, dispose };
 }
 
 async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): Promise<void> {
-  const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
+  const { harness, currentTrack, command, client, startSwap, enable, dispose } = createSwapCall();
   try {
     await client.join({ microphone: true, camera: false });
     if (scenario !== "rapid") {
       await client.media.setMicrophoneEnabled(false);
-      expect(track.enabled).toBe(false);
+      expect(currentTrack().enabled).toBe(false);
     }
     await startSwap();
     const muted = scenario === "rapid" ? client.media.setMicrophoneEnabled(false).catch((cause: unknown) => cause) : Promise.resolve();
@@ -2893,7 +3044,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
     expect(await enabled).toBe("enabled");
     await muted;
     expect(command.mock.calls.at(-1)).toEqual([true]);
-    expect(track.enabled).toBe(true);
+    expect(currentTrack().enabled).toBe(true);
     const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
     expect(publication).toMatchObject({ enabled: true });
     expect(harness.transport.localPublications.has(publication!.publicationId!)).toBe(true);
@@ -2904,7 +3055,13 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
 }
 
 it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
-  const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  const { harness, platform, currentTrack, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  const localMicrophonePublicationIds = () =>
+    [...harness.transport.localPublications.values()]
+      .filter((item) => item.source === "microphone")
+      .map((item) => item.publicationId)
+      .sort();
+  const localAddCount = () => harness.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local")).length;
   let expire: (() => void) | undefined;
   const schedule = platform.dependencies.clock.setTimeout;
   const timer = vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => {
@@ -2917,6 +3074,11 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
   try {
     await client.join({ microphone: true, camera: false });
     await client.media.setMicrophoneEnabled(false);
+    const publicationIdsAfterMute = localMicrophonePublicationIds();
+    const localAddsAfterMute = localAddCount();
+    expect(publicationIdsAfterMute).not.toHaveLength(0);
+    expect(publishedMicrophone()).toBe(true);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")?.enabled ?? false).toBe(false);
     await startSwap();
     const enabled = enable();
     await vi.waitFor(() => expect(expire).toBeTypeOf("function"));
@@ -2939,8 +3101,14 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(command).not.toHaveBeenCalledWith(true);
-    expect(track.enabled).toBe(false);
-    expect(publishedMicrophone()).toBe(false);
+    expect(currentTrack().enabled).toBe(false);
+    if (ending === "call-ended") {
+      expect(publishedMicrophone()).toBe(false);
+    } else {
+      expect(localMicrophonePublicationIds()).toEqual(publicationIdsAfterMute);
+      expect(localAddCount()).toBe(localAddsAfterMute);
+      expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")?.enabled ?? false).toBe(false);
+    }
     expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
   } finally {
     timer.mockRestore();
@@ -2955,6 +3123,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly createSilentAudio?: CloudflareSFUClientOptions["createSilentAudio"];
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -2973,6 +3142,7 @@ function createHarness(
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory,
+    createSilentAudio: options.createSilentAudio,
   });
   return { client, peers, transport, peerConnectionFactory };
 }

@@ -5,7 +5,8 @@ const sources = ["microphone", "camera", "screen"] as const;
 describe("recovery publication authority", () => {
   it.each(sources.flatMap((source) => [false, true].map((newerAction) => ({ source, newerAction }))))("scopes a recovered lost $source publication to its old action (newer: $newerAction)", async ({ source, newerAction }) => {
     const close = vi.fn(async () => undefined);
-    const { platform, client, track, setEnabled, command } = createConvergenceScenario(source, { media: { closeForcedLocalPublication: close } });
+    const pause = vi.fn(async () => undefined);
+    const { platform, client, track, setEnabled, command } = createConvergenceScenario(source, { media: { closeForcedLocalPublication: close, pauseLocalCapture: pause } });
     try {
       await client.join({ microphone: false, camera: false });
       await setEnabled(true);
@@ -21,7 +22,11 @@ describe("recovery publication authority", () => {
       if (newerAction) {
         await vi.waitFor(() => expect(command).toHaveBeenLastCalledWith(false));
         // Only the explicit Off closes it; recovery must not close it again.
-        expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
+        // A microphone Off pauses capture and keeps its publication, so nothing is closed.
+        if (source === "microphone") {
+          expect(pause).toHaveBeenCalledExactlyOnceWith(source);
+          expect(close).not.toHaveBeenCalled();
+        } else expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
       } else {
         await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "sync_recovery_loss"));
         expect(track.enabled).toBe(false);

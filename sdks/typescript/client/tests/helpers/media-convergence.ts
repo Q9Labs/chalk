@@ -37,7 +37,13 @@ export function capturedClient(
       dependencies: {
         ...platform.dependencies,
         mediaDevices: { getUserMedia: async () => mediaStream(track), ...overrides.mediaDevices },
-        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), ...overrides.media }),
+        createMediaClient: (input) => {
+          const media = { ...platform.dependencies.createMediaClient(input), ...overrides.media };
+          const target = overrides.media?.setLocalPublicationTarget;
+          // A microphone pause is a capture pause; route it to the target a test observes unless the test fakes the pause itself.
+          if (target && !overrides.media?.pauseLocalCapture) media.pauseLocalCapture = async (source) => void (await target({ operationId: `pause-${source}`, participantId: "participant-1", source, enabled: false }));
+          return media;
+        },
         createSyncClient: () => ({ ...platform.sync, ...overrides.sync }),
       },
     },
