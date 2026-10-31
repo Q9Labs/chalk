@@ -963,6 +963,7 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 		return map[string]any{
 			"connectionId": grant.ClientPayload.ConnectionID,
 			"stunServer":   grant.ClientPayload.StunServer,
+			"iceServers":   grant.ClientPayload.ICEServers,
 		}
 
 	default:

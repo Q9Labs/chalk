@@ -322,6 +322,7 @@ func createAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{
 		Provider: service.Provider(), Episode: episode,
 		ParticipantName: request.ParticipantID.String(), ExternalParticipantID: request.ParticipantID.String(), ParticipantPreset: "contributor",
+		AllowRelay: true,
 	})
 }
 
@@ -337,6 +338,7 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 	}
 	return service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
 		Provider: service.Provider(), Episode: episode, ExternalParticipantID: request.ParticipantID.String(), ConnectionRef: connectionRef,
+		AllowRelay: true,
 	})
 }
 

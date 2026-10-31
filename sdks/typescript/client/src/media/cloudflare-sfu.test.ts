@@ -1587,6 +1587,41 @@ async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTra
   expect(wasAborted()).toBe(true);
   await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
 }
+describe("peer connection ICE servers", () => {
+  it("builds the peer connection from the bootstrap STUN and TURN entries", async () => {
+    const harness = createHarness();
+    const iceServers = [{ urls: ["stun:stun.example.test:3478"] }, { urls: ["turn:turn.example.test:3478?transport=udp", "turn:turn.example.test:3478?transport=tcp", "turns:turn.example.test:443?transport=tcp"], username: "user", credential: "secret" }];
+    await harness.client.restart({ ...bootstrap("connection-2"), iceServers });
+    const configuration = (harness.peerConnectionFactory.mock.calls.at(-1) as unknown as [RTCConfiguration])[0];
+    expect(configuration.iceServers).toEqual(iceServers);
+    expect(configuration.bundlePolicy).toBe("max-bundle");
+  });
+  it("takes ICE servers from the newest bootstrap on every restart, never from an earlier one", async () => {
+    const harness = createHarness();
+    const first = [{ urls: ["turn:first.example.test:3478"], username: "first-user", credential: "first-credential" }];
+    const second = [{ urls: ["turn:second.example.test:3478"], username: "second-user", credential: "second-credential" }];
+    await harness.client.restart({ ...bootstrap("connection-2"), iceServers: first });
+    await harness.client.restart({ ...bootstrap("connection-3"), iceServers: second });
+    const servers = harness.peerConnectionFactory.mock.calls.map((call) => (call as unknown as [RTCConfiguration])[0].iceServers);
+    expect(servers.at(-2)).toEqual(first);
+    expect(servers.at(-1)).toEqual(second);
+  });
+  it("takes ICE servers from the replacement bootstrap when recovery replaces the media connection", async () => {
+    const renewed = [{ urls: ["turn:renewed.example.test:443?transport=tcp"], username: "renewed-user", credential: "renewed-credential" }];
+    const harness = createHarness({ replaceMediaConnection: async () => ({ ...bootstrap("replacement"), iceServers: renewed }) });
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio"), new FakeTrack("camera", "video")));
+      vi.spyOn(harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("Close transport failed", "signaling_failed", { status: 503, retryableConnection: true }));
+      await harness.client.closeForcedLocalPublication("microphone");
+      const servers = harness.peerConnectionFactory.mock.calls.map((call) => (call as unknown as [RTCConfiguration])[0].iceServers);
+      expect(servers).toHaveLength(2);
+      expect(servers[0]).toEqual([{ urls: "stun:example.test" }]);
+      expect(servers[1]).toEqual(renewed);
+    } finally {
+      harness.client.stop();
+    }
+  });
+});
 describe("Cloudflare SFU HTTP signaling", () => {
   it("reads a fresh media credential before every signaling request", async () => {
     const authoritativePublicationId = versionedPublicationID("connection-1", "0", "camera-track");
