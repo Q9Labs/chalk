@@ -76,6 +76,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
         .leave()
         .catch(() => undefined)
         .finally(() => client.dispose());
+      expect(platform.stopped).not.toHaveBeenCalled();
       expect(platform.syncStopped).not.toHaveBeenCalled();
       if (outcome === "confirmed") departure.resolve();
       else departure.reject(new Error("Durable departure failed"));
