@@ -2,10 +2,15 @@
 
 Creates the environment's Cloudflare TURN key. The API mints short-lived TURN
 credentials from it for each join, so clients behind strict NATs and firewalls
-reach the SFU over UDP 3478, TCP, or TLS on 443. TURN and the SFU share one
-1,000 GB monthly free allowance and cost USD 0.05 per GB past it, so relayed
-calls count against the same allowance as SFU traffic
-([pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/)).
+reach the SFU over UDP 3478, TCP, or TLS on 443.
+
+TURN used together with our SFU adds no charge, because Cloudflare does not bill
+traffic between TURN and the SFU twice
+([SFU pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/)).
+TURN traffic that does not go to our SFU costs USD 0.05 per GB
+([TURN pricing](https://developers.cloudflare.com/realtime/turn/)). SFU and
+TURN usage share one 1,000 GB free allowance each month. Credential abuse is
+the only way to pay for TURN alone.
 
 The key's name is the runtime input pair `CHALK_CLOUDFLARE_TURN_KEY_ID` and
 `CHALK_CLOUDFLARE_TURN_API_TOKEN`. Their values live in the environment's
