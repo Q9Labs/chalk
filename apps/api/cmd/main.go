@@ -649,6 +649,11 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	receiveHealthDone := make(chan struct{})
+	go func() {
+		mediaPublicationService.RunReceiveHealth(signalCtx)
+		close(receiveHealthDone)
+	}()
 	dispatcherOwner, err := utilities.NewID()
 	if err != nil {
 		return fmt.Errorf("create webhook dispatcher owner: %w", err)
@@ -826,6 +831,7 @@ func run() error {
 			runErr = err
 		}
 	}
+	<-receiveHealthDone
 	return runErr
 }
 

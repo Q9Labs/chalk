@@ -304,11 +304,9 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
-	logAddTracksCall(ctx, input, time.Since(started), statusCode, err)
-	if err != nil {
-		return response.toMediaPlane(), err
-	}
-	return response.toMediaPlane(), nil
+	result := response.toMediaPlane()
+	logAddTracksCall(ctx, input, result.TrackErrors, time.Since(started), statusCode, err)
+	return result, err
 }
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
@@ -873,8 +871,10 @@ func normalizedProviderCode(code string) string {
 		return "rate_limited"
 	case "timeout", "request_timeout", "deadline_exceeded":
 		return "timeout"
-	case "transport_error", "client_canceled":
-		return code
+	case "transport_error":
+		return "transport_error"
+	case "client_canceled":
+		return "client_canceled"
 	case "plane_unavailable":
 		return "plane_unavailable"
 	case "invalid_json":
