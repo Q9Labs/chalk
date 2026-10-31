@@ -27,6 +27,26 @@ summary="$here/results/summary.md"
   echo "| run | check | sources | seq | drops | loss | mutes | cfails | rule | ui | sfu | expect | outcome | states | distinct | depth | seconds |"
   echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
 } > "$work/summary.md"
+# Runs TLC on one config and sets outcome, gen, dist, depth and seconds. The log decides the outcome.
+tlc_check() {
+  local name=$1 cfg=$2 tla=$3 start counts
+  start=$(date +%s)
+  # TLC exits non-zero when it finds a violation.
+  (cd "$work" && java -Xmx6g -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers "${TLC_WORKERS:-auto}" \
+      -noTE -metadir "$work/states" -config "$cfg" "$tla" > "$work/$name.log" 2>&1) || true
+  seconds=$(( $(date +%s) - start ))
+
+  grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path|Running breadth-first|Starting\.\.\.|Progress\()" "$work/$name.log" > "$here/results/$name.txt"
+  if grep -q "Model checking completed. No error has been found" "$work/$name.log"; then outcome=pass
+  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated" "$work/$name.log"; then outcome=violated
+  else outcome=error; fi
+  counts=$(grep -E "^[0-9,]+ states generated" "$work/$name.log" | tail -1)
+  gen=$(echo "$counts" | sed -E 's/^([0-9,]+) states generated.*/\1/')
+  dist=$(echo "$counts" | sed -E 's/.*, ([0-9,]+) distinct states found.*/\1/')
+  depth=$(grep -E "^The depth of the complete state graph search is" "$work/$name.log" | sed -E 's/.* is ([0-9]+)\./\1/' || true)
+  [ -z "$depth" ] && depth=$(grep -E "^The depth of the complete state graph search is|Depth" "$work/$name.log" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
+}
+
 status=0
 
 while IFS='|' read -r name check sources seq drops loss mutes cfails rule ui sfu expect; do
@@ -79,21 +99,7 @@ CHECK_DEADLOCK FALSE
 CFG
   [ "$symmetry" = yes ] && echo "SYMMETRY SourceSymmetry" >> "$cfg"
 
-  start=$(date +%s)
-  # TLC exits non-zero when it finds a violation; the log decides the outcome.
-  (cd "$work" && java -Xmx6g -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers auto \
-      -noTE -metadir "$work/states" -config "$cfg" "$here/MediaControl.tla" > "$work/$name.log" 2>&1) || true
-  seconds=$(( $(date +%s) - start ))
-
-  grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path|Running breadth-first|Starting\.\.\.|Progress\()" "$work/$name.log" > "$here/results/$name.txt"
-  if grep -q "Model checking completed. No error has been found" "$work/$name.log"; then outcome=pass
-  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated" "$work/$name.log"; then outcome=violated
-  else outcome=error; fi
-  counts=$(grep -E "^[0-9,]+ states generated" "$work/$name.log" | tail -1)
-  gen=$(echo "$counts" | sed -E 's/^([0-9,]+) states generated.*/\1/')
-  dist=$(echo "$counts" | sed -E 's/.*, ([0-9,]+) distinct states found.*/\1/')
-  depth=$(grep -E "^The depth of the complete state graph search is" "$work/$name.log" | sed -E 's/.* is ([0-9]+)\./\1/' || true)
-  [ -z "$depth" ] && depth=$(grep -E "^The depth of the complete state graph search is|Depth" "$work/$name.log" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
+  tlc_check "$name" "$cfg" "$here/MediaControl.tla"
 
   want_outcome=$([ "$expect" = pass ] && echo pass || echo violated)
   verdict=ok
@@ -102,6 +108,67 @@ CFG
   echo "| $name | $check | $sources | $seq | $drops | $loss | $mutes | $cfails | $rule | $ui | $sfu | $expect | $outcome | $gen | $dist | ${depth:-} | $seconds |" >> "$work/summary.md"
 done < "${RUNS_FILE:-$here/runs.txt}"
 
+# Heal model: MediaHeal.tla, one row per run in heal-runs.txt.
+#   name | check | expect | KEY=VALUE overrides of the default constants (no spaces inside a value)
+heal_defaults="Listeners={l1} Pub=pub MaxGen=4 MaxToggle=2 MaxPubLost=1 MaxListenerLost=1 MaxPullFail=1 MaxRecvDown=1 MaxPubDrop=1 MaxSfuRebuild=1 MaxLoss=1 DeadThreshold=2 CapTicks=2 FlatTicks=2 FailSat=4 GiveUpAfter=0 RetryCap=TRUE FlatDrop=TRUE RecvReconnect=TRUE DeadPath=TRUE PublisherSelfDetect=FALSE MuteKeepsPublication=TRUE StaleLoss=TRUE"
+heal_summary="$here/results/heal-summary.md"
+machine=$(scutil --get ComputerName 2>/dev/null || hostname)
+{
+  echo "| run | check | expect | outcome | overrides | machine | states | distinct | depth | seconds |"
+  echo "|---|---|---|---|---|---|---|---|---|---|"
+} > "$work/heal-summary.md"
+
+while IFS='|' read -r name check expect overrides; do
+  name=$(echo "$name" | xargs); [ -z "$name" ] || [[ "$name" == \#* ]] && continue
+  check=$(echo "$check" | xargs); expect=$(echo "$expect" | xargs); overrides=$(echo "$overrides" | xargs)
+  if [ "$#" -gt 0 ]; then
+    printf '%s\n' "$@" | grep -qx "$name" || continue
+  elif [[ "$name" == deep-* && -z "${DEEP:-}" ]]; then continue; fi
+
+  symmetry=no
+  case "$check" in
+    safety) checks="INVARIANT TypeOK
+INVARIANT P1_MutedNeverCaptures
+INVARIANT GenSupply
+INVARIANT P6_RetrySpacing
+PROPERTY P2_OffSurvivesReconnect
+PROPERTY S5_PullOnlyListed"; symmetry=yes ;;
+    P4h) checks="PROPERTY P4h_PublisherAgrees" ;;
+    P5) checks="PROPERTY P5_EveryOnPublicationHeard" ;;
+    P5src) checks="PROPERTY P5src_MicrophoneHeard" ;;
+    P6) checks="INVARIANT P6_RetrySpacing" ;;
+    S5b) checks="PROPERTY S5b_PullOnlyIfSyncListsOn" ;;
+    S5c) checks="PROPERTY S5c_UndesiredDropped" ;;
+    W1) checks="INVARIANT W1_Heard" ;;
+    W2) checks="INVARIANT W2_DeadThenRepublished" ;;
+    W3) checks="INVARIANT W3_FlatThenRepulled" ;;
+    *) echo "unknown check '$check' in run $name" >&2; exit 2 ;;
+  esac
+
+  cfg="$here/results/$name.cfg"
+  {
+    echo "\\* Generated by run.sh from heal-runs.txt row \"$name\". Do not edit."
+    echo "SPECIFICATION Spec"
+    echo "CONSTANTS"
+    for kv in $heal_defaults; do
+      key=${kv%%=*}; val=${kv#*=}
+      for o in $overrides; do [ "${o%%=*}" = "$key" ] && val=${o#*=}; done
+      echo "  $key = $val"
+    done
+    echo "$checks"
+    echo "CHECK_DEADLOCK FALSE"
+    [ "$symmetry" = yes ] && echo "SYMMETRY ListenerSymmetry"
+  } > "$cfg"
+
+  tlc_check "$name" "$cfg" "$here/MediaHeal.tla"
+
+  want_outcome=$([ "$expect" = pass ] && echo pass || echo violated)
+  verdict=ok
+  if [ "$outcome" != "$want_outcome" ]; then verdict=MISMATCH; status=1; fi
+  echo "$name: expected $expect, got $outcome ($verdict)  states $gen, distinct $dist, ${seconds}s"
+  echo "| $name | $check | $expect | $outcome | ${overrides:-defaults} | $machine | $gen | $dist | ${depth:-} | $seconds |" >> "$work/heal-summary.md"
+done < "${HEAL_RUNS_FILE:-$here/heal-runs.txt}"
+
 # A partial run (rows named on the command line, or a RUNS_FILE) must not overwrite the full summary.
-if [ "$#" -eq 0 ] && [ -z "${RUNS_FILE:-}" ]; then cp "$work/summary.md" "$summary"; fi
+if [ "$#" -eq 0 ] && [ -z "${RUNS_FILE:-}" ] && [ -z "${HEAL_RUNS_FILE:-}" ]; then cp "$work/summary.md" "$summary"; cp "$work/heal-summary.md" "$heal_summary"; fi
 exit $status
