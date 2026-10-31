@@ -493,7 +493,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
     const clock = new ManualClock();
-    const { client, sockets } = recoveryClient(clock, 100);
+    const { client, sockets } = recoveryClient(clock, 100, { random: () => 1 });
 
     const startup = client.startSceneSubscription();
     void startup.catch(() => undefined);
@@ -508,6 +508,47 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     expect(sockets).toHaveLength(2);
     clock.advance(1);
     expect(sockets).toHaveLength(3);
+
+    await client.stopSceneSubscription();
+  });
+
+  it("spreads reconnect waits across clients that close together", async () => {
+    const clock = new ManualClock();
+    const random = mulberry32(0x1a2b3c4d);
+    const clients = [];
+    const reconnectTimes = new Map<number, number>();
+
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        clients.push(await startedRecoveryClient(clock, undefined, { random }));
+      }
+      for (const { sockets } of clients) sockets[0]?.close(1012);
+
+      for (let elapsed = 1; elapsed <= 250; elapsed += 1) {
+        clock.advance(1);
+        await settle();
+        clients.forEach(({ sockets }, index) => {
+          if (sockets.length > 1 && !reconnectTimes.has(index)) reconnectTimes.set(index, elapsed);
+        });
+      }
+
+      const times = [...reconnectTimes.values()];
+      expect(times).toHaveLength(20);
+      expect(times.every((time) => time >= 125 && time <= 250)).toBe(true);
+      expect(new Set(times).size).toBeGreaterThanOrEqual(10);
+    } finally {
+      await Promise.all(clients.map(({ client }) => client.stopSceneSubscription()));
+    }
+  });
+
+  it("reconnects immediately when the configured delay is zero", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 0, { random: () => 0.5 });
+
+    sockets[0]?.close(1012);
+    clock.advance(0);
+    await settle();
+    expect(sockets).toHaveLength(2);
 
     await client.stopSceneSubscription();
   });
@@ -1433,6 +1474,16 @@ describe("whiteboard slow-connection watchdog", () => {
 
 function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
+}
+
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    let value = (state += 0x6d2b79f5);
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+  };
 }
 
 function recoveryClient(clock = new ManualClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {
