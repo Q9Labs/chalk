@@ -100,8 +100,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp validate_finalization_authority(connection, episode, external, policy) do
     with :ok <- validate_finalization_episode(external, policy),
-         :ok <- validate_finalization_participant(connection, episode, external, :actor),
-         :ok <- validate_finalization_participant(connection, episode, external, :target) do
+         :ok <- validate_finalization_target(connection, episode, external) do
       validate_finalization_deadline(external, policy)
     end
   end
@@ -120,25 +119,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
 
-  defp validate_finalization_participant(_connection, _episode, external, field)
-       when field == :actor and is_nil(external.actor_participant_id),
-       do: :ok
+  defp validate_finalization_target(_connection, _episode, %{target_participant_id: nil}),
+    do: :ok
 
-  defp validate_finalization_participant(_connection, _episode, external, field)
-       when field == :target and is_nil(external.target_participant_id),
-       do: :ok
+  defp validate_finalization_target(connection, episode, external) do
+    generation = external.target_participant_generation
 
-  defp validate_finalization_participant(connection, episode, external, field) do
-    {participant_id, generation} =
-      case field do
-        :actor ->
-          {external.actor_participant_id, external.actor_generation}
-
-        :target ->
-          {external.target_participant_id, external.target_participant_generation}
-      end
-
-    case Authority.lock_participant(connection, episode, participant_id) do
+    case Authority.lock_participant(connection, episode, external.target_participant_id) do
       %{generation: ^generation, status: status}
       when status in ["active", "leaving", "joining"] ->
         :ok
