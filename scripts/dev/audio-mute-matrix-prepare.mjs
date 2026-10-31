@@ -34,7 +34,7 @@ if (process.argv[1] === import.meta.filename) {
     if (integrity !== metadata.dist.integrity) throw new Error(`SDK package ${version}: integrity mismatch`);
     const destination = resolve('.private/audio-mute-matrix/packages', version);
     await mkdir(destination, { recursive: true });
-    execFileSync('tar', ['-xf', '-', '-C', destination, '--strip-components=1'], { input: archive });
+    execFileSync('tar', ['-xzf', '-', '-C', destination, '--strip-components=1'], { input: archive });
     packages.push({ version, integrity, tarball: metadata.dist.tarball });
   }
   await writeFile('.private/audio-mute-matrix/published-packages.json', JSON.stringify(packages, null, 2));

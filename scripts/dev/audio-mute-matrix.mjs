@@ -36,6 +36,8 @@ const config = resolveDevConfig({
   secretResolver: async () => credentials,
 });
 config.webJoinPath = '/synthetic';
+config.databaseName = process.env.CHALK_MATRIX_DB || 'chalk_audio_mute_matrix';
+assert.match(config.databaseName, /^[a-z_]+$/u);
 const services = [
   { id: 'api', command: 'go', expectedCommand: null, args: ['run', './cmd'], cwd: `${serverRoot}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
   { id: 'sync', command: 'mix', expectedCommand: null, args: ['run', '--no-halt'], cwd: `${serverRoot}/apps/sync`, dependsOn: ['api'], readiness: { url: `${config.urls.sync}/readyz` } },
