@@ -51,7 +51,8 @@ const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
-// Cloudflare expires video tracks after 30 seconds without RTP.
+// Cloudflare expires tracks after 30 seconds without RTP. A detached sender
+// sends none, so leave time for the resume operation. Microphones send silence instead.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -349,7 +350,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     state.track.stop();
-    this.#localTracks.delete("microphone");
+    if (this.#localTracks.get("microphone") === state) this.#localTracks.delete("microphone");
     this.#publishSnapshot();
     this.#emitLocal();
   }
