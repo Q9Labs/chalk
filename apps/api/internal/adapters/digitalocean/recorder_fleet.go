@@ -323,12 +323,16 @@ func (a *RecorderFleet) ensureBootstrapEvidence(ctx context.Context, droplet dig
 	}
 	for _, snapshot := range snapshots {
 		if snapshot.Name == snapshotName {
-			a.pruneBootstrapEvidence(ctx, droplet)
+			if snapshot.ID == "" {
+				a.logBootstrapEvidenceError(ctx, droplet, "list_droplet_snapshots", errors.New("snapshot ID missing"))
+				return recorderfleet.ErrNodeEvidencePending
+			}
+			a.pruneBootstrapEvidence(ctx, droplet, snapshot.ID)
 			slog.InfoContext(ctx, "recorder bootstrap evidence preserved",
 				"event", "recorder.bootstrap_evidence_preserved",
 				"provider_id", strconv.FormatInt(droplet.ID, 10),
 				"node_name", droplet.Name,
-				"snapshot_id", snapshot.ID,
+				"snapshot_id", string(snapshot.ID),
 			)
 			return nil
 		}
@@ -385,7 +389,7 @@ func (a *RecorderFleet) listDropletActions(ctx context.Context, dropletID int64)
 	return response.Actions, err
 }
 
-func (a *RecorderFleet) pruneBootstrapEvidence(ctx context.Context, droplet digitalOceanDroplet) {
+func (a *RecorderFleet) pruneBootstrapEvidence(ctx context.Context, droplet digitalOceanDroplet, currentSnapshotID snapshotID) {
 	snapshots, err := a.listSnapshots(ctx)
 	if err != nil {
 		a.logBootstrapEvidenceError(ctx, droplet, "prune_list_snapshots", err)
@@ -394,16 +398,17 @@ func (a *RecorderFleet) pruneBootstrapEvidence(ctx context.Context, droplet digi
 	prefix := "chalk-recorder-" + string(a.role) + "-" + a.environment + "-"
 	owned := make([]digitalOceanSnapshot, 0)
 	for _, snapshot := range snapshots {
-		if snapshot.ResourceType == "droplet" && strings.HasPrefix(snapshot.Name, prefix) && strings.HasSuffix(snapshot.Name, "-bootstrap-evidence") {
+		if snapshot.ID != currentSnapshotID && snapshot.ID != "" && snapshot.ResourceType == "droplet" &&
+			strings.HasPrefix(snapshot.Name, prefix) && strings.HasSuffix(snapshot.Name, "-bootstrap-evidence") {
 			owned = append(owned, snapshot)
 		}
 	}
 	slices.SortFunc(owned, compareSnapshotCreatedAt)
-	if len(owned) <= 3 {
+	if len(owned) <= 2 {
 		return
 	}
-	for _, snapshot := range owned[3:] {
-		path := "/v2/snapshots/" + strconv.FormatInt(snapshot.ID, 10)
+	for _, snapshot := range owned[2:] {
+		path := "/v2/snapshots/" + string(snapshot.ID)
 		if err := a.doJSON(ctx, http.MethodDelete, path, nil, nil, nil, http.StatusNoContent); err != nil {
 			a.logBootstrapEvidenceError(ctx, droplet, "prune_delete_snapshot", err)
 		}
@@ -829,10 +834,37 @@ type retrieveDropletResponse struct {
 }
 
 type digitalOceanSnapshot struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	CreatedAt    string `json:"created_at"`
-	ResourceType string `json:"resource_type"`
+	ID           snapshotID `json:"id"`
+	Name         string     `json:"name"`
+	CreatedAt    string     `json:"created_at"`
+	ResourceType string     `json:"resource_type"`
+}
+
+type snapshotID string
+
+func (id *snapshotID) UnmarshalJSON(data []byte) error {
+	var value string
+	if len(data) > 0 && data[0] == '"' {
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+	} else {
+		value = string(data)
+	}
+	if value == "" {
+		return errors.New("invalid DigitalOcean snapshot ID")
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return errors.New("invalid DigitalOcean snapshot ID")
+		}
+	}
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return errors.New("invalid DigitalOcean snapshot ID")
+	}
+	*id = snapshotID(strconv.FormatUint(parsed, 10))
+	return nil
 }
 
 type listSnapshotsResponse struct {
