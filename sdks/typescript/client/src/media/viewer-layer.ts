@@ -66,6 +66,12 @@ export class ViewerLayerPolicy {
     return this.#layer === "h" ? this.#sampleHigh(health, sample) : this.#sampleLow(health, sample);
   }
 
+  sampleUnappliedTile(tileHeight: number | undefined): ViewerLayer {
+    this.#tileIsSmall = tileIsSmall(this.#tileIsSmall, tileHeight);
+    // Tile growth can cancel a size-only downgrade; stats still describe the applied layer.
+    return this.#layer === "l" && !this.#tileIsSmall && !this.#limitedByNetwork ? this.#rise() : this.#layer;
+  }
+
   #settle(): Health {
     this.#settling--;
     return "unknown";
@@ -248,8 +254,8 @@ export class ViewerLayerSelector {
       const view = this.#view(camera);
       const stats = this.#reader.read(rows, camera.track.id);
       if (!stats) continue;
-      // Do not learn from l until the switch actually reached the receiver.
-      const layer = view.policy.layer === view.applied ? view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height }) : view.policy.layer;
+      const tileHeight = videoRenderSize(camera.track)?.height;
+      const layer = view.policy.layer === view.applied ? view.policy.sample({ ...stats, tileHeight }) : view.policy.sampleUnappliedTile(tileHeight);
       if (layer !== view.applied && now >= view.retryAt) changes.push({ ...camera, layer });
     }
     return changes;
