@@ -214,7 +214,7 @@ try {
       const at = 20 + round * 110 + index * 20;
       schedule.push({ at, participant: index, kind: 'mic', enabled: false }, { at: at + 8, participant: index, kind: 'mic', enabled: true });
     }
-    if (moderatorProbe) schedule.push({ at: 20, participant: 1, kind: 'moderator', enabled: false }, { at: 28, participant: 1, kind: 'mic', enabled: true });
+    if (moderatorProbe) schedule.push({ at: 40, participant: 1, kind: 'moderator', enabled: false }, { at: 48, participant: 1, kind: 'mic', enabled: true });
     else {
       for (const at of [70, 160, 390]) schedule.push({ at, participant: 0, kind: 'camera', enabled: true }, { at: at + 12, participant: 0, kind: 'camera', enabled: false });
       schedule.push({ at: 300, participant: 2, kind: 'offline', enabled: true }, { at: 305, participant: 2, kind: 'offline', enabled: false });

@@ -38,9 +38,9 @@ can shorten the run to a smoke check (minimum 60). Both settings change test
 coverage; record them with the result. `CHALK_MATRIX_OUTPUT` selects the output
 directory. The default is the ignored `artifacts/th-audio-1030-evening` directory.
 
-`CHALK_MATRIX_MODERATOR=true CHALK_MATRIX_SECONDS=60` selects a separate probe:
-the teacher mutes student 1 at 20 seconds; that student uses the React mic
-control to unmute at 28 seconds. This exercises forced retirement separately
+`CHALK_MATRIX_MODERATOR=true CHALK_MATRIX_SECONDS=90` selects a separate probe:
+the teacher mutes student 1 at 40 seconds; that student uses the React mic
+control to unmute at 48 seconds. This exercises forced retirement separately
 from self-mute. Save it to a separate output directory.
 
 The report requires rising received packets and positive inbound `audioLevel`.
