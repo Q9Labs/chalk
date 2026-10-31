@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -137,6 +138,7 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 			result.Failed += len(publications)
 			slog.WarnContext(ctx, "failed to inspect publisher session after remote track failure",
 				"event", "media_publication.publisher_session_inspection_failed",
+				"diag_error", regexp.MustCompile(`[0-9A-Za-z_-]{20,}`).ReplaceAllString(readErr.Error(), "<id>"),
 				"publication_count", len(publications),
 			)
 			continue
