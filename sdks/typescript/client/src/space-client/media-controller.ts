@@ -55,6 +55,7 @@ type CameraState =
   | { readonly status: "capturing"; readonly owner: CameraOwner }
   | { readonly status: "live"; readonly owner: CameraOwner; readonly track: MediaStreamTrack; readonly publication: ConnectionPorts["media"] | "initial" | null; readonly onEnded: () => void };
 export type MediaControllerEffects = {
+  readonly observeAudioElement: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   readonly configure: (
     intent: Readonly<{
       microphone?: boolean;
@@ -166,6 +167,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.microphone !== undefined) this.#recordIntent("microphone", intent.microphone);
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
+  observeAudioElement = (track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } => this.#ports?.media.observeAudioElement?.(track, element) ?? { played: () => {}, detach: () => {} };
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> =>
     Effect.sync(() => {
       this.#microphoneMutedByOtherDevice = false;

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
+import { useMedia, useParticipants, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { toAudioParticipants } from "../../selectors/space-selectors";
 import { useParticipantVolumeContext } from "../participants-panel/participant-volume-context";
 
@@ -42,6 +42,7 @@ type SinkAwareAudioElement = HTMLAudioElement & {
 };
 
 export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, getParticipantVolume, resumeAudioLabel = "Resume audio" }: AudioOutputProps) {
+  const client = useSpaceClient();
   const media = useMedia();
   const self = useSelf();
   const participantState = useParticipants();
@@ -68,6 +69,11 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   // Map of participant ID -> audio element (screen share audio)
   const screenShareAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const observationsRef = useRef(new Map<HTMLMediaElement, { played(result: unknown): void; detach(): void }>());
+  const detachObservation = (element: HTMLMediaElement) => {
+    observationsRef.current.get(element)?.detach();
+    observationsRef.current.delete(element);
+  };
 
   // When autoplay is blocked (common on iOS/Safari until user gesture), we need to
   // retry play() on the next interaction. Without this, audio can stay silent.
@@ -157,6 +163,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
         for (const [i, r] of results.entries()) {
           const el = els[i];
           if (!el) continue;
+          observationsRef.current.get(el)?.played(r.status === "fulfilled" ? undefined : r.reason);
           if (r.status === "rejected") pendingAutoplayRetryRef.current.add(el);
         }
 
@@ -225,16 +232,23 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       const currentTrack = currentStream?.getAudioTracks()[0];
 
       if (currentTrack !== audioTrack) {
+        detachObservation(audioEl);
         // Attach the new track
         const stream = new MediaStream([audioTrack]);
         audioEl.srcObject = stream;
+        const observation = client.media.observeAudioElement(audioTrack, audioEl);
+        observationsRef.current.set(audioEl, observation);
 
         // Handle autoplay restrictions
         const attachedElement = audioEl;
         audioEl
           .play()
-          .then(() => clearAutoplayRetryForElement(attachedElement))
+          .then(() => {
+            observation.played(undefined);
+            clearAutoplayRetryForElement(attachedElement);
+          })
           .catch((cause: unknown) => {
+            observation.played(cause);
             if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(id) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
           });
       }
@@ -245,6 +259,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     const activeIds = new Set(remoteWithAudio.map((p) => p.id));
     for (const [id, audioEl] of audioElements.entries()) {
       if (!activeIds.has(id)) {
+        detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
         clearAutoplayRetryForElement(audioEl);
@@ -252,7 +267,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       }
     }
     // No cleanup return here - we only clean departed participants above
-  }, [remoteWithAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
+  }, [client, remoteWithAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for mic audio
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
@@ -260,6 +275,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     const audioElements = audioElementsRef.current;
     return () => {
       for (const audioEl of audioElements.values()) {
+        detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
         clearAutoplayRetryForElement(audioEl);
@@ -280,6 +296,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       const handleEnded = () => {
         const audioEl = audioElementsRef.current.get(id);
         if (audioEl) {
+          detachObservation(audioEl);
           audioEl.srcObject = null;
           audioEl.pause();
           clearAutoplayRetryForElement(audioEl);
@@ -335,13 +352,20 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
       const currentTrack = currentStream?.getAudioTracks()[0];
 
       if (currentTrack !== screenShareAudioTrack) {
+        detachObservation(audioEl);
         const stream = new MediaStream([screenShareAudioTrack]);
         audioEl.srcObject = stream;
+        const observation = client.media.observeAudioElement(screenShareAudioTrack, audioEl);
+        observationsRef.current.set(audioEl, observation);
         const attachedElement = audioEl;
         audioEl
           .play()
-          .then(() => clearAutoplayRetryForElement(attachedElement))
+          .then(() => {
+            observation.played(undefined);
+            clearAutoplayRetryForElement(attachedElement);
+          })
           .catch((cause: unknown) => {
+            observation.played(cause);
             if (cause instanceof DOMException && cause.name === "NotAllowedError" && audioElements.get(ssKey) === attachedElement && attachedElement.srcObject === stream) markAutoplayBlocked(attachedElement);
           });
       }
@@ -351,13 +375,14 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     const activeIds = new Set(remoteWithScreenShareAudio.map((p) => `ss-${p.id}`));
     for (const [key, audioEl] of audioElements.entries()) {
       if (!activeIds.has(key)) {
+        detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
         clearAutoplayRetryForElement(audioEl);
         audioElements.delete(key);
       }
     }
-  }, [remoteWithScreenShareAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
+  }, [client, remoteWithScreenShareAudio, volume, effectiveAudioOutputDeviceId, effectiveGetParticipantVolume, applyAudioOutputDevice]);
 
   // Unmount-only cleanup for screen share audio
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- Own existing audio elements, autoplay listeners, and media-track cleanup.
@@ -365,6 +390,7 @@ export function AudioOutput({ participants, volume = 1, audioOutputDeviceId, get
     const audioElements = screenShareAudioRef.current;
     return () => {
       for (const audioEl of audioElements.values()) {
+        detachObservation(audioEl);
         audioEl.srcObject = null;
         audioEl.pause();
         clearAutoplayRetryForElement(audioEl);
