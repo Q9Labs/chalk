@@ -3478,9 +3478,7 @@ async function restartWithRetainedPublications(harness: ReturnType<typeof create
 }
 
 it.each(["waited", "rapid"] as const)("a %s unmute during a media connection swap publishes with real media and coordinator", (scenario) => unmuteDuringSwap(scenario));
-// Known gap: past the 250 ms lifecycle grace, #pauseRecoveredIntents cancels the unsent click as lost to Sync.
-// The recovery-rule fix (pause only when Sync's own state says off) is owned by a separate PR; drop `.fails` when it lands.
-it.fails("a cross-grace unmute during a media connection swap publishes with real media and coordinator", () => unmuteDuringSwap("cross-grace"));
+it("a cross-grace unmute during a media connection swap publishes with real media and coordinator", () => unmuteDuringSwap("cross-grace"));
 
 function createSwapCall() {
   const harness = createHarness();
@@ -3557,7 +3555,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
   }
 }
 
-it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
+it.each(["superseded", "timeout", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
   const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
   let expire: (() => void) | undefined;
   const schedule = platform.dependencies.clock.setTimeout;
@@ -3577,13 +3575,6 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
     if (ending === "superseded") await client.media.setMicrophoneEnabled(false);
     if (ending === "timeout") expire!();
     if (ending === "call-ended") await client.leave();
-    if (ending === "sync-loss") {
-      // Sync is lost and restored while the swap is still in flight; the pending click settles on restoration.
-      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await harness.client.restart(bootstrap("connection-2"));
-      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-    }
     const outcome = await enabled;
     if (ending === "superseded") expect(outcome).toBe("enabled");
     else expect(outcome).toMatchObject({ code: ending === "timeout" ? "media.timeout" : expect.any(String) });
@@ -3598,6 +3589,29 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
     expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
   } finally {
     timer.mockRestore();
+    dispose();
+  }
+});
+
+// Sync never saw the click and nothing turned the source off, so recovery keeps it wanted-on and publishes it.
+it("an unmute during a media connection swap is published when Sync is lost and restored meanwhile", async () => {
+  const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  try {
+    await client.join({ microphone: true, camera: false });
+    await client.media.setMicrophoneEnabled(false);
+    await startSwap();
+    const enabled = enable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await harness.client.restart(bootstrap("connection-2"));
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+    expect(await enabled).toBe("enabled");
+    expect(command.mock.calls.at(-1)).toEqual([true]);
+    expect(track.enabled).toBe(true);
+    expect(publishedMicrophone()).toBe(true);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+  } finally {
     dispose();
   }
 });

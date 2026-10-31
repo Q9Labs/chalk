@@ -1287,6 +1287,17 @@ type SyncMediaPause struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncMediaStop struct {
+	TenantID              pgtype.UUID        `json:"tenant_id"`
+	SpaceID               pgtype.UUID        `json:"space_id"`
+	EpisodeID             pgtype.UUID        `json:"episode_id"`
+	ParticipantID         pgtype.UUID        `json:"participant_id"`
+	ParticipantGeneration int64              `json:"participant_generation"`
+	Source                string             `json:"source"`
+	Revision              int64              `json:"revision"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncPresenceRuntime struct {
 	Singleton    bool               `json:"singleton"`
 	RecoverAfter pgtype.Timestamptz `json:"recover_after"`

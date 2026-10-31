@@ -1095,7 +1095,14 @@ function updateProjection<T>(projection: V1Projection<T> | null, projectionId: s
   return { projectionId, sequence, items: [...projection.items.filter((candidate) => key(candidate) !== itemKey), item] };
 }
 function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublication {
-  return { participantId: item.participant_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
+  return {
+    participantId: item.participant_id,
+    source: item.source,
+    enabled: item.enabled,
+    publicationId: item.publication_id,
+    ...(item.off_reason === undefined ? {} : { offReason: item.off_reason }),
+    ...(item.off_revision === undefined ? {} : { offRevision: item.off_revision }),
+  };
 }
 function presenceItem(item: typeof import("../generated/sync").PresenceProjectionItemSchema.Type): V1Presence {
   return { participantId: item.participant_id, admissionRevision: item.admission_revision, identityId: item.identity_id, deviceType: item.device_type, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
@@ -1142,6 +1149,8 @@ function entryUrl(value: string, generation: number | null, confirmation: boolea
   const url = new URL(value);
   url.searchParams.set("participant_devices", "1");
   url.searchParams.set("participant_device_admissions", "2");
+  // Previous Sync ignores this query and sends the earlier item shape, which means "no evidence".
+  url.searchParams.set("media_off_reason", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

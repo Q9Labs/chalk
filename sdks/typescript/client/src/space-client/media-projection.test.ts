@@ -411,7 +411,9 @@ it("preserves a recovered host stop until fresh consent", async () => {
     test.project(true);
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
-    test.project(false);
+    // The host stopped it while the device was gone: Sync's item carries the stop's revision.
+    const stop = { participantId: "participant-1", source: "microphone", enabled: false, publicationId: null, offReason: "host", offRevision: 5 } as const;
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), media: { projectionId: "media", sequence: 2, items: [stop] } });
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
     expect(test.track.enabled).toBe(false);

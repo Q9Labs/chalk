@@ -43,6 +43,50 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.MediaPauses do
     """
   end
 
+  def list_stops do
+    """
+    select stop.participant_id, stop.source, stop.revision
+    from sync_media_stops stop
+    join participants participant
+      on participant.tenant_id = stop.tenant_id
+     and participant.space_id = stop.space_id
+     and participant.episode_id = stop.episode_id
+     and participant.id = stop.participant_id
+     and participant.generation = stop.participant_generation
+    where stop.tenant_id = $1 and stop.space_id = $2 and stop.episode_id = $3
+      and participant.status in ('joining', 'active', 'leaving')
+    order by stop.participant_id, stop.source
+    limit 1501
+    """
+  end
+
+  # The stop belongs to the participant's newest generation; the older generations left.
+  def upsert_stop do
+    """
+    insert into sync_media_stops (
+      tenant_id, space_id, episode_id, participant_id, participant_generation,
+      source, revision
+    )
+    select $1, $2, $3, id, generation, $5, $6
+    from participants
+    where tenant_id = $1 and space_id = $2 and episode_id = $3 and id = $4
+    order by generation desc
+    limit 1
+    on conflict (tenant_id, episode_id, participant_id, source)
+    do update set participant_generation = excluded.participant_generation,
+                  revision = excluded.revision,
+                  created_at = now()
+    """
+  end
+
+  def clear_stop do
+    """
+    delete from sync_media_stops
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and participant_id = $4 and source = $5
+    """
+  end
+
   def clear do
     """
     delete from sync_media_pauses

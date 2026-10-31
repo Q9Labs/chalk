@@ -19,6 +19,7 @@ defmodule ChalkSync.Live.Episode do
     :screen_leases,
     :media_observed_items,
     :media_pauses,
+    :media_stops,
     :media_items,
     :media_observation_cursor,
     :media_projection,
@@ -31,6 +32,7 @@ defmodule ChalkSync.Live.Episode do
     :screen_leases,
     :media_observed_items,
     :media_pauses,
+    :media_stops,
     :media_items,
     :media_observation_cursor,
     :media_projection,
@@ -48,6 +50,7 @@ defmodule ChalkSync.Live.Episode do
       screen_leases: %{},
       media_observed_items: [],
       media_pauses: %{},
+      media_stops: %{},
       media_items: [],
       media_observation_cursor: nil,
       media_projection: nil,
@@ -165,8 +168,13 @@ defmodule ChalkSync.Live.Episode do
 
   defp refresh_media(state, options) do
     with {:ok, pauses} <- Stateholder.media_pauses(state.episode),
+         {:ok, stops} <- Stateholder.media_stops(state.episode),
          {:ok, observation} <- observed_media(state) do
-      apply_media_observation(%{state | media_pauses: pauses}, observation, options)
+      apply_media_observation(
+        %{state | media_pauses: pauses, media_stops: stops},
+        observation,
+        options
+      )
     else
       {:retryable, _reason} -> {:error, :dependency_unavailable}
       error -> error
@@ -192,7 +200,10 @@ defmodule ChalkSync.Live.Episode do
     observed_items = normalize_media_items(publications)
 
     if observed_items == state.media_observed_items do
-      reconcile_observed_media(state, apply_media_pauses(observed_items, state.media_pauses))
+      reconcile_observed_media(
+        state,
+        apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
+      )
     else
       {:error, :dependency_unavailable}
     end
@@ -200,7 +211,9 @@ defmodule ChalkSync.Live.Episode do
 
   defp apply_newer_media_observation(state, cursor, publications, options) do
     observed_items = normalize_media_items(publications)
-    {_pauses, media_items} = projection = apply_media_pauses(observed_items, state.media_pauses)
+
+    {_pauses, media_items} =
+      projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
 
     with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
       next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
@@ -220,7 +233,7 @@ defmodule ChalkSync.Live.Episode do
     end
   end
 
-  defp apply_media_pauses(observed_items, pauses) do
+  defp apply_media_pauses(observed_items, pauses, stops) do
     retained =
       Enum.reduce(observed_items, %{}, fn item, retained ->
         key = {item["participant_id"], item["source"]}
@@ -240,7 +253,42 @@ defmodule ChalkSync.Live.Episode do
           else: %{item | "enabled" => false, "publication_id" => nil}
       end)
 
-    {retained, projected}
+    {retained, project_off_reasons(projected, retained, stops)}
+  end
+
+  # Says why an item is off: a host stop (with its revision) wins over a device pause.
+  # A stop projects even when the media plane lists no publication, so a client that
+  # missed the stop event still sees it. Everything else stays without a reason.
+  defp project_off_reasons(items, retained, stops) do
+    listed = MapSet.new(items, &{&1["participant_id"], &1["source"]})
+
+    unlisted =
+      for {{participant_id, source} = key, _revision} <- stops, not MapSet.member?(listed, key) do
+        %{
+          "participant_id" => participant_id,
+          "source" => source,
+          "enabled" => false,
+          "publication_id" => nil
+        }
+      end
+
+    (items ++ unlisted)
+    |> Enum.map(&put_off_reason(&1, retained, stops))
+    |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
+  end
+
+  defp put_off_reason(%{"enabled" => true} = item, _retained, _stops), do: item
+
+  defp put_off_reason(item, retained, stops) do
+    key = {item["participant_id"], item["source"]}
+
+    case Map.fetch(stops, key) do
+      {:ok, revision} ->
+        Map.merge(item, %{"off_reason" => "host", "off_revision" => revision})
+
+      :error ->
+        if Map.has_key?(retained, key), do: Map.put(item, "off_reason", "self"), else: item
+    end
   end
 
   defp replace_live_projections(state) do

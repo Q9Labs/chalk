@@ -349,6 +349,46 @@
     },
     {
       "type": "projection_event",
+      "stream": "media",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25",
+      "sequence": 1,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "source": "microphone",
+        "enabled": false,
+        "publication_id": null,
+        "off_reason": "host",
+        "off_revision": 7
+      }
+    },
+    {
+      "type": "projection_event",
+      "stream": "media",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25",
+      "sequence": 1,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "source": "microphone",
+        "enabled": false,
+        "publication_id": null,
+        "off_reason": "self"
+      }
+    },
+    {
+      "type": "projection_event",
+      "stream": "media",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c25",
+      "sequence": 1,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "source": "microphone",
+        "enabled": false,
+        "publication_id": null,
+        "off_reason": "dead"
+      }
+    },
+    {
+      "type": "projection_event",
       "stream": "presence",
       "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26",
       "sequence": 1,

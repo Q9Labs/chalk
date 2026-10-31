@@ -26,15 +26,35 @@ defmodule ChalkSync.Stateholder.Postgres.MediaPauses do
         authority ++ [Atom.to_string(source), publication_id]
       )
     else
-      Postgrex.query!(
-        connection,
-        SQL.clear(),
-        Scope.participant(identity) ++ [Atom.to_string(source)]
-      )
+      params = Scope.participant(identity) ++ [Atom.to_string(source)]
+      Postgrex.query!(connection, SQL.clear(), params)
+      # A newly accepted on answers the host stop.
+      Postgrex.query!(connection, SQL.clear_stop(), params)
     end
 
     :ok
   end
+
+  # Runs inside the transaction that commits the stop event, so the stop and its revision are one fact.
+  def record_stop(connection, episode, participant_id, source, revision) do
+    Postgrex.query!(
+      connection,
+      SQL.upsert_stop(),
+      Scope.episode(episode) ++ [Scope.uuid(participant_id), Atom.to_string(source), revision]
+    )
+
+    :ok
+  end
+
+  # At most 500 Participants and three sources per Episode.
+  def decode_stop_rows(rows) when length(rows) <= 1500 do
+    {:ok,
+     Map.new(rows, fn [participant_id, source, revision] ->
+       {{UUID.load!(participant_id), source}, revision}
+     end)}
+  end
+
+  def decode_stop_rows(_rows), do: {:retryable, :dependency_unavailable}
 
   # At most 500 Participants and two pausable sources per Episode.
   def decode_rows(rows) when length(rows) <= 1000 do

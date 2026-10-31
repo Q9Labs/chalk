@@ -72,7 +72,13 @@ export type V1ControlState = {
   readonly participants: readonly V1Participant[];
   readonly admissionRequests: readonly V1AdmissionRequest[];
 };
-export type V1MediaPublication = MediaPublication;
+/** Why Sync shows a media item as off. A missing reason is no evidence, never "off". */
+export type V1MediaOffReason = "host" | "self" | "dead";
+export type V1MediaPublication = MediaPublication & {
+  readonly offReason?: V1MediaOffReason;
+  /** The control revision of the host stop; only with `offReason: "host"`. */
+  readonly offRevision?: number;
+};
 export type V1Presence = {
   readonly admissionRevision?: number;
   /** Stable person identity, independent of the per-device participant ID. */
