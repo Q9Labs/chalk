@@ -2966,7 +2966,8 @@ it.fails("a cross-grace unmute during a media connection swap publishes with rea
 function createSwapCall() {
   const harness = createHarness();
   const platform = createCoreTestPlatform();
-  const track = new FakeTrack("swap-microphone", "audio");
+  const tracks: FakeTrack[] = [];
+  const currentTrack = () => tracks.at(-1)!;
   const coordinator = new V1LiveTargetCoordinator({
     mediaPlane: harness.client,
     requestIds: { next: () => crypto.randomUUID() },
@@ -2989,7 +2990,22 @@ function createSwapCall() {
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("swap") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: {
+          ...platform.dependencies.mediaDevices,
+          getUserMedia: async () => {
+            const track = new FakeTrack(`swap-microphone-${tracks.length + 1}`, "audio");
+            tracks.push(track);
+            return fakeStream(track);
+          },
+        },
+        createMediaClient: () => harness.client,
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
+      },
+    },
   );
   const startSwap = async () => {
     command.mockClear();
@@ -3007,16 +3023,16 @@ function createSwapCall() {
     client.dispose();
     harness.client.stop();
   };
-  return { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose };
+  return { harness, platform, currentTrack, command, client, startSwap, enable, publishedMicrophone, dispose };
 }
 
 async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): Promise<void> {
-  const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
+  const { harness, currentTrack, command, client, startSwap, enable, dispose } = createSwapCall();
   try {
     await client.join({ microphone: true, camera: false });
     if (scenario !== "rapid") {
       await client.media.setMicrophoneEnabled(false);
-      expect(track.enabled).toBe(false);
+      expect(currentTrack().enabled).toBe(false);
     }
     await startSwap();
     const muted = scenario === "rapid" ? client.media.setMicrophoneEnabled(false).catch((cause: unknown) => cause) : Promise.resolve();
@@ -3028,7 +3044,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
     expect(await enabled).toBe("enabled");
     await muted;
     expect(command.mock.calls.at(-1)).toEqual([true]);
-    expect(track.enabled).toBe(true);
+    expect(currentTrack().enabled).toBe(true);
     const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
     expect(publication).toMatchObject({ enabled: true });
     expect(harness.transport.localPublications.has(publication!.publicationId!)).toBe(true);
@@ -3039,7 +3055,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
 }
 
 it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
-  const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  const { harness, platform, currentTrack, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
   const localMicrophonePublicationIds = () =>
     [...harness.transport.localPublications.values()]
       .filter((item) => item.source === "microphone")
@@ -3085,7 +3101,7 @@ it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmut
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(command).not.toHaveBeenCalledWith(true);
-    expect(track.enabled).toBe(false);
+    expect(currentTrack().enabled).toBe(false);
     if (ending === "call-ended") {
       expect(publishedMicrophone()).toBe(false);
     } else {
