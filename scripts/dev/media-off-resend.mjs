@@ -5,6 +5,9 @@
 //
 //   CHALK_OFF_SCENARIO=lost-off  (default) the send of A's mic off is dropped while the link stays up, then A reconnects
 //   CHALK_OFF_SCENARIO=toggle    plain off and on with no injected failure
+//   CHALK_OFF_SCENARIO=off-on    off, wait CHALK_OFF_GAP_MS (default 2000), on; measures A sender stats and B decoded signal
+//   CHALK_OFF_GAPS_MS=500,2000   (off-on) one off/on cycle per gap
+//   CHALK_OFF_FAKE_DEVICE=1      use Chromium's fake microphone with a looping tone file instead of the in-page oscillator
 //   CHALK_OFF_BLOCK_MEDIA_CLOSE=1 also fail A's SFU track close request (a second fault, harsher than lost-off)
 //   CHALK_OFF_SDK_REF=<git ref>  build the browser SDK from this ref (for example origin/master); default is the working tree
 //   CHALK_OFF_OUTPUT=<dir>       report directory (default artifacts/media-off-resend)
@@ -27,7 +30,7 @@ const { build } = createRequire(resolve(root, "tools/sdk-web-consumer-e2e/packag
 const { chromium } = createRequire(resolve(root, "sdks/typescript/client/package.json"))("playwright");
 const scenario = process.env.CHALK_OFF_SCENARIO || "lost-off";
 const blockMediaClose = process.env.CHALK_OFF_BLOCK_MEDIA_CLOSE === "1";
-assert.ok(["lost-off", "toggle"].includes(scenario), `unknown scenario ${scenario}`);
+assert.ok(["lost-off", "toggle", "off-on"].includes(scenario), `unknown scenario ${scenario}`);
 const sdkRef = process.env.CHALK_OFF_SDK_REF || null;
 const output = resolve(root, process.env.CHALK_OFF_OUTPUT || "artifacts/media-off-resend");
 await mkdir(output, { recursive: true });
@@ -71,6 +74,26 @@ const runtime = createChalkSupervisor(config, { serviceSpecs: services, adapters
 const report = { started: new Date().toISOString(), scenario, sdkRevision, serverRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), timeline: [], assertions: [], passed: false };
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const t0 = Date.now();
+/** A mono 16-bit 48 kHz sine as a WAV buffer. */
+function wavTone(frequency, seconds) {
+  const rate = 48000;
+  const samples = rate * seconds;
+  const buffer = Buffer.alloc(44 + samples * 2);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + samples * 2, 4);
+  buffer.write("WAVEfmt ", 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(rate, 24);
+  buffer.writeUInt32LE(rate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i += 1) buffer.writeInt16LE(Math.round(Math.sin((2 * Math.PI * frequency * i) / rate) * 16000), 44 + i * 2);
+  return buffer;
+}
 const note = (event, detail = {}) => {
   report.timeline.push({ t: Math.round((Date.now() - t0) / 100) / 10, event, ...detail });
   console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s] ${event}`, Object.keys(detail).length ? JSON.stringify(detail) : "");
@@ -86,7 +109,11 @@ const browsers = [];
 try {
   await build({ entryPoints: [resolve(root, "sdks/typescript/client/src/server/index.ts")], bundle: true, outfile: `${output}/server-client.mjs`, platform: "node", format: "esm" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(`${output}/server-client.mjs`).href);
-  const instrument = await readFile(resolve(import.meta.dirname, "media-off-resend-instrument.js"), "utf8");
+  const fakeDevice = process.env.CHALK_OFF_FAKE_DEVICE === "1";
+  const instrument = (fakeDevice ? "window.proofNativeAudio = true;\n" : "") + (await readFile(resolve(import.meta.dirname, "media-off-resend-instrument.js"), "utf8"));
+  // Chromium's own fake microphone, fed by a looping 440 Hz tone file, so capture is re-acquired like a real device.
+  const toneFile = resolve(await mkdtemp(resolve(tmpdir(), "media-off-tone-")), "tone.wav");
+  if (fakeDevice) await writeFile(toneFile, wavTone(440, 10));
   const pageBundle = (
     await build({
       entryPoints: [resolve(import.meta.dirname, "media-off-resend-page.js")],
@@ -112,7 +139,7 @@ try {
 
   const fixtureSpace = await chalk.spaces.create({ name: "Media off resend proof", slug: `off-resend-${Date.now()}`, mediaPlane: "cf_sfu", defaultEpisodeDurationSeconds: 3600, maximumEpisodeDurationSeconds: 3600 });
   const episode = await chalk.episodes.create(fixtureSpace.id, {});
-  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
+  const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", ...(fakeDevice ? [`--use-file-for-fake-audio-capture=${toneFile}`] : []), "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
   browsers.push(browser);
   const people = [];
   for (const [name, role] of [
@@ -166,7 +193,64 @@ try {
   check("baseline: B hears A", start.hears, { ...start, peers: bState.peers, remoteAudioTracks: bState.remoteAudioTracks });
   check("baseline: A shows mic enabled", (await state(a)).microphone === "enabled", { a: (await state(a)).microphone });
 
-  if (scenario === "lost-off") {
+  if (scenario === "off-on") {
+    // CHALK_OFF_GAPS_MS is a comma list: one off/on cycle per entry, each with that gap between the off and the on.
+    const gaps = (process.env.CHALK_OFF_GAPS_MS || process.env.CHALK_OFF_GAP_MS || "2000").split(",").map(Number);
+    const sample = async (label) => {
+      const senderBefore = await a.page.evaluate(() => window.proof.senderStats());
+      const receiver = await b.page.evaluate(() => window.proof.receiverStats(3000));
+      const senderAfter = await a.page.evaluate(() => window.proof.senderStats());
+      const sender = senderAfter.map((item, index) => ({ ...item, packetsSentDelta: item.packetsSent - (senderBefore[index]?.packetsSent ?? 0), bytesSentDelta: item.bytesSent - (senderBefore[index]?.bytesSent ?? 0) }));
+      note(`sample ${label}`, { sender, receiver });
+      return { sender, receiver };
+    };
+    /** Milliseconds until B decodes a real signal from A, or null when none arrives in time. */
+    const audibleSince = async (timeoutMs) => {
+      const started = Date.now();
+      for (;;) {
+        const receiver = await b.page.evaluate(() => window.proof.receiverStats(300));
+        if (receiver.some((item) => item.rmsPeak > 0.01)) return Date.now() - started;
+        if (Date.now() - started > timeoutMs) return null;
+        await sleep(500);
+      }
+    };
+    const optional = (promise) =>
+      promise.then(
+        () => true,
+        () => false,
+      );
+    const baseline = await audibleSince(40000);
+    note("baseline: B first audible", { afterMs: baseline });
+    check("baseline: B receives a decoded signal", baseline !== null, {});
+    const cycles = [];
+    for (const [index, gapMs] of gaps.entries()) {
+      const offAt = Date.now();
+      const off = await a.page.evaluate(() => window.proof.setMicrophone(false));
+      await sleep(Math.max(0, gapMs - (Date.now() - offAt)));
+      const onAt = Date.now();
+      const on = await a.page.evaluate(() => window.proof.setMicrophone(true));
+      const aEnabled = await optional(waitFor("A mic enabled again", async () => (await state(a)).microphone === "enabled", 30000));
+      const bSeesOn = aEnabled && (await optional(waitFor("B sees A mic on in Sync", async () => (await projectionOfA(b)) === true, 30000)));
+      const settledAfterMs = Date.now() - onAt;
+      const audibleAfterMs = await audibleSince(45000);
+      const mediaFetches = await a.page.evaluate(
+        (since) =>
+          window.proof
+            .fetchLog()
+            .filter((entry) => entry.at > since)
+            .map(({ path, status }) => `${path}:${status}`),
+        onAt,
+      );
+      const [senderBefore, receiver] = [await a.page.evaluate(() => window.proof.senderStats()), await b.page.evaluate(() => window.proof.receiverStats(3000))];
+      const senderAfter = await a.page.evaluate(() => window.proof.senderStats());
+      const cycle = { cycle: index + 1, gapMs, off, on, aEnabled, bSeesOn, settledAfterMs, audibleAfterMs, mediaFetches, sender: senderAfter.map((item, i) => ({ ...item, packetsSentDelta: item.packetsSent - (senderBefore[i]?.packetsSent ?? 0) })), receiver };
+      cycles.push(cycle);
+      note(`cycle ${index + 1} (gap ${gapMs} ms)`, cycle);
+      check(`cycle ${index + 1} (gap ${gapMs} ms): UI on, Sync on, and B decodes A within 45 s`, aEnabled && bSeesOn && audibleAfterMs !== null, { aEnabled, bSeesOn, audibleAfterMs, mediaFetches });
+      await sleep(1500);
+    }
+    report.cycles = cycles;
+  } else if (scenario === "lost-off") {
     await a.page.evaluate((flag) => {
       window.proof.faults.dropNextMicrophoneOff = true;
       window.proof.faults.failMediaClose = flag;
@@ -205,13 +289,15 @@ try {
     await sleep(10000);
   }
 
-  const finalA = await state(a);
-  const finalB = await state(b);
-  check("A's UI shows off", finalA.microphone === "disabled", { a: finalA.microphone });
-  check("Sync projection (as B sees it) shows A's mic off", finalB.projection[`${a.id}/microphone`] !== true, { projection: finalB.projection[`${a.id}/microphone`] });
-  check("Sync projection (as A sees it) shows A's mic off", finalA.projection[`${a.id}/microphone`] !== true, { projection: finalA.projection[`${a.id}/microphone`] });
-  const silent = await bHearsA(5000);
-  check("B no longer receives A's audio", !silent.hears, silent);
+  if (scenario !== "off-on") {
+    const finalA = await state(a);
+    const finalB = await state(b);
+    check("A's UI shows off", finalA.microphone === "disabled", { a: finalA.microphone });
+    check("Sync projection (as B sees it) shows A's mic off", finalB.projection[`${a.id}/microphone`] !== true, { projection: finalB.projection[`${a.id}/microphone`] });
+    check("Sync projection (as A sees it) shows A's mic off", finalA.projection[`${a.id}/microphone`] !== true, { projection: finalA.projection[`${a.id}/microphone`] });
+    const silent = await bHearsA(5000);
+    check("B no longer receives A's audio", !silent.hears, silent);
+  }
 
   if (scenario === "toggle") {
     await a.page.evaluate(() => {

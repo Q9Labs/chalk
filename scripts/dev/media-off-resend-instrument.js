@@ -17,7 +17,19 @@ window.fetch = (input, init) => {
     faults.failedMediaCloses += 1;
     return Promise.reject(new TypeError("injected: media close request failed"));
   }
-  return nativeFetch(input, init);
+  const path = new URL(url, location.href).pathname.split("/media/").at(-1);
+  const entry = { at: Date.now(), path };
+  (window.proofFetchLog ??= []).push(entry);
+  return nativeFetch(input, init).then(
+    (response) => {
+      entry.status = response.status;
+      return response;
+    },
+    (error) => {
+      entry.status = String(error);
+      throw error;
+    },
+  );
 };
 const key = (item) => `${item.participant_id}/${item.source}`;
 
@@ -65,6 +77,10 @@ window.RTCPeerConnection = class extends NativePeerConnection {
 
 // A steady tone makes "audio flows" measurable as receiver energy.
 navigator.mediaDevices.getUserMedia = async (constraints) => {
+  if (window.proofNativeAudio) {
+    (window.proofCaptureCalls ??= []).push(Date.now());
+    return nativeCapture(constraints);
+  }
   const stream = new MediaStream();
   if (constraints.audio) {
     const context = new AudioContext();
@@ -115,8 +131,76 @@ async function receivedAudio() {
   return { energy, packets };
 }
 
+/** Outbound audio on this page: sender track state and what actually left the encoder. */
+async function senderStats() {
+  const out = [];
+  for (const pc of peers) {
+    if (pc.connectionState === "closed") continue;
+    for (const sender of pc.getSenders()) {
+      const track = sender.track;
+      if (!track || track.kind !== "audio") continue;
+      const item = { track: { id: track.id, enabled: track.enabled, muted: track.muted, readyState: track.readyState }, transceiverDirection: pc.getTransceivers().find((t) => t.sender === sender)?.currentDirection ?? null };
+      (await sender.getStats()).forEach((stat) => {
+        if (stat.type === "outbound-rtp") Object.assign(item, { packetsSent: stat.packetsSent, bytesSent: stat.bytesSent, active: stat.active });
+        if (stat.type === "media-source") Object.assign(item, { sourceAudioLevel: stat.audioLevel, sourceTotalAudioEnergy: stat.totalAudioEnergy });
+      });
+      out.push(item);
+    }
+  }
+  return out;
+}
+
+const analysers = new WeakMap();
+/** Receiver side: inbound counters plus a real signal level read from the decoded track over a window. */
+async function receiverStats(windowMs = 0) {
+  const out = [];
+  for (const pc of peers) {
+    if (pc.connectionState === "closed") continue;
+    for (const receiver of pc.getReceivers()) {
+      const track = receiver.track;
+      if (track.kind !== "audio" || track.readyState !== "live") continue;
+      playRemoteAudio();
+      if (!analysers.has(track)) {
+        const context = new AudioContext();
+        await context.resume();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048;
+        context.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+        analysers.set(track, analyser);
+      }
+      const analyser = analysers.get(track);
+      const buffer = new Float32Array(analyser.fftSize);
+      let peak = 0;
+      let sum = 0;
+      let samples = 0;
+      const until = Date.now() + windowMs;
+      do {
+        analyser.getFloatTimeDomainData(buffer);
+        let square = 0;
+        for (const value of buffer) square += value * value;
+        const rms = Math.sqrt(square / buffer.length);
+        peak = Math.max(peak, rms);
+        sum += rms;
+        samples += 1;
+        if (windowMs) await new Promise((resolve) => setTimeout(resolve, 50));
+      } while (Date.now() < until);
+      const item = { track: { id: track.id, muted: track.muted }, rmsPeak: Number(peak.toFixed(5)), rmsMean: Number((sum / samples).toFixed(5)) };
+      (await receiver.getStats()).forEach((stat) => {
+        if (stat.type === "inbound-rtp" && (stat.kind ?? stat.mediaType) === "audio")
+          Object.assign(item, { packetsReceived: stat.packetsReceived, bytesReceived: stat.bytesReceived, totalAudioEnergy: stat.totalAudioEnergy, audioLevel: stat.audioLevel, concealedSamples: stat.concealedSamples, totalSamplesReceived: stat.totalSamplesReceived });
+      });
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 window.proof = {
   faults,
+  senderStats,
+  receiverStats,
+  fetchLog: () => window.proofFetchLog ?? [],
+  toneCount: () => (window.proofToneGraphs ?? []).length + (window.proofCaptureCalls ?? []).length,
   receivedAudio,
   state() {
     const snapshot = window.proofClient.getSnapshot();
