@@ -168,6 +168,32 @@ describe("media capture ownership", () => {
     }
   });
 
+  it("mutes the microphone by pausing capture, releasing the device and keeping the publication", async () => {
+    const pauseLocalCapture = vi.fn(async () => undefined);
+    const closeForcedLocalPublication = vi.fn(async () => undefined);
+    const clearPreparedLocalTrack = vi.fn(async () => undefined);
+    const { client, track, capture, command, setEnabled } = createConvergenceScenario("microphone", { media: { pauseLocalCapture, closeForcedLocalPublication, clearPreparedLocalTrack } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      expect(capture).toHaveBeenCalledOnce();
+      await setEnabled(false);
+      expect(pauseLocalCapture).toHaveBeenCalledExactlyOnceWith("microphone");
+      expect(clearPreparedLocalTrack).toHaveBeenCalledWith("microphone");
+      expect(closeForcedLocalPublication).not.toHaveBeenCalled();
+      expect(track.enabled).toBe(false);
+      expect(track.stop).toHaveBeenCalled();
+      await client.media.selectMicrophone("usb-headset");
+      await setEnabled(true);
+      expect(capture).toHaveBeenCalledTimes(2);
+      expect(capture).toHaveBeenLastCalledWith(expect.objectContaining({ audio: { deviceId: { exact: "usb-headset" } } }));
+      expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, false, true]);
+      expect(closeForcedLocalPublication).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("a rejected duplicate join does not change active media", async () => {
     const { client, track, setEnabled } = createConvergenceScenario("microphone");
     try {

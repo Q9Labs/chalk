@@ -1,5 +1,6 @@
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { ReceiveStallRecovery } from "./receive-stall";
+import { createSilentAudio, type SilentAudio } from "./silent-audio";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { subscribeSnapshot } from "./observers";
@@ -48,6 +49,7 @@ const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
+const REPUBLISH_COOLDOWN_MS = 30_000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 const VIEWER_LAYER_BATCH_SIZE = 16;
@@ -63,6 +65,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
+  readonly #createSilentAudio: () => Promise<SilentAudio | null>;
   readonly #pollIntervalMs: number;
   readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -71,6 +74,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #locallyPausedSources = new Map<MediaPublicationSource, LocalPublicationRetirementCause>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
+  readonly #lastRepublishAt = new Map<MediaPublicationSource, number>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -79,6 +83,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #retiredLocalCause: LocalPublicationRetirementCause = "forced_pause";
   #replacementCause: MediaConnectionReplacementCause | undefined;
+  #silentAudio: SilentAudio | null = null;
+  #silentAudioRequested = false;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
@@ -116,6 +122,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
+    this.#createSilentAudio = options.createSilentAudio ?? createSilentAudio;
     this.#connection = this.#createPeerConnection(options.bootstrap);
     this.#snapshot = freezeSnapshot({
       connection: { phase: "idle", peerConnectionState: this.#connection.connectionState, iceConnectionState: this.#connection.iceConnectionState },
@@ -175,6 +182,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       track.addEventListener("ended", state.endedListener);
     }
     this.#localTracks.set(source, state);
+    if (source === "microphone") this.#warmSilentAudio();
     this.#publishSnapshot();
     this.#emitLocal();
   }
@@ -243,6 +251,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const transport = this.#requireTransport();
       const authoritative = await this.#signal(() => transport.listPublications());
       this.#requireGeneration(generation);
+      await this.#republishUnlistedLocalPublications(authoritative, generation);
       await this.#reconcileRemotePublications(authoritative, generation);
       this.#requireGeneration(generation);
       if (!this.#remotePullIncomplete) this.#pollFailures = 0;
@@ -251,6 +260,31 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     } finally {
       this.#finishPublicationPoll(generation);
+    }
+  }
+  // The registry drops a publication when listeners keep failing to pull it.
+  // A publisher that still believes it is sending must publish again, so
+  // listeners get a new publication ID instead of retrying a dead one.
+  async #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
+    const unlisted = [...this.#localTracks.values()].filter(
+      (state) =>
+        (state.source === "microphone" || state.source === "camera") &&
+        state.enabled &&
+        state.desiredEnabled &&
+        state.providerPublicationId !== null &&
+        !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId) &&
+        Date.now() - (this.#lastRepublishAt.get(state.source) ?? Number.NEGATIVE_INFINITY) >= REPUBLISH_COOLDOWN_MS,
+    );
+    for (const state of unlisted) {
+      this.#lastRepublishAt.set(state.source, Date.now());
+      try {
+        // Lists again, so a snapshot that predates the publish cannot trigger a republish.
+        await this.#retireUnavailableLocalPublication(state);
+        this.#requireGeneration(generation);
+        if (state.providerPublicationId === null && this.#localTracks.get(state.source) === state) await this.#enablePreparedTrack(state);
+      } catch (error) {
+        if (generation === this.#generation && !this.#stopped) this.#reportError(error);
+      }
     }
   }
   #finishPublicationPoll(generation: number): void {
@@ -530,6 +564,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#localTracks.clear();
     void this.#retireOwnedPublications();
+    this.#silentAudio?.dispose();
+    this.#silentAudio = null;
     this.#started = false;
     this.#cursor = null;
     this.#publishSnapshot("stopped", null);
@@ -598,15 +634,39 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitLocal();
     return state.enabled;
   }
-  async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
-    const transceiver = state.transceiver;
+  // Start the audio graph while the join or unmute gesture is still fresh. A mute
+  // before it is ready, or on a platform without it, detaches the sender instead.
+  #warmSilentAudio(): void {
+    if (this.#silentAudioRequested) return;
+    this.#silentAudioRequested = true;
+    void this.#createSilentAudio().then(
+      (silence) => {
+        if (this.#stopped) silence?.dispose();
+        else this.#silentAudio = silence;
+        // A platform that refused to start the graph may allow it at the next gesture.
+        this.#silentAudioRequested = silence !== null;
+      },
+      (error: unknown) => {
+        this.#silentAudioRequested = false;
+        this.#reportError(error);
+      },
+    );
+  }
+  #markDetached(transceiver: RTCRtpTransceiver | null): void {
     for (const publication of this.#ownedPublications) {
       if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
     }
+  }
+  async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
+    const transceiver = state.transceiver;
+    // A muted microphone keeps sending silence, so the provider never sees the
+    // 30 second RTP gap that expires a detached track and the publication ID survives.
+    const silence = state.source === "microphone" ? this.#silentAudio : null;
+    if (!silence) this.#markDetached(transceiver);
     state.desiredEnabled = false;
     state.track.enabled = false;
     // Queue the detach before notifying consumers, but never wait to expose off.
-    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
+    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(silence?.track ?? null)) : Promise.resolve();
     state.enabled = false;
     this.#publishSnapshot();
     this.#emitLocal();
