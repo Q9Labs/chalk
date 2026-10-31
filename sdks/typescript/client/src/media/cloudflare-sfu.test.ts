@@ -351,6 +351,8 @@ it("drops a stale registry recovery after its re-list still contains the publica
     h.transport.publicationListSnapshots.push({ incarnation: 1, sequence: 102, publications: [] }, { incarnation: 1, sequence: 103, publications: listed });
     await h.client.refreshRemotePublications();
     await vi.advanceTimersByTimeAsync(0);
+    expect(h.transport.listPublicationCalls).toBe(callsBefore + 1);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(h.transport.listPublicationCalls).toBe(callsBefore + 2);
     expect(h.transport.closeInputs).toHaveLength(0);
     expect(localAddCount(h, "microphone")).toBe(addsBefore);
@@ -2634,15 +2636,15 @@ describe("remote publication recovery", () => {
 
         harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
         await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-        // The server drops the replaced connection's publications and advances its sequence.
-        harness.transport.localPublications.clear();
+        // The server withdraws publications from the replaced connection before retrying pulls.
+        for (const publicationId of [...harness.transport.localPublications.keys()]) harness.transport.withdrawPublication(publicationId);
         harness.transport.snapshot = publicationSnapshot(1, 2, "remote|missing");
         const remoteAttempts = () => vi.mocked(harness.transport.addTracks).mock.calls.filter(([input]) => input.tracks.some((track) => track.location === "remote")).length;
         const attemptsBeforeRetry = remoteAttempts();
         await vi.advanceTimersByTimeAsync(120_000);
         expect(remoteAttempts()).toBeGreaterThan(attemptsBeforeRetry);
-        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
-        expect(harness.peers).toHaveLength(2);
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(harness.peers).toHaveLength(3);
       },
       { replaceMediaConnection },
     );
@@ -3499,6 +3501,7 @@ function createHarness(
 class FakeTransport implements CloudflareSFUSignalingTransport {
   uniqueRemoteMids = false;
   #nextRemoteMid = 0;
+  #localPublicationRevision = 0;
   readonly addInputs: {
     readonly connectionId: string;
     readonly sessionDescription?: CloudflareSFUSessionDescription;
@@ -3548,7 +3551,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
       }
-      const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`)).map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
+      const tracks = input.tracks
+        .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`))
+        .map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
       const trackErrors = input.tracks.flatMap((track) => {
         const code = this.failedRemoteTrackNames.get(track.trackName) ?? (this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`) ? "publication_unavailable" : undefined);
         return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
@@ -3580,6 +3585,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
       if (track.source) {
         this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
         this.#withdrawnLocalPublications.delete(track.publicationId);
+        this.#localPublicationRevision++;
       }
     }
     return {
@@ -3592,7 +3598,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
       throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
     }
-    for (const track of input.tracks) this.localPublications.delete(track.publicationId);
+    for (const track of input.tracks) {
+      if (this.localPublications.delete(track.publicationId)) this.#localPublicationRevision++;
+    }
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
   }
   withdrawPublication(publicationId: string): void {
@@ -3600,6 +3608,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (!publication) return;
     const { connectionId, trackName } = parseCloudflareSFUPublicationID(publicationId);
     this.localPublications.delete(publicationId);
+    this.#localPublicationRevision++;
     this.#withdrawnLocalPublications.add(publicationId);
     this.#withdrawnRemoteTrackKeys.add(`${connectionId}|${trackName}`);
   }
@@ -3617,7 +3626,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     this.listPublicationCalls++;
     const next = this.publicationListSnapshots.shift();
     if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
-    return next ?? { ...this.snapshot, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
+    return next ?? { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
   }
   blockConnection(connectionId: string): void {
     this.#blockedConnections.set(connectionId, () => undefined);
