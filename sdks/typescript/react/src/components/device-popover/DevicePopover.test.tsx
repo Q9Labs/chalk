@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { getCameraBackground, setCameraBackground } from "@q9labsai/chalk-client";
 import { expect, it, vi } from "vitest";
 import { DevicePopover } from "./DevicePopover";
 
@@ -51,6 +52,36 @@ it("refreshes the open preview when its published camera is disabled", async () 
     const preview = document.querySelector("video")?.srcObject;
     if (!(preview instanceof MediaStream)) throw new Error("Preview stream missing");
     expect(preview.getVideoTracks()[0]?.enabled).toBe(true);
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("clears a saved background from the picker after its preview fails, then retries the camera", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await setCameraBackground("camera-blocked", "blur");
+  const videoTrack = track("video");
+  const captureCameraPreview = vi.fn(async () => {
+    if (getCameraBackground("camera-blocked") !== "none") throw new Error("Background model blocked");
+    return { track: videoTrack, release: () => {} };
+  });
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<DevicePopover type="video" isActive={false} onToggle={() => {}} devices={[]} selectedDeviceId="camera-blocked" onDeviceChange={() => {}} captureCameraPreview={captureCameraPreview} />));
+    await act(async () => element.querySelector<HTMLButtonElement>('button[aria-label="Select camera"]')?.click());
+    expect(document.body.textContent).toContain("Camera preview unavailable");
+    const none = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"], [role="menuitem"], [role="menuitemradio"]')].find((item) => item.textContent === "None");
+    if (!none) throw new Error("Background choices missing after the failed preview");
+    await act(async () => none.click());
+    expect(getCameraBackground("camera-blocked")).toBe("none");
+    expect(localStorage.getItem("chalk_camera_background:camera-blocked")).toBe("none");
+    expect(captureCameraPreview).toHaveBeenCalledTimes(2);
+    expect(document.body.textContent).toContain("Only you see this preview");
+    expect(document.querySelector("video")?.srcObject).toBeInstanceOf(MediaStream);
   } finally {
     await act(async () => root.unmount());
     element.remove();

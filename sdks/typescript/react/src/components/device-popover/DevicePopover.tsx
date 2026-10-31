@@ -1,7 +1,7 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -77,8 +77,12 @@ function CameraPreview({
   selectedDeviceId,
   captureCameraPreview,
   onDeviceId,
+  onFailed,
+  attempt,
 }: {
   readonly onDeviceId: (deviceId: string | null) => void;
+  readonly onFailed: (failed: boolean) => void;
+  readonly attempt: number;
   readonly track?: MediaStreamTrack | null;
   readonly mirrored: boolean;
   readonly open: boolean;
@@ -96,6 +100,7 @@ function CameraPreview({
     let preview: CameraPreviewHandle | undefined;
     setUnavailable(false);
     onDeviceId(null);
+    onFailed(false);
     if (captureCameraPreview) {
       void captureCameraPreview().then(
         (captured) => {
@@ -108,7 +113,9 @@ function CameraPreview({
           element.srcObject = new MediaStream([captured.track]);
         },
         () => {
-          if (!cancelled) setUnavailable(true);
+          if (cancelled) return;
+          setUnavailable(true);
+          onFailed(true);
         },
       );
     } else if (track?.enabled && track.readyState === "live") {
@@ -122,7 +129,7 @@ function CameraPreview({
       element.srcObject = null;
       preview?.release();
     };
-  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId]);
+  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId, onFailed, attempt]);
   return (
     <>
       <div className="chalk-shell-preview">
@@ -174,6 +181,9 @@ export function DevicePopover({
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
+  const retryPreview = useCallback(() => setPreviewAttempt((attempt) => attempt + 1), []);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
     subscribeCameraBackground,
@@ -212,7 +222,7 @@ export function DevicePopover({
           </button>
         }
       >
-        {!mic ? <CameraPreview onDeviceId={setPreviewDeviceId} track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
+        {!mic ? <CameraPreview onDeviceId={setPreviewDeviceId} onFailed={setPreviewFailed} attempt={previewAttempt} track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (
@@ -245,6 +255,7 @@ export function DevicePopover({
           <>
             <Menu.Separator className="chalk-shell-menu-separator" />
             {open && previewDeviceId ? <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} /> : null}
+            {open && previewFailed ? <CameraBackgroundPicker key={`failed-${deviceId}`} deviceId={deviceId} onRecover={retryPreview} /> : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
           </>
         )}

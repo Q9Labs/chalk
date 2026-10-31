@@ -2,7 +2,8 @@ import { CAMERA_BACKGROUND_OPTIONS, cameraBackgroundAvailable, getCameraBackgrou
 import { useState, useSyncExternalStore } from "react";
 import { ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
 
-export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string }) {
+/** With `onRecover`, the picker clears or swaps a saved choice whose preview failed to start, then retries it. */
+export function CameraBackgroundPicker({ deviceId, onRecover }: { readonly deviceId: string; readonly onRecover?: () => void }) {
   const selected = useSyncExternalStore(
     subscribeCameraBackground,
     () => getCameraBackground(deviceId),
@@ -10,12 +11,13 @@ export function CameraBackgroundPicker({ deviceId }: { readonly deviceId: string
   );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!cameraBackgroundAvailable(deviceId)) return null;
+  if (onRecover ? selected === "none" && !busy : !cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
     setBusy(true);
     setFailed(false);
     try {
       await setCameraBackground(deviceId, background);
+      onRecover?.();
     } catch {
       setFailed(true);
     } finally {
