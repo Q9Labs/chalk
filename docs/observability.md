@@ -181,12 +181,17 @@ state on the next sample; shutdown clears it too. These process-local diagnostic
 reset on API restart and assume pulls for an Episode reach the same API process.
 
 Pull observations do not read the database or write logs. They retain bounded,
-hashed track-identity results until the sampler can match them to a publication,
-including pulls completed before its first sample. Results are keyed by listener
-generation and connection and expire after two minutes. Results bind to the
-request's publication reference when available, otherwise to the last sampled
-publication identity. Results for tracks not yet sampled are consumed on their
-first match, so a replacement cannot inherit an earlier publication's success.
+hashed publication-identity results, including pulls completed before the first
+sample. Results are keyed by listener generation and connection and expire after
+two minutes. Results bind to the request's publication reference when available,
+otherwise to an in-memory identity snapshot fed by committed publication writes.
+The write hook performs no extra reads or logging and cannot fail the publication
+write when diagnostic capacity is exhausted. The sampler also refreshes identity
+snapshots; an older incarnation/sequence cannot overwrite a newer commit. These
+snapshots retain at most 128 Episodes and 128 hashed identities per Episode and
+expire after two minutes without a refresh. A pull with no known publication
+identity is not credited to a later publication. Reusing a publisher connection
+and track name therefore does not transfer success to a replacement publication.
 Episode reconciliation and event collection share one per-Episode lock; payloads
 are emitted after unlocking, so a slow log sink does not hold up pull observations.
 

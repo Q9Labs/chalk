@@ -37,13 +37,20 @@ func newReceiveHealthFixture(t *testing.T) *receiveHealthFixture {
 	t.Helper()
 	f := &receiveHealthFixture{now: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC), repository: &receiveHealthRepositoryStub{}}
 	f.service = newService(f.repository, func() time.Time { return f.now })
-	tenant, episode, publisher, _ := publishRemoteObservationFixture(t, f.service, &f.repository.reconciliationRepositoryStub)
+	tenant := reconciliationTestID(t, "11111111-1111-4111-8111-111111111111")
+	episode := reconciliationTestID(t, "22222222-2222-4222-8222-222222222222")
+	publisher := reconciliationTestID(t, "33333333-3333-4333-8333-333333333333")
 	listener := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
 	key := ReceiveHealthEpisode{TenantID: tenant, EpisodeID: episode, SpaceID: reconciliationTestID(t, "55555555-5555-4555-8555-555555555555")}
 	f.repository.episodes = []ReceiveHealthEpisode{key}
 	f.repository.participants = []PublicationParticipant{{ID: publisher, Generation: 1, ConnectionID: "publisher-connection"}, {ID: listener, Generation: 1, ConnectionID: "listener-connection"}}
-	// The publishing fixture uses camera; receive health follows audio only.
-	f.repository.observations[0].Publications[0].Source = "microphone"
+	_, err := f.service.RecordPublishedTracks(context.Background(), RecordInput{
+		TenantID: tenant, EpisodeID: episode, ParticipantID: publisher, ParticipantGeneration: 1, ConnectionID: "publisher-connection",
+		Tracks: []PublishedTrack{{Source: "microphone", MID: "camera-mid", TrackName: "camera-track"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	reference, err := ParseReference(f.repository.observations[0].Publications[0].PublicationID)
 	if err != nil {
 		t.Fatal(err)
@@ -270,10 +277,14 @@ func TestReceiveHealthReplacementListenerNeedsNewPullAndRejectsLateSuccess(t *te
 
 func TestReceiveHealthPartialResponseCountsEachTrackIndependently(t *testing.T) {
 	f := newReceiveHealthFixture(t)
-	publication := f.repository.observations[0].Publications[0]
-	publication.PublicationID = encodeReference(f.input.Requested[0].SessionID, "screen-mid", "screen-audio", 1)
-	publication.Source = "screen_audio"
-	f.repository.observations[0].Publications = append(f.repository.observations[0].Publications, publication)
+	_, err := f.service.RecordPublishedTracks(context.Background(), RecordInput{
+		TenantID: f.input.TenantID, EpisodeID: f.input.EpisodeID, ParticipantID: f.repository.participants[0].ID,
+		ParticipantGeneration: 1, ConnectionID: f.input.Requested[0].SessionID,
+		Tracks: []PublishedTrack{{Source: "screen_audio", MID: "screen-mid", TrackName: "screen-audio"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	f.input.Requested = append(f.input.Requested, mediaplane.Track{Location: "remote", SessionID: f.input.Requested[0].SessionID, TrackName: "screen-audio"})
 	f.success()
 	f.sample(time.Minute)

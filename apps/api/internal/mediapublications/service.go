@@ -142,6 +142,7 @@ func (s Service) RecordPublicationAvailability(ctx context.Context, input Availa
 		}
 		next := provideroperations.ObservationInput{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: latest.Incarnation, Sequence: latest.Sequence + 1, Publications: publications}
 		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+			s.receiveHealth.recordPublications(next)
 			return nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return fmt.Errorf("append media publication availability: %w", err)
@@ -216,6 +217,7 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 		// Retirement changes the snapshot, so it must advance the cursor too.
 		next := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: latest.Incarnation, Sequence: latest.Sequence + 1, Publications: publications}
 		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+			s.receiveHealth.recordPublications(next)
 			return Snapshot{Incarnation: next.Incarnation, Sequence: next.Sequence, Publications: publications}, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return Snapshot{}, fmt.Errorf("retire media publications: %w", err)
@@ -248,6 +250,7 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		}
 		next := merge(latest, input, references)
 		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
+			s.receiveHealth.recordPublications(next)
 			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return nil, fmt.Errorf("append media publication observation: %w", err)
@@ -313,6 +316,7 @@ func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) 
 			return ErrInvalidPublication
 		}
 		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
+			s.receiveHealth.recordPublications(next)
 			outcome = "confirmed"
 			return nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
