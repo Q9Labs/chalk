@@ -62,6 +62,21 @@ function silentEpisodes(run, series, from, to) {
   return episodes;
 }
 
+// Times (ms since run start) at which a participant's SFU session changed after its first one.
+function sessionChanges(run, participant) {
+  const times = [];
+  let highest = 0;
+  for (const entry of run.network) {
+    if (entry.participant !== participant || !entry.connectionNumber) continue;
+    if (entry.connectionNumber > highest) {
+      if (highest > 0) times.push(entry.at);
+      highest = entry.connectionNumber;
+    }
+  }
+  return times;
+}
+const REAL_SILENCE = 2; // seconds; the 1 s sampling makes anything shorter a normal join or heal
+
 const wilson = (k, n) => {
   if (!n) return [NaN, NaN];
   const z = 1.96;
@@ -132,6 +147,7 @@ files.forEach((file, fileIndex) => {
       pulls: 0,
       trackErrors: 0,
       errorShapes: new Map(),
+      reconnect: { pairs: 0, recovered: 0, openAtEnd: 0, heal: [] },
       s503: 0,
       injected503: 0,
       listenerKills: 0,
@@ -193,6 +209,16 @@ files.forEach((file, fileIndex) => {
           const silent = heard === null || heard > deadline;
           const episodes = silentEpisodes(run, series, enabled.t, end);
           const worst = episodes.reduce((max, episode) => Math.max(max, episode.end - episode.start), 0);
+          const changes = [...sessionChanges(run, listener), ...sessionChanges(run, speaker)];
+          const atMs = (seconds) => run.samples.find((sample) => sample.t >= seconds)?.atMs ?? Infinity;
+          const reconnected = episodes.filter((episode) => episode.end - episode.start > REAL_SILENCE && changes.some((time) => time >= atMs(episode.start) - 3000 && time <= atMs(episode.end) + 1000));
+          if (reconnected.length) {
+            cell.reconnect.pairs++;
+            if (reconnected.every((episode) => !episode.open)) {
+              cell.reconnect.recovered++;
+              cell.reconnect.heal.push(Math.max(...reconnected.map((episode) => episode.end - episode.start)));
+            } else cell.reconnect.openAtEnd++;
+          }
           const bucket = action.first ? cell.first : cell.again;
           cell.pairs++;
           bucket.pairs++;
@@ -259,6 +285,7 @@ const summaries = rows.map((cell) => ({
   pulls: cell.pulls,
   pullsWithTrackErrors: cell.trackErrors,
   trackErrorShapes: Object.fromEntries(cell.errorShapes),
+  reconnect: `${cell.reconnect.pairs} pairs, ${cell.reconnect.recovered} recovered (heal p50 ${quantile(cell.reconnect.heal, 0.5).toFixed(1)} s, max ${cell.reconnect.heal.length ? Math.max(...cell.reconnect.heal).toFixed(1) : "-"} s), ${cell.reconnect.openAtEnd} still silent at run end`,
   injected503: cell.injected503,
   listenerKills: `${cell.listenerKillsClosed}/${cell.listenerKills}`,
   publisherKills: cell.kills,
@@ -276,7 +303,7 @@ if (asJson) {
     );
   for (const s of summaries) {
     console.log(
-      `\n${s.build} | ${s.condition}: rooms dropped for a stall ${s.stalledRooms}, errored ${s.erroredRooms}, first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}`,
+      `\n${s.build} | ${s.condition}: rooms dropped for a stall ${s.stalledRooms}, errored ${s.erroredRooms}, first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}; reconnect: ${s.reconnect}`,
     );
     for (const [stage, count] of Object.entries(s.stagesSilent)) console.log(`  silent pairs by furthest stage: ${stage}: ${count}`);
   }
