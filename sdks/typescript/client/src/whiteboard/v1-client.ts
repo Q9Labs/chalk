@@ -33,6 +33,11 @@ const MAX_TIMER_DRIFT_MS = 250;
 const MAX_SLOW_CONNECTION_BACKOFF_MS = 4_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+function reconnectDelay(configuredDelay: number | undefined, attempt: number, random: () => number): number {
+  if (configuredDelay === 0) return 0;
+  const base = Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(attempt, 5));
+  return Math.round(base * (0.5 + 0.5 * random()));
+}
 /** Matches the retries the hello ladder used to give a rejected token, so a key rotation or clock skew still clears up. */
 const MAX_REJECTED_HELLO_RETRIES = 4;
 type ClientPhase = "idle" | "connecting" | "authenticating" | "live" | "stopped";
@@ -1052,7 +1057,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #scheduleReconnect(): void {
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    const delay = reconnectDelay(configuredDelay, this.#reconnectAttempt, this.#options.random ?? Math.random);
     this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
