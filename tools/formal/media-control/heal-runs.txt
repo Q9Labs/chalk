@@ -1,0 +1,48 @@
+# name | check | expect | overrides of the default constants in run.sh (KEY=VALUE, space separated)
+# The defaults are the decided design: heal loop with retry cap, flat drop, receive reconnect, no give-up,
+# and the server dead-publication path; off keeps the publication (#716). Bounds: 1 listener, 4 publications,
+# 2 user actions, each fault kind at most once, at most 2 faults together.
+# Decided design, with the proposed recovery rule (RecoveryPause="grant"): every property holds.
+heal-decided-safety        | safety | pass |
+heal-decided-P5src         | P5src  | pass |
+heal-decided-P5            | P5     | pass |
+heal-decided-P4h           | P4h    | pass |
+heal-decided-S5c           | S5c    | pass |
+# The recovery rule. "item" is what the SDK on master does (#pauseRecoveredIntents pauses a device
+# whose Sync item is not enabled); it leaves the microphone off for good when the first publication
+# is not yet listed or the dead path has just removed it. "grant" pauses only on a moderation pause.
+heal-sdk-today-P5src       | P5src  | violated | RecoveryPause="item"
+heal-sdk-today-W4          | W4     | violated | RecoveryPause="item"
+heal-decided-W4            | W4     | pass |
+heal-witness-W5            | W5     | violated |
+# A host mute that arrives during a reconnect must still stop capture.
+heal-hostmute-grant-safety | safety | pass | MaxHostMute=1
+heal-hostmute-grant-P1d    | P1d    | pass | MaxHostMute=1
+heal-hostmute-item-P1d     | P1d    | pass | MaxHostMute=1 RecoveryPause="item"
+heal-hostmute-none-P1d     | P1d    | violated | MaxHostMute=1 RecoveryPause="none"
+# The same design with the other settings the code may have.
+heal-retire-on-off-P5src   | P5src  | pass | MuteKeepsPublication=FALSE
+heal-selfdetect-P5src      | P5src  | pass | PublisherSelfDetect=TRUE
+heal-nogc-selfdetect-P5src | P5src  | pass | SfuExpiresStale=FALSE PublisherSelfDetect=TRUE
+# A listener's roster can be older than Sync's: it may pull a publication Sync already lists as dead.
+heal-S5b-stale-roster      | S5b    | violated |
+# Mutants: each removes one mechanism and must break the property it exists for.
+mutant-heal-nodead-P5src   | P5src  | violated | DeadPath=FALSE
+mutant-heal-noflat-P5src   | P5src  | violated | FlatDrop=FALSE
+mutant-heal-norecv-P5src   | P5src  | violated | RecvReconnect=FALSE
+mutant-heal-giveup-P5src   | P5src  | violated | GiveUpAfter=2
+mutant-heal-nocap-P6       | P6     | violated | RetryCap=FALSE
+mutant-heal-nocap-P5src    | P5src  | pass | RetryCap=FALSE
+mutant-heal-nogc-P5src     | P5src  | violated | SfuExpiresStale=FALSE
+# Witnesses: the states the properties talk about are reachable.
+heal-witness-W1            | W1     | violated |
+heal-witness-W2            | W2     | violated |
+heal-witness-W3            | W3     | violated | 
+# Deeper bounds (run with DEEP=1): three faults together, two listeners. The liveness rows use one
+# user action (MaxToggle=1) so they fit in 8 GB; the safety rows keep two. Two listeners at the default
+# bounds did not finish in 80 minutes on 8 GB, so those rows allow one fault and three publications.
+deep-heal-P5src-faults3    | P5src  | pass | MaxFaults=3 MaxToggle=1
+deep-heal-safety-faults3   | safety | pass | MaxFaults=3
+deep-heal-P5src-2listeners | P5src  | pass | Listeners={l1,l2} MaxToggle=1 MaxFaults=1 MaxGen=3
+deep-heal-safety-2listeners| safety | pass | Listeners={l1,l2} MaxToggle=1 MaxFaults=1 MaxGen=3
+deep-heal-S5c-2listeners   | S5c    | pass | Listeners={l1,l2} MaxToggle=1 MaxFaults=1 MaxGen=3
