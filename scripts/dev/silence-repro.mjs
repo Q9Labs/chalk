@@ -92,33 +92,26 @@ async function publishedClient(version) {
 const sh = (command) => execFileSync("sh", ["-c", command], { encoding: "utf8" });
 const defaultInterface = () => sh("ip route show default | awk '{print $5; exit}'").trim();
 const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" });
-// Remote IPv4 peers of connections open right now (the box's control channel, our shell) stay unshaped.
-const exemptAddresses = () => [
-  ...new Set(
-    sh("ss -Htn state established | awk '{print $4}'")
-      .split("\n")
-      .map((peer) => peer.replace(/:\d+$/u, ""))
-      .filter((address) => /^\d+\.\d+\.\d+\.\d+$/u.test(address) && !address.startsWith("127.")),
-  ),
-];
-// Egress: prio qdisc, exempt peers in band 1, everything else through netem in band 3. Ingress: redirect to ifb0 and shape there.
+// Only UDP is shaped, which is Chromium's WebRTC media path to the SFU (DNS and NTP excluded). TCP stays clean: the local
+// API's own calls to Cloudflare are a datacenter link in production, and the box's control channel must keep working.
+// Egress: prio qdisc, UDP through netem in band 3, the rest in band 1. Ingress: UDP is redirected to ifb0 and shaped there.
 const setNetem = (profile) => {
   clearNetem();
-  if (!profile) return [];
+  if (!profile) return;
   const dev = defaultInterface();
-  const exempt = exemptAddresses();
-  tc("qdisc", "add", "dev", dev, "root", "handle", "1:", "prio", "bands", "3", "priomap", ...Array(16).fill("2"));
+  const unshapedUdpPorts = ["53", "123"];
+  tc("qdisc", "add", "dev", dev, "root", "handle", "1:", "prio", "bands", "3", "priomap", ...Array(16).fill("0"));
   tc("qdisc", "add", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...profile.egress.split(" "));
-  for (const address of exempt) tc("filter", "add", "dev", dev, "parent", "1:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "dst", `${address}/32`, "flowid", "1:1");
+  for (const port of unshapedUdpPorts) tc("filter", "add", "dev", dev, "parent", "1:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "protocol", "17", "0xff", "match", "ip", "dport", port, "0xffff", "flowid", "1:1");
+  tc("filter", "add", "dev", dev, "parent", "1:", "protocol", "ip", "prio", "2", "u32", "match", "ip", "protocol", "17", "0xff", "flowid", "1:3");
   try {
     execFileSync("sudo", ["ip", "link", "add", "ifb0", "type", "ifb"], { stdio: "pipe" });
   } catch {} // already exists
   execFileSync("sudo", ["ip", "link", "set", "ifb0", "up"]);
   tc("qdisc", "add", "dev", dev, "handle", "ffff:", "ingress");
-  for (const address of exempt) tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "src", `${address}/32`, "action", "pass");
-  tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "all", "prio", "2", "u32", "match", "u32", "0", "0", "action", "mirred", "egress", "redirect", "dev", "ifb0");
+  for (const port of unshapedUdpPorts) tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "protocol", "17", "0xff", "match", "ip", "sport", port, "0xffff", "action", "pass");
+  tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "ip", "prio", "2", "u32", "match", "ip", "protocol", "17", "0xff", "action", "mirred", "egress", "redirect", "dev", "ifb0");
   tc("qdisc", "add", "dev", "ifb0", "root", "netem", ...profile.ingress.split(" "));
-  return exempt;
 };
 const clearNetem = () => {
   const dev = defaultInterface();
@@ -314,7 +307,7 @@ async function runBuild(name) {
         };
         report.runs.push(run);
         try {
-          run.exemptPeers = setNetem(condition.profile).length;
+          setNetem(condition.profile);
           await runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName });
         } catch (error) {
           run.error = error.message;
