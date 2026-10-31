@@ -66,7 +66,10 @@ describe("per-publication receive recovery", () => {
   });
   it("excludes muted speakers and intentionally off sources", () => {
     const recovery = stalledRecovery();
-    recovery.expect(publications.map((publication) => ({ ...publication, enabled: publication.publicationId === "healthy" })), "listener");
+    recovery.expect(
+      publications.map((publication) => ({ ...publication, enabled: publication.publicationId === "healthy" })),
+      "listener",
+    );
     for (let now = 21_000; now <= 60_000; now += 1000) sampleRecovery(recovery, now);
     expect(recovery.isStalled("stalled")).toBe(false);
     expect(recovery.canRepull("stalled")).toBe(false);

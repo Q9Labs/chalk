@@ -25,7 +25,7 @@ func TestReceiveCloseVerifiesEveryMIDBeforeMutation(t *testing.T) {
     w.Header().Set("Content-Type", "application/json")
     switch r.Method {
     case http.MethodGet:
-     if r.URL.Path != "/sessions/listener" { t.Errorf("unexpected session %s", r.URL.Path) }
+     if r.URL.Path != "/apps/app/sessions/listener" { t.Errorf("unexpected session %s", r.URL.Path) }
      fmt.Fprintf(w, `{"tracks":%s}`, test.tracks)
     case http.MethodPut:
      closes++
