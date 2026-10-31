@@ -73,6 +73,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           session_description: input.sessionDescription,
           tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
           force: input.force,
+          ...(input.receiveOnly ? { receive_only: true } : {}),
         }),
       }),
     renegotiate: async (input) => {
