@@ -1,0 +1,38 @@
+# Cloudflare SFU and TURN egress check
+
+Realtime SFU and TURN share one 1,000 GB monthly free allowance and cost USD
+0.05 per GB past it
+([pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/)).
+Cloudflare's usage alert (`billing_usage_alert`) lists no Realtime product, and
+the pinned OpenTofu provider cannot create a budget alert, so this job reads
+the numbers itself.
+
+`egress-check.mjs` runs daily from
+the [egress check workflow](../../.github/workflows/cloudflare-egress-check.yml).
+It sums SFU and TURN egress from Cloudflare GraphQL analytics
+(`callsUsageAdaptiveGroups` and `callsTurnUsageAdaptiveGroups`) and posts to the
+Oncall webhook when:
+
+- the last 24 hours sent 100 GB or more (about 9 Mbps sustained; a 200 Mbps
+  flood costs about USD 58 past the allowance in one day), or
+- the month-to-date total crossed 500 GB or 800 GB since the previous run, so
+  each threshold fires once a month.
+
+A crossed limit also fails the run, so GitHub emails the failure. A query or
+webhook failure fails the run the same way. A GB is 10^9 bytes.
+
+The workflow reads the repository variable `CLOUDFLARE_ACCOUNT_ID` and the
+secrets `CLOUDFLARE_ANALYTICS_TOKEN` (read-only analytics) and
+`ONCALL_WEBHOOK_URL`. Their values live in 1Password vault `dev`.
+
+Run the workflow by hand with `drill` set to send one marked test to Oncall.
+Oncall acts on a payload only for an app and check in its registry, so the key
+`cloudflare-sfu-turn-egress-*` needs a matching registry entry; until then Oncall
+records the alert as unconfirmed.
+
+```sh
+node --test infrastructure/cloudflare-egress-alert/egress-check.test.mjs
+```
+
+To undo, delete the workflow file and this folder, and remove the two secrets
+and the variable.
