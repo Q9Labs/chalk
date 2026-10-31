@@ -310,6 +310,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           if (connectionId) connections[index].add(connectionId);
           const entry = {
             at: Date.now() - origin,
+            startedAt: Math.round(response.request().timing().startTime - origin),
             participant: index,
             method: response.request().method(),
             path: path.replace(/\/[0-9a-f-]{20,}/gu, "/:id"),
