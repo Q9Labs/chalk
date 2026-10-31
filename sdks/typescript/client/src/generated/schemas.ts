@@ -196,6 +196,22 @@ export const CloudflareSFUCloseTracksRequestSchema = Schema.Struct({
 });
 export type CloudflareSFUCloseTracksRequest = typeof CloudflareSFUCloseTracksRequestSchema.Type;
 
+export const CloudflareSFUPublicationsAvailableRequestSchema = Schema.Struct({
+  connection_id: Schema.String.check(Schema.isMinLength(1)),
+  tracks: Schema.Array(
+    Schema.Struct({
+      publication_id: Schema.String.check(Schema.isMinLength(1)),
+      source: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  ),
+});
+export type CloudflareSFUPublicationsAvailableRequest = typeof CloudflareSFUPublicationsAvailableRequestSchema.Type;
+
+export const CloudflareSFUPublicationsAvailableResponseSchema = Schema.Struct({
+  accepted: Schema.Boolean,
+});
+export type CloudflareSFUPublicationsAvailableResponse = typeof CloudflareSFUPublicationsAvailableResponseSchema.Type;
+
 export const CloudflareSFUPublicationsResponseSchema = Schema.Struct({
   incarnation: Schema.Number,
   publications: Schema.Array(
@@ -224,6 +240,7 @@ export const CloudflareSFURenegotiateResponseSchema = Schema.Struct({
 export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
 
 export const CloudflareSFUUpdateTracksAPIResponseSchema = Schema.Struct({
+  publicationsPending: Schema.optional(Schema.Boolean),
   requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
   sessionDescription: Schema.optional(
     Schema.NullOr(
@@ -1372,6 +1389,7 @@ export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPath
 
 export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
   allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+  defer_publication: Schema.optional(Schema.Boolean),
   replacement_cause: Schema.optional(
     Schema.Literals([
       "user_pause",
@@ -2345,6 +2363,27 @@ export const ListWebhookEndpoints429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type ListWebhookEndpoints429ResponseHeaders = typeof ListWebhookEndpoints429ResponseHeadersSchema.Type;
+
+export const MarkCloudflareSFUPublicationsAvailablePathParamsSchema = Schema.Struct({
+  episode_id: EpisodeIdSchema,
+  participant_id: ParticipantIdSchema,
+  space_id: SpaceIdSchema,
+  tenant_id: TenantIdSchema,
+});
+export type MarkCloudflareSFUPublicationsAvailablePathParams = typeof MarkCloudflareSFUPublicationsAvailablePathParamsSchema.Type;
+
+export const MarkCloudflareSFUPublicationsAvailableRequestBodySchema = CloudflareSFUPublicationsAvailableRequestSchema;
+export type MarkCloudflareSFUPublicationsAvailableRequestBody = typeof MarkCloudflareSFUPublicationsAvailableRequestBodySchema.Type;
+
+export const MarkCloudflareSFUPublicationsAvailableResponseSchema = CloudflareSFUPublicationsAvailableResponseSchema;
+export type MarkCloudflareSFUPublicationsAvailableResponse = typeof MarkCloudflareSFUPublicationsAvailableResponseSchema.Type;
+
+export const MarkCloudflareSFUPublicationsAvailable429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type MarkCloudflareSFUPublicationsAvailable429ResponseHeaders = typeof MarkCloudflareSFUPublicationsAvailable429ResponseHeadersSchema.Type;
 
 export const PreparePublicSpaceEntranceRequestBodySchema = EntranceInviteSchema;
 export type PreparePublicSpaceEntranceRequestBody = typeof PreparePublicSpaceEntranceRequestBodySchema.Type;
@@ -5793,6 +5832,24 @@ export const ListWebhookEndpointsErrorSchema = Schema.Union([
 ]);
 export type ListWebhookEndpointsError = typeof ListWebhookEndpointsErrorSchema.Type;
 
+export const MarkCloudflareSFUPublicationsAvailableErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type MarkCloudflareSFUPublicationsAvailableError = typeof MarkCloudflareSFUPublicationsAvailableErrorSchema.Type;
+
 export const PreparePublicSpaceEntranceErrorSchema = Schema.Union([RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, SpacePublicInviteUnavailableErrorSchema]);
 export type PreparePublicSpaceEntranceError = typeof PreparePublicSpaceEntranceErrorSchema.Type;
 
@@ -6251,6 +6308,7 @@ export const ChalkOperationPolicies = {
   listTenants: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listWebhookDeliveries: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   listWebhookEndpoints: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
+  markCloudflareSFUPublicationsAvailable: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   preparePublicSpaceEntrance: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceEntrance: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   prepareSpaceRecording: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

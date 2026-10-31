@@ -363,21 +363,33 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
     state.capturePause = "none";
-    if (!enabled) {
-      state.localEnabled = false;
-      this.#pauseTracks(source);
-      if (source === "screen") {
-        this.#track("screen")?.stop();
-        this.#screenAudioTrack?.stop();
-      }
-      const ports = this.#ports;
-      if (ports) {
-        ports.media.setLocalSourceIntent?.(source, false, "user_pause");
-        this.#retainPause(state, this.#beginLocalPause(ports, source, "user_pause"));
-      }
-    }
+    if (!enabled) this.#recordPauseIntent(source);
     for (const check of this.#readinessChecks) check();
     return desired;
+  }
+  #recordPauseIntent(source: MediaSource): void {
+    const state = this.#sources[source];
+    state.localEnabled = false;
+    this.#pauseTracks(source);
+    if (source === "screen") {
+      this.#track("screen")?.stop();
+      this.#screenAudioTrack?.stop();
+    }
+    const ports = this.#ports;
+    if (!ports) return;
+    const silencing = ports.media.setLocalSourceIntent?.(source, false, "user_pause");
+    if (source === "microphone") {
+      void Promise.resolve(silencing)
+        .then(() => this.#dropEndedMutedMicrophone(ports))
+        .catch(() => undefined);
+    }
+    this.#retainPause(state, this.#beginLocalPause(ports, source, "user_pause"));
+  }
+  async #dropEndedMutedMicrophone(ports: ConnectionPorts): Promise<void> {
+    const track = this.#track("microphone");
+    if (track?.readyState !== "ended") return;
+    await ports.media.clearPreparedLocalTrack("microphone", { stopTrack: false });
+    if (this.#track("microphone") === track) this.#deleteTrack("microphone");
   }
   #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
     return Effect.suspend(() => {

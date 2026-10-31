@@ -695,6 +695,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications/available": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mark cloudflare s f u publications available */
+    post: operations["markCloudflareSFUPublicationsAvailable"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate": {
     parameters: {
       query?: never;
@@ -1279,6 +1296,16 @@ export interface components {
         source: string;
       }[];
     };
+    CloudflareSFUPublicationsAvailableRequest: {
+      connection_id: string;
+      tracks: {
+        publication_id: string;
+        source: string;
+      }[];
+    };
+    CloudflareSFUPublicationsAvailableResponse: {
+      accepted: boolean;
+    };
     CloudflareSFUPublicationsResponse: {
       incarnation: number;
       publications: {
@@ -1320,6 +1347,7 @@ export interface components {
       }[];
     };
     CloudflareSFUUpdateTracksAPIResponse: {
+      publicationsPending?: boolean;
       requiresImmediateRenegotiation?: boolean;
       sessionDescription?: {
         sdp: string;
@@ -6790,6 +6818,110 @@ export interface operations {
       };
     };
   };
+  markCloudflareSFUPublicationsAvailable: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloudflareSFUPublicationsAvailableRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CloudflareSFUPublicationsAvailableResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   renegotiateCloudflareSFU: {
     parameters: {
       query?: never;
@@ -6898,6 +7030,7 @@ export interface operations {
     parameters: {
       query?: {
         allow_partial_remote_tracks?: boolean;
+        defer_publication?: boolean;
         replacement_cause?:
           | "user_pause"
           | "moderation_pause"

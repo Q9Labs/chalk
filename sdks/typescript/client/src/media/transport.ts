@@ -40,7 +40,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         return (await response.json()) as T;
       });
     } catch (error) {
-      const step = path === "publications" ? "sfu_publications" : path === "tracks/close" ? "sfu_close_tracks" : path === "renegotiate" ? "sfu_renegotiate" : "sfu_tracks";
+      const step = path === "publications" || path === "publications/available" ? "sfu_publications" : path === "tracks/close" ? "sfu_close_tracks" : path === "renegotiate" ? "sfu_renegotiate" : "sfu_tracks";
       markMediaFailure(error, step);
       throw error;
     }
@@ -49,6 +49,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     addTracks: async (input) => {
       const query = new URLSearchParams();
       if (input.allowPartialRemoteTracks) query.set("allow_partial_remote_tracks", "true");
+      if (input.deferPublication) query.set("defer_publication", "true");
       if (input.replacementCause) query.set("replacement_cause", input.replacementCause);
       const path = query.size ? `tracks?${query}` : "tracks";
       const response = await request<{
@@ -57,6 +58,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           readonly publication_id?: string;
         })[];
         readonly requiresImmediateRenegotiation?: boolean;
+        readonly publicationsPending?: boolean;
       }>(path, {
         method: "POST",
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks }),
@@ -65,6 +67,15 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         ...response,
         tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })),
       };
+    },
+    markPublicationsAvailable: async (input) => {
+      await request("publications/available", {
+        method: "POST",
+        body: JSON.stringify({
+          connection_id: input.connectionId,
+          tracks: input.tracks.map((track) => ({ source: track.source, publication_id: track.publicationId })),
+        }),
+      });
     },
     closeTracks: async (input) =>
       request<CloudflareSFUTracksResponse>("tracks/close", {

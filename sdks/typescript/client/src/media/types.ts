@@ -29,6 +29,7 @@ export type CloudflareSFUCloseTrackRequest = {
 export type CloudflareSFUTracksResponse = {
   readonly sessionDescription?: CloudflareSFUSessionDescription;
   readonly tracks?: readonly CloudflareSFUTrackRequest[];
+  readonly publicationsPending?: boolean;
   readonly trackErrors?: readonly {
     readonly connectionId: string;
     readonly trackName: string;
@@ -52,8 +53,10 @@ export type CloudflareSFUSignalingTransport = {
     readonly sessionDescription?: CloudflareSFUSessionDescription;
     readonly tracks: readonly CloudflareSFUTrackRequest[];
     readonly allowPartialRemoteTracks?: boolean;
+    readonly deferPublication?: boolean;
     readonly replacementCause?: MediaConnectionReplacementCause;
   }) => Promise<CloudflareSFUTracksResponse>;
+  readonly markPublicationsAvailable?: (input: { readonly connectionId: string; readonly tracks: readonly { readonly source: MediaPublicationSource; readonly publicationId: string }[] }) => Promise<void>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
   /** Changes the simulcast layer of tracks already pulled, without renegotiating. Transports without it keep the layer chosen at pull time. */
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
