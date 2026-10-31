@@ -1,3 +1,4 @@
+import { setVideoRenderSize } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState, type RefObject } from "react";
 /**
  * - `idle`: nothing attached (no track, disabled, or track not live)
@@ -38,12 +39,23 @@ export function useVideoTrack(videoRef: RefObject<HTMLVideoElement | null>, trac
     track.addEventListener("mute", onMute);
     track.addEventListener("unmute", onUnmute);
     track.addEventListener("ended", onEnded);
+    // The media client picks a lower simulcast layer for a small tile.
+    const sizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(([entry]) => {
+            const scale = window.devicePixelRatio || 1;
+            if (entry) setVideoRenderSize(track, { width: entry.contentRect.width * scale, height: entry.contentRect.height * scale });
+          });
+    sizeObserver?.observe(video);
     video.play().catch((cause: unknown) => {
       // AbortError: attach superseded by a newer track before playback began — the newer effect owns the element.
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setStatus("error");
     });
     return () => {
+      sizeObserver?.disconnect();
+      setVideoRenderSize(track, null);
       video.removeEventListener("loadeddata", onLoaded);
       track.removeEventListener("mute", onMute);
       track.removeEventListener("unmute", onUnmute);
