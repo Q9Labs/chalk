@@ -103,14 +103,14 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
     session = captured;
     signal?.throwIfAborted();
     await enqueue(deviceId, async () => {
-      const commit = await captured.prepare(preferences.get(deviceId));
+      const commit = await untilAborted(captured.prepare(preferences.get(deviceId)), signal);
       commit();
       const active = sessions.get(deviceId) ?? new Set<CameraEffectsTrack>();
       sessions.set(deviceId, active);
       active.add(captured);
       const remove = () => {
         active.delete(captured);
-        if (active.size === 0) sessions.delete(deviceId);
+        if (active.size === 0 && sessions.get(deviceId) === active) sessions.delete(deviceId);
       };
       captured.track.addEventListener("ended", remove, { once: true });
       const stop = captured.track.stop.bind(captured.track);
@@ -129,6 +129,17 @@ export async function processCameraStream(stream: MediaStream, signal?: AbortSig
   } finally {
     signal?.removeEventListener("abort", cancel);
   }
+}
+
+/** Cancelled capture releases the device queue now; the track's own stop closes anything that loads later. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    void work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }
 
 export async function createCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
