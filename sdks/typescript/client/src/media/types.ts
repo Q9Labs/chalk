@@ -98,6 +98,7 @@ export type CloudflareSFUClientOptions = {
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
+  readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
 };

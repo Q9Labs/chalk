@@ -130,6 +130,7 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    onReceiveHealth: input.onTransportDiagnostic,
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
@@ -151,6 +152,7 @@ type BoundMediaClient = Pick<
   | "closeForcedLocalPublication"
   | "observeLocalPublications"
   | "observeRemotePublications"
+  | "observeAudioElement"
   | "remotePublicationsChanged"
   | "remoteParticipantsChanged"
   | "remotePublicationResumed"
@@ -169,6 +171,7 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     ...(client.closeForcedLocalPublication ? { closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client) } : {}),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
+    ...(client.observeAudioElement ? { observeAudioElement: client.observeAudioElement.bind(client) } : {}),
     ...(client.remoteParticipantsChanged ? { remoteParticipantsChanged: client.remoteParticipantsChanged.bind(client) } : {}),
     ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
     ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
