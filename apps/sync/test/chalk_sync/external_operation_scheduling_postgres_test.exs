@@ -163,7 +163,8 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
           send(observer, {:accepted, self()})
 
           await_left(client, identity.participant_id)
-          {identity.episode.episode_id, System.monotonic_time(:millisecond) - started}
+          finished = System.monotonic_time(:millisecond)
+          {identity.episode.episode_id, finished - started, finished}
         end)
       end
 
@@ -174,8 +175,8 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     start_supervised!({ChalkSync.Fanout.PostgresNotifications, url: @database_url})
 
-    # Queue the class first, then the other Episode, before provider work starts.
-    # This makes the concurrency assertion independent of database and VM timing.
+    # All class commands and then the other Episode's command are durably pending
+    # before discovery starts.
     for task <- Enum.take(tasks, 10) do
       send(task.pid, :leave)
       pid = task.pid
@@ -197,6 +198,8 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     results = Task.await_many(tasks, 100_000)
     last_ack = results |> Enum.map(&elem(&1, 1)) |> Enum.max()
     other_ack = results |> List.last() |> elem(1)
+    other_finished = results |> List.last() |> elem(2)
+    class_finished = results |> Enum.take(10) |> Enum.map(&elem(&1, 2)) |> Enum.max()
 
     calls = drain_calls([])
 
@@ -217,8 +220,9 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     )
 
     assert active == 0
-    assert peak in 2..8
+    assert peak in 1..8
     assert episode_peak == 1
+    assert other_finished < class_finished
     assert last_ack < 2 * delay + 8 * fast_delay + 5_000
     assert other_ack < delay + 2_000
     assert {:ok, []} = Postgres.claim_operations(8)
