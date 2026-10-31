@@ -475,6 +475,39 @@ it("does not retire the new publication when the old ID withdraws during unmute"
   });
 });
 
+it.each(["microphone", "camera"] as const)("recovers a real %s withdrawal reported by registry and Sync as unmute resolves", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const p1 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    expect(h.transport.localPublications.has(p1)).toBe(true);
+
+    await h.client.setLocalSourceIntent(source, false, "user_pause");
+    expect(h.transport.localPublications.has(p1)).toBe(false);
+
+    await h.client.setLocalSourceIntent(source, true);
+    await expect(h.client.setLocalPublicationTarget({ operationId: `quick-toggle-${source}`, participantId: "participant-1", source, enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    const p2 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    expect(p2).not.toBe(p1);
+
+    const withdraw = (h.transport as typeof h.transport & { withdrawPublication?: (id: string) => void }).withdrawPublication;
+    if (withdraw) withdraw.call(h.transport, p2);
+    else h.transport.localPublications.delete(p2);
+    h.transport.snapshot = { ...h.transport.snapshot, sequence: h.transport.snapshot.sequence + 1 };
+    const registryPoll = h.client.refreshRemotePublications();
+    const notify = (h.client as CloudflareSFUClient & { localPublicationWithdrawn?: (id: string) => void }).localPublicationWithdrawn;
+    notify?.call(h.client, p2);
+    await registryPoll;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(p1);
+    expect(live[0]!.publicationId).not.toBe(p2);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: true, publicationId: live[0]!.publicationId });
+  });
+});
+
 it("recovers a withdrawal onto the replacement connection while reconnect is in flight", async () => {
   const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
   const replacementStarted = Promise.withResolvers<void>();
