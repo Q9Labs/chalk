@@ -45,6 +45,7 @@ tlc_check() {
   dist=$(echo "$counts" | sed -E 's/.*, ([0-9,]+) distinct states found.*/\1/')
   depth=$(grep -E "^The depth of the complete state graph search is" "$work/$name.log" | sed -E 's/.* is ([0-9]+)\./\1/' || true)
   [ -z "$depth" ] && depth=$(grep -E "^The depth of the complete state graph search is|Depth" "$work/$name.log" | tail -1 | grep -oE '[0-9]+' | tail -1 || true)
+  return 0
 }
 
 status=0
@@ -110,7 +111,7 @@ done < "${RUNS_FILE:-$here/runs.txt}"
 
 # Heal model: MediaHeal.tla, one row per run in heal-runs.txt.
 #   name | check | expect | KEY=VALUE overrides of the default constants (no spaces inside a value)
-heal_defaults="Listeners={l1} Pub=pub MaxGen=4 MaxToggle=2 MaxPubLost=1 MaxListenerLost=1 MaxPullFail=1 MaxRecvDown=1 MaxPubDrop=1 MaxSfuRebuild=1 MaxLoss=1 DeadThreshold=2 CapTicks=2 FlatTicks=2 FailSat=4 GiveUpAfter=0 RetryCap=TRUE FlatDrop=TRUE RecvReconnect=TRUE DeadPath=TRUE PublisherSelfDetect=FALSE MuteKeepsPublication=TRUE StaleLoss=TRUE"
+heal_defaults="Listeners={l1} Pub=pub MaxGen=4 MaxToggle=2 MaxPubLost=1 MaxListenerLost=1 MaxPullFail=1 MaxRecvDown=1 MaxPubDrop=1 MaxSfuRebuild=1 MaxLoss=1 MaxFaults=2 DeadThreshold=2 CapTicks=2 FlatTicks=2 FailSat=4 GiveUpAfter=0 RetryCap=TRUE FlatDrop=TRUE RecvReconnect=TRUE DeadPath=TRUE PublisherSelfDetect=FALSE MuteKeepsPublication=TRUE StaleLoss=TRUE RecoveryPause=\"item\" LazyClose=TRUE SfuExpiresStale=TRUE"
 heal_summary="$here/results/heal-summary.md"
 machine=$(scutil --get ComputerName 2>/dev/null || hostname)
 {
@@ -157,7 +158,7 @@ PROPERTY S5_PullOnlyListed"; symmetry=yes ;;
     done
     echo "$checks"
     echo "CHECK_DEADLOCK FALSE"
-    [ "$symmetry" = yes ] && echo "SYMMETRY ListenerSymmetry"
+    if [ "$symmetry" = yes ]; then echo "SYMMETRY ListenerSymmetry"; fi
   } > "$cfg"
 
   tlc_check "$name" "$cfg" "$here/MediaHeal.tla"

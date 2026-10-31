@@ -35,6 +35,7 @@ CONSTANTS
   MaxPubDrop,             \* publisher Sync-link drops, in total
   MaxSfuRebuild,          \* publisher SFU-session rebuilds, in total
   MaxLoss,                \* messages the network may lose, in total
+  MaxFaults,              \* faults of all kinds together (keeps joint faults small)
   DeadThreshold,          \* failed pulls of one gone track before the API reports it dead
   CapTicks,               \* retry delay cap in heal ticks (about 1 s)
   FlatTicks,              \* flat observations before a pulled track is dropped (about 2 s)
@@ -46,7 +47,11 @@ CONSTANTS
   DeadPath,               \* FALSE = mutant: no server dead-publication path
   PublisherSelfDetect,    \* TRUE = publisher also notices its own lost track (#716 send-stall)
   MuteKeepsPublication,   \* TRUE = off keeps the publication (#716); FALSE = off retires it
-  StaleLoss               \* TRUE = a lost track may also linger at the SFU without packets
+  StaleLoss,              \* TRUE = a lost track may also linger at the SFU without packets
+  RecoveryPause,          \* "item" = SDK today: after a reconnect pause the device if Sync's item for it is not enabled;
+                          \* "grant" = pause only if Sync's grant is off (moderation); "none" = never
+  LazyClose,              \* TRUE = retiring a publication leaves its track at the SFU until a separate close call
+  SfuExpiresStale         \* TRUE = the SFU eventually expires a track that gets no packets (Cloudflare: 30 s)
 
 \* Listeners are interchangeable. Used for safety runs only: symmetry is unsound for liveness.
 ListenerSymmetry == Permutations(Listeners)
@@ -61,6 +66,7 @@ VARIABLES
   pubGen,       \* publication the device believes it has (0 = none)
   pubReq,       \* a publish request is in flight to the API
   pubSfuUp,     \* the device's SFU session is up
+  recovering,   \* -1, or the revision (seq) the device held on when its connection last dropped
   \* SYNC
   list,         \* list[g]: Sync's status of publication g
   grant, lastSeq, ver, nextGen,
@@ -76,7 +82,7 @@ VARIABLES
   \* FAULT BUDGETS
   bud
 
-pubv  == <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp>>
+pubv  == <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, recovering>>
 syncv == <<list, grant, lastSeq, nextGen, deadMsg>>
 sfuv  == <<sfu, stale, obs>>
 chan  == <<view, rmsg>>
@@ -85,6 +91,8 @@ vars  == <<pubv, syncv, ver, sfuv, chan, lsv, bud>>
 
 ----------------------------------------------------------------------------
 Min(a, b) == IF a < b THEN a ELSE b
+
+FaultsLeft == bud.pl + bud.ll + bud.pf + bud.rd + bud.pd + bud.sr + bud.loss < MaxFaults
 
 NoSnap == [ver |-> -1, list |-> [g \in Gens |-> "none"], grant |-> FALSE, ack |-> 0]
 SyncSnapshot == [ver |-> ver, list |-> list, grant |-> grant, ack |-> lastSeq]
@@ -97,9 +105,19 @@ Olds(g) == {h \in Gens : h # g /\ list[h] = "on"}
 
 FreshPair == [wait |-> 0, fails |-> 0, flat |-> 0]
 
+\* #rememberRecoveryIntents: when the connection drops while on, remember the revision once.
+Remember == IF recovering >= 0 THEN recovering ELSE IF want THEN seq ELSE -1
+
+\* The participant's own item in a Sync snapshot: enabled only with a live publication (episode.ex:238).
+ItemEnabled(m) == m.grant /\ \E g \in Gens : m.list[g] = "on"
+PauseNeeded(m) ==
+  CASE RecoveryPause = "item" -> ~ItemEnabled(m)
+    [] RecoveryPause = "grant" -> ~m.grant
+    [] OTHER -> FALSE
+
 Init ==
   /\ want = FALSE /\ cap = FALSE /\ seq = 0 /\ offSt = "none" /\ syncUp = TRUE
-  /\ onSlot = 0 /\ offSlot = 0 /\ pubGen = 0 /\ pubReq = FALSE /\ pubSfuUp = TRUE
+  /\ onSlot = 0 /\ offSlot = 0 /\ pubGen = 0 /\ pubReq = FALSE /\ pubSfuUp = TRUE /\ recovering = -1
   /\ list = [g \in Gens |-> "none"] /\ grant = FALSE /\ lastSeq = 0 /\ ver = 0 /\ nextGen = 1
   /\ deadMsg = {}
   /\ sfu = {} /\ stale = {} /\ obs = [g \in Gens |-> 0]
@@ -117,7 +135,7 @@ UserOn ==
   /\ syncUp /\ ~want /\ seq < MaxToggle
   /\ want' = TRUE /\ cap' = TRUE /\ seq' = seq + 1 /\ offSt' = "none"
   /\ onSlot' = seq + 1
-  /\ UNCHANGED <<syncUp, offSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<syncUp, offSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 \* Off is the device's decision: capture stops in this step, link or no link.
 UserOff ==
@@ -127,44 +145,55 @@ UserOff ==
        THEN offSt' = "sent" /\ offSlot' = seq + 1
        ELSE offSt' = "queued" /\ offSlot' = offSlot
   /\ pubGen' = IF MuteKeepsPublication THEN pubGen ELSE 0
-  /\ UNCHANGED <<syncUp, onSlot, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<syncUp, onSlot, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 DeviceSendOn ==
   /\ syncUp /\ want /\ view[Pub].ack < seq /\ onSlot # seq
   /\ onSlot' = seq
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, offSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, offSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 DeviceSendOff ==
   /\ syncUp /\ ~want /\ offSt \in {"queued", "sent"}
   /\ \/ offSt = "queued" \/ offSlot # seq
   /\ offSt' = "sent" /\ offSlot' = seq
-  /\ UNCHANGED <<want, cap, seq, syncUp, onSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, syncUp, onSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 \* The device asks the API to publish once Sync has granted this revision and it holds no publication.
 DevicePublish ==
   /\ pubSfuUp /\ want /\ cap /\ pubGen = 0 /\ ~pubReq
   /\ view[Pub].grant /\ view[Pub].ack >= seq
   /\ pubReq' = TRUE
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 \* The publisher's roster shows its publication dead: drop it and publish again.
 PublisherDropDead ==
   /\ pubGen # 0 /\ view[Pub].list[pubGen] = "dead"
   /\ pubGen' = 0
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 \* #716: the publisher's own stats show the SFU no longer serves its track.
 PublisherSelfDetectLoss ==
   /\ PublisherSelfDetect /\ pubGen # 0 /\ (pubGen \notin sfu \/ pubGen \in stale)
   /\ pubGen' = 0
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
+
+\* #pauseRecoveredIntents: on the first Sync snapshot after the connection returns, a device
+\* that still holds its old on-revision pauses its capture if Sync does not show it as live.
+\* Its desired state stays on, and nothing turns capture back on by itself.
+PublisherRecover ==
+  /\ recovering >= 0 /\ syncUp /\ pubSfuUp /\ rmsg[Pub].ver >= 0 /\ rmsg[Pub].ver >= view[Pub].ver
+  /\ view' = [view EXCEPT ![Pub] = rmsg[Pub]]
+  /\ recovering' = -1
+  /\ cap' = IF want /\ seq = recovering /\ PauseNeeded(rmsg[Pub]) THEN FALSE ELSE cap
+  /\ offSt' = IF rmsg[Pub].ack >= seq /\ ~want THEN "none" ELSE offSt
+  /\ UNCHANGED <<want, seq, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, rmsg, lsv, bud>>
 
 \* The device applies a Sync snapshot (any recipient). Older or repeated ones are ignored.
 RecvSnap(r) ==
   /\ rmsg[r].ver > view[r].ver /\ (r = Pub => syncUp)
   /\ view' = [view EXCEPT ![r] = rmsg[r]]
   /\ offSt' = IF r = Pub /\ rmsg[r].ack >= seq /\ ~want THEN "none" ELSE offSt
-  /\ UNCHANGED <<want, cap, seq, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, rmsg, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, syncUp, onSlot, offSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, rmsg, lsv, bud>>
 
 ----------------------------------------------------------------------------
 (* SYNC AND API *)
@@ -181,8 +210,8 @@ SyncRecvOff ==
   /\ IF MuteKeepsPublication
        THEN list' = list /\ sfu' = sfu /\ stale' = stale
        ELSE /\ list' = [g \in Gens |-> IF list[g] = "on" THEN "off" ELSE list[g]]
-            /\ sfu' = sfu \ {g \in Gens : list[g] = "on"}
-            /\ stale' = stale \ {g \in Gens : list[g] = "on"}
+            /\ sfu' = IF LazyClose THEN sfu ELSE sfu \ {g \in Gens : list[g] = "on"}
+            /\ stale' = IF LazyClose THEN stale ELSE stale \ {g \in Gens : list[g] = "on"}
   /\ UNCHANGED <<pubv, nextGen, deadMsg, obs, chan, lsv, bud>>
 
 \* The API admits a publication only if Sync's grant is on, and a new one replaces the old.
@@ -190,11 +219,11 @@ Admit ==
   /\ pubReq /\ pubSfuUp /\ grant /\ pubGen = 0 /\ nextGen <= MaxGen
   /\ LET g == nextGen IN
        /\ list' = [h \in Gens |-> IF h = g THEN "on" ELSE IF list[h] = "on" THEN "off" ELSE list[h]]
-       /\ sfu' = (sfu \ Olds(g)) \cup {g}
-       /\ stale' = stale \ Olds(g)
+       /\ sfu' = IF LazyClose THEN sfu \cup {g} ELSE (sfu \ Olds(g)) \cup {g}
+       /\ stale' = IF LazyClose THEN stale ELSE stale \ Olds(g)
        /\ pubGen' = g /\ nextGen' = g + 1
   /\ pubReq' = FALSE
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubSfuUp, lastSeq, grant, deadMsg, obs, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubSfuUp, recovering, lastSeq, grant, deadMsg, obs, chan, lsv, bud>>
 
 SyncSend(r) ==
   /\ (r = Pub => syncUp) /\ rmsg[r] # SyncSnapshot
@@ -251,7 +280,7 @@ HealPullGone(l, g) ==
 \* Fault: the SFU refuses or times out a pull although the track exists. The API
 \* asks the SFU, finds the track, and records nothing.
 HealPullRefused(l, g) ==
-  /\ PullReady(l, g) /\ g \in sfu /\ bud.pf < MaxPullFail
+  /\ PullReady(l, g) /\ g \in sfu /\ bud.pf < MaxPullFail /\ FaultsLeft
   /\ pair' = [pair EXCEPT ![l][g] = [wait |-> Backoff(Min(@.fails + 1, FailSat)),
                                       fails |-> Min(@.fails + 1, FailSat), flat |-> 0]]
   /\ bud' = [bud EXCEPT !.pf = @ + 1]
@@ -281,28 +310,34 @@ HealFlatDrop(l, g) ==
 
 \* Cloudflare expires a track that gets no packets.
 SfuGc(g) ==
-  /\ g \in stale
+  /\ SfuExpiresStale /\ g \in stale
+  /\ sfu' = sfu \ {g} /\ stale' = stale \ {g}
+  /\ UNCHANGED <<pubv, syncv, obs, chan, lsv, bud>>
+
+\* The API closes the SFU track of a publication Sync no longer lists as on.
+SfuClose(g) ==
+  /\ LazyClose /\ g \in sfu /\ list[g] \in {"off", "dead"}
   /\ sfu' = sfu \ {g} /\ stale' = stale \ {g}
   /\ UNCHANGED <<pubv, syncv, obs, chan, lsv, bud>>
 
 RebuildSfu ==
   /\ ~pubSfuUp
   /\ pubSfuUp' = TRUE
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubReq, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, onSlot, offSlot, pubGen, pubReq, recovering, syncv, sfuv, chan, lsv, bud>>
 
 ReconnectPub ==
   /\ ~syncUp
   /\ syncUp' = TRUE
   /\ offSt' = IF offSt = "queued" THEN "sent" ELSE offSt
   /\ offSlot' = IF offSt = "queued" THEN seq ELSE offSlot
-  /\ UNCHANGED <<want, cap, seq, onSlot, pubGen, pubReq, pubSfuUp, syncv, sfuv, chan, lsv, bud>>
+  /\ UNCHANGED <<want, cap, seq, onSlot, pubGen, pubReq, pubSfuUp, recovering, syncv, sfuv, chan, lsv, bud>>
 
 ----------------------------------------------------------------------------
 (* FAULTS. Each has a budget and no fairness. *)
 
 \* The SFU forgets a track (or keeps it without packets) while Sync still lists it on.
 PubTrackLost(g) ==
-  /\ bud.pl < MaxPubLost /\ g \in sfu /\ g \notin stale /\ list[g] = "on"
+  /\ bud.pl < MaxPubLost /\ FaultsLeft /\ g \in sfu /\ g \notin stale /\ list[g] = "on"
   /\ \/ sfu' = sfu \ {g} /\ stale' = stale
      \/ StaleLoss /\ stale' = stale \cup {g} /\ sfu' = sfu
   /\ bud' = [bud EXCEPT !.pl = @ + 1]
@@ -310,13 +345,13 @@ PubTrackLost(g) ==
 
 \* The SFU drops a listener's subscription: the track stays pulled, packets go flat.
 ListenerTrackLost(l, g) ==
-  /\ bud.ll < MaxListenerLost /\ recvUp[l] /\ g \in pulled[l] /\ g \notin subLost[l]
+  /\ bud.ll < MaxListenerLost /\ FaultsLeft /\ recvUp[l] /\ g \in pulled[l] /\ g \notin subLost[l]
   /\ subLost' = [subLost EXCEPT ![l] = @ \cup {g}]
   /\ bud' = [bud EXCEPT !.ll = @ + 1]
   /\ UNCHANGED <<pubv, syncv, sfuv, chan, recvUp, pulled, pair>>
 
 RecvDown(l) ==
-  /\ bud.rd < MaxRecvDown /\ recvUp[l]
+  /\ bud.rd < MaxRecvDown /\ FaultsLeft /\ recvUp[l]
   /\ recvUp' = [recvUp EXCEPT ![l] = FALSE]
   /\ pulled' = [pulled EXCEPT ![l] = {}]
   /\ subLost' = [subLost EXCEPT ![l] = {}]
@@ -325,18 +360,19 @@ RecvDown(l) ==
   /\ UNCHANGED <<pubv, syncv, sfuv, chan>>
 
 DropPub ==
-  /\ bud.pd < MaxPubDrop /\ syncUp
+  /\ bud.pd < MaxPubDrop /\ FaultsLeft /\ syncUp
   /\ syncUp' = FALSE
   /\ onSlot' = 0 /\ offSlot' = 0
   /\ offSt' = IF offSt = "sent" THEN "queued" ELSE offSt
+  /\ recovering' = Remember
   /\ rmsg' = [rmsg EXCEPT ![Pub] = NoSnap]
   /\ bud' = [bud EXCEPT !.pd = @ + 1]
   /\ UNCHANGED <<want, cap, seq, pubGen, pubReq, pubSfuUp, syncv, sfuv, view, lsv>>
 
 \* The publisher's SFU session dies and is rebuilt later: its tracks vanish or linger.
 DropSfu ==
-  /\ bud.sr < MaxSfuRebuild /\ pubSfuUp
-  /\ pubSfuUp' = FALSE /\ pubGen' = 0 /\ pubReq' = FALSE
+  /\ bud.sr < MaxSfuRebuild /\ FaultsLeft /\ pubSfuUp
+  /\ pubSfuUp' = FALSE /\ pubGen' = 0 /\ pubReq' = FALSE /\ recovering' = Remember
   /\ \/ sfu' = {} /\ stale' = {}
      \/ StaleLoss /\ stale' = sfu /\ sfu' = sfu
   /\ bud' = [bud EXCEPT !.sr = @ + 1]
@@ -344,7 +380,7 @@ DropSfu ==
 
 \* The network loses the latest message of one kind.
 Lose ==
-  /\ bud.loss < MaxLoss
+  /\ bud.loss < MaxLoss /\ FaultsLeft
   /\ \/ onSlot > 0 /\ onSlot' = 0 /\ UNCHANGED <<offSlot, pubReq, rmsg, deadMsg>>
      \/ offSlot > 0 /\ offSlot' = 0 /\ UNCHANGED <<onSlot, pubReq, rmsg, deadMsg>>
      \/ pubReq /\ pubReq' = FALSE /\ UNCHANGED <<onSlot, offSlot, rmsg, deadMsg>>
@@ -352,7 +388,7 @@ Lose ==
                               /\ UNCHANGED <<onSlot, offSlot, pubReq, deadMsg>>
      \/ \E g \in deadMsg : deadMsg' = deadMsg \ {g} /\ UNCHANGED <<onSlot, offSlot, pubReq, rmsg>>
   /\ bud' = [bud EXCEPT !.loss = @ + 1]
-  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, pubGen, pubSfuUp, list, grant, lastSeq, nextGen, sfuv, view, lsv>>
+  /\ UNCHANGED <<want, cap, seq, offSt, syncUp, pubGen, pubSfuUp, recovering, list, grant, lastSeq, nextGen, sfuv, view, lsv>>
 
 ----------------------------------------------------------------------------
 \* Every change to Sync's roster state gets a new version.
@@ -369,6 +405,7 @@ Next ==
   \/ PublisherDropDead /\ Stamp
   \/ PublisherSelfDetectLoss /\ Stamp
   \/ \E r \in Recipients : RecvSnap(r) /\ Stamp
+  \/ PublisherRecover /\ Stamp
   \/ SyncRecvOn /\ Stamp
   \/ SyncRecvOff /\ Stamp
   \/ Admit /\ Stamp
@@ -383,6 +420,7 @@ Next ==
   \/ \E l \in Listeners, g \in Gens : HealFlatTick(l, g) /\ Stamp
   \/ \E l \in Listeners, g \in Gens : HealFlatDrop(l, g) /\ Stamp
   \/ \E g \in Gens : SfuGc(g) /\ Stamp
+  \/ \E g \in Gens : SfuClose(g) /\ Stamp
   \/ RebuildSfu /\ Stamp
   \/ ReconnectPub /\ Stamp
   \/ \E g \in Gens : PubTrackLost(g) /\ Stamp
@@ -400,11 +438,11 @@ Next ==
 Fair(A) == WF_vars(A /\ Stamp)
 Fairness ==
   /\ Fair(DeviceSendOn) /\ Fair(DeviceSendOff) /\ Fair(DevicePublish)
-  /\ Fair(PublisherDropDead) /\ Fair(PublisherSelfDetectLoss)
+  /\ Fair(PublisherDropDead) /\ Fair(PublisherSelfDetectLoss) /\ Fair(PublisherRecover)
   /\ Fair(SyncRecvOn) /\ Fair(SyncRecvOff) /\ Fair(Admit)
   /\ Fair(RebuildSfu) /\ Fair(ReconnectPub)
   /\ \A r \in Recipients : Fair(RecvSnap(r)) /\ Fair(SyncSend(r))
-  /\ \A g \in Gens : Fair(SyncRecvDead(g)) /\ Fair(SfuGc(g))
+  /\ \A g \in Gens : Fair(SyncRecvDead(g)) /\ Fair(SfuGc(g)) /\ Fair(SfuClose(g))
   /\ \A l \in Listeners : Fair(HealReconnect(l))
   /\ \A l \in Listeners, g \in Gens :
        Fair(HealDropUndesired(l, g)) /\ Fair(HealPullOk(l, g)) /\ Fair(HealPullGone(l, g))
@@ -417,7 +455,7 @@ Spec == Init /\ [][Next]_vars /\ Fairness
 
 TypeOK ==
   /\ want \in BOOLEAN /\ cap \in BOOLEAN /\ seq \in 0..MaxToggle /\ lastSeq \in 0..MaxToggle
-  /\ offSt \in {"none", "queued", "sent"}
+  /\ offSt \in {"none", "queued", "sent"} /\ recovering \in -1..MaxToggle
   /\ list \in [Gens -> Statuses] /\ nextGen \in 1..(MaxGen + 1)
   /\ sfu \subseteq Gens /\ stale \subseteq sfu /\ deadMsg \subseteq Gens
   /\ \A l \in Listeners : pulled[l] \subseteq Gens /\ subLost[l] \subseteq pulled[l]
@@ -462,14 +500,19 @@ P5_EveryOnPublicationHeard ==
 \* on and stays connected, every listener eventually hears some live publication.
 P5src_MicrophoneHeard ==
   \A l \in Listeners :
-    (<>[](want /\ syncUp)) => <>[](\E g \in Gens : list[g] = "on" /\ Rising(l, g))
+    (<>[](want /\ syncUp)) => <>[](cap /\ \E g \in Gens : list[g] = "on" /\ Rising(l, g))
 
 ----------------------------------------------------------------------------
 (* WITNESSES. Each is expected to be VIOLATED: the violation proves the state is reachable. *)
 
-W1_Heard == \A l \in Listeners, g \in Gens : ~(want /\ list[g] = "on" /\ Rising(l, g))
+W1_Heard == \A l \in Listeners, g \in Gens : ~(want /\ cap /\ list[g] = "on" /\ Rising(l, g))
 W2_DeadThenRepublished ==
   ~(\E g, h \in Gens : g < h /\ list[g] = "dead" /\ list[h] = "on" /\ \E l \in Listeners : Rising(l, h))
 W3_FlatThenRepulled ==
   \A l \in Listeners, g \in Gens : ~(g \in pulled[l] /\ g \in subLost[l] /\ pair[l][g].flat >= FlatTicks)
+W4_PausedByRecovery == ~(want /\ ~cap)
+W5_DeadWhileOffline == ~(want /\ ~syncUp /\ recovering >= 0 /\ \E g \in Gens : list[g] = "dead")
+W6_DeadNoneOn == ~(want /\ recovering >= 0 /\ \E g \in Gens : list[g] = "dead" /\ ~(\E h \in Gens : list[h] = "on"))
+W7_PauseEnabled == ~(want /\ recovering >= 0 /\ syncUp /\ rmsg[Pub].ver >= 0 /\ PauseNeeded(rmsg[Pub]))
+W8_PauseSnap == ~(want /\ recovering >= 0 /\ rmsg[Pub].ver >= 0 /\ PauseNeeded(rmsg[Pub]))
 =======================================================================

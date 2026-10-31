@@ -1,1 +1,28 @@
 # name | check | expect | overrides of the default constants in run.sh (KEY=VALUE, space separated)
+# The defaults are the decided design: heal loop with retry cap, flat drop, receive reconnect, no give-up,
+# and the server dead-publication path; off keeps the publication (#716). Bounds: 1 listener, 4 publications,
+# 2 user actions, each fault kind at most once, at most 2 faults together.
+# Decided design: every property holds.
+heal-decided-safety        | safety | pass |
+heal-decided-P5src         | P5src  | pass |
+heal-decided-P5            | P5     | pass |
+heal-decided-P4h           | P4h    | pass |
+heal-decided-S5c           | S5c    | pass |
+# The same design with the other settings the code may have.
+heal-retire-on-off-P5src   | P5src  | pass | MuteKeepsPublication=FALSE
+heal-selfdetect-P5src      | P5src  | pass | PublisherSelfDetect=TRUE
+heal-nogc-selfdetect-P5src | P5src  | pass | SfuExpiresStale=FALSE PublisherSelfDetect=TRUE
+# A listener's roster can be older than Sync's: it may pull a publication Sync already lists as dead.
+heal-S5b-stale-roster      | S5b    | violated |
+# Mutants: each removes one mechanism and must break the property it exists for.
+mutant-heal-nodead-P5src   | P5src  | violated | DeadPath=FALSE
+mutant-heal-noflat-P5src   | P5src  | violated | FlatDrop=FALSE
+mutant-heal-norecv-P5src   | P5src  | violated | RecvReconnect=FALSE
+mutant-heal-giveup-P5src   | P5src  | violated | GiveUpAfter=2
+mutant-heal-nocap-P6       | P6     | violated | RetryCap=FALSE
+mutant-heal-nocap-P5src    | P5src  | pass | RetryCap=FALSE
+mutant-heal-nogc-P5src     | P5src  | violated | SfuExpiresStale=FALSE
+# Witnesses: the states the properties talk about are reachable.
+heal-witness-W1            | W1     | violated |
+heal-witness-W2            | W2     | violated |
+heal-witness-W3            | W3     | violated | 
