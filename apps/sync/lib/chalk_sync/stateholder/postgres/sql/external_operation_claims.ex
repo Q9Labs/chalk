@@ -31,10 +31,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
 
   defp claim_operations_where(operation_filter) do
     """
-    with candidates as (
-      select external_operation_id
+    with eligible as (
+      select tenant_id, episode_id, external_operation_id,
+        next_attempt_at, attempt_count, acceptance_order
       from sync_external_operations
       where status = 'pending'
+        and not (episode_id = any($2::uuid[]))
         and next_attempt_at <= now()
         and attempt_count < 100
         and #{operation_filter}
@@ -85,8 +87,26 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
         )
-      order by next_attempt_at, attempt_count, created_at, external_operation_id
-      for update skip locked
+    ), episode_heads as (
+      select distinct on (tenant_id, episode_id)
+        tenant_id, episode_id, next_attempt_at, attempt_count, acceptance_order
+      from eligible
+      order by tenant_id, episode_id, acceptance_order
+    ), selected_episodes as (
+      select tenant_id, episode_id from episode_heads
+      order by next_attempt_at, attempt_count, acceptance_order
+      limit $3
+    ), candidates as (
+      select operation.external_operation_id
+      from sync_external_operations operation
+      join eligible using (external_operation_id)
+      join selected_episodes selected
+        on selected.tenant_id = operation.tenant_id and selected.episode_id = operation.episode_id
+      where operation.status = 'pending'
+        and operation.next_attempt_at <= now()
+        and operation.attempt_count < 100
+      order by eligible.acceptance_order
+      for update of operation skip locked
       limit $1
     ), claimed as (
       update sync_external_operations operation
@@ -99,7 +119,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     )
     select #{ExternalOperationColumns.columns("claimed")}
     from claimed
-    order by next_attempt_at, attempt_count, created_at, external_operation_id
+    order by acceptance_order
     """
   end
 end

@@ -14,7 +14,10 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
           {String.to_charlist(url), headers_to_charlists(headers)}
 
         :post ->
-          {String.to_charlist(url), headers_to_charlists(headers), content_type(method), body}
+          # A persistent httpc session can queue independent Episode operations
+          # behind a slow provider call. Each bounded dispatch owns its connection.
+          headers = headers_to_charlists([{"connection", "close"} | headers])
+          {String.to_charlist(url), headers, content_type(method), body}
       end
 
     http_options =

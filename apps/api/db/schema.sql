@@ -1758,7 +1758,14 @@ alter table sync_lifecycle_intents
     )
     on delete restrict;
 
+create sequence sync_external_operation_acceptance_order_seq as bigint;
+
+create function next_sync_external_operation_order() returns bigint
+    language sql volatile security definer set search_path = pg_catalog
+    return nextval('sync_external_operation_acceptance_order_seq'::regclass);
+
 create table sync_external_operations (
+    acceptance_order bigint default next_sync_external_operation_order(),
     tenant_id uuid not null,
     space_id uuid not null,
     episode_id uuid not null,
@@ -1876,6 +1883,13 @@ alter table sync_external_operations
     add foreign key (tenant_id, episode_id, parent_external_operation_id)
     references sync_external_operations(tenant_id, episode_id, external_operation_id)
     on delete restrict;
+alter sequence sync_external_operation_acceptance_order_seq
+    owned by sync_external_operations.acceptance_order;
+
+alter table sync_external_operations
+    add constraint sync_external_operations_pending_order_check
+    check (status <> 'pending' or acceptance_order is not null);
+
 create unique index sync_external_operations_parent_source_key
     on sync_external_operations(tenant_id, episode_id, parent_external_operation_id, source)
     where parent_external_operation_id is not null;

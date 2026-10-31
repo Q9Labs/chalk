@@ -32,6 +32,7 @@ var publicationSources = map[string]struct{}{
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
 
 type Repository interface {
+	ClosePublication(context.Context, CloseInput) (bool, error)
 	AppendPublicationObservation(context.Context, provideroperations.ObservationInput, PublicationParticipant) (provideroperations.Observation, error)
 	AppendObservation(context.Context, provideroperations.ObservationInput) (provideroperations.Observation, error)
 	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
@@ -297,28 +298,16 @@ func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) 
 	if err := validateCloseInput(&input); err != nil {
 		return err
 	}
-	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
-		attempts = attempt + 1
-		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
-		if err != nil {
-			return err
-		}
-		next, state := disable(latest, input)
-		if state == closeStateSatisfied {
-			outcome = "satisfied"
-			return nil
-		}
-		if state == closeStateStale {
-			return ErrInvalidPublication
-		}
-		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
-			outcome = "confirmed"
-			return nil
-		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
-			return fmt.Errorf("append media publication close observation: %w", err)
-		}
+	attempts = 1
+	changed, err := s.repository.ClosePublication(ctx, input)
+	if err != nil {
+		return fmt.Errorf("close media publication observation: %w", err)
 	}
-	return fmt.Errorf("append media publication close observation: %w", provideroperations.ErrObservationConflict)
+	outcome = "satisfied"
+	if changed {
+		outcome = "confirmed"
+	}
+	return nil
 }
 
 func (s Service) latest(ctx context.Context, tenantID, episodeID utilities.ID) (*provideroperations.Observation, error) {
@@ -398,10 +387,15 @@ func publicationCloseState(latest *provideroperations.Observation, input CloseIn
 	return closeStateSatisfied
 }
 
-func disable(latest *provideroperations.Observation, input CloseInput) (provideroperations.ObservationInput, closeState) {
+// CloseObservation derives the next snapshot after a confirmed provider close.
+// A nil result means the exact publication was already retired.
+func CloseObservation(latest *provideroperations.Observation, input CloseInput) (*provideroperations.ObservationInput, error) {
 	state := publicationCloseState(latest, input)
-	if state != closeStateRequired {
-		return provideroperations.ObservationInput{}, state
+	if state == closeStateStale {
+		return nil, ErrInvalidPublication
+	}
+	if state == closeStateSatisfied {
+		return nil, nil
 	}
 	publications := make(map[string]provideroperations.Publication, len(latest.Publications))
 	for _, publication := range latest.Publications {
@@ -412,13 +406,13 @@ func disable(latest *provideroperations.Observation, input CloseInput) (provider
 	publication.Enabled = false
 	publication.PublicationID = ""
 	publications[key] = publication
-	return provideroperations.ObservationInput{
+	return &provideroperations.ObservationInput{
 		TenantID:     input.TenantID,
 		EpisodeID:    input.EpisodeID,
 		Incarnation:  latest.Incarnation,
 		Sequence:     latest.Sequence + 1,
 		Publications: sortedPublications(publications),
-	}, closeStateRequired
+	}, nil
 }
 
 func publishedReferences(input RecordInput) []PublishedReference {

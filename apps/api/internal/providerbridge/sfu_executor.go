@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sort"
+	"sync"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -112,38 +113,65 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		connectionIDs = append(connectionIDs, connectionID)
 	}
 	sort.Strings(connectionIDs)
-	allAlreadyClosed := true
-	for _, connectionID := range connectionIDs {
-		connectionTargets := connections[connectionID]
-		tracks := make([]mediaplane.CloseTrack, 0, len(connectionTargets))
-		for _, target := range connectionTargets {
-			tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
-		}
-		closed, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
+	// Batch each session's tracks together and persist completed sessions while
+	// slower siblings are still closing, so a deadline preserves partial progress.
+	results := make([]ExecutionResult, len(connectionIDs))
+	slots := make(chan struct{}, 4)
+	var workers sync.WaitGroup
+	for index, connectionID := range connectionIDs {
+		slots <- struct{}{}
+		workers.Go(func() {
+			defer func() { <-slots }()
+			results[index] = e.closeConnection(ctx, input, connectionID, connections[connectionID])
 		})
-		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
-			closed.AlreadyClosed = true
-			err = nil
-		}
-		if err != nil {
-			result := providerExecutionFailure(err)
-			slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
+	}
+	workers.Wait()
+
+	allAlreadyClosed := true
+	for _, result := range results {
+		if result.Outcome != provideroperations.OutcomeConfirmed && result.Outcome != provideroperations.OutcomeSatisfied {
 			return result
 		}
-		allAlreadyClosed = allAlreadyClosed && closed.AlreadyClosed
-		for _, target := range connectionTargets {
-			if err := e.publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
-				TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
-				ParticipantGeneration: target.reference.ParticipantGeneration, ConnectionID: connectionID,
-				MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
-			}); err != nil {
-				slog.WarnContext(ctx, "Provider media cleanup observation failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "record_closed_publication", "error_code", "observation_update_failed")
-				return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
-			}
-		}
+		allAlreadyClosed = allAlreadyClosed && result.Outcome == provideroperations.OutcomeSatisfied
 	}
 	if allAlreadyClosed {
+		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
+	}
+	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
+}
+
+func (e SFUExecutor) closeConnection(ctx context.Context, input provideroperations.OperationInput, connectionID string, targets []publicationTarget) ExecutionResult {
+	tracks := make([]mediaplane.CloseTrack, 0, len(targets))
+	for _, target := range targets {
+		tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
+	}
+	closed, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
+		Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
+	})
+	if errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		closed.AlreadyClosed = true
+		err = nil
+	}
+	if err != nil {
+		result := providerExecutionFailure(err)
+		slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
+		return result
+	}
+	var observationFailed bool
+	for _, target := range targets {
+		if err := e.publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
+			TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
+			ParticipantGeneration: target.reference.ParticipantGeneration, ConnectionID: connectionID,
+			MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
+		}); err != nil {
+			slog.WarnContext(ctx, "Provider media cleanup observation failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "record_closed_publication", "error_code", "observation_update_failed")
+			observationFailed = true
+		}
+	}
+	if observationFailed {
+		return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
+	}
+	if closed.AlreadyClosed {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
