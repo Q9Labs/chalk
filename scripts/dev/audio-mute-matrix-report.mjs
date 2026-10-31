@@ -72,6 +72,15 @@ const summaries = report.versions.map((run) => {
     const key = `${operation}:${failure.http_status}`;
     providerStatusCounts[key] = (providerStatusCounts[key] || 0) + 1;
   }
+  const seenConnections = new Set();
+  const connectionTimeline = run.network.flatMap((event) => {
+    if (!event.connectionNumber) return [];
+    const key = `${event.participant}:${event.connectionNumber}`;
+    if (seenConnections.has(key)) return [];
+    seenConnections.add(key);
+    return [{ participant: event.participant, connectionNumber: event.connectionNumber, t: event.at / 1000 - run.joinSeconds }];
+  });
+  const commandErrors = run.samples.flatMap((sample) => sample.states.filter((state) => state.commandError).map((state) => ({ t: sample.t, listener: state.listener, error: state.commandError })));
   return {
     version: run.version,
     sdkRevision: run.sdkRevision,
@@ -80,6 +89,8 @@ const summaries = report.versions.map((run) => {
     measuredSeconds: lastT,
     apiStatusCounts: statusCounts,
     providerStatusCounts,
+    connectionTimeline,
+    commandErrors,
     pairs,
     lostPairSeconds: pairs.reduce((sum, pair) => sum + pair.lostSeconds, 0),
     medianUnmuteSeconds: median,
