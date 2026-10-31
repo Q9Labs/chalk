@@ -56,6 +56,15 @@ const settled = async () => {
 };
 
 describe("automatic connection reports", () => {
+  it("retains allowlisted camera processing failures in the diagnostic report", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "media_state", source: "camera", phase: "failed", outcome: "failed", code: "media_capture_failed", media_error_kind: "OperationError", media_error_step: "local_capture" });
+    fail(reporter);
+    await settled();
+    expect(test.sent[0]?.events[0]).toMatchObject({ event: "media_state", source: "camera", code: "media_capture_failed", media_error_kind: "OperationError", media_error_step: "local_capture" });
+    reporter.dispose();
+  });
   it("automatically uploads bounded media mismatch facts without device text", async () => {
     const test = fixture();
     const reporter = test.create();

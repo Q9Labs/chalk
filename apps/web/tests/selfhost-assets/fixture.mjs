@@ -14,6 +14,11 @@ export async function setupAssetScripts(fixture) {
   await cp(join(webRoot, "scripts/vendor-asset-files.ts"), join(dirname(script), "vendor-asset-files.ts"));
   await symlink(join(webRoot, "node_modules"), join(fixture, "apps/web/node_modules"), "dir");
   await cp(join(webRoot, "src/lib/whiteboard-asset-versions.ts"), versions);
+  await cp(join(webRoot, "src/lib/camera-effect-assets.ts"), join(dirname(versions), "camera-effect-assets.ts"));
+  const clientRoot = join(fixture, "sdks/typescript/client");
+  await mkdir(clientRoot, { recursive: true });
+  await writeFile(join(clientRoot, "package.json"), "{}");
+  await symlink(join(webRoot, "../../sdks/typescript/client/node_modules"), join(clientRoot, "node_modules"), "dir");
   await writeFile(join(fixture, "package.json"), JSON.stringify({ type: "module" }));
   const packageRoot = join(fixture, "packages/whiteboard");
   await mkdir(packageRoot, { recursive: true });
