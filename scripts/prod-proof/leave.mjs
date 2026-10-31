@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { evaluateLeaves } from "./leave-criteria.mjs";
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
-import { prepareIntegration } from "./proofs.mjs";
+import { createSpace, prepareIntegration } from "./proofs.mjs";
 import { check, command, save } from "./runtime.mjs";
 
 const baselineVersion = "5.2.6";
@@ -28,18 +28,7 @@ export async function baselineEntry(run) {
 }
 
 async function createEpisode(run) {
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `leave-proof-${randomUUID()}`,
-    metadata: { proof_run_id: run.runId },
-    media_plane: "cf_sfu",
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  const space = await createSpace(run);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   return { space, episode };
 }
@@ -73,14 +62,17 @@ async function observeDeparture(page, scenario) {
   // delay the outbound Leave or its server acknowledgement.
   await armPublications(page, scenario === "publications-403");
   return page.evaluate(async (name) => {
-    const startedAt = performance.timeOrigin + performance.now();
-    try {
-      await window.proofClient.leave();
-    } catch (error) {
-      // The old client's known 5-second failure is diagnostic evidence. Candidate
-      // failures still fail the comparison through confirmed/deadlineFallback.
-      if (!String(error).includes("left locally without a durable Leave acknowledgement")) throw error;
+    async function attemptLeave() {
+      try {
+        await window.proofClient.leave();
+      } catch (error) {
+        // Keep the old client's known deadline as failed-ack evidence. Candidate
+        // failures still fail through confirmed/deadlineFallback.
+        if (!String(error).includes("left locally without a durable Leave acknowledgement")) throw error;
+      }
     }
+    const startedAt = performance.timeOrigin + performance.now();
+    await attemptLeave();
     const probe = window.proofLeave;
     const completedAt = performance.timeOrigin + performance.now();
     return {
@@ -113,6 +105,11 @@ export async function sampleLeave(run, origin, sdkEntry, scenario) {
   }
 }
 
+function capturedBaseline() {
+  const value = process.env.CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS;
+  return { median: value ? Number(value) : undefined, evidence: process.env.CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256 || null };
+}
+
 export async function leaveProof(run) {
   const receiver = await prepareIntegration(run, false);
   const entry = await baselineEntry(run);
@@ -127,9 +124,9 @@ export async function leaveProof(run) {
     candidate.push(await sampleLeave(run, receiver.origin, undefined, "publications-403"));
     await save(`${run.directory}/leave-samples.json`, { baseline, candidate });
   }
-  const captured = process.env.CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS;
-  const result = evaluateLeaves(baseline, candidate, captured ? Number(captured) : undefined);
-  result.baselineEvidenceSha256 = process.env.CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256 || null;
+  const captured = capturedBaseline();
+  const result = evaluateLeaves(baseline, candidate, captured.median);
+  result.baselineEvidenceSha256 = captured.evidence;
   await save(`${run.directory}/leave-comparison.json`, result);
   console.log(`Leave comparison: baseline median ${result.baselineMedianMs} ms, max ${result.baselineMaxMs} ms; candidate median ${result.candidateMedianMs} ms, max ${result.candidateMaxMs} ms; limit ${result.limitMs} ms; 403 observed ${result.observed403}`);
   check(result.passed, "Leave acknowledgement comparison failed");

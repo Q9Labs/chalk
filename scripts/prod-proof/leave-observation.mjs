@@ -10,38 +10,49 @@ export function installLeaveObservation() {
     return socket;
   }
   window.WebSocket = new Proxy(WebSocket, { construct: (target, args) => observeSocket(Reflect.construct(target, args)) });
-  function observeMessage(state, data) {
-    let frame;
+  function parseFrame(data) {
     try {
-      frame = JSON.parse(data);
+      return JSON.parse(data);
     } catch {
-      return;
+      return null;
     }
+  }
+  function ackMatches(frame, state) {
+    return frame.type === "ack" && frame.command_id === state.command && ["committed", "satisfied"].includes(frame.outcome);
+  }
+  function departureMatches(frame, state) {
+    return frame.type === "event" && frame.name === "participant_left" && frame.payload?.participant_id === state.participant;
+  }
+  function recordConfirmation(frame, state) {
+    if (!state.command) return;
+    const acknowledged = ackMatches(frame, state);
+    const departed = departureMatches(frame, state);
+    if (![acknowledged, departed].some(Boolean)) return;
+    probe.ackAt ??= now();
+    probe.frames.push({ at: now(), direction: "received", type: frame.type, name: frame.name, outcome: frame.outcome, matchesLeave: acknowledged, ownDeparture: departed });
+  }
+  function observeMessage(state, data) {
+    const frame = parseFrame(data);
+    if (!frame) return;
     if (frame.type === "welcome") state.participant = frame.participant_id;
-    const acknowledged = frame.type === "ack" && frame.command_id === state.command && ["committed", "satisfied"].includes(frame.outcome);
-    const departed = frame.type === "event" && frame.name === "participant_left" && frame.payload?.participant_id === state.participant;
-    if (state.command && (acknowledged || departed)) {
-      probe.ackAt ??= now();
-      probe.frames.push({ at: now(), direction: "received", type: frame.type, name: frame.name, outcome: frame.outcome, matchesLeave: acknowledged, ownDeparture: departed });
-    }
+    recordConfirmation(frame, state);
+  }
+  function isLeaveOperation(frame) {
+    return frame?.type === "operation" && frame.name === "participant_leave";
+  }
+  function recordLeave(socket, frame) {
+    observed.get(socket).command = frame.command_id;
+    probe.sentAt ??= now();
+    probe.frames.push({ at: now(), direction: "sent", type: frame.type, name: frame.name });
+    void window.proofReleasePublications?.();
   }
   const send = WebSocket.prototype.send;
   WebSocket.prototype.send = function (data) {
     if (!observed.has(this)) {
       observeSocket(this);
     }
-    let frame;
-    try {
-      frame = JSON.parse(data);
-    } catch {
-      /* Other frames are irrelevant. */
-    }
-    if (frame?.type === "operation" && frame.name === "participant_leave") {
-      observed.get(this).command = frame.command_id;
-      probe.sentAt ??= now();
-      probe.frames.push({ at: now(), direction: "sent", type: frame.type, name: frame.name });
-      void window.proofReleasePublications?.();
-    }
+    const frame = parseFrame(data);
+    if (isLeaveOperation(frame)) recordLeave(this, frame);
     return send.call(this, data);
   };
   const close = RTCPeerConnection.prototype.close;

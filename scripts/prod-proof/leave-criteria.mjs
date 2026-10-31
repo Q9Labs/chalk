@@ -5,31 +5,47 @@ export function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function validateCapturedMedian(value) {
+  if (value === undefined) return;
+  if (![Number.isFinite(value), value > 0, value <= 5000].every(Boolean)) throw new Error("Captured baseline median must be positive and at most 5000 ms");
+}
+function summarize(samples) {
+  const values = samples.filter((sample) => sample.confirmed).map((sample) => sample.ms);
+  if (!values.length) return { median: null, max: null };
+  return { median: median(values), max: Math.max(...values) };
+}
+function confirmed(sample) {
+  return sample.confirmed && !sample.deadlineFallback;
+}
+function safeRejection(sample) {
+  return sample.rejectedWhileLeaving && !sample.peerClosedBeforeAck;
+}
+function limitFor(value) {
+  if (value === null) return null;
+  return 2 * value + 500;
+}
 export function evaluateLeaves(baseline, candidate, capturedMedianMs) {
-  if (capturedMedianMs !== undefined && (!Number.isFinite(capturedMedianMs) || capturedMedianMs <= 0 || capturedMedianMs > 5000)) throw new Error("Captured baseline median must be positive and at most 5000 ms");
+  validateCapturedMedian(capturedMedianMs);
   const reference = baseline.filter((sample) => sample.scenario === "ordinary");
   const ordinary = candidate.filter((sample) => sample.scenario === "ordinary");
   const rejected = candidate.filter((sample) => sample.scenario === "publications-403");
-  const complete = reference.length === 5 && ordinary.length === 5 && rejected.length === 5;
-  const confirmed = [...reference, ...candidate].every((sample) => sample.confirmed && !sample.deadlineFallback);
-  const observed403 = rejected.every((sample) => sample.rejectedWhileLeaving && !sample.peerClosedBeforeAck);
-  const baselineMs = reference.filter((sample) => sample.confirmed).map((sample) => sample.ms);
-  const candidateMs = candidate.filter((sample) => sample.confirmed).map((sample) => sample.ms);
-  const baselineMedianMs = baselineMs.length ? median(baselineMs) : null;
-  const candidateMedianMs = candidateMs.length ? median(candidateMs) : null;
-  const referenceMedianMs = capturedMedianMs ?? baselineMedianMs;
-  const limitMs = referenceMedianMs === null ? null : 2 * referenceMedianMs + 500;
-  const candidateMaxMs = candidateMs.length ? Math.max(...candidateMs) : null;
+  const complete = [reference.length, ordinary.length, rejected.length].every((count) => count === 5);
+  const allConfirmed = [...reference, ...candidate].every(confirmed);
+  const observed403 = rejected.every(safeRejection);
+  const before = summarize(reference);
+  const after = summarize(candidate);
+  const referenceMedianMs = capturedMedianMs ?? before.median;
+  const limitMs = limitFor(referenceMedianMs);
   return {
-    passed: complete && confirmed && observed403 && candidateMedianMs <= limitMs && candidateMaxMs <= 5000,
+    passed: [complete, allConfirmed, observed403, after.median <= limitMs, after.max <= 5000].every(Boolean),
     complete,
-    confirmed,
+    confirmed: allConfirmed,
     observed403,
-    baselineMedianMs,
+    baselineMedianMs: before.median,
     referenceMedianMs,
-    baselineMaxMs: baselineMs.length ? Math.max(...baselineMs) : null,
-    candidateMedianMs,
-    candidateMaxMs,
+    baselineMaxMs: before.max,
+    candidateMedianMs: after.median,
+    candidateMaxMs: after.max,
     limitMs,
     baselineSamples: reference.length,
     candidateSamples: candidate.length,
