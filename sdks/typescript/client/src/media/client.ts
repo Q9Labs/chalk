@@ -1049,10 +1049,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#transport?.updateTracks || !this.#canObserveReceiveProgress(connection)) return;
     const now = performance.now();
     const cameras = [...this.#remoteTracks.values()].filter(({ source, track }) => source === "camera" && track.readyState === "live");
-    const changes = selector.sample(now, report, cameras);
-    const active = new Set(changes.map(({ publicationId }) => publicationId));
-    for (const id of this.#viewerLayerPending.keys()) if (!active.has(id)) this.#viewerLayerPending.delete(id);
-    for (const change of changes) this.#viewerLayerPending.set(change.publicationId, change);
+    this.#queueViewerLayers(selector.sample(now, report, cameras));
     if (this.#viewerLayerUpdating || now < this.#viewerLayerUpdateAt) return;
     const batch = [...this.#viewerLayerPending.values()]
       .flatMap((change) => {
@@ -1073,6 +1070,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         else selector.applied(change);
       }
     });
+  }
+  #queueViewerLayers(changes: readonly ViewerLayerChange[]): void {
+    const active = new Set(changes.map(({ publicationId }) => publicationId));
+    for (const id of this.#viewerLayerPending.keys()) if (!active.has(id)) this.#viewerLayerPending.delete(id);
+    for (const change of changes) this.#viewerLayerPending.set(change.publicationId, change);
   }
   // A layer switch is an optimization: when the SFU refuses it, the pulled layer keeps playing.
   async #requestViewerLayers(transport: CloudflareSFUSignalingTransport, batch: readonly { readonly change: ViewerLayerChange; readonly mid: string }[]): Promise<ReadonlySet<string>> {

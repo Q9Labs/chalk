@@ -76,7 +76,7 @@ export class ViewerLayerPolicy {
     if (this.#tileIsSmall) return this.#drop(false);
     if (health === "bad" || health === "severe") {
       this.#stableSamples = 0;
-      if (health === "severe" || ++this.#badSamples >= DROP_AFTER_BAD_SAMPLES) return this.#drop(true, !isBad(sample, false) && health !== "severe" ? sample.framesPerSecond : undefined);
+      if (health === "severe" || ++this.#badSamples >= DROP_AFTER_BAD_SAMPLES) return this.#drop(true, frameRateProbe(sample, health));
       return this.#layer;
     }
     this.#badSamples = 0;
@@ -90,19 +90,23 @@ export class ViewerLayerPolicy {
       this.#unimprovedSamples = 0;
       return this.#layer;
     }
-    // Only compare clean, settled samples from both layers. If l buys no frame
-    // rate, keep h's resolution without treating another probe as congestion.
-    const fps = sample.framesPerSecond;
-    if (this.#frameRateProbe !== undefined && fps !== undefined && fps > 0 && fps <= this.#frameRateProbe * 1.25) {
-      if (++this.#unimprovedSamples >= FRAME_RATE_COMPARISON_SAMPLES) {
-        this.#senderFrameRate = this.#frameRateProbe;
-        this.#backoff = 1;
-        return this.#rise();
-      }
-    } else this.#unimprovedSamples = 0;
+    if (this.#detectSenderLimit(sample.framesPerSecond)) {
+      this.#senderFrameRate = this.#frameRateProbe;
+      this.#backoff = 1;
+      return this.#rise();
+    }
     const needed = this.#limitedByNetwork ? RISE_AFTER_GOOD_SAMPLES * this.#backoff : RISE_AFTER_TILE_GROWS_SAMPLES;
     if (++this.#goodSamples < needed) return this.#layer;
     return this.#rise();
+  }
+
+  #detectSenderLimit(fps: number | undefined): boolean {
+    // If clean, settled l samples buy no frame rate, keep h's resolution.
+    if (this.#frameRateProbe === undefined || fps === undefined || fps <= 0 || fps > this.#frameRateProbe * 1.25) {
+      this.#unimprovedSamples = 0;
+      return false;
+    }
+    return ++this.#unimprovedSamples >= FRAME_RATE_COMPARISON_SAMPLES;
   }
 
   #drop(byNetwork: boolean, frameRate?: number): ViewerLayer {
@@ -147,6 +151,10 @@ function isSevere({ lossFraction, freezeSeconds }: ViewerLayerSample): boolean {
 function isBad({ lossFraction, framesPerSecond, newFreezes }: ViewerLayerSample, checkFrameRate: boolean): boolean {
   if (newFreezes > 0 || (lossFraction !== undefined && lossFraction >= BAD_LOSS)) return true;
   return checkFrameRate && lossFraction !== undefined && framesPerSecond !== undefined && framesPerSecond < MIN_FRAMES_PER_SECOND;
+}
+
+function frameRateProbe(sample: ViewerLayerSample, health: Health): number | undefined {
+  return health === "severe" || isBad(sample, false) ? undefined : sample.framesPerSecond;
 }
 
 function classify(sample: ViewerLayerSample, checkFrameRate: boolean): Health {
