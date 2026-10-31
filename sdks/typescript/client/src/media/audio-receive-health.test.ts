@@ -61,6 +61,27 @@ describe("AudioReceiveHealth", () => {
     h.tracker.dispose();
   });
 
+  it("reports element_bound when playback advances then pauses between samples", async () => {
+    const h = harness();
+    const p = remote();
+    const audio = element(p.track, false);
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.pullSucceeded([p.publicationId]);
+    h.tracker.observeAudioElement(p.track, audio).played(undefined);
+    h.bytes(p.track, 1);
+    await h.tracker.sample();
+    audio.currentTime = 1;
+    Object.assign(audio, { paused: true });
+    h.tracker.start();
+    for (let i = 2; i <= 4; i++) {
+      h.bytes(p.track, i);
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    expect(h.events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "element_bound", element_state: "paused", duration_ms: 15000 }));
+    h.tracker.dispose();
+  });
+
   it.each(["resolved", "event", "frozen"])("requires started and advancing playback: %s", async (mode) => {
     const h = harness();
     const p = remote();
