@@ -24,8 +24,10 @@ heal-hostmute-none-P1d     | P1d    | violated | MaxHostMute=1 RecoveryPause="no
 heal-retire-on-off-P5src   | P5src  | pass | MuteKeepsPublication=FALSE
 heal-selfdetect-P5src      | P5src  | pass | PublisherSelfDetect=TRUE
 heal-nogc-selfdetect-P5src | P5src  | pass | SfuExpiresStale=FALSE PublisherSelfDetect=TRUE
-# A listener's roster can be older than Sync's: it may pull a publication Sync already lists as dead.
+# A listener's roster can be older than Sync's: it may pull after Sync revoked the grant (S5b). It cannot pull
+# a publication Sync lists as dead, because dead is reported only for a track the SFU has already lost (S5d).
 heal-S5b-stale-roster      | S5b    | violated |
+heal-S5d-no-pull-of-dead   | S5d    | pass |
 # Mutants: each removes one mechanism and must break the property it exists for.
 mutant-heal-nodead-P5src   | P5src  | violated | DeadPath=FALSE
 mutant-heal-noflat-P5src   | P5src  | violated | FlatDrop=FALSE

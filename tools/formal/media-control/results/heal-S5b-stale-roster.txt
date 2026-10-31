@@ -1,6 +1,6 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-11-01 04:07:17.
+Finished computing initial states: 1 distinct state generated at 2026-11-01 04:12:05.
 Error: Action property S5b_PullOnlyIfSyncListsOn is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -699,6 +699,6 @@ State 12: <Next line 429, col 39 to line 429, col 63 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-34215 states generated, 10114 distinct states found, 3012 states left on queue.
-The depth of the complete state graph search is 13.
-Finished in 00s at (2026-11-01 04:07:18)
+35349 states generated, 10478 distinct states found, 3209 states left on queue.
+The depth of the complete state graph search is 14.
+Finished in 00s at (2026-11-01 04:12:06)

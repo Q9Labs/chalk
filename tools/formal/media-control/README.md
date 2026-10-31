@@ -167,7 +167,8 @@ Actors: the publisher (the decided on/off rules, reduced to one source), Sync (o
 - **P1d (liveness).** A host mute that Sync has applied stops capture, also when it arrives during a reconnect.
 - **P2 (safety), P4h.** An off is never lost across a publisher reconnect; publisher and Sync agree again.
 - **S5 (safety).** The heal loop pulls a publication only if its own roster lists it as on.
-- **S5b (expected violated).** Against Sync itself the listener's roster can be older than Sync's, so a listener may pull a publication Sync already lists as dead. The heal loop cannot rule this out; the check records it.
+- **S5b (expected violated).** Against Sync itself the listener's roster can be older than Sync's, so a listener may pull after Sync has revoked the grant (an off or a host mute) and before the listener sees it. The heal loop cannot rule this out; the check records it.
+- **S5d (holds).** The heal loop never pulls a publication Sync lists as dead, even from a stale roster: the API reports a publication dead only after the SFU has lost its track, and a lost track cannot be pulled again. This holds because of that ordering in the model, not because the listener checks Sync.
 - **P6 (safety).** Retry spacing stays within the cap. This is the check for the no-cap mutant, because without time eventual liveness does not depend on how long a backoff is.
 
 ### Fairness

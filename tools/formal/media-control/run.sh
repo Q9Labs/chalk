@@ -141,6 +141,7 @@ PROPERTY S5_PullOnlyListed"; symmetry=yes ;;
     P5src) checks="PROPERTY P5src_MicrophoneHeard" ;;
     P6) checks="INVARIANT P6_RetrySpacing" ;;
     S5b) checks="PROPERTY S5b_PullOnlyIfSyncListsOn" ;;
+    S5d) checks="PROPERTY S5d_NoPullOfDead" ;;
     S5c) checks="PROPERTY S5c_UndesiredDropped" ;;
     W1) checks="INVARIANT W1_Heard" ;;
     W2) checks="INVARIANT W2_DeadThenRepublished" ;;

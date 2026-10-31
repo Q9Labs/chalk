@@ -498,8 +498,15 @@ S5_PullOnlyListed ==
   [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => g \in Desired(l) ]_vars
 
 \* S5b. Against Sync itself, not the listener's roster. Expected VIOLATED: the roster is stale.
+\* The counterexample is a pull while Sync has already revoked the grant (an off or a host mute)
+\* and the listener has not yet seen it.
 S5b_PullOnlyIfSyncListsOn ==
   [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => list[g] = "on" /\ grant ]_vars
+
+\* S5d. No pull of a publication Sync lists as dead. Expected to HOLD: the API reports a publication
+\* dead only after the SFU has lost its track, and a lost track cannot be pulled again.
+S5d_NoPullOfDead ==
+  [][ \A l \in Listeners, g \in Gens : (g \in pulled'[l] /\ g \notin pulled[l]) => list[g] # "dead" ]_vars
 
 \* S5c. A pulled publication that Sync lists as off or dead is eventually dropped.
 S5c_UndesiredDropped ==
