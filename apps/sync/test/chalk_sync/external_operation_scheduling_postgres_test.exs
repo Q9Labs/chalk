@@ -237,13 +237,19 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
   defp await_left(client, participant_id) do
     case Client.recv(client, 90_000) do
-      {:json,
-       %{
-         "type" => "event",
-         "name" => "participant_left",
-         "payload" => %{"participant_id" => ^participant_id}
-       }, client} ->
-        Client.close_tcp(client)
+      {:json, %{"type" => "event"} = frame, client} ->
+        client =
+          Client.send_json(client, %{
+            "type" => "delivery_ack",
+            "stream" => "control",
+            "revision" => frame["revision"],
+            "state_digest" => frame["resulting_state_digest"]
+          })
+
+        if frame["name"] == "participant_left" and
+             frame["payload"]["participant_id"] == participant_id,
+           do: Client.close_tcp(client),
+           else: await_left(client, participant_id)
 
       {:json, _frame, client} ->
         await_left(client, participant_id)
