@@ -25,9 +25,12 @@ it.each([
   const acknowledgement = Promise.withResolvers<Awaited<ReturnType<typeof platform.sync.leave>>>();
   const leaveSync = vi.spyOn(platform.sync, "leave").mockImplementation(() => acknowledgement.promise);
   const stopSync = vi.spyOn(platform.sync, "stop");
-  const stopMedia = vi.fn();
   const microphone = track("audio");
   const camera = track("video");
+  const stopMedia = vi.fn(() => {
+    microphone.stop();
+    camera.stop();
+  });
   const client = createSpaceClientForPlatform(
     { space: "leave-proof", getAccess: async () => opaqueAccessGrant(1) },
     {

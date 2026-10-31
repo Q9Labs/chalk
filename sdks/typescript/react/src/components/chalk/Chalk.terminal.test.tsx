@@ -28,6 +28,10 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
     const microphone = track("audio");
     const camera = track("video");
+    platform.stopped.mockImplementation(() => {
+      microphone.stop();
+      camera.stop();
+    });
     const onLeft = vi.fn(() => {
       expect(microphone.readyState).toBe("ended");
       expect(camera.readyState).toBe("ended");
