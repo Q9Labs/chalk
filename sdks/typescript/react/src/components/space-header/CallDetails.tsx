@@ -1,4 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
+import { currentSessionId } from "@q9labsai/chalk-client";
 import { useRef, useState, type RefObject } from "react";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
 import { shareQr } from "./share-qr";
@@ -212,6 +213,7 @@ export function CallDetails({
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = shareQr(link);
   const [details, setDetails] = useState(false);
+  const sessionId = currentSessionId();
   return (
     <div className="chalk-details">
       <div className="chalk-shell-details-heading">
@@ -298,6 +300,15 @@ export function CallDetails({
           </button>
         ) : null}
       </section>
+      {sessionId ? (
+        <section className="chalk-shell-section">
+          <h3 className="chalk-shell-label">Session ID</h3>
+          <div className="chalk-shell-link">
+            <span dir="ltr">{sessionId}</span>
+            <ChalkCopyButton text={sessionId} label="Copy session ID" />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

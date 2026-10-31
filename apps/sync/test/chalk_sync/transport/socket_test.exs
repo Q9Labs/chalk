@@ -96,6 +96,59 @@ defmodule ChalkSync.Transport.SocketV1Test do
     assert Map.has_key?(closed, :close_code)
   end
 
+  @session_id "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
+
+  for {label, headers, correlation, at_handshake, expected} <- [
+        {"hello field", [], %{"baggage" => "session.id=#{@session_id}"}, nil, @session_id},
+        {"upgrade header", [{"baggage", "userId=alice,session.id=#{@session_id}"}], %{},
+         @session_id, @session_id},
+        {"invalid hello field", [], %{"baggage" => "session.id=not-a-uuid"}, nil, nil},
+        {"invalid upgrade header", [{"baggage", "session.id=NOT-A-UUID"}], %{}, nil, nil},
+        {"no baggage", [], %{}, nil, nil}
+      ] do
+    @headers headers
+    @correlation correlation
+    @at_handshake at_handshake
+    @expected expected
+    test "session.id from #{label} labels connection events but never frames", %{port: port} do
+      owner = self()
+      handler = "session-id-#{System.unique_integer([:positive])}"
+
+      :telemetry.attach(
+        handler,
+        [:chalk_sync, :observability, :event],
+        fn _, _, metadata, _ ->
+          if metadata.event in [
+               "sync.websocket.handshake",
+               "sync.websocket.authenticated",
+               "sync.websocket.closed"
+             ],
+             do: send(owner, {:session_event, metadata.event, metadata.session_id})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler) end)
+      host = identity()
+      seed_participants(host, [host])
+      client = connect_live(port, host, @headers, @correlation)
+      client = Client.send_json(client, %{"type" => "ping"})
+      assert {:json, pong, client} = Client.recv(client)
+      refute Map.has_key?(pong, "baggage")
+      refute inspect(pong) =~ @session_id
+      client = Client.close(client)
+      Client.recv(client)
+
+      assert_receive {:session_event, "sync.websocket.handshake", handshake_session}
+      assert_receive {:session_event, "sync.websocket.authenticated", authenticated_session}
+      assert_receive {:session_event, "sync.websocket.closed", closed_session}
+
+      assert handshake_session == @at_handshake
+      assert authenticated_session == @expected
+      assert closed_session == @expected
+    end
+  end
+
   test "a failure after authentication keeps the identity on close", %{port: port} do
     owner = self()
     handler = "failed-hello-#{System.unique_integer([:positive])}"

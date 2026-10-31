@@ -19,6 +19,7 @@ defmodule ChalkSync.Observability do
   @runtime_event [:chalk_sync, :runtime, :health]
   @runtime_interval_ms 30_000
   @journey_id_pattern ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  @session_id_pattern ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
   @episode_event_names ~w(
     admission_denied admission_expired admission_policy_changed admission_requested
     deadline_changed episode_ended episode_started hand_lowered hand_raised
@@ -30,6 +31,7 @@ defmodule ChalkSync.Observability do
   @type context :: %{
           journey_id: String.t() | nil,
           journey_observed?: boolean(),
+          session_id: String.t() | nil,
           otel_ctx: map(),
           w3c_trace?: boolean()
         }
@@ -38,12 +40,17 @@ defmodule ChalkSync.Observability do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
-  @doc "Builds correlation context from HTTP headers or protocol-frame fields."
+  @doc """
+  Builds correlation context from HTTP headers or protocol-frame fields.
+
+  The `baggage` header or hello field may carry the connection's `session.id`.
+  It is connection-scoped: it never reaches `frame_fields/1` or durable work.
+  """
   @spec context(map() | [{String.t(), String.t()}] | nil) :: context() | nil
   def context(nil), do: nil
 
   def context(carrier) when is_map(carrier) do
-    fields = Map.take(carrier, ["journey_id", "traceparent", "tracestate"])
+    fields = Map.take(carrier, ["journey_id", "traceparent", "tracestate", "baggage"])
 
     if fields == %{}, do: nil, else: build_context(fields)
   end
@@ -57,9 +64,20 @@ defmodule ChalkSync.Observability do
         {"x-chalk-journey-id", value} -> {"journey_id", value}
         pair -> pair
       end)
+      |> put_baggage(headers)
 
     if fields == %{}, do: nil, else: build_context(fields)
   end
+
+  @doc "Sets the connection process's Logger metadata from its context."
+  @spec bind_logger(context() | nil) :: :ok
+  def bind_logger(%{session_id: session_id}) when is_binary(session_id) do
+    # The key is read by log handlers; the console format does not print it.
+    # credo:disable-for-next-line Credo.Check.Warning.MissedMetadataKeyInLoggerConfig
+    Logger.metadata(session_id: session_id)
+  end
+
+  def bind_logger(_context), do: :ok
 
   @doc "Merges missing protocol-frame context into a connection's existing context."
   @spec merge(context() | nil, context() | nil) :: context()
@@ -82,6 +100,7 @@ defmodule ChalkSync.Observability do
             current.journey_observed?
           ),
         journey_observed?: current.journey_observed? or incoming_journey?,
+        session_id: current.session_id || incoming.session_id,
         otel_ctx: current_or_incoming(current.otel_ctx, incoming_otel_ctx, current.w3c_trace?),
         w3c_trace?: current.w3c_trace? or incoming_trace?
     }
@@ -305,6 +324,7 @@ defmodule ChalkSync.Observability do
     %{
       journey_id: journey_id,
       journey_observed?: not is_nil(journey_id),
+      session_id: session_id_from_baggage(fields["baggage"]),
       otel_ctx: otel_ctx,
       w3c_trace?: remote_span?(otel_ctx)
     }
@@ -314,6 +334,7 @@ defmodule ChalkSync.Observability do
     %{
       journey_id: new_journey_id(),
       journey_observed?: false,
+      session_id: nil,
       otel_ctx: :otel_ctx.new(),
       w3c_trace?: false
     }
@@ -390,18 +411,27 @@ defmodule ChalkSync.Observability do
     %{
       event: name,
       journey_id: context.journey_id,
+      session_id: context.session_id,
       attributes: attributes,
       stage: Atom.to_string(stage)
     }
   end
 
-  defp span_attributes(metadata, attributes) do
-    Map.merge(attributes, %{
+  @doc false
+  def span_attributes(metadata, attributes) do
+    attributes
+    |> Map.merge(%{
       "chalk.journey.id" => metadata.journey_id,
       "chalk.sync.event" => metadata.event,
       "chalk.sync.stage" => metadata.stage
     })
+    |> put_session_id(metadata, "session.id")
   end
+
+  defp put_session_id(fields, %{session_id: session_id}, key) when is_binary(session_id),
+    do: Map.put(fields, key, session_id)
+
+  defp put_session_id(fields, _metadata, _key), do: fields
 
   defp log(metadata, context) do
     trace_metadata =
@@ -422,10 +452,9 @@ defmodule ChalkSync.Observability do
         ],
         do:
           JSON.encode!(
-            Map.merge(metadata.attributes, %{
-              event: metadata.event,
-              journey_id: metadata.journey_id
-            })
+            metadata.attributes
+            |> Map.merge(%{event: metadata.event, journey_id: metadata.journey_id})
+            |> put_session_id(metadata, "session.id")
           ),
         else: "chalk_sync_observability"
       ),
@@ -434,9 +463,14 @@ defmodule ChalkSync.Observability do
         journey_id: metadata.journey_id,
         observability_stage: metadata.stage,
         observability_attributes: metadata.attributes
-      ] ++ trace_metadata
+      ] ++ session_metadata(metadata) ++ trace_metadata
     )
   end
+
+  defp session_metadata(%{session_id: session_id}) when is_binary(session_id),
+    do: [session_id: session_id]
+
+  defp session_metadata(_metadata), do: []
 
   defp span_metadata(nil), do: []
 
@@ -497,6 +531,33 @@ defmodule ChalkSync.Observability do
   end
 
   defp valid_journey_id(_value), do: nil
+
+  # W3C baggage: comma-separated `key=value;property` members. Only a lowercase
+  # UUID `session.id` member is kept; anything else is ignored.
+  defp put_baggage(fields, headers) do
+    case for({key, value} <- headers, String.downcase(key) == "baggage", do: value) do
+      [] -> fields
+      values -> Map.put(fields, "baggage", Enum.join(values, ","))
+    end
+  end
+
+  defp session_id_from_baggage(baggage) when is_binary(baggage) do
+    baggage
+    |> String.split(",")
+    |> Enum.find_value(fn member ->
+      with [pair | _properties] <- String.split(member, ";"),
+           [key, value] <- String.split(pair, "=", parts: 2),
+           "session.id" <- String.trim(key),
+           value = String.trim(value),
+           true <- Regex.match?(@session_id_pattern, value) do
+        value
+      else
+        _other -> nil
+      end
+    end)
+  end
+
+  defp session_id_from_baggage(_baggage), do: nil
 
   defp new_journey_id do
     <<prefix::binary-size(6), version, next, variant, suffix::binary-size(7)>> =
