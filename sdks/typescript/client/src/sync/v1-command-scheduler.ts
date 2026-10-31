@@ -36,6 +36,7 @@ type V1CommandSchedulerOptions = {
   readonly sendIfLive: (frame: SyncV1ClientFrame) => void;
   readonly stateChanged: () => void;
   readonly ackHeadIsProven: (ack: Extract<V1CommandResult, { readonly outcome: "committed" | "satisfied" }>) => boolean;
+  readonly controlHead: () => { readonly revision: number; readonly state_digest: string };
 };
 
 export class V1CommandScheduler {
@@ -152,6 +153,11 @@ export class V1CommandScheduler {
   async acknowledge(frame: V1CommandResult): Promise<void> {
     const deferred = this.#commands.get(frame.command_id);
     if (!deferred) return;
+    if (frame.outcome === "rejected" && frame.reason === "participant_inactive" && deferred.frame.type === "operation" && inactiveParticipantSatisfies(deferred.frame.name)) {
+      const head = this.#options.controlHead();
+      await this.#finishCommand(frame.command_id, { type: "ack", command_id: frame.command_id, delivery: "duplicate", outcome: "satisfied", revision: head.revision, state_digest: head.state_digest });
+      return;
+    }
     if (frame.outcome === "rejected" || frame.outcome === "command_id_conflict") {
       await this.#finishCommand(frame.command_id, frame);
       return;
@@ -193,15 +199,12 @@ export class V1CommandScheduler {
   }
 
   async settleTerminalRecovery(frame: Extract<SyncV1ServerFrame, { readonly type: "welcome"; readonly mode: "terminal" }>): Promise<void> {
-    const satisfiedOperations = new Set<V1OperationName>();
-    if (frame.reason === "episode_ended") {
-      satisfiedOperations.add("end_episode");
-      satisfiedOperations.add("participant_leave");
-    } else if (frame.reason === "participant_inactive") {
-      satisfiedOperations.add("participant_leave");
-    }
+    const satisfies = (operation: V1OperationName): boolean => {
+      if (frame.reason === "episode_ended") return operation === "end_episode" || operation === "participant_leave";
+      return frame.reason === "participant_inactive" && inactiveParticipantSatisfies(operation);
+    };
     for (const [commandId, deferred] of this.#commands) {
-      if (deferred.frame.type !== "operation" || !satisfiedOperations.has(deferred.frame.name)) continue;
+      if (deferred.frame.type !== "operation" || !satisfies(deferred.frame.name)) continue;
       await this.#finishCommand(commandId, {
         type: "ack",
         command_id: commandId,
@@ -389,6 +392,11 @@ function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV
     case "assign_roles":
       return { type: "command", command_id: commandId, name: command.name, payload: command.payload };
   }
+}
+
+// A Participant that is already inactive has reached the state a Leave asks for, whether sync reports it live or in a terminal recovery.
+function inactiveParticipantSatisfies(operation: V1OperationName): boolean {
+  return operation === "participant_leave";
 }
 
 function isTerminalLifecycleOperation(frame: SyncV1ClientFrame): boolean {

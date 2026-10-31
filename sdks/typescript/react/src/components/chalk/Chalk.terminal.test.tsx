@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "../../../../client/src/space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../../../../client/src/space-client/space-client";
 import { control, terminalTestPlatform } from "../../../../client/src/space-client/terminal.test.helpers";
+import { V1CommandScheduler } from "../../../../client/src/sync/v1-command-scheduler";
+import { InMemoryV1PendingTargetStore } from "../../../../client/src/sync/v1-persistence";
 import { Chalk } from "./Chalk";
 import { CloudflareSFUError } from "../../../../client/src/media";
 import { track } from "../../../../client/src/space-client/capture.test.helpers";
@@ -222,6 +224,56 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       expect(onLeft).not.toHaveBeenCalled();
       expect(container.textContent).toContain("The call ended");
       expect(container.textContent).not.toContain("Joining");
+    } finally {
+      await act(async () => root.unmount());
+      client.dispose();
+      container.remove();
+    }
+  });
+
+  it("completes Leave without an error when sync rejects the Leave as participant_inactive", async () => {
+    const platform = terminalTestPlatform();
+    const scheduler: V1CommandScheduler = new V1CommandScheduler({
+      store: new InMemoryV1PendingTargetStore(),
+      ids: undefined,
+      maxPendingCommands: undefined,
+      maxPendingBytes: undefined,
+      maxPendingAgeMs: undefined,
+      maxOperationPendingAgeMs: undefined,
+      retryDelayMs: undefined,
+      clock: () => platform.dependencies.clock,
+      isStarted: () => true,
+      sendIfLive: (frame) => {
+        if (frame.type === "operation") queueMicrotask(() => void scheduler.acknowledge({ type: "ack", command_id: frame.command_id, delivery: "original", outcome: "rejected", reason: "participant_inactive" }));
+      },
+      stateChanged: () => undefined,
+      ackHeadIsProven: () => true,
+      controlHead: () => ({ revision: control.revision, state_digest: control.stateDigest }),
+    });
+    platform.leave.mockImplementation(() => scheduler.sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "participant_leave", payload: {} }), 0));
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    const error = vi.fn();
+    client.on("error", error);
+    const onError = vi.fn();
+    const onLeft = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onError={onError} onLeft={onLeft} />));
+      await act(async () => {
+        await client.join({ microphone: false, camera: false });
+        platform.emitSync({ ...platform.sync.getSnapshot(), control });
+      });
+      await act(async () => {
+        await client.leave();
+      });
+      expect(platform.leave).toHaveBeenCalledOnce();
+      expect(client.getSnapshot().connection.status).toBe("left");
+      expect(onLeft).toHaveBeenCalledOnce();
+      expect(error).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      expect(container.textContent).not.toContain("Unable");
     } finally {
       await act(async () => root.unmount());
       client.dispose();
