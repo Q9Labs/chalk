@@ -94,11 +94,9 @@ async function revokeKey(call, path) {
     if (error.status !== 409 || error.apiCode !== "api_key.inactive") throw error;
   }
 }
-function cleanupEndpointId(config, known) {
-  return known.webhook?.id ?? config.webhook_endpoint_id;
-}
 async function cleanupWebhook(call, config, known, base, attempt) {
-  const endpointId = cleanupEndpointId(config, known);
+  // The endpoint is shared by every run, so only a run that recorded using it may rotate and disable it.
+  const endpointId = known.webhook?.id;
   if (endpointId) {
     await attempt("webhook-endpoint", endpointId, async () => {
       const endpoint = await rotateAndPatchEndpoint(call, `${base}/webhook-endpoints/${endpointId}`, { enabled: false });
