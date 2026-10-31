@@ -17,8 +17,8 @@ function shouldResetBaselines(now: number, sampledAt: number | undefined): boole
   return sampledAt !== undefined && (now - sampledAt > MAX_SAMPLE_GAP_MS || now < sampledAt);
 }
 
-function needsNewBaseline(sample: SendSample, base: Baseline | undefined): boolean {
-  return !base || sample.jitter !== base.jitter || sample.packetsSent <= base.packetsSent || sample.receiverReports < base.receiverReports;
+function needsNewBaseline(sample: SendSample, base: Baseline): boolean {
+  return sample.jitter !== base.jitter || sample.packetsSent <= base.packetsSent || sample.receiverReports < base.receiverReports;
 }
 
 function isWithinStallWindow(now: number, base: Baseline): boolean {
@@ -58,7 +58,7 @@ export class SendStallDetector {
     for (const sample of samples) {
       seen.add(sample.mid);
       const base = this.#baselines.get(sample.mid);
-      if (needsNewBaseline(sample, base)) {
+      if (!base || needsNewBaseline(sample, base)) {
         this.#baselines.set(sample.mid, makeBaseline(now, sample));
         continue;
       }
