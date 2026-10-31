@@ -9,6 +9,8 @@ export const AUDIO_STALL_WINDOW_MS = 1500;
 export const AUDIO_STARTUP_GRACE_MS = 3000;
 // Nothing desired is flowing for this long: the receive session itself is suspect, not one publisher.
 export const RECEIVE_ESCALATION_MS = 8000;
+// With one desired publisher, "nothing flows" cannot tell a dead publisher from a dead receive session, so wait longer.
+export const RECEIVE_SOLO_ESCALATION_MS = 30_000;
 export const RECEIVE_REBUILD_COOLDOWN_MS = 15_000;
 // Rebuilding the receive session republishes every local track, so back off while nothing flows.
 const MAX_REBUILD_COOLDOWN_MS = 120_000;
@@ -268,7 +270,8 @@ export class ReceiveStallRecovery {
     if (this.#audio.size > this.#unhealthySince.size) this.#rebuildStreak = 0;
     if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size) return false;
     const cooldown = Math.min(RECEIVE_REBUILD_COOLDOWN_MS * 2 ** Math.max(this.#rebuildStreak - 1, 0), MAX_REBUILD_COOLDOWN_MS);
-    return now - Math.min(...this.#unhealthySince.values()) >= RECEIVE_ESCALATION_MS && now - this.#lastRebuildAt >= cooldown;
+    const patience = connected && this.#audio.size < 2 ? RECEIVE_SOLO_ESCALATION_MS : RECEIVE_ESCALATION_MS;
+    return now - Math.min(...this.#unhealthySince.values()) >= patience && now - this.#lastRebuildAt >= cooldown;
   }
 
   #isExpected(publication: CloudflareSFURemoteTrack): boolean {

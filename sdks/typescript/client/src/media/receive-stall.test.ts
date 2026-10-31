@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AUDIO_STALL_WINDOW_MS, AUDIO_STARTUP_GRACE_MS, RECEIVE_ESCALATION_MS, RECEIVE_REBUILD_COOLDOWN_MS, ReceiveStallDetector, ReceiveStallRecovery, RECEIVE_STALL_WINDOW_MS, RECEIVE_STARTUP_GRACE_MS } from "./receive-stall";
+import { AUDIO_STALL_WINDOW_MS, AUDIO_STARTUP_GRACE_MS, RECEIVE_ESCALATION_MS, RECEIVE_REBUILD_COOLDOWN_MS, RECEIVE_SOLO_ESCALATION_MS, ReceiveStallDetector, ReceiveStallRecovery, RECEIVE_STALL_WINDOW_MS, RECEIVE_STARTUP_GRACE_MS } from "./receive-stall";
 
 const track = { publicationId: "publication", trackId: "receiver", packets: 10 };
 function observe(detector: ReceiveStallDetector, from = 0, until = RECEIVE_STARTUP_GRACE_MS) {
@@ -209,6 +209,13 @@ describe("audio receive recovery", () => {
     expect(escalated).toBeGreaterThanOrEqual(RECEIVE_ESCALATION_MS);
     expect(escalated).toBeLessThan(RECEIVE_ESCALATION_MS + 1000);
   });
+  it("waits longer to blame the receive session when only one publisher is desired", () => {
+    const recovery = new ReceiveStallRecovery();
+    recovery.expect(speakers.slice(0, 1), "listener");
+    expect(sampleAudio(recovery, 0, { a: 10 }, heard.slice(0, 1)).escalate).toBe(false);
+    expect(sampleAudio(recovery, RECEIVE_SOLO_ESCALATION_MS - 500, { a: 10 }, heard.slice(0, 1)).escalate).toBe(false);
+    expect(sampleAudio(recovery, RECEIVE_SOLO_ESCALATION_MS, { a: 10 }, heard.slice(0, 1)).escalate).toBe(true);
+  });
   it("counts a receive connection that carries no media as unhealthy from the first sample", () => {
     const recovery = audioRecovery();
     expect(sampleAudio(recovery, 0, {}, heard, false).escalate).toBe(false);
@@ -233,7 +240,7 @@ describe("audio receive recovery", () => {
         recovery.replaced();
       }
     }
-    expect(escalations.slice(1).map((at, index) => at - escalations[index]!)).toEqual([RECEIVE_REBUILD_COOLDOWN_MS * 2, RECEIVE_REBUILD_COOLDOWN_MS * 4, 120_000]);
+    expect(escalations.slice(1).map((at, index) => at - escalations[index]!)).toEqual([RECEIVE_REBUILD_COOLDOWN_MS, RECEIVE_REBUILD_COOLDOWN_MS * 2, RECEIVE_REBUILD_COOLDOWN_MS * 4]);
     for (const end = now + 2000; now <= end; now += 500) sampleAudio(recovery, now, { a: now, b: now });
     const heardAt = now;
     let next: number | undefined;
