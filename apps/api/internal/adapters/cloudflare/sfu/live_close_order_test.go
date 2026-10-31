@@ -3,7 +3,9 @@ package sfu_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,9 +21,9 @@ func TestLiveCloudflareSFUCloseOrder(t *testing.T) {
 	if os.Getenv("CHALK_RUN_LIVE_SFU_CLOSE_TEST") != "1" {
 		t.Skip("CHALK_RUN_LIVE_SFU_CLOSE_TEST is not enabled")
 	}
-	adapter, err := cloudflaresfu.NewAdapter(config.CloudflareRealtimeConfig{
+	adapter, err := cloudflaresfu.NewAdapterWithClient(config.CloudflareRealtimeConfig{
 		RealtimeAppID: os.Getenv(config.CloudflareRealtimeAppID), RealtimeAppSecret: os.Getenv(config.CloudflareRealtimeAppSecret), RequestTimeout: 15 * time.Second,
-	})
+	}, &http.Client{Timeout: 25 * time.Second, Transport: closeOrderTransport{test: t}}, "")
 	if err != nil {
 		t.Fatal("create adapter:", err)
 	}
@@ -105,4 +107,17 @@ func TestLiveCloudflareSFUCloseOrder(t *testing.T) {
 			})
 		}
 	}
+}
+
+type closeOrderTransport struct {
+	test *testing.T
+}
+
+func (c closeOrderTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	started := time.Now()
+	response, err := http.DefaultTransport.RoundTrip(request)
+	if err == nil && strings.HasSuffix(request.URL.Path, "/tracks/close") {
+		c.test.Logf("close_http status=%d elapsed_ms=%d", response.StatusCode, time.Since(started).Milliseconds())
+	}
+	return response, err
 }
