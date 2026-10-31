@@ -567,6 +567,20 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("returns a capacity failure as a rejected promise", async () => {
+    const { client } = await startedRecoveryClient(new ManualClock());
+    try {
+      for (let index = 0; index < 128; index += 1) {
+        void client.submitUpdate({ sceneId, syncAll: false, elements: [] }).catch(() => undefined);
+      }
+      await settle();
+      const rejected = client.submitUpdate({ sceneId, syncAll: false, elements: [] });
+      await expect(rejected).rejects.toMatchObject({ code: "unavailable" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("uses the application close code when token authentication fails", async () => {
     const socket = new TestSocket();
     const client = new ChalkWhiteboardV1Client({
