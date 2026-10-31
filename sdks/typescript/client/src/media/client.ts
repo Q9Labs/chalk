@@ -290,21 +290,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   // The SFU can close a track while the browser keeps sending: reports still arrive but its jitter reading freezes.
+  // A muted microphone keeps sending silence, so it shows the same signal and is retired for the next unmute to publish anew.
   #republishStalledSenders(mids: readonly string[], generation: number): void {
     for (const mid of mids) {
-      const state = [...this.#localTracks.values()].find((item) => item.transceiver?.mid === mid && item.enabled && item.desiredEnabled && (item.source === "microphone" || item.source === "camera"));
-      if (!state || Date.now() - (this.#lastRepublishAt.get(state.source) ?? Number.NEGATIVE_INFINITY) < REPUBLISH_COOLDOWN_MS) continue;
-      this.#lastRepublishAt.set(state.source, Date.now());
-      this.#republishLostPublication(state, generation).catch((error: unknown) => {
+      const owned = [...this.#ownedPublications].find((item) => item.lifecycle.kind === "confirmed" && item.transceiver.mid === mid && (item.state.source === "microphone" || item.state.source === "camera"));
+      if (!owned || Date.now() - (this.#lastRepublishAt.get(owned.state.source) ?? Number.NEGATIVE_INFINITY) < REPUBLISH_COOLDOWN_MS) continue;
+      this.#lastRepublishAt.set(owned.state.source, Date.now());
+      this.#republishLostPublication(owned.state, generation).catch((error: unknown) => {
         if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       });
     }
   }
   async #republishLostPublication(state: LocalTrackState, generation: number): Promise<void> {
+    const wasOn = state.enabled && state.desiredEnabled;
     this.#pauseLocalSource(state.source, "discovery_absent");
     await this.#retireOwnedPublications();
     this.#requireGeneration(generation);
-    if (this.#localTracks.get(state.source) === state) await this.#enablePreparedTrack(state);
+    if (wasOn && this.#localTracks.get(state.source) === state) await this.#enablePreparedTrack(state);
   }
   #finishPublicationPoll(generation: number): void {
     if (generation !== this.#generation) return;
