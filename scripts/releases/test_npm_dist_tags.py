@@ -141,6 +141,12 @@ save()
         self.assertEqual(json.loads(output.read_text()), expected)
         self.assertIn(f'npm_latest={json.dumps(expected, separators=(",", ":"))}', github_output.read_text())
 
+    def test_read_latest_does_not_treat_bare_404_as_unpublished(self):
+        result = subprocess.CompletedProcess([], 1, "", "HTTP 404")
+        with patch.object(npm_dist_tags.subprocess, "run", return_value=result):
+            with self.assertRaisesRegex(RuntimeError, "npm view failed"):
+                npm_dist_tags.read_latest("package-one")
+
     def test_restore_only_adds_tags_that_moved(self):
         previous = {"package-one": "1.0.0", "package-two": "2.0.0"}
         state = {"latest": {"package-one": "1.0.0", "package-two": "2.1.0"}, "npm_calls": []}
@@ -199,6 +205,7 @@ save()
         self.assertLess(retain, artifact)
         self.assertIn("pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1", approve[:retain])
         self.assertIn("actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020", approve[:retain])
+        self.assertNotIn("registry-url:", approve[:retain])
         self.assertIn("npm_latest: ${{ steps.npm.outputs.npm_latest }}", approve)
         self.assertIn('--argjson npm "$(cat previous-npm.json)"', approve)
         self.assertIn("npm_latest:$npm", approve)
@@ -211,6 +218,7 @@ save()
         self.assertEqual(rollback_condition, npm_condition)
         self.assertIn("needs: [select, approve, release, proof, rollback]", rollback_npm)
         self.assertIn("timeout-minutes: 45", rollback_npm)
+        self.assertIn("registry-url: https://registry.npmjs.org/", rollback_npm)
         self.assertIn("NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}", rollback_npm)
         self.assertEqual(re.findall(r"secrets\.([A-Za-z0-9_]+)", rollback_npm), ["NPM_TOKEN"])
         result = workflow.split("  result:\n", 1)[1].split("  github-release:\n", 1)[0]

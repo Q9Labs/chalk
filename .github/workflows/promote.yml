@@ -92,7 +92,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .tool-versions
-          registry-url: https://registry.npmjs.org/
       - name: Retain the live npm latest tags before the first promotion changes them
         id: npm
         run: python3 scripts/releases/npm_dist_tags.py retain --output previous-npm.json
