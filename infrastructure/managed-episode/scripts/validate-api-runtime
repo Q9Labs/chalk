@@ -61,8 +61,21 @@ case "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE)" in
   cf_sfu)
     require_env CHALK_CLOUDFLARE_REALTIME_APP_ID
     require_env CHALK_CLOUDFLARE_REALTIME_APP_SECRET
-    require_env CHALK_CLOUDFLARE_TURN_KEY_ID
-    require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
+    # Relay (TURN) is optional for the API, which then serves STUN only, so
+    # the two inputs are set together or not at all. A nightly or production
+    # deployment must have them, because strict networks cannot connect
+    # without a relay.
+    turn_key_set=false
+    turn_token_set=false
+    env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
+    env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
+    [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
+    case "$(env_value "${api_env}" CHALK_API_ENV || true)" in
+      nightly | production)
+        require_env CHALK_CLOUDFLARE_TURN_KEY_ID
+        require_env CHALK_CLOUDFLARE_TURN_API_TOKEN
+        ;;
+    esac
     ;;
   *)
     fail "CHALK_DEFAULT_MEDIA_PLANE must be cf_sfu because the Dashboard access-grant path requires Cloudflare SFU"

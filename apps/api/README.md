@@ -315,11 +315,17 @@ it and always use Cloudflare's production SFU endpoint.
 
 `CHALK_CLOUDFLARE_TURN_KEY_ID` and `CHALK_CLOUDFLARE_TURN_API_TOKEN` name a
 Cloudflare TURN key (created by [`infrastructure/cloudflare-turn`](../../infrastructure/cloudflare-turn/README.md)).
-Set both or neither. With both, every media bootstrap carries `iceServers` with
-short-lived TURN credentials (UDP 3478, TCP, and TLS on 443) next to
-`stunServer`. With neither, or when Cloudflare cannot mint a credential, clients
-get STUN only and the join still succeeds. Tenant-managed Cloudflare accounts
-do not get TURN.
+Set both or neither; the runtime validators require them for nightly and
+production on the Cloudflare SFU. With both, a media bootstrap carries
+`iceServers` with short-lived TURN credentials (UDP 3478, TCP, and TLS on 443)
+next to `stunServer`, but only for callers tied to an accountable owner:
+authenticated access grants and episode admission, and guests who join a
+tenant's Space through its public invite. Guests of an anonymous public Space
+(the managed public Tenant) get STUN only, as do tenant-managed Cloudflare
+accounts. With no TURN key, or when Cloudflare cannot mint a credential, clients
+get STUN only and the join still succeeds. One process-wide minter reuses a
+credential for an hour, backs off for 30 seconds after a failure, and a join
+waits at most two seconds for it.
 
 ## Runtime Smoke
 

@@ -66,6 +66,9 @@ type AccessConfig struct {
 	MediaTokens        MediaIssuer
 	MediaProof         MediaProofVerifier
 	MediaProofRecovery MediaProofRecoveryVerifier
+	// ManagedTenantID owns the anonymous public Spaces. Its guests have no
+	// accountable owner, so they never receive relay (TURN) credentials.
+	ManagedTenantID utilities.ID
 
 	ReadyTimeout time.Duration
 	PollInterval time.Duration
@@ -80,6 +83,7 @@ type accessPort struct {
 	mediaTokens        MediaIssuer
 	mediaProof         MediaProofVerifier
 	mediaProofRecovery MediaProofRecoveryVerifier
+	managedTenantID    utilities.ID
 
 	readyTimeout time.Duration
 	pollInterval time.Duration
@@ -87,6 +91,9 @@ type accessPort struct {
 
 func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 	if config.Episodes == nil || config.Spaces == nil || config.Tenants == nil || config.MediaResolver == nil || config.SyncTokens == nil || config.MediaTokens == nil {
+		return nil, ErrInvalidAccess
+	}
+	if config.ManagedTenantID.IsZero() {
 		return nil, ErrInvalidAccess
 	}
 	if config.MediaProofRecovery == nil {
@@ -106,8 +113,8 @@ func NewAccessPort(config AccessConfig) (publicinvites.Access, error) {
 	return accessPort{
 		episodes: config.Episodes, spaces: config.Spaces, tenants: config.Tenants, mediaResolver: config.MediaResolver,
 		syncTokens: config.SyncTokens, mediaTokens: config.MediaTokens, mediaProof: config.MediaProof,
-		mediaProofRecovery: config.MediaProofRecovery,
-		readyTimeout:       config.ReadyTimeout, pollInterval: config.PollInterval,
+		mediaProofRecovery: config.MediaProofRecovery, managedTenantID: config.ManagedTenantID,
+		readyTimeout: config.ReadyTimeout, pollInterval: config.PollInterval,
 	}, nil
 }
 
@@ -287,16 +294,21 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
+	// Guests of an account's Space inherit that account's relay allowance;
+	// anonymous public Spaces have no accountable owner.
+	allowRelay := arrival.TenantID != a.managedTenantID
 	var join mediaplane.Join
 	if refresh && !replaceMediaConnection {
 		join, err = service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
 			Provider: service.Provider(), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
+			AllowRelay: allowRelay,
 		})
 	} else {
 		join, err = service.CreateJoin(ctx, mediaplane.CreateJoinInput{
 			Provider: service.Provider(), Episode: episode,
 			ParticipantName: arrival.DisplayName, ExternalParticipantID: result.Participant.ID.String(), ParticipantPreset: "contributor",
-			Metadata: map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
+			Metadata:   map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
+			AllowRelay: allowRelay,
 		})
 	}
 	if err != nil {

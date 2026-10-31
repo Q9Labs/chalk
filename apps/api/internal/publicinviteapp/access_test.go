@@ -33,8 +33,34 @@ func TestApprovedArrivalCollectsGrantWithoutMediaProof(t *testing.T) {
 	if fixture.plane.createCalls != 0 || fixture.plane.resumeCalls != 1 {
 		t.Fatalf("create/resume calls = %d/%d, want 0/1", fixture.plane.createCalls, fixture.plane.resumeCalls)
 	}
-	if servers := grant.ClientPayload.ICEServers; len(servers) != 1 || servers[0].Username != "user" || servers[0].URLs[0] != "turns:turn.test:443?transport=tcp" {
-		t.Fatalf("grant dropped the TURN ice servers: %+v", servers)
+	if servers := grant.ClientPayload.ICEServers; len(servers) != 2 || servers[1].Username != "user" || servers[1].URLs[0] != "turns:turn.test:443?transport=tcp" {
+		t.Fatalf("a guest of an account's Space must keep the TURN ice servers: %+v", servers)
+	}
+}
+
+func TestAnonymousPublicSpaceGuestGetsNoTurnCredentials(t *testing.T) {
+	fixture := newAccessFixture(t)
+	fixture.managedTenant = fixture.tenant
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grant, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if servers := grant.ClientPayload.ICEServers; len(servers) != 1 || servers[0].Username != "" || servers[0].Credential != "" {
+		t.Fatalf("a guest of an anonymous public Space must get STUN only: %+v", servers)
+	}
+}
+
+func TestAccessPortRequiresTheManagedTenant(t *testing.T) {
+	fixture := newAccessFixture(t)
+	config := fixture.config()
+	config.ManagedTenantID = utilities.ID{}
+	if _, err := publicinviteapp.NewAccessPort(config); !errors.Is(err, publicinviteapp.ErrInvalidAccess) {
+		t.Fatalf("a missing managed Tenant would hand TURN to everyone, got %v", err)
 	}
 }
 
@@ -103,6 +129,9 @@ type accessFixture struct {
 	result      episodes.PublicJoinResult
 	plane       *mediaPlaneStub
 	recovery    *proofVerifierStub
+	// managedTenant owns the anonymous public Spaces; it differs from tenant
+	// unless a test says the arrival is an anonymous public Space guest.
+	managedTenant utilities.ID
 }
 
 func newAccessFixture(t *testing.T) *accessFixture {
@@ -117,13 +146,15 @@ func newAccessFixture(t *testing.T) *accessFixture {
 		tenant: tenant, space: space, episode: episode, participant: participant,
 		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
 		result:  result, plane: &mediaPlaneStub{}, recovery: &proofVerifierStub{subject: proofSubject},
+		managedTenant: mustID(t, "55555555-5555-4555-8555-555555555555"),
 	}
 }
 
 func (f *accessFixture) config() publicinviteapp.AccessConfig {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f.plane)
 	return publicinviteapp.AccessConfig{
-		Episodes: publicJoinStub{result: f.result}, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
+		ManagedTenantID: f.managedTenant,
+		Episodes:        publicJoinStub{result: f.result}, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
 		MediaResolver: mediaResolverStub{service: &service},
 		SyncTokens:    syncIssuerStub{}, MediaTokens: mediaIssuerStub{}, MediaProofRecovery: f.recovery,
 	}
@@ -193,14 +224,23 @@ type mediaPlaneStub struct {
 func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
 	return mediaplane.Episode{Provider: input.Provider, Ref: "episode-ref"}, nil
 }
-func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput) (mediaplane.Join, error) {
+func (p *mediaPlaneStub) CreateJoin(_ context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
-	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ParticipantRef: "new-provider", ClientPayload: map[string]any{"connectionId": "new-provider", "stunServer": "stun:test"}}, nil
+	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ParticipantRef: "new-provider", ClientPayload: map[string]any{"connectionId": "new-provider", "stunServer": "stun:test", "iceServers": relayServers(input.AllowRelay)}}, nil
+}
+
+// relayServers mirrors the Cloudflare adapter: TURN only when relay is allowed.
+func relayServers(allowRelay bool) []mediaplane.ICEServer {
+	servers := []mediaplane.ICEServer{{URLs: []string{"stun:test"}}}
+	if allowRelay {
+		servers = append(servers, mediaplane.ICEServer{URLs: []string{"turns:turn.test:443?transport=tcp"}, Username: "user", Credential: "secret"})
+	}
+	return servers
 }
 
 func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	p.resumeCalls++
-	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test", "iceServers": []mediaplane.ICEServer{{URLs: []string{"turns:turn.test:443?transport=tcp"}, Username: "user", Credential: "secret"}}}}, nil
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test", "iceServers": relayServers(input.AllowRelay)}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

@@ -130,7 +130,7 @@ type Adapter struct {
 	client            httpClient
 	forcedCloseClient httpClient
 	captureReplay     *captureReplayRegistry
-	turn              *turnCredentials
+	turn              *TurnCredentials
 }
 
 type ConnectionMetadata struct {
@@ -223,7 +223,6 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		client:            &http.Client{Timeout: cfg.RequestTimeout},
 		forcedCloseClient: &http.Client{Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
 		captureReplay:     newCaptureReplayRegistry(),
-		turn:              newTurnCredentials(cfg.TurnKeyID, cfg.TurnAPIToken),
 	}, nil
 }
 
@@ -269,7 +268,7 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 		participantRef = input.ParticipantName
 	}
 
-	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID, a.iceServers(ctx)), nil
+	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
 func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
@@ -277,7 +276,7 @@ func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInpu
 		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
 	}
 
-	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx)), nil
+	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {

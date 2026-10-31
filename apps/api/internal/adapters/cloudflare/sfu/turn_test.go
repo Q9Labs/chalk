@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,12 +53,12 @@ func turnAdapter(t *testing.T, fake *fakeTurnAPI, keyID, token string) Adapter {
 	server := httptest.NewServer(fake.handler(t))
 	t.Cleanup(server.Close)
 	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{
-		RealtimeAppID: "app", RealtimeAppSecret: "sfu-secret", TurnKeyID: keyID, TurnAPIToken: token, RequestTimeout: time.Second,
+		RealtimeAppID: "app", RealtimeAppSecret: "sfu-secret", RequestTimeout: time.Second,
 	}, server.Client(), server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return adapter
+	return adapter.WithTurnCredentials(NewTurnCredentials(keyID, token))
 }
 
 func turnURLs(servers []mediaplane.ICEServer) []string {
@@ -75,7 +76,7 @@ func TestIceServersMintTurnCredentialsFromCloudflare(t *testing.T) {
 	fake := &fakeTurnAPI{status: http.StatusCreated}
 	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
 
-	servers := adapter.iceServers(context.Background())
+	servers := adapter.iceServers(context.Background(), true)
 
 	if fake.path.Load() != "/turn/keys/key-id/credentials/generate-ice-servers" {
 		t.Fatalf("unexpected mint path %v", fake.path.Load())
@@ -99,7 +100,7 @@ func TestCreateJoinCarriesIceServersAlongsideStun(t *testing.T) {
 	fake := &fakeTurnAPI{status: http.StatusCreated}
 	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
 
-	join, err := adapter.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderCloudflareSFU, Episode: mediaplane.Episode{Ref: "episode"}, ExternalParticipantID: "p", ConnectionRef: "conn"})
+	join, err := adapter.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderCloudflareSFU, Episode: mediaplane.Episode{Ref: "episode"}, ExternalParticipantID: "p", ConnectionRef: "conn", AllowRelay: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestIceServersAreStunOnlyWithoutTurnKey(t *testing.T) {
 	fake := &fakeTurnAPI{status: http.StatusCreated}
 	adapter := turnAdapter(t, fake, "", "")
 
-	servers := adapter.iceServers(context.Background())
+	servers := adapter.iceServers(context.Background(), true)
 
 	if len(servers) != 1 || servers[0].URLs[0] != stunServer || servers[0].Username != "" {
 		t.Fatalf("expected the STUN fallback, got %+v", servers)
@@ -131,7 +132,7 @@ func TestIceServersFallBackToStunWhenMintFailsAndBackOff(t *testing.T) {
 	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
 
 	for range 3 {
-		servers := adapter.iceServers(context.Background())
+		servers := adapter.iceServers(context.Background(), true)
 		if len(servers) != 1 || servers[0].Username != "" {
 			t.Fatalf("a failed mint must degrade to STUN, got %+v", servers)
 		}
@@ -145,14 +146,14 @@ func TestIceServersReuseMintedCredentials(t *testing.T) {
 	fake := &fakeTurnAPI{status: http.StatusCreated}
 	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
 
-	adapter.iceServers(context.Background())
-	adapter.iceServers(context.Background())
+	adapter.iceServers(context.Background(), true)
+	adapter.iceServers(context.Background(), true)
 	if fake.requests.Load() != 1 {
 		t.Fatalf("expected one mint for two joins, got %d", fake.requests.Load())
 	}
 
 	adapter.turn.mintedAt = time.Now().Add(-turnCredentialReuse - time.Second)
-	adapter.iceServers(context.Background())
+	adapter.iceServers(context.Background(), true)
 	if fake.requests.Load() != 2 {
 		t.Fatalf("expected a fresh mint after the reuse window, got %d", fake.requests.Load())
 	}
@@ -164,11 +165,12 @@ func TestIceServersRejectResponseWithoutTurnServer(t *testing.T) {
 		_, _ = w.Write([]byte(`{"iceServers":[{"urls":["stun:stun.cloudflare.com:3478"]}]}`))
 	}))
 	defer server.Close()
-	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "a", RealtimeAppSecret: "s", TurnKeyID: "k", TurnAPIToken: "t", RequestTimeout: time.Second}, server.Client(), server.URL)
+	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "a", RealtimeAppSecret: "s", RequestTimeout: time.Second}, server.Client(), server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if servers := adapter.iceServers(context.Background()); len(turnURLs(servers)) != 0 {
+	adapter = adapter.WithTurnCredentials(NewTurnCredentials("k", "t"))
+	if servers := adapter.iceServers(context.Background(), true); len(turnURLs(servers)) != 0 {
 		t.Fatalf("a response with no TURN credentials must fall back, got %+v", servers)
 	}
 }
@@ -177,5 +179,102 @@ func TestTurnReuseWindowLeavesALongCallMargin(t *testing.T) {
 	const longestCall = 8 * time.Hour
 	if remaining := turnCredentialTTL - turnCredentialReuse; remaining < longestCall {
 		t.Fatalf("a reused credential keeps only %s of life, want at least %s", remaining, longestCall)
+	}
+}
+
+func TestIceServersAreStunOnlyUnlessRelayIsAllowed(t *testing.T) {
+	fake := &fakeTurnAPI{status: http.StatusCreated}
+	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
+
+	servers := adapter.iceServers(context.Background(), false)
+	if len(servers) != 1 || servers[0].URLs[0] != stunServer || servers[0].Username != "" {
+		t.Fatalf("a caller without relay allowance must get STUN only, got %+v", servers)
+	}
+	join, err := adapter.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderCloudflareSFU, Episode: mediaplane.Episode{Ref: "episode"}, ExternalParticipantID: "p", ConnectionRef: "conn"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turnURLs(join.ClientPayload["iceServers"].([]mediaplane.ICEServer))) != 0 {
+		t.Fatal("a join without relay allowance must carry no TURN credentials")
+	}
+	if fake.requests.Load() != 0 {
+		t.Fatal("a caller without relay allowance must not cause a mint")
+	}
+}
+
+func TestSharedMinterMintsOnceAcrossAdapters(t *testing.T) {
+	fake := &fakeTurnAPI{status: http.StatusCreated}
+	first := turnAdapter(t, fake, "key-id", "turn-api-token")
+	second := first.WithTurnCredentials(first.turn)
+
+	first.iceServers(context.Background(), true)
+	second.iceServers(context.Background(), true)
+	if fake.requests.Load() != 1 {
+		t.Fatalf("adapters sharing a minter must share one credential, got %d mints", fake.requests.Load())
+	}
+}
+
+func TestConcurrentJoinsShareOneMint(t *testing.T) {
+	fake := &fakeTurnAPI{status: http.StatusCreated}
+	adapter := turnAdapter(t, fake, "key-id", "turn-api-token")
+
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() { adapter.iceServers(context.Background(), true) })
+	}
+	wg.Wait()
+	if fake.requests.Load() != 1 {
+		t.Fatalf("concurrent joins must share one mint, got %d", fake.requests.Load())
+	}
+}
+
+func TestSlowMintNeverDelaysAJoinBeyondTheMintTimeout(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "a", RealtimeAppSecret: "s", RequestTimeout: time.Minute}, server.Client(), server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter = adapter.WithTurnCredentials(NewTurnCredentials("k", "t"))
+
+	startedAt := time.Now()
+	servers := adapter.iceServers(context.Background(), true)
+	if elapsed := time.Since(startedAt); elapsed > turnMintTimeout+time.Second {
+		t.Fatalf("a hung TURN API delayed the join by %s", elapsed)
+	}
+	if len(turnURLs(servers)) != 0 {
+		t.Fatalf("a timed out mint must fall back to STUN, got %+v", servers)
+	}
+}
+
+func TestCanceledJoinStopsWaitingForAMint(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "a", RealtimeAppSecret: "s", RequestTimeout: time.Minute}, server.Client(), server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter = adapter.WithTurnCredentials(NewTurnCredentials("k", "t"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	startedAt := time.Now()
+	adapter.iceServers(ctx, true)
+	if elapsed := time.Since(startedAt); elapsed > time.Second {
+		t.Fatalf("a canceled join kept waiting for the mint for %s", elapsed)
 	}
 }

@@ -24,14 +24,16 @@ const (
 	// A minted credential is shared by joins for this long, so every client
 	// still receives at least turnCredentialTTL minus this window.
 	turnCredentialReuse = time.Hour
-	turnMintTimeout     = 3 * time.Second
+	turnMintTimeout     = 2 * time.Second
 	turnMintBackoff     = 30 * time.Second
 )
 
-// turnCredentials mints and caches Cloudflare TURN credentials for the
-// deployment's TURN key. A mint failure never fails a join: clients fall back
-// to STUN.
-type turnCredentials struct {
+// TurnCredentials mints and caches Cloudflare TURN credentials for the
+// deployment's TURN key. The key is global, so one TurnCredentials serves every
+// adapter built for the deployment and its cache and failure backoff outlive a
+// single media-plane resolution. A mint failure never fails a join: clients
+// fall back to STUN, and a join waits at most turnMintTimeout for a mint.
+type TurnCredentials struct {
 	keyID    string
 	apiToken string
 
@@ -39,21 +41,31 @@ type turnCredentials struct {
 	servers  []mediaplane.ICEServer
 	mintedAt time.Time
 	failedAt time.Time
+	lastErr  error
+	inflight chan struct{}
 }
 
-func newTurnCredentials(keyID, apiToken string) *turnCredentials {
+// NewTurnCredentials returns nil when the key or token is blank.
+func NewTurnCredentials(keyID, apiToken string) *TurnCredentials {
 	keyID, apiToken = strings.TrimSpace(keyID), strings.TrimSpace(apiToken)
 	if keyID == "" || apiToken == "" {
 		return nil
 	}
-	return &turnCredentials{keyID: keyID, apiToken: apiToken}
+	return &TurnCredentials{keyID: keyID, apiToken: apiToken}
 }
 
-// iceServers returns the ICE servers a client should use: Cloudflare STUN and
-// TURN when a TURN key is configured and reachable, STUN alone otherwise.
-func (a Adapter) iceServers(ctx context.Context) []mediaplane.ICEServer {
+// WithTurnCredentials returns the adapter using a shared TURN minter.
+func (a Adapter) WithTurnCredentials(turn *TurnCredentials) Adapter {
+	a.turn = turn
+	return a
+}
+
+// iceServers returns the ICE servers a client should use: Cloudflare STUN and,
+// when the caller allows relay and a TURN key is configured and reachable,
+// Cloudflare TURN. Everyone else gets STUN alone.
+func (a Adapter) iceServers(ctx context.Context, allowRelay bool) []mediaplane.ICEServer {
 	fallback := []mediaplane.ICEServer{{URLs: []string{stunServer}}}
-	if a.turn == nil {
+	if !allowRelay || a.turn == nil {
 		return fallback
 	}
 	servers, err := a.turn.get(ctx, a.client, a.endpoint)
@@ -67,26 +79,49 @@ func (a Adapter) iceServers(ctx context.Context) []mediaplane.ICEServer {
 	return servers
 }
 
-func (t *turnCredentials) get(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	now := time.Now()
-	if t.servers != nil && now.Sub(t.mintedAt) < turnCredentialReuse {
-		return t.servers, nil
+func (t *TurnCredentials) get(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
+	for {
+		t.mu.Lock()
+		now := time.Now()
+		if t.servers != nil && now.Sub(t.mintedAt) < turnCredentialReuse {
+			servers := t.servers
+			t.mu.Unlock()
+			return servers, nil
+		}
+		if !t.failedAt.IsZero() && now.Sub(t.failedAt) < turnMintBackoff {
+			err := t.lastErr
+			t.mu.Unlock()
+			return nil, err
+		}
+		inflight := t.inflight
+		if inflight == nil {
+			inflight = make(chan struct{})
+			t.inflight = inflight
+			go t.mintAndStore(context.WithoutCancel(ctx), client, endpoint, inflight)
+		}
+		t.mu.Unlock()
+		select {
+		case <-inflight:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	if !t.failedAt.IsZero() && now.Sub(t.failedAt) < turnMintBackoff {
-		return nil, fmt.Errorf("mint skipped during backoff after an earlier failure")
-	}
-	servers, err := t.mint(ctx, client, endpoint)
-	if err != nil {
-		t.failedAt = now
-		return nil, err
-	}
-	t.servers, t.mintedAt, t.failedAt = servers, now, time.Time{}
-	return servers, nil
 }
 
-func (t *turnCredentials) mint(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
+func (t *TurnCredentials) mintAndStore(ctx context.Context, client httpClient, endpoint string, done chan struct{}) {
+	servers, err := t.mint(ctx, client, endpoint)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err != nil {
+		t.failedAt, t.lastErr = time.Now(), err
+	} else {
+		t.servers, t.mintedAt, t.failedAt, t.lastErr = servers, time.Now(), time.Time{}, nil
+	}
+	t.inflight = nil
+	close(done)
+}
+
+func (t *TurnCredentials) mint(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	ctx, cancel := context.WithTimeout(ctx, turnMintTimeout)
 	defer cancel()
 

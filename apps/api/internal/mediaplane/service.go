@@ -64,6 +64,9 @@ type CreateJoinInput struct {
 	ExternalParticipantID string
 	ParticipantPreset     string
 	Metadata              map[string]string
+	// AllowRelay lets the media plane hand out relay (TURN) credentials. Only
+	// callers attributable to an authenticated owner set it.
+	AllowRelay bool
 }
 
 type ResumeJoinInput struct {
@@ -71,6 +74,9 @@ type ResumeJoinInput struct {
 	Episode               Episode
 	ExternalParticipantID string
 	ConnectionRef         string
+	// AllowRelay lets the media plane hand out relay (TURN) credentials. Only
+	// callers attributable to an authenticated owner set it.
+	AllowRelay bool
 }
 
 type RemoveParticipantInput struct {

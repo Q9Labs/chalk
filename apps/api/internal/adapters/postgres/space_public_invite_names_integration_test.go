@@ -128,7 +128,7 @@ func TestSpacePublicInviteAcceptsEverySpaceName(t *testing.T) {
 		t.Fatal(err)
 	}
 	accessPort, err := publicinviteapp.NewAccessPort(publicinviteapp.AccessConfig{
-		Episodes: episodes.NewService(episodeRepository), Spaces: spaceService, Tenants: tenantService, MediaResolver: media,
+		Episodes: episodes.NewService(episodeRepository), Spaces: spaceService, Tenants: tenantService, MediaResolver: media, ManagedTenantID: tenantID,
 		SyncTokens: synctokens.NewBroker(episodeRepository, syncSigner), MediaTokens: mediaTokens,
 	})
 	if err != nil {
