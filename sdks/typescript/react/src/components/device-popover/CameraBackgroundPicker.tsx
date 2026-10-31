@@ -1,17 +1,32 @@
-import { CAMERA_BACKGROUND_OPTIONS, cameraBackgroundAvailable, getCameraBackground, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
-import { useState, useSyncExternalStore } from "react";
-import { ChalkMenuItem, ChalkMenuLabel } from "../chalk-ui";
+import { loadCameraBackgroundControls, setCameraBackground, subscribeCameraBackground, type CameraBackground } from "@q9labsai/chalk-client";
+import { use, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+
+type Controls = Awaited<ReturnType<typeof loadCameraBackgroundControls>>;
+type MenuItemProps = { readonly checked: boolean; readonly disabled: boolean; readonly closeOnClick: boolean; readonly onClick: () => void; readonly children: ReactNode };
+
+/** The menu parts are passed in so this lazy chunk shares no UI module with the call controls. */
+export interface CameraBackgroundMenu {
+  readonly Label: ComponentType<{ readonly children: ReactNode }>;
+  readonly Item: ComponentType<MenuItemProps>;
+}
+
+let loadedControls: Promise<Controls> | undefined;
 
 /** With `onRecover`, the picker clears or swaps a saved choice whose preview failed to start, then retries it. */
-export function CameraBackgroundPicker({ deviceId, onRecover }: { readonly deviceId: string; readonly onRecover?: () => void }) {
+export function CameraBackgroundPicker({ deviceId, menu, onRecover }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu; readonly onRecover?: () => void }) {
+  loadedControls ??= loadCameraBackgroundControls();
+  return <Options controls={use(loadedControls)} deviceId={deviceId} menu={menu} onRecover={onRecover} />;
+}
+
+function Options({ controls, deviceId, menu: { Label, Item }, onRecover }: { readonly controls: Controls; readonly deviceId: string; readonly menu: CameraBackgroundMenu; readonly onRecover?: () => void }) {
   const selected = useSyncExternalStore(
     subscribeCameraBackground,
-    () => getCameraBackground(deviceId),
+    () => controls.getCameraBackground(deviceId),
     () => "none",
   );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (onRecover ? selected === "none" && !busy : !cameraBackgroundAvailable(deviceId)) return null;
+  if (onRecover ? selected === "none" && !busy : !controls.cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
     setBusy(true);
     setFailed(false);
@@ -26,9 +41,9 @@ export function CameraBackgroundPicker({ deviceId, onRecover }: { readonly devic
   };
   return (
     <>
-      <ChalkMenuLabel>Background</ChalkMenuLabel>
-      {CAMERA_BACKGROUND_OPTIONS.map((option) => (
-        <ChalkMenuItem
+      <Label>Background</Label>
+      {controls.CAMERA_BACKGROUND_OPTIONS.map((option) => (
+        <Item
           key={option.id}
           checked={selected === option.id}
           disabled={busy}
@@ -44,7 +59,7 @@ export function CameraBackgroundPicker({ deviceId, onRecover }: { readonly devic
             </picture>
           ) : null}
           {option.label}
-        </ChalkMenuItem>
+        </Item>
       ))}
       {busy ? <span role="status">Loading background…</span> : null}
       {failed ? <span role="alert">Background didn’t load. Try again.</span> : null}

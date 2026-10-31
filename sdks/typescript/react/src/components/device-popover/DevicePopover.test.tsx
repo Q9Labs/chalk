@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { getCameraBackground, setCameraBackground } from "@q9labsai/chalk-client";
+import { loadCameraBackgroundControls, setCameraBackground } from "@q9labsai/chalk-client";
 import { expect, it, vi } from "vitest";
 import { DevicePopover } from "./DevicePopover";
 
@@ -61,6 +61,7 @@ it("refreshes the open preview when its published camera is disabled", async () 
 
 it("clears a saved background from the picker after its preview fails, then retries the camera", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { getCameraBackground } = await loadCameraBackgroundControls();
   await setCameraBackground("camera-blocked", "blur");
   const videoTrack = track("video");
   const captureCameraPreview = vi.fn(async () => {

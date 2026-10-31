@@ -232,3 +232,10 @@ function drawCover(context: CanvasRenderingContext2D, image: HTMLImageElement, w
   const h = image.naturalHeight * scale;
   context.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
 }
+
+/** Eager state the call UI reads; the lazily loaded operations write it. */
+export interface CameraEffectStore {
+  readonly fallbacks: Map<string, number>;
+  readonly notify: () => void;
+  readonly markFailure: (track: MediaStreamTrack) => void;
+}

@@ -1,10 +1,10 @@
-import { CAMERA_BACKGROUND_IMAGES } from "./camera-background-images";
+const CAMERA_BACKGROUND_PRESET_IDS = ["modern-acoustic-office", "warm-executive-home-office", "bright-creative-studio", "garden-terrace-lounge", "soft-abstract-glass", "cozy-evening-lounge"] as const;
 
-export type CameraBackground = "none" | "blur" | keyof typeof CAMERA_BACKGROUND_IMAGES;
-export const CAMERA_BACKGROUND_OPTIONS: readonly { readonly id: CameraBackground; readonly label: string; readonly image?: string; readonly avif?: string }[] = [{ id: "none", label: "None" }, { id: "blur", label: "Blur" }, ...Object.values(CAMERA_BACKGROUND_IMAGES)];
+export type CameraBackgroundPreset = (typeof CAMERA_BACKGROUND_PRESET_IDS)[number];
+export type CameraBackground = "none" | "blur" | CameraBackgroundPreset;
 
 export function isCameraBackground(value: unknown): value is CameraBackground {
-  return CAMERA_BACKGROUND_OPTIONS.some((option) => option.id === value);
+  return value === "none" || value === "blur" || CAMERA_BACKGROUND_PRESET_IDS.some((id) => id === value);
 }
 
 /** A blocked or full storage area still remembers choices for this page. */

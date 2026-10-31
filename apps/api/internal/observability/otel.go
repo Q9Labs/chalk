@@ -59,7 +59,7 @@ func Start(ctx context.Context, config Config) (Runtime, error) {
 		return Runtime{}, fmt.Errorf("create telemetry resource: %w", err)
 	}
 
-	traceOptions := []trace.TracerProviderOption{trace.WithResource(resource), trace.WithSampler(trace.ParentBased(trace.AlwaysSample()))}
+	traceOptions := []trace.TracerProviderOption{trace.WithResource(resource), trace.WithSampler(trace.ParentBased(trace.AlwaysSample())), trace.WithSpanProcessor(sessionSpanProcessor{})}
 	meterOptions := []sdkmetric.Option{sdkmetric.WithResource(resource)}
 	logOptions := []sdklog.LoggerProviderOption{sdklog.WithResource(resource)}
 	traceExporter, err := otlptracehttp.New(ctx, otlpHTTPOptions(endpoint, config.OTLPInsecure)...)

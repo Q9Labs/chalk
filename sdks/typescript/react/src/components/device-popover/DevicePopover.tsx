@@ -1,7 +1,7 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -9,7 +9,9 @@ import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
-import { CameraBackgroundPicker } from "./CameraBackgroundPicker";
+
+const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
+const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
 
 export interface DevicePopoverProps {
   type: "mic" | "video";
@@ -254,8 +256,16 @@ export function DevicePopover({
         ) : (
           <>
             <Menu.Separator className="chalk-shell-menu-separator" />
-            {open && previewDeviceId ? <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} /> : null}
-            {open && previewFailed ? <CameraBackgroundPicker key={`failed-${deviceId}`} deviceId={deviceId} onRecover={retryPreview} /> : null}
+            {open && previewDeviceId ? (
+              <Suspense fallback={null}>
+                <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} menu={backgroundMenu} />
+              </Suspense>
+            ) : null}
+            {open && previewFailed ? (
+              <Suspense fallback={null}>
+                <CameraBackgroundPicker key={`failed-${deviceId}`} deviceId={deviceId} menu={backgroundMenu} onRecover={retryPreview} />
+              </Suspense>
+            ) : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
           </>
         )}

@@ -3,7 +3,8 @@ import { cameraEffectFailure } from "./camera-effects";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient } from "../space-client/capture.test.helpers";
 import { track, stream } from "../space-client/capture.test.helpers";
-import { cameraBackgroundAvailable, createCameraEffectsTrack, processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, configureCameraEffectProvider } from "./camera-effects";
+import { openCameraEffectsTrack as createCameraEffectsTrack, getCameraBackgroundFallback, processCameraStream, setCameraBackground, configureCameraEffectProvider } from "./camera-effects";
+import { cameraBackgroundAvailable, getCameraBackground } from "./camera-effect-operations";
 
 const model = vi.hoisted(() => ({ close: vi.fn(), create: vi.fn() }));
 afterEach(() => {
