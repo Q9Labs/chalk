@@ -58,6 +58,7 @@ const report = {
   serverDescription: '29 Oct production-tagged source, run locally; dedicated development SFU',
   durationSeconds: duration, sampleIntervalSeconds: 1,
   profile: moderatorProbe ? 'moderator-retirement' : 'self-mute-camera-outage',
+  clientPackages: JSON.parse(await readFile(resolve(root, '.private/audio-mute-matrix/published-packages.json'), 'utf8')),
   machine: { cores: execFileSync('nproc', { encoding: 'utf8' }).trim(), uptime: execFileSync('uptime', { encoding: 'utf8' }).trim() },
   versions: [],
 };
@@ -137,12 +138,14 @@ try {
   for (const version of versions) {
     console.log(`Starting SDK ${version}.`);
     const sdkRoot = resolve(root, '.private/audio-mute-matrix', version, 'sdks/typescript');
+    const clientEntry = version === '5.3.1' ? `${sdkRoot}/client/src/index.ts` : resolve(root, '.private/audio-mute-matrix/packages', version, 'dist/index.js');
+    const effectEntry = version === '5.3.1' ? `${sdkRoot}/client/src/effect.ts` : resolve(root, '.private/audio-mute-matrix/packages', version, 'dist/effect.js');
     const aliases = {
-      'matrix-client-effect': `${sdkRoot}/client/src/effect.ts`,
+      'matrix-client-effect': effectEntry,
       'matrix-react-context': `${sdkRoot}/react/src/bindings/context.tsx`,
       'matrix-react-hooks': `${sdkRoot}/react/src/bindings/hooks.ts`,
       'matrix-react-controls': `${sdkRoot}/react/src/components/control-bar/control-bar-behavior.ts`,
-      '@q9labsai/chalk-client': `${sdkRoot}/client/src/index.ts`,
+      '@q9labsai/chalk-client': clientEntry,
     };
     const built = await build({
       entryPoints: [resolve(root, 'scripts/dev/audio-mute-matrix-page.jsx')],
