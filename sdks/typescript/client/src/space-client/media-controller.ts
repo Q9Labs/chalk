@@ -169,7 +169,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
   #disposed = false;
-  #recovering: ReadonlySet<MediaSource> | null = null;
+  /** The wanted-on sources when recovery began, with the intent revision each one had then. */
+  #recovering: ReadonlyMap<MediaSource, number> | null = null;
   /** The last moment Sync was heard before the current recovery began: the start of its down time. */
   #lastConfirmedAt: number | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
@@ -1322,24 +1323,25 @@ class MediaControllerRuntime implements MediaControllerEffects {
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
     if (this.#recovering === null) this.#lastConfirmedAt = this.#ports.sync.lastHeardAt?.() ?? this.#now();
-    this.#recovering ??= new Set(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled));
+    this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
   /**
    * Recovery turns a wanted-on source off in two cases. When Sync's snapshot item says the host stopped it after the user's intent
    * (`off_reason: "host"` with a newer stop revision), the intent is paused; a replayed stop event reaches `#subscribePauses` the same
    * way. When Sync lost the source with no such evidence (a missing item, a plain tombstone, a device pause or a dead tombstone), the
    * source stays wanted-on after a drop shorter than `LONG_DROP_MS` and turns off, like a tap, after a drop of that length or more.
+   * That cutoff applies only to the intent the source had when recovery began: a newer intent from the user is left alone.
    */
   #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
     const recovering = this.#recovering;
     const longDrop = this.#now() - (this.#lastConfirmedAt ?? this.#now()) >= LONG_DROP_MS;
     this.#recovering = null;
     this.#lastConfirmedAt = null;
-    for (const source of recovering ?? []) {
+    for (const [source, intentRevision] of recovering ?? []) {
       const item = ownProjection(snapshot, source);
       const stopRevision = this.#hostStopNewerThanIntent(source, item);
       if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);
-      else if (longDrop && !item?.enabled) this.#turnOffLikeATap(source);
+      else if (longDrop && !item?.enabled && this.#sources[source].desired.revision === intentRevision) this.#turnOffLikeATap(source);
     }
   }
   #hostStopNewerThanIntent(source: MediaSource, item: ReturnType<typeof ownProjection>): number | null {

@@ -229,7 +229,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
   describe("after Sync lost the publication with no stop evidence", () => {
     const longDropMs = 60_000;
 
-    async function dropAndRecover(source: Source, downMs: number, items: readonly object[] = []) {
+    async function dropAndRecover(source: Source, downMs: number, items: readonly object[] = [], duringDrop: (setEnabled: Scenario["setEnabled"]) => Promise<unknown> = async () => undefined) {
       const heardAt = Date.now();
       let now = heardAt;
       const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
@@ -239,9 +239,11 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
         await client.join({ microphone: false, camera: false });
         await setEnabled(true);
         await enterRecovery({ platform, client });
+        const user = duringDrop(setEnabled);
         now = heardAt + downMs;
         platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items } });
         await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+        await user;
         await tick(20);
       } catch (cause) {
         client.dispose();
@@ -298,6 +300,35 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       try {
         await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
         expect(track.enabled).toBe(false);
+      } finally {
+        finish();
+      }
+    });
+
+    // The cutoff judges the intent that existed when recovery began, so a tap during the drop is the user's new word.
+    const offThenOn = async (setEnabled: Scenario["setEnabled"]) => {
+      await setEnabled(false);
+      await setEnabled(true).catch(() => undefined);
+    };
+
+    it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs, longDropMs * 2].map((downMs) => ({ source, downMs }))))("$source: a turn-off and turn-on during a drop of $downMs ms keeps the new on and applies it once", async ({ source, downMs }) => {
+      const { command, setLocalSourceIntent, finish } = await dropAndRecover(source, downMs, [], offThenOn);
+      try {
+        expect(command.mock.calls.filter(([enabled]) => enabled === true)).toHaveLength(2);
+        const intents = setLocalSourceIntent.mock.calls;
+        expect(intents.at(-1)).toEqual([source, true]);
+        expect(intents.filter(([, enabled]) => enabled === false)).toHaveLength(1);
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs].map((downMs) => ({ source, downMs }))))("$source: a tap off during a drop of $downMs ms stays off", async ({ source, downMs }) => {
+      const { client, track, command, finish } = await dropAndRecover(source, downMs, [], (setEnabled) => setEnabled(false));
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(command.mock.calls.filter(([enabled]) => enabled === true)).toHaveLength(1);
       } finally {
         finish();
       }

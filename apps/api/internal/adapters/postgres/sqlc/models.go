@@ -1329,6 +1329,7 @@ type SyncPublicationGrantReservation struct {
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	AnsweredStopRevision  pgtype.Int8        `json:"answered_stop_revision"`
 }
 
 type SyncRecording struct {
