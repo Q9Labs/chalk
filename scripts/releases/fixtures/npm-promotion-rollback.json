@@ -1,0 +1,20 @@
+{
+  "previous_tags": {
+    "@q9labsai/chalk-client": "5.2.6",
+    "@q9labsai/chalk-react": "5.2.6",
+    "@q9labsai/chalk-ui": "5.2.6",
+    "@q9labsai/chalk-assets": "5.2.6",
+    "@q9labsai/facehash": "5.2.6"
+  },
+  "publish_run": {
+    "databaseId": 123,
+    "status": "in_progress"
+  },
+  "tags_after_publish": {
+    "@q9labsai/chalk-client": "5.3.0",
+    "@q9labsai/chalk-react": "5.3.0",
+    "@q9labsai/chalk-ui": "5.3.0",
+    "@q9labsai/chalk-assets": "5.3.0",
+    "@q9labsai/facehash": "5.3.0"
+  }
+}

@@ -42,6 +42,11 @@ def save():
 
 if args[0] == "view":
     package = args[1]
+    state.setdefault("latest_reads", []).append([package, state["latest"].get(package)])
+    for event in state.get("publish_events", []):
+        if event["after_reads"] == len(state["latest_reads"]):
+            state.setdefault("publish_runs", []).append(event["run"])
+            state.setdefault("watch_updates_by_run", {})[str(event["run"]["databaseId"])] = event["tags_after_publish"]
     if package not in state["latest"] or state["latest"][package] is None:
         print("E404", file=sys.stderr)
         save()
@@ -80,7 +85,8 @@ elif args[:2] == ["run", "watch"]:
     run_id = args[2]
     for run in state.get("publish_runs", []):
         if str(run.get("databaseId")) == run_id:
-            state["latest"].update(state.get("watch_updates", {}))
+            updates = state.get("watch_updates_by_run", {}).get(run_id, state.get("watch_updates", {}))
+            state["latest"].update(updates)
             run["status"] = "completed"
     save()
 else:
@@ -123,6 +129,16 @@ save()
             text=True,
         )
 
+    def run_retain(self, packages, state):
+        self.write_state(state)
+        output = self.root / "previous-npm.json"
+        github_output = self.root / "github-output"
+        with patch.object(npm_dist_tags, "package_names", return_value=packages), patch.dict(
+            os.environ,
+            self.environment(GITHUB_OUTPUT=str(github_output)),
+        ):
+            return npm_dist_tags.retain(output)
+
     @staticmethod
     def dist_tag_calls(state):
         return [call for call in state["npm_calls"] if call[:2] == ["dist-tag", "add"]]
@@ -140,6 +156,66 @@ save()
         self.assertEqual(retained, expected)
         self.assertEqual(json.loads(output.read_text()), expected)
         self.assertIn(f'npm_latest={json.dumps(expected, separators=(",", ":"))}', github_output.read_text())
+
+    def test_retain_waits_for_publish_before_reading_all_tags(self):
+        previous = {"package-a": "1.0.0", "package-b": "2.0.0"}
+        after_publish = {"package-a": "1.1.0", "package-b": "2.1.0"}
+        state = {
+            "latest": previous.copy(),
+            "npm_calls": [],
+            "publish_runs": [{"databaseId": 123, "status": "in_progress"}],
+            "watch_updates": after_publish,
+        }
+        retained = self.run_retain(list(previous), state)
+        updated = self.read_state()
+        self.assertEqual(retained, after_publish)
+        self.assertEqual(updated["latest_reads"], [[package, version] for package, version in after_publish.items()])
+        self.assertIn(["run", "watch", "123"], updated["gh_calls"])
+
+    def test_retain_rereads_all_tags_when_publish_starts_during_snapshot(self):
+        previous = {"package-a": "1.0.0", "package-b": "2.0.0"}
+        after_publish = {"package-a": "1.1.0", "package-b": "2.1.0"}
+        state = {
+            "latest": previous.copy(),
+            "npm_calls": [],
+            "publish_events": [
+                {
+                    "after_reads": 2,
+                    "run": {"databaseId": 124, "status": "in_progress"},
+                    "tags_after_publish": after_publish,
+                }
+            ],
+        }
+        retained = self.run_retain(list(previous), state)
+        updated = self.read_state()
+        self.assertEqual(retained, after_publish)
+        self.assertEqual(
+            updated["latest_reads"],
+            [[package, version] for package, version in previous.items()]
+            + [[package, version] for package, version in after_publish.items()],
+        )
+        self.assertIn(["run", "watch", "124"], updated["gh_calls"])
+
+    def test_retain_fails_when_publish_runs_keep_starting_during_snapshot(self):
+        previous = {"package-a": "1.0.0", "package-b": "2.0.0"}
+        after_publish = {"package-a": "1.1.0", "package-b": "2.1.0"}
+        state = {
+            "latest": previous.copy(),
+            "npm_calls": [],
+            "publish_events": [
+                {
+                    "after_reads": count,
+                    "run": {"databaseId": 200 + count, "status": "in_progress"},
+                    "tags_after_publish": after_publish,
+                }
+                for count in (2, 4, 6, 8)
+            ],
+        }
+        with self.assertRaisesRegex(RuntimeError, "did not stabilize"):
+            self.run_retain(list(previous), state)
+        updated = self.read_state()
+        self.assertEqual(len(updated["latest_reads"]), 8)
+        self.assertEqual(len([call for call in updated["gh_calls"] if call[:2] == ["run", "watch"]]), 3)
 
     def test_read_latest_does_not_treat_bare_404_as_unpublished(self):
         result = subprocess.CompletedProcess([], 1, "", "HTTP 404")
@@ -180,6 +256,24 @@ save()
         self.assertIn(["run", "watch", "123"], updated["gh_calls"])
         self.assertEqual(self.dist_tag_calls(updated), [["dist-tag", "add", "package-one@1.0.0", "latest"]])
 
+    def test_restore_reproduces_publish_finishing_during_promotion_rollback(self):
+        incident = json.loads((ROOT / "scripts/releases/fixtures/npm-promotion-rollback.json").read_text())
+        previous = incident["previous_tags"]
+        result = self.run_restore(
+            previous,
+            {
+                "latest": previous.copy(),
+                "npm_calls": [],
+                "publish_runs": [incident["publish_run"]],
+                "watch_updates": incident["tags_after_publish"],
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        updated = self.read_state()
+        expected_calls = [["dist-tag", "add", f"{package}@{version}", "latest"] for package, version in previous.items()]
+        self.assertEqual(self.dist_tag_calls(updated), expected_calls)
+        self.assertEqual(updated["latest"], previous)
+
     def test_failing_dist_tag_add_returns_nonzero(self):
         result = self.run_restore(
             {"package-one": "1.0.0"},
@@ -202,7 +296,9 @@ save()
         approve = workflow.split("  approve:\n", 1)[1].split("  release:\n", 1)[0]
         retain = approve.index("Retain the live npm latest tags before the first promotion changes them")
         artifact = approve.index("uses: actions/upload-artifact@")
+        retain_step = approve[retain:].split("      - name:", 1)[0]
         self.assertLess(retain, artifact)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", retain_step)
         self.assertIn("pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1", approve[:retain])
         self.assertIn("actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020", approve[:retain])
         self.assertNotIn("registry-url:", approve[:retain])
