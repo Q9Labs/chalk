@@ -1,8 +1,8 @@
 defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.ExternalOperationDispatchTestHelpers, as: Helpers
+  alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID
