@@ -333,7 +333,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
 
     # A removal that completes closes the socket for good, on its tick with no traffic.
     lifecycle(connection, PlannerSQL.mark_participant_leaving(), removed)
-    lifecycle(connection, FinalizerSQL.complete_external_participant(), removed)
+    lifecycle(connection, FinalizerSQL.complete_external_participant(), removed ++ [nil])
 
     assert {:stop, :normal, {1008, "policy violation"}, closed} =
              SocketWhiteboardV1.handle_info(:whiteboard_authority_tick, socket)

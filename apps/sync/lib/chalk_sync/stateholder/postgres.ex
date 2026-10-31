@@ -172,6 +172,12 @@ defmodule ChalkSync.Stateholder.Postgres do
   def begin_operation(%Identity{} = identity, %Operation{} = operation) do
     case run_operation_transaction(identity, operation) do
       {:ok, %OperationDecision{} = decision} ->
+        WebhookObservation.external_operation(
+          identity.episode,
+          decision.external_operation_id,
+          decision
+        )
+
         {:ok, decision}
 
       {:error, {:retryable, reason}} ->
@@ -197,6 +203,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   def begin_internal_operation(%EpisodeKey{} = episode, %Operation{} = operation) do
     case run_internal_operation_transaction(episode, operation) do
       {:ok, %OperationDecision{} = decision} ->
+        WebhookObservation.external_operation(episode, decision.external_operation_id, decision)
         {:ok, decision}
 
       {:error, {:retryable, reason}} ->
