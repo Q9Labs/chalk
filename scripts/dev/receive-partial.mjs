@@ -18,7 +18,6 @@ const { chromium } = requireConsumer("playwright");
 const output = resolve(root, process.env.CHALK_PARTIAL_OUTPUT || "artifacts/receive-partial");
 await mkdir(output, { recursive: true });
 const duration = Number(process.env.CHALK_PARTIAL_SECONDS || 150);
-const moderatorProbe = false;
 assert.ok(duration >= 60 && duration <= 1200);
 const versions = (process.env.CHALK_PARTIAL_VERSIONS || "master-1,fixed-1,master-2,fixed-2,master-3,fixed-3").split(",");
 assert.ok(versions.every((version) => Object.hasOwn(revisions, version) && version !== "server"));
@@ -234,13 +233,6 @@ try {
       participants.push({ context, page });
     }
     run.joinSeconds = (Date.now() - origin) / 1000;
-    if (moderatorProbe)
-      await participants[0].page.evaluate(
-        (target) => {
-          window.matrixMuteTarget = target;
-        },
-        [...ids].find(([, index]) => index === 1)[0],
-      );
     const start = Date.now();
     const schedule = [];
     for (let index = 0; index < 4; index++) {
@@ -255,7 +247,6 @@ try {
       schedule.push({ at, participant, kind: "mic", enabled: false }, { at: at + 4, participant, kind: "mic", enabled: true });
     schedule.sort((a, b) => a.at - b.at);
     let cursor = 0;
-    let offline = false;
     while ((Date.now() - start) / 1000 < duration) {
       const t = (Date.now() - start) / 1000;
       while (cursor < schedule.length && schedule[cursor].at <= t) {
@@ -285,8 +276,8 @@ try {
             assert.ok(!body.errorCode && body.tracks?.every((track) => !track.errorCode), "provider must accept the targeted fault");
             run.partialFault = { t: (Date.now() - start) / 1000, listener: 1, speaker: 2, mid };
           } else {
-            if (action.kind === "mic" || action.kind === "moderator") intents[action.participant] = action.enabled;
-            const actor = action.kind === "moderator" ? 0 : action.participant;
+            if (action.kind === "mic") intents[action.participant] = action.enabled;
+            const actor = action.participant;
             await participants[actor].page.locator(`#${action.kind}`).click({ timeout: 3000 });
           }
         } catch (error) {
@@ -310,7 +301,6 @@ try {
       }
       await sleep(250);
     }
-    if (offline) execFileSync("sudo", ["iptables", "-w", "-D", "OUTPUT", "-p", "udp", "-j", "DROP"]);
     run.sessionsPerParticipant = connections.map((connections) => connections.size);
     run.receiverAllocations = await Promise.all(
       connections.map(async (sessions) => {
@@ -345,10 +335,6 @@ try {
   await save();
   throw error;
 } finally {
-  // Our machine has no other browser/workload; remove only our exact firewall rule if present.
-  try {
-    execFileSync("sudo", ["iptables", "-w", "-D", "OUTPUT", "-p", "udp", "-j", "DROP"], { stdio: "ignore" });
-  } catch {}
   await Promise.all(allBrowsers.map((browser) => browser.close()));
   await runtime.stop();
   if (http) await new Promise((resolve) => http.close(resolve));
