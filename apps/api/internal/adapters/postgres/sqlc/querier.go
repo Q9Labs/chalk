@@ -352,6 +352,7 @@ type Querier interface {
 	RequestRecordingCompletionRecovery(ctx context.Context, arg RequestRecordingCompletionRecoveryParams) (pgtype.UUID, error)
 	RequestRecordingStop(ctx context.Context, arg RequestRecordingStopParams) (RequestRecordingStopRow, error)
 	RequeueArtifactJob(ctx context.Context, arg RequeueArtifactJobParams) (ArtifactJob, error)
+	// The requeue trigger assigns a missing acceptance order when a legacy row returns to pending.
 	RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error)
 	ReserveAPIKeyMutation(ctx context.Context, arg ReserveAPIKeyMutationParams) (ApiKeyMutationRequest, error)
 	ReserveChatAttachmentUpload(ctx context.Context, arg ReserveChatAttachmentUploadParams) (ReserveChatAttachmentUploadRow, error)

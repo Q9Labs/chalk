@@ -810,6 +810,7 @@ select operation_name from sync_external_operations
 where tenant_id = sqlc.arg(tenant_id) and episode_id = sqlc.arg(episode_id)
   and external_operation_id = sqlc.arg(external_operation_id);
 
+-- The requeue trigger assigns a missing acceptance order when a legacy row returns to pending.
 -- name: RequeueFailedAdmissionDecision :one
 update sync_external_operations
 set status = 'pending', completed_at = null, last_error_code = null,
