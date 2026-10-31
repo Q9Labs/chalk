@@ -3041,7 +3041,10 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
 it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
   const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
   const localMicrophonePublicationIds = () =>
-    [...harness.transport.localPublications.values()].filter((item) => item.source === "microphone").map((item) => item.publicationId).sort();
+    [...harness.transport.localPublications.values()]
+      .filter((item) => item.source === "microphone")
+      .map((item) => item.publicationId)
+      .sort();
   const localAddCount = () => harness.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local")).length;
   let expire: (() => void) | undefined;
   const schedule = platform.dependencies.clock.setTimeout;
