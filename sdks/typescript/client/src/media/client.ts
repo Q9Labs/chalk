@@ -60,7 +60,7 @@ const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
-const RECOVERY_RESET_WINDOW_MS = 30_000;
+const RECOVERY_HEALTHY_RESET_MS = 10_000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 const VIEWER_LAYER_BATCH_SIZE = 16;
@@ -85,7 +85,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
   readonly #localRecoveries = new Map<MediaPublicationSource, LocalRecovery>();
-  readonly #recentRecoveries = new Map<MediaPublicationSource, { count: number; lastStartedAt: number }>();
+  readonly #recentRecoveries = new Map<MediaPublicationSource, { count: number; healthySince: number }>();
   readonly #remoteTracks = new Map<string, CloudflareSFURemoteTrack>();
   #bootstrap: CloudflareSFUBootstrap;
   #connection: RTCPeerConnection;
@@ -301,9 +301,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #recoveryStartDelay(source: MediaPublicationSource, now: number): number {
     const recent = this.#recentRecoveries.get(source);
-    const repeats = recent && now - recent.lastStartedAt < RECOVERY_RESET_WINDOW_MS ? recent.count + 1 : 0;
-    this.#recentRecoveries.set(source, { count: repeats, lastStartedAt: now });
-    return repeats === 0 ? 0 : recoveryBackoffMs(repeats - 1);
+    if (!recent || now - recent.healthySince >= RECOVERY_HEALTHY_RESET_MS) {
+      this.#recentRecoveries.set(source, { count: 0, healthySince: now });
+      return 0;
+    }
+    this.#recentRecoveries.set(source, { count: recent.count + 1, healthySince: now });
+    return recoveryBackoffMs(recent.count);
   }
   #scheduleLocalRecovery(recovery: LocalRecovery, delayMs: number): void {
     recovery.timer = globalThis.setTimeout(() => {
@@ -381,6 +384,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     const publicationId = recovery.state.providerPublicationId;
     if (!published || publicationId === null || publicationId === recovery.deadPublicationId) return false;
+    const recent = this.#recentRecoveries.get(source);
+    if (recent) this.#recentRecoveries.set(source, { ...recent, healthySince: Date.now() });
     this.#dropLocalRecovery(source, recovery);
     return true;
   }

@@ -565,6 +565,58 @@ it.each(["microphone", "camera"] as const)("repeated %s withdrawals follow 1/2/4
   });
 });
 
+it.each(["microphone", "camera"] as const)("resets %s withdrawal backoff after 10 seconds of healthy publication", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const live = () => [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    const withdraw = (publicationId: string) => {
+      h.transport.withdrawPublication(publicationId);
+      notifyLocalPublicationWithdrawn(h.client, publicationId);
+    };
+    const onlyLivePublicationId = () => {
+      expect(live()).toHaveLength(1);
+      return live()[0]!.publicationId;
+    };
+
+    const p1 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    withdraw(p1);
+    await vi.advanceTimersByTimeAsync(100);
+    const p2 = onlyLivePublicationId();
+    expect(p2).not.toBe(p1);
+
+    withdraw(p2);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p3 = onlyLivePublicationId();
+    expect(p3).not.toBe(p2);
+
+    withdraw(p3);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p4 = onlyLivePublicationId();
+    expect(p4).not.toBe(p3);
+
+    await vi.advanceTimersByTimeAsync(9000);
+    withdraw(p4);
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p5 = onlyLivePublicationId();
+    expect(p5).not.toBe(p4);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    withdraw(p5);
+    await vi.advanceTimersByTimeAsync(100);
+    const p6 = onlyLivePublicationId();
+    expect(p6).not.toBe(p5);
+    expect(new Set([p1, p2, p3, p4, p5, p6]).size).toBe(6);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: true, publicationId: p6 });
+  });
+});
+
 it("review736: recovers repeated replacement deaths through the short backoff", async () => {
   await withTimedHarness(
     async (h) => {
