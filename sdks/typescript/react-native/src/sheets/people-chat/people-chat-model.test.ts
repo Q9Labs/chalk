@@ -1,6 +1,6 @@
 import type { ChatMessage, Participant, PendingChatSend } from "@q9labsai/chalk-client";
 import { describe, expect, it } from "vitest";
-import { groupMessages, messageSummary, mimeTypeOf, stagingError } from "./chat-model";
+import { formatTime, groupMessages, messageSummary, mimeTypeOf, stagingError } from "./chat-model";
 import { nextHandOrder, peopleRows } from "./people-model";
 
 function person(participantId: string, displayName: string, handRaised = false): Participant {
@@ -95,4 +95,13 @@ describe("chat files", () => {
     expect(mimeTypeOf("notes", undefined)).toBe("application/octet-stream");
     expect(mimeTypeOf("a.png", "image/png")).toBe("image/png");
   });
+});
+
+it.each([
+  [0, 0, "12:00 AM"],
+  [12, 0, "12:00 PM"],
+  [3, 5, "3:05 AM"],
+  [15, 5, "3:05 PM"],
+] as const)("formats native chat time %i:%i as %s", (hour, minute, expected) => {
+  expect(formatTime(new Date(2026, 9, 26, hour, minute).toISOString())).toBe(expected);
 });
