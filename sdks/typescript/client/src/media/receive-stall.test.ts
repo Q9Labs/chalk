@@ -209,6 +209,16 @@ describe("audio receive recovery", () => {
     expect(escalated).toBeGreaterThanOrEqual(RECEIVE_ESCALATION_MS);
     expect(escalated).toBeLessThan(RECEIVE_ESCALATION_MS + 1000);
   });
+  it("does not blame the receive session while a video track still flows", () => {
+    const camera = { participantId: "c", source: "camera" as const, publicationId: "c", enabled: true };
+    const video = { ...camera, track: { id: "c", kind: "video" } as MediaStreamTrack };
+    const recovery = new ReceiveStallRecovery();
+    recovery.expect([...speakers, camera], "listener");
+    for (let now = 0; now <= 3 * RECEIVE_ESCALATION_MS; now += 500) expect(sampleAudio(recovery, now, { a: 10, b: 10, c: now }, [...heard, video]).escalate).toBe(false);
+    let escalated = false;
+    for (let now = 3 * RECEIVE_ESCALATION_MS + 500; now <= 5 * RECEIVE_ESCALATION_MS; now += 500) escalated ||= sampleAudio(recovery, now, { a: 10, b: 10, c: 10 }, [...heard, video]).escalate;
+    expect(escalated).toBe(true);
+  });
   it("waits longer to blame the receive session when only one publisher is desired", () => {
     const recovery = new ReceiveStallRecovery();
     recovery.expect(speakers.slice(0, 1), "listener");

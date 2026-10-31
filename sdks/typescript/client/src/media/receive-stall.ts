@@ -254,21 +254,24 @@ export class ReceiveStallRecovery {
     const unrestored = this.#active.filter((id) => this.#awaiting.has(id) && !stalled.includes(id));
     this.#stalled = new Set([...stalled, ...unrestored]);
     if (newlyStalled.length) this.#record(now);
-    return { stalled: [...stalled, ...unrestored], advanced, newlyStalled, escalate: this.#observeAudioHealth(now, report !== null) };
+    return { stalled: [...stalled, ...unrestored], advanced, newlyStalled, escalate: this.#observeAudioHealth(now, report !== null, new Set(samples.map((sample) => sample.publicationId))) };
   }
 
-  // Escalate only when no desired audio flows: if some publisher is heard, the receive session works
-  // and a re-pull of the broken one is the whole repair.
-  #observeAudioHealth(now: number, connected: boolean): boolean {
+  // Escalate only when nothing desired flows: if any publisher is heard, audio or video, the receive session
+  // works and a re-pull of the broken one is the whole repair.
+  #observeAudioHealth(now: number, connected: boolean, sampled: ReadonlySet<string>): boolean {
     const pulled = new Set(this.#active);
+    const sessionCarriesMedia = connected && this.#active.some((id) => !this.#audio.has(id) && this.#detector.flowing(id));
     for (const id of this.#audio) {
       // A fresh pull is unhealthy until packets actually advance, so repeated re-pulls cannot reset the clock.
-      const healthy = connected && pulled.has(id) && this.#detector.flowing(id) && !this.#stalled.has(id);
+      // Audio whose packet cadence is unknown has no samples, so it can neither stall nor count as broken.
+      const flowing = this.#detector.flowing(id) || !sampled.has(id);
+      const healthy = connected && pulled.has(id) && flowing && !this.#stalled.has(id);
       if (healthy) this.#unhealthySince.delete(id);
       else if (!this.#unhealthySince.has(id)) this.#unhealthySince.set(id, now);
     }
     if (this.#audio.size > this.#unhealthySince.size) this.#rebuildStreak = 0;
-    if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size) return false;
+    if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size || sessionCarriesMedia) return false;
     const cooldown = Math.min(RECEIVE_REBUILD_COOLDOWN_MS * 2 ** Math.max(this.#rebuildStreak - 1, 0), MAX_REBUILD_COOLDOWN_MS);
     const patience = connected && this.#audio.size < 2 ? RECEIVE_SOLO_ESCALATION_MS : RECEIVE_ESCALATION_MS;
     return now - Math.min(...this.#unhealthySince.values()) >= patience && now - this.#lastRebuildAt >= cooldown;
