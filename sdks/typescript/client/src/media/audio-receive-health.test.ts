@@ -12,7 +12,7 @@ function remote(id = "publication-private"): CloudflareSFURemoteTrack {
 }
 
 function element(track: MediaStreamTrack, paused = true): HTMLAudioElement {
-  return { paused, srcObject: { getTracks: () => [track] } } as unknown as HTMLAudioElement;
+  return Object.assign(new EventTarget(), { paused, currentTime: 0, srcObject: { getTracks: () => [track] } }) as unknown as HTMLAudioElement;
 }
 
 function harness() {
@@ -43,6 +43,62 @@ describe("AudioReceiveHealth", () => {
     vi.useRealTimers();
   });
 
+  it("reports element_bound when unpaused playback never started despite growing bytes", async () => {
+    const h = harness();
+    const p = remote();
+    const audio = element(p.track, false);
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.pullSucceeded([p.publicationId]);
+    h.tracker.observeAudioElement(p.track, audio);
+    h.tracker.start();
+    for (let i = 1; i <= 3; i++) {
+      h.bytes(p.track, i);
+      audio.currentTime = i;
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    expect(h.events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "element_bound", element_state: "playing", duration_ms: 15000 }));
+    h.tracker.dispose();
+  });
+
+  it.each(["resolved", "event", "frozen"])("requires started and advancing playback: %s", async (mode) => {
+    const h = harness();
+    const p = remote();
+    const audio = element(p.track, false);
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.pullSucceeded([p.publicationId]);
+    const handle = h.tracker.observeAudioElement(p.track, audio);
+    if (mode === "event") audio.dispatchEvent(new Event("playing"));
+    else handle.played(undefined);
+    h.tracker.start();
+    for (let i = 1; i <= 12; i++) {
+      h.bytes(p.track, i);
+      if (mode !== "frozen") audio.currentTime = i;
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    expect(h.events.find((event) => event.event === "audio_receive_summary")?.receive_counts).toEqual({ [mode === "frozen" ? "element_bound" : "playing"]: 1 });
+    expect(h.events.filter((event) => event.event === "audio_receive_stuck")).toHaveLength(mode === "frozen" ? 1 : 0);
+    if (mode === "frozen") expect(h.events[0]).toMatchObject({ receive_state: "element_bound", play_result: "ok" });
+    h.tracker.dispose();
+  });
+
+  it("removes playing listeners on detach and dispose, and does not attach after disposal", () => {
+    const h = harness();
+    const p = remote();
+    const audio = element(p.track);
+    const add = vi.spyOn(audio, "addEventListener");
+    const remove = vi.spyOn(audio, "removeEventListener");
+    const first = h.tracker.observeAudioElement(p.track, audio);
+    first.detach();
+    expect(remove).toHaveBeenNthCalledWith(1, "playing", add.mock.calls[0]?.[1]);
+    h.tracker.observeAudioElement(p.track, audio);
+    h.tracker.dispose();
+    expect(remove).toHaveBeenNthCalledWith(2, "playing", add.mock.calls[1]?.[1]);
+    h.tracker.observeAudioElement(p.track, audio);
+    expect(add).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"] as const)("reports the consecutive %s stage", async (state) => {
     const h = harness();
     const p = remote();
@@ -52,10 +108,12 @@ describe("AudioReceiveHealth", () => {
     const pulled = ["pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"].includes(state);
     if (pulled) h.tracker.pullSucceeded([p.publicationId]);
     if (["track_received", "bytes_flowing", "element_bound", "playing"].includes(state)) h.tracks.push(p);
-    if (["element_bound", "playing"].includes(state)) h.tracker.observeAudioElement(p.track, element(p.track, state !== "playing")).played(undefined);
+    const audio = element(p.track, state !== "playing");
+    if (["element_bound", "playing"].includes(state)) h.tracker.observeAudioElement(p.track, audio).played(undefined);
     h.bytes(p.track, 10);
     await h.tracker.sample();
     for (let i = 1; i < 12; i++) {
+      if (state === "playing") audio.currentTime = i;
       if (["bytes_flowing", "element_bound", "playing"].includes(state)) h.bytes(p.track, 10 + i);
       vi.setSystemTime(i * 5000);
       await h.tracker.sample();
@@ -113,11 +171,12 @@ describe("AudioReceiveHealth", () => {
     h.tracks.push(p);
     h.tracker.roster([p]);
     h.tracker.pullSucceeded([p.publicationId]);
-    h.tracker.observeAudioElement(p.track, audio);
+    h.tracker.observeAudioElement(p.track, audio).played(undefined);
     for (let i = 0; i < 10; i++) {
       h.bytes(p.track, i * 2);
       await h.tracker.sample();
       h.bytes(p.track, i * 2 + 1);
+      audio.currentTime = i + 1;
       await h.tracker.sample();
       vi.setSystemTime(Date.now() + 11000);
       await h.tracker.sample();
@@ -265,6 +324,7 @@ describe("AudioReceiveHealth", () => {
     h.tracker.pullSucceeded([p.publicationId]);
     const audio = element(p.track, false);
     const handle = h.tracker.observeAudioElement(p.track, audio);
+    handle.played(undefined);
     h.bytes(p.track, 1);
     await h.tracker.sample();
     h.bytes(p.track, 2, { kind: "video" });
@@ -272,8 +332,10 @@ describe("AudioReceiveHealth", () => {
     await h.tracker.sample();
     expect(h.events[0]?.receive_state).toBe("track_received");
     h.bytes(p.track, 3);
+    audio.currentTime = 1;
     await h.tracker.sample();
     h.bytes(p.track, 4);
+    audio.currentTime = 2;
     await h.tracker.sample();
     handle.detach();
     h.bytes(p.track, 5);
@@ -297,11 +359,14 @@ describe("AudioReceiveHealth", () => {
     h.tracker.observeAudioElement(p.track, element(remote("other").track, false));
     h.tracker.observeAudioElement(p.track, element(p.track)).played(new DOMException("private", "NotAllowedError"));
     h.tracker.observeAudioElement(p.track, element(p.track)).played(undefined);
-    const playing = h.tracker.observeAudioElement(p.track, element(p.track, false));
+    const audio = element(p.track, false);
+    const playing = h.tracker.observeAudioElement(p.track, audio);
+    playing.played(undefined);
     h.bytes(p.track, 1);
     await h.tracker.sample();
     vi.setSystemTime(11000);
     h.bytes(p.track, 2);
+    audio.currentTime = 1;
     await h.tracker.sample();
     expect(h.events).toEqual([]);
     playing.detach();

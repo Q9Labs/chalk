@@ -7,7 +7,7 @@ type PlayResult = NonNullable<ConnectionReportTransportEvent["play_result"]>;
 type FailureKind = NonNullable<ConnectionReportTransportEvent["media_error_kind"]>;
 type Counts = NonNullable<ConnectionReportTransportEvent["receive_counts"]>;
 type AudioSource = "microphone" | "screen_audio";
-type Observation = { element: HTMLAudioElement; result?: PlayResult };
+type Observation = { element: HTMLAudioElement; result?: PlayResult; started: boolean; time?: number; playing: boolean; onPlaying(): void };
 type Entry = {
   source: AudioSource;
   projectionKey: string;
@@ -59,6 +59,9 @@ export class AudioReceiveHealth {
     if (this.#timer !== undefined) this.#options.clearInterval(this.#timer);
     this.#timer = undefined;
     this.#entries.clear();
+    for (const observations of this.#elements.values()) {
+      for (const observation of observations) observation.element.removeEventListener("playing", observation.onPlaying);
+    }
     this.#elements.clear();
     this.#projection = undefined;
   }
@@ -66,6 +69,7 @@ export class AudioReceiveHealth {
   replaced(): void {
     if (this.#disposed) return;
     this.#connectionRevision++;
+    this.#resetPlayback();
     for (const entry of this.#entries.values()) {
       entry.pull = "announced";
       entry.since = this.#options.now();
@@ -127,17 +131,29 @@ export class AudioReceiveHealth {
   }
 
   observeAudioElement(track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } {
-    const observation: Observation = { element };
+    const observation: Observation = {
+      element,
+      started: false,
+      playing: false,
+      onPlaying: () => {
+        observation.started = true;
+      },
+    };
     const observations = this.#elements.get(track) ?? new Set<Observation>();
     if (!this.#disposed) {
+      element.addEventListener("playing", observation.onPlaying);
       observations.add(observation);
       this.#elements.set(track, observations);
     }
     return {
       played: (result) => {
-        if (!this.#disposed && observations.has(observation)) observation.result = playResult(result);
+        if (!this.#disposed && observations.has(observation)) {
+          observation.result = playResult(result);
+          if (observation.result === "ok") observation.started = true;
+        }
       },
       detach: () => {
+        element.removeEventListener("playing", observation.onPlaying);
         observations.delete(observation);
         if (observations.size === 0 && this.#elements.get(track) === observations) this.#elements.delete(track);
       },
@@ -162,8 +178,15 @@ export class AudioReceiveHealth {
   #resetConnection(connection: RTCPeerConnection | null): void {
     if (connection === this.#connection) return;
     this.#connection = connection;
+    this.#resetPlayback();
     for (const entry of this.#entries.values()) {
       entry.bytes = undefined;
+    }
+  }
+
+  #resetPlayback(): void {
+    for (const observations of this.#elements.values()) {
+      for (const observation of observations) observation.time = undefined;
     }
   }
 
@@ -213,7 +236,7 @@ export class AudioReceiveHealth {
     if (!flowing) return snapshot;
     snapshot.receive_state = "bytes_flowing";
     if (!observation) return snapshot;
-    snapshot.receive_state = observation.element.paused ? "element_bound" : "playing";
+    snapshot.receive_state = observation.playing ? "playing" : "element_bound";
     return snapshot;
   }
 
@@ -279,14 +302,25 @@ async function readStats(connection: RTCPeerConnection | null): Promise<RTCStats
 }
 
 function boundElement(observations: Set<Observation> | undefined, track: MediaStreamTrack): Observation | undefined {
-  let paused: Observation | undefined;
+  let selected: Observation | undefined;
+  let rank = -1;
   for (const observation of observations ?? []) {
     const stream = observation.element.srcObject;
     if (stream === null || !("getTracks" in stream) || !stream.getTracks().includes(track)) continue;
-    if (!observation.element.paused) return observation;
-    paused ??= observation;
+    updatePlayback(observation);
+    const priority = Number(observation.playing) * 2 + Number(!observation.element.paused);
+    if (priority > rank) {
+      selected = observation;
+      rank = priority;
+    }
   }
-  return paused;
+  return selected;
+}
+
+function updatePlayback(observation: Observation): void {
+  const time = observation.element.currentTime;
+  observation.playing = observation.started && observation.time !== undefined && time > observation.time;
+  observation.time = time;
 }
 
 function playResult(result: unknown): PlayResult {
