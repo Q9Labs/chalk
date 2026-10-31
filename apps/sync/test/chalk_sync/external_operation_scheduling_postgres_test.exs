@@ -126,6 +126,28 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     confirm(episode, ending, adapter)
   end
 
+  test "a departing actor waits for its removal of another participant", %{connection: connection} do
+    seed = fixture(connection, 3)
+    [actor, target, independent] = seed.identities
+    removal_id = queue(actor, :remove_participant, %{"participantId" => target.participant_id})
+    actor_id = queue(actor, :participant_leave)
+    independent_id = queue(independent, :participant_leave)
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    assert {:ok, operations} = Postgres.claim_operations(8)
+    assert length(operations) == 2
+
+    assert MapSet.new(Enum.map(operations, fn {_, op} -> op.external_operation_id end)) ==
+             MapSet.new([removal_id, independent_id])
+
+    assert {:ok, []} = Postgres.claim_operations(8)
+    Enum.each(operations, fn {episode, operation} -> confirm(episode, operation, adapter) end)
+    assert {:ok, [{episode, departure}]} = Postgres.claim_operations(8)
+    assert departure.external_operation_id == actor_id
+    confirm(episode, departure, adapter)
+    assert {:ok, []} = Postgres.claim_operations(8)
+  end
+
   @tag timeout: 120_000
   test "ten simultaneous wire Leaves and a later Episode have bounded durable acknowledgement", %{
     connection: connection,

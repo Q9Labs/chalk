@@ -70,6 +70,18 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
         and attempt_count < 100
         and #{operation_filter}
         and (
+          operation_name not in ('participant_leave', 'remove_participant')
+          or not exists (
+            select 1 from sync_external_operations dependency
+            where dependency.tenant_id = sync_external_operations.tenant_id
+              and dependency.episode_id = sync_external_operations.episode_id
+              and dependency.status = 'pending'
+              and dependency.actor_participant_id = sync_external_operations.target_participant_id
+              and dependency.actor_generation = sync_external_operations.target_participant_generation
+              and dependency.external_operation_id <> sync_external_operations.external_operation_id
+          )
+        )
+        and (
           #{recording_callback("sync_external_operations")}
           or (
             pending_order.barriers_before = 0
