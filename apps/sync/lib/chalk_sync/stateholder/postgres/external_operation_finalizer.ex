@@ -148,6 +148,18 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
        when name not in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
        do: :ok
 
+  # End reservation stops new commands immediately. Previously accepted work
+  # must still drain before the ordered Episode end can finish its cleanup.
+  defp validate_finalization_episode(%{name: name}, %{status: "ending"})
+       when name not in [
+              :end_episode,
+              :tenant_end_episode,
+              :maximum_duration_expired,
+              :recording_capture_ready,
+              :recording_capture_failed
+            ],
+       do: :ok
+
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
 
   defp validate_finalization_target(_connection, _episode, %{target_participant_id: nil}),

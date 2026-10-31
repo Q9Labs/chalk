@@ -8,14 +8,28 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims, as: SQL
   alias ChalkSync.UUID
 
-  def claim_operations(connection, limit),
-    do: claim_operation_rows(connection, SQL.claim_operations(), limit)
+  def claim_operations(connection, limit, excluded_episodes \\ [], episode_limit \\ 64),
+    do:
+      claim_operation_rows(
+        connection,
+        SQL.claim_operations(),
+        limit,
+        excluded_episodes,
+        episode_limit
+      )
 
   def claim_local_operations(connection, limit),
     do: claim_operation_rows(connection, SQL.claim_local_operations(), limit)
 
-  defp claim_operation_rows(connection, query, limit) do
-    %{rows: rows} = Postgrex.query!(connection, query, [limit], timeout: 2_000)
+  defp claim_operation_rows(
+         connection,
+         query,
+         limit,
+         excluded_episodes \\ [],
+         episode_limit \\ 64
+       ) do
+    params = [limit, Enum.map(excluded_episodes, &UUID.dump!/1), episode_limit]
+    %{rows: rows} = Postgrex.query!(connection, query, params, timeout: 2_000)
 
     Enum.map(rows, fn row ->
       operation = ExternalOperationRecord.from_row(row)

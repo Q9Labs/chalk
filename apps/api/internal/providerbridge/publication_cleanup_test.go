@@ -2,6 +2,7 @@ package providerbridge
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -11,8 +12,24 @@ import (
 )
 
 type cleanupPublicationRepository struct {
+	mu           sync.Mutex
 	observations []provideroperations.Observation
 	participants []mediapublications.PublicationParticipant
+}
+
+func (r *cleanupPublicationRepository) ClosePublication(ctx context.Context, input mediapublications.CloseInput) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var latest *provideroperations.Observation
+	if len(r.observations) > 0 {
+		latest = &r.observations[len(r.observations)-1]
+	}
+	next, err := mediapublications.CloseObservation(latest, input)
+	if err != nil || next == nil {
+		return false, err
+	}
+	_, err = r.AppendObservation(ctx, *next)
+	return err == nil, err
 }
 
 func (r *cleanupPublicationRepository) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
@@ -85,9 +102,14 @@ func TestReplacementPublishingPreservesOtherSourcesForCleanup(t *testing.T) {
 	}
 }
 
-type cleanupSourceCloser struct{ tracks int }
+type cleanupSourceCloser struct {
+	mu     sync.Mutex
+	tracks int
+}
 
 func (c *cleanupSourceCloser) CloseTracks(_ context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.tracks += len(input.Tracks)
 	return mediaplane.CloseTracksResponse{}, nil
 }

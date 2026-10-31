@@ -183,6 +183,19 @@ func (r *reconciliationRepositoryStub) ListPublicationParticipants(_ context.Con
 	return []PublicationParticipant{{ID: id, Generation: 1}}, nil
 }
 
+func (r *reconciliationRepositoryStub) ClosePublication(ctx context.Context, input CloseInput) (bool, error) {
+	var latest *provideroperations.Observation
+	if len(r.observations) > 0 {
+		latest = &r.observations[len(r.observations)-1]
+	}
+	next, err := CloseObservation(latest, input)
+	if err != nil || next == nil {
+		return false, err
+	}
+	_, err = r.AppendObservation(ctx, *next)
+	return err == nil, err
+}
+
 func (r *reconciliationRepositoryStub) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
 	r.appended = input
 	r.appendedInputs = append(r.appendedInputs, input)

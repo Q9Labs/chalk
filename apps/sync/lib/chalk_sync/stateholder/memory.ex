@@ -105,6 +105,10 @@ defmodule ChalkSync.Stateholder.Memory do
   def claim_operations(limit), do: GenServer.call(__MODULE__, {:claim_operations, limit})
 
   @impl ChalkSync.Stateholder
+  def claim_operations(limit, excluded_episodes, episode_limit),
+    do: GenServer.call(__MODULE__, {:claim_operations, limit, excluded_episodes, episode_limit})
+
+  @impl ChalkSync.Stateholder
   def claim_local_operations(limit),
     do: GenServer.call(__MODULE__, {:claim_local_operations, limit})
 
@@ -392,6 +396,20 @@ defmodule ChalkSync.Stateholder.Memory do
   def handle_call({:claim_operations, limit}, _from, server_state),
     do: claim_memory_operations(server_state, limit, fn _operation -> true end)
 
+  def handle_call(
+        {:claim_operations, limit, excluded_episodes, episode_limit},
+        _from,
+        server_state
+      ),
+      do:
+        claim_memory_operations(
+          server_state,
+          limit,
+          fn _operation -> true end,
+          excluded_episodes,
+          episode_limit
+        )
+
   def handle_call({:claim_local_operations, limit}, _from, server_state) do
     claim_memory_operations(server_state, limit, fn operation ->
       operation.name in [
@@ -528,7 +546,13 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp update_media_pauses(pauses, key, nil), do: Map.delete(pauses, key)
 
-  defp claim_memory_operations(server_state, limit, operation_filter) do
+  defp claim_memory_operations(
+         server_state,
+         limit,
+         operation_filter,
+         excluded_episodes \\ [],
+         episode_limit \\ 64
+       ) do
     operations =
       @episodes
       |> :ets.tab2list()
@@ -539,6 +563,17 @@ defmodule ChalkSync.Stateholder.Memory do
         |> Enum.map(&{episode.episode, &1})
       end)
       |> Enum.sort_by(fn {_episode, operation} -> operation.external_operation_id end)
+      |> Enum.reject(fn {episode, _operation} -> episode.episode_id in excluded_episodes end)
+
+    selected_episodes =
+      operations
+      |> Enum.map(fn {episode, _operation} -> episode.episode_id end)
+      |> Enum.uniq()
+      |> Enum.take(episode_limit)
+
+    operations =
+      operations
+      |> Enum.filter(fn {episode, _operation} -> episode.episode_id in selected_episodes end)
       |> Enum.take(limit)
 
     {:reply, {:ok, operations}, server_state}

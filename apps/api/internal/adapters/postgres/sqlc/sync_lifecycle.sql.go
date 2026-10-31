@@ -849,7 +849,7 @@ insert into sync_external_operations (
     $16,
     $17
 )
-returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+returning acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
 type CreateTenantExternalOperationParams struct {
@@ -894,6 +894,7 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 	)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,
@@ -1831,7 +1832,7 @@ func (q *Queries) LockLifecycleParticipantForUpdate(ctx context.Context, arg Loc
 }
 
 const lockPendingDeadlineOperation = `-- name: LockPendingDeadlineOperation :one
-select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+select acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
@@ -1854,6 +1855,7 @@ func (q *Queries) LockPendingDeadlineOperation(ctx context.Context, arg LockPend
 	row := q.db.QueryRow(ctx, lockPendingDeadlineOperation, arg.TenantID, arg.SpaceID, arg.EpisodeID)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,
@@ -1959,7 +1961,7 @@ func (q *Queries) LockSyncEpisodeControlForUpdate(ctx context.Context, arg LockS
 }
 
 const lockTenantExternalOperationForRequest = `-- name: LockTenantExternalOperationForRequest :one
-select tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+select acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 from sync_external_operations
 where
     tenant_id = $1
@@ -1988,6 +1990,7 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 	)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,
@@ -2207,7 +2210,7 @@ where tenant_id = $1 and episode_id = $2
   and external_operation_id = $3
   and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
   and status = 'failed'
-returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
+returning acceptance_order, tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate
 `
 
 type RequeueFailedAdmissionDecisionParams struct {
@@ -2220,6 +2223,7 @@ func (q *Queries) RequeueFailedAdmissionDecision(ctx context.Context, arg Requeu
 	row := q.db.QueryRow(ctx, requeueFailedAdmissionDecision, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
 	var i SyncExternalOperation
 	err := row.Scan(
+		&i.AcceptanceOrder,
 		&i.TenantID,
 		&i.SpaceID,
 		&i.EpisodeID,

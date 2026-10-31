@@ -50,16 +50,16 @@ defmodule ChalkSync.Operations.SingleNodeTest do
              Probe.validate_database(%{observations | migration_version: 20_261_019_120_000})
   end
 
-  test "requires the rollout migration before readiness and accepts newer schemas", %{
+  test "requires acceptance-order migration before readiness and accepts newer schemas", %{
     observations: observations
   } do
     # The controller migrates the stopped runtime's database before starting Sync.
-    for version <- [20_261_023_153_001, 20_261_023_190_002] do
+    for version <- [20_261_023_190_003, 20_261_030_180_000] do
       assert {:error, :incompatible_database_migration} =
                Probe.validate_database(%{observations | migration_version: version})
     end
 
-    for version <- [20_261_023_190_003, 20_261_023_190_004] do
+    for version <- [20_261_031_090_000, 20_261_031_090_001] do
       assert :ok = Probe.validate_database(%{observations | migration_version: version})
     end
   end
