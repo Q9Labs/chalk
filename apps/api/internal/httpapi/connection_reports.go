@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -21,6 +22,7 @@ import (
 const ConnectionReportBodyLimit = 32768
 const ConnectionReportEventLimit = 64
 const ConnectionReportMaxMilliseconds = 2147483647
+const ConnectionReportMaxReceiveCount = 10000
 
 var connectionReportParticipantLimit = ratelimit.Policy{Name: "connection_reports.participant", Limit: 6, Window: 10 * time.Minute}
 
@@ -36,25 +38,42 @@ type connectionReport struct {
 }
 
 type connectionReportEvent struct {
-	Event            string `json:"event"`
-	ElapsedMS        int64  `json:"elapsed_ms"`
-	State            string `json:"state,omitempty"`
-	Step             string `json:"step,omitempty"`
-	Outcome          string `json:"outcome,omitempty"`
-	Code             string `json:"code,omitempty"`
-	Phase            string `json:"phase,omitempty"`
-	Attempt          *int64 `json:"attempt,omitempty"`
-	DurationMS       *int64 `json:"duration_ms,omitempty"`
-	HeartbeatGapMS   *int64 `json:"heartbeat_gap_ms,omitempty"`
-	CloseCode        *int64 `json:"close_code,omitempty"`
-	HTTPStatus       *int64 `json:"http_status,omitempty"`
-	MediaErrorKind   string `json:"media_error_kind,omitempty"`
-	MediaErrorStep   string `json:"media_error_step,omitempty"`
-	GrantedAudio     string `json:"granted_audio,omitempty"`
-	GrantedVideo     string `json:"granted_video,omitempty"`
-	Source           string `json:"source,omitempty"`
-	PublicationState string `json:"publication_state,omitempty"`
-	ProjectionState  string `json:"projection_state,omitempty"`
+	Event            string                         `json:"event"`
+	ElapsedMS        int64                          `json:"elapsed_ms"`
+	State            string                         `json:"state,omitempty"`
+	Step             string                         `json:"step,omitempty"`
+	Outcome          string                         `json:"outcome,omitempty"`
+	Code             string                         `json:"code,omitempty"`
+	Phase            string                         `json:"phase,omitempty"`
+	Attempt          *int64                         `json:"attempt,omitempty"`
+	DurationMS       *int64                         `json:"duration_ms,omitempty"`
+	HeartbeatGapMS   *int64                         `json:"heartbeat_gap_ms,omitempty"`
+	CloseCode        *int64                         `json:"close_code,omitempty"`
+	HTTPStatus       *int64                         `json:"http_status,omitempty"`
+	MediaErrorKind   string                         `json:"media_error_kind,omitempty"`
+	MediaErrorStep   string                         `json:"media_error_step,omitempty"`
+	GrantedAudio     string                         `json:"granted_audio,omitempty"`
+	GrantedVideo     string                         `json:"granted_video,omitempty"`
+	Source           string                         `json:"source,omitempty"`
+	PublicationState string                         `json:"publication_state,omitempty"`
+	ProjectionState  string                         `json:"projection_state,omitempty"`
+	ReceiveState     string                         `json:"receive_state,omitempty"`
+	TrackState       string                         `json:"track_state,omitempty"`
+	ElementState     string                         `json:"element_state,omitempty"`
+	PlayResult       string                         `json:"play_result,omitempty"`
+	ReceiveCounts    *connectionReportReceiveCounts `json:"receive_counts,omitempty"`
+}
+
+type connectionReportReceiveCounts struct {
+	Announced     *int64 `json:"announced,omitempty"`
+	PullRequested *int64 `json:"pull_requested,omitempty"`
+	PullFailed    *int64 `json:"pull_failed,omitempty"`
+	PullSucceeded *int64 `json:"pull_succeeded,omitempty"`
+	TrackReceived *int64 `json:"track_received,omitempty"`
+	BytesFlowing  *int64 `json:"bytes_flowing,omitempty"`
+	ElementBound  *int64 `json:"element_bound,omitempty"`
+	Playing       *int64 `json:"playing,omitempty"`
+	ProjectionOff *int64 `json:"projection_off,omitempty"`
 }
 
 // These are also the OpenAPI enums. No peer text, URLs, payloads or identities
@@ -68,11 +87,19 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "granted_audio", "granted_video":
 		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":
-		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"}
+		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
 	case "source":
-		return []string{"microphone", "camera"}
+		return []string{"microphone", "camera", "screen_audio"}
+	case "receive_state":
+		return []string{"announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"}
+	case "track_state":
+		return []string{"live", "muted", "ended"}
+	case "element_state":
+		return []string{"paused", "playing"}
+	case "play_result":
+		return []string{"ok", "NotAllowedError", "AbortError", "unknown"}
 	case "publication_state", "projection_state":
 		return []string{"on", "off"}
 	case "state":
@@ -122,6 +149,21 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
+		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "play_result": event.PlayResult} {
+			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
+				return report, rejectConnectionReport(r, field+"_label")
+			}
+		}
+		if counts := event.ReceiveCounts; counts != nil {
+			if event.Event != "audio_receive_summary" {
+				return report, rejectConnectionReport(r, "receive_counts_event")
+			}
+			for _, value := range []*int64{counts.Announced, counts.PullRequested, counts.PullFailed, counts.PullSucceeded, counts.TrackReceived, counts.BytesFlowing, counts.ElementBound, counts.Playing, counts.ProjectionOff} {
+				if value != nil && (*value < 0 || *value > ConnectionReportMaxReceiveCount) {
+					return report, rejectConnectionReport(r, "receive_counts_range")
+				}
+			}
+		}
 		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo, "source": event.Source, "publication_state": event.PublicationState, "projection_state": event.ProjectionState} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
@@ -189,7 +231,13 @@ func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connec
 			if err != nil {
 				return struct{}{}, apiErrorInternal
 			}
-			observability.RequestLogger(ctx).WarnContext(ctx, "SDK connection failure", "event", "sdk.connection_report",
+			level := slog.LevelWarn
+			message := "SDK connection failure"
+			if report.Trigger == "audio_receive_summary" {
+				level = slog.LevelInfo
+				message = "SDK audio receive summary"
+			}
+			observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
 				"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
 				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
 				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
