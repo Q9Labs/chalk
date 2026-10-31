@@ -22,6 +22,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   @max_event_bytes 32 * 1024
   @schema_version 1
+  @max_attempts 100
+  @obsolete_target_errors [
+    :participant_inactive,
+    :stale_participant_generation,
+    :episode_ended,
+    :stale_deadline_generation
+  ]
 
   def finalize_transaction(connection, episode, external_operation_id, outcome) do
     Transaction.configure(connection)
@@ -74,12 +81,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         finalize_pending_operation(connection, episode, external, state, {:failed, reason})
 
       _ ->
-        Postgrex.rollback(connection, {:error, reason})
+        settle_exhausted_authority(connection, episode, external, reason)
     end
   end
 
-  defp settle_stale_media(connection, _episode, _external, _state, _outcome, reason),
-    do: Postgrex.rollback(connection, {:error, reason})
+  defp settle_stale_media(connection, episode, external, _state, _outcome, reason),
+    do: settle_exhausted_authority(connection, episode, external, reason)
 
   defp settle_leave_cleanup(connection, episode, external, {:confirmed, :provider}) do
     mark_external_applied(connection, episode, external, nil, nil)
@@ -127,6 +134,24 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
       [row] -> ExternalOperationRecord.from_row(row)
       [] -> Postgrex.rollback(connection, {:error, :operation_not_found})
     end
+  end
+
+  defp settle_exhausted_authority(connection, episode, external, reason)
+       when external.attempt_count >= @max_attempts and reason in @obsolete_target_errors,
+       do: settle_obsolete(connection, episode, external, reason)
+
+  defp settle_exhausted_authority(connection, _episode, _external, reason),
+    do: Postgrex.rollback(connection, {:error, reason})
+
+  defp settle_obsolete(connection, episode, external, reason) do
+    PublicationFences.delete(connection, episode, external)
+    mark_external_failed(connection, episode, external, Atom.to_string(reason))
+    reject_external_receipt(connection, episode, external)
+
+    ExternalOperationDecision.build(
+      %{external | status: :failed, last_error_code: reason},
+      :original
+    )
   end
 
   defp validate_finalization_authority(connection, episode, external, policy) do

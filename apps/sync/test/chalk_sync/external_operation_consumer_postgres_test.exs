@@ -559,6 +559,81 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
     assert {:ok, %{status: :applied}} = Postgres.read_operation(fixture.episode, end_id)
   end
 
+  test "an exhausted operation for a departed target settles instead of reclaiming forever", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_exhausted_departed_mute", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    Postgrex.query!(
+      connection,
+      "update participants set status='left' where id=$1",
+      [UUID.dump!(guest.participant_id)]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100} = external} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    ExternalOperationConsumer.execute_operation(
+      episode,
+      external,
+      {MediaPlaneTestAdapter, adapter},
+      nil,
+      &Postgres.finalize_operation/3
+    )
+
+    assert {:ok, %{status: :failed, last_error_code: reason}} =
+             Postgres.read_operation(episode, id)
+
+    assert reason in [:participant_inactive, :stale_participant_generation]
+
+    assert [["failed", "rejected", 0]] =
+             Postgrex.query!(
+               connection,
+               """
+               select operation.status, receipt.outcome, count(fence.external_operation_id)
+               from sync_external_operations operation
+               join sync_command_receipts receipt using(external_operation_id)
+               left join sync_publication_fences fence using(external_operation_id)
+               where operation.external_operation_id=$1
+               group by operation.status, receipt.outcome
+               """,
+               [UUID.dump!(id)]
+             ).rows
+
+    assert {:ok, %{delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, id, {:confirmed, :provider})
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, reclaimed} = Postgres.claim_operations(64)
+    refute Enum.any?(reclaimed, fn {_, op} -> op.external_operation_id == id end)
+    assert [{:revoke_publication, ^id, _}] = MediaPlaneTestAdapter.calls(adapter)
+  end
+
   test "migration re-arms exhausted cleanup and its command receipt without replacing identity",
        %{connections: connections} do
     connection = hd(connections)
