@@ -144,7 +144,7 @@ try {
     };
     const built = await build({
       entryPoints: [resolve(root, 'scripts/dev/audio-mute-matrix-page.jsx')],
-      alias: aliases, nodePaths: [resolve(root, 'node_modules'), resolve(root, 'tools/sdk-web-consumer-e2e/node_modules')],
+      alias: aliases, nodePaths: [resolve(root, 'node_modules'), resolve(root, 'sdks/typescript/client/node_modules'), resolve(root, 'sdks/typescript/react/node_modules'), resolve(root, 'tools/sdk-web-consumer-e2e/node_modules')],
       bundle: true, write: false, platform: 'browser', format: 'iife', jsx: 'automatic',
     });
     bundle = built.outputFiles[0].text;
