@@ -347,6 +347,21 @@ class HeldSelectionTests(unittest.TestCase):
                 selected = json.loads((Path(directory) / 'output').read_text().split('selection=', 1)[1])
                 self.assertEqual(selected['selection']['release_id'], expected)
 
+    def test_promotion_refuses_a_different_revision_or_invalid_captured_leave_baseline(self):
+        api = MemoryGitHub()
+        self.cut(api, '1', 'A')
+        valid = dict(EXPECTED_RELEASE_SHA=SHA, LEAVE_BASELINE_MEDIAN_MS='150.5',
+                     LEAVE_BASELINE_EVIDENCE_SHA256='a' * 64)
+        cases = [(dict(EXPECTED_RELEASE_SHA='0' * 40), 'approved release revision'),
+                 (dict(LEAVE_BASELINE_MEDIAN_MS='nan'), 'baseline median'),
+                 (dict(LEAVE_BASELINE_MEDIAN_MS='5001'), 'baseline median'),
+                 (dict(LEAVE_BASELINE_EVIDENCE_SHA256='invalid'), 'evidence')]
+        with patch.object(release, 'validate_choice', return_value=held()['payload']):
+            for changes, message in cases:
+                with self.subTest(changes=changes), patch.dict(os.environ, {**valid, **changes}):
+                    with self.assertRaisesRegex(ValueError, message):
+                        release.select(api, None)
+
     def test_approval_recheck_allows_inflight_but_rejects_newly_held_replacement(self):
         api = MemoryGitHub()
         self.cut(api, '1', 'A')

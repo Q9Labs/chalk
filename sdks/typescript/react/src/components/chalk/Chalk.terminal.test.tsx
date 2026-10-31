@@ -7,6 +7,7 @@ import { createSpaceClientForPlatform } from "../../../../client/src/space-clien
 import { control, terminalTestPlatform } from "../../../../client/src/space-client/terminal.test.helpers";
 import { Chalk } from "./Chalk";
 import { CloudflareSFUError } from "../../../../client/src/media";
+import { track } from "../../../../client/src/space-client/capture.test.helpers";
 
 beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 204 })));
 afterEach(() => vi.unstubAllGlobals());
@@ -17,6 +18,88 @@ vi.mock("../media-request-dialog/MediaRequestDialog", () => ({ MediaRequestDialo
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("Chalk terminal callbacks with a real SpaceClient", () => {
+  it.each(["confirmed", "unconfirmed"] as const)("notifies local departure before %s cleanup and keeps its acknowledgement alive after unmount", async (outcome) => {
+    const platform = terminalTestPlatform();
+    const departure = Promise.withResolvers<void>();
+    platform.leave.mockImplementation(async () => {
+      await departure.promise;
+      return { type: "ack", command_id: "leave", delivery: "original", outcome: "satisfied", revision: 2, state_digest: "digest" };
+    });
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
+    const microphone = track("audio");
+    const camera = track("video");
+    platform.stopped.mockImplementation(() => {
+      microphone.stop();
+      camera.stop();
+    });
+    const onLeft = vi.fn(() => {
+      expect(microphone.readyState).toBe("ended");
+      expect(camera.readyState).toBe("ended");
+      expect(platform.stopped).not.toHaveBeenCalled();
+    });
+    const error = vi.fn();
+    client.on("error", error);
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let mounted = true;
+    let leaving: Promise<boolean> | undefined;
+    try {
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onLeft={onLeft} />));
+      await act(async () => {
+        await client.join({ microphone: false, camera: false });
+        platform.emitSync({ ...platform.sync.getSnapshot(), control });
+        platform.media.emit({
+          ...platform.media.getSnapshot(),
+          localTracks: [
+            { source: "microphone", enabled: true, publicationId: "microphone", track: microphone },
+            { source: "camera", enabled: true, publicationId: "camera", track: camera },
+          ],
+        });
+      });
+      let settled = false;
+      await act(async () => {
+        leaving = client
+          .leave()
+          .then(
+            () => true,
+            () => false,
+          )
+          .finally(() => {
+            settled = true;
+          });
+        await vi.waitFor(() => expect(platform.leave).toHaveBeenCalledOnce());
+      });
+      expect(onLeft).toHaveBeenCalledOnce();
+      expect(container.textContent).toContain("You left");
+      expect(settled).toBe(false);
+      expect(platform.syncStopped).not.toHaveBeenCalled();
+      await act(async () => root.unmount());
+      mounted = false;
+      const cleanup = client
+        .leave()
+        .catch(() => undefined)
+        .finally(() => client.dispose());
+      expect(platform.stopped).not.toHaveBeenCalled();
+      expect(platform.syncStopped).not.toHaveBeenCalled();
+      if (outcome === "confirmed") departure.resolve();
+      else departure.reject(new Error("Durable departure failed"));
+      expect(await leaving).toBe(outcome === "confirmed");
+      await cleanup;
+      expect(platform.stopped).toHaveBeenCalledOnce();
+      expect(platform.syncStopped).toHaveBeenCalledOnce();
+      expect(onLeft).toHaveBeenCalledOnce();
+      if (outcome === "confirmed") expect(error).not.toHaveBeenCalled();
+      else expect(error).toHaveBeenCalledWith({ error: expect.objectContaining({ code: "connection.leave_unconfirmed" }) });
+    } finally {
+      departure.resolve();
+      await leaving;
+      if (mounted) await act(async () => root.unmount());
+      client.dispose();
+      container.remove();
+    }
+  });
+
   it("displays explicit-rejoin guidance for rejected startup media without refreshing access", async () => {
     const platform = terminalTestPlatform();
     const getAccess = vi.fn(async () => opaqueAccessGrant(1));
@@ -68,9 +151,10 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
+    const onLeft = vi.fn();
     let leaving: Promise<void> | undefined;
     try {
-      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onReportProblem={async () => undefined} />));
+      await act(async () => root.render(<Chalk client={client} defaults={{ microphone: false, camera: false }} onLeft={onLeft} onReportProblem={async () => undefined} />));
       await act(async () => {
         await client.join({ microphone: false, camera: false });
         platform.emitSync({ ...platform.sync.getSnapshot(), control });
@@ -80,11 +164,13 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
         await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("leaving"));
       });
       expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Report a problem")).toBe(false);
+      expect(onLeft).toHaveBeenCalledOnce();
       await act(async () => {
         departure.resolve();
         await leaving;
       });
       expect(client.getSnapshot().connection.status).toBe("left");
+      expect(onLeft).toHaveBeenCalledOnce();
       expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Report a problem")).toBe(true);
     } finally {
       departure.resolve();

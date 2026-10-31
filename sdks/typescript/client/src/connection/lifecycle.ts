@@ -26,7 +26,8 @@ type MediaRecoveryAttempt = {
 };
 // A 10s dial can fail and retry before the overall join gives up.
 const START_TIMEOUT_MS = 30000;
-const LEAVE_TIMEOUT_MS = 5000;
+// Sync's provider worker allows 35s for durable cleanup; leave time for its acknowledgement too.
+const LEAVE_TIMEOUT_MS = 40000;
 const RECOVERY_BUDGET_MS = MEDIA_RECOVERY_TIMEOUT_MS;
 const MAX_RECOVERY_ATTEMPTS = 3;
 const REFRESH_RETRY_MS = 5000;
@@ -598,6 +599,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
             return;
           }
+          yield* Effect.sync(() => {
+            for (const { track } of model.media?.getSnapshot().localTracks ?? []) {
+              track.enabled = false;
+              track.stop();
+            }
+          });
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
@@ -1107,9 +1114,14 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* publish();
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
+        if (model.state === "leaving") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
-        if (sfuAccessRejected(cause)) stopRejectedMedia();
-        if (sfuAccessRejected(cause) || (cause instanceof CloudflareSFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
+        const failure = failureFromCause(cause, "media_start_failed", "Media transport needs recovery");
+        if (sfuAccessRejected(cause)) {
+          stopRejectedMedia();
+          return failForSnapshot(failure);
+        }
+        if ((cause instanceof CloudflareSFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failure);
         return handleMediaSnapshot(media, media.getSnapshot());
       };
       const applyAutomaticMediaReplacement = (grant: ParsedAccessGrant): Effect.Effect<void> =>

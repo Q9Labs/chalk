@@ -48,6 +48,8 @@ jobs:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -89,6 +91,12 @@ jobs:
         run: |
           test -n "$EVIDENCE_RECIPIENT"
           printf '' | age --recipient "$EVIDENCE_RECIPIENT" --output /dev/null
+      - name: Keep private browser proof files in memory
+        run: |
+          mkdir -p .private /dev/shm/chalk-web-private /dev/shm/chalk-web-tmp
+          chmod 700 /dev/shm/chalk-web-private /dev/shm/chalk-web-tmp
+          sudo mount --bind /dev/shm/chalk-web-private .private
+          echo "TMPDIR=/dev/shm/chalk-web-tmp" >> "$GITHUB_ENV"
       - name: Prove the deployed web app
         timeout-minutes: 7
         env:

@@ -12715,6 +12715,9 @@
           "force": {
             "type": "boolean"
           },
+          "receive_only": {
+            "type": "boolean"
+          },
           "session_description": {
             "additionalProperties": false,
             "properties": {

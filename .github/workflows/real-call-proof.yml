@@ -16,6 +16,18 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
+      release_sha:
+        description: Exact deployed revision to prove; defaults to the workflow revision
+        type: string
+        default: ""
+      leave_baseline_median_ms:
+        description: Captured production baseline; empty measures the local old SDK reference
+        type: string
+        default: ""
+      leave_baseline_evidence_sha256:
+        description: Encrypted comparison evidence hash
+        type: string
+        default: ""
   workflow_call:
     inputs:
       environment:
@@ -26,6 +38,16 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
+      release_sha:
+        description: Exact deployed revision to prove
+        type: string
+        default: ""
+      leave_baseline_median_ms:
+        type: string
+        default: ""
+      leave_baseline_evidence_sha256:
+        type: string
+        default: ""
     secrets:
       CHALK_PROOF_API_KEY:
         description: Bootstrap key for the environment proof Tenant
@@ -60,8 +82,19 @@ jobs:
       - name: Refuse non-master invocation before checkout
         env:
           WORKFLOW_REF: ${{ github.ref }}
-        run: test "$WORKFLOW_REF" = refs/heads/master
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          test "$WORKFLOW_REF" = refs/heads/master
+          if [[ -n "$RELEASE_SHA" ]]; then
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require selected proof code to be merged before dependency installation
+        run: git merge-base --is-ancestor HEAD origin/master
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -99,6 +132,12 @@ jobs:
       - name: Identify invocation
         id: invocation
         run: echo "suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+      - name: Keep private proof files in memory
+        run: |
+          mkdir -p .private /dev/shm/chalk-proof-private /dev/shm/chalk-proof-tmp
+          chmod 700 /dev/shm/chalk-proof-private /dev/shm/chalk-proof-tmp
+          sudo mount --bind /dev/shm/chalk-proof-private .private
+          echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
         timeout-minutes: 40
         env:
@@ -106,6 +145,8 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
+          CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
+          CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
@@ -120,7 +161,7 @@ jobs:
           fi
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|leave) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
           done

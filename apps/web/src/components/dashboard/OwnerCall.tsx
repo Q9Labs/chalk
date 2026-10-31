@@ -192,7 +192,6 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     };
   }, [spaceId, owner, apiBaseURL]);
   const leave = () => {
-    if (client?.getSnapshot().connection.lastError?.code !== "connection.leave_unconfirmed") owner.clearReload();
     void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
   };
 

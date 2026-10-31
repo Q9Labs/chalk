@@ -152,12 +152,13 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
         "payload" => payload
       })
 
-    assert {:json,
-            %{
-              "type" => "retryable_error",
-              "command_id" => ^request_key,
-              "code" => "external_operation_pending"
-            }, client} = Client.recv(client)
+    assert {:json, %{"command_id" => ^request_key} = response, client} = Client.recv(client)
+
+    if operation_name == "participant_leave" do
+      assert %{"type" => "ack", "outcome" => "committed"} = response
+    else
+      assert %{"type" => "retryable_error", "code" => "external_operation_pending"} = response
+    end
 
     _client = Client.close(client)
     :ok
@@ -233,7 +234,10 @@ defmodule ChalkSync.Transport.PostgresSocketV1WebhookTest do
 
     assert is_binary(operation_id)
     assert stored_parent_event_id == accepted_event_id
-    assert attempt_count >= 1
+
+    if event_name == "participant.left",
+      do: assert(attempt_count == 0),
+      else: assert(attempt_count >= 1)
   end
 
   defp assert_provider_operation_pending(connection, fixture, request_key) do

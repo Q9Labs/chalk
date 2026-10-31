@@ -58,6 +58,7 @@ type RenegotiateRequest struct {
 }
 
 type CloseTracksRequest struct {
+	ReceiveOnly        bool
 	Provider           Provider
 	ConnectionID       string
 	SessionDescription *SessionDescription

@@ -54,7 +54,7 @@ export type CloudflareSFUSignalingTransport = {
     readonly allowPartialRemoteTracks?: boolean;
     readonly replacementCause?: MediaConnectionReplacementCause;
   }) => Promise<CloudflareSFUTracksResponse>;
-  readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }) => Promise<CloudflareSFUTracksResponse>;
+  readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
 };

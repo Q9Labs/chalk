@@ -1251,6 +1251,7 @@ export interface components {
     CloudflareSFUCloseTracksRequest: {
       connection_id: string;
       force: boolean;
+      receive_only?: boolean;
       session_description?: {
         sdp: string;
         type: string;

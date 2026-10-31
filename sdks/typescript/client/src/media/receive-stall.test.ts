@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ReceiveStallDetector, RECEIVE_STALL_WINDOW_MS, RECEIVE_STARTUP_GRACE_MS } from "./receive-stall";
+import { ReceiveStallDetector, ReceiveStallRecovery, RECEIVE_STALL_WINDOW_MS, RECEIVE_STARTUP_GRACE_MS } from "./receive-stall";
 
 const track = { publicationId: "publication", trackId: "receiver", packets: 10 };
 function observe(detector: ReceiveStallDetector, from = 0, until = RECEIVE_STARTUP_GRACE_MS) {
@@ -39,5 +39,93 @@ describe("expected receive packet progress", () => {
     observe(detector, 0, 19_000);
     expect(detector.sample(20_000, [{ ...track, packets: 11 }]).stalled).toEqual([]);
     expect(detector.sample(21_000, [{ ...track, packets: 0 }]).stalled).toEqual([]);
+  });
+});
+
+const publications = ["stalled", "healthy"].map((publicationId) => ({ participantId: publicationId, source: "microphone" as const, publicationId, enabled: true }));
+const remote = publications.map((publication) => ({ ...publication, track: { id: publication.publicationId, kind: "audio" } as MediaStreamTrack }));
+function sampleRecovery(recovery: ReceiveStallRecovery, now: number, stalledPackets = 10, tracks = remote, reporting = tracks) {
+  const codec = { id: "opus", type: "codec", mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+  const rows = reporting.map((publication) => ({ id: publication.track.id, type: "inbound-rtp", trackIdentifier: publication.track.id, packetsReceived: publication.publicationId === "healthy" ? now : stalledPackets, codecId: codec.id }));
+  return recovery.sample(now, { getReceivers: () => [] } as unknown as RTCPeerConnection, new Map([...rows.map((row) => [row.id, row] as const), [codec.id, codec]]) as unknown as RTCStatsReport, tracks);
+}
+function stalledRecovery() {
+  const recovery = new ReceiveStallRecovery();
+  recovery.expect(publications, "listener");
+  for (let now = 0; now <= RECEIVE_STARTUP_GRACE_MS; now += 1000) sampleRecovery(recovery, now);
+  return recovery;
+}
+describe("per-publication receive recovery", () => {
+  it("recovers a partial stall without making a healthy publication eligible", () => {
+    const recovery = stalledRecovery();
+    expect(recovery.isStalled("stalled")).toBe(true);
+    expect(recovery.canRepull("stalled")).toBe(true);
+    expect(recovery.canRepull("healthy")).toBe(false);
+    expect(recovery.canRebuild("healthy")).toBe(false);
+    expect(recovery.observations).toEqual([expect.objectContaining({ scope: "partial", stalledTracks: 1 })]);
+  });
+  it("excludes muted speakers and intentionally off sources", () => {
+    const recovery = stalledRecovery();
+    recovery.expect(
+      publications.map((publication) => ({ ...publication, enabled: publication.publicationId === "healthy" })),
+      "listener",
+    );
+    for (let now = 21_000; now <= 60_000; now += 1000) sampleRecovery(recovery, now);
+    expect(recovery.isStalled("stalled")).toBe(false);
+    expect(recovery.canRepull("stalled")).toBe(false);
+    expect(recovery.canRebuild()).toBe(false);
+  });
+  it("bounds a publication to one re-pull and two fallback rebuilds across peers and pauses", () => {
+    const recovery = stalledRecovery();
+    expect(recovery.reserveRepull("stalled")).toBe(true);
+    expect(recovery.reserveRepull("stalled")).toBe(false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(recovery.reserveRebuild()).toBe(true);
+      recovery.suspend();
+      recovery.expect(publications, "listener");
+      const start = (attempt + 1) * 100_000;
+      for (let now = start; now <= start + RECEIVE_STARTUP_GRACE_MS; now += 1000) sampleRecovery(recovery, now);
+    }
+    expect(recovery.reserveRepull("stalled")).toBe(false);
+    expect(recovery.reserveRebuild()).toBe(false);
+  });
+  it("gives a replacement the startup grace without resetting its budget", () => {
+    const recovery = stalledRecovery();
+    recovery.reserveRepull("stalled");
+    recovery.restarted("stalled");
+    for (let now = 21_000; now < 41_000; now += 1000) expect(sampleRecovery(recovery, now).stalled).toEqual([]);
+    expect(sampleRecovery(recovery, 41_000).stalled).toEqual(["stalled"]);
+    expect(recovery.canRepull("stalled")).toBe(false);
+    expect(recovery.canRebuild("stalled")).toBe(true);
+  });
+  it("rearms only after sustained packet progress", () => {
+    const recovery = stalledRecovery();
+    recovery.reserveRepull("stalled");
+    recovery.reserveRebuild();
+    for (let now = 21_000; now <= 28_000; now += 1000) sampleRecovery(recovery, now, now);
+    for (let now = 29_000; now <= 35_000; now += 1000) sampleRecovery(recovery, now, 28_000);
+    expect(recovery.canRepull("stalled")).toBe(true);
+  });
+  it("keeps a source's rebuild budget when its publication is replaced", () => {
+    const recovery = stalledRecovery();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(recovery.reserveRebuild()).toBe(true);
+      const replaced = [{ ...remote[0]!, publicationId: `stalled-${attempt}` }, remote[1]!];
+      recovery.expect(replaced, "listener");
+      const start = (attempt + 1) * 100_000;
+      for (let now = start; now <= start + RECEIVE_STARTUP_GRACE_MS; now += 1000) sampleRecovery(recovery, now, 10, replaced);
+    }
+    expect(recovery.isStalled("stalled-1")).toBe(true);
+    expect(recovery.canRebuild("stalled-1")).toBe(false);
+    expect(recovery.reserveRebuild()).toBe(false);
+  });
+  it("keeps a re-pulled publication recoverable after its retired receiver leaves the stats", () => {
+    const recovery = stalledRecovery();
+    expect(recovery.reserveRepull("stalled")).toBe(true);
+    const retired = remote.filter((publication) => publication.publicationId === "healthy");
+    for (let now = 21_000; now <= 120_000; now += 1000) sampleRecovery(recovery, now, 10, remote, retired);
+    expect(recovery.canRepull("stalled")).toBe(false);
+    expect(recovery.canRebuild("stalled")).toBe(true);
+    expect(recovery.reserveRebuild()).toBe(true);
   });
 });

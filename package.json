@@ -74,6 +74,7 @@
     "check:tracker": "node scripts/generate-tracker.mjs --check",
     "test:tracker": "node scripts/test/run.mjs node --test scripts/tracker.node-test.mjs",
     "prod:proof": "node scripts/prod-proof/index.mjs",
+    "prod:proof:compare-leave": "node scripts/prod-proof/leave-session.mjs",
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
     "web:proof": "node scripts/web-proof/run.mjs",
     "test:e2e": "e2e run",
