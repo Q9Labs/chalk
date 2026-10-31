@@ -489,17 +489,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
       const state = this.#sources[source];
-      if (state.result.revision === intent.revision && (state.result.status === "failed" || owesRemoteOff(state))) {
-        // This revision already ran (or its result was reset). Only the off is left to send, whatever the revision wants.
-        yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
-        state.offDebt = "sent";
-        if (state.result.revision === intent.revision && state.result.status === "failed") {
-          // A failed enable keeps its failure for the caller.
-          if (intent.enabled) state.result.cleanup = false;
-          else state.result = { revision: intent.revision, status: "confirmed" };
-        }
-        return;
-      }
+      // This revision already ran (or its result was reset). Only the off is left to send, whatever the revision wants.
+      if (state.result.revision === intent.revision && (state.result.status === "failed" || owesRemoteOff(state))) return yield* this.#sendOwedOff(source, intent);
       const operation = source === "screen" ? this.#prepareScreen(ports, intent) : this.#prepareDevice(ports, source, intent);
       const result = yield* Effect.exit(this.#connection.runCommand(() => operation));
       if (state.desired.revision !== intent.revision) return;
@@ -511,6 +502,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
         const cause = yield* Effect.flip(result);
         yield* this.#failRevision(ports, source, intent, cause);
       }
+    });
+  }
+  #sendOwedOff(source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
+    return Effect.gen({ self: this }, function* () {
+      const state = this.#sources[source];
+      yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
+      state.offDebt = "sent";
+      if (state.result.revision !== intent.revision || state.result.status !== "failed") return;
+      // A failed enable keeps its failure for the caller.
+      if (intent.enabled) state.result.cleanup = false;
+      else state.result = { revision: intent.revision, status: "confirmed" };
     });
   }
   #failRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, cause: unknown): Effect.Effect<void, unknown> {
