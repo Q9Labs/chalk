@@ -181,6 +181,133 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
              end)
   end
 
+  test "requeued legacy admission decisions receive an order and complete", %{
+    connection: connection
+  } do
+    seed = fixture(connection, 1)
+    seed = SyncPostgres.seed_admission_request(connection, seed)
+
+    request_id = seed.admission_request_id
+
+    {:ok, operation} =
+      Operation.new(
+        "legacy_admission_requeue_" <> UUID.generate(),
+        :deny_admission,
+        %{"admissionRequestId" => request_id}
+      )
+
+    assert {:ok, %{external_operation_id: external_operation_id}} =
+             Postgres.begin_operation(hd(seed.identities), operation)
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_external_operations
+      set status = 'failed', acceptance_order = null, completed_at = now(),
+          last_error_code = 'legacy_fixture_failure'
+      where tenant_id = $1 and episode_id = $2 and external_operation_id = $3
+      """,
+      [
+        UUID.dump!(seed.episode.tenant_id),
+        UUID.dump!(seed.episode.episode_id),
+        UUID.dump!(external_operation_id)
+      ]
+    )
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_admission_requests
+      set decision_external_operation_id = null
+      where tenant_id = $1 and episode_id = $2 and admission_request_id = $3
+      """,
+      [
+        UUID.dump!(seed.episode.tenant_id),
+        UUID.dump!(seed.episode.episode_id),
+        UUID.dump!(request_id)
+      ]
+    )
+
+    %{rows: [[acceptance_order]]} =
+      Postgrex.query!(
+        connection,
+        """
+        update sync_external_operations
+        set status = 'pending', completed_at = null, last_error_code = null,
+            next_attempt_at = now(), attempt_count = 0
+        where tenant_id = $1 and episode_id = $2
+          and external_operation_id = $3
+          and operation_name in ('admit_participant', 'deny_admission', 'admission_request_expired')
+          and status = 'failed'
+        returning acceptance_order
+        """,
+        [
+          UUID.dump!(seed.episode.tenant_id),
+          UUID.dump!(seed.episode.episode_id),
+          UUID.dump!(external_operation_id)
+        ]
+      )
+
+    assert is_integer(acceptance_order) and acceptance_order > 0
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_admission_requests
+      set decision_external_operation_id = $4
+      where tenant_id = $1 and episode_id = $2 and admission_request_id = $3
+      """,
+      [
+        UUID.dump!(seed.episode.tenant_id),
+        UUID.dump!(seed.episode.episode_id),
+        UUID.dump!(request_id),
+        UUID.dump!(external_operation_id)
+      ]
+    )
+
+    assert {:ok, claimed_operations} = Postgres.claim_operations(1)
+
+    assert Enum.any?(claimed_operations, fn {episode, operation} ->
+             episode.episode_id == seed.episode.episode_id and
+               operation.external_operation_id == external_operation_id
+           end)
+
+    assert {:ok, %{result: :applied}} =
+             Postgres.finalize_operation(
+               seed.episode,
+               external_operation_id,
+               {:confirmed, :local}
+             )
+
+    %{rows: [["applied"]]} =
+      Postgrex.query!(
+        connection,
+        """
+        select status from sync_external_operations
+        where tenant_id = $1 and episode_id = $2 and external_operation_id = $3
+        """,
+        [
+          UUID.dump!(seed.episode.tenant_id),
+          UUID.dump!(seed.episode.episode_id),
+          UUID.dump!(external_operation_id)
+        ]
+      )
+
+    %{rows: [["denied"]]} =
+      Postgrex.query!(
+        connection,
+        """
+        select status from sync_admission_requests
+        where tenant_id = $1 and episode_id = $2 and admission_request_id = $3
+        """,
+        [
+          UUID.dump!(seed.episode.tenant_id),
+          UUID.dump!(seed.episode.episode_id),
+          UUID.dump!(request_id)
+        ]
+      )
+  end
+
   defp fixture(connection, count) do
     seed =
       SyncPostgres.seed_episode(connection, count, %{}, %{

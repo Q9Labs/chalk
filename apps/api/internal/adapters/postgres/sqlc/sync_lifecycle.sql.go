@@ -2219,6 +2219,7 @@ type RequeueFailedAdmissionDecisionParams struct {
 	ExternalOperationID pgtype.UUID `json:"external_operation_id"`
 }
 
+// The requeue trigger assigns a missing acceptance order when a legacy row returns to pending.
 func (q *Queries) RequeueFailedAdmissionDecision(ctx context.Context, arg RequeueFailedAdmissionDecisionParams) (SyncExternalOperation, error) {
 	row := q.db.QueryRow(ctx, requeueFailedAdmissionDecision, arg.TenantID, arg.EpisodeID, arg.ExternalOperationID)
 	var i SyncExternalOperation
