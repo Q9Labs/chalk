@@ -1114,7 +1114,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* publish();
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
-        if (model.state === "leaving" || model.state === "left") return Effect.void;
+        if (model.state === "leaving") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
         const failure = failureFromCause(cause, "media_start_failed", "Media transport needs recovery");
         if (sfuAccessRejected(cause)) {
