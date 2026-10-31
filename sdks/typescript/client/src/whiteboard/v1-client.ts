@@ -1,5 +1,6 @@
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
+import { sessionBaggage } from "../session";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
@@ -117,7 +118,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewsSupported = false;
   #presenting = false;
   #presenterId: string | null = null;
-  #hello: HelloLevel = "presenter-view";
+  #hello: HelloLevel = HELLO_LEVELS[0];
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -172,7 +173,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "presenter-view";
+    this.#hello = HELLO_LEVELS[0];
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -999,7 +1000,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = "presenter-view";
+    if (phase === "live") this.#hello = HELLO_LEVELS[0];
     return true;
   }
 
@@ -1016,7 +1017,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #fallbackHello(): void {
-    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + 1, HELLO_LEVELS.length - 1)] ?? "legacy";
+    const step = this.#hello === "session" && sessionBaggage() === undefined ? 2 : 1;
+    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + step, HELLO_LEVELS.length - 1)] ?? "legacy";
     if (!viewsNegotiated(this.#hello)) this.#pendingLeadingView = null;
   }
 
@@ -1384,25 +1386,31 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
 }
 
 // Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = ["presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
+const HELLO_LEVELS = ["session", "presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
 type HelloLevel = (typeof HELLO_LEVELS)[number];
+const PRESENTER_VIEW_EXTENSIONS = [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] as const;
 
 function viewsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
 }
 
 function viewOriginsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
 }
 
 function drawPolicyNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy";
 }
 
 function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
   const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
   if (level === "legacy") return hello;
-  if (level === "presenter-view") return { ...hello, extensions: [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
+  if (level === "session") {
+    const baggage = sessionBaggage();
+    const presenterView = { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
+    return baggage === undefined ? presenterView : { ...presenterView, baggage };
+  }
+  if (level === "presenter-view") return { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
