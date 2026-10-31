@@ -625,14 +625,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       },
     );
   }
+  #markDetached(transceiver: RTCRtpTransceiver | null): void {
+    for (const publication of this.#ownedPublications) {
+      if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
+    }
+  }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
     // A muted microphone keeps sending silence, so the provider never sees the
     // 30 second RTP gap that expires a detached track and the publication ID survives.
     const silence = state.source === "microphone" ? this.#silentAudio : null;
-    for (const publication of this.#ownedPublications) {
-      if (!silence && publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
-    }
+    if (!silence) this.#markDetached(transceiver);
     state.desiredEnabled = false;
     state.track.enabled = false;
     // Queue the detach before notifying consumers, but never wait to expose off.

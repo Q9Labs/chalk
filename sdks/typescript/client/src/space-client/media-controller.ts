@@ -434,15 +434,20 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#track("screen")?.stop();
         this.#screenAudioTrack?.stop();
       }
-      const ports = this.#ports;
-      if (ports && source === "microphone") this.#retainPause(state, this.#pauseMicrophone(ports.media));
-      else if (ports) {
-        ports.media.setLocalSourceIntent?.(source, false, "user_pause");
-        this.#retainPause(state, this.#beginLocalPause(ports, source, "user_pause"));
-      }
+      this.#pauseLocalSource(source);
     }
     for (const check of this.#readinessChecks) check();
     return desired;
+  }
+  #pauseLocalSource(source: MediaSource): void {
+    const ports = this.#ports;
+    if (!ports) return;
+    if (source === "microphone") {
+      this.#retainPause(this.#sources[source], this.#pauseMicrophone(ports.media));
+      return;
+    }
+    ports.media.setLocalSourceIntent?.(source, false, "user_pause");
+    this.#retainPause(this.#sources[source], this.#beginLocalPause(ports, source, "user_pause"));
   }
   #act(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): ClientEffect<void> {
     return Effect.suspend(() => {
