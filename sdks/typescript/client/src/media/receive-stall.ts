@@ -3,12 +3,20 @@ import type { CloudflareSFURemoteTrack } from "./types";
 
 export const RECEIVE_STALL_WINDOW_MS = 7000;
 export const RECEIVE_STARTUP_GRACE_MS = 20_000;
+// A listener must hear an enabled microphone within seconds, so audio gets its own windows.
+// Opus DTX sends a packet about every 400 ms while silent, so 1.5 s is still several packet intervals.
+export const AUDIO_STALL_WINDOW_MS = 1500;
+export const AUDIO_STARTUP_GRACE_MS = 3000;
+// Nothing desired is flowing for this long: the receive session itself is suspect, not one publisher.
+export const RECEIVE_ESCALATION_MS = 8000;
+export const RECEIVE_REBUILD_COOLDOWN_MS = 15_000;
 const MAX_SAMPLE_GAP_MS = 3000;
 
 export type ReceivePacketSample = {
   readonly publicationId: string;
   readonly trackId: string;
   readonly packets: number;
+  readonly audio?: boolean;
 };
 
 type ReceiveProgress = { trackId: string; packets: number; advancedAt: number; flowing: boolean; flowingSince: number };
@@ -40,23 +48,35 @@ export class ReceiveStallDetector {
     };
   }
 
-  #observeTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample): "stalled" | "advanced" | "resumed" | null {
-    const previous = this.#progress.get(publicationId);
-    const sameTrack = previous?.trackId === trackId;
-    if (sameTrack && previous.packets === packets) {
-      const window = previous.flowing ? RECEIVE_STALL_WINDOW_MS : RECEIVE_STARTUP_GRACE_MS;
-      return now - previous.advancedAt >= window ? "stalled" : null;
-    }
-    return this.#advanceTrack(now, { publicationId, trackId, packets }, previous);
+  flowing(publicationId: string): boolean {
+    return this.#progress.get(publicationId)?.flowing === true;
   }
 
-  #advanceTrack(now: number, { publicationId, trackId, packets }: ReceivePacketSample, previous: ReceiveProgress | undefined): "advanced" | "resumed" | null {
+  #observeTrack(now: number, sample: ReceivePacketSample): "stalled" | "advanced" | "resumed" | null {
+    const previous = this.#progress.get(sample.publicationId);
+    const sameTrack = previous?.trackId === sample.trackId;
+    if (sameTrack && previous.packets === sample.packets) {
+      const window = previous.flowing ? stallWindow(sample) : startupGrace(sample);
+      return now - previous.advancedAt >= window ? "stalled" : null;
+    }
+    return this.#advanceTrack(now, sample, previous);
+  }
+
+  #advanceTrack(now: number, { publicationId, trackId, packets, audio }: ReceivePacketSample, previous: ReceiveProgress | undefined): "advanced" | "resumed" | null {
+    const window = stallWindow({ audio });
     const advanced = previous?.trackId === trackId && packets > previous.packets;
-    const flowingSince = advanced && now - previous.advancedAt < RECEIVE_STALL_WINDOW_MS ? previous.flowingSince : now;
+    const flowingSince = advanced && now - previous.advancedAt < window ? previous.flowingSince : now;
     this.#progress.set(publicationId, { trackId, packets, advancedAt: now, flowing: advanced, flowingSince });
     if (!advanced) return null;
-    return now - flowingSince >= RECEIVE_STALL_WINDOW_MS ? "resumed" : "advanced";
+    return now - flowingSince >= window ? "resumed" : "advanced";
   }
+}
+
+function stallWindow({ audio }: { readonly audio?: boolean }): number {
+  return audio ? AUDIO_STALL_WINDOW_MS : RECEIVE_STALL_WINDOW_MS;
+}
+function startupGrace({ audio }: { readonly audio?: boolean }): number {
+  return audio ? AUDIO_STARTUP_GRACE_MS : RECEIVE_STARTUP_GRACE_MS;
 }
 
 export type ReceiveStallObservation = {
@@ -82,6 +102,11 @@ export class ReceiveStallRecovery {
   // Re-pulled but not yet restored. Retired receivers vanish from stats, so this cannot depend on detector samples.
   readonly #awaiting = new Set<string>();
   readonly #identities = new Map<string, CloudflareSFURemoteTrack>();
+  // Audio publications are healed forever: no repull or rebuild budget applies to them.
+  readonly #unhealthySince = new Map<string, number>();
+  #audio = new Set<string>();
+  #lastRebuildAt = Number.NEGATIVE_INFINITY;
+  #now = 0;
   #expected = new Set<string>();
   #screens = new Set<string>();
   #stalled = new Set<string>();
@@ -92,10 +117,13 @@ export class ReceiveStallRecovery {
     return this.#observations;
   }
 
-  expect(publications: readonly MediaPublication[], participantId: string): void {
-    const enabled = publications.filter((publication) => publication.participantId !== participantId && publication.enabled);
+  /** `subscribable` leaves out publications this client would never pull, such as an abandoned participant's. */
+  expect(publications: readonly MediaPublication[], participantId: string, subscribable: (publication: MediaPublication) => boolean = () => true): void {
+    const enabled = publications.filter((publication) => publication.participantId !== participantId && publication.enabled && subscribable(publication));
     this.#expected = new Set(enabled.flatMap((publication) => (publication.publicationId ? [publication.publicationId] : [])));
     this.#screens = new Set(enabled.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));
+    this.#audio = new Set(enabled.filter((publication) => publication.source === "microphone" || publication.source === "screen_audio").flatMap((publication) => (publication.publicationId ? [publication.publicationId] : [])));
+    for (const id of this.#unhealthySince.keys()) if (!this.#audio.has(id)) this.#unhealthySince.delete(id);
     this.#pruneWithdrawn(publications);
     this.#pruneAttempts(publications);
     for (const publication of this.#identities.values()) {
@@ -110,7 +138,28 @@ export class ReceiveStallRecovery {
   suspend(): void {
     this.#expected.clear();
     this.#screens.clear();
+    this.#audio.clear();
+    this.#unhealthySince.clear();
     this.clear();
+  }
+
+  /** Nothing is desired, so the reconcile tick has nothing to read stats for. */
+  hasExpectations(): boolean {
+    return this.#expected.size > 0 || this.#audio.size > 0 || this.#screens.size > 0;
+  }
+
+  hasUnhealthyAudio(tracks: Iterable<CloudflareSFURemoteTrack>): boolean {
+    return this.missingAudio(tracks).length > 0 || [...this.#audio].some((id) => this.#stalled.has(id));
+  }
+
+  isAudio(publicationId: string): boolean {
+    return this.#audio.has(publicationId);
+  }
+
+  /** Enabled audio publications that no live receiver currently carries. */
+  missingAudio(tracks: Iterable<CloudflareSFURemoteTrack>): readonly string[] {
+    const pulled = new Set([...tracks].map((track) => track.publicationId));
+    return [...this.#audio].filter((id) => !pulled.has(id));
   }
 
   #pruneWithdrawn(publications: readonly MediaPublication[]): void {
@@ -133,7 +182,7 @@ export class ReceiveStallRecovery {
   }
 
   canRepull(id: string): boolean {
-    return this.#stalled.has(id) && !this.#repulled.has(id);
+    return this.#stalled.has(id) && (this.#audio.has(id) || !this.#repulled.has(id));
   }
 
   reserveRepull(id: string): boolean {
@@ -150,7 +199,7 @@ export class ReceiveStallRecovery {
   }
 
   canRebuild(id?: string): boolean {
-    return this.#active.some((active) => (id === undefined || id === active) && this.#stalled.has(active) && this.#rebuildsLeft(active));
+    return this.#active.some((active) => (id === undefined || id === active) && !this.#audio.has(active) && this.#stalled.has(active) && this.#rebuildsLeft(active));
   }
 
   reserveRebuild(): boolean {
@@ -170,6 +219,8 @@ export class ReceiveStallRecovery {
   /** The media connection was replaced: its receivers are gone, so nothing is awaiting a restore. */
   replaced(): void {
     this.#awaiting.clear();
+    this.#unhealthySince.clear();
+    this.#lastRebuildAt = this.#now;
     this.clear();
   }
 
@@ -179,11 +230,13 @@ export class ReceiveStallRecovery {
     this.#active = [];
   }
 
-  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<CloudflareSFURemoteTrack>): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
+  /** A null report means the receive connection is not carrying media: no packet can be observed. */
+  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport | null, tracks: Iterable<CloudflareSFURemoteTrack>): ReceiveSampleResult {
+    this.#now = now;
     const active = [...tracks].filter((publication) => this.#isExpected(publication));
     for (const publication of active) this.#rememberIdentity(publication);
     this.#active = active.map((publication) => publication.publicationId);
-    const samples = active.flatMap((publication) => receivePacketSample(connection, report, publication) ?? []);
+    const samples = report ? active.flatMap((publication) => receivePacketSample(connection, report, publication, this.#audio.has(publication.publicationId)) ?? []) : [];
     const { stalled, advanced, resumed } = this.#detector.sample(now, samples);
     for (const id of resumed) {
       const source = this.#sources.get(id);
@@ -195,7 +248,20 @@ export class ReceiveStallRecovery {
     const unrestored = this.#active.filter((id) => this.#awaiting.has(id) && !stalled.includes(id));
     this.#stalled = new Set([...stalled, ...unrestored]);
     if (newlyStalled.length) this.#record(now);
-    return { stalled: [...stalled, ...unrestored], advanced, newlyStalled };
+    return { stalled: [...stalled, ...unrestored], advanced, newlyStalled, escalate: this.#observeAudioHealth(now, report !== null) };
+  }
+
+  // Escalate only when no desired audio flows: if some publisher is heard, the receive session works
+  // and a re-pull of the broken one is the whole repair.
+  #observeAudioHealth(now: number, connected: boolean): boolean {
+    const pulled = new Set(this.#active);
+    for (const id of this.#audio) {
+      const unhealthy = !connected || !pulled.has(id) || this.#stalled.has(id);
+      if (!unhealthy) this.#unhealthySince.delete(id);
+      else if (!this.#unhealthySince.has(id)) this.#unhealthySince.set(id, now);
+    }
+    if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size) return false;
+    return now - Math.min(...this.#unhealthySince.values()) >= RECEIVE_ESCALATION_MS && now - this.#lastRebuildAt >= RECEIVE_REBUILD_COOLDOWN_MS;
   }
 
   #isExpected(publication: CloudflareSFURemoteTrack): boolean {
@@ -228,11 +294,18 @@ function sourceKey({ participantId, source }: { readonly participantId: string; 
   return `${participantId}\0${source}`;
 }
 
-function receivePacketSample(connection: RTCPeerConnection, report: RTCStatsReport, publication: CloudflareSFURemoteTrack): ReceivePacketSample | undefined {
+export type ReceiveSampleResult = {
+  readonly stalled: readonly string[];
+  readonly advanced: readonly string[];
+  readonly newlyStalled: readonly string[];
+  readonly escalate: boolean;
+};
+
+function receivePacketSample(connection: RTCPeerConnection, report: RTCStatsReport, publication: CloudflareSFURemoteTrack, audio: boolean): ReceivePacketSample | undefined {
   const rows = [...report.values()].filter((row) => row.type === "inbound-rtp" && row.trackIdentifier === publication.track.id);
   if (rows.some((row) => !Number.isSafeInteger(row.packetsReceived) || row.packetsReceived < 0)) return;
   if (publication.track.kind === "audio" && !audioPacketCadenceKnown(connection, report, publication.track, rows)) return;
-  return { publicationId: publication.publicationId, trackId: publication.track.id, packets: rows.reduce((sum, row) => sum + row.packetsReceived, 0) };
+  return { publicationId: publication.publicationId, trackId: publication.track.id, packets: rows.reduce((sum, row) => sum + row.packetsReceived, 0), audio };
 }
 
 function audioPacketCadenceKnown(connection: RTCPeerConnection, report: RTCStatsReport, track: MediaStreamTrack, rows: readonly RTCInboundRtpStreamStats[]): boolean {

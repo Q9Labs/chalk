@@ -58,6 +58,15 @@ const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
 // resume operation rather than trusting Chalk's registry as provider liveness.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
+const RECEIVE_RECONCILE_INTERVAL_MS = 500;
+// Cloudflare disconnects a session that never connected a peer between 12 and 15 s after creation,
+// and then answers the first pull only after 5 s with a 410. Replace the session before that.
+const DORMANT_CONNECTION_MS = 8000;
+// An enabled microphone must be heard within seconds: its pulls retry quickly and never give up.
+const AUDIO_PULL_RETRY_BASE_MS = 250;
+const AUDIO_PULL_RETRY_CAP_MS = 1000;
+const AUDIO_PULL_REFUSED_RETRY_MS = 3000;
+const RECEIVE_KICK_INTERVAL_MS = 1000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
@@ -83,6 +92,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #replacementCause: MediaConnectionReplacementCause | undefined;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
+  #connectionCreatedAt = Date.now();
+  #advertisedRemoteMedia: readonly MediaPublication[] | null = null;
+  #receiveEscalation = false;
+  #receiveKickedAt = Number.NEGATIVE_INFINITY;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
   readonly #receiveProgress = new ReceiveStallRecovery();
   readonly #viewerLayerPending = new Map<string, ViewerLayerChange>();
@@ -144,11 +157,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteParticipantIds = new Set(participantIds);
     this.#remoteParticipantRevision++;
     this.#remotePullIncomplete = true;
+    if (this.#advertisedRemoteMedia) this.#receiveProgress.expect(this.#advertisedRemoteMedia, this.#participantId, (publication) => this.#canSubscribeToRemotePublication(publication));
     this.remotePublicationsChanged();
   }
   remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
     if (projectionState === "unavailable") this.#receiveProgress.suspend();
-    else if (publications) this.#receiveProgress.expect(publications, this.#participantId);
+    else if (publications) {
+      this.#advertisedRemoteMedia = publications;
+      this.#receiveProgress.expect(publications, this.#participantId, (publication) => this.#canSubscribeToRemotePublication(publication));
+    }
     if (this.#polling) {
       this.#pollAfterCurrent = true;
       return;
@@ -851,13 +868,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-  #canSubscribeToRemotePublication(publication: CloudflareSFUPublication): boolean {
-    return this.#remoteParticipantIds === null || this.#remoteParticipantIds.has(publication.participantId) || this.#subscribedPublicationIds.has(publication.publicationId);
+  #canSubscribeToRemotePublication(publication: Pick<MediaPublication, "participantId" | "publicationId">): boolean {
+    return this.#remoteParticipantIds === null || this.#remoteParticipantIds.has(publication.participantId) || (publication.publicationId !== null && this.#subscribedPublicationIds.has(publication.publicationId));
   }
   async #pullWithRecovery(desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     const pending = this.#pendingRemotePulls(desired);
+    if (this.#receiveEscalation && this.#replaceMediaConnection && desired.size > 0) {
+      this.#receiveEscalation = false;
+      this.#replacementAttemptedGeneration = null;
+      return this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "receive_stalled");
+    }
+    if (pending.length > 0 && this.#isDormantConnection(generation)) return this.#retryRemotePullOnReplacement(pending, cursor, generation, "dormant_connection");
     const stalled = pending.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
-    if (stalled.length) return this.#recoverStalledRemotePublications(stalled, desired, cursor, generation);
+    const stalledAudio = stalled.filter((publication) => this.#receiveProgress.isAudio(publication.publicationId));
+    if (stalledAudio.length) await this.#retireStalledAudioReceivers(stalledAudio, generation);
+    const stalledOther = stalled.filter((publication) => !this.#receiveProgress.isAudio(publication.publicationId));
+    if (stalledOther.length) return this.#recoverStalledRemotePublications(stalledOther, desired, cursor, generation);
     const publications = pending;
     try {
       return await this.#pull(publications, generation);
@@ -890,6 +916,45 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
     for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
     return pulled;
+  }
+  #isDormantConnection(generation: number): boolean {
+    return this.#negotiatedGeneration !== generation && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation && Date.now() - this.#connectionCreatedAt >= DORMANT_CONNECTION_MS;
+  }
+  // A silent audio receiver is dropped and pulled again like a missing one. Releasing it at the SFU is best effort:
+  // a failed close must not stop the listener from hearing the publication again.
+  async #retireStalledAudioReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<void> {
+    await this.#serializeSDP(async () => {
+      this.#requireGeneration(generation);
+      const connection = this.#connection;
+      const connectionId = this.#bootstrap.connectionId;
+      const stalled = publications.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
+      const receivers = stalled.flatMap((publication) => {
+        const remote = [...this.#remoteTracks.values()].find((track) => track.publicationId === publication.publicationId);
+        const transceiver = connection.getTransceivers().find((item) => item.receiver.track === remote?.track);
+        return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+      });
+      if (receivers.length) {
+        try {
+          await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: receivers.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
+        } catch (error) {
+          this.#requireGeneration(generation);
+          this.#reportError(error);
+        }
+        this.#requireGeneration(generation);
+        for (const { transceiver } of receivers) transceiver.stop();
+      }
+      this.#dropRemoteTracks(stalled.map((publication) => publication.publicationId));
+    });
+  }
+  #dropRemoteTracks(publicationIds: readonly string[]): void {
+    for (const [key, publication] of this.#remoteTracks) {
+      if (!publicationIds.includes(publication.publicationId)) continue;
+      safeStopTrack(publication.track, this.#reportError.bind(this));
+      this.#remoteTracks.delete(key);
+      this.#receiveProgress.restarted(publication.publicationId);
+    }
+    this.#publishSnapshot();
+    this.#emitRemote();
   }
   async #retireStalledReceivers(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFUPublication[]> {
     return this.#serializeSDP(async () => {
@@ -970,8 +1035,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return pulled;
   }
   #deferRemotePulls(publications: readonly CloudflareSFUPublication[], error: unknown): void {
-    const retryAfter = retryableRemotePull(error) ? Date.now() + 15_000 : Number.POSITIVE_INFINITY;
     for (const publication of publications) {
+      const audio = this.#receiveProgress.isAudio(publication.publicationId);
+      const delay = audio ? (retryableRemotePull(error) && !isRateLimited(error) ? jitter(AUDIO_PULL_RETRY_CAP_MS) : AUDIO_PULL_REFUSED_RETRY_MS) : retryableRemotePull(error) ? 15_000 : Number.POSITIVE_INFINITY;
+      const retryAfter = Date.now() + delay;
       const failures = this.#remotePullRetries.get(publication.publicationId)?.failures ?? 0;
       this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures, receiveStalled: this.#remotePullRetries.get(publication.publicationId)?.receiveStalled });
     }
@@ -1049,7 +1116,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #backoffRemotePull(publicationId: string, receiveStalled = false): void {
     const previous = this.#remotePullRetries.get(publicationId) ?? { retryAfter: 0, failures: 0 };
     const failures = Math.min(previous.failures + 1, 6);
-    this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + Math.min(15_000, 750 * 2 ** (failures - 1)), failures, receiveStalled: receiveStalled || previous.receiveStalled });
+    const delay = this.#receiveProgress.isAudio(publicationId) ? jitter(Math.min(AUDIO_PULL_RETRY_CAP_MS, AUDIO_PULL_RETRY_BASE_MS * 2 ** (failures - 1))) : Math.min(15_000, 750 * 2 ** (failures - 1));
+    this.#remotePullRetries.set(publicationId, { retryAfter: Date.now() + delay, failures, receiveStalled: receiveStalled || previous.receiveStalled });
   }
   #adaptViewerLayers(connection: RTCPeerConnection, report: RTCStatsReport, selector: ViewerLayerSelector, current: () => boolean): void {
     if (!this.#transport?.updateTracks || !this.#canObserveReceiveProgress(connection)) return;
@@ -1107,18 +1175,31 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #canObserveReceiveProgress(connection: RTCPeerConnection): boolean {
     return this.#started && connectionIsLive(connection) && (typeof document === "undefined" || document.visibilityState !== "hidden");
   }
-  #observeReceiveProgress(connection: RTCPeerConnection, report: RTCStatsReport): void {
-    if (!this.#canObserveReceiveProgress(connection)) {
+  // The receive reconcile tick. Desired: every enabled remote audio publication. Actual: a pulled track whose packets keep rising.
+  // Anything else is pulled again soon, and again, for as long as it is desired.
+  #observeReceiveProgress(connection: RTCPeerConnection, report: RTCStatsReport | null): void {
+    if (!this.#started || (typeof document !== "undefined" && document.visibilityState === "hidden")) {
       this.#receiveProgress.clear();
       return;
     }
-    const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), connection, report, this.#remoteTracks.values());
-    for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
+    const live = connectionIsLive(connection);
+    const sample = this.#receiveProgress.sample(performance.now(), connection, live ? report : null, this.#remoteTracks.values());
+    for (const publicationId of sample.advanced) this.#remotePullRetries.delete(publicationId);
     this.#publishSnapshot();
-    if (!stalled.some((id) => this.#receiveProgress.canRepull(id) || (this.#replaceMediaConnection && this.#receiveProgress.canRebuild(id)))) return;
-    for (const publicationId of stalled) {
-      if (!this.#remotePullRetries.get(publicationId)?.receiveStalled) this.#backoffRemotePull(publicationId, true);
+    if (sample.escalate) this.#receiveEscalation = true;
+    const now = Date.now();
+    const audioDue = [...this.#receiveProgress.missingAudio(this.#remoteTracks.values()), ...sample.stalled.filter((id) => this.#receiveProgress.isAudio(id))].some((id) => (this.#remotePullRetries.get(id)?.retryAfter ?? 0) <= now);
+    const stalledOther = sample.stalled.filter((id) => !this.#receiveProgress.isAudio(id));
+    if (stalledOther.some((id) => this.#receiveProgress.canRepull(id) || (this.#replaceMediaConnection && this.#receiveProgress.canRebuild(id)))) {
+      for (const publicationId of stalledOther) {
+        if (!this.#remotePullRetries.get(publicationId)?.receiveStalled) this.#backoffRemotePull(publicationId, true);
+      }
+      this.#remotePullIncomplete = true;
+      this.remotePublicationsChanged();
+      return;
     }
+    if (!(audioDue || this.#receiveEscalation) || this.#polling || now - this.#receiveKickedAt < RECEIVE_KICK_INTERVAL_MS) return;
+    this.#receiveKickedAt = now;
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
@@ -1235,7 +1316,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         }
         const report = await connection.getStats();
         if (!current() || connection.signalingState !== "stable") return;
-        this.#observeReceiveProgress(connection, report);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
         this.#callStats.observe(report);
         const sender = this.#cameraSimulcastSender(state);
@@ -1248,11 +1328,24 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (current()) cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
       }
     };
+    let receiveTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const reconcileReceive = async () => {
+      if (!current()) return;
+      try {
+        const live = connectionIsLive(connection);
+        if (!live || (this.#receiveProgress.hasExpectations() && connection.signalingState === "stable")) this.#observeReceiveProgress(connection, live ? await connection.getStats() : null);
+      } catch {
+        // A failed stats read is not evidence about the media; the next tick reads again.
+      } finally {
+        if (current()) receiveTimer = globalThis.setTimeout(reconcileReceive, RECEIVE_RECONCILE_INTERVAL_MS);
+      }
+    };
     const dispose = () => {
       if (disposed) return;
       disposed = true;
       this.#viewerLayerPending.clear();
       if (cameraTimer !== undefined) globalThis.clearTimeout(cameraTimer);
+      if (receiveTimer !== undefined) globalThis.clearTimeout(receiveTimer);
       connection.removeEventListener("connectionstatechange", capture);
       connection.removeEventListener("iceconnectionstatechange", capture);
       connection.removeEventListener("signalingstatechange", capture);
@@ -1270,6 +1363,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     this.#disposeConnectionObservation = dispose;
     cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
+    receiveTimer = globalThis.setTimeout(reconcileReceive, RECEIVE_RECONCILE_INTERVAL_MS);
     connection.addEventListener("connectionstatechange", capture);
     connection.addEventListener("iceconnectionstatechange", capture);
     connection.addEventListener("signalingstatechange", capture);
@@ -1334,6 +1428,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
+    this.#connectionCreatedAt = Date.now();
     return create({ iceServers: iceServersFor(bootstrap), bundlePolicy: "max-bundle" });
   }
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
@@ -1412,6 +1507,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #incompletePullDelay(): number {
     this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
+    if (this.#receiveProgress.hasUnhealthyAudio(this.#remoteTracks.values())) return Math.min(this.#pollIntervalMs, jitter(Math.min(AUDIO_PULL_RETRY_CAP_MS, AUDIO_PULL_RETRY_BASE_MS * 2 ** (this.#pollFailures - 1))));
     return Math.min(this.#pollIntervalMs, 750 * 2 ** (this.#pollFailures - 1));
   }
   #clearPoll(): void {
@@ -1614,6 +1710,10 @@ async function createLocalOffer(connection: RTCPeerConnection) {
 }
 function localSourceGroup(source: MediaPublicationSource): readonly MediaPublicationSource[] {
   return source === "screen" ? [source, "screen_audio"] : [source];
+}
+// Listeners that fail together must not retry together.
+function jitter(delayMs: number): number {
+  return delayMs * (0.75 + Math.random() * 0.25);
 }
 function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;
