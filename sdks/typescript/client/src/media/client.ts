@@ -818,6 +818,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (!desiredIds.has(publicationId)) this.#subscribedPublicationIds.delete(publicationId);
     }
     const now = Date.now();
+    this.#stampFirstSeenRemote(desiredIds, now);
+    return [...desired].filter(([key, publication]) => this.#isDueForPull(key, publication, now)).map(([, publication]) => publication);
+  }
+  #stampFirstSeenRemote(desiredIds: ReadonlySet<string>, now: number): void {
     for (const publicationId of this.#firstSeenRemote.keys()) {
       if (!desiredIds.has(publicationId)) this.#firstSeenRemote.delete(publicationId);
     }
@@ -825,16 +829,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publicationId of desiredIds) {
       if (!this.#firstSeenRemote.has(publicationId)) this.#firstSeenRemote.set(publicationId, this.#cursor === null ? Number.NEGATIVE_INFINITY : now);
     }
-    return [...desired]
-      .filter(([key, publication]) => {
-        if (now - (this.#firstSeenRemote.get(publication.publicationId) ?? Number.NEGATIVE_INFINITY) < this.#newPublicationPullDelayMs) return false;
-        if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) {
-          if (!this.#receiveProgress.canRepull(publication.publicationId) && !(this.#replaceMediaConnection && this.#receiveProgress.canRebuild(publication.publicationId))) return false;
-        }
-        const remaining = (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) - now;
-        return remaining <= 0;
-      })
-      .map(([, publication]) => publication);
+  }
+  #isDueForPull(key: string, publication: CloudflareSFUPublication, now: number): boolean {
+    if (now - (this.#firstSeenRemote.get(publication.publicationId) ?? Number.NEGATIVE_INFINITY) < this.#newPublicationPullDelayMs) return false;
+    if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) {
+      if (!this.#receiveProgress.canRepull(publication.publicationId) && !(this.#replaceMediaConnection && this.#receiveProgress.canRebuild(publication.publicationId))) return false;
+    }
+    return (this.#remotePullRetries.get(publication.publicationId)?.retryAfter ?? 0) <= now;
   }
   #nextRemotePublicationCursor(authoritative: CloudflareSFUPublicationSnapshot): PublicationCursor | null {
     if (this.#cursor?.signature === INVALID_PUBLICATION_SIGNATURE && this.#cursor.incarnation === authoritative.incarnation && this.#cursor.sequence === authoritative.sequence) return null;
