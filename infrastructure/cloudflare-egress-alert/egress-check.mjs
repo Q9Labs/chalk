@@ -11,14 +11,20 @@ export const MONTHLY_THRESHOLDS_GB = [500, 800];
 const key = (id) => `cloudflare-sfu-turn-egress:chalk:${id}`;
 export const ALERT_KEYS = [key("24h"), ...MONTHLY_THRESHOLDS_GB.map((gb) => key(`month-${gb}gb`))];
 
+// A monthly threshold alerts on every run until its crossing is this old, so one or two
+// missed or failed runs cannot hide it. Oncall dedupes the repeats by key.
+const LOOKBACK_HOURS = 72;
+
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
-const QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $now: Time!) {
+const QUERY = `query ($account: String!, $dayStart: Time!, $monthStart: Time!, $priorEnd: Time!, $now: Time!) {
   viewer {
     accounts(filter: { accountTag: $account }) {
       daySfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $dayStart, datetime_lt: $now }) { sum { egressBytes } }
       dayTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $dayStart, datetime_lt: $now }) { sum { egressBytes } }
       monthSfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $now }) { sum { egressBytes } }
       monthTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $now }) { sum { egressBytes } }
+      priorSfu: callsUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $priorEnd }) { sum { egressBytes } }
+      priorTurn: callsTurnUsageAdaptiveGroups(limit: 1, filter: { datetime_geq: $monthStart, datetime_lt: $priorEnd }) { sum { egressBytes } }
     }
   }
 }`;
@@ -30,12 +36,19 @@ function groupBytes(groups) {
 export async function readEgress({ fetchImpl = fetch, accountId, token, now }) {
   const dayStart = new Date(now.getTime() - 24 * 3600 * 1000);
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const priorEnd = new Date(now.getTime() - LOOKBACK_HOURS * 3600 * 1000);
   const response = await fetchImpl(GRAPHQL_URL, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({
       query: QUERY,
-      variables: { account: accountId, dayStart: dayStart.toISOString(), monthStart: monthStart.toISOString(), now: now.toISOString() },
+      variables: {
+        account: accountId,
+        dayStart: dayStart.toISOString(),
+        monthStart: monthStart.toISOString(),
+        priorEnd: priorEnd.toISOString(),
+        now: now.toISOString(),
+      },
     }),
   });
   if (!response.ok) throw new Error(`Cloudflare GraphQL answered HTTP ${response.status}`);
@@ -45,16 +58,16 @@ export async function readEgress({ fetchImpl = fetch, accountId, token, now }) {
   return {
     dayBytes: groupBytes(account.daySfu) + groupBytes(account.dayTurn),
     monthBytes: groupBytes(account.monthSfu) + groupBytes(account.monthTurn),
-    // A run on the first day sees a 24 h window that began last month.
-    dayStartsInMonth: dayStart > monthStart,
+    // Month-to-date total as of the lookback. It is empty, so 0, while the lookback still falls in last month.
+    priorBytes: groupBytes(account.priorSfu) + groupBytes(account.priorTurn),
   };
 }
 
 const gb = (bytes) => Math.round(bytes / GB);
 
-// One run per day, so each monthly threshold fires once: on the run whose last
-// 24 h took the month-to-date total across it.
-export function evaluate({ dayBytes, monthBytes, dayStartsInMonth }) {
+// A monthly threshold is open while the month total is past it and the total
+// LOOKBACK_HOURS ago was not. That needs no state from the run before.
+export function evaluate({ dayBytes, monthBytes, priorBytes }) {
   const incidents = [];
   if (dayBytes >= DAILY_LIMIT_GB * GB) {
     incidents.push({
@@ -62,7 +75,6 @@ export function evaluate({ dayBytes, monthBytes, dayStartsInMonth }) {
       detail: `Realtime SFU and TURN sent ${gb(dayBytes)} GB in the last 24 h (limit ${DAILY_LIMIT_GB} GB).`,
     });
   }
-  const priorBytes = dayStartsInMonth ? monthBytes - dayBytes : 0;
   for (const threshold of MONTHLY_THRESHOLDS_GB) {
     if (monthBytes >= threshold * GB && priorBytes < threshold * GB) {
       incidents.push({
@@ -84,14 +96,17 @@ export function oncallPayload(incidents, { drill }) {
 
 export async function run({ env, fetchImpl = fetch, now = new Date(), log = console.log }) {
   const { CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ANALYTICS_TOKEN, ONCALL_WEBHOOK_URL, EGRESS_CHECK_DRILL } = env;
-  if (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_ANALYTICS_TOKEN || !ONCALL_WEBHOOK_URL) {
+  // A drill tests the Oncall webhook alone, so it never reads Cloudflare.
+  const drill = EGRESS_CHECK_DRILL === "true";
+  if (!ONCALL_WEBHOOK_URL || (!drill && (!CLOUDFLARE_ACCOUNT_ID || !CLOUDFLARE_ANALYTICS_TOKEN))) {
     throw new Error("CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ANALYTICS_TOKEN and ONCALL_WEBHOOK_URL are required");
   }
-  const usage = await readEgress({ fetchImpl, accountId: CLOUDFLARE_ACCOUNT_ID, token: CLOUDFLARE_ANALYTICS_TOKEN, now });
-  log(`SFU+TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
-
-  const drill = EGRESS_CHECK_DRILL === "true";
-  const incidents = drill ? [{ key: key("24h"), detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }] : evaluate(usage);
+  let incidents = [{ key: key("24h"), detail: "Drill: test notification from the Cloudflare egress check. No usage limit was crossed." }];
+  if (!drill) {
+    const usage = await readEgress({ fetchImpl, accountId: CLOUDFLARE_ACCOUNT_ID, token: CLOUDFLARE_ANALYTICS_TOKEN, now });
+    log(`SFU+TURN egress: ${gb(usage.dayBytes)} GB in 24 h, ${gb(usage.monthBytes)} GB this month`);
+    incidents = evaluate(usage);
+  }
   if (incidents.length === 0) return 0;
 
   for (const incident of incidents) log(incident.detail);

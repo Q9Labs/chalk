@@ -17,8 +17,9 @@ It sums SFU and TURN egress from Cloudflare GraphQL analytics
 Oncall webhook when:
 
 - the last 24 hours sent 100 GB or more (about 9 Mbps sustained), or
-- the month-to-date total crossed 500 GB or 800 GB since the previous run, so
-  each threshold fires once a month.
+- the month-to-date total crossed 500 GB or 800 GB within the last 72 hours. A
+  threshold alerts on each daily run until its crossing is 72 hours old, so one
+  missed run or one failed webhook post cannot hide it. Oncall dedupes the repeats.
 
 A crossed limit also fails the run, so GitHub emails the failure. A query or
 webhook failure fails the run the same way. A GB is 10^9 bytes.
@@ -31,7 +32,7 @@ Run the workflow by hand with `drill` set to send one marked test to Oncall.
 Oncall acts on a payload only for an app and check in its registry. The keys this
 job posts are `cloudflare-sfu-turn-egress:chalk:24h` and `...:month-500gb` and
 `...:month-800gb`, the same ones Oncall's poller registers for Chalk, and a test pins
-them. A drill posts the 24 h key.
+them. A drill posts the 24 h key and never reads Cloudflare, so it tests the webhook alone.
 
 ```sh
 node --test infrastructure/cloudflare-egress-alert/egress-check.test.mjs
