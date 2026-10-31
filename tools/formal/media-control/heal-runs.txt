@@ -38,9 +38,10 @@ mutant-heal-nogc-P5src     | P5src  | violated | SfuExpiresStale=FALSE
 heal-witness-W1            | W1     | violated |
 heal-witness-W2            | W2     | violated |
 heal-witness-W3            | W3     | violated | 
-# Deeper bounds (run with DEEP=1): three faults together, two listeners.
-deep-heal-P5src-faults3    | P5src  | pass | MaxFaults=3
+# Deeper bounds (run with DEEP=1): three faults together, two listeners. The liveness rows use one
+# user action (MaxToggle=1) so they fit in 8 GB; the safety rows keep two.
+deep-heal-P5src-faults3    | P5src  | pass | MaxFaults=3 MaxToggle=1
 deep-heal-safety-faults3   | safety | pass | MaxFaults=3
-deep-heal-P5src-2listeners | P5src  | pass | Listeners={l1,l2}
+deep-heal-P5src-2listeners | P5src  | pass | Listeners={l1,l2} MaxToggle=1
 deep-heal-safety-2listeners| safety | pass | Listeners={l1,l2}
-deep-heal-S5c-2listeners   | S5c    | pass | Listeners={l1,l2}
+deep-heal-S5c-2listeners   | S5c    | pass | Listeners={l1,l2} MaxToggle=1

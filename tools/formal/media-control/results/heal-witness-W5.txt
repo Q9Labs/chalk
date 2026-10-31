@@ -1,6 +1,6 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 23:05:18.
+Finished computing initial states: 1 distinct state generated at 2026-10-31 18:31:14.
 Error: Invariant W5_DeadWhileOffline is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -873,6 +873,6 @@ State 15: <Next line 440, col 6 to line 440, col 21 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-99126 states generated, 28071 distinct states found, 7842 states left on queue.
+98731 states generated, 27935 distinct states found, 7601 states left on queue.
 The depth of the complete state graph search is 15.
-Finished in 01s at (2026-10-31 23:05:19)
+Finished in 01s at (2026-10-31 18:31:16)

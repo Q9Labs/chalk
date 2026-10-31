@@ -1,8 +1,8 @@
 TLC2 Version 2026.10.30.154139 (rev: 090e85c)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 23:10:09.
-Checking temporal properties for the current state space with 11120 total distinct states at (2026-10-31 23:10:12)
+Finished computing initial states: 1 distinct state generated at 2026-10-31 18:37:52.
+Checking temporal properties for the current state space with 18524 total distinct states at (2026-10-31 18:37:55)
 Error: Temporal property P1d_HostMuteStopsCapture was violated.
 
 Error: The following behavior constitutes a counter-example:
@@ -471,7 +471,65 @@ State 8: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 9: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
+State 9: <Next line 418, col 6 to line 418, col 30 of module MediaHeal>
+/\ seq = 1
+/\ pubReq = FALSE
+/\ sfu = {}
+/\ pulled = (l1 :> {})
+/\ offSt = "none"
+/\ syncUp = TRUE
+/\ offSlot = 0
+/\ rmsg = ( l1 :>
+      [ list |-> <<"none", "none", "none", "none">>,
+        grant |-> FALSE,
+        ver |-> -1,
+        ack |-> 0 ] @@
+  pub :>
+      [ list |-> <<"none", "none", "none", "none">>,
+        grant |-> FALSE,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ view = ( l1 :>
+      [ list |-> <<"none", "none", "none", "none">>,
+        grant |-> FALSE,
+        ver |-> 0,
+        ack |-> 0 ] @@
+  pub :>
+      [ list |-> <<"none", "none", "none", "none">>,
+        grant |-> FALSE,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ lastSeq = 1
+/\ pubGen = 0
+/\ recovering = -1
+/\ cap = TRUE
+/\ ver = 2
+/\ bud = [ pl |-> 0,
+  ll |-> 0,
+  pf |-> 0,
+  rd |-> 0,
+  pd |-> 1,
+  sr |-> 0,
+  loss |-> 0,
+  hm |-> 1 ]
+/\ list = <<"none", "none", "none", "none">>
+/\ deadMsg = {}
+/\ stale = {}
+/\ onSlot = 1
+/\ pubSfuUp = TRUE
+/\ nextGen = 1
+/\ obs = <<0, 0, 0, 0>>
+/\ subLost = (l1 :> {})
+/\ want = TRUE
+/\ recvUp = (l1 :> TRUE)
+/\ pair = ( l1 :>
+      << [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
+/\ grant = FALSE
+
+State 10: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -497,69 +555,11 @@ State 9: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
   pub :>
       [ list |-> <<"none", "none", "none", "none">>,
         grant |-> FALSE,
-        ver |-> 0,
-        ack |-> 0 ] )
-/\ lastSeq = 1
-/\ pubGen = 0
-/\ recovering = 1
-/\ cap = TRUE
-/\ ver = 2
-/\ bud = [ pl |-> 0,
-  ll |-> 0,
-  pf |-> 0,
-  rd |-> 0,
-  pd |-> 1,
-  sr |-> 0,
-  loss |-> 0,
-  hm |-> 1 ]
-/\ list = <<"none", "none", "none", "none">>
-/\ deadMsg = {}
-/\ stale = {}
-/\ onSlot = 1
-/\ pubSfuUp = TRUE
-/\ nextGen = 1
-/\ obs = <<0, 0, 0, 0>>
-/\ subLost = (l1 :> {})
-/\ want = TRUE
-/\ recvUp = (l1 :> TRUE)
-/\ pair = ( l1 :>
-      << [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
-/\ grant = FALSE
-
-State 10: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
-/\ seq = 1
-/\ pubReq = FALSE
-/\ sfu = {}
-/\ pulled = (l1 :> {})
-/\ offSt = "none"
-/\ syncUp = TRUE
-/\ offSlot = 0
-/\ rmsg = ( l1 :>
-      [ list |-> <<"none", "none", "none", "none">>,
-        grant |-> FALSE,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ list |-> <<"none", "none", "none", "none">>,
-        grant |-> FALSE,
         ver |-> 2,
         ack |-> 1 ] )
-/\ view = ( l1 :>
-      [ list |-> <<"none", "none", "none", "none">>,
-        grant |-> FALSE,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ list |-> <<"none", "none", "none", "none">>,
-        grant |-> FALSE,
-        ver |-> 0,
-        ack |-> 0 ] )
 /\ lastSeq = 1
 /\ pubGen = 0
-/\ recovering = 1
+/\ recovering = -1
 /\ cap = TRUE
 /\ ver = 2
 /\ bud = [ pl |-> 0,
@@ -587,7 +587,7 @@ State 10: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 11: <Next line 418, col 6 to line 418, col 30 of module MediaHeal>
+State 11: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -646,7 +646,7 @@ State 11: <Next line 418, col 6 to line 418, col 30 of module MediaHeal>
 /\ grant = FALSE
 
 State 12: Stuttering
-Finished checking temporal properties in 00s at 2026-10-31 23:10:12
-51409 states generated, 15384 distinct states found, 4264 states left on queue.
-The depth of the complete state graph search is 13.
-Finished in 03s at (2026-10-31 23:10:12)
+Finished checking temporal properties in 00s at 2026-10-31 18:37:55
+86601 states generated, 25518 distinct states found, 6994 states left on queue.
+The depth of the complete state graph search is 14.
+Finished in 03s at (2026-10-31 18:37:55)
