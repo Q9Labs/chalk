@@ -47,9 +47,6 @@ under the request and adds `session.id` to its structured logs. Sync adds it to
 connection spans and logs. Any other value is ignored. The ID is request and
 connection scoped: it is not written to the journey ledger, to Sync frames sent
 back to the client, or to durable lifecycle rows.
-Rejected origins emit a `cors.origin_forbidden` warning and `journey.phase.http`
-attributes for `cors.outcome=forbidden`, `cors.policy`, and a sanitized
-`cors.origin` (IP literals are rendered as `[ip]`).
 
 ```apl
 | where ['session.id'] == "<session-id>"
@@ -144,6 +141,14 @@ subscription state" tests), `sdks/typescript/client/src/media/subscription-deliv
 `apps/api/internal/httpapi/sfu_subscriptions_test.go`,
 `apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
 `apps/api/internal/adapters/chalksfu/conformance_test.go`.
+
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
 
 ### Interrupted recording stops and missing provider tracks
 
