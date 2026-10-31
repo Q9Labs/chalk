@@ -25,26 +25,44 @@ const builds = {
   pr716: { serverRev: "origin/master", sdkRev: "origin/fix/mic-mute-keeps-publication" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
-// netem is applied to the default interface only, so browser-to-local-API/Sync traffic on lo is untouched.
-const conditions = {
-  open: { netem: null, kill: false },
-  netem: { netem: "delay 150ms 30ms loss 1.5%", kill: false },
-  kill: { netem: null, kill: true },
-  netemKill: { netem: "delay 150ms 30ms loss 1.5%", kill: true },
-  slow: { netem: "delay 250ms 40ms loss 2%", kill: false },
+// Per-direction impairment (RTT = egress + ingress delay). Only the default interface is shaped, so browser-to-local
+// API/Sync traffic on lo is untouched. Mobile caps egress at 1 Mbit/s with a queue of about one second.
+const profiles = {
+  open: null,
+  home: { egress: "delay 75ms 15ms loss 2%", ingress: "delay 75ms 15ms loss 2%" },
+  mobile: { egress: "delay 150ms 30ms loss 8% rate 1mbit limit 100", ingress: "delay 150ms 30ms loss 8%" },
+};
+// kill: the publisher's tracks are force-closed at the SFU 5 s after first publish.
+// listener-kill: every listener's pulled track of each speaker is force-closed once, mid-call.
+// pull503: the browser's remote-pull requests fail with 503 media.unavailable at a fixed rate.
+const faults = ["kill", "listener-kill", "pull503"];
+// A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
+const conditionOf = (name) => {
+  const parts = name.split("+");
+  const profileName = parts.find((part) => Object.hasOwn(profiles, part)) ?? "open";
+  const faultNames = parts.filter((part) => !Object.hasOwn(profiles, part));
+  assert.ok(
+    faultNames.every((fault) => faults.includes(fault)),
+    `unknown condition ${name}`,
+  );
+  return { profileName, profile: profiles[profileName], faults: faultNames };
 };
 
-const want = (process.env.SR_BUILDS || "5.2.6,master,pr716,pr708").split(",");
-const wantConditions = (process.env.SR_CONDITIONS || "open,netem,netemKill").split(",");
+const want = (process.env.SR_BUILDS || "5.2.6,pr716").split(",");
+const wantConditions = (process.env.SR_CONDITIONS || "open,home,mobile").split(",");
 const runsPerCell = Number(process.env.SR_RUNS || 2);
 const participantsCount = Number(process.env.SR_N || 8);
 const speakerCount = Number(process.env.SR_SPEAKERS || 4);
 const runSeconds = Number(process.env.SR_SECONDS || 95);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
+const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
+const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
 const output = resolve(root, process.env.SR_OUTPUT || "artifacts/silence-repro");
 await mkdir(output, { recursive: true });
-assert.ok(want.every((name) => Object.hasOwn(builds, name)));
-assert.ok(wantConditions.every((name) => Object.hasOwn(conditions, name)));
+// "sdk:<git ref>" tests that ref's SDK and React source on the master server tree.
+const buildSpec = (name) => (name.startsWith("sdk:") ? { serverRev: "origin/master", sdkRev: name.slice(4) } : builds[name]);
+assert.ok(want.every((name) => buildSpec(name)));
+wantConditions.forEach(conditionOf);
 
 const credentials = JSON.parse(await readFile(process.env.CHALK_DEVELOPMENT_CREDENTIALS || "/tmp/sr-creds.json", "utf8"));
 assert.equal(credentials.environment, "development");
@@ -71,16 +89,48 @@ async function publishedClient(version) {
   return destination;
 }
 
-const defaultInterface = () => execFileSync("sh", ["-c", "ip route show default | awk '{print $5; exit}'"], { encoding: "utf8" }).trim();
-const setNetem = (netem) => {
-  const dev = defaultInterface();
+const sh = (command) => execFileSync("sh", ["-c", command], { encoding: "utf8" });
+const defaultInterface = () => sh("ip route show default | awk '{print $5; exit}'").trim();
+const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" });
+// Remote IPv4 peers of connections open right now (the box's control channel, our shell) stay unshaped.
+const exemptAddresses = () => [
+  ...new Set(
+    sh("ss -Htn state established | awk '{print $4}'")
+      .split("\n")
+      .map((peer) => peer.replace(/:\d+$/u, ""))
+      .filter((address) => /^\d+\.\d+\.\d+\.\d+$/u.test(address) && !address.startsWith("127.")),
+  ),
+];
+// Egress: prio qdisc, exempt peers in band 1, everything else through netem in band 3. Ingress: redirect to ifb0 and shape there.
+const setNetem = (profile) => {
   clearNetem();
-  if (netem) execFileSync("sudo", ["tc", "qdisc", "add", "dev", dev, "root", "netem", ...netem.split(" ")]);
+  if (!profile) return [];
+  const dev = defaultInterface();
+  const exempt = exemptAddresses();
+  tc("qdisc", "add", "dev", dev, "root", "handle", "1:", "prio", "bands", "3", "priomap", ...Array(16).fill("2"));
+  tc("qdisc", "add", "dev", dev, "parent", "1:3", "handle", "30:", "netem", ...profile.egress.split(" "));
+  for (const address of exempt) tc("filter", "add", "dev", dev, "parent", "1:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "dst", `${address}/32`, "flowid", "1:1");
+  try {
+    execFileSync("sudo", ["ip", "link", "add", "ifb0", "type", "ifb"], { stdio: "pipe" });
+  } catch {} // already exists
+  execFileSync("sudo", ["ip", "link", "set", "ifb0", "up"]);
+  tc("qdisc", "add", "dev", dev, "handle", "ffff:", "ingress");
+  for (const address of exempt) tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "ip", "prio", "1", "u32", "match", "ip", "src", `${address}/32`, "action", "pass");
+  tc("filter", "add", "dev", dev, "parent", "ffff:", "protocol", "all", "prio", "2", "u32", "match", "u32", "0", "0", "action", "mirred", "egress", "redirect", "dev", "ifb0");
+  tc("qdisc", "add", "dev", "ifb0", "root", "netem", ...profile.ingress.split(" "));
+  return exempt;
 };
 const clearNetem = () => {
-  try {
-    execFileSync("sudo", ["tc", "qdisc", "del", "dev", defaultInterface(), "root"], { stdio: "ignore" });
-  } catch {}
+  const dev = defaultInterface();
+  for (const args of [
+    ["qdisc", "del", "dev", dev, "root"],
+    ["qdisc", "del", "dev", dev, "ingress"],
+    ["qdisc", "del", "dev", "ifb0", "root"],
+  ]) {
+    try {
+      tc(...args);
+    } catch {} // nothing to remove
+  }
 };
 
 function browserInstrumentation({ frequency }) {
@@ -107,6 +157,16 @@ function browserInstrumentation({ frequency }) {
       (window.matrixToneGraphs ??= []).push({ context, oscillator, destination });
     }
     return stream;
+  };
+  window.srMidFor = (speaker) => {
+    const entry = window.matrixClient.getSnapshot().media.remote.find((candidate) => candidate.source === "microphone" && candidate.participantId === speaker);
+    if (!entry?.track) return null;
+    for (const pc of window.matrixPeers) {
+      if (pc.connectionState === "closed") continue;
+      const transceiver = pc.getTransceivers().find((candidate) => candidate.receiver.track?.id === entry.track.id);
+      if (transceiver?.mid) return transceiver.mid;
+    }
+    return null;
   };
   window.srSample = async () => {
     const snapshot = window.matrixClient.getSnapshot();
@@ -150,8 +210,8 @@ const allBrowsers = [];
 let http;
 
 async function runBuild(name) {
-  const spec = builds[name];
-  const dir = resolve(root, ".private/silence-repro", name);
+  const spec = buildSpec(name);
+  const dir = resolve(root, ".private/silence-repro", name.replaceAll(/\W/gu, "_"));
   const serverRoot = `${dir}/server`;
   const sdkRoot = `${dir}/sdk`;
   const serverSha = resolveRev(spec.serverRev);
@@ -228,13 +288,33 @@ async function runBuild(name) {
   await once(http, "listening");
 
   try {
-    for (const conditionName of wantConditions)
-      for (let runIndex = 0; runIndex < runsPerCell; runIndex++) {
-        const condition = conditions[conditionName];
-        setNetem(condition.netem);
-        const run = { build: name, serverSha, sdkSha, condition: conditionName, netem: condition.netem, kill: condition.kill, runIndex, started: new Date().toISOString(), network: [], actions: [], samples: [], faults: [], kills: [] };
+    // Conditions rotate inside each run index, so slow drift at the SFU spreads over all conditions.
+    for (let runIndex = 0; runIndex < runsPerCell; runIndex++)
+      for (const conditionName of wantConditions) {
+        const condition = conditionOf(conditionName);
+        const run = {
+          build: name,
+          serverSha,
+          sdkSha,
+          condition: conditionName,
+          profile: condition.profileName,
+          netem: condition.profile,
+          kill: condition.faults.includes("kill"),
+          listenerKill: condition.faults.includes("listener-kill"),
+          pull503: condition.faults.includes("pull503") ? pull503Rate : 0,
+          runIndex,
+          started: new Date().toISOString(),
+          network: [],
+          actions: [],
+          samples: [],
+          faults: [],
+          kills: [],
+          listenerKills: [],
+          injected503: [],
+        };
         report.runs.push(run);
         try {
+          run.exemptPeers = setNetem(condition.profile).length;
           await runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName });
         } catch (error) {
           run.error = error.message;
@@ -254,12 +334,22 @@ async function runBuild(name) {
 }
 
 async function runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName }) {
-  const space = await chalk.spaces.create({ name: `Silence ${name}`, slug: `sr-${name.replaceAll(/\W/gu, "-")}-${conditionName.toLowerCase()}-${Date.now()}`, mediaPlane: "cf_sfu", defaultEpisodeDurationSeconds: 3600, maximumEpisodeDurationSeconds: 7200, lingerWindowSeconds: 600 });
+  const space = await chalk.spaces.create({
+    name: `Silence ${name}`,
+    slug: `sr-${name.replaceAll(/\W/gu, "-")}-${conditionName.replaceAll(/\W/gu, "-").toLowerCase()}-${Date.now()}`.slice(0, 60),
+    mediaPlane: "cf_sfu",
+    defaultEpisodeDurationSeconds: 3600,
+    maximumEpisodeDurationSeconds: 7200,
+    lingerWindowSeconds: 600,
+  });
   const episode = await chalk.episodes.create(space.id, {});
   const browser = await chromium.launch({ headless: true, executablePath: process.env.SR_CHROMIUM || undefined, args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
   allBrowsers.push(browser);
   const origin = Date.now();
   const ids = new Map();
+  const participantIds = [];
+  const pullSessions = [];
+  const random = seededRandom(run.runIndex * 7919 + name.length * 31 + conditionName.length);
   const connections = Array.from({ length: participantsCount }, () => new Set());
   const killed = new Set();
   const participants = [];
@@ -286,6 +376,14 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         let accessQueue = Promise.resolve();
         const context = await browser.newContext({ permissions: ["microphone"] });
         await context.addInitScript(browserInstrumentation, { frequency: 300 + index * 110 });
+        if (run.pull503 > 0)
+          await context.route(/\/media\//u, async (route) => {
+            const request = route.request();
+            const tracks = request.method() === "POST" ? request.postDataJSON()?.tracks : null;
+            if (!tracks?.length || !tracks.every((track) => track.location === "remote") || random() >= run.pull503) return route.continue();
+            run.injected503.push({ at: Date.now() - origin, participant: index });
+            return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "media.unavailable", message: "Media plane is unavailable" } }) });
+          });
         const page = await context.newPage();
         await page.exposeFunction("matrixAccess", (request) => {
           const next = accessQueue.then(async () => {
@@ -308,6 +406,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           const input = response.request().postDataJSON();
           const connectionId = input?.connection_id ?? null;
           if (connectionId) connections[index].add(connectionId);
+          if (connectionId && input?.tracks?.[0]?.location === "remote" && response.status() < 300) pullSessions[index] = connectionId;
           const entry = {
             at: Date.now() - origin,
             participant: index,
@@ -329,7 +428,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         await page.goto(config.urls.web);
         await page.evaluate((cfg) => window.matrixJoin(cfg), { space: space.slug, baseUrl: config.urls.api, syncUrl: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: `Synthetic ${index}`, microphone: false });
         await page.waitForFunction(() => window.matrixClient?.getSnapshot().connection.status === "live", null, { timeout: 120000 });
-        ids.set(await page.evaluate(() => window.matrixClient.getSnapshot().self.participantId), index);
+        participantIds[index] = await page.evaluate(() => window.matrixClient.getSnapshot().self.participantId);
+        ids.set(participantIds[index], index);
         participants[index] = { context, page };
       }),
     );
@@ -342,6 +442,14 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     schedule.sort((a, b) => a.at - b.at);
     run.speakerCount = speakerCount;
+    // Every listener-speaker pair loses its pulled track once, in shuffled order, 0.7 s apart while all speakers are on.
+    const pairKills = [];
+    if (run.listenerKill) {
+      const pairs = [];
+      for (let speaker = 0; speaker < speakerCount; speaker++) for (let listener = 0; listener < participantsCount; listener++) if (listener !== speaker) pairs.push({ speaker, listener });
+      pairs.sort(() => random() - 0.5).forEach((pair, order) => pairKills.push({ ...pair, at: listenerKillFrom + order * 0.7 }));
+    }
+    let killCursor = 0;
     let cursor = 0;
     while ((Date.now() - start) / 1000 < runSeconds) {
       const t = (Date.now() - start) / 1000;
@@ -354,6 +462,12 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         } catch (error) {
           event.error = error.message;
         }
+      }
+      while (killCursor < pairKills.length && pairKills[killCursor].at <= t) {
+        const { listener, speaker } = pairKills[killCursor++];
+        const event = { listener, speaker, t, atMs: Date.now() - origin };
+        run.listenerKills.push(event);
+        void killListenerTrack(event, participants[listener].page, participantIds[speaker], pullSessions[listener] ?? [...connections[listener]].at(-1));
       }
       const states = await Promise.all(
         participants.map(async ({ page }, listener) => {
@@ -372,6 +486,30 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(() => undefined);
   } finally {
     await browser.close().catch(() => undefined);
+  }
+}
+
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Closes one pulled track in the listener's SFU session with force, so media stops without the SDK's help.
+async function killListenerTrack(event, page, speakerParticipantId, sessionId) {
+  try {
+    const mid = await page.evaluate((speaker) => window.srMidFor(speaker), speakerParticipantId);
+    event.mid = mid;
+    if (!mid || !sessionId) return;
+    const response = await sfuFetch(`/sessions/${sessionId}/tracks/close`, { method: "PUT", body: JSON.stringify({ tracks: [{ mid }], force: true }) });
+    event.closeStatus = response.status;
+    if (!response.ok) event.closeBody = (await response.text()).slice(0, 200);
+  } catch (error) {
+    event.error = error.message;
   }
 }
 
