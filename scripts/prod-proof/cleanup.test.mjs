@@ -318,11 +318,14 @@ test("truncated ownership reports failure but in-memory key, endpoint, Spaces an
   assert.deepEqual(JSON.parse(await readFile(`${directory}/key-rejection.json`)), { status: 401 });
   const results = JSON.parse(await readFile(`${directory}/remote-cleanup.json`));
   assert.equal(results.find((entry) => entry.kind === "ownership").result, "failed");
-  // Recovery without in-memory state still disables the configured endpoint and sweeps Spaces.
+  // Recovery without in-memory state still sweeps Spaces, and never guesses an endpoint.
   calls.length = 0;
   await assert.rejects(cleanupByRunId(config, "truncated", directory), /Remote cleanup failed/);
   assert.ok(calls.includes("GET /v1/tenants/tenant/spaces"));
-  assert.ok(calls.includes("PATCH /v1/tenants/tenant/webhook-endpoints/hook"));
+  assert.equal(
+    calls.some((call) => call.includes("webhook-endpoints")),
+    false,
+  );
 });
 
 test("sweep archives only old owned empty Spaces or Spaces whose Episodes are all stale and owned", async (t) => {
@@ -384,6 +387,28 @@ test("cleanup prefers the persisted endpoint when configuration changes", async 
   assert.ok(paths.some((path) => path.endsWith("/original")));
   assert.equal(
     paths.some((path) => path.includes("replacement")),
+    false,
+  );
+});
+
+test("cleanup leaves the shared endpoint alone when the run never used a webhook", async (t) => {
+  const calls = [];
+  const config = await fixture(t, (req, res) => {
+    calls.push(`${req.method} ${new URL(req.url, "http://local").pathname}`);
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ spaces: [], pagination: {} }));
+  });
+  config.webhook_endpoint_id = "shared";
+  const directory = await mkdtemp(join(tmpdir(), "proof-no-webhook-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, "ownership.json"), JSON.stringify({ keyId: "key" }));
+  const results = await cleanupByRunId(config, "leave-only", directory);
+  assert.deepEqual(
+    calls.filter((call) => call.includes("webhook-endpoints")),
+    [],
+  );
+  assert.equal(
+    results.some((entry) => entry.kind.startsWith("webhook")),
     false,
   );
 });

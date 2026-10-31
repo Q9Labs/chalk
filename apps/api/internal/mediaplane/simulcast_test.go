@@ -40,3 +40,28 @@ func TestLocalPublicationRejectsSubscriberPolicy(t *testing.T) {
 		t.Fatalf("local policy accepted: %v", err)
 	}
 }
+
+func TestUpdateTracksRequiresAnExistingRemoteSubscriptionWithPolicy(t *testing.T) {
+	policy := &Simulcast{"l", "none", "asciibetical"}
+	valid := Track{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher", Simulcast: policy}
+	for _, tc := range []struct {
+		name    string
+		request UpdateTracksRequest
+		invalid bool
+	}{
+		{"remote layer switch", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{valid}}, false},
+		{"no tracks", UpdateTracksRequest{ConnectionID: "viewer"}, true},
+		{"no connection", UpdateTracksRequest{Tracks: []Track{valid}}, true},
+		{"local publication", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "local", Mid: "3", TrackName: "camera", Simulcast: policy}}}, true},
+		{"missing mid", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", TrackName: "camera", SessionID: "publisher", Simulcast: policy}}}, true},
+		{"missing publisher session", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", Simulcast: policy}}}, true},
+		{"missing policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher"}}}, true},
+		{"invalid policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher", Simulcast: &Simulcast{"l", "descending", "none"}}}}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := requireUpdateTracksRequest(&tc.request); errors.Is(err, ErrInvalidSignalRequest) != tc.invalid {
+				t.Fatalf("invalid=%v: %v", tc.invalid, err)
+			}
+		})
+	}
+}

@@ -1,5 +1,6 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../collaboration/types";
 import { CHAT_FILE_REACHABILITY_MESSAGE, ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
+import { withRequestContext } from "../session";
 
 export type ChalkChatFileHttpTransportOptions = {
   readonly baseUrl: string;
@@ -52,8 +53,9 @@ function invalidUpload(message: string): never {
 }
 
 function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
-  const baseUrl = options.baseUrl.replace(/\/+$/u, "");
+  const fetchImplementation = withRequestContext(options.fetch);
+  let baseUrl = options.baseUrl;
+  while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
   return async function request<T>(operation: ChalkChatFileOperation, path: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
     const headers = new Headers(init.headers);
     try {

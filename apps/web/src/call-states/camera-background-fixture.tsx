@@ -1,7 +1,7 @@
 import "../styles.css";
 import "../lib/camera-effects";
 import { createRoot } from "react-dom/client";
-import { processCameraStream, setCameraBackground, getCameraBackground, getCameraBackgroundFallback, type CameraBackground } from "@q9labsai/chalk-client";
+import { loadCameraBackgroundControls, processCameraStream, setCameraBackground, getCameraBackgroundFallback, type CameraBackground } from "@q9labsai/chalk-client";
 import { PreviewDevicePopover } from "@q9labsai/chalk-react/preview";
 import { syntheticCamera } from "./camera-fixtures/synthetic-camera";
 import portraitUrl from "./camera-fixtures/webcam-subject.jpg";
@@ -22,6 +22,7 @@ class CameraBackgroundFixture extends HTMLElement {
     const source = camera.track;
     const raw = new MediaStream([source]);
     const processed = await processCameraStream(raw);
+    const { getCameraBackground } = await loadCameraBackgroundControls();
     const track = processed.getVideoTracks()[0];
     if (!track) throw new Error("Camera capture failed");
     const local = document.createElement("video");

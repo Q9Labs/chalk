@@ -55,6 +55,8 @@ export type CloudflareSFUSignalingTransport = {
     readonly replacementCause?: MediaConnectionReplacementCause;
   }) => Promise<CloudflareSFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
+  /** Changes the simulcast layer of tracks already pulled, without renegotiating. Transports without it keep the layer chosen at pull time. */
+  readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
 };

@@ -1,5 +1,5 @@
 /** Browser-only bootstrap. Native SDK entry points never import the segmentation runtime. */
-import { configureCameraEffectProvider, createCameraEffectsTrack as createTrack, type CameraEffectsAssets, type CameraEffectsProvider } from "./media/camera-effects";
+import { configureCameraEffectProvider, openCameraEffectsTrack as createTrack, type CameraEffectsAssets, type CameraEffectsProvider } from "./media/camera-effects";
 
 const createSegmenter: CameraEffectsProvider = async (files) => {
   const { createSegmenter } = await import("./camera-effects-provider");

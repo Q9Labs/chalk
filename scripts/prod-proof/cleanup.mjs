@@ -94,25 +94,24 @@ async function revokeKey(call, path) {
     if (error.status !== 409 || error.apiCode !== "api_key.inactive") throw error;
   }
 }
-function cleanupEndpointId(config, known) {
-  return known.webhook?.id ?? config.webhook_endpoint_id;
-}
 async function cleanupWebhook(call, config, known, base, attempt) {
-  const endpointId = cleanupEndpointId(config, known);
+  // The endpoint is shared by every run, so only a run that recorded using it may rotate and disable it.
+  const endpointId = known.webhook?.id;
   if (endpointId) {
     await attempt("webhook-endpoint", endpointId, async () => {
       const endpoint = await rotateAndPatchEndpoint(call, `${base}/webhook-endpoints/${endpointId}`, { enabled: false });
       check(endpoint.enabled === false, "Webhook endpoint not disabled");
     });
   }
-  if (known.webhook?.catcherId) {
-    const { catcherId } = known.webhook;
-    await attempt("webhook-catcher", catcherId, async () => {
-      const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
-      await response.body?.cancel();
-      check([response.ok, response.status === 404].some(Boolean), "Catcher deletion failed");
-    });
-  }
+  await deleteCatcher(config, attempt, known.webhook?.catcherId);
+}
+async function deleteCatcher(config, attempt, catcherId) {
+  if (!catcherId) return;
+  await attempt("webhook-catcher", catcherId, async () => {
+    const response = await fetch(new URL(`/token/${catcherId}`, config.webhook_service_url), { method: "DELETE", signal: AbortSignal.timeout(15_000) });
+    await response.body?.cancel();
+    check([response.ok, response.status === 404].some(Boolean), "Catcher deletion failed");
+  });
 }
 async function readOwnership(directory) {
   try {
