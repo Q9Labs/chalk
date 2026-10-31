@@ -22,7 +22,7 @@ import (
 )
 
 func TestRateLimitOutageRecordsBoundedEvidence(t *testing.T) {
-	for _, policy := range []ratelimit.Policy{corsPolicyLookupRateLimit, authenticatedReadRateLimit, authenticatedWriteRateLimit, webhookReadRateLimit,
+	for _, policy := range []ratelimit.Policy{corsPolicyLookupRateLimit, authenticatedReadRateLimit, authenticatedWriteRateLimit, webhookReadRateLimit, callStatsParticipantLimit,
 		{Name: "private-unknown-policy", Limit: 1, Window: time.Minute},
 	} {
 		for _, malformed := range []bool{false, true} {
