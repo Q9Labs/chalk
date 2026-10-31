@@ -251,7 +251,7 @@ describe("Chalk terminal callbacks with a real SpaceClient", () => {
       controlHead: () => ({ revision: control.revision, state_digest: control.stateDigest }),
     });
     platform.leave.mockImplementation(() => scheduler.sendOperation((commandId) => ({ type: "operation", command_id: commandId, name: "participant_leave", payload: {} }), 0));
-    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, platform);
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
     const error = vi.fn();
     client.on("error", error);
     const onError = vi.fn();
