@@ -4,6 +4,7 @@ import { Schema } from "effect";
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
+import { ChalkWhiteboardV1Error } from "./types";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import { ManualClock } from "../../tests/helpers/manual-clock";
 import type { ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation } from "./types";
@@ -540,33 +541,91 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
-  it("rejects a drawing when the socket send fails after its save", async () => {
-    const { client, sockets } = await startedRecoveryClient(new ManualClock());
+  it.each(["submit_update", "set_draw_policy", "set_draw_permission", "clear", "set_presentation"] as const)("keeps a failed %s send pending until reconnect confirms it", async (type) => {
+    const clock = new ManualClock();
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, sockets } = await hostClient(clock, { pendingStore });
     const unhandled = unhandledRejections();
-    const sendFailure = new Error("socket send failed");
     try {
       const socket = sockets[0];
       if (!socket) throw new Error("missing socket");
       const send = socket.send.bind(socket);
       socket.send = (data) => {
-        if (JSON.parse(data).type === "submit_update") throw sendFailure;
+        if (JSON.parse(data).type === type) throw new Error("socket send failed");
         send(data);
       };
-
-      const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
-      const expectedRejection = expect(drawing).rejects.toBe(sendFailure);
-      const boundedAssertion = Promise.race([expectedRejection, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("drawing did not settle")), 0))]);
-      const assertionResult = boundedAssertion.then(
-        () => ({ passed: true }),
-        (cause: unknown) => ({ passed: false, cause }),
+      const operation =
+        type === "submit_update"
+          ? client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] })
+          : type === "set_draw_policy"
+            ? client.setDrawPolicy("hosts")
+            : type === "set_draw_permission"
+              ? client.setDrawPermission(sceneId, true)
+              : type === "clear"
+                ? client.clear()
+                : client.setPresentation(true);
+      const outcomes: unknown[] = [];
+      void operation.then(
+        () => outcomes.push("confirmed"),
+        (cause) => outcomes.push(cause),
       );
       await settle();
-      const unhandledReasons = await unhandled.after();
-      expect(unhandledReasons).toEqual([]);
-      expect(await assertionResult).toMatchObject({ passed: true });
+      expect(outcomes).toEqual([]);
+      const [stored] = await pendingStore.load();
+      expect(stored?.frame.type).toBe(type);
+      expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "whiteboard send failed" });
+      clock.advance(1_000);
+      await acceptWelcome(sockets, 1);
+      await settle();
+      expect(sentFrames(sockets[1], type)).toEqual([stored?.frame]);
+      expect(outcomes).toEqual([]);
+      commit(sockets[1], stored!.operationId, "2");
+      await operation;
+      expect(outcomes).toEqual(["confirmed"]);
+      expect(await pendingStore.load()).toEqual([]);
+      expect(await unhandled.after()).toEqual([]);
     } finally {
       await client.stopSceneSubscription();
       unhandled.stop();
+    }
+  });
+
+  it.each(["submit_update", "set_draw_policy", "set_draw_permission"] as const)("settles a failed %s send with typed final failures", async (type) => {
+    for (const outcome of ["rejected_connection", "rejected_operation", "stop"] as const) {
+      const clock = new ManualClock();
+      const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+      const { client, sockets } = await hostClient(clock, { pendingStore });
+      const socket = sockets[0]!;
+      const send = socket.send.bind(socket);
+      socket.send = (data) => {
+        if (JSON.parse(data).type === type) throw new Error("socket send failed");
+        send(data);
+      };
+      const operation = type === "submit_update" ? client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] }) : type === "set_draw_policy" ? client.setDrawPolicy("hosts") : client.setDrawPermission(sceneId, true);
+      const outcomes: unknown[] = [];
+      void operation.then(
+        () => outcomes.push("confirmed"),
+        (cause) => outcomes.push(cause),
+      );
+      try {
+        await settle();
+        expect(outcomes).toEqual([]);
+        const [stored] = await pendingStore.load();
+        if (outcome === "stop") await client.stopSceneSubscription();
+        else {
+          clock.advance(1_000);
+          await acceptWelcome(sockets, 1);
+          if (outcome === "rejected_connection") sockets[1]?.close(1008);
+          else sockets[1]?.receive({ type: "operation_error", correlation_id: stored!.operationId, operation: type, code: "permission_denied", recoverable: false, message: "Drawing refused." });
+        }
+        await settle();
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]).toBeInstanceOf(ChalkWhiteboardV1Error);
+        expect(outcomes[0]).toMatchObject({ operation: type, code: outcome === "stop" ? "unavailable" : "permission_denied", recoverable: outcome === "stop" });
+        await expect(operation).rejects.toBe(outcomes[0]);
+      } finally {
+        await client.stopSceneSubscription();
+      }
     }
   });
 

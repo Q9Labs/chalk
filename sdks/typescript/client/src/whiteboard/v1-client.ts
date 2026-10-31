@@ -782,7 +782,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (isAccessChange(frame)) return this.#queueAccessChange({ pending, deferred, retries: 0 }, deferred, promise);
     const entry = { pending, deferred, retries: 0 };
     this.#savingOperations.set(frame.operation_id, entry);
-    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, cause));
+    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, error(failure(operationName(frame), "unavailable", true, "Unable to queue the whiteboard operation."), cause)));
     return promise;
   }
 
@@ -931,6 +931,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (head) head.state = "sent";
     const entries = [...operations, ...(head ? [head.entry] : [])].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     for (const entry of entries) {
+      if (this.#phase !== "live") break;
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
       this.#sendOperation(entry.pending.frame);
     }
@@ -1105,7 +1106,24 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
-    for (const outbound of whiteboardV1OperationFrames(frame)) this.#send(outbound);
+    const socket = this.#socket;
+    if (!socket || this.#phase !== "live") return;
+    for (const outbound of whiteboardV1OperationFrames(frame)) {
+      const wire = encodeWhiteboardV1ClientFrame(outbound);
+      try {
+        socket.send(wire);
+      } catch {
+        // A partial send is not a receipt. Keep the operation and its caller for the next connection.
+        this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
+        try {
+          socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard send failed");
+        } catch {
+          // Reconnect already owns recovery even if the broken socket cannot close.
+        }
+        return;
+      }
+      if (socket !== this.#socket || this.#phase !== "live") return;
+    }
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
