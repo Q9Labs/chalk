@@ -1557,6 +1557,16 @@ async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTra
   expect(wasAborted()).toBe(true);
   await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
 }
+describe("peer connection ICE servers", () => {
+  it("builds the peer connection from the bootstrap STUN and TURN entries", async () => {
+    const harness = createHarness();
+    const iceServers = [{ urls: ["stun:stun.example.test:3478"] }, { urls: ["turn:turn.example.test:3478?transport=udp", "turn:turn.example.test:3478?transport=tcp", "turns:turn.example.test:443?transport=tcp"], username: "user", credential: "secret" }];
+    await harness.client.restart({ ...bootstrap("connection-2"), iceServers });
+    const configuration = (harness.peerConnectionFactory.mock.calls.at(-1) as unknown as [RTCConfiguration])[0];
+    expect(configuration.iceServers).toEqual(iceServers);
+    expect(configuration.bundlePolicy).toBe("max-bundle");
+  });
+});
 describe("Cloudflare SFU HTTP signaling", () => {
   it("reads a fresh media credential before every signaling request", async () => {
     const authoritativePublicationId = versionedPublicationID("connection-1", "0", "camera-track");

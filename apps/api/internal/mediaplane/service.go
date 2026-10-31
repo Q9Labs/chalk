@@ -95,6 +95,14 @@ type Episode struct {
 	Metadata map[string]string
 }
 
+// ICEServer is one WebRTC ICE server entry that the client passes to its
+// RTCPeerConnection. Username and Credential are set for TURN only.
+type ICEServer struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
+}
+
 type Join struct {
 	Provider       Provider
 	ParticipantRef string

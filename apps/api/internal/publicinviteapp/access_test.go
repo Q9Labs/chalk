@@ -33,6 +33,9 @@ func TestApprovedArrivalCollectsGrantWithoutMediaProof(t *testing.T) {
 	if fixture.plane.createCalls != 0 || fixture.plane.resumeCalls != 1 {
 		t.Fatalf("create/resume calls = %d/%d, want 0/1", fixture.plane.createCalls, fixture.plane.resumeCalls)
 	}
+	if servers := grant.ClientPayload.ICEServers; len(servers) != 1 || servers[0].Username != "user" || servers[0].URLs[0] != "turns:turn.test:443?transport=tcp" {
+		t.Fatalf("grant dropped the TURN ice servers: %+v", servers)
+	}
 }
 
 func TestApprovedArrivalRejectsChangedParticipantGeneration(t *testing.T) {
@@ -197,7 +200,7 @@ func (p *mediaPlaneStub) CreateJoin(context.Context, mediaplane.CreateJoinInput)
 
 func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	p.resumeCalls++
-	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test"}}, nil
+	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test", "iceServers": []mediaplane.ICEServer{{URLs: []string{"turns:turn.test:443?transport=tcp"}, Username: "user", Credential: "secret"}}}}, nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {

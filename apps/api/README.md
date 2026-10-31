@@ -313,6 +313,14 @@ It is separate from the public router and exposes authenticated readiness at
 against a protocol-faithful Cloudflare endpoint. Non-local environments reject
 it and always use Cloudflare's production SFU endpoint.
 
+`CHALK_CLOUDFLARE_TURN_KEY_ID` and `CHALK_CLOUDFLARE_TURN_API_TOKEN` name a
+Cloudflare TURN key (created by [`infrastructure/cloudflare-turn`](../../infrastructure/cloudflare-turn/README.md)).
+Set both or neither. With both, every media bootstrap carries `iceServers` with
+short-lived TURN credentials (UDP 3478, TCP, and TLS on 443) next to
+`stunServer`. With neither, or when Cloudflare cannot mint a credential, clients
+get STUN only and the join still succeeds. Tenant-managed Cloudflare accounts
+do not get TURN.
+
 ## Runtime Smoke
 
 ```bash

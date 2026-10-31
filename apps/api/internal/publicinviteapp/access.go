@@ -387,7 +387,8 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 		if !ok || !stunOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(stunServer) == "" {
 			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
 		}
-		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, StunServer: stunServer}, nil
+		iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
+		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, StunServer: stunServer, ICEServers: iceServers}, nil
 
 	default:
 		return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable

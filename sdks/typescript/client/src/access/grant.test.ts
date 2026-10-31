@@ -43,6 +43,20 @@ describe("access grant parsing", () => {
       }),
     ).toThrowError(expect.objectContaining({ code: "access.invalid" }));
   });
+  it("carries TURN ice servers from the wire through the parsed grant and back", () => {
+    const wire = accessWire();
+    const iceServers = [{ urls: ["stun:stun.test:3478"] }, { urls: ["turn:turn.test:3478?transport=udp", "turns:turn.test:443?transport=tcp"], username: "user", credential: "secret" }];
+    const withTurn = { ...wire, media: { ...wire.media, client_payload: { ...wire.media.client_payload, iceServers } } };
+    const parsed = parseParsedAccessGrant(withTurn);
+    expect(parsed.media.clientPayload.iceServers).toEqual(iceServers);
+    expect(JSON.parse(JSON.stringify(parseAccessGrant(withTurn)))).toEqual(withTurn);
+  });
+  it("rejects malformed ice servers", () => {
+    const wire = accessWire();
+    for (const iceServers of ["turn:x", [{ urls: [] }], [{ urls: ["turn:x"], username: "u" }], [{ urls: [""] }]]) {
+      expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, client_payload: { ...wire.media.client_payload, iceServers } } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
+    }
+  });
   it("rejects unsupported media providers", () => {
     const wire = accessWire();
     expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, provider: "realtimekit" } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
