@@ -153,7 +153,7 @@ export class V1CommandScheduler {
   async acknowledge(frame: V1CommandResult): Promise<void> {
     const deferred = this.#commands.get(frame.command_id);
     if (!deferred) return;
-    if (frame.outcome === "rejected" && frame.reason === "participant_inactive" && deferred.frame.type === "operation" && inactiveParticipantSatisfies(deferred.frame.name)) {
+    if (isSatisfiedByInactiveParticipant(frame, deferred.frame)) {
       const head = this.#options.controlHead();
       await this.#finishCommand(frame.command_id, { type: "ack", command_id: frame.command_id, delivery: "duplicate", outcome: "satisfied", revision: head.revision, state_digest: head.state_digest });
       return;
@@ -397,6 +397,10 @@ function targetFrame(commandId: string, command: V1TargetCommand): Extract<SyncV
 // A Participant that is already inactive has reached the state a Leave asks for, whether sync reports it live or in a terminal recovery.
 function inactiveParticipantSatisfies(operation: V1OperationName): boolean {
   return operation === "participant_leave";
+}
+
+function isSatisfiedByInactiveParticipant(result: V1CommandResult, command: SyncV1ClientFrame): boolean {
+  return result.outcome === "rejected" && result.reason === "participant_inactive" && command.type === "operation" && inactiveParticipantSatisfies(command.name);
 }
 
 function isTerminalLifecycleOperation(frame: SyncV1ClientFrame): boolean {
