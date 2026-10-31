@@ -23,6 +23,8 @@ const builds = {
   "5.2.6": { serverRev: "origin/master", sdkRev: "2ec22c54b", npm: "5.2.6" },
   master: { serverRev: "origin/master", sdkRev: "origin/master" },
   pr716: { serverRev: "origin/master", sdkRev: "origin/fix/mic-mute-keeps-publication" },
+  base721: { serverRev: "a784a9702c205121d90eea709b125fd75f070d08", sdkRev: "a784a9702c205121d90eea709b125fd75f070d08" },
+  pr721: { serverRev: "origin/devin/1793456079-audio-receive-health", sdkRev: "origin/devin/1793456079-audio-receive-health" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
 // netem is applied to the default interface only, so browser-to-local-API/Sync traffic on lo is untouched.
@@ -122,7 +124,8 @@ function browserInstrumentation({ frequency }) {
           if (stat.type === "inbound-rtp" && (stat.kind === "audio" || stat.mediaType === "audio")) inbound = { bytes: stat.bytesReceived || 0, packets: stat.packetsReceived || 0, audioLevel: stat.audioLevel ?? null, energy: stat.totalAudioEnergy ?? null };
         });
       }
-      const element = track ? window.srElements?.[track.id] : undefined;
+      const audio = track ? [...document.querySelectorAll("audio")].find((candidate) => candidate.srcObject?.getAudioTracks?.()[0]?.id === track.id) : undefined;
+      const element = audio ? { audio, play: "audio-output" } : undefined;
       remote.push({
         speaker: entry.participantId,
         trackId: track?.id ?? null,
@@ -192,6 +195,7 @@ async function runBuild(name) {
     "matrix-client-effect": packagePath ? `${packagePath}/dist/effect.js` : `${sdkTs}/client/src/effect.ts`,
     "matrix-react-context": `${sdkTs}/react/src/bindings/context.tsx`,
     "matrix-react-hooks": `${sdkTs}/react/src/bindings/hooks.ts`,
+    "matrix-react-audio-output": `${sdkTs}/react/src/components/audio-output/AudioOutput.tsx`,
     "matrix-react-controls": `${sdkTs}/react/src/components/control-bar/control-bar-behavior.ts`,
     "@q9labsai/chalk-client": packagePath ? `${packagePath}/dist/index.js` : `${sdkTs}/client/src/index.ts`,
   };
@@ -250,6 +254,8 @@ async function runBuild(name) {
     if (http) await new Promise((done) => http.close(done));
     http = undefined;
     await runtime.stop();
+    execFileSync("mkdir", ["-p", `${output}/api-logs-${name}`]);
+    execFileSync("sh", ["-c", `cp -r "${serverRoot}/.logs/dev/." "${output}/api-logs-${name}/" 2>/dev/null || true`]);
   }
 }
 
@@ -334,6 +340,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
       }),
     );
     run.joinSeconds = (Date.now() - origin) / 1000;
+    run.participantIds = admissions.map((admission) => admission.participant.id);
+    run.participantIdHashes = run.participantIds.map((id) => createHash("sha256").update(id).digest("hex"));
     const start = Date.now();
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {

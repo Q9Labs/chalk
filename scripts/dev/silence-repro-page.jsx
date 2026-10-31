@@ -4,40 +4,17 @@ import { createSpaceClientForPlatform } from "matrix-client-effect";
 import { ChalkProvider } from "matrix-react-context";
 import { useMedia, useSpaceClient } from "matrix-react-hooks";
 import { useConnectedControlBarBehavior } from "matrix-react-controls";
+import { AudioOutput } from "matrix-react-audio-output";
 
 function Controls() {
   const client = useSpaceClient();
   const media = useMedia();
   const controls = useConnectedControlBarBehavior({});
   window.matrixCommandError = controls.commandError;
-  useEffect(() => {
-    const elements = media.remote
-      .filter((remote) => remote.source === "microphone")
-      .map((remote) => {
-        const audio = document.createElement("audio");
-        audio.autoplay = true;
-        audio.srcObject = new MediaStream([remote.track]);
-        document.body.append(audio);
-        const entry = { audio, play: "pending" };
-        (window.srElements ??= {})[remote.track.id] = entry;
-        audio.play().then(
-          () => (entry.play = "ok"),
-          (error) => {
-            entry.play = `error:${error.name}`;
-            window.matrixErrors.push({ kind: "playback", message: error.message });
-          },
-        );
-        return audio;
-      });
-    return () =>
-      elements.forEach((audio) => {
-        audio.srcObject = null;
-        audio.remove();
-      });
-  }, [media.remote]);
   window.matrixClient = client;
   return (
     <>
+      <AudioOutput />
       <button id="mic" onClick={controls.surfaceProps.onToggleMute}>
         Microphone
       </button>
