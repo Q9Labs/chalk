@@ -9,6 +9,7 @@ function Controls() {
   const client = useSpaceClient();
   const media = useMedia();
   const controls = useConnectedControlBarBehavior({});
+  window.matrixCommandError = controls.commandError;
   useEffect(() => {
     const elements = media.remote.filter(remote => remote.source === 'microphone').map(remote => {
       const audio = document.createElement('audio');
@@ -22,8 +23,8 @@ function Controls() {
   }, [media.remote]);
   window.matrixClient = client;
   return <>
-    <button id="mic" onClick={controls.onToggleMute}>Microphone</button>
-    <button id="camera" onClick={controls.onToggleVideo}>Camera</button>
+    <button id="mic" onClick={controls.surfaceProps.onToggleMute}>Microphone</button>
+    <button id="camera" onClick={controls.surfaceProps.onToggleVideo}>Camera</button>
     <output>{media.local.microphone.state}</output>
   </>;
 }
