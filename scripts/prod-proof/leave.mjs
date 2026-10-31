@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { evaluateLeaves } from "./leave-criteria.mjs";
-import { launchGuests, stats, checkMediaProgress } from "./media.mjs";
+import { launchGuests, waitForMediaProgress } from "./media.mjs";
 import { prepareIntegration } from "./proofs.mjs";
 import { check, command, save } from "./runtime.mjs";
 
@@ -103,9 +103,7 @@ export async function sampleLeave(run, origin, sdkEntry, scenario) {
   const call = { ...run, directory };
   try {
     const guests = await launchGuests(call, space, episode, null, origin, true, 2, { sdkEntry, observeLeave: true });
-    const before = await stats(guests.pages);
-    await run.wait(1000);
-    checkMediaProgress(before, await stats(guests.pages));
+    await save(`${directory}/initial-media-progress.json`, await waitForMediaProgress(guests.pages));
     const result = await observeDeparture(guests.pages[0], scenario);
     await save(`${directory}/leave.json`, result);
     return result;

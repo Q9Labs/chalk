@@ -343,6 +343,23 @@ function receivedStreamMoved(rows, current) {
   if (!(current.bytesReceived > previous.bytesReceived)) return false;
   return current.kind !== "video" || current.framesDecoded > previous.framesDecoded;
 }
+export async function waitForMediaProgress(pages) {
+  let before = await stats(pages);
+  let evidence;
+  await waitFor(
+    "initial bidirectional audio and video progress",
+    async () => {
+      const after = await stats(pages);
+      const ready = after.length === 2 && after.every((rows, guest) => ["audio", "video"].every((kind) => rows.some((row) => row.type === "inbound-rtp" && row.kind === kind && row.source === { audio: "microphone", video: "camera" }[kind] && receivedStreamMoved(before[guest], row))));
+      if (ready) evidence = { before, after };
+      before = after;
+      return ready;
+    },
+    30_000,
+    1000,
+  );
+  return evidence;
+}
 export function checkMediaProgress(before, after) {
   check(before.length === after.length && after.length === 2, "Post-refresh media requires both clients");
   for (let guest = 0; guest < after.length; guest++) {

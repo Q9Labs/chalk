@@ -84,6 +84,18 @@ class NpmPublishTests(unittest.TestCase):
         self.marker({'environment': 'production', 'commit': self.master})
         self.verify(self.master)
 
+    def test_proof_checkout_rejects_unmerged_code_before_installing_dependencies(self):
+        workflow = (ROOT / '.github/workflows/real-call-proof.yml').read_text()
+        guard = 'Require selected proof code to be merged before dependency installation'
+        self.assertLess(workflow.index(guard), workflow.index('Install proof dependencies'))
+        script = workflow.split(guard + '\n', 1)[1].split('run: ', 1)[1].split('\n', 1)[0]
+        self.git(self.checkout, 'fetch', '--unshallow', 'origin', '+refs/heads/*:refs/remotes/origin/*')
+        for target, accepted in ((self.master, True), (self.production, True), (self.side, False)):
+            with self.subTest(target=target):
+                self.git(self.checkout, 'checkout', target)
+                result = subprocess.run(['bash', '-e', '-c', script], cwd=self.checkout, capture_output=True)
+                self.assertEqual(result.returncode == 0, accepted)
+
     def test_master_only_commit_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Production identity check failed:.*does not match live production'):
             self.verify(self.master)
