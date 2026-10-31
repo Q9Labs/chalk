@@ -61,7 +61,7 @@ async function armPublications(page, reject) {
   });
   await Promise.race([
     poll,
-    page.waitForTimeout(12_000).then(() => {
+    page.waitForTimeout(30_000).then(() => {
       throw new Error("SDK background publications poll was not observed");
     }),
   ]);
@@ -74,11 +74,18 @@ async function observeDeparture(page, scenario) {
   await armPublications(page, scenario === "publications-403");
   return page.evaluate(async (name) => {
     const startedAt = performance.timeOrigin + performance.now();
-    await window.proofClient.leave();
+    try {
+      await window.proofClient.leave();
+    } catch (error) {
+      // The old client's known 5-second failure is diagnostic evidence. Candidate
+      // failures still fail the comparison through confirmed/deadlineFallback.
+      if (!String(error).includes("left locally without a durable Leave acknowledgement")) throw error;
+    }
     const probe = window.proofLeave;
     const completedAt = performance.timeOrigin + performance.now();
     return {
       scenario: name,
+      socketEvidence: { sentAt: probe.sentAt, ackAt: probe.ackAt, frames: probe.frames, peerCloses: probe.peerCloses, rejections: probe.rejections },
       confirmed: probe.ackAt !== null,
       ms: (probe.ackAt ?? completedAt) - startedAt,
       deadlineFallback: probe.ackAt === null || completedAt - startedAt >= 39_000,

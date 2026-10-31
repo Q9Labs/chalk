@@ -63,7 +63,7 @@ jobs:
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
-    needs: release
+    needs: [plan, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: nightly

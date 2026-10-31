@@ -1,7 +1,7 @@
 // Observe the real protocol and PeerConnection without changing SDK behavior.
 export function installLeaveObservation() {
   const now = () => performance.timeOrigin + performance.now();
-  const probe = (window.proofLeave = { sentAt: null, ackAt: null, peerCloses: [], rejections: [] });
+  const probe = (window.proofLeave = { sentAt: null, ackAt: null, peerCloses: [], rejections: [], frames: [] });
   const observed = new WeakMap();
   function observeSocket(socket) {
     const state = { participant: null, command: null };
@@ -20,7 +20,10 @@ export function installLeaveObservation() {
     if (frame.type === "welcome") state.participant = frame.participant_id;
     const acknowledged = frame.type === "ack" && frame.command_id === state.command && ["committed", "satisfied"].includes(frame.outcome);
     const departed = frame.type === "event" && frame.name === "participant_left" && frame.payload?.participant_id === state.participant;
-    if (state.command && (acknowledged || departed)) probe.ackAt ??= now();
+    if (state.command && (acknowledged || departed)) {
+      probe.ackAt ??= now();
+      probe.frames.push({ at: now(), direction: "received", type: frame.type, name: frame.name, outcome: frame.outcome, matchesLeave: acknowledged, ownDeparture: departed });
+    }
   }
   const send = WebSocket.prototype.send;
   WebSocket.prototype.send = function (data) {
@@ -36,6 +39,7 @@ export function installLeaveObservation() {
     if (frame?.type === "operation" && frame.name === "participant_leave") {
       observed.get(this).command = frame.command_id;
       probe.sentAt ??= now();
+      probe.frames.push({ at: now(), direction: "sent", type: frame.type, name: frame.name });
       void window.proofReleasePublications?.();
     }
     return send.call(this, data);

@@ -99,7 +99,7 @@ jobs:
       web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
     secrets: inherit
   proof:
-    needs: release
+    needs: [select, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
