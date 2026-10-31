@@ -13,6 +13,30 @@ export type SendSample = {
 
 type Baseline = Omit<SendSample, "mid"> & { readonly at: number };
 
+function shouldResetBaselines(now: number, sampledAt: number | undefined): boolean {
+  return sampledAt !== undefined && (now - sampledAt > MAX_SAMPLE_GAP_MS || now < sampledAt);
+}
+
+function needsNewBaseline(sample: SendSample, base: Baseline | undefined): boolean {
+  return !base || sample.jitter !== base.jitter || sample.packetsSent <= base.packetsSent || sample.receiverReports < base.receiverReports;
+}
+
+function isWithinStallWindow(now: number, base: Baseline): boolean {
+  return now - base.at < SEND_STALL_WINDOW_MS;
+}
+
+function meetsStallThresholds(sample: SendSample, base: Baseline): boolean {
+  return sample.packetsSent - base.packetsSent >= MIN_PACKETS && sample.receiverReports - base.receiverReports >= MIN_RECEIVER_REPORTS;
+}
+
+function makeBaseline(now: number, sample: SendSample): Baseline {
+  return { at: now, packetsSent: sample.packetsSent, receiverReports: sample.receiverReports, jitter: sample.jitter };
+}
+
+function removeUnseenBaselines(baselines: Map<string, Baseline>, seen: Set<string>): void {
+  for (const mid of baselines.keys()) if (!seen.has(mid)) baselines.delete(mid);
+}
+
 /**
  * A sender is stalled when the SFU keeps answering with receiver reports, our packets keep
  * leaving, and the SFU's jitter reading never moves. That is what a track the SFU closed looks like.
@@ -27,22 +51,22 @@ export class SendStallDetector {
   }
 
   sample(now: number, samples: readonly SendSample[]): readonly string[] {
-    if (this.#sampledAt !== undefined && (now - this.#sampledAt > MAX_SAMPLE_GAP_MS || now < this.#sampledAt)) this.#baselines.clear();
+    if (shouldResetBaselines(now, this.#sampledAt)) this.#baselines.clear();
     this.#sampledAt = now;
     const stalled: string[] = [];
     const seen = new Set<string>();
     for (const sample of samples) {
       seen.add(sample.mid);
       const base = this.#baselines.get(sample.mid);
-      if (!base || sample.jitter !== base.jitter || sample.packetsSent <= base.packetsSent || sample.receiverReports < base.receiverReports) {
-        this.#baselines.set(sample.mid, { at: now, packetsSent: sample.packetsSent, receiverReports: sample.receiverReports, jitter: sample.jitter });
+      if (needsNewBaseline(sample, base)) {
+        this.#baselines.set(sample.mid, makeBaseline(now, sample));
         continue;
       }
-      if (now - base.at < SEND_STALL_WINDOW_MS) continue;
-      if (sample.packetsSent - base.packetsSent >= MIN_PACKETS && sample.receiverReports - base.receiverReports >= MIN_RECEIVER_REPORTS) stalled.push(sample.mid);
-      this.#baselines.set(sample.mid, { at: now, packetsSent: sample.packetsSent, receiverReports: sample.receiverReports, jitter: sample.jitter });
+      if (isWithinStallWindow(now, base)) continue;
+      if (meetsStallThresholds(sample, base)) stalled.push(sample.mid);
+      this.#baselines.set(sample.mid, makeBaseline(now, sample));
     }
-    for (const mid of this.#baselines.keys()) if (!seen.has(mid)) this.#baselines.delete(mid);
+    removeUnseenBaselines(this.#baselines, seen);
     return stalled;
   }
 }
