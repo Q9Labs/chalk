@@ -12,12 +12,13 @@ export interface CameraBackgroundMenu {
 
 let loadedControls: Promise<Controls> | undefined;
 
-export function CameraBackgroundPicker({ deviceId, menu }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu }) {
+/** With `onRecover`, the picker clears or swaps a saved choice whose preview failed to start, then retries it. */
+export function CameraBackgroundPicker({ deviceId, menu, onRecover }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu; readonly onRecover?: () => void }) {
   loadedControls ??= loadCameraBackgroundControls();
-  return <Options controls={use(loadedControls)} deviceId={deviceId} menu={menu} />;
+  return <Options controls={use(loadedControls)} deviceId={deviceId} menu={menu} onRecover={onRecover} />;
 }
 
-function Options({ controls, deviceId, menu: { Label, Item } }: { readonly controls: Controls; readonly deviceId: string; readonly menu: CameraBackgroundMenu }) {
+function Options({ controls, deviceId, menu: { Label, Item }, onRecover }: { readonly controls: Controls; readonly deviceId: string; readonly menu: CameraBackgroundMenu; readonly onRecover?: () => void }) {
   const selected = useSyncExternalStore(
     subscribeCameraBackground,
     () => controls.getCameraBackground(deviceId),
@@ -25,12 +26,13 @@ function Options({ controls, deviceId, menu: { Label, Item } }: { readonly contr
   );
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (!controls.cameraBackgroundAvailable(deviceId)) return null;
+  if (onRecover ? selected === "none" && !busy : !controls.cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
     setBusy(true);
     setFailed(false);
     try {
       await setCameraBackground(deviceId, background);
+      onRecover?.();
     } catch {
       setFailed(true);
     } finally {
