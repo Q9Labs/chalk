@@ -201,13 +201,17 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
   end
 
   defp execute_claim({episode, claim}, media, recording) do
-    ExternalOperationConsumer.execute_operation(
-      episode,
-      claim,
-      media,
-      recording,
-      &Postgres.finalize_operation/3
-    )
+    result =
+      ExternalOperationConsumer.execute_operation(
+        episode,
+        claim,
+        media,
+        recording,
+        &Postgres.finalize_operation/3
+      )
+
+    Postgres.release_dispatch_lease(episode, claim.dispatch_lease)
+    result
   end
 
   defp recording_operation!(actor, name, recording_id, key, media, recording) do

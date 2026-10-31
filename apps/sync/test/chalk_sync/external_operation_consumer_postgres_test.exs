@@ -75,6 +75,7 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
     assert {:ok, %{status: :applied, attempt_count: 1}} =
              Postgres.read_operation(fixture.episode, operation_id)
 
+    assert :ok = Postgres.release_dispatch_lease(episode, external.dispatch_lease)
     assert {:ok, remaining} = Postgres.claim_operations(64)
 
     refute Enum.any?(remaining, fn {_episode, candidate} ->

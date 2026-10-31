@@ -29,7 +29,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
         where lease.tenant_id = head.tenant_id
           and lease.episode_id = head.episode_id
           and lease.expires_at > now()
-          and lease.owner_id <> $1::uuid
       )
       order by head.next_attempt_at, head.attempt_count, head.acceptance_order
       limit $3
@@ -47,15 +46,9 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       on conflict (tenant_id, episode_id) do update
       set
         owner_id = excluded.owner_id,
-        fence = case
-          when current_lease.owner_id = excluded.owner_id
-            and current_lease.expires_at > now()
-            then current_lease.fence
-          else excluded.fence
-        end,
+        fence = excluded.fence,
         expires_at = excluded.expires_at
       where current_lease.expires_at <= now()
-        or current_lease.owner_id = excluded.owner_id
       returning tenant_id, episode_id, owner_id, fence
     )
     select tenant_id, episode_id, owner_id, fence

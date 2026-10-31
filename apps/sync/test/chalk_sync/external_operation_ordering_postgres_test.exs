@@ -92,6 +92,17 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     # Deterministic crash: do not execute/finalize this committed final claim.
     # Moving its lease into the past models restart after the lease expires.
     expire_fences(connection, seed)
+
+    Postgrex.query!(
+      connection,
+      """
+      update sync_episode_dispatch_leases
+      set expires_at = now() - interval '1 second'
+      where tenant_id = $1 and episode_id = $2
+      """,
+      [UUID.dump!(seed.episode.tenant_id), UUID.dump!(seed.episode.episode_id)]
+    )
+
     _end_id = queue(ender, :end_episode)
 
     drain_operations()
@@ -196,15 +207,24 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     for _ <- 1..3 do
       assert {:ok, operations} = Postgres.claim_operations(8)
 
-      for {episode, operation} <- operations do
-        assert {:ok, _} =
-                 Postgres.finalize_operation(
-                   episode,
-                   operation.external_operation_id,
-                   {:confirmed, :provider}
-                 )
-      end
+      Enum.each(Enum.group_by(operations, &elem(&1, 0)), fn {episode, episode_operations} ->
+        finalize_episode_operations(episode, episode_operations)
+      end)
     end
+  end
+
+  defp finalize_episode_operations(episode, episode_operations) do
+    Enum.each(episode_operations, fn {_episode, operation} ->
+      assert {:ok, _} =
+               Postgres.finalize_operation(
+                 episode,
+                 operation.external_operation_id,
+                 {:confirmed, :provider}
+               )
+    end)
+
+    {_episode, first_operation} = hd(episode_operations)
+    assert :ok = Postgres.release_dispatch_lease(episode, first_operation.dispatch_lease)
   end
 
   defp assert_pending_count(connection, seed, count),

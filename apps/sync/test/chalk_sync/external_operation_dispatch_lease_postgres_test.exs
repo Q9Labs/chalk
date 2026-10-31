@@ -189,28 +189,39 @@ defmodule ChalkSync.ExternalOperationDispatchLeasePostgresTest do
     assert :ok = Postgres.release_dispatch_lease(episode, lease)
   end
 
-  test "overlapping claims by one owner share the live fence", %{connection: connection} do
-    seed = fixture(connection, 3)
-    [actor, target, _ender] = seed.identities
+  test "an owner cannot reclaim its own live Episode lease", %{connection: connection} do
+    episode_seed = fixture(connection, 3)
+    other_seed = fixture(connection, 2)
+    [actor, target, _ender] = episode_seed.identities
+    [other_actor | _] = other_seed.identities
     mute_id = Helpers.queue(actor, :mute_participant, %{"participantId" => target.participant_id})
     leave_id = Helpers.queue(actor, :participant_leave)
-    Helpers.expire_fences(connection, seed)
+    other_leave_id = Helpers.queue(other_actor, :participant_leave)
+    Helpers.expire_fences(connection, episode_seed)
+    Helpers.expire_fences(connection, other_seed)
 
     owner_id = UUID.generate()
     assert {:ok, [{episode, first}]} = Postgres.claim_operations(1, [], 64, owner_id)
-    assert {:ok, [{^episode, second}]} = Postgres.claim_operations(1, [], 64, owner_id)
-    assert [first.external_operation_id, second.external_operation_id] == [mute_id, leave_id]
-    assert first.dispatch_lease.fence == second.dispatch_lease.fence
+    assert episode == episode_seed.episode
+    assert first.external_operation_id == mute_id
 
-    assert {:ok, _decision} =
-             Postgres.finalize_operation(
-               episode,
-               first.external_operation_id,
-               {:confirmed, :provider},
-               first.dispatch_lease
-             )
+    assert {:ok, other_operations} = Postgres.claim_operations(32, [], 64, owner_id)
 
-    assert :ok = Postgres.release_dispatch_lease(episode, second.dispatch_lease)
+    assert Enum.map(other_operations, fn {claimed_episode, operation} ->
+             {claimed_episode, operation.external_operation_id}
+           end) == [{other_seed.episode, other_leave_id}]
+
+    assert :ok = Postgres.release_dispatch_lease(episode, first.dispatch_lease)
+
+    assert {:ok, [{^episode, leave}]} = Postgres.claim_operations(32, [], 64, owner_id)
+    assert leave.external_operation_id == leave_id
+    assert leave.dispatch_lease.fence > first.dispatch_lease.fence
+
+    for {other_episode, operation} <- other_operations do
+      assert :ok = Postgres.release_dispatch_lease(other_episode, operation.dispatch_lease)
+    end
+
+    assert :ok = Postgres.release_dispatch_lease(episode, leave.dispatch_lease)
   end
 
   test "finishing and releasing the first batch hands later work to the next owner", %{
