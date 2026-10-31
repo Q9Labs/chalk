@@ -1438,6 +1438,8 @@ export interface components {
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
+        element_state?: "paused" | "playing";
+        /** @enum {string} */
         event:
           | "space_join_span"
           | "state_changed"
@@ -1456,7 +1458,9 @@ export interface components {
           | "sync_heartbeat_gap"
           | "media_state"
           | "media_http_error"
-          | "media_projection_mismatch";
+          | "media_projection_mismatch"
+          | "audio_receive_stuck"
+          | "audio_receive_summary";
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -1472,18 +1476,35 @@ export interface components {
         /** @enum {string} */
         phase?: "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped" | "new" | "connected" | "disconnected" | "closed";
         /** @enum {string} */
+        play_result?: "ok" | "NotAllowedError" | "AbortError" | "unknown";
+        /** @enum {string} */
         projection_state?: "on" | "off";
         /** @enum {string} */
         publication_state?: "on" | "off";
+        receive_counts?: {
+          announced?: number | null;
+          bytes_flowing?: number | null;
+          element_bound?: number | null;
+          playing?: number | null;
+          projection_off?: number | null;
+          pull_failed?: number | null;
+          pull_requested?: number | null;
+          pull_succeeded?: number | null;
+          track_received?: number | null;
+        } | null;
         /** @enum {string} */
-        source?: "microphone" | "camera";
+        receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
+        /** @enum {string} */
+        source?: "microphone" | "camera" | "screen_audio";
         /** @enum {string} */
         state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
         /** @enum {string} */
         step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
+        /** @enum {string} */
+        track_state?: "live" | "muted" | "ended";
       }[];
       /** @enum {string} */
-      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch";
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch" | "audio_receive_stuck" | "audio_receive_summary";
       /** @enum {integer} */
       version: 1;
     };
