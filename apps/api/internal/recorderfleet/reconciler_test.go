@@ -42,6 +42,8 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 		t.Fatalf("ready result = %+v", result)
 	}
 
+	node.CreatedAt = fixture.now.Add(-fixture.config.StartupTimeout - time.Hour)
+	fixture.provider.nodes[node.ProviderID] = node
 	fixture.demand.value = Demand{Revision: "demand-2", DesiredNodes: 0, ObservedAt: fixture.now}
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionAdmissionClosed || result.Projection.AdmissionOpen || fixture.runtime.closeCalls != 1 {
@@ -68,6 +70,9 @@ func TestReconcilerTransitionsZeroToReadyAndDrainsToZero(t *testing.T) {
 	result = fixture.step(t, reconciler)
 	if result.Action != ActionNodeDeleted || fixture.provider.deleteCalls != 1 {
 		t.Fatalf("delete result = %+v, calls %d", result, fixture.provider.deleteCalls)
+	}
+	if !fixture.provider.lastDeleteRequest.EvidenceUntil.IsZero() {
+		t.Fatalf("drained node evidence deadline = %s, want zero", fixture.provider.lastDeleteRequest.EvidenceUntil)
 	}
 	fixture.runtime.observations = nil
 	result = fixture.step(t, reconciler)
@@ -666,6 +671,24 @@ func TestReconcilerPersistsBootstrapDiagnosticUntilNeverReadyNodeRevocation(t *t
 	if result.Action != ActionIdentityRevoked || result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic {
 		t.Fatalf("revocation result = %+v", result)
 	}
+
+	fixture.provider.deleteErr = fmt.Errorf("snapshot still running: %w", ErrNodeEvidencePending)
+	result = fixture.step(t, reconciler)
+	wantEvidenceUntil := node.CreatedAt.Add(fixture.config.StartupTimeout + bootstrapEvidenceWindow)
+	if result.Action != ActionNone || result.ProviderNodeID != node.ProviderID ||
+		result.BootstrapDiagnostic == nil || *result.BootstrapDiagnostic != diagnostic ||
+		!fixture.provider.lastDeleteRequest.EvidenceUntil.Equal(wantEvidenceUntil) {
+		t.Fatalf("pending evidence result/request = %+v/%+v, want deadline %s", result, fixture.provider.lastDeleteRequest, wantEvidenceUntil)
+	}
+	if got := fixture.journal.state.Nodes[node.ProviderID].Phase; got != PhaseIdentityRevoked {
+		t.Fatalf("phase after pending evidence = %s, want %s", got, PhaseIdentityRevoked)
+	}
+
+	fixture.provider.deleteErr = nil
+	result = fixture.step(t, reconciler)
+	if result.Action != ActionNodeDeleted || result.ProviderNodeID != node.ProviderID {
+		t.Fatalf("delete after evidence result = %+v", result)
+	}
 }
 
 func TestReconcilerDrainsNodeStuckInProviderCreate(t *testing.T) {
@@ -805,12 +828,14 @@ func cloneJournal(state Journal) Journal {
 }
 
 type fakeProvider struct {
-	config      Config
-	nodes       map[string]Node
-	nextID      int
-	ensureCalls int
-	deleteCalls int
-	events      *[]string
+	config            Config
+	nodes             map[string]Node
+	nextID            int
+	ensureCalls       int
+	deleteCalls       int
+	deleteErr         error
+	lastDeleteRequest DeleteNodeRequest
+	events            *[]string
 }
 
 func (f *fakeProvider) NodeExists(_ context.Context, _ PoolKey, id string) (bool, error) {
@@ -859,6 +884,10 @@ func (f *fakeProvider) DeleteNode(_ context.Context, request DeleteNodeRequest) 
 		if !hasTag(node.Tags, tag) {
 			return ErrInventoryDrift
 		}
+	}
+	f.lastDeleteRequest = request
+	if f.deleteErr != nil {
+		return f.deleteErr
 	}
 	*f.events = append(*f.events, "delete")
 	delete(f.nodes, request.ProviderID)
