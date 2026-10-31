@@ -41,6 +41,12 @@ export function configureCameraEffectProvider(next: CameraEffectsAssets, createS
 export function loadCameraBackgroundControls() {
   return import("./camera-effect-operations");
 }
+function loadControlsOwning(tracks: readonly MediaStreamTrack[]) {
+  return loadCameraBackgroundControls().catch((error: unknown) => {
+    for (const track of tracks) track.stop();
+    throw error;
+  });
+}
 export function setCameraBackground(deviceId: string, background: CameraBackground): Promise<void> {
   return loadCameraBackgroundControls().then((controls) => controls.setBackground(store, deviceId, background));
 }
@@ -48,10 +54,10 @@ export function setCameraBackground(deviceId: string, background: CameraBackgrou
 /** Capture boundary: only this processed track reaches preview or the SFU. */
 export async function processCameraStream(stream: MediaStream, signal?: AbortSignal): Promise<MediaStream> {
   if (!signal?.aborted && !(assets && provider)) return stream;
-  const controls = await loadCameraBackgroundControls();
+  const controls = await loadControlsOwning(stream.getTracks());
   return controls.processStream(store, stream, assets, provider, signal);
 }
 
 export function openCameraEffectsTrack(source: MediaStreamTrack, files: CameraEffectsAssets, createSegmenter: CameraEffectsProvider, onSlow?: (fps: number) => void): Promise<CameraEffectsTrack> {
-  return loadCameraBackgroundControls().then((controls) => controls.createEffectsTrack(store, source, files, createSegmenter, onSlow));
+  return loadControlsOwning([source]).then((controls) => controls.createEffectsTrack(store, source, files, createSegmenter, onSlow));
 }
