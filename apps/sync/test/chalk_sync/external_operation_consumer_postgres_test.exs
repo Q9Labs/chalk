@@ -194,6 +194,77 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
     assert {:ok, %{status: :applied}} = Postgres.read_operation(fixture.episode, end_id)
   end
 
+  test "observed pending end finalizes after satisfied media cleanup without a new end", %{
+    connections: connections
+  } do
+    observed =
+      "../api/internal/providerbridge/testdata/end-cleanup-2026-10-29.json"
+      |> File.read!()
+      |> JSON.decode!()
+      |> Map.fetch!("operations")
+      |> Enum.find(&(&1["operation_name"] == "tenant_end_episode"))
+
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 1)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    {:ok, operation} = Operation.new("observed_pending_end", :end_episode, %{})
+
+    assert {:ok, %{external_operation_id: end_id}} =
+             Postgres.begin_operation(hd(fixture.identities), operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count = $2, next_attempt_at = now() where external_operation_id = $1",
+      [UUID.dump!(end_id), observed["attempt_count"]]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, external} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == end_id end)
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link(outcomes: %{end_episode: :satisfied})
+    {:ok, recording_adapter} = RecordingPlaneTestAdapter.start_link()
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               external,
+               {MediaPlaneTestAdapter, adapter},
+               {RecordingPlaneTestAdapter, recording_adapter},
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :applied}} = Postgres.read_operation(episode, end_id)
+
+    assert %{rows: [[false]]} =
+             Postgrex.query!(
+               connection,
+               "select fence_active from sync_external_operations where external_operation_id = $1",
+               [
+                 UUID.dump!(end_id)
+               ]
+             )
+
+    assert %{rows: [["ended", true]]} =
+             Postgrex.query!(
+               connection,
+               "select status, ended_at is not null from episodes where id = $1",
+               [
+                 UUID.dump!(episode.episode_id)
+               ]
+             )
+
+    assert %{rows: [[1]]} =
+             Postgrex.query!(
+               connection,
+               "select count(*) from sync_control_events where episode_id = $1 and event_name = 'episode_ended'",
+               [
+                 UUID.dump!(episode.episode_id)
+               ]
+             )
+  end
+
   test "migration re-arms exhausted cleanup and its command receipt without replacing identity",
        %{connections: connections} do
     connection = hd(connections)
