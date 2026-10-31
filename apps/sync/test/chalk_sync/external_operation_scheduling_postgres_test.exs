@@ -10,6 +10,15 @@ defmodule ChalkSync.DepartureDelayAdapter do
   end
 end
 
+defmodule ChalkSync.DepartureGateAdapter do
+  @moduledoc false
+
+  def remove_participant(observer, operation_id, episode, _participant_id) do
+    send(observer, {:cleanup_blocked, operation_id, episode.episode_id, self()})
+    receive do: (:release -> :confirmed)
+  end
+end
+
 defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
   use ChalkSync.ServerCase, async: false
 
@@ -72,6 +81,46 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
              Postgres.claim_operations(32, [class.episode.episode_id], 1)
 
     assert episode == other.episode
+  end
+
+  test "eight busy Episodes bound dispatch and a completed slot refills immediately", %{
+    connection: connection
+  } do
+    episodes = for _ <- 1..9, do: fixture(connection, 1)
+
+    for seed <- episodes do
+      {:ok, operation} =
+        Operation.new("bound_" <> ChalkSync.UUID.generate(), :participant_leave, %{})
+
+      assert {:ok, _} = Postgres.begin_operation(hd(seed.identities), operation)
+    end
+
+    consumer =
+      start_supervised!(
+        {ExternalOperationConsumer,
+         poll_interval_ms: 5, media_plane: {ChalkSync.DepartureGateAdapter, self()}}
+      )
+
+    blocked =
+      for _ <- 1..8 do
+        assert_receive {:cleanup_blocked, _operation, episode, handler}, 2_000
+        {episode, handler}
+      end
+
+    try do
+      assert MapSet.size(MapSet.new(blocked, &elem(&1, 0))) == 8
+      refute_receive {:cleanup_blocked, _, _, _}, 100
+      assert ExternalOperationConsumer.health(consumer).active_work
+      send(elem(hd(blocked), 1), :release)
+      assert_receive {:cleanup_blocked, _operation, episode, handler}, 2_000
+      refute Enum.any?(blocked, fn {prior, _} -> prior == episode end)
+      send(handler, :release)
+    after
+      for {_episode, handler} <- blocked, do: send(handler, :release)
+    end
+
+    # Stop dispatch before fixture teardown; provider work was explicitly released.
+    stop_supervised!(ExternalOperationConsumer)
   end
 
   @tag timeout: 120_000
