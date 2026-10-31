@@ -100,6 +100,15 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     assert {:ok, [{episode, departure}]} = Postgres.claim_operations(8)
     assert departure.external_operation_id == second_id
+
+    # An expired publication fence permits Episode end reservation, but must not
+    # let end overtake the still-pending durable cleanup operation.
+    Postgrex.query!(
+      connection,
+      "update sync_publication_fences set expires_at = now() - interval '1 second' where external_operation_id = $1",
+      [ChalkSync.UUID.dump!(second_id)]
+    )
+
     end_id = queue(owner, :end_episode)
 
     # An unfinalized predecessor remains a barrier even after it has been leased.

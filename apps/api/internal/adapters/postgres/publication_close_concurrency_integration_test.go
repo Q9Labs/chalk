@@ -95,4 +95,8 @@ func TestConcurrentPublicationRetirement(t *testing.T) {
 			t.Error("close replay:", err)
 		}
 	}
+	replayed, err := repository.LatestObservation(ctx, tenantID, episodeID)
+	if err != nil || replayed.Sequence != latest.Sequence {
+		t.Fatalf("close replay changed durable observation: before=%d after=%d err=%v", latest.Sequence, replayed.Sequence, err)
+	}
 }

@@ -16,6 +16,19 @@ type cleanupPublicationRepository struct {
 	participants []mediapublications.PublicationParticipant
 }
 
+func (r *cleanupPublicationRepository) ClosePublication(ctx context.Context, input mediapublications.CloseInput) (bool, error) {
+	var latest *provideroperations.Observation
+	if len(r.observations) > 0 {
+		latest = &r.observations[len(r.observations)-1]
+	}
+	next, err := mediapublications.CloseObservation(latest, input)
+	if err != nil || next == nil {
+		return false, err
+	}
+	_, err = r.AppendObservation(ctx, *next)
+	return err == nil, err
+}
+
 func (r *cleanupPublicationRepository) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {
 	observation := provideroperations.Observation{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: input.Incarnation, Sequence: input.Sequence, Publications: input.Publications}
 	r.observations = append(r.observations, observation)
