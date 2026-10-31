@@ -50,6 +50,7 @@ jobs:
     outputs:
       pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
       rollback_media: ${{ steps.media.outputs.members }}
+      npm_latest: ${{ steps.npm.outputs.npm_latest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -83,12 +84,24 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           python3 scripts/releases/web.py current
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.8.1
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+          registry-url: https://registry.npmjs.org/
+      - name: Retain the live npm latest tags before the first promotion changes them
+        id: npm
+        run: python3 scripts/releases/npm_dist_tags.py retain --output previous-npm.json
       - name: Retain rollback source and saved Pages identity
         env:
           SELECTION: ${{ needs.select.outputs.selection }}
           PAGES_ID: ${{ steps.pages.outputs.pages_deployment_id }}
         run: |
-          jq -n --argjson source "$SELECTION" --arg pages "$PAGES_ID" '{source:$source, pages_deployment_id:$pages}' > rollback.json
+          jq -n --argjson source "$SELECTION" --arg pages "$PAGES_ID" --argjson npm "$(cat previous-npm.json)" '{source:$source, pages_deployment_id:$pages, npm_latest:$npm}' > rollback.json
           cat rollback.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -96,6 +109,7 @@ jobs:
           path: |
             rollback.json
             previous-media.json
+            previous-npm.json
           retention-days: 90
   release:
     needs: [select, approve]
@@ -145,8 +159,35 @@ jobs:
       rollback_media: ${{ needs.approve.outputs.rollback_media }}
       pages_rollback_id: ${{ needs.approve.outputs.pages_deployment_id }}
     secrets: inherit
-  result:
+  rollback-npm:
     needs: [select, approve, release, proof, rollback]
+    if: >-
+      always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
+      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 12.8.1
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+          registry-url: https://registry.npmjs.org/
+      - name: Restore npm latest to the versions retained before promotion
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_NPM_LATEST: ${{ needs.approve.outputs.npm_latest }}
+        run: python3 scripts/releases/npm_dist_tags.py restore
+  result:
+    needs: [select, approve, release, proof, rollback, rollback-npm]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -156,6 +197,7 @@ jobs:
           DEPLOY_RESULT: ${{ needs.release.result }}
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           ROLLBACK_RESULT: ${{ needs.rollback.result }}
+          NPM_ROLLBACK_RESULT: ${{ needs.rollback-npm.result }}
           SELECTION: ${{ needs.select.outputs.selection }}
           APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
           ROLLBACK: ${{ toJSON(needs.rollback.outputs) }}
@@ -172,6 +214,7 @@ jobs:
           passed = os.environ.get('DEPLOY_RESULT') == 'success' and os.environ.get('PROOF_RESULT') == 'passed'
           previous = selection['previous']
           recovered = (os.environ.get('ROLLBACK_RESULT') == 'success'
+                       and os.environ.get('NPM_ROLLBACK_RESULT') == 'success'
                        and rollback.get('restored_source_release_id') == previous['release_id']
                        and bool(rollback.get('release_id'))
                        and rollback.get('applied_release_id') == rollback['release_id']
@@ -186,6 +229,7 @@ jobs:
                   else:
                       summary.write('RECOVERY NOT RUN — manual recovery required\n\n'
                                     'Recovery was skipped, cancelled, failed, or lacks explicit restoration evidence.\n\n'
+                                    "npm latest may need restoring to the versions in the promotion-rollback artifact's rollback.json (`npm_latest`).\n\n"
                                     'Run the Release workflow from master with exactly these manual inputs:\n\n```json\n')
                       manual = dict(target_sha=previous['target_sha'], release_managed=False, deploy_managed=True,
                                     managed_environment='production', deploy_web=True, manifest_run_id=previous['run_id'],
