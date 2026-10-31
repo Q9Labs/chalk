@@ -228,6 +228,8 @@ try {
           path: path.replace(/\/[0-9a-f-]{20,}/gu, "/:id"),
           status: response.status(),
           operation: input?.tracks?.map((track) => track.location).join(",") ?? null,
+          receiveOnly: input?.receive_only === true,
+          replacementCause: new URL(response.url()).searchParams.get("replacement_cause"),
           connectionNumber: input?.connection_id ? [...connections[index]].indexOf(input.connection_id) + 1 : null,
           hasConnection: Boolean(body.connection_id || body.connectionId),
           errorCode: body.code ?? body.error?.code ?? null,
