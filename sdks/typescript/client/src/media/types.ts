@@ -1,5 +1,6 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
+import type { SilentAudio } from "./silent-audio";
 export type CloudflareSFUBootstrap = {
   readonly connectionId: string;
   readonly stunServer: string;
@@ -100,6 +101,7 @@ export type CloudflareSFUClientOptions = {
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
+  readonly createSilentAudio?: () => Promise<SilentAudio | null>;
 };
 export type CloudflareSFURestartOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;

@@ -1,5 +1,6 @@
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { ReceiveStallRecovery } from "./receive-stall";
+import { createSilentAudio, type SilentAudio } from "./silent-audio";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
 import { subscribeSnapshot } from "./observers";
@@ -60,6 +61,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
+  readonly #createSilentAudio: () => Promise<SilentAudio | null>;
   readonly #pollIntervalMs: number;
   readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
@@ -76,6 +78,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #retiredLocalCause: LocalPublicationRetirementCause = "forced_pause";
   #replacementCause: MediaConnectionReplacementCause | undefined;
+  #silentAudio: SilentAudio | null = null;
+  #silentAudioRequested = false;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
@@ -110,6 +114,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
+    this.#createSilentAudio = options.createSilentAudio ?? createSilentAudio;
     this.#connection = this.#createPeerConnection(options.bootstrap);
     this.#snapshot = freezeSnapshot({
       connection: { phase: "idle", peerConnectionState: this.#connection.connectionState, iceConnectionState: this.#connection.iceConnectionState },
@@ -169,6 +174,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       track.addEventListener("ended", state.endedListener);
     }
     this.#localTracks.set(source, state);
+    if (source === "microphone") this.#warmSilentAudio();
     this.#publishSnapshot();
     this.#emitLocal();
   }
@@ -524,6 +530,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#localTracks.clear();
     void this.#retireOwnedPublications();
+    this.#silentAudio?.dispose();
+    this.#silentAudio = null;
     this.#started = false;
     this.#cursor = null;
     this.#publishSnapshot("stopped", null);
@@ -592,15 +600,36 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#emitLocal();
     return state.enabled;
   }
+  // Start the audio graph while the join or unmute gesture is still fresh. A mute
+  // before it is ready, or on a platform without it, detaches the sender instead.
+  #warmSilentAudio(): void {
+    if (this.#silentAudioRequested) return;
+    this.#silentAudioRequested = true;
+    void this.#createSilentAudio().then(
+      (silence) => {
+        if (this.#stopped) silence?.dispose();
+        else this.#silentAudio = silence;
+        // A platform that refused to start the graph may allow it at the next gesture.
+        this.#silentAudioRequested = silence !== null;
+      },
+      (error: unknown) => {
+        this.#silentAudioRequested = false;
+        this.#reportError(error);
+      },
+    );
+  }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {
     const transceiver = state.transceiver;
+    // A muted microphone keeps sending silence, so the provider never sees the
+    // 30 second RTP gap that expires a detached track and the publication ID survives.
+    const silence = state.source === "microphone" ? this.#silentAudio : null;
     for (const publication of this.#ownedPublications) {
-      if (publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
+      if (!silence && publication.transceiver === transceiver && publication.lifecycle.kind === "confirmed") publication.detachedAt ??= Date.now();
     }
     state.desiredEnabled = false;
     state.track.enabled = false;
     // Queue the detach before notifying consumers, but never wait to expose off.
-    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(null)) : Promise.resolve();
+    const detach = transceiver ? this.#boundPeerOperation(transceiver.sender.replaceTrack(silence?.track ?? null)) : Promise.resolve();
     state.enabled = false;
     this.#publishSnapshot();
     this.#emitLocal();

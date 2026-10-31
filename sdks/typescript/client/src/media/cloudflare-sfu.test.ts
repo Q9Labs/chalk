@@ -941,6 +941,45 @@ it.each([false, true])("republishes expired capture after 40 seconds so the remo
   }
 });
 
+it.each(["microphone and camera", "microphone only"] as const)("mute keeps the microphone publication sending silence, so unmute is a local track swap (%s)", async (shape) => {
+  const silence = new FakeTrack("silence", "audio");
+  const dispose = vi.fn();
+  const harness = createHarness({ createSilentAudio: async () => ({ track: silence as unknown as MediaStreamTrack, dispose }) });
+  const microphone = new FakeTrack("microphone", "audio");
+  const withCamera = shape === "microphone and camera";
+  try {
+    await harness.client.start(fakeStream(...(withCamera ? [microphone, new FakeTrack("camera", "video")] : [microphone])));
+    const original = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")!.publicationId;
+    const sessionsBefore = harness.peers.length;
+    const addsBefore = harness.transport.addInputs.length;
+    const sender = harness.peers[0]!.getSenders().find((item) => item.track === (microphone as unknown as MediaStreamTrack))!;
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 5 * 60_000);
+
+    await harness.client.pauseLocalCapture("microphone");
+    await harness.client.clearPreparedLocalTrack("microphone");
+    expect(sender.track).toBe(silence);
+    expect(microphone.readyState).toBe("ended");
+    expect(harness.transport.localPublications.has(original!)).toBe(true);
+
+    // Minutes of mute never age the publication out: silence is still RTP at the provider.
+    const captured = new FakeTrack("microphone-2", "audio");
+    harness.client.prepareLocalTrack("microphone", captured as unknown as MediaStreamTrack);
+    await harness.client.setLocalSourceIntent("microphone", true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+    expect(sender.track).toBe(captured);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({ enabled: true, publicationId: original });
+    expect(harness.transport.addInputs).toHaveLength(addsBefore);
+    expect(harness.transport.closeInputs).toHaveLength(0);
+    expect(harness.peers).toHaveLength(sessionsBefore);
+    harness.client.stop();
+    expect(dispose).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+    harness.client.stop();
+  }
+});
+
 it("acknowledges Sync capture unavailability without retiring the retained sender", async () => {
   const harness = createHarness();
   try {
@@ -1513,7 +1552,8 @@ it("keeps a rejected microphone Off paused in the production adapter", async () 
     await expect(client.media.setMicrophoneEnabled(false)).rejects.toBeDefined();
     const local = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
     const senderAttached = harness.peers.some((peer) => peer.getSenders().some((sender) => sender.track?.id === microphone.id));
-    expect({ trackEnabled: microphone.enabled, adapterEnabled: local?.enabled, senderAttached }).toEqual({ trackEnabled: false, adapterEnabled: false, senderAttached: false });
+    // Mute releases the capture, so the adapter no longer lists the microphone as a local track.
+    expect({ trackEnabled: microphone.enabled, adapterEnabled: local?.enabled ?? false, senderAttached }).toEqual({ trackEnabled: false, adapterEnabled: false, senderAttached: false });
   } finally {
     client.dispose();
     harness.client.stop();
@@ -2545,6 +2585,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly createSilentAudio?: CloudflareSFUClientOptions["createSilentAudio"];
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -2563,6 +2604,7 @@ function createHarness(
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory,
+    createSilentAudio: options.createSilentAudio,
   });
   return { client, peers, transport, peerConnectionFactory };
 }
