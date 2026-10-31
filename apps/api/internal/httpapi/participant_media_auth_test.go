@@ -73,6 +73,39 @@ func TestParticipantMediaRouteRejectsMismatchedConnectionBeforeProviderCall(t *t
 	}
 }
 
+func TestReceiveOnlyCloseRejectsMismatchedConnectionBeforeProviderCall(t *testing.T) {
+	subject := participantMediaSubject(t)
+	verifier := &participantMediaVerifierStub{subject: subject}
+	authorizer := &activeParticipantAuthorizerStub{}
+
+	router := chi.NewRouter()
+	router.Use(requireParticipantMedia(verifier, authorizer))
+	sfuCloseTracksEndpoint(nil, nil, nil, nil, nil).Mount(router, RateLimitOptions{})
+
+	path := fmt.Sprintf(
+		"/tenants/%s/spaces/%s/episodes/%s/participants/%s/media/sfu/tracks/close",
+		subject.TenantID,
+		subject.SpaceID,
+		subject.EpisodeID,
+		subject.ParticipantID,
+	)
+	request := httptest.NewRequest(http.MethodPut, path, bytes.NewBufferString(`{"connection_id":"another-connection","receive_only":true,"force":true,"tracks":[{"mid":"1","source":"microphone","publication_id":"remote"}]}`))
+	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusForbidden)
+	}
+	if response.Body.String() != `{"error":{"code":"access.forbidden","message":"Access denied"}}`+"\n" {
+		t.Fatalf("body = %q", response.Body.String())
+	}
+	if verifier.called != 1 || authorizer.called != 1 || authorizer.subject != subject {
+		t.Fatalf("authentication calls: verifier=%d authorizer=%d subject=%#v", verifier.called, authorizer.called, authorizer.subject)
+	}
+}
+
 func TestParticipantMediaAddTracksLabelsProviderCallWithRouteIDs(t *testing.T) {
 	subject := participantMediaSubject(t)
 	plane := &addTracksRouteFixture{}

@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 const baseline = "3f9fe4385eb3ba000953b6b0198ddc705c508db9";
 const fixed = execFileSync("git", ["rev-parse", process.env.CHALK_PARTIAL_FIX_REF || "HEAD"], { encoding: "utf8" }).trim();
-export const revisions = {
+const requestedRevisions = {
   server: fixed,
   ...Object.fromEntries(
     [1, 2, 3].flatMap((run) => [
@@ -12,7 +13,9 @@ export const revisions = {
     ]),
   ),
 };
-if (process.argv[1] === import.meta.filename) {
+const preparing = process.argv[1] === import.meta.filename;
+export const revisions = preparing ? requestedRevisions : JSON.parse(readFileSync(resolve(".private/receive-partial/revisions.json"), "utf8"));
+if (preparing) {
   for (const [version, revision] of Object.entries(revisions)) {
     if (version === "server") continue;
     const destination = resolve(".private/receive-partial", version);

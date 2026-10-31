@@ -117,6 +117,25 @@ it("re-pulls only a stalled publication and retires its previous receiver", asyn
   );
 });
 
+it("falls back to one connection rebuild when targeted receive retirement fails", async () => {
+  let replacements = 0;
+  let receiver: ReturnType<typeof createHarness>;
+  await withTimedHarness(
+    async (h) => {
+      receiver = h;
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await reviewSubscribe(h);
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => reviewStats(h, (source) => (source === "microphone" ? 10 : Date.now())));
+      vi.spyOn(h.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("receive close unavailable", "signaling_failed", { status: 503 }));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(replacements).toBe(1);
+      expect(h.peers[0]!.closed).toBe(true);
+      expect(h.transport.addInputs.filter((input) => input.replacementCause === "receive_stalled")).toEqual([expect.objectContaining({ connectionId: "targeted-fallback-1" })]);
+    },
+    { replaceMediaConnection: async () => reviewReplacement(receiver, `targeted-fallback-${++replacements}`) },
+  );
+});
+
 it("formerly flowing DTX audio records a partial packet freeze", async () => {
   await withTimedHarness(
     async (h) => {
