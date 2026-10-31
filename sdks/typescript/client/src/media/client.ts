@@ -56,6 +56,9 @@ const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
 // Cloudflare expires tracks after 30 seconds without RTP. Leave time for the
 // resume operation rather than trusting Chalk's registry as provider liveness.
 const CAPTURE_REUSE_WINDOW_MS = 20_000;
+// A publication is announced before its publisher's transport connects. A pull in that window can fail,
+// and the provider then keeps failing that track, so a publication announced mid-call waits this long.
+const DEFAULT_NEW_PUBLICATION_PULL_DELAY_MS = 500;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
@@ -64,6 +67,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #participantId: string;
   readonly #peerConnectionFactory: ((configuration: RTCConfiguration) => RTCPeerConnection) | undefined;
   readonly #pollIntervalMs: number;
+  readonly #newPublicationPullDelayMs: number;
   readonly #replaceMediaConnection: (() => Promise<CloudflareSFUBootstrap>) | undefined;
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
@@ -82,6 +86,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
+  readonly #firstSeenRemote = new Map<string, number>();
   readonly #receiveProgress = new ReceiveStallRecovery();
   readonly #viewerLayerPending = new Map<string, ViewerLayerChange>();
   #viewerLayerUpdating = false;
@@ -111,6 +116,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
+    this.#newPublicationPullDelayMs = options.newPublicationPullDelayMs ?? DEFAULT_NEW_PUBLICATION_PULL_DELAY_MS;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onRemoteTrack = options.onRemoteTrack;
@@ -812,8 +818,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (!desiredIds.has(publicationId)) this.#subscribedPublicationIds.delete(publicationId);
     }
     const now = Date.now();
+    for (const publicationId of this.#firstSeenRemote.keys()) {
+      if (!desiredIds.has(publicationId)) this.#firstSeenRemote.delete(publicationId);
+    }
+    // Publications in the first snapshot were announced before this client joined, so their publishers are connected.
+    for (const publicationId of desiredIds) {
+      if (!this.#firstSeenRemote.has(publicationId)) this.#firstSeenRemote.set(publicationId, this.#cursor === null ? Number.NEGATIVE_INFINITY : now);
+    }
     return [...desired]
       .filter(([key, publication]) => {
+        if (now - (this.#firstSeenRemote.get(publication.publicationId) ?? Number.NEGATIVE_INFINITY) < this.#newPublicationPullDelayMs) return false;
         if (this.#remoteTracks.get(key)?.publicationId === publication.publicationId) {
           if (!this.#receiveProgress.canRepull(publication.publicationId) && !(this.#replaceMediaConnection && this.#receiveProgress.canRebuild(publication.publicationId))) return false;
         }
