@@ -12,7 +12,7 @@ const ok = (body) => ({ ok: true, json: async () => body });
 
 test("parses recorded-shape empty, one and several Episode tables by field name", async () => {
   assert.deepEqual(parseTabular(await fixture("empty")), []);
-  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: "api_unpulled", count: 1 }]);
+  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: "api_unpulled", events: 1 }]);
   const rows = parseTabular(await fixture("several"));
   assert.equal(rows.length, 3);
   const merged = mergeEpisodes(rows);
@@ -21,28 +21,28 @@ test("parses recorded-shape empty, one and several Episode tables by field name"
   assert.equal(merged[0].total, 3);
   assert.equal(evaluate(rows, window).length, 2);
   assert.deepEqual(mergeEpisodes([]), []);
-  assert.deepEqual(mergeEpisodes([{ episode_id: "injection", signal: "api_unpulled", count: 1 }]), []);
+  assert.deepEqual(mergeEpisodes([{ episode_id: "injection", signal: "api_unpulled", events: 1 }]), []);
   assert.deepEqual(mergeEpisodes([...rows, rows[0]])[0].counts, { api_unpulled: 2, synthetic_second: 2 });
 });
 
-test("rejects malformed, partial and invalid count results without leaking body", async () => {
+test("rejects malformed, partial and invalid events results without leaking body", async () => {
   const one = await fixture("one");
   for (const body of [null, {}, { tables: [] }, await fixture("malformed"), { ...one, status: { isPartial: true } }, { ...one, status: { isEstimate: true } }]) {
     assert.throws(() => parseTabular(body), /malformed tabular/);
   }
-  for (const count of [-1, 1.5, "1", null]) {
+  for (const events of [-1, 1.5, "1", null]) {
     const body = structuredClone(one);
-    body.tables[0].columns[2][0] = count;
+    body.tables[0].columns[2][0] = events;
     assert.throws(() => parseTabular(body), /malformed tabular/);
   }
 });
 
 test("threshold is one; stable Episode keys merge signals across overlapping windows", () => {
   assert.equal(EPISODE_THRESHOLD, 1);
-  assert.deepEqual(evaluate([{ episode_id: id, signal: "api_unpulled", count: 0 }], window), []);
+  assert.deepEqual(evaluate([{ episode_id: id, signal: "api_unpulled", events: 0 }], window), []);
   const rows = [
-    { episode_id: id, signal: "api_unpulled", count: 1 },
-    { episode_id: id.toUpperCase(), signal: "synthetic_second", count: 2 },
+    { episode_id: id, signal: "api_unpulled", events: 1 },
+    { episode_id: id.toUpperCase(), signal: "synthetic_second", events: 2 },
   ];
   const first = evaluate(rows, window);
   const second = evaluate(rows, { startTime: "2026-10-31T11:55:00.000Z", endTime: "2026-10-31T12:05:00.000Z" });
@@ -75,7 +75,7 @@ test("posts exact payload, requests a ten-minute APL window and logs aggregates 
   assert.equal(new Date(body.endTime) - new Date(body.startTime), 600000);
   assert.ok(body.apl.includes(env.CHALK_AXIOM_LOG_DATASET));
   assert.ok(body.apl.includes("media.listener_publication_unpulled"));
-  assert.match(body.apl, /project episode_id, signal, count$/);
+  assert.match(body.apl, /project episode_id, signal, events$/);
   assert.doesNotMatch(body.apl, /participant|publication_id|tenant|space|sdk.connection_report/);
   assert.deepEqual(SIGNALS, [{ name: "api_unpulled", event: "media.listener_publication_unpulled" }]);
   assert.equal(calls[1].url, env.ONCALL_WEBHOOK_URL);

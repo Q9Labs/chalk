@@ -207,10 +207,16 @@ runs every five minutes against a ten-minute Axiom window. At least one
 `media.listener_publication_unpulled` event pages Oncall, with one incident per
 Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
 key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
-contain only aggregate counts; the query projects only Episode ID, signal and
-count, and validated UUIDs go only in the Oncall POST body. The workflow requires
-`CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` (the private dataset name)
-and the existing `ONCALL_WEBHOOK_URL`. A webhook-only drill never reads Axiom.
+contain only aggregate counts; the query projects only `episode_id`, `signal` and
+`events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
+`CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` and the existing
+`ONCALL_WEBHOOK_URL`. `CHALK_AXIOM_LOG_DATASET` must be the production API log
+dataset, the same one the production Axiom monitors use as `LOG_DATASET`.
+The query does not filter by environment: pointing it at a dataset that also
+holds nightly logs would page for nightly. A fired alert fails the run so GitHub
+sends a failed-run email. Because `media.listener_publication_unpulled` is
+one-shot per pair, a stuck Episode stops firing roughly ten minutes after its
+last new event. A webhook-only drill never reads Axiom.
 The `listener-audio` scope must also be registered for Chalk in Oncall's registry
 outside this repo. #721 will add `sdk.connection_report` with
 `['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not

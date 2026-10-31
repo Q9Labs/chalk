@@ -6,7 +6,7 @@
       "fields": [
         { "name": "episode_id", "type": "string" },
         { "name": "signal", "type": "string" },
-        { "name": "count", "type": "integer" }
+        { "name": "events", "type": "integer" }
       ],
       "columns": [[], [], []]
     }

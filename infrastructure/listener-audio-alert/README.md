@@ -13,16 +13,18 @@ One incident merges all signal counts for an Episode and includes the UTC query
 window. The stable key is `listener-audio:chalk:<episode_id>`; Oncall dedupes
 overlapping ten-minute windows and later repeats by key. A fired alert also
 fails the run so GitHub emails the failure. Query and webhook failures fail the
-run too. Empty results succeed without posting. One-shot API events age out of
-the window even if the underlying problem remains.
+run too. Empty results succeed without posting. Because
+`media.listener_publication_unpulled` is one-shot per pair, a stuck Episode
+stops firing roughly ten minutes after its last new event, even if the
+underlying problem remains.
 
 The workflow reads these secrets (no values are provisioned by this change):
 
 - `CHALK_AXIOM_QUERY_TOKEN`: an Axiom API token with query permission on the API log dataset.
-- `CHALK_AXIOM_LOG_DATASET`: the private production API log dataset name, kept secret so public logs mask it.
+- `CHALK_AXIOM_LOG_DATASET`: the private production API log dataset name, kept secret so public logs mask it. This must be the same dataset the production Axiom monitors use as `LOG_DATASET`. The query does not filter by environment: a dataset that also holds nightly logs would page for nightly.
 - `ONCALL_WEBHOOK_URL`: the existing Oncall webhook.
 
-The APL projects only Episode ID, signal and count. Public workflow output logs
+The APL projects only `episode_id`, `signal` and `events`. Public workflow output logs
 only aggregate Episode and event counts, never IDs, hashes, names, IPs or the
 dataset. Valid UUID Episode IDs go only to Oncall; other IDs are dropped.
 The parser follows Axiom's documented [tabular response](https://axiom.co/docs/restapi/query):

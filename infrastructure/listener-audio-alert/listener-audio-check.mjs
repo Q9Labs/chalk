@@ -12,8 +12,8 @@ export function query(dataset) {
 | where ['service.name'] == 'chalk-api' and ['attributes.event'] in (${SIGNALS.map((s) => literal(s.event)).join(", ")})
 | where ${SIGNALS.map(predicate).join(" or ")}
 | extend signal=case(${SIGNALS.map((s) => `${predicate(s)}, ${literal(s.name)}`).join(", ")}, '')
-| summarize count=count() by episode_id=tostring(['attributes.episode_id']), signal
-| project episode_id, signal, count`;
+| summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal
+| project episode_id, signal, events`;
 }
 
 export function parseTabular(body) {
@@ -24,13 +24,13 @@ export function parseTabular(body) {
   if (body?.status?.isPartial || body?.status?.isEstimate || body?.status?.messages?.some((m) => m.priority === "error")) malformed();
   if (!Array.isArray(body?.tables) || body.tables.length !== 1 || !Array.isArray(table?.fields) || !Array.isArray(table?.columns)) malformed();
   const names = table.fields.map((f) => f?.name);
-  if (names.length !== 3 || new Set(names).size !== 3 || !["episode_id", "signal", "count"].every((n) => names.includes(n))) malformed();
+  if (names.length !== 3 || new Set(names).size !== 3 || !["episode_id", "signal", "events"].every((n) => names.includes(n))) malformed();
   const columns = table.columns;
   if (columns.length !== 3 || !columns.every((c) => Array.isArray(c) && c.length === columns[0].length)) malformed();
   return columns[0]
     .map((_, i) => {
       const row = Object.fromEntries(names.map((name, j) => [name, columns[j][i]]));
-      if (typeof row.episode_id !== "string" || typeof row.signal !== "string" || !Number.isSafeInteger(row.count) || row.count < 0) malformed();
+      if (typeof row.episode_id !== "string" || typeof row.signal !== "string" || !Number.isSafeInteger(row.events) || row.events < 0) malformed();
       return row;
     })
     .filter((row) => uuid.test(row.episode_id));
@@ -38,11 +38,11 @@ export function parseTabular(body) {
 
 export function mergeEpisodes(rows) {
   const episodes = new Map();
-  for (const { episode_id, signal, count } of rows) {
+  for (const { episode_id, signal, events } of rows) {
     if (!uuid.test(episode_id)) continue;
     const id = episode_id.toLowerCase();
     const counts = episodes.get(id) ?? new Map();
-    counts.set(signal, (counts.get(signal) ?? 0) + count);
+    counts.set(signal, (counts.get(signal) ?? 0) + events);
     episodes.set(id, counts);
   }
   return [...episodes]
@@ -60,7 +60,7 @@ export function evaluate(rows, { startTime, endTime }) {
     .map((e) => ({
       key: `listener-audio:chalk:${e.episode_id}`,
       detail: `Listener audio missing. ${Object.entries(e.counts)
-        .map(([signal, count]) => `${signal}: ${count}`)
+        .map(([signal, events]) => `${signal}: ${events}`)
         .join(", ")}. UTC query window: ${startTime} to ${endTime}.`,
     }));
 }
@@ -100,7 +100,7 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   if (!drill) {
     const rows = await readSignals({ fetchImpl, token: env.CHALK_AXIOM_QUERY_TOKEN, dataset: env.CHALK_AXIOM_LOG_DATASET, ...window });
     incidents = evaluate(rows, window);
-    log(`${incidents.length} Episodes affected, ${rows.reduce((sum, row) => sum + row.count, 0)} events`);
+    log(`${incidents.length} Episodes affected, ${rows.reduce((sum, row) => sum + row.events, 0)} events`);
   }
   if (!incidents.length) return 0;
   let response;
