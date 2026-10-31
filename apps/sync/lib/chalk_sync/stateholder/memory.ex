@@ -109,6 +109,16 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:claim_operations, limit, excluded_episodes, episode_limit})
 
   @impl ChalkSync.Stateholder
+  def claim_operations(limit, excluded_episodes, episode_limit, _owner_id),
+    do: claim_operations(limit, excluded_episodes, episode_limit)
+
+  @impl ChalkSync.Stateholder
+  def renew_dispatch_lease(_episode, _dispatch_lease), do: :ok
+
+  @impl ChalkSync.Stateholder
+  def release_dispatch_lease(_episode, _dispatch_lease), do: :ok
+
+  @impl ChalkSync.Stateholder
   def claim_local_operations(limit),
     do: GenServer.call(__MODULE__, {:claim_local_operations, limit})
 
@@ -118,7 +128,17 @@ defmodule ChalkSync.Stateholder.Memory do
 
   @impl ChalkSync.Stateholder
   def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome),
-    do: GenServer.call(__MODULE__, {:finalize_operation, episode, external_operation_id, outcome})
+    do: finalize_operation(episode, external_operation_id, outcome, nil)
+
+  @impl ChalkSync.Stateholder
+  def finalize_operation(
+        %EpisodeKey{} = episode,
+        external_operation_id,
+        outcome,
+        _dispatch_lease
+      ),
+      do:
+        GenServer.call(__MODULE__, {:finalize_operation, episode, external_operation_id, outcome})
 
   @impl ChalkSync.Stateholder
   def participant_authority(%EpisodeKey{} = episode, participant_id, expected_generation),

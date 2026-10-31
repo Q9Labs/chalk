@@ -41,6 +41,7 @@ defmodule ChalkSync.Stateholder.Postgres do
   alias ChalkSync.UUID
 
   @transaction_timeout_ms 3_000
+  @default_dispatch_owner_key {__MODULE__, :default_dispatch_owner}
 
   @impl ChalkSync.Stateholder
   def decide_command(%Identity{} = identity, %Command{} = command) do
@@ -223,15 +224,35 @@ defmodule ChalkSync.Stateholder.Postgres do
 
   @impl ChalkSync.Stateholder
   def claim_operations(limit) when is_integer(limit) and limit in 1..64,
-    do: claim_operation_rows(&ExternalOperationClaims.claim_operations(&1, limit))
+    do: claim_operations(limit, [], 64, default_dispatch_owner_id())
 
   @impl ChalkSync.Stateholder
   def claim_operations(limit, excluded_episodes, episode_limit)
       when is_integer(limit) and limit in 1..64 do
+    claim_operations(limit, excluded_episodes, episode_limit, default_dispatch_owner_id())
+  end
+
+  @impl ChalkSync.Stateholder
+  def claim_operations(limit, excluded_episodes, episode_limit, owner_id)
+      when is_integer(limit) and limit in 1..64 and is_binary(owner_id) do
     claim_operation_rows(
-      &ExternalOperationClaims.claim_operations(&1, limit, excluded_episodes, episode_limit)
+      &ExternalOperationClaims.claim_operations(
+        &1,
+        limit,
+        excluded_episodes,
+        episode_limit,
+        owner_id
+      )
     )
   end
+
+  @impl ChalkSync.Stateholder
+  def renew_dispatch_lease(episode, dispatch_lease),
+    do: ExternalOperationClaims.renew_dispatch_lease(episode, dispatch_lease)
+
+  @impl ChalkSync.Stateholder
+  def release_dispatch_lease(episode, dispatch_lease),
+    do: ExternalOperationClaims.release_dispatch_lease(episode, dispatch_lease)
 
   @impl ChalkSync.Stateholder
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
@@ -385,9 +406,23 @@ defmodule ChalkSync.Stateholder.Postgres do
   @impl ChalkSync.Stateholder
   def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome)
       when is_binary(external_operation_id) and is_tuple(outcome) do
+    finalize_operation(episode, external_operation_id, outcome, nil)
+  end
+
+  @impl ChalkSync.Stateholder
+  def finalize_operation(
+        %EpisodeKey{} = episode,
+        external_operation_id,
+        outcome,
+        dispatch_lease
+      )
+      when is_binary(external_operation_id) and is_tuple(outcome) do
     case UUID.dump(external_operation_id) do
-      {:ok, _id} -> finalize_known_operation(episode, external_operation_id, outcome)
-      :error -> {:error, :operation_not_found}
+      {:ok, _id} ->
+        finalize_known_operation(episode, external_operation_id, outcome, dispatch_lease)
+
+      :error ->
+        {:error, :operation_not_found}
     end
   rescue
     exception ->
@@ -402,8 +437,8 @@ defmodule ChalkSync.Stateholder.Postgres do
       ExternalOperationDecision.resolve_uncertain_finalization(episode, external_operation_id)
   end
 
-  defp finalize_known_operation(episode, external_operation_id, outcome) do
-    case run_operation_finalization(episode, external_operation_id, outcome) do
+  defp finalize_known_operation(episode, external_operation_id, outcome, dispatch_lease) do
+    case run_operation_finalization(episode, external_operation_id, outcome, dispatch_lease) do
       {:ok, %OperationDecision{} = decision} ->
         WebhookObservation.external_operation(episode, external_operation_id, decision)
         {:ok, decision}
@@ -502,17 +537,42 @@ defmodule ChalkSync.Stateholder.Postgres do
     )
   end
 
-  defp run_operation_finalization(episode, external_operation_id, outcome) do
+  defp run_operation_finalization(episode, external_operation_id, outcome, dispatch_lease) do
     Postgrex.transaction(
       Database.connection(episode),
       &ExternalOperationFinalizer.finalize_transaction(
         &1,
         episode,
         external_operation_id,
-        outcome
+        outcome,
+        dispatch_lease
       ),
       timeout: @transaction_timeout_ms,
       commit_comment: "chalk sync external operation finalization"
     )
+  end
+
+  defp default_dispatch_owner_id do
+    case :persistent_term.get(@default_dispatch_owner_key, nil) do
+      nil ->
+        initialize_default_dispatch_owner_id()
+
+      owner_id ->
+        owner_id
+    end
+  end
+
+  defp initialize_default_dispatch_owner_id do
+    :global.trans({@default_dispatch_owner_key, self()}, fn ->
+      case :persistent_term.get(@default_dispatch_owner_key, nil) do
+        nil ->
+          owner_id = UUID.generate()
+          :persistent_term.put(@default_dispatch_owner_key, owner_id)
+          owner_id
+
+        owner_id ->
+          owner_id
+      end
+    end)
   end
 end

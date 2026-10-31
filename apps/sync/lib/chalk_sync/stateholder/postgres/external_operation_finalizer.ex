@@ -22,10 +22,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   @max_event_bytes 32 * 1024
   @schema_version 1
 
-  def finalize_transaction(connection, episode, external_operation_id, outcome) do
+  def finalize_transaction(connection, episode, external_operation_id, outcome),
+    do: finalize_transaction(connection, episode, external_operation_id, outcome, nil)
+
+  def finalize_transaction(connection, episode, external_operation_id, outcome, dispatch_lease) do
     Transaction.configure(connection)
     control = Authority.lock_control(connection, episode)
     policy = Authority.lock_episode(connection, episode)
+    lock_dispatch_lease(connection, episode, dispatch_lease)
     external = lock_external_operation(connection, episode, external_operation_id)
 
     cond do
@@ -45,6 +49,30 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         end
     end
   end
+
+  defp lock_dispatch_lease(_connection, _episode, nil), do: :ok
+
+  defp lock_dispatch_lease(
+         connection,
+         episode,
+         %{owner_id: owner_id, fence: fence}
+       )
+       when is_binary(owner_id) and is_integer(fence) do
+    params = [
+      Scope.uuid(episode.tenant_id),
+      Scope.uuid(episode.episode_id),
+      Scope.uuid(owner_id),
+      fence
+    ]
+
+    case Postgrex.query!(connection, SQL.lock_dispatch_lease(), params).rows do
+      [[1]] -> :ok
+      [] -> Postgrex.rollback(connection, {:error, :dispatch_lease_lost})
+    end
+  end
+
+  defp lock_dispatch_lease(connection, _episode, _dispatch_lease),
+    do: Postgrex.rollback(connection, {:error, :dispatch_lease_lost})
 
   defp stale_maximum_duration?(%{name: :maximum_duration_expired} = external, policy) do
     external.deadline_generation != policy.deadline_generation ||

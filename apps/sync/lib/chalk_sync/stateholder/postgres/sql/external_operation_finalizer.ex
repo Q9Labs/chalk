@@ -7,6 +7,15 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
     ExternalOperationClaims.read_operation() <> " for update"
   end
 
+  def lock_dispatch_lease do
+    """
+    select 1
+    from sync_episode_dispatch_leases
+    where tenant_id = $1 and episode_id = $2 and owner_id = $3 and fence = $4
+    for share
+    """
+  end
+
   def lock_admission_lifecycle_intent do
     """
     select lifecycle_intent_id, status, participant_generation

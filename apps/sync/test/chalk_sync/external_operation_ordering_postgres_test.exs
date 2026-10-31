@@ -1,8 +1,8 @@
 defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.ExternalOperationDispatchTestHelpers, as: Helpers
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.UUID
@@ -182,35 +182,15 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
   end
 
   defp fixture(connection, count) do
-    seed =
-      SyncPostgres.seed_episode(connection, count, %{}, %{
-        participants: List.duplicate(%{role: "owner"}, count)
-      })
+    seed = Helpers.fixture(connection, count)
 
     on_exit(fn -> SyncPostgres.cleanup(connection, seed.episode) end)
     seed
   end
 
-  defp queue(identity, name, payload \\ %{}) do
-    {:ok, operation} = Operation.new("judge_" <> UUID.generate(), name, payload)
-    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(identity, operation)
-    assert is_binary(id)
-    id
-  end
+  defp queue(identity, name, payload \\ %{}), do: Helpers.queue(identity, name, payload)
 
-  defp expire_fences(connection, seed) do
-    Postgrex.query!(
-      connection,
-      "update sync_publication_fences set created_at=now()-interval '2 hours', expires_at=now()-interval '1 hour' where episode_id=$1",
-      [UUID.dump!(seed.episode.episode_id)]
-    )
-
-    Postgrex.query!(
-      connection,
-      "update sync_external_operations set next_attempt_at=now()-interval '1 hour' where episode_id=$1",
-      [UUID.dump!(seed.episode.episode_id)]
-    )
-  end
+  defp expire_fences(connection, seed), do: Helpers.expire_fences(connection, seed)
 
   defp drain_operations do
     for _ <- 1..3 do
@@ -227,28 +207,8 @@ defmodule ChalkSync.ExternalOperationOrderingPostgresTest do
     end
   end
 
-  defp assert_pending_count(connection, seed, count) do
-    %{rows: [[^count]]} =
-      Postgrex.query!(
-        connection,
-        "select count(*) from sync_external_operations where episode_id=$1 and status='pending'",
-        [UUID.dump!(seed.episode.episode_id)]
-      )
-  end
+  defp assert_pending_count(connection, seed, count),
+    do: Helpers.assert_pending_count(connection, seed, count)
 
-  defp assert_ended(connection, seed) do
-    %{rows: [["ended"]]} =
-      Postgrex.query!(connection, "select status from episodes where id=$1", [
-        UUID.dump!(seed.episode.episode_id)
-      ])
-
-    %{rows: [[1]]} =
-      Postgrex.query!(
-        connection,
-        "select count(*) from sync_control_events where episode_id=$1 and event_name='participant_left'",
-        [UUID.dump!(seed.episode.episode_id)]
-      )
-
-    assert {:ok, []} = Postgres.claim_operations(8)
-  end
+  defp assert_ended(connection, seed), do: Helpers.assert_ended(connection, seed)
 end

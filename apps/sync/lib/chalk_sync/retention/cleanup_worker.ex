@@ -112,6 +112,9 @@ defmodule ChalkSync.Retention.CleanupWorker do
         publication_fences =
           delete_measurement(transaction, SQL.delete_publication_fences(), candidate)
 
+        _dispatch_leases =
+          delete_measurement(transaction, SQL.delete_episode_dispatch_leases(), candidate)
+
         grant_reservations =
           delete_measurement(transaction, SQL.delete_publication_grant_reservations(), candidate)
 

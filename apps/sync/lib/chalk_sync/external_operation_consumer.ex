@@ -1,11 +1,11 @@
 defmodule ChalkSync.ExternalOperationConsumer do
   @moduledoc """
-  Bounded executor for durable provider-neutral external operations.
+  Bounded executor for durable provider-neutral external operations. Episode
+  dispatch leases and fencing keep each ordered batch owned by one consumer.
 
-  PostgreSQL claims are the multi-node exclusion barrier. Adapter calls happen
-  after the claim transaction and retain the stable external operation id.
-  Ambiguous and retryable outcomes remain pending for the durable claim
-  schedule; only confirmed or terminal outcomes are finalized.
+  Adapter calls happen after the claim transaction and retain the stable
+  external operation id. Ambiguous and retryable outcomes remain pending for
+  the durable claim schedule; only confirmed or terminal outcomes are finalized.
   """
 
   use GenServer
@@ -19,6 +19,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Telemetry
+  alias ChalkSync.UUID
 
   @max_concurrency 8
   @default_page_size 32
@@ -59,7 +60,12 @@ defmodule ChalkSync.ExternalOperationConsumer do
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
-      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/3),
+      owner_id: UUID.generate(),
+      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/4),
+      renew_dispatch_lease:
+        Keyword.get(options, :renew_dispatch_lease, &Stateholder.renew_dispatch_lease/2),
+      release_dispatch_lease:
+        Keyword.get(options, :release_dispatch_lease, &Stateholder.release_dispatch_lease/2),
       media_plane: Keyword.get(options, :media_plane),
       recording_plane: Keyword.get(options, :recording_plane),
       last_success_at_ms: nil,
@@ -90,7 +96,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
       work =
         start_worker(fn ->
-          result = state.claim_operations.(state.page_size, excluded, slots)
+          result = state.claim_operations.(state.page_size, excluded, slots, state.owner_id)
           send(owner, {:claimed, self(), result})
         end)
 
@@ -265,25 +271,62 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp prepare_entry_leave(_episode, _operation), do: :ready
 
   defp execute_episode(episode, operations, state, owner) do
-    # Keep the master's claimed batch together and ordered within the Episode.
-    # Discovery continues for other Episodes while this worker awaits the provider.
-    Enum.each(operations, fn {^episode, operation} ->
-      started_at = System.monotonic_time()
+    dispatch_lease = operations |> hd() |> elem(1) |> Map.get(:dispatch_lease)
 
-      result =
-        execute_operation(
-          episode,
-          operation,
-          state.media_plane,
-          state.recording_plane,
-          &Stateholder.finalize_operation/3,
-          state.adapter_timeout_ms
-        )
+    try do
+      Enum.reduce_while(operations, :ok, fn {^episode, operation}, :ok ->
+        case renew_dispatch_lease(episode, dispatch_lease, state.renew_dispatch_lease) do
+          :ok ->
+            execute_episode_operation(episode, operation, dispatch_lease, state, owner)
+            {:cont, :ok}
 
-      report_result(operation.name, result, started_at)
-      send(owner, {:operation_result, episode, self(), result})
-    end)
+          result ->
+            log_dispatch_lease_renewal_failure(result)
+            {:halt, :dispatch_lease_lost}
+        end
+      end)
+    after
+      state.release_dispatch_lease.(episode, dispatch_lease)
+    end
   end
+
+  defp renew_dispatch_lease(_episode, nil, _renew), do: :ok
+
+  defp renew_dispatch_lease(episode, dispatch_lease, renew),
+    do: renew.(episode, dispatch_lease)
+
+  defp execute_episode_operation(episode, operation, dispatch_lease, state, owner) do
+    started_at = System.monotonic_time()
+
+    finalize = fn episode, operation_id, outcome ->
+      Stateholder.finalize_operation(episode, operation_id, outcome, dispatch_lease)
+    end
+
+    result =
+      execute_operation(
+        episode,
+        operation,
+        state.media_plane,
+        state.recording_plane,
+        finalize,
+        state.adapter_timeout_ms
+      )
+
+    report_result(operation.name, result, started_at)
+    send(owner, {:operation_result, episode, self(), result})
+  end
+
+  defp log_dispatch_lease_renewal_failure({:error, reason}) when is_atom(reason),
+    do: Logger.warning("sync external operation dispatch lease renewal failed: reason=#{reason}")
+
+  defp log_dispatch_lease_renewal_failure({:retryable, reason}) when is_atom(reason),
+    do:
+      Logger.warning(
+        "sync external operation dispatch lease renewal unavailable: reason=#{reason}"
+      )
+
+  defp log_dispatch_lease_renewal_failure(_result),
+    do: Logger.warning("sync external operation dispatch lease renewal failed")
 
   defp record_result(state, :confirmed),
     do: %{state | confirmed_count: state.confirmed_count + 1, consecutive_failures: 0}

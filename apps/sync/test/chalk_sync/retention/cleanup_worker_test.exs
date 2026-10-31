@@ -217,6 +217,17 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
     assert screen_share_lease_count(connection, unexpired) == 1
   end
 
+  test "deletes expired dispatch leases for retained Episodes", %{connections: connections} do
+    connection = hd(connections)
+    fixture = seed_ended_episode(connection, @retention_seconds + 1)
+    cleanup_fixture(connection, fixture)
+    insert_dispatch_lease(connection, fixture, DateTime.add(@now, -60, :second))
+
+    assert {:ok, %Result{episodes: 1}} = run_cleanup(connection, batch_size: 16)
+    assert checkpointed?(connection, fixture)
+    assert dispatch_lease_count(connection, fixture) == 0
+  end
+
   defp seed_ended_episode(connection, age_seconds) do
     fixture = SyncPostgres.seed_pending_join(connection)
 
@@ -586,6 +597,28 @@ defmodule ChalkSync.Retention.CleanupWorkerTest do
       Postgrex.query!(
         connection,
         "select count(*) from sync_screen_share_leases where tenant_id = $1 and episode_id = $2",
+        episode_ids(fixture)
+      ).rows
+
+    count
+  end
+
+  defp insert_dispatch_lease(connection, fixture, expires_at) do
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_episode_dispatch_leases (tenant_id, episode_id, owner_id, fence, expires_at)
+      values ($1, $2, $3, 1, $4)
+      """,
+      episode_ids(fixture) ++ [UUID.dump!(UUID.generate()), expires_at]
+    )
+  end
+
+  defp dispatch_lease_count(connection, fixture) do
+    [[count]] =
+      Postgrex.query!(
+        connection,
+        "select count(*) from sync_episode_dispatch_leases where tenant_id = $1 and episode_id = $2",
         episode_ids(fixture)
       ).rows
 

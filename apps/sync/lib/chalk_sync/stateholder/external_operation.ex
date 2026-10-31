@@ -36,7 +36,8 @@ defmodule ChalkSync.Stateholder.ExternalOperation do
     :producing_tracestate,
     :applied_event_id,
     :applied_revision,
-    :last_error_code
+    :last_error_code,
+    dispatch_lease: nil
   ]
 
   @type t :: %__MODULE__{}

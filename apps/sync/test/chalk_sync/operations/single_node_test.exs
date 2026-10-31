@@ -54,12 +54,17 @@ defmodule ChalkSync.Operations.SingleNodeTest do
     observations: observations
   } do
     # The controller migrates the stopped runtime's database before starting Sync.
-    for version <- [20_261_023_190_003, 20_261_030_180_000] do
+    for version <- [
+          20_261_023_190_003,
+          20_261_030_180_000,
+          20_261_031_090_000,
+          20_261_031_090_001
+        ] do
       assert {:error, :incompatible_database_migration} =
                Probe.validate_database(%{observations | migration_version: version})
     end
 
-    for version <- [20_261_031_090_000, 20_261_031_090_001] do
+    for version <- [20_261_031_130_000, 20_261_031_130_001] do
       assert :ok = Probe.validate_database(%{observations | migration_version: version})
     end
   end

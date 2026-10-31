@@ -52,11 +52,18 @@ defmodule ChalkSync.Stateholder do
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback claim_operations(pos_integer(), [String.t()], pos_integer()) ::
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback claim_operations(pos_integer(), [String.t()], pos_integer(), String.t()) ::
+              {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback renew_dispatch_lease(EpisodeKey.t(), map()) ::
+              :ok | {:error, atom()} | {:retryable, atom()}
+  @callback release_dispatch_lease(EpisodeKey.t(), map()) :: :ok
   @callback claim_local_operations(pos_integer()) ::
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback read_operation(EpisodeKey.t(), String.t()) ::
               {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
   @callback finalize_operation(EpisodeKey.t(), String.t(), tuple()) ::
+              {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  @callback finalize_operation(EpisodeKey.t(), String.t(), tuple(), map() | nil) ::
               {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
   @callback participant_authority(EpisodeKey.t(), String.t(), pos_integer() | nil) ::
               {:ok,
@@ -210,6 +217,21 @@ defmodule ChalkSync.Stateholder do
       when is_integer(limit) and limit in 1..64,
       do: impl().claim_operations(limit, excluded_episodes, episode_limit)
 
+  @spec claim_operations(pos_integer(), [String.t()], pos_integer(), String.t()) ::
+          {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  def claim_operations(limit, excluded_episodes, episode_limit, owner_id)
+      when is_integer(limit) and limit in 1..64 and is_binary(owner_id),
+      do: impl().claim_operations(limit, excluded_episodes, episode_limit, owner_id)
+
+  @spec renew_dispatch_lease(EpisodeKey.t(), map()) ::
+          :ok | {:error, atom()} | {:retryable, atom()}
+  def renew_dispatch_lease(%EpisodeKey{} = episode, dispatch_lease),
+    do: impl().renew_dispatch_lease(episode, dispatch_lease)
+
+  @spec release_dispatch_lease(EpisodeKey.t(), map()) :: :ok
+  def release_dispatch_lease(%EpisodeKey{} = episode, dispatch_lease),
+    do: impl().release_dispatch_lease(episode, dispatch_lease)
+
   @spec claim_local_operations(pos_integer()) ::
           {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
@@ -225,7 +247,13 @@ defmodule ChalkSync.Stateholder do
           {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
   def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome)
       when is_binary(external_operation_id) and is_tuple(outcome),
-      do: impl().finalize_operation(episode, external_operation_id, outcome)
+      do: finalize_operation(episode, external_operation_id, outcome, nil)
+
+  @spec finalize_operation(EpisodeKey.t(), String.t(), tuple(), map() | nil) ::
+          {:ok, OperationDecision.t()} | {:error, atom()} | {:retryable, atom()}
+  def finalize_operation(%EpisodeKey{} = episode, external_operation_id, outcome, dispatch_lease)
+      when is_binary(external_operation_id) and is_tuple(outcome),
+      do: impl().finalize_operation(episode, external_operation_id, outcome, dispatch_lease)
 
   @spec participant_authority(EpisodeKey.t(), String.t(), pos_integer() | nil) ::
           {:ok, map()} | {:error, atom()} | {:retryable, atom()}
