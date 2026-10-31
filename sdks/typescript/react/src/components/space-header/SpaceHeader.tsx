@@ -1,6 +1,7 @@
-import React, { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
+import { useNarrowCall } from "../../internal/call-width";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { ChalkPopover, ChalkSheet } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
@@ -11,24 +12,6 @@ import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
-const PHONE_WIDTH = 640;
-
-/** A header inside a call follows the call's width, as the `chalk-call` container rules do; elsewhere it follows the window. */
-function usePhoneHeader(header: RefObject<HTMLElement | null>): boolean {
-  const narrowWindow = useMediaQuery(`(max-width: ${PHONE_WIDTH}px)`);
-  const [narrowCall, setNarrowCall] = useState<boolean | null>(null);
-  useLayoutEffect(() => {
-    const frame = header.current?.closest<HTMLElement>("[data-part=call-frame]");
-    if (!frame || typeof ResizeObserver === "undefined") return setNarrowCall(null);
-    setNarrowCall(frame.getBoundingClientRect().width <= PHONE_WIDTH);
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) setNarrowCall(entry.contentRect.width <= PHONE_WIDTH);
-    });
-    observer.observe(frame);
-    return () => observer.disconnect();
-  }, [header]);
-  return narrowCall ?? narrowWindow;
-}
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
@@ -42,7 +25,8 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
-  const phone = usePhoneHeader(focusScope);
+  const narrowWindow = useMediaQuery("(max-width: 640px)");
+  const phone = useNarrowCall() || narrowWindow;
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />
