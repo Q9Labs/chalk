@@ -3,6 +3,9 @@
 Realtime SFU and TURN share one 1,000 GB monthly free allowance and cost USD
 0.05 per GB past it
 ([pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/)).
+Traffic between TURN and our SFU is not charged twice, so the extra cost TURN
+can add is TURN traffic that does not go to our SFU, such as credential abuse.
+This check covers SFU growth and that abuse.
 Cloudflare's usage alert (`billing_usage_alert`) lists no Realtime product, and
 the pinned OpenTofu provider cannot create a budget alert, so this job reads
 the numbers itself.
@@ -13,8 +16,7 @@ It sums SFU and TURN egress from Cloudflare GraphQL analytics
 (`callsUsageAdaptiveGroups` and `callsTurnUsageAdaptiveGroups`) and posts to the
 Oncall webhook when:
 
-- the last 24 hours sent 100 GB or more (about 9 Mbps sustained; a 200 Mbps
-  flood costs about USD 58 past the allowance in one day), or
+- the last 24 hours sent 100 GB or more (about 9 Mbps sustained), or
 - the month-to-date total crossed 500 GB or 800 GB since the previous run, so
   each threshold fires once a month.
 
