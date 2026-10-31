@@ -435,7 +435,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
         this.#screenAudioTrack?.stop();
       }
       const ports = this.#ports;
-      if (ports) {
+      if (ports && source === "microphone") this.#retainPause(state, this.#pauseMicrophone(ports.media));
+      else if (ports) {
         ports.media.setLocalSourceIntent?.(source, false, "user_pause");
         this.#retainPause(state, this.#beginLocalPause(ports, source, "user_pause"));
       }
@@ -866,6 +867,22 @@ class MediaControllerRuntime implements MediaControllerEffects {
         }),
       ),
     );
+  }
+  /**
+   * Mute leaves the microphone publication in place: the sender switches to silence, so listeners keep
+   * the track and the next unmute is a local track swap. Releasing the capture turns off the browser's
+   * recording indicator, and the next unmute captures again from the selected device.
+   */
+  async #pauseMicrophone(media: ConnectionPorts["media"]): Promise<void> {
+    const track = this.#tracks.get("microphone");
+    try {
+      await media.pauseLocalCapture?.("microphone");
+      await media.clearPreparedLocalTrack("microphone");
+    } finally {
+      if (track && this.#tracks.get("microphone") === track) this.#deleteTrack("microphone");
+      track?.stop();
+      this.#publish();
+    }
   }
   #beginLocalPause(ports: ConnectionPorts, source: MediaSource, cause: LocalPublicationRetirementCause): Promise<void> {
     this.#sources[source].pausedPublicationId = ports.media.getSnapshot().localTracks.find((item) => item.source === source)?.publicationId ?? null;

@@ -252,12 +252,14 @@ describe("independent r7 ordering", () => {
       await pause.promise;
     });
     const local = vi.fn(async () => ({ outcome: "confirmed" as const, errorCode: null }));
-    const { platform, client, command, setEnabled } = createConvergenceScenario(source, { media: { setLocalPublicationTarget: local, closeForcedLocalPublication: close } });
+    // A microphone Off pauses capture and keeps the publication; the other sources retire theirs.
+    const userOff = source === "microphone" ? ([source] as const) : ([source, "user_pause"] as const);
+    const { platform, client, command, setEnabled } = createConvergenceScenario(source, { media: { setLocalPublicationTarget: local, closeForcedLocalPublication: close, pauseLocalCapture: close } });
     try {
       await client.join({ microphone: false, camera: false });
       await setEnabled(true);
       const off = setEnabled(false);
-      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause"));
+      await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(...userOff));
       // The committed control head is the evidence that this stop predates On.
       platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, revision: 2 } });
       const on = setEnabled(true);
@@ -265,7 +267,7 @@ describe("independent r7 ordering", () => {
       platform.emitMediaPause({ source, revision: 2 });
       pause.release();
       await Promise.all([off, on]);
-      expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
+      expect(close).toHaveBeenCalledExactlyOnceWith(...userOff);
       expect(local).not.toHaveBeenCalled();
       expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
     } finally {
