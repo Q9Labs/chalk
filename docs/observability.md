@@ -175,9 +175,12 @@ and listener connection replacement for a retained pair. Episode end removes
 state on the next sample; shutdown clears it too. These process-local diagnostics
 reset on API restart and assume pulls for an Episode reach the same API process.
 
-Events reuse Tenant, Space, Episode, publication IDs and `participant_id_hash`
-(SHA-256 of the listener's participant ID). No identity labels, raw error text,
-credentials, SDP or media payloads are added. The existing
+Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
+`publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant
+ID and the complete publication reference, respectively). Publication references
+can encode client-supplied track names and MIDs, so they are never logged raw or
+reversibly encoded. No identity labels, raw error text, credentials, SDP or media
+payloads are added. The existing
 `cloudflare_sfu.add_tracks` log also includes up to 16 normalized
 `track_error_kinds`, without remote track names or remote session IDs.
 

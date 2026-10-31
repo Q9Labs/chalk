@@ -328,7 +328,7 @@ func (h *receiveHealth) emit(ctx context.Context, key ReceiveHealthEpisode, stat
 		pair.reported = true
 		slog.WarnContext(ctx, "Listener has not pulled an active audio publication",
 			"event", "media.listener_publication_unpulled", "tenant_id", key.TenantID.String(), "space_id", key.SpaceID.String(), "episode_id", key.EpisodeID.String(),
-			"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(keyPair.listener.String()))), "publication_id", keyPair.publication,
+			"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(keyPair.listener.String()))), "publication_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(keyPair.publication))),
 			"step", pair.step, "error_kind", pair.errorKind, "duration_ms", now.Sub(pair.since).Milliseconds())
 	}
 	if (overdue > 0 || state.truncated) && now.Sub(state.lastSummary) >= receiveHealthSummaryInterval {

@@ -55,6 +55,7 @@ func TestAddTracksCanonicalizesProviderControlledErrorKinds(t *testing.T) {
 		{"Transport_Error", "transport_error"},
 		{" CLIENT_CANCELED ", "client_canceled"},
 		{"private arbitrary provider text", "unknown"},
+		{"audio@example.invalid", "unknown"},
 	} {
 		t.Run(test.kind, func(t *testing.T) {
 			adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"publisher","trackName":"audio","errorCode":"`+test.raw+`"}]}`)

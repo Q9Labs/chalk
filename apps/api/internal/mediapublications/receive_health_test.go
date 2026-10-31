@@ -3,6 +3,7 @@ package mediapublications
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -108,7 +109,8 @@ func TestReceiveHealthNeverPulledPairEmitsOnceAndPeriodicCounts(t *testing.T) {
 	f.sample(44 * time.Second)
 	f.sample(time.Minute)
 	events := f.events(t, "media.listener_publication_unpulled")
-	if len(events) != 1 || events[0]["step"] != "no_pull_attempted" || events[0]["duration_ms"] != float64(16000) || events[0]["publication_id"] != f.repository.observations[0].Publications[0].PublicationID {
+	wantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(f.repository.observations[0].Publications[0].PublicationID)))
+	if len(events) != 1 || events[0]["step"] != "no_pull_attempted" || events[0]["duration_ms"] != float64(16000) || events[0]["publication_id_hash"] != wantHash {
 		t.Fatalf("unpulled events = %+v", events)
 	}
 	summaries := f.events(t, "media.listener_publication_summary")
@@ -146,6 +148,62 @@ func TestReceiveHealthFailedPullCarriesOnlyBoundedPerTrackKind(t *testing.T) {
 				t.Fatalf("summary = %+v", summary)
 			}
 		})
+	}
+}
+
+func TestReceiveHealthPublicationReferencesNeverReachLogs(t *testing.T) {
+	const trackName = "audio@example.invalid"
+	const mid = "mid@example.invalid"
+	for _, format := range []string{"generated", "legacy"} {
+		for _, step := range []string{"no_pull_attempted", "pull_failed"} {
+			t.Run(format+"/"+step, func(t *testing.T) {
+				f := newReceiveHealthFixture(t)
+				connection := f.input.Requested[0].SessionID
+				reference := encodeReference(connection, mid, trackName, 1)
+				if format == "legacy" {
+					reference = connection + "|" + trackName
+				}
+				f.repository.observations[0].Publications[0].PublicationID = reference
+				f.sample(0)
+				if step == "pull_failed" {
+					f.input.Requested[0].TrackName = trackName
+					f.input.Response.TrackErrors = []mediaplane.TrackError{{ConnectionID: connection, TrackName: trackName, Code: trackName}}
+					f.input.Err = errors.New(trackName)
+					f.service.ObserveListenerPull(context.Background(), f.input)
+				}
+				f.sample(16 * time.Second)
+				f.sample(44 * time.Second)
+				f.repository.err = errors.New(trackName)
+				f.sample(0)
+				for line := range strings.Lines(f.logs.String()) {
+					for _, private := range []string{trackName, mid, reference, strings.TrimPrefix(reference, publicationReferencePrefix)} {
+						if strings.Contains(line, private) {
+							t.Fatal("raw or reversibly encoded publication data reached telemetry")
+						}
+					}
+					var record map[string]any
+					if err := json.Unmarshal([]byte(line), &record); err != nil {
+						t.Fatal(err)
+					}
+					if _, ok := record["publication_id"]; ok {
+						t.Fatal("raw publication_id field must not be logged")
+					}
+				}
+				events := f.events(t, "media.listener_publication_unpulled")
+				wantHash := fmt.Sprintf("%x", sha256.Sum256([]byte(reference)))
+				if len(events) != 1 || events[0]["publication_id_hash"] != wantHash || events[0]["step"] != step {
+					t.Fatalf("unpulled events = %+v", events)
+				}
+				if step == "pull_failed" && events[0]["error_kind"] != "unknown" {
+					t.Fatal("provider error kind must be allowlisted")
+				}
+				for _, event := range []string{"media.listener_publication_summary", "media.listener_publication_sampling_incomplete"} {
+					if len(f.events(t, event)) != 1 {
+						t.Fatalf("expected one %s event", event)
+					}
+				}
+			})
+		}
 	}
 }
 
