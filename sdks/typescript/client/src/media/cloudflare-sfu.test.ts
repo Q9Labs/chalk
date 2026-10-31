@@ -8,9 +8,49 @@ import { V1SyncError } from "../sync/v1-error";
 import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+
+it("stops receive health sampling when stopped", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|microphone");
+    h.transport.snapshot = { ...h.transport.snapshot, publications: h.transport.snapshot.publications.map((p) => ({ ...p, source: "microphone" })) };
+    await h.client.refreshRemotePublications();
+    const stats = vi.spyOn(h.peers[0]!, "getStats");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(stats).toHaveBeenCalled();
+    h.client.stop();
+    const before = stats.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(stats).toHaveBeenCalledTimes(before);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it("reports a remote track error as a stuck pull failure", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|microphone");
+    h.transport.snapshot = { ...h.transport.snapshot, publications: h.transport.snapshot.publications.map((p) => ({ ...p, source: "microphone" })) };
+    h.transport.failedRemoteTrackNames.set("microphone", "not_available");
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "pull_failed", media_error_kind: "CloudflareSFUError", media_error_step: "sfu_tracks" }));
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
@@ -2525,7 +2565,7 @@ describe("viewer layer switching", () => {
       h.peers[0]!.availableOutgoingBitrate = 300_000;
       await vi.advanceTimersByTimeAsync(9000);
       expect(update).toHaveBeenCalledTimes(1);
-      expect(stats.mock.calls.length - samples).toBe(9);
+      expect(stats.mock.calls.length - samples).toBe(11);
       expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
       expect(
         h.peers[0]!.getSenders()
@@ -3007,6 +3047,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -3024,6 +3065,7 @@ function createHarness(
     pollIntervalMs: options.pollIntervalMs ?? 60000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
+    onReceiveHealth: options.onReceiveHealth,
     peerConnectionFactory,
   });
   return { client, peers, transport, peerConnectionFactory };

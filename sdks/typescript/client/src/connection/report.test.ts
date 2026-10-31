@@ -36,8 +36,8 @@ function fixture(online = true) {
     create,
     sent,
     access,
-    advance: () => {
-      now += 61000;
+    advance: (ms = 61000) => {
+      now += ms;
     },
     fail: () => {
       failures = 10;
@@ -56,6 +56,68 @@ const settled = async () => {
 };
 
 describe("automatic connection reports", () => {
+  it("uploads stuck receive facts without identities or private text", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({
+      event: "audio_receive_stuck",
+      source: "screen_audio",
+      receive_state: "element_bound",
+      track_state: "live",
+      element_state: "paused",
+      play_result: "NotAllowedError",
+      media_error_kind: "network",
+      media_error_step: "sfu_tracks",
+      duration_ms: 11000,
+      ...{ publicationId: "private-publication", participantId: "private-person", trackId: "private-track", name: "private-name" },
+    });
+    await settled();
+    expect(test.sent[0]?.trigger).toBe("audio_receive_stuck");
+    expect(test.sent[0]?.events[0]).toMatchObject({ source: "screen_audio", receive_state: "element_bound", track_state: "live", element_state: "paused", play_result: "NotAllowedError", media_error_kind: "network", media_error_step: "sfu_tracks", duration_ms: 11000 });
+    expect(JSON.stringify(test.sent)).not.toMatch(/private|participantId|publicationId|trackId/);
+    reporter.dispose();
+  });
+  it("retains only the latest summary and bounds fixed-key counts with independent five-minute spacing", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "sync_socket_open" });
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 1 } });
+    await settled();
+    test.advance(299999);
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 2 } });
+    expect(test.sent).toHaveLength(1);
+    test.advance(1);
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 10001, announced: -1, ...{ privateId: 1 } } });
+    await settled();
+    expect(test.sent).toHaveLength(2);
+    expect(test.sent[1]?.events).toEqual([{ event: "audio_receive_summary", elapsed_ms: 300000, receive_counts: { playing: 10000, announced: 0 } }]);
+    expect(test.sent.every((r) => r.events.every((e) => e.event.startsWith("audio_receive_")))).toBe(true);
+    expect(JSON.stringify(test.sent)).not.toContain("private");
+    reporter.dispose();
+  });
+  it.each(["completed", "offline", "inflight"] as const)("a %s summary never consumes or blocks the failure cooldown", async (mode) => {
+    const test = fixture(mode !== "offline");
+    const upload = Promise.withResolvers<void>();
+    const reporter = test.create(mode === "inflight" ? () => (test.sent.length === 1 ? upload.promise : Promise.resolve()) : undefined);
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 1 } });
+    if (mode === "completed") await settled();
+    fail(reporter);
+    if (mode === "offline") test.reconnect();
+    upload.resolve();
+    await vi.waitFor(() => expect(test.sent.at(-1)?.trigger).toBe("join_failed"));
+    expect(test.sent.filter((r) => r.trigger === "join_failed")).toHaveLength(1);
+    reporter.dispose();
+  });
+  it("replaces an unsent offline summary with the latest counts", async () => {
+    const test = fixture(false);
+    const reporter = test.create();
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 1 } });
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 2 } });
+    test.reconnect();
+    await settled();
+    expect(test.sent[0]?.events).toEqual([{ event: "audio_receive_summary", elapsed_ms: 0, receive_counts: { playing: 2 } }]);
+    reporter.dispose();
+  });
   it("automatically uploads bounded media mismatch facts without device text", async () => {
     const test = fixture();
     const reporter = test.create();
