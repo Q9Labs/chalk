@@ -600,6 +600,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             return;
           }
           yield* transition("leaving");
+          yield* Effect.sync(() => model.mediaBindingCleanup?.());
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
           model.failure = confirmed ? null : toFailure(lifecycleFailure("leave_unconfirmed", false, "The Episode left locally without a durable Leave acknowledgement"));

@@ -24,11 +24,14 @@ it.each([
   clock.advance(Date.now());
   const acknowledgement = Promise.withResolvers<Awaited<ReturnType<typeof platform.sync.leave>>>();
   const leaveSync = vi.spyOn(platform.sync, "leave").mockImplementation(() => acknowledgement.promise);
+  const stopSync = vi.spyOn(platform.sync, "stop");
+  const stopMedia = vi.fn();
   const client = createSpaceClientForPlatform(
     { space: "leave-proof", getAccess: async () => opaqueAccessGrant(1) },
     {
       dependencies: {
         ...platform.dependencies,
+        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), stop: stopMedia }),
         clock: { now: () => clock.now(), setTimeout: (callback, delay) => clock.setTimeout(callback, delay), clearTimeout: (handle) => clock.clearTimeout(handle) },
         cancelPendingAdmission: async () => false,
       },
@@ -42,11 +45,15 @@ it.each([
       () => false,
     );
     await vi.waitFor(() => expect(leaveSync).toHaveBeenCalledOnce());
+    expect(stopMedia).toHaveBeenCalledOnce();
+    expect(stopSync).not.toHaveBeenCalled();
     clock.advance(delay);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     acknowledgement.resolve({ type: "ack", command_id: "leave", outcome: "satisfied", revision: 2, state_digest: "digest" });
     expect(await leaving).toBe(acknowledged);
     expect(client.getSnapshot().connection.status).toBe("left");
+    expect(stopMedia).toHaveBeenCalledOnce();
+    expect(stopSync).toHaveBeenCalledOnce();
   } finally {
     acknowledgement.resolve({ type: "ack", command_id: "leave", outcome: "satisfied", revision: 2, state_digest: "digest" });
     await leaving;
