@@ -2,6 +2,7 @@
   "entry": [
     "gate.config.ts",
     "scripts/dev/share-audio-proof.mjs",
+    "tools/formal/media-control/trace-diff.mjs",
     "scripts/dev/multi-device-proof.mjs",
     "apps/web/src/call-states/main.tsx",
     "apps/web/src/call-states/web-space-journey.tsx",
