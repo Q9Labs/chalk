@@ -2,6 +2,7 @@ package sfu_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -97,6 +98,11 @@ func TestLiveCloudflareSFUCloseOrder(t *testing.T) {
 					if err := peer.Close(); err != nil {
 						t.Fatal(err)
 					}
+					if os.Getenv("CHALK_SFU_CLOSE_INSPECT_FIRST") == "1" {
+						started := time.Now()
+						_, err := adapter.VerifyConnectionMetadata(ctx, connection)
+						t.Logf("inspect_closed elapsed_ms=%d absent=%t", time.Since(started).Milliseconds(), errors.Is(err, mediaplane.ErrConnectionNotFound))
+					}
 				}
 				started := time.Now()
 				closed, err := closeTracks()
@@ -116,8 +122,8 @@ type closeOrderTransport struct {
 func (c closeOrderTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	started := time.Now()
 	response, err := http.DefaultTransport.RoundTrip(request)
-	if err == nil && strings.HasSuffix(request.URL.Path, "/tracks/close") {
-		c.test.Logf("close_http status=%d elapsed_ms=%d", response.StatusCode, time.Since(started).Milliseconds())
+	if err == nil && (strings.HasSuffix(request.URL.Path, "/tracks/close") || request.Method == http.MethodGet) {
+		c.test.Logf("close_http method=%s status=%d elapsed_ms=%d", request.Method, response.StatusCode, time.Since(started).Milliseconds())
 	}
 	return response, err
 }
