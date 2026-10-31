@@ -77,6 +77,8 @@ defmodule ChalkSync.Stateholder do
               {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
   @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
               :ok | {:error, atom()} | {:retryable, atom()}
+  @callback answer_media_stop(Identity.t(), :microphone | :camera | :screen, pos_integer()) ::
+              :ok | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
               {:ok, Decision.t()} | {:retryable, atom()}
 
@@ -140,6 +142,13 @@ defmodule ChalkSync.Stateholder do
       when source in [:microphone, :camera, :screen] and
              (is_nil(publication_id) or is_binary(publication_id)),
       do: impl().set_media_pause(identity, source, publication_id)
+
+  @doc "An accepted on answers the host stops it followed: those with a revision up to `through_revision`. A newer stop stays."
+  @spec answer_media_stop(Identity.t(), :microphone | :camera | :screen, pos_integer()) ::
+          :ok | {:error, atom()} | {:retryable, atom()}
+  def answer_media_stop(%Identity{} = identity, source, through_revision)
+      when source in [:microphone, :camera, :screen] and is_integer(through_revision),
+      do: impl().answer_media_stop(identity, source, through_revision)
 
   @spec apply_lifecycle_intent(EpisodeKey.t(), String.t()) ::
           {:ok, LifecycleDecision.t()} | {:error, atom()} | {:retryable, atom()}

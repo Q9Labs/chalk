@@ -15,6 +15,15 @@ import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
+/**
+ * How long a drop may last before recovery fails closed. #597 made a long recovery leave capture off until the user taps, so a
+ * student never speaks into a call that lost them without knowing it. A short blip must not silence a speaker, so a wanted-on
+ * source that Sync lost without any stop evidence resumes by itself when the drop was shorter than this, and turns off like a tap
+ * when it was not. Down time is wall-clock time from the last frame Sync sent before the drop (`lastHeardAt`) to the recovery, so a
+ * sleeping laptop or a frozen tab counts as down. A quiet call hears a frame only every 20 s, so measured down time can read up to
+ * 20 s too long: the effective cutoff is 40 to 60 s of real downtime, and the error is toward fail closed.
+ */
+const LONG_DROP_MS = 60_000;
 const OFF_RETRY_INITIAL_MS = 1000;
 const OFF_RETRY_MAX_MS = 30000;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
@@ -161,6 +170,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #syncLive = false;
   #disposed = false;
   #recovering: ReadonlySet<MediaSource> | null = null;
+  /** The last moment Sync was heard before the current recovery began: the start of its down time. */
+  #lastConfirmedAt: number | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -676,7 +687,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return state.desired.enabled && state.forcedRevision !== state.desired.revision;
   }
   #resetObservations(): void {
-    if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
+    if (this.#connection.getSnapshot().state !== "reconnecting") {
+      this.#recovering = null;
+      this.#lastConfirmedAt = null;
+    }
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
       // The result belongs to the old connection. An off Sync has not shown yet stays owed on the source and is resent after the next connect.
@@ -1307,22 +1321,31 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
+    if (this.#recovering === null) this.#lastConfirmedAt = this.#ports.sync.lastHeardAt?.() ?? this.#now();
     this.#recovering ??= new Set(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled));
   }
   /**
    * Recovery pauses a source only when Sync's own state says the host turned it off after the user's intent: the snapshot item carries
    * `off_reason: "host"` with a newer stop revision. A missing item, a plain tombstone, a device pause and a dead tombstone are no
    * evidence, so a source with no publication yet stays wanted-on. A replayed stop event reaches `#subscribePauses` the same way.
+   * A source Sync lost without evidence stays wanted-on after a short drop and turns off, like a tap, after a long one (`LONG_DROP_MS`).
    */
   #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
     const recovering = this.#recovering;
+    const downMs = this.#now() - (this.#lastConfirmedAt ?? this.#now());
     this.#recovering = null;
+    this.#lastConfirmedAt = null;
     for (const source of recovering ?? []) {
-      const stop = ownProjection(snapshot, source);
+      const item = ownProjection(snapshot, source);
       const state = this.#sources[source];
-      if (stop?.offReason !== "host" || stop.offRevision === undefined || stop.offRevision <= state.desired.controlRevision) continue;
-      state.serverSequence = Math.max(state.serverSequence, stop.offRevision);
-      this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
+      if (item?.offReason === "host" && item.offRevision !== undefined && item.offRevision > state.desired.controlRevision) {
+        state.serverSequence = Math.max(state.serverSequence, item.offRevision);
+        this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
+      } else if (downMs >= LONG_DROP_MS && !item?.enabled) {
+        // The user's intent becomes off exactly as a tap makes it, so the UI shows it off and the user can tap to turn it on.
+        this.#recordIntent(source, false);
+        state.offDebt = "owed";
+      }
     }
   }
   #subscribeSync(ports: ConnectionPorts): () => void {

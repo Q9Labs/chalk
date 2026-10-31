@@ -8,16 +8,7 @@ defmodule ChalkSync.Stateholder.Postgres.MediaPauses do
   alias ChalkSync.UUID
 
   def set_transaction(connection, %Identity{} = identity, source, publication_id) do
-    Transaction.configure(connection)
-
-    authority = Scope.participant(identity) ++ [identity.participant_generation]
-
-    case Postgrex.query!(connection, SQL.lock_authority(), authority).rows do
-      [["active", "active"]] -> :ok
-      [["active", _status]] -> Postgrex.rollback(connection, {:error, :participant_inactive})
-      [[_status, _participant_status]] -> Postgrex.rollback(connection, {:error, :episode_ended})
-      [] -> Postgrex.rollback(connection, {:error, :stale_participant_generation})
-    end
+    authority = lock_authority(connection, identity)
 
     if is_binary(publication_id) do
       Postgrex.query!(
@@ -28,11 +19,35 @@ defmodule ChalkSync.Stateholder.Postgres.MediaPauses do
     else
       params = Scope.participant(identity) ++ [Atom.to_string(source)]
       Postgrex.query!(connection, SQL.clear(), params)
-      # A newly accepted on answers the host stop.
-      Postgrex.query!(connection, SQL.clear_stop(), params)
     end
 
     :ok
+  end
+
+  # A newly accepted on answers the host stops it followed, up to `through_revision`.
+  def answer_stop_transaction(connection, %Identity{} = identity, source, through_revision) do
+    lock_authority(connection, identity)
+
+    Postgrex.query!(
+      connection,
+      SQL.clear_stop_through(),
+      Scope.participant(identity) ++ [Atom.to_string(source), through_revision]
+    )
+
+    :ok
+  end
+
+  defp lock_authority(connection, identity) do
+    Transaction.configure(connection)
+
+    authority = Scope.participant(identity) ++ [identity.participant_generation]
+
+    case Postgrex.query!(connection, SQL.lock_authority(), authority).rows do
+      [["active", "active"]] -> authority
+      [["active", _status]] -> Postgrex.rollback(connection, {:error, :participant_inactive})
+      [[_status, _participant_status]] -> Postgrex.rollback(connection, {:error, :episode_ended})
+      [] -> Postgrex.rollback(connection, {:error, :stale_participant_generation})
+    end
   end
 
   # Runs inside the transaction that commits the stop event, so the stop and its revision are one fact.

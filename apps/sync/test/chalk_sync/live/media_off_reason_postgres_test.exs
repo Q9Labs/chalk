@@ -7,8 +7,10 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestWSClient, as: Client
+  alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -46,7 +48,11 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
   end
 
   setup %{connection: connection} do
-    fixture = SyncPostgres.seed_episode(connection, 2)
+    fixture =
+      SyncPostgres.seed_episode(connection, 2, %{}, %{
+        participants: [%{}, %{role: "collaborator"}]
+      })
+
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     [host, guest] = fixture.identities
     {:ok, fixture: fixture, host: host, guest: guest}
@@ -77,7 +83,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
 
     assert participant_id == guest.participant_id
 
-    assert :ok = Postgres.set_media_pause(guest, :microphone, nil)
+    assert :ok = Postgres.answer_media_stop(guest, :microphone, revision)
     assert {:ok, stops} = Postgres.media_stops(fixture.episode)
     refute Map.has_key?(stops, key)
     assert {:ok, cleared, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
@@ -117,6 +123,72 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     end
 
     assert fixture.episode == guest.episode
+  end
+
+  test "an accepted on answers the stop it saw and keeps a stop committed between its grant and its clear",
+       %{connection: connection, fixture: fixture, host: host, guest: guest} do
+    key = {guest.participant_id, "microphone"}
+    first = mute(host, guest)
+    second = first + 1
+
+    # The host's next stop commits after the grant and before the on clears the stop it followed.
+    use_adapter(%{
+      grant_publication: fn ->
+        :ok =
+          MediaPauses.record_stop(
+            connection,
+            fixture.episode,
+            guest.participant_id,
+            :microphone,
+            second
+          )
+
+        :confirmed
+      end
+    })
+
+    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
+
+    {_live, result} =
+      LiveEpisode.live_target(live, guest, %{
+        name: :set_microphone_enabled,
+        operation_id: UUID.generate(),
+        enabled: true
+      })
+
+    assert result["outcome"] == "confirmed"
+    assert {:ok, %{^key => ^second}} = Postgres.media_stops(fixture.episode)
+  end
+
+  test "an accepted on clears the stop that was in place when it was granted",
+       %{fixture: fixture, host: host, guest: guest} do
+    mute(host, guest)
+    use_adapter(%{})
+
+    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
+
+    {_live, result} =
+      LiveEpisode.live_target(live, guest, %{
+        name: :set_microphone_enabled,
+        operation_id: UUID.generate(),
+        enabled: true
+      })
+
+    assert result["outcome"] == "confirmed"
+    assert {:ok, stops} = Postgres.media_stops(fixture.episode)
+    assert stops == %{}
+  end
+
+  defp use_adapter(outcomes) do
+    previous = Application.get_env(:chalk_sync, :media_plane)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: Map.put_new(outcomes, :observe_episode_publications, {:ok, []})
+      )
+
+    Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
+    on_exit(fn -> Application.put_env(:chalk_sync, :media_plane, previous) end)
   end
 
   defp mute(host, guest) do
