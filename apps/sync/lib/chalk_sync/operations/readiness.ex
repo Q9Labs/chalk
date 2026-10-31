@@ -17,17 +17,6 @@ defmodule ChalkSync.Operations.Readiness do
 
   @default_interval_ms 1_000
   @default_success_span_ms 5_000
-  @readiness_reasons ~w(
-    database_unavailable database_not_writable_primary incompatible_database_migration
-    unsupported_postgres_version unsafe_database_durability synchronous_commit_disabled
-    lifecycle_intent_lag synchronous_standby_not_configured synchronous_standby_unavailable
-    synchronous_standby_lag required_process_unavailable lifecycle_consumer_unavailable
-    lifecycle_consumer_initializing lifecycle_consumer_stale
-    external_operation_consumer_unavailable external_operation_consumer_initializing
-    external_operation_consumer_stale notification_listener_unavailable
-    retention_cleanup_unavailable provider_bridge_not_configured provider_bridge_unavailable
-    non_production_stateholder development_token_verifier invalid_token_verifier probe_failed
-  )
 
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -182,12 +171,7 @@ defmodule ChalkSync.Operations.Readiness do
 
   defp transition_reason(%{status: :ready}), do: "none"
 
-  defp transition_reason(next) do
-    case Map.get(next.details, :reason) do
-      reason when is_binary(reason) and reason in @readiness_reasons -> reason
-      _reason -> "none"
-    end
-  end
+  defp transition_reason(next), do: Map.get(next.details, :reason, "none")
 
   defp transition_unready_at(_previous, %{status: :unready}, now), do: now
   defp transition_unready_at(%{status: :unready}, %{status: :ready}, _now), do: nil
