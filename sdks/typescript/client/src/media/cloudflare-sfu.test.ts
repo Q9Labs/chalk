@@ -54,7 +54,7 @@ it.each([false, true])("old close does not retire an already-replaced connection
       await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
       remoteMedia(h);
       await h.client.refreshRemotePublications();
-      await vi.advanceTimersByTimeAsync(22_100);
+      await vi.advanceTimersByTimeAsync(44_100);
       expect(replacements, "receive recovery should have requested fresh access").toBe(1);
       const gate = Promise.withResolvers<CloudflareSFUTracksResponse>();
       vi.spyOn(h.transport, "closeTracks").mockImplementationOnce(() => gate.promise);
@@ -132,7 +132,7 @@ it("formerly flowing DTX audio records a partial packet freeze", async () => {
       });
       const pulls = h.transport.addInputs.length;
       await vi.advanceTimersByTimeAsync(70_000);
-      expect(h.transport.addInputs).toHaveLength(pulls + 1);
+      expect(h.transport.addInputs).toHaveLength(pulls + 3);
       expect((h.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
     },
     { replaceMediaConnection: async () => bootstrap("replacement") },
@@ -202,6 +202,9 @@ it.each(["audio", "video", "dtx-audio"] as const)("handles a pull before its fir
       await vi.advanceTimersByTimeAsync(19_000);
       expect(harness.peers).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(5000);
+      expect(harness.peers).toHaveLength(1);
+      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true })]);
+      await vi.advanceTimersByTimeAsync(25_000);
       expect(harness.peers.length).toBeGreaterThan(1);
     },
     { replaceMediaConnection: async () => bootstrap("replacement"), pollIntervalMs: 1000 },
@@ -2262,7 +2265,7 @@ it.each(["packets", "republish", "pause"] as const)("keeps or replenishes the re
         h.client.remotePublicationsChanged(publications.map((publication) => ({ ...publication, enabled: true })));
         await h.client.refreshRemotePublications();
       }
-      await vi.advanceTimersByTimeAsync(24_000);
+      await vi.advanceTimersByTimeAsync(50_000);
       expect(replacements).toBe(reset === "pause" ? 2 : 3);
     },
     { replaceMediaConnection: async () => reviewReplacement(receiver, `reset-${++replacements}`) },
@@ -2306,7 +2309,7 @@ it("retries one rejected receive replacement grant within the two-attempt budget
       await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
       await reviewSubscribe(h);
       vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => reviewStats(h, () => 0));
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(55_000);
       expect(grants).toBe(2);
       expect(h.peers).toHaveLength(2);
       await vi.advanceTimersByTimeAsync(180_000);
