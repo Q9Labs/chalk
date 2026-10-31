@@ -1654,20 +1654,21 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
   });
-  it("uploads call stats with the last token once the access grant is gone", async () => {
+  it("uploads call stats with the last token and never asks the credential provider, which can refresh access", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
-    let granted = true;
-    const credential = async () => {
-      if (!granted) throw new Error("access grant released");
-      return "media-token";
-    };
+    const credential = vi.fn(async () => "media-token");
     const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
+
+    await transport.uploadCallStats?.(stats);
+    expect(fetch).not.toHaveBeenCalled();
+
     await transport.listPublications();
-    granted = false;
-    await transport.uploadCallStats?.({ version: 1, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" }] });
+    await transport.uploadCallStats?.(stats);
     const [url, init] = fetch.mock.calls[1] ?? [];
     expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer media-token");
+    expect(credential).toHaveBeenCalledTimes(1);
   });
   it("sends replacement diagnostics in an optional query without changing legacy bodies or CORS headers", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));

@@ -9,7 +9,7 @@ const CREDENTIAL_TIMEOUT_MS = 7000;
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
-  // After Leave the access grant is gone, so the closing stats upload reuses the last token a request got.
+  // Stats are diagnostics: they reuse the last token a request got and never ask the credential provider, which can refresh access.
   let lastToken = "";
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
@@ -94,14 +94,13 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       });
     },
     uploadCallStats: async (stats: CallStatsRequest) => {
-      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal)).catch(() => lastToken);
-      if (!token.trim()) return;
+      if (!lastToken) return;
       await withDeadline(timeoutMs, async (signal) => {
         const response = await fetch(statsPath, {
           method: "POST",
           signal,
           keepalive: true,
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${lastToken}`, "Content-Type": "application/json" },
           body: JSON.stringify(stats),
         });
         if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
