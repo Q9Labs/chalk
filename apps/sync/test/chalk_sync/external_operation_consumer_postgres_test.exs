@@ -634,6 +634,40 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
     assert [{:revoke_publication, ^id, _}] = MediaPlaneTestAdapter.calls(adapter)
   end
 
+  test "stale media waits for a provider result below the attempt budget", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_stale_media_failed", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(connection, "update participants set status='left' where id=$1", [
+      UUID.dump!(guest.participant_id)
+    ])
+
+    assert {:error, :stale_participant_generation} =
+             Postgres.finalize_operation(fixture.episode, id, {:pending, :provider})
+
+    assert {:ok, %{status: :pending}} = Postgres.read_operation(fixture.episode, id)
+
+    assert {:ok, %{result: :failed}} =
+             Postgres.finalize_operation(fixture.episode, id, {:failed, :provider_failure})
+
+    assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
+             Postgres.read_operation(fixture.episode, id)
+
+    assert {:ok, %{result: :failed, delivery: :duplicate}} =
+             Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
+  end
+
   test "operation rows decode in a fresh VM without loading consumers" do
     code = ~S'''
     try do
