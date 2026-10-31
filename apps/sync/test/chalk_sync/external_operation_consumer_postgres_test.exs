@@ -143,6 +143,371 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
            ] = MediaPlaneTestAdapter.calls(adapter)
   end
 
+  test "an expired last claim is reclaimed and settles its publication fence", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_exhausted_mute_01", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100}} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, reclaimed} = Postgres.claim_operations(64)
+
+    assert {^episode, %{attempt_count: 100}} =
+             Enum.find(reclaimed, fn {_, op} -> op.external_operation_id == id end)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, reclaimed_again} = Postgres.claim_operations(64)
+
+    assert {^episode, %{attempt_count: 100} = external} =
+             Enum.find(reclaimed_again, fn {_, op} -> op.external_operation_id == id end)
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :applied}} = Postgres.read_operation(episode, id)
+
+    assert {:ok, %{result: :applied, delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, id, {:confirmed, :provider})
+
+    assert [["applied", "committed", 0]] =
+             Postgrex.query!(
+               connection,
+               """
+               select operation.status, receipt.outcome, count(fence.external_operation_id)
+               from sync_external_operations operation
+               join sync_command_receipts receipt using(external_operation_id)
+               left join sync_publication_fences fence using(external_operation_id)
+               where operation.external_operation_id=$1
+               group by operation.status, receipt.outcome
+               """,
+               [UUID.dump!(id)]
+             ).rows
+
+    {:ok, later} =
+      Operation.new("consumer_after_exhausted_mute", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: later_id}} = Postgres.begin_operation(host, later)
+    assert {:ok, later_claims} = Postgres.claim_operations(64)
+
+    assert {^episode, later_external} =
+             Enum.find(later_claims, fn {_, op} -> op.external_operation_id == later_id end)
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               later_external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :applied}} = Postgres.read_operation(episode, later_id)
+
+    {:ok, end_episode} = Operation.new("consumer_after_exhausted_end", :end_episode, %{})
+    assert {:ok, %{external_operation_id: end_id}} = Postgres.begin_operation(host, end_episode)
+    assert {:ok, end_claims} = Postgres.claim_operations(64)
+
+    assert {^episode, end_external} =
+             Enum.find(end_claims, fn {_, op} -> op.external_operation_id == end_id end)
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               end_external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+  end
+
+  test "an exhausted reclaim preserves a terminal provider outcome", %{connections: connections} do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_exhausted_terminal", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100}} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, reclaimed} = Postgres.claim_operations(64)
+
+    assert {^episode, external} =
+             Enum.find(reclaimed, fn {_, op} -> op.external_operation_id == id end)
+
+    {:ok, adapter} =
+      MediaPlaneTestAdapter.start_link(
+        outcomes: %{revoke_publication: {:terminal_failure, :provider_rejected}}
+      )
+
+    assert :terminal_failure =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :failed, last_error_code: :provider_rejected}} =
+             Postgres.read_operation(episode, id)
+
+    assert [{:revoke_publication, ^id, [^episode, _, :microphone]}] =
+             MediaPlaneTestAdapter.calls(adapter)
+  end
+
+  test "two rolled back last-attempt finalizations reclaim without duplicate outbox rows", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    SyncPostgres.seed_webhook_endpoint(fixture, connection, ["participant.left"])
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_exhausted_rollback", :remove_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    Application.put_env(:chalk_sync, :external_operation_fault_hook, fn point, _context ->
+      if point == :after_webhook_production, do: raise("injected finalization rollback")
+    end)
+
+    on_exit(fn -> Application.delete_env(:chalk_sync, :external_operation_fault_hook) end)
+
+    for _ <- 1..2 do
+      assert {:ok, claimed} = Postgres.claim_operations(64)
+
+      assert {episode, %{attempt_count: 100} = external} =
+               Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+      assert :finalization_failure =
+               ExternalOperationConsumer.execute_operation(
+                 episode,
+                 external,
+                 {MediaPlaneTestAdapter, adapter},
+                 nil,
+                 &Postgres.finalize_operation/3
+               )
+
+      assert {:ok, %{status: :pending}} = Postgres.read_operation(episode, id)
+
+      assert [["pending", 3, 0, 0]] =
+               Postgrex.query!(
+                 connection,
+                 """
+                 select receipt.outcome,
+                   (select count(*) from sync_publication_fences where external_operation_id=$1),
+                   (select count(*) from webhook_events where tenant_id=$2),
+                   (select count(*) from webhook_deliveries where tenant_id=$2)
+                 from sync_command_receipts receipt where receipt.external_operation_id=$1
+                 """,
+                 [UUID.dump!(id), UUID.dump!(episode.tenant_id)]
+               ).rows
+
+      Postgrex.query!(
+        connection,
+        "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+        [UUID.dump!(id)]
+      )
+    end
+
+    Application.delete_env(:chalk_sync, :external_operation_fault_hook)
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100} = external} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{result: :applied, delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, id, {:confirmed, :provider})
+
+    assert {:ok, %{status: :applied}} = Postgres.read_operation(episode, id)
+
+    assert [["committed", 1, 0, 1, 1]] =
+             Postgrex.query!(
+               connection,
+               """
+               select receipt.outcome,
+                 (select count(*) from sync_command_receipts where external_operation_id=$1),
+                 (select count(*) from sync_publication_fences where external_operation_id=$1),
+                 (select count(*) from webhook_events where tenant_id=$2),
+                 (select count(*) from webhook_deliveries where tenant_id=$2)
+               from sync_command_receipts receipt where receipt.external_operation_id=$1
+               """,
+               [UUID.dump!(id), UUID.dump!(episode.tenant_id)]
+             ).rows
+
+    assert [
+             {:remove_participant, ^id, _},
+             {:remove_participant, ^id, _},
+             {:remove_participant, ^id, _}
+           ] = MediaPlaneTestAdapter.calls(adapter)
+  end
+
+  test "an ambiguous last attempt can be reclaimed after finalization failure", %{
+    connections: connections
+  } do
+    connection = hd(connections)
+    fixture = SyncPostgres.seed_episode(connection, 2)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
+
+    {:ok, operation} =
+      Operation.new("consumer_exhausted_pending", :mute_participant, %{
+        "participantId" => guest.participant_id
+      })
+
+    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(host, operation)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99 where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, claimed} = Postgres.claim_operations(64)
+
+    assert {episode, %{attempt_count: 100} = external} =
+             Enum.find(claimed, fn {_, op} -> op.external_operation_id == id end)
+
+    assert :finalization_failure =
+             ExternalOperationConsumer.execute_operation(episode, external, nil, nil, fn _,
+                                                                                         _,
+                                                                                         _ ->
+               {:error, :unavailable}
+             end)
+
+    assert {:ok, %{status: :pending}} = Postgres.read_operation(episode, id)
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    claims =
+      1..2
+      |> Task.async_stream(fn _ -> Postgres.claim_operations(64) end, max_concurrency: 2)
+      |> Enum.to_list()
+
+    reclaimed =
+      for {:ok, {:ok, ops}} <- claims,
+          {^episode, op} <- ops,
+          op.external_operation_id == id,
+          do: op
+
+    assert [%{attempt_count: 100} = retry] = reclaimed
+
+    assert :terminal_failure =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               retry,
+               nil,
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert {:ok, %{status: :failed, last_error_code: :retry_exhausted}} =
+             Postgres.read_operation(episode, id)
+
+    assert {:ok, %{result: :failed, delivery: :duplicate}} =
+             Postgres.finalize_operation(episode, id, {:failed, :retry_exhausted})
+
+    assert [["failed", "rejected", 0]] =
+             Postgrex.query!(
+               connection,
+               """
+               select operation.status, receipt.outcome, count(fence.external_operation_id)
+               from sync_external_operations operation
+               join sync_command_receipts receipt using(external_operation_id)
+               left join sync_publication_fences fence using(external_operation_id)
+               where operation.external_operation_id=$1
+               group by operation.status, receipt.outcome
+               """,
+               [UUID.dump!(id)]
+             ).rows
+  end
+
   test "Episode end claims the active recording and requires both provider cleanups", %{
     connections: connections
   } do
