@@ -51,6 +51,7 @@ const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
+const REMOTE_TRACK_ARRIVAL_MS = 1000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 const VIEWER_LAYER_BATCH_SIZE = 16;
 // Adaptation uses at most 12 of the participant's 60 call-control writes/minute.
@@ -1045,27 +1046,29 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     if (publications.length === 0) return [];
-    return this.#serializeSDP(async () => {
-      const connection = this.#connection;
-      const connectionId = this.#bootstrap.connectionId;
-      const requested = publications.map((publication): CloudflareSFUTrackRequest => {
-        const reference = parseCloudflareSFUPublicationID(publication.publicationId);
-        return {
-          location: "remote",
-          sessionId: reference.connectionId,
-          trackName: reference.trackName,
-          // h sorts before l: prefer full camera quality, but keep video flowing
-          // when the publisher pauses h. Do not silently downgrade a live h layer.
-          // https://developers.cloudflare.com/realtime/sfu/features/simulcast/#quality-control
-          ...(publication.source === "camera" ? { simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } as const } : {}),
-        };
-      });
-      const received = new Map<string, MediaStreamTrack>();
-      const onTrack = (event: RTCTrackEvent) => {
-        if (event.transceiver.mid !== null) received.set(event.transceiver.mid, event.track);
-      };
-      connection.addEventListener("track", onTrack);
-      try {
+    const connection = this.#connection;
+    const received = new Map<string, MediaStreamTrack>();
+    const onTrack = (event: RTCTrackEvent) => {
+      if (event.transceiver.mid !== null) received.set(event.transceiver.mid, event.track);
+    };
+    connection.addEventListener("track", onTrack);
+    try {
+      // The queue holds only the offer/answer exchange. Waiting for the tracks or for packets happens outside it,
+      // so one slow pull never delays the pull of another speaker.
+      const { matched, responseTracks } = await this.#serializeSDP(async () => {
+        const connectionId = this.#bootstrap.connectionId;
+        const requested = publications.map((publication): CloudflareSFUTrackRequest => {
+          const reference = parseCloudflareSFUPublicationID(publication.publicationId);
+          return {
+            location: "remote",
+            sessionId: reference.connectionId,
+            trackName: reference.trackName,
+            // h sorts before l: prefer full camera quality, but keep video flowing
+            // when the publisher pauses h. Do not silently downgrade a live h layer.
+            // https://developers.cloudflare.com/realtime/sfu/features/simulcast/#quality-control
+            ...(publication.source === "camera" ? { simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } as const } : {}),
+          };
+        });
         this.#requireGeneration(generation);
         const response = await this.#signal(() => this.#addTracks({ connectionId, tracks: requested, allowPartialRemoteTracks: true }), {
           generation,
@@ -1079,23 +1082,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           if (!this.#remotePullRetries.get(publication.publicationId)?.receiveStalled) this.#remotePullRetries.delete(publication.publicationId);
         }
         await this.#completeRenegotiation(response, connection, connectionId, generation);
-        if (matched.length === 0) return [];
-        await this.#waitForConnection(connection, generation);
-        this.#negotiatedGeneration = generation;
-        await (() => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5000))();
-        this.#requireGeneration(generation);
-        return matched.map(({ publication, mid }) => {
-          const track = received.get(mid);
-          if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
-          return Object.freeze({ ...publication, track });
-        });
-      } catch (error) {
-        for (const track of received.values()) safeStopTrack(track, this.#reportError.bind(this));
-        throw error;
-      } finally {
-        connection.removeEventListener("track", onTrack);
-      }
-    });
+        return { matched, responseTracks };
+      });
+      if (matched.length === 0) return [];
+      await waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), REMOTE_TRACK_ARRIVAL_MS);
+      this.#requireGeneration(generation);
+      return matched.map(({ publication, mid }) => {
+        const track = received.get(mid);
+        if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
+        return Object.freeze({ ...publication, track });
+      });
+    } catch (error) {
+      for (const track of received.values()) safeStopTrack(track, this.#reportError.bind(this));
+      throw error;
+    } finally {
+      connection.removeEventListener("track", onTrack);
+    }
   }
   #recordRemotePullErrors(publications: readonly CloudflareSFUPublication[], failures: NonNullable<CloudflareSFUTracksResponse["trackErrors"]>): void {
     const requested = new Map(
@@ -1352,6 +1354,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const observe = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
+      if (connectionIsLive(connection)) this.#negotiatedGeneration = generation;
       const observation = observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started);
       if (observation) this.#publishSnapshot(observation.phase, observation.failure);
       else this.#publishSnapshot();

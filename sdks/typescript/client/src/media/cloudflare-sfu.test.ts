@@ -4311,6 +4311,29 @@ describe("listener audio reconcile loop", () => {
     );
   });
 
+  it("pulls speaker B within about a second while speaker A's pull waits on a session that never connects", async () => {
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream());
+        const pullStarts: number[] = [];
+        const add = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) pullStarts.push(Date.now());
+          return add(input);
+        });
+        desire(h, ["a"]);
+        await vi.advanceTimersByTimeAsync(1000);
+        const appeared = Date.now();
+        desire(h, ["a", "b"]);
+        await vi.advanceTimersByTimeAsync(1500);
+        const next = pullStarts.find((at) => at >= appeared);
+        expect(next).toBeDefined();
+        expect(next! - appeared).toBeLessThanOrEqual(1100);
+      },
+      { autoConnect: false },
+    );
+  });
+
   it("replaces a receive connection that never connected before its first pull", async () => {
     let replacements = 0;
     await withTimedHarness(
