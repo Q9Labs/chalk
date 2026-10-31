@@ -206,8 +206,8 @@ describe("audio receive recovery", () => {
     for (let now = 0; now <= 30_000 && escalated === undefined; now += 500) {
       if (sampleAudio(flat, now, { a: 10, b: 10 }).escalate) escalated = now;
     }
-    expect(escalated).toBeGreaterThanOrEqual(AUDIO_STARTUP_GRACE_MS + RECEIVE_ESCALATION_MS);
-    expect(escalated).toBeLessThan(AUDIO_STARTUP_GRACE_MS + RECEIVE_ESCALATION_MS + 1000);
+    expect(escalated).toBeGreaterThanOrEqual(RECEIVE_ESCALATION_MS);
+    expect(escalated).toBeLessThan(RECEIVE_ESCALATION_MS + 1000);
   });
   it("counts a receive connection that carries no media as unhealthy from the first sample", () => {
     const recovery = audioRecovery();

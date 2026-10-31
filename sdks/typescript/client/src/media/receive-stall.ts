@@ -256,8 +256,9 @@ export class ReceiveStallRecovery {
   #observeAudioHealth(now: number, connected: boolean): boolean {
     const pulled = new Set(this.#active);
     for (const id of this.#audio) {
-      const unhealthy = !connected || !pulled.has(id) || this.#stalled.has(id);
-      if (!unhealthy) this.#unhealthySince.delete(id);
+      // A fresh pull is unhealthy until packets actually advance, so repeated re-pulls cannot reset the clock.
+      const healthy = connected && pulled.has(id) && this.#detector.flowing(id) && !this.#stalled.has(id);
+      if (healthy) this.#unhealthySince.delete(id);
       else if (!this.#unhealthySince.has(id)) this.#unhealthySince.set(id, now);
     }
     if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size) return false;
