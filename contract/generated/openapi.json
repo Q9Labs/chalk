@@ -13537,6 +13537,10 @@
                   "minimum": 0,
                   "type": "integer"
                 },
+                "element_state": {
+                  "enum": ["paused", "playing"],
+                  "type": "string"
+                },
                 "event": {
                   "enum": [
                     "space_join_span",
@@ -13556,7 +13560,9 @@
                     "sync_heartbeat_gap",
                     "media_state",
                     "media_http_error",
-                    "media_projection_mismatch"
+                    "media_projection_mismatch",
+                    "audio_receive_stuck",
+                    "audio_receive_summary"
                   ],
                   "type": "string"
                 },
@@ -13594,6 +13600,10 @@
                   "enum": ["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"],
                   "type": "string"
                 },
+                "play_result": {
+                  "enum": ["ok", "NotAllowedError", "AbortError", "unknown"],
+                  "type": "string"
+                },
                 "projection_state": {
                   "enum": ["on", "off"],
                   "type": "string"
@@ -13602,8 +13612,63 @@
                   "enum": ["on", "off"],
                   "type": "string"
                 },
+                "receive_counts": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "announced": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "bytes_flowing": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "element_bound": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "playing": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "projection_off": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_failed": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_requested": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "pull_succeeded": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "track_received": {
+                      "maximum": 10000,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    }
+                  },
+                  "type": ["object", "null"]
+                },
+                "receive_state": {
+                  "enum": ["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"],
+                  "type": "string"
+                },
                 "source": {
-                  "enum": ["microphone", "camera"],
+                  "enum": ["microphone", "camera", "screen_audio"],
                   "type": "string"
                 },
                 "state": {
@@ -13612,6 +13677,10 @@
                 },
                 "step": {
                   "enum": ["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"],
+                  "type": "string"
+                },
+                "track_state": {
+                  "enum": ["live", "muted", "ended"],
                   "type": "string"
                 }
               },
@@ -13623,7 +13692,7 @@
             "type": "array"
           },
           "trigger": {
-            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"],
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"],
             "type": "string"
           },
           "version": {
