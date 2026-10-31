@@ -53,7 +53,7 @@ const wantConditions = (process.env.SR_CONDITIONS || "open,home,mobile").split("
 const runsPerCell = Number(process.env.SR_RUNS || 2);
 const participantsCount = Number(process.env.SR_N || 8);
 const speakerCount = Number(process.env.SR_SPEAKERS || 4);
-const runSeconds = Number(process.env.SR_SECONDS || 95);
+const runSeconds = Number(process.env.SR_SECONDS || 105);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
 const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
@@ -434,7 +434,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
       }),
     );
     run.joinSeconds = (Date.now() - origin) / 1000;
-    const start = Date.now();
+    const start = performance.now(); // monotonic: the box clock can step mid-run
+    const startWall = Date.now();
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {
       schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
@@ -451,8 +452,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     let killCursor = 0;
     let cursor = 0;
-    while ((Date.now() - start) / 1000 < runSeconds) {
-      const t = (Date.now() - start) / 1000;
+    while ((performance.now() - start) / 1000 < runSeconds) {
+      const t = (performance.now() - start) / 1000;
       while (cursor < schedule.length && schedule[cursor].at <= t) {
         const action = schedule[cursor++];
         const event = { ...action, t, clickedAtMs: Date.now() - origin };
@@ -479,9 +480,10 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           }
         }),
       );
-      run.samples.push({ t: (Date.now() - start) / 1000, atMs: Date.now() - origin, states });
+      run.samples.push({ t: (performance.now() - start) / 1000, atMs: Date.now() - origin, states });
       await sleep(1000);
     }
+    run.wallMinusMonotonicMs = Date.now() - startWall - (performance.now() - start);
     run.sessionsPerParticipant = connections.map((set) => set.size);
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(() => undefined);
   } finally {
@@ -502,7 +504,12 @@ function seededRandom(seed) {
 // Closes one pulled track in the listener's SFU session with force, so media stops without the SDK's help.
 async function killListenerTrack(event, page, speakerParticipantId, sessionId) {
   try {
-    const mid = await page.evaluate((speaker) => window.srMidFor(speaker), speakerParticipantId);
+    let mid = null;
+    for (event.attempts = 1; event.attempts <= 5; event.attempts++) {
+      mid = await page.evaluate((speaker) => window.srMidFor(speaker), speakerParticipantId);
+      if (mid) break;
+      await sleep(1000); // the track may be mid-replacement
+    }
     event.mid = mid;
     if (!mid || !sessionId) return;
     const response = await sfuFetch(`/sessions/${sessionId}/tracks/close`, { method: "PUT", body: JSON.stringify({ tracks: [{ mid }], force: true }) });
