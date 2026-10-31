@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -131,7 +132,7 @@ func (t *TurnCredentials) mint(ctx context.Context, client httpClient, endpoint 
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/turn/keys/%s/credentials/generate-ice-servers", endpoint, url.PathEscape(t.keyID)), bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build TURN credential request: %w", err)
+		return nil, fmt.Errorf("build TURN credential request: %w", withoutRequestURL(err))
 	}
 	request.Header.Set("Authorization", "Bearer "+t.apiToken)
 	request.Header.Set("Content-Type", "application/json")
@@ -139,7 +140,7 @@ func (t *TurnCredentials) mint(ctx context.Context, client httpClient, endpoint 
 
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("request TURN credentials: %w", err)
+		return nil, fmt.Errorf("request TURN credentials: %w", withoutRequestURL(err))
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<16))
@@ -159,6 +160,17 @@ func (t *TurnCredentials) mint(ctx context.Context, client httpClient, endpoint 
 		return nil, fmt.Errorf("TURN credential response has no TURN server")
 	}
 	return decoded.ICEServers, nil
+}
+
+// withoutRequestURL unwraps a transport error to its cause, such as a timeout
+// or a refused connection. The wrapper's text carries the request URL, which
+// holds the private TURN key ID, and these errors are logged on every join.
+func withoutRequestURL(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
 }
 
 func hasTurnServer(servers []mediaplane.ICEServer) bool {

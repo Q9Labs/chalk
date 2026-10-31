@@ -1,9 +1,11 @@
 package sfu
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -276,5 +278,51 @@ func TestCanceledJoinStopsWaitingForAMint(t *testing.T) {
 	adapter.iceServers(ctx, true)
 	if elapsed := time.Since(startedAt); elapsed > time.Second {
 		t.Fatalf("a canceled join kept waiting for the mint for %s", elapsed)
+	}
+}
+
+func TestMintFailuresNeverExposeTheKeyIDOrTheRequestURL(t *testing.T) {
+	const keyID = "private-turn-key-id-0123456789abcdef"
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer hung.Close()
+	defer close(release)
+	refused := httptest.NewServer(http.NotFoundHandler())
+	refusedURL := refused.URL
+	refused.Close()
+
+	for name, endpoint := range map[string]string{"timeout": hung.URL, "refused connection": refusedURL, "unparseable endpoint": "http://bad host"} {
+		t.Run(name, func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := slog.Default()
+			slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+			t.Cleanup(func() { slog.SetDefault(previous) })
+
+			adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "a", RealtimeAppSecret: "s", RequestTimeout: time.Minute}, hung.Client(), endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapter = adapter.WithTurnCredentials(NewTurnCredentials(keyID, "turn-api-token"))
+
+			_, mintErr := adapter.turn.get(context.Background(), adapter.client, adapter.endpoint)
+			if mintErr == nil {
+				t.Fatal("the mint must fail")
+			}
+			adapter.iceServers(context.Background(), true)
+
+			for label, text := range map[string]string{"error": mintErr.Error(), "log": logs.String()} {
+				if strings.Contains(text, keyID) || strings.Contains(text, endpoint) || strings.Contains(text, "/turn/keys/") {
+					t.Fatalf("the %s exposes the key ID or request URL: %s", label, text)
+				}
+			}
+			if !strings.Contains(logs.String(), "cloudflare_turn.credentials_failed") {
+				t.Fatalf("the failure must still be logged: %s", logs.String())
+			}
+		})
 	}
 }
