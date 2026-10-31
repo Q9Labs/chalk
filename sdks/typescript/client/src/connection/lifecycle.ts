@@ -1114,6 +1114,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* publish();
         });
       const handleMediaFailure = (media: ConnectionMediaClient, cause: unknown, binding: string | undefined): Effect.Effect<void> => {
+        if (model.state === "leaving" || model.state === "left") return Effect.void;
         if (media !== model.media || binding !== access.currentUnsafe()?.media.clientPayload.connectionId) return Effect.void;
         if (sfuAccessRejected(cause)) stopRejectedMedia();
         if (sfuAccessRejected(cause) || (cause instanceof CloudflareSFUError && cause.options.status === 410) || (active(model) && connectionSuperseded(cause))) return failForSnapshot(failureFromCause(cause, "media_start_failed", "Media transport needs recovery"));
