@@ -331,6 +331,12 @@
     "body": "{\"connection_id\":\"foreign-connection\",\"tracks\":[],\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
   },
   {
+    "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications/available",
+    "operation": "markCloudflareSFUPublicationsAvailable",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"connection_id\":\"foreign-connection\",\"tracks\":[{\"source\":\"microphone\",\"publication_id\":\"foreign-connection|microphone-track\"}]}"
+  },
+  {
     "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
     "operation": "renegotiateCloudflareSFU",
     "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
