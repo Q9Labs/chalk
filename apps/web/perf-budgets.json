@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "JS limits preserve bounded media failure reporting (#596): master measures 466.446 KiB on the route and 384.115 KiB in call scenarios. Compacting the classifier did not fit the old limits. Including media recovery (#594) and mic-state sync (#597) measures 468.243/385.808 KiB; 469/386 were the smallest whole-KiB limits above that combined build. The session ID (#670) adds its module, the Sync hello baggage and the legacy-Sync hello fallback, about 0.8 KiB gzip on the route; the combined build measures 469.5 KiB on the route in CI, which did not fit 469, so the route limit is 470, the smallest whole-KiB limit above it. The call-scenario limit (386) and all other limits stay unchanged.",
+  "_comment": "JS limits preserve bounded media failure reporting (#596): master measures 466.446 KiB on the route and 384.115 KiB in call scenarios. Compacting the classifier did not fit the old limits. Including media recovery (#594) and mic-state sync (#597) measures 468.243/385.808 KiB; 469/386 were the smallest whole-KiB limits above that combined build. The session ID (#670) adds its module, the Sync hello baggage and the legacy-Sync hello fallback, about 0.8 KiB gzip on the route; the combined build measures 469.5 KiB on the route in CI, which did not fit 469, so the route limit is 470, the smallest whole-KiB limit above it. The call-scenario limit (386) and all other limits stay unchanged. Listener audio receive health (#721) adds the receive tracker, report fields and AudioOutput play reporting; it must run from join, so it cannot load after Join. The combined build measures 472.13 KiB on the route, which did not fit 470, so the route limit is 473, the smallest whole-KiB limit above it. #712 tracks trimming the call route under 465 KiB. The call-scenario limit (386) and all other limits stay unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
@@ -32,7 +32,7 @@
     "firstCallMs": 2499,
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
-    "routeJsGzipKiB": 470,
+    "routeJsGzipKiB": 473,
     "routeCssGzipKiB": 32,
     "videoDroppedFramePercent": 5,
     "layoutShift": 0.05
