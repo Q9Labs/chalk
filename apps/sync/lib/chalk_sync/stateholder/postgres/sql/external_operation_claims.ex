@@ -34,16 +34,18 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
     with pending_order as (
       select external_operation_id,
         row_number() over (
-          partition by tenant_id, episode_id order by created_at, external_operation_id
+          partition by tenant_id, episode_id
+          order by (next_attempt_at > now()) desc, created_at, external_operation_id
         ) as episode_pending_position,
         row_number() over (
           partition by tenant_id, episode_id, target_participant_id
-          order by created_at, external_operation_id
+          order by (next_attempt_at > now()) desc, created_at, external_operation_id
         ) as participant_pending_position,
         count(*) filter (
           where operation_name not in ('participant_leave', 'remove_participant')
         ) over (
-          partition by tenant_id, episode_id order by created_at, external_operation_id
+          partition by tenant_id, episode_id
+          order by (next_attempt_at > now()) desc, created_at, external_operation_id
           rows between unbounded preceding and 1 preceding
         ) as barriers_before
       from sync_external_operations

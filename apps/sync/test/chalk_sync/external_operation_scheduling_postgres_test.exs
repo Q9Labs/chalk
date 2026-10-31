@@ -82,6 +82,16 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
 
     assert {:ok, [{episode, mute}]} = Postgres.claim_operations(8)
     assert mute.external_operation_id == mute_id
+
+    # Transaction timestamps can put a later accepted operation before an active
+    # claim. It must still wait for that claim's provider mutation to finish.
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set created_at = created_at - interval '1 hour' where external_operation_id = $1",
+      [ChalkSync.UUID.dump!(camera_id)]
+    )
+
+    assert {:ok, []} = Postgres.claim_operations(8)
     confirm(episode, mute, adapter)
 
     assert {:ok, [{episode, camera}]} = Postgres.claim_operations(8)
