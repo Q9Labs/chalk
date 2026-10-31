@@ -331,7 +331,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #attemptLocalRecovery(recovery: LocalRecovery): Promise<void> {
-    if (!(await this.#relistLocalRecoveryIfNeeded(recovery)) || !this.#canContinueLocalRecovery(recovery)) return;
+    if (!(await this.#relistLocalRecoveryIfNeeded(recovery)) || !this.#canContinueLocalRecovery(recovery)) {
+      this.#dropLocalRecovery(recovery.state.source, recovery);
+      return;
+    }
     this.#retireDeadLocalPublication(recovery);
     if (await this.#retireLocalRecoveryIfNeeded(recovery)) return;
     const published = await this.#enablePreparedTrack(recovery.state);
