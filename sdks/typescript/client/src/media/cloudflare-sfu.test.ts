@@ -2258,7 +2258,7 @@ it.each([false, true])("all-inbound stalls permit at most two rebuilds (brief st
   );
 });
 
-it.each(["packets", "republish", "pause"] as const)("keeps or replenishes the receive budget after %s", async (reset) => {
+it.each(["packets", "republish", "pause"] as const)("bounds fallback rebuilds across a %s (only sustained packets replenish the budget)", async (reset) => {
   let replacements = 0;
   let receiver: ReturnType<typeof createHarness>;
   let flowing = false;
@@ -2285,7 +2285,7 @@ it.each(["packets", "republish", "pause"] as const)("keeps or replenishes the re
         await h.client.refreshRemotePublications();
       }
       await vi.advanceTimersByTimeAsync(50_000);
-      expect(replacements).toBe(reset === "pause" ? 2 : 3);
+      expect(replacements).toBe(reset === "packets" ? 3 : 2);
     },
     { replaceMediaConnection: async () => reviewReplacement(receiver, `reset-${++replacements}`) },
   );
@@ -3572,4 +3572,88 @@ it("quarantine sweep: screen re-acquire stream stops while previous screen clean
     await t.cleanup();
     await action;
   }
+});
+
+it("two receivers republishing for each other cannot renew their fallback budgets with new publication ids", async () => {
+  vi.useFakeTimers();
+  const origin = Date.now();
+  const times: number[][] = [[], []];
+  const pair = times.map((replacements, i) =>
+    createHarness({
+      replaceMediaConnection: async () => {
+        replacements.push(Date.now() - origin);
+        return reviewReplacement(pair[i]!, `pair-${i}-connection-${replacements.length}`);
+      },
+    }),
+  );
+  let sequence = 0;
+  for (const [i, h] of pair.entries()) {
+    h.transport.uniqueRemoteMids = true;
+    const addTracks = h.transport.addTracks.bind(h.transport);
+    vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+      const result = await addTracks(input);
+      if (input.tracks.some((track) => track.location === "local")) {
+        const other = pair[1 - i]!;
+        const publications = [...h.transport.localPublications.values()].map((p) => ({ ...p, participantId: `peer-${i}` }));
+        other.transport.snapshot = { incarnation: 1, sequence: ++sequence, publications };
+        other.client.remotePublicationsChanged(publications.map((p) => ({ ...p, enabled: true })));
+      }
+      return result;
+    });
+  }
+  vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async function (this: FakePeerConnection) {
+    const h = pair.find((h) => h.peers.includes(this))!;
+    return reviewStats(h, (source) => (source === "camera" ? Date.now() - origin : 10));
+  });
+  try {
+    for (const [i, h] of pair.entries()) {
+      await h.client.start(fakeStream(new FakeTrack(`mic-${i}`, "audio"), new FakeTrack(`camera-${i}`, "video")));
+    }
+    for (const h of pair) await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(times[0]!.length + times[1]!.length, "Two recipients should have at most two fallback rebuilds each").toBeLessThanOrEqual(4);
+  } finally {
+    for (const h of pair) h.client.stop();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  }
+});
+it("a re-pull whose final renegotiation fails still falls back for the retired audio receiver", async () => {
+  let replacements = 0;
+  let negotiatedRetirement = false;
+  let receiver: ReturnType<typeof createHarness>;
+  await withTimedHarness(
+    async (h) => {
+      receiver = h;
+      await h.client.start(fakeStream(new FakeTrack("local-mic", "audio")));
+      await reviewSubscribe(h);
+      h.transport.immediateRenegotiation = true;
+      const getReceivers = FakePeerConnection.prototype.getReceivers;
+      vi.spyOn(FakePeerConnection.prototype, "getReceivers").mockImplementation(function (this: FakePeerConnection) {
+        const receivers = getReceivers.call(this);
+        return negotiatedRetirement ? receivers.filter((receiver) => receiver.track.readyState !== "ended") : receivers;
+      });
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+        const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+        const tracks = h.client.getSnapshot().remoteTracks.filter((p) => !negotiatedRetirement || p.track.readyState !== "ended");
+        const rows = tracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.source === "camera" ? Date.now() : 10, codecId: codec.id }));
+        return new Map([...rows.map((row) => [row.id, row] as const), [codec.id, codec]]);
+      });
+      const renegotiate = h.transport.renegotiate.bind(h.transport);
+      vi.spyOn(h.transport, "renegotiate").mockImplementation(async () => {
+        if (h.transport.closeInputs.length > 0 && !negotiatedRetirement) {
+          // setLocalDescription(answer) has completed; the browser has now
+          // stopped the old transceiver and no longer reports its receiver.
+          negotiatedRetirement = true;
+          await new Promise<void>((resolve) => setTimeout(resolve, 2500));
+          throw new CloudflareSFUError("final renegotiation request interrupted", "signaling_failed", { status: 503 });
+        }
+        return renegotiate();
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(replacements, "A failed re-pull after retiring the receiver must use its available fallback budget").toBeGreaterThan(0);
+      expect(h.client.getSnapshot().remoteTracks.find((p) => p.source === "microphone")?.track.readyState).toBe("live");
+    },
+    { replaceMediaConnection: async () => reviewReplacement(receiver, `retired-fallback-${++replacements}`) },
+  );
 });

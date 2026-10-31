@@ -1276,7 +1276,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #disposeConnection(stopSenders: boolean): void {
-    this.#receiveProgress.clear();
+    this.#receiveProgress.replaced();
     if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
     this.#disposeConnectionObservation = undefined;

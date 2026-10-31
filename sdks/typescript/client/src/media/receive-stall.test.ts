@@ -44,10 +44,10 @@ describe("expected receive packet progress", () => {
 
 const publications = ["stalled", "healthy"].map((publicationId) => ({ participantId: publicationId, source: "microphone" as const, publicationId, enabled: true }));
 const remote = publications.map((publication) => ({ ...publication, track: { id: publication.publicationId, kind: "audio" } as MediaStreamTrack }));
-function sampleRecovery(recovery: ReceiveStallRecovery, now: number, stalledPackets = 10, tracks = remote) {
+function sampleRecovery(recovery: ReceiveStallRecovery, now: number, stalledPackets = 10, tracks = remote, reporting = tracks) {
   const codec = { id: "opus", type: "codec", mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
-  const rows = tracks.map((publication) => ({ id: publication.track.id, type: "inbound-rtp", trackIdentifier: publication.track.id, packetsReceived: publication.publicationId === "healthy" ? now : stalledPackets, codecId: codec.id }));
-  return recovery.sample(now, {} as RTCPeerConnection, new Map([...rows.map((row) => [row.id, row] as const), [codec.id, codec]]) as unknown as RTCStatsReport, tracks);
+  const rows = reporting.map((publication) => ({ id: publication.track.id, type: "inbound-rtp", trackIdentifier: publication.track.id, packetsReceived: publication.publicationId === "healthy" ? now : stalledPackets, codecId: codec.id }));
+  return recovery.sample(now, { getReceivers: () => [] } as unknown as RTCPeerConnection, new Map([...rows.map((row) => [row.id, row] as const), [codec.id, codec]]) as unknown as RTCStatsReport, tracks);
 }
 function stalledRecovery() {
   const recovery = new ReceiveStallRecovery();
@@ -105,5 +105,27 @@ describe("per-publication receive recovery", () => {
     for (let now = 21_000; now <= 28_000; now += 1000) sampleRecovery(recovery, now, now);
     for (let now = 29_000; now <= 35_000; now += 1000) sampleRecovery(recovery, now, 28_000);
     expect(recovery.canRepull("stalled")).toBe(true);
+  });
+  it("keeps a source's rebuild budget when its publication is replaced", () => {
+    const recovery = stalledRecovery();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(recovery.reserveRebuild()).toBe(true);
+      const replaced = [{ ...remote[0]!, publicationId: `stalled-${attempt}` }, remote[1]!];
+      recovery.expect(replaced, "listener");
+      const start = (attempt + 1) * 100_000;
+      for (let now = start; now <= start + RECEIVE_STARTUP_GRACE_MS; now += 1000) sampleRecovery(recovery, now, 10, replaced);
+    }
+    expect(recovery.isStalled("stalled-1")).toBe(true);
+    expect(recovery.canRebuild("stalled-1")).toBe(false);
+    expect(recovery.reserveRebuild()).toBe(false);
+  });
+  it("keeps a re-pulled publication recoverable after its retired receiver leaves the stats", () => {
+    const recovery = stalledRecovery();
+    expect(recovery.reserveRepull("stalled")).toBe(true);
+    const retired = remote.filter((publication) => publication.publicationId === "healthy");
+    for (let now = 21_000; now <= 120_000; now += 1000) sampleRecovery(recovery, now, 10, remote, retired);
+    expect(recovery.canRepull("stalled")).toBe(false);
+    expect(recovery.canRebuild("stalled")).toBe(true);
+    expect(recovery.reserveRebuild()).toBe(true);
   });
 });
