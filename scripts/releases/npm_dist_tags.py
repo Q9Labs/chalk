@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = "https://registry.npmjs.org/"
 VERIFY_ATTEMPTS = 6
 VERIFY_DELAY_SECONDS = 10
+RETAIN_STABILITY_ROUNDS = 3
 
 
 def package_names():
@@ -53,13 +54,30 @@ def read_latest(package):
 
 
 def retain(output):
-    latest = {package: read_latest(package) for package in package_names()}
+    wait_for_publish_runs()
+    latest = read_stable_latest(package_names())
     compact = json.dumps(latest, separators=(",", ":"))
     Path(output).write_text(compact + "\n", encoding="utf-8")
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         with open(github_output, "a", encoding="utf-8") as output_file:
             output_file.write(f"npm_latest={compact}\n")
+    return latest
+
+
+def read_all_latest(packages):
+    return {package: read_latest(package) for package in packages}
+
+
+def read_stable_latest(packages):
+    latest = read_all_latest(packages)
+    for _ in range(RETAIN_STABILITY_ROUNDS):
+        if not in_flight_publish_runs():
+            return latest
+        wait_for_publish_runs()
+        latest = read_all_latest(packages)
+    if in_flight_publish_runs():
+        raise RuntimeError("npm latest tags did not stabilize while retaining.")
     return latest
 
 
@@ -77,9 +95,13 @@ def pending_publish_runs():
         raise RuntimeError("gh returned invalid JSON while listing npm publish runs.") from error
 
 
+def in_flight_publish_runs():
+    return [run for run in pending_publish_runs() if run.get("status") != "completed"]
+
+
 def wait_for_publish_runs():
     while True:
-        pending = [run for run in pending_publish_runs() if run.get("status") != "completed"]
+        pending = in_flight_publish_runs()
         if not pending:
             return
         for run in pending:

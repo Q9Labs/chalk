@@ -94,6 +94,8 @@ jobs:
           node-version-file: .tool-versions
       - name: Retain the live npm latest tags before the first promotion changes them
         id: npm
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/releases/npm_dist_tags.py retain --output previous-npm.json
       - name: Retain rollback source and saved Pages identity
         env:
