@@ -240,7 +240,7 @@ func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
 	ensureRequest := recorderFleetEnsureRequest()
 	snapshotName := ensureRequest.Name + "-bootstrap-evidence"
 	prefix := "chalk-recorder-capture-nightly-"
-	snapshot := func(id int64, name, createdAt string) map[string]any {
+	snapshot := func(id any, name, createdAt string) map[string]any {
 		return map[string]any{"id": id, "name": name, "created_at": createdAt, "resource_type": "droplet"}
 	}
 	scenarios := []bootstrapEvidenceTestScenario{
@@ -261,17 +261,17 @@ func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
 		},
 		{
 			name: "preserve and prune owned snapshots", now: now, evidenceUntil: now.Add(time.Hour),
-			dropletSnapshots: []map[string]any{snapshot(4, snapshotName, "2026-09-04T00:00:00Z")},
+			dropletSnapshots: []map[string]any{snapshot(int64(4), snapshotName, "2026-09-04T00:00:00Z")},
 			accountSnapshotPages: [][]map[string]any{
 				{
-					snapshot(1, prefix+"1-old-bootstrap-evidence", "2026-09-01T00:00:00Z"),
-					snapshot(2, prefix+"2-bootstrap-evidence", "2026-09-02T00:00:00Z"),
+					snapshot("1", prefix+"1-old-bootstrap-evidence", "2026-09-01T00:00:00Z"),
+					snapshot("2", prefix+"2-bootstrap-evidence", "2026-09-02T00:00:00Z"),
 				},
 				{
-					snapshot(3, prefix+"3-bootstrap-evidence", "2026-09-03T00:00:00Z"),
-					snapshot(4, snapshotName, "2026-09-04T00:00:00Z"),
-					snapshot(99, "chalk-recorder-render-nightly-9-other-bootstrap-evidence", "2026-08-01T00:00:00Z"),
-					snapshot(100, "human-bootstrap-evidence", "2026-08-01T00:00:00Z"),
+					snapshot("3", prefix+"3-bootstrap-evidence", "2026-09-03T00:00:00Z"),
+					snapshot("4", snapshotName, "2026-09-04T00:00:00Z"),
+					snapshot("99", "chalk-recorder-render-nightly-9-other-bootstrap-evidence", "2026-08-01T00:00:00Z"),
+					snapshot("100", "human-bootstrap-evidence", "2026-08-01T00:00:00Z"),
 				},
 			},
 			wantDelete: true, wantPruned: []string{"1"},
@@ -279,6 +279,23 @@ func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
 				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots",
 				"GET /v2/snapshots", "GET /v2/snapshots",
 				"DELETE /v2/snapshots/1", "DELETE /v2/droplets/789",
+			},
+		},
+		{
+			name: "retain current snapshot when oldest of five", now: now, evidenceUntil: now.Add(time.Hour),
+			dropletSnapshots: []map[string]any{snapshot(int64(5), snapshotName, "2026-09-01T00:00:00Z")},
+			accountSnapshotPages: [][]map[string]any{{
+				snapshot("1", prefix+"1-bootstrap-evidence", "2026-09-02T00:00:00Z"),
+				snapshot("2", prefix+"2-bootstrap-evidence", "2026-09-03T00:00:00Z"),
+				snapshot("3", prefix+"3-bootstrap-evidence", "2026-09-04T00:00:00Z"),
+				snapshot("4", prefix+"4-bootstrap-evidence", "2026-09-05T00:00:00Z"),
+				snapshot("5", snapshotName, "2026-09-01T00:00:00Z"),
+			}},
+			wantDelete: true, wantPruned: []string{"2", "1"},
+			wantCalls: []string{
+				"GET /v2/droplets/789", "GET /v2/droplets/789/snapshots",
+				"GET /v2/snapshots", "DELETE /v2/snapshots/2", "DELETE /v2/snapshots/1",
+				"DELETE /v2/droplets/789",
 			},
 		},
 		{
@@ -335,6 +352,33 @@ func TestRecorderFleetDeleteCapturesBootstrapEvidence(t *testing.T) {
 				(!strings.Contains(logs.String(), "operation=list_droplet_snapshots") || !strings.Contains(logs.String(), "http_status=403") ||
 					strings.Contains(logs.String(), "secret-token") || strings.Contains(logs.String(), "provider body")) {
 				t.Fatalf("bounded API error log = %q", logs.String())
+			}
+		})
+	}
+}
+
+func TestSnapshotIDUnmarshalJSON(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   string
+		want    snapshotID
+		wantErr bool
+	}{
+		{name: "integer", value: `6372321`, want: "6372321"},
+		{name: "string", value: `"6372321"`, want: "6372321"},
+		{name: "non-digit string", value: `"6372x21"`, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var snapshot digitalOceanSnapshot
+			err := json.Unmarshal([]byte(`{"id":`+test.value+`}`), &snapshot)
+			if test.wantErr {
+				if err == nil {
+					t.Fatal("malformed snapshot ID accepted")
+				}
+				return
+			}
+			if err != nil || snapshot.ID != test.want {
+				t.Fatalf("snapshot ID/error = %q/%v, want %q", snapshot.ID, err, test.want)
 			}
 		})
 	}
