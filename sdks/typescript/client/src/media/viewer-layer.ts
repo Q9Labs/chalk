@@ -202,7 +202,7 @@ export type ViewerLayerChange = ViewerLayerCamera & { readonly layer: ViewerLaye
 const RETRY_AFTER_FAILED_SWITCH_MS = 5000;
 const MAX_RETRY_DELAY_MS = 60_000;
 
-type CameraView = { readonly policy: ViewerLayerPolicy; applied: ViewerLayer; retryAt: number; failures: number };
+type CameraView = { readonly policy: ViewerLayerPolicy; track: MediaStreamTrack; applied: ViewerLayer; retryAt: number; failures: number };
 
 /** One per peer connection: owns a policy for each remote camera and reports the switches still to apply. */
 export class ViewerLayerSelector {
@@ -217,7 +217,7 @@ export class ViewerLayerSelector {
     }
     const changes: ViewerLayerChange[] = [];
     for (const camera of cameras) {
-      const view = this.#view(camera.publicationId);
+      const view = this.#view(camera);
       const stats = this.#reader.read(rows, camera.track.id);
       if (!stats) continue;
       const layer = view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height });
@@ -240,11 +240,14 @@ export class ViewerLayerSelector {
     view.failures++;
   }
 
-  #view(publicationId: string): CameraView {
+  // A re-pull of the same publication gives a new receiver, and the SFU starts it on h.
+  #view({ publicationId, track }: ViewerLayerCamera): CameraView {
     let view = this.#views.get(publicationId);
     if (!view) {
-      view = { policy: new ViewerLayerPolicy(), applied: "h", retryAt: 0, failures: 0 };
+      view = { policy: new ViewerLayerPolicy(), track, applied: "h", retryAt: 0, failures: 0 };
       this.#views.set(publicationId, view);
+    } else if (view.track !== track) {
+      Object.assign(view, { track, applied: "h", retryAt: 0, failures: 0 });
     }
     return view;
   }

@@ -202,4 +202,22 @@ describe("viewer layer selector", () => {
     const changes = selector.sample(1000, report([inbound("small", 2000, { packetsReceived: 100, framesDecoded: 30 })]), cameras);
     expect(changes).toMatchObject([{ layer: "l" }]);
   });
+
+  it("asks for l again when a stall re-pull replaces the receiver of the same publication", () => {
+    const selector = new ViewerLayerSelector();
+    const smallTrack = (id: string) => {
+      const small = track(id);
+      setVideoRenderSize(small, { width: 480, height: 270 });
+      return small;
+    };
+    const pull = (id: string, now: number) => {
+      const cameras = [{ publicationId: "session|small", track: smallTrack(id) }];
+      selector.sample(now, report([inbound(id, now)]), cameras);
+      return selector.sample(now + 1000, report([inbound(id, now + 1000, { packetsReceived: 100, framesDecoded: 30 })]), cameras);
+    };
+    const [first] = pull("first", 0);
+    selector.applied(first!);
+    // The re-pull keeps the publication ID, and the SFU starts the new subscription on h.
+    expect(pull("second", 5000)).toMatchObject([{ layer: "l" }]);
+  });
 });
