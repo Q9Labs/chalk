@@ -319,7 +319,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
   dispose(): void {
     this.#disposed = true;
     this.#cancelOffRetries();
-    for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
     this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
     this.#cancelCaptures();
@@ -788,10 +787,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
       return;
     }
     this.#runWork(source);
-  }
-  /** A Sync snapshot repays an owed off now, unless an attempt for that source is already queued or running. */
-  #retryOffs(): void {
-    for (const source of MEDIA_SOURCES) this.#resendOwedOff(source);
   }
   #runWork(source: MediaSource): void {
     const retry = this.#sources[source].offRetry;
@@ -1297,7 +1292,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
-      this.#retryOffs();
+      for (const source of MEDIA_SOURCES) this.#resendOwedOff(source);
       this.#notifyCapturePauses(ports);
       this.#publish();
     });
