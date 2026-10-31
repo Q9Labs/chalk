@@ -235,6 +235,11 @@ consumer freshness/failure counters where available; unavailable dependencies
 report `observed=false`. Exceptions and exits record only their category, never
 the raw error text. These are probe observations, before readiness hysteresis.
 
+Readiness status transitions emit `sync.readiness.changed` through the same
+observability path and JSON journal, only after hysteresis changes the cached
+status. The event includes the prior and new status, allowlisted failure reason,
+and consecutive failure count; recovery also reports time spent unready.
+
 Database query failures also record `query_stage` (`role`, `migration`, `pending_age`,
 or `replication`), `error_class`, and SQLSTATE when available. SQL text, parameters,
 connection details, and database error messages are not recorded. Query errors

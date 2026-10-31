@@ -9,8 +9,11 @@ defmodule ChalkSync.Operations.Readiness do
 
   use GenServer
 
+  alias ChalkSync.Observability
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Probe
+
+  require Logger
 
   @default_interval_ms 1_000
   @default_success_span_ms 5_000
@@ -44,6 +47,7 @@ defmodule ChalkSync.Operations.Readiness do
       consecutive_failures: 0,
       consecutive_successes: 0,
       first_success_at_ms: nil,
+      unready_at_ms: nil,
       last_checked_at_ms: nil,
       details: %{},
       interval_ms: Keyword.get(options, :interval_ms, @default_interval_ms),
@@ -133,11 +137,57 @@ defmodule ChalkSync.Operations.Readiness do
     now = state.clock.()
     next = %{state | probe_pid: nil, probe_ref: nil}
     next = apply_result(next, result, now)
+    next = record_status_transition(state, next, now)
     Enum.each(next.probe_waiters, &GenServer.reply(&1, public_health(next)))
     next = %{next | probe_waiters: []}
 
     if next.auto_probe?, do: Process.send_after(self(), :probe, next.interval_ms)
     next
+  end
+
+  defp record_status_transition(%{status: status}, %{status: status} = next, _now), do: next
+
+  defp record_status_transition(previous, next, now) do
+    attributes = transition_attributes(previous, next, now)
+    emit_status_transition(next.status, attributes)
+
+    %{next | unready_at_ms: transition_unready_at(previous, next, now)}
+  end
+
+  defp transition_attributes(previous, next, now) do
+    attributes = %{
+      from: Atom.to_string(previous.status),
+      to: Atom.to_string(next.status),
+      reason: transition_reason(next),
+      consecutive_failures: next.consecutive_failures
+    }
+
+    if previous.status == :unready and next.status == :ready do
+      Map.put(attributes, :unready_ms, max(now - previous.unready_at_ms, 0))
+    else
+      attributes
+    end
+  end
+
+  defp transition_reason(%{status: :ready}), do: "none"
+
+  defp transition_reason(next), do: Map.get(next.details, :reason, "none")
+
+  defp transition_unready_at(_previous, %{status: :unready}, now), do: now
+  defp transition_unready_at(%{status: :unready}, %{status: :ready}, _now), do: nil
+  defp transition_unready_at(_previous, next, _now), do: next.unready_at_ms
+
+  defp emit_status_transition(status, attributes) do
+    context = Observability.root(nil, "sync.readiness.changed", attributes)
+
+    log = fn ->
+      attributes
+      |> Map.merge(Observability.frame_fields(context))
+      |> Map.put(:event, "sync.readiness.changed")
+      |> JSON.encode!()
+    end
+
+    if status == :ready, do: Logger.info(log), else: Logger.warning(log)
   end
 
   defp apply_result(state, {:ok, details}, now) do
@@ -150,7 +200,7 @@ defmodule ChalkSync.Operations.Readiness do
 
     %{
       state
-      | status: if(ready?, do: :ready, else: :initializing),
+      | status: status_after_success(state.status, ready?),
         consecutive_failures: 0,
         consecutive_successes: successes,
         first_success_at_ms: first_success_at,
@@ -176,6 +226,10 @@ defmodule ChalkSync.Operations.Readiness do
         details: Map.put(details, :reason, Atom.to_string(reason))
     }
   end
+
+  defp status_after_success(_status, true), do: :ready
+  defp status_after_success(:unready, false), do: :unready
+  defp status_after_success(_status, false), do: :initializing
 
   defp public_health(state) do
     accepting? = Operations.accepting_connections?()
