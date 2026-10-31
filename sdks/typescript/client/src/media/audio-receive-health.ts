@@ -319,7 +319,7 @@ function boundElement(observations: Set<Observation> | undefined, track: MediaSt
 
 function updatePlayback(observation: Observation): void {
   const time = observation.element.currentTime;
-  observation.playing = observation.started && observation.time !== undefined && time > observation.time;
+  observation.playing = !observation.element.paused && observation.started && observation.time !== undefined && time > observation.time;
   observation.time = time;
 }
 
