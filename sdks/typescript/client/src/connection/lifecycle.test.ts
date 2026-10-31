@@ -26,6 +26,8 @@ it.each([
   const leaveSync = vi.spyOn(platform.sync, "leave").mockImplementation(() => acknowledgement.promise);
   const stopSync = vi.spyOn(platform.sync, "stop");
   const stopMedia = vi.fn();
+  const microphone = track("audio");
+  const camera = track("video");
   const client = createSpaceClientForPlatform(
     { space: "leave-proof", getAccess: async () => opaqueAccessGrant(1) },
     {
@@ -40,12 +42,21 @@ it.each([
   let leaving: Promise<boolean> | undefined;
   try {
     await client.join({ microphone: false, camera: false });
+    platform.media.emit({
+      ...platform.media.getSnapshot(),
+      localTracks: [
+        { source: "microphone", enabled: true, publicationId: "microphone", track: microphone },
+        { source: "camera", enabled: true, publicationId: "camera", track: camera },
+      ],
+    });
     leaving = client.leave().then(
       () => true,
       () => false,
     );
     await vi.waitFor(() => expect(leaveSync).toHaveBeenCalledOnce());
-    expect(stopMedia).toHaveBeenCalledOnce();
+    expect(microphone.readyState).toBe("ended");
+    expect(camera.readyState).toBe("ended");
+    expect(stopMedia).not.toHaveBeenCalled();
     expect(stopSync).not.toHaveBeenCalled();
     clock.advance(delay);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
