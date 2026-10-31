@@ -24,9 +24,10 @@ Oncall webhook when:
 A crossed limit also fails the run, so GitHub emails the failure. A query or
 webhook failure fails the run the same way. A GB is 10^9 bytes.
 
-The workflow reads the repository variable `CLOUDFLARE_ACCOUNT_ID` and the
-secrets `CLOUDFLARE_ANALYTICS_TOKEN` (read-only analytics) and
-`ONCALL_WEBHOOK_URL`. Their values live in 1Password vault `dev`.
+The workflow reads the secrets `CLOUDFLARE_EGRESS_ACCOUNT_ID` (the account ID, a
+secret so public run logs mask it), `CLOUDFLARE_ANALYTICS_TOKEN` (read-only
+analytics) and `ONCALL_WEBHOOK_URL`. The token and webhook values live in
+1Password vault `dev`.
 
 Run the workflow by hand with `drill` set to send one marked test to Oncall.
 Oncall acts on a payload only for an app and check in its registry. The keys this
@@ -38,5 +39,4 @@ them. A drill posts the 24 h key and never reads Cloudflare, so it tests the web
 node --test infrastructure/cloudflare-egress-alert/egress-check.test.mjs
 ```
 
-To undo, delete the workflow file and this folder, and remove the two secrets
-and the variable.
+To undo, delete the workflow file and this folder, and remove the three secrets.
