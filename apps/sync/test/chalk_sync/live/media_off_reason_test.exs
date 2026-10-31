@@ -120,27 +120,6 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
     refute Map.has_key?(item, "off_revision")
   end
 
-  test "a later accepted on clears the host stop it followed", ctx do
-    observe(ctx, [])
-    revision = mute(ctx)
-    assert [%{"off_reason" => "host"}] = items(ctx.episode)
-
-    :ok = Memory.answer_media_stop(ctx.guest, :microphone, revision)
-
-    assert [] = items(ctx.episode)
-  end
-
-  test "answering a stop up to an earlier revision keeps a newer stop", ctx do
-    observe(ctx, [])
-    first = mute(ctx)
-    second = mute(ctx)
-    assert second > first
-
-    :ok = Memory.answer_media_stop(ctx.guest, :microphone, first)
-
-    assert [%{"off_reason" => "host", "off_revision" => ^second}] = items(ctx.episode)
-  end
-
   test "a host stop is newer than the device's own pause for the same source", ctx do
     publication_id = "mic-track"
 
@@ -157,25 +136,6 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
     revision = mute(ctx)
 
     assert [%{"off_reason" => "host", "off_revision" => ^revision}] = items(ctx.episode)
-  end
-
-  test "a removed item drops its reason instead of repeating it", ctx do
-    observe(ctx, [])
-    revision = mute(ctx)
-    assert {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(ctx.episode))
-    assert [%{"off_reason" => "host"}] = Projection.items(live.media_projection)
-
-    :ok = Memory.answer_media_stop(ctx.guest, :microphone, revision)
-    assert {:ok, cleared, [frame]} = LiveEpisode.reconcile(live)
-
-    assert frame["item"] == %{
-             "participant_id" => ctx.guest.participant_id,
-             "source" => "microphone",
-             "enabled" => false,
-             "publication_id" => nil
-           }
-
-    assert [%{"enabled" => false}] = Projection.items(cleared.media_projection)
   end
 
   describe "item validation" do

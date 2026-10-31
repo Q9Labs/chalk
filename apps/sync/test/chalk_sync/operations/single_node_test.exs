@@ -55,29 +55,32 @@ defmodule ChalkSync.Operations.SingleNodeTest do
          observations: observations
        } do
     # The controller migrates the stopped runtime's database before starting Sync.
-    # 20261023190003 is the schema before sync_media_stops: every live registration reads that table.
+    # 20261031120000 adds sync_media_stops and 20261101030000 adds answered_stop_revision: Sync needs both.
     for version <- [
           20_261_023_153_001,
           20_261_023_190_002,
           20_261_023_190_003,
-          20_261_030_180_000
+          20_261_030_180_000,
+          20_261_031_120_000
         ] do
       assert {:error, :incompatible_database_migration} =
                Probe.validate_database(%{observations | migration_version: version})
     end
 
-    for version <- [20_261_031_120_000, 20_261_031_120_001] do
+    for version <- [20_261_101_030_000, 20_261_101_030_001] do
       assert :ok = Probe.validate_database(%{observations | migration_version: version})
     end
   end
 
-  test "the compatibility floor covers the sync_media_stops migration" do
-    [file] =
-      Path.wildcard(Path.expand("../../../../api/db/migrations/*_sync_media_stops.sql", __DIR__))
+  test "the compatibility floor covers the media stop migrations" do
+    for suffix <- ["sync_media_stops", "sync_publication_grant_answered_stop"] do
+      [file] =
+        Path.wildcard(Path.expand("../../../../api/db/migrations/*_#{suffix}.sql", __DIR__))
 
-    {version, _rest} = file |> Path.basename() |> Integer.parse()
+      {version, _rest} = file |> Path.basename() |> Integer.parse()
 
-    assert Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration) >= version
+      assert Application.fetch_env!(:chalk_sync, :minimum_compatible_sync_migration) >= version
+    end
   end
 
   test "single-node mode retains primary durability checks", %{observations: observations} do

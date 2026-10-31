@@ -327,26 +327,6 @@ defmodule ChalkSync.Stateholder.Postgres do
   end
 
   @impl ChalkSync.Stateholder
-  def answer_media_stop(%Identity{} = identity, source, through_revision)
-      when source in [:microphone, :camera, :screen] and is_integer(through_revision) do
-    case Postgrex.transaction(
-           Database.connection(identity.episode),
-           &MediaPauses.answer_stop_transaction(&1, identity, source, through_revision),
-           timeout: @transaction_timeout_ms,
-           commit_comment: "chalk sync media stop answered"
-         ) do
-      {:ok, :ok} -> :ok
-      {:error, {:error, reason}} -> {:error, reason}
-      {:error, {:retryable, reason}} -> {:retryable, reason}
-      {:error, _reason} -> {:retryable, :dependency_unavailable}
-    end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
-  end
-
-  @impl ChalkSync.Stateholder
   def reserve_publication_grant(%Identity{} = identity, operation_id, source)
       when is_binary(operation_id) and source in [:microphone, :camera, :screen] do
     case Postgrex.transaction(

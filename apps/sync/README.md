@@ -343,8 +343,17 @@ query keep the exact earlier four-key item shape, and new SDKs accept items from
 older servers that never send the fields. The fields do not change the canonical
 control digest.
 
-Apply `20261031120000_sync_media_stops` before Sync. Every live registration reads
-`sync_media_stops`, so the compatibility floor `minimum_compatible_sync_migration`
-is that version: a database without the table fails readiness with
-`incompatible_database_migration` and Sync does not serve. A rollback leaves the
-table in place.
+Apply `20261031120000_sync_media_stops` and
+`20261101030000_sync_publication_grant_answered_stop` before Sync. Every live
+registration reads `sync_media_stops` and every grant reservation writes
+`answered_stop_revision`, so the compatibility floor
+`minimum_compatible_sync_migration` is the later version: a database without
+them fails readiness with `incompatible_database_migration` and Sync does not
+serve. A rollback leaves the table and the column in place.
+
+An accepted on clears the host stop that stood when its publication grant was
+reserved, and no newer one. The reservation stores that revision
+(`answered_stop_revision`) in the same transaction that holds the episode lock,
+and the grant's completion transaction deletes the stops up to it. A retry of the
+same operation id finds the stored revision, so it cannot reach a stop committed
+after the first attempt.

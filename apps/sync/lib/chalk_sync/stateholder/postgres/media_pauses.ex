@@ -24,19 +24,6 @@ defmodule ChalkSync.Stateholder.Postgres.MediaPauses do
     :ok
   end
 
-  # A newly accepted on answers the host stops it followed, up to `through_revision`.
-  def answer_stop_transaction(connection, %Identity{} = identity, source, through_revision) do
-    lock_authority(connection, identity)
-
-    Postgrex.query!(
-      connection,
-      SQL.clear_stop_through(),
-      Scope.participant(identity) ++ [Atom.to_string(source), through_revision]
-    )
-
-    :ok
-  end
-
   defp lock_authority(connection, identity) do
     Transaction.configure(connection)
 

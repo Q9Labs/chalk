@@ -16,12 +16,12 @@ import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOption
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 /**
- * How long a drop may last before recovery fails closed. #597 made a long recovery leave capture off until the user taps, so a
- * student never speaks into a call that lost them without knowing it. A short blip must not silence a speaker, so a wanted-on
- * source that Sync lost without any stop evidence resumes by itself when the drop was shorter than this, and turns off like a tap
- * when it was not. Down time is wall-clock time from the last frame Sync sent before the drop (`lastHeardAt`) to the recovery, so a
- * sleeping laptop or a frozen tab counts as down. A quiet call hears a frame only every 20 s, so measured down time can read up to
- * 20 s too long: the effective cutoff is 40 to 60 s of real downtime, and the error is toward fail closed.
+ * How long a drop may last before recovery fails closed. A source Sync lost without stop evidence resumes by itself after a drop
+ * shorter than this and turns off like a tap after a drop of this length or more, so a short blip never silences a speaker and a
+ * call that lost someone for a long time never captures for them without their knowing (#597). Down time is wall-clock time from the
+ * last frame Sync sent before the drop (`lastHeardAt`) to the recovery, so a sleeping laptop or a frozen tab counts as down. A quiet
+ * call hears a frame only every 20 s, so measured down time can read up to 20 s too long: the effective cutoff is 40 to 60 s of real
+ * downtime, and the error is toward fail closed.
  */
 const LONG_DROP_MS = 60_000;
 const OFF_RETRY_INITIAL_MS = 1000;
@@ -1325,28 +1325,36 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#recovering ??= new Set(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled));
   }
   /**
-   * Recovery pauses a source only when Sync's own state says the host turned it off after the user's intent: the snapshot item carries
-   * `off_reason: "host"` with a newer stop revision. A missing item, a plain tombstone, a device pause and a dead tombstone are no
-   * evidence, so a source with no publication yet stays wanted-on. A replayed stop event reaches `#subscribePauses` the same way.
-   * A source Sync lost without evidence stays wanted-on after a short drop and turns off, like a tap, after a long one (`LONG_DROP_MS`).
+   * Recovery turns a wanted-on source off in two cases. When Sync's snapshot item says the host stopped it after the user's intent
+   * (`off_reason: "host"` with a newer stop revision), the intent is paused; a replayed stop event reaches `#subscribePauses` the same
+   * way. When Sync lost the source with no such evidence (a missing item, a plain tombstone, a device pause or a dead tombstone), the
+   * source stays wanted-on after a drop shorter than `LONG_DROP_MS` and turns off, like a tap, after a drop of that length or more.
    */
   #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
     const recovering = this.#recovering;
-    const downMs = this.#now() - (this.#lastConfirmedAt ?? this.#now());
+    const longDrop = this.#now() - (this.#lastConfirmedAt ?? this.#now()) >= LONG_DROP_MS;
     this.#recovering = null;
     this.#lastConfirmedAt = null;
     for (const source of recovering ?? []) {
       const item = ownProjection(snapshot, source);
-      const state = this.#sources[source];
-      if (item?.offReason === "host" && item.offRevision !== undefined && item.offRevision > state.desired.controlRevision) {
-        state.serverSequence = Math.max(state.serverSequence, item.offRevision);
-        this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
-      } else if (downMs >= LONG_DROP_MS && !item?.enabled) {
-        // The user's intent becomes off exactly as a tap makes it, so the UI shows it off and the user can tap to turn it on.
-        this.#recordIntent(source, false);
-        state.offDebt = "owed";
-      }
+      const stopRevision = this.#hostStopNewerThanIntent(source, item);
+      if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);
+      else if (longDrop && !item?.enabled) this.#turnOffLikeATap(source);
     }
+  }
+  #hostStopNewerThanIntent(source: MediaSource, item: ReturnType<typeof ownProjection>): number | null {
+    if (item?.offReason !== "host" || item.offRevision === undefined) return null;
+    return item.offRevision > this.#sources[source].desired.controlRevision ? item.offRevision : null;
+  }
+  #pauseForHostStop(ports: ConnectionPorts, source: MediaSource, stopRevision: number): void {
+    const state = this.#sources[source];
+    state.serverSequence = Math.max(state.serverSequence, stopRevision);
+    this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
+  }
+  // The intent becomes off exactly as a tap makes it, so the UI shows it off and the user can tap to turn it on.
+  #turnOffLikeATap(source: MediaSource): void {
+    this.#recordIntent(source, false);
+    this.#sources[source].offDebt = "owed";
   }
   #subscribeSync(ports: ConnectionPorts): () => void {
     return ports.sync.subscribe((snapshot) => {

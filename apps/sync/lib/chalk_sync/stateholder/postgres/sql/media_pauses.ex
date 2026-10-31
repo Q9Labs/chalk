@@ -79,15 +79,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.MediaPauses do
     """
   end
 
-  # Answers only the stops the accepted on followed: a stop committed after it has a newer revision and stays.
-  def clear_stop_through do
-    """
-    delete from sync_media_stops
-    where tenant_id = $1 and space_id = $2 and episode_id = $3
-      and participant_id = $4 and source = $5 and revision <= $6
-    """
-  end
-
   def clear do
     """
     delete from sync_media_pauses
