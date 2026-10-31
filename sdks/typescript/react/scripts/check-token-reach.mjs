@@ -29,6 +29,7 @@ export async function findTokenViolations(root = componentRoot, approvedExceptio
     for (const [rule, pattern] of patterns) {
       const input = rule === "legacy-variable" || rule === "palette-utility" ? withoutClosedTokens : text;
       for (const match of rule === "named-color" ? namedColorMatches(input, file) : input.matchAll(pattern)) {
+        if (rule === "literal" && isUnderscoreIdentifierColor(input, match)) continue;
         const start = input.lastIndexOf("\n", match.index) + 1;
         const end = input.indexOf("\n", match.index);
         const lineText = input.slice(start, end === -1 ? undefined : end).trim();
@@ -39,6 +40,11 @@ export async function findTokenViolations(root = componentRoot, approvedExceptio
   }
   if (root === componentRoot) for (const { file } of approvedExceptions) if (!seen.has(file)) throw new Error(`Token exception file no longer exists: ${file}`);
   return violations;
+}
+
+function isUnderscoreIdentifierColor(source, match) {
+  if (!match[0].startsWith("#") || source[match.index - 1] !== "_") return false;
+  return source.lastIndexOf("[", match.index) <= source.lastIndexOf("]", match.index);
 }
 
 export function compareBaseline(violations, baseline) {
