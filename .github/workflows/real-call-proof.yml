@@ -20,6 +20,14 @@ on:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
         default: ""
+      leave_baseline_median_ms:
+        description: Captured production baseline; empty measures the local old SDK reference
+        type: string
+        default: ""
+      leave_baseline_evidence_sha256:
+        description: Encrypted comparison evidence hash
+        type: string
+        default: ""
   workflow_call:
     inputs:
       environment:
@@ -32,6 +40,12 @@ on:
         default: smoke transcript
       release_sha:
         description: Exact deployed revision to prove
+        type: string
+        default: ""
+      leave_baseline_median_ms:
+        type: string
+        default: ""
+      leave_baseline_evidence_sha256:
         type: string
         default: ""
     secrets:
@@ -122,6 +136,8 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
+          CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
+          CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}

@@ -5,7 +5,8 @@ export function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-export function evaluateLeaves(baseline, candidate) {
+export function evaluateLeaves(baseline, candidate, capturedMedianMs) {
+  if (capturedMedianMs !== undefined && (!Number.isFinite(capturedMedianMs) || capturedMedianMs <= 0 || capturedMedianMs > 5000)) throw new Error("Captured baseline median must be positive and at most 5000 ms");
   const reference = baseline.filter((sample) => sample.scenario === "ordinary");
   const ordinary = candidate.filter((sample) => sample.scenario === "ordinary");
   const rejected = candidate.filter((sample) => sample.scenario === "publications-403");
@@ -16,7 +17,8 @@ export function evaluateLeaves(baseline, candidate) {
   const candidateMs = candidate.filter((sample) => sample.confirmed).map((sample) => sample.ms);
   const baselineMedianMs = baselineMs.length ? median(baselineMs) : null;
   const candidateMedianMs = candidateMs.length ? median(candidateMs) : null;
-  const limitMs = baselineMedianMs === null ? null : 2 * baselineMedianMs + 500;
+  const referenceMedianMs = capturedMedianMs ?? baselineMedianMs;
+  const limitMs = referenceMedianMs === null ? null : 2 * referenceMedianMs + 500;
   const candidateMaxMs = candidateMs.length ? Math.max(...candidateMs) : null;
   return {
     passed: complete && confirmed && observed403 && candidateMedianMs <= limitMs && candidateMaxMs <= 5000,
@@ -24,6 +26,7 @@ export function evaluateLeaves(baseline, candidate) {
     confirmed,
     observed403,
     baselineMedianMs,
+    referenceMedianMs,
     baselineMaxMs: baselineMs.length ? Math.max(...baselineMs) : null,
     candidateMedianMs,
     candidateMaxMs,

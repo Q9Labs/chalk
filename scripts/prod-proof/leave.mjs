@@ -8,7 +8,7 @@ import { check, command, save } from "./runtime.mjs";
 
 const baselineVersion = "5.2.6";
 
-async function baselineEntry(run) {
+export async function baselineEntry(run) {
   const metadata = await fetch(`https://registry.npmjs.org/@q9labsai%2fchalk-client/${baselineVersion}`, { signal: AbortSignal.timeout(30_000) });
   check(metadata.ok, "Baseline npm metadata is unavailable");
   const release = await metadata.json();
@@ -95,7 +95,7 @@ async function observeDeparture(page, scenario) {
   }, scenario);
 }
 
-async function sampleLeave(run, origin, sdkEntry, scenario) {
+export async function sampleLeave(run, origin, sdkEntry, scenario) {
   const { space, episode } = await createEpisode(run);
   const resourcesStart = run.resources.length;
   const directory = resolve(run.directory, `leave-${sdkEntry ? "baseline" : "candidate"}-${scenario}-${randomUUID()}`);
@@ -129,7 +129,9 @@ export async function leaveProof(run) {
     candidate.push(await sampleLeave(run, receiver.origin, undefined, "publications-403"));
     await save(`${run.directory}/leave-samples.json`, { baseline, candidate });
   }
-  const result = evaluateLeaves(baseline, candidate);
+  const captured = process.env.CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS;
+  const result = evaluateLeaves(baseline, candidate, captured ? Number(captured) : undefined);
+  result.baselineEvidenceSha256 = process.env.CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256 || null;
   await save(`${run.directory}/leave-comparison.json`, result);
   console.log(`Leave comparison: baseline median ${result.baselineMedianMs} ms, max ${result.baselineMaxMs} ms; candidate median ${result.candidateMedianMs} ms, max ${result.candidateMaxMs} ms; limit ${result.limitMs} ms; 403 observed ${result.observed403}`);
   check(result.passed, "Leave acknowledgement comparison failed");

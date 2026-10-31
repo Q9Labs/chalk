@@ -19,6 +19,12 @@ test("rejects a single sample above5seconds even when its median passes", () => 
   assert.equal(evaluateLeaves(baseline(), rows).passed, false);
 });
 
+test("production uses the captured baseline even when its local old-client reference is slower", () => {
+  assert.equal(evaluateLeaves(baseline(), candidate(801), 150).passed, false);
+  assert.equal(evaluateLeaves(baseline(), candidate(800), 150).passed, true);
+  for (const value of [NaN, 0, -1, 5001]) assert.throws(() => evaluateLeaves(baseline(), candidate(), value));
+});
+
 test("requires every confirmed ack, no deadline fallback, and the observed403 sequence", () => {
   for (const fault of [{ confirmed: false }, { deadlineFallback: true }, { rejectedWhileLeaving: false }, { peerClosedBeforeAck: true }]) {
     const rows = candidate();
