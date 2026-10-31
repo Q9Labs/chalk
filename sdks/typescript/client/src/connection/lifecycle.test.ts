@@ -7,7 +7,7 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "../space-client/core.
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "./lifecycle";
 import { ConnectionAccessFailure } from "../access/manager";
 import type { ConnectionOptions } from "./index";
-import { createCloudflareSFUHTTPTransport } from "../media";
+import { CloudflareSFUError, createCloudflareSFUHTTPTransport } from "../media";
 import { streamFromTracks } from "./media-devices";
 import { ConnectionReporter, type ConnectionReport } from "./report";
 import { track } from "../space-client/capture.test.helpers";
@@ -31,12 +31,16 @@ it.each([
     microphone.stop();
     camera.stop();
   });
+  let rejectMedia: ((cause: unknown) => void) | undefined;
   const client = createSpaceClientForPlatform(
     { space: "leave-proof", getAccess: async () => opaqueAccessGrant(1) },
     {
       dependencies: {
         ...platform.dependencies,
-        createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), stop: stopMedia }),
+        createMediaClient: (input) => {
+          rejectMedia = input.onFailure;
+          return { ...platform.dependencies.createMediaClient(input), stop: stopMedia };
+        },
         clock: { now: () => clock.now(), setTimeout: (callback, delay) => clock.setTimeout(callback, delay), clearTimeout: (handle) => clock.clearTimeout(handle) },
         cancelPendingAdmission: async () => false,
       },
@@ -59,6 +63,7 @@ it.each([
     await vi.waitFor(() => expect(leaveSync).toHaveBeenCalledOnce());
     expect(microphone.readyState).toBe("ended");
     expect(camera.readyState).toBe("ended");
+    rejectMedia?.(new CloudflareSFUError("Leaving participant cannot poll publications", "signaling_failed", { status: 403 }));
     expect(stopMedia).not.toHaveBeenCalled();
     expect(stopSync).not.toHaveBeenCalled();
     clock.advance(delay);
