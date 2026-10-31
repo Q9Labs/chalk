@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -665,6 +666,7 @@ func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 	for _, track := range providerTracks {
 		if addTrackResultFailed(track) {
 			code := normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription))
+			slog.Default().Warn("Cloudflare SFU track error", "event", "cloudflare_sfu.track_error", "normalized", code, "raw_code", track.ErrorCode, "raw_description", diagTrackErrorText(track.ErrorDescription))
 			trackErrors = append(trackErrors, mediaplane.TrackError{ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code})
 			continue
 		}
@@ -1108,4 +1110,15 @@ func sfuStatusError(operation string, statusCode int, payload []byte) error {
 	failure := newProviderFailure(operation, failureStageHTTPStatus, statusCode, providerRejectionCode(code, message))
 	failure.details.rawCode = observableHTTPProviderCode(payload)
 	return failure
+}
+
+var diagIDPattern = regexp.MustCompile(`[0-9A-Za-z_-]{20,}`)
+
+// diagTrackErrorText keeps Cloudflare's wording and drops anything that looks like an identifier.
+func diagTrackErrorText(text string) string {
+	text = diagIDPattern.ReplaceAllString(text, "<id>")
+	if len(text) > 160 {
+		return text[:160]
+	}
+	return text
 }
