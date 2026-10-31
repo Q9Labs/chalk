@@ -123,6 +123,32 @@ export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantReque
 export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
 export type AuditLogId = typeof AuditLogIdSchema.Type;
 
+export const CallStatsRequestSchema = Schema.Struct({
+  samples: Schema.Array(
+    Schema.Struct({
+      connection_type: Schema.Literals(["udp", "tcp", "turn", "unknown"]),
+      elapsed_ms: Schema.Number,
+      freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
+      freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+      recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+      recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
+      recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+      relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
+      remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+      rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      send_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+      send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+      send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
+      send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+      window_ms: Schema.Number,
+    }),
+  ).check(Schema.isMinLength(1), Schema.isMaxLength(30)),
+  version: Schema.Literal(1),
+});
+export type CallStatsRequest = typeof CallStatsRequestSchema.Type;
+
 export const CancelRecordingPreparationRequestSchema = Schema.Struct({
   expected_revision: Schema.Number,
 });
@@ -2816,6 +2842,21 @@ export const UpdateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
   "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
 });
 export type UpdateWebhookEndpoint429ResponseHeaders = typeof UpdateWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const UploadCallStatsPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+});
+export type UploadCallStatsPathParams = typeof UploadCallStatsPathParamsSchema.Type;
+
+export const UploadCallStatsRequestBodySchema = CallStatsRequestSchema;
+export type UploadCallStatsRequestBody = typeof UploadCallStatsRequestBodySchema.Type;
+
+export const UploadCallStats429ResponseHeadersSchema = Schema.Struct({
+  "Retry-After": RetryAfterHeaderSchema,
+  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+});
+export type UploadCallStats429ResponseHeaders = typeof UploadCallStats429ResponseHeadersSchema.Type;
 
 export class AccessForbiddenError extends Schema.TaggedErrorClass<AccessForbiddenError>()("AccessForbiddenError", {
   error: Schema.Struct({
@@ -6208,6 +6249,9 @@ export const UpdateWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type UpdateWebhookEndpointError = typeof UpdateWebhookEndpointErrorSchema.Type;
 
+export const UploadCallStatsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestInvalidErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type UploadCallStatsError = typeof UploadCallStatsErrorSchema.Type;
+
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -6275,5 +6319,6 @@ export const ChalkOperationPolicies = {
   updateSpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateTenant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  uploadCallStats: { maxBodyBytes: 32768, rateLimit: { limit: 30, policy: "call_stats.participant", windowSeconds: 600 } },
 } as const;
 export type ChalkOperationPolicy = (typeof ChalkOperationPolicies)[keyof typeof ChalkOperationPolicies];

@@ -66,6 +66,12 @@ export type CloudflareSFUSignalingTransport = {
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /**
+   * Best-effort per-call stats upload; transports without it simply report nothing. The `closing`
+   * batch reuses the last token and never asks the credential provider, which could refresh access
+   * for a participant who just left or was evicted.
+   */
+  readonly uploadCallStats?: (stats: import("./call-stats").CallStatsRequest, closing: boolean) => Promise<void>;
 };
 export type CloudflareSFURemoteTrack = CloudflareSFUPublication & {
   readonly track: MediaStreamTrack;
