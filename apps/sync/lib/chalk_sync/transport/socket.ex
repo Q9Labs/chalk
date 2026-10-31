@@ -39,11 +39,12 @@ defmodule ChalkSync.Transport.SocketV1 do
     connection_attributes =
       opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
 
+    observability = opts |> Map.get(:observability) |> Observability.merge(nil)
+    Observability.bind_logger(observability)
+
     observability =
-      opts
-      |> Map.get(:observability)
-      |> Observability.merge(nil)
-      |> Observability.root(
+      Observability.root(
+        observability,
         "sync.websocket.handshake",
         Map.merge(connection_attributes, %{transport: "websocket", protocol: 1})
       )
@@ -703,11 +704,11 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   defp merge_hello_observability(state, correlation) when is_map(correlation) do
-    %{
-      state
-      | observability:
-          Observability.merge(state.observability, Observability.context(correlation))
-    }
+    observability =
+      Observability.merge(state.observability, Observability.context(correlation))
+
+    Observability.bind_logger(observability)
+    %{state | observability: observability}
   end
 
   defp merge_hello_observability(state, _correlation), do: state

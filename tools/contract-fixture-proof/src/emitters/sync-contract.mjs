@@ -174,11 +174,21 @@ function validateCorrelationDefinition(value) {
     }
   }
 
+  const helloOnlyFields = requireObjectProperty(value, "helloOnlyFields", "correlation helloOnlyFields are required");
+  if (JSON.stringify(Object.keys(helloOnlyFields)) !== JSON.stringify(["baggage"])) {
+    throw new Error("Invalid sync v1 contract: hello-only correlation fields must be baggage");
+  }
+  const baggage = /** @type {JsonObject} */ (helloOnlyFields.baggage);
+  validateField(baggage);
+  if (baggage.kind !== "string" || baggage.format !== "w3c-baggage-session-id" || baggage.minBytes !== 47 || baggage.maxBytes !== 47 || baggage.pattern !== "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$") {
+    throw new Error("Invalid sync v1 contract: correlation.baggage must be the single lowercase session.id member");
+  }
+
   const acceptedOn = requireObjectProperty(value, "acceptedOn", "correlation acceptedOn is required");
   if (acceptedOn.hello !== "client-to-server" || acceptedOn.serverFrames !== "server-to-client") {
     throw new Error("Invalid sync v1 contract: correlation acceptedOn directions are invalid");
   }
-  if (JSON.stringify(value.upgradeHeaders) !== JSON.stringify(["x-chalk-journey-id", "traceparent", "tracestate"])) {
+  if (JSON.stringify(value.upgradeHeaders) !== JSON.stringify(["x-chalk-journey-id", "traceparent", "tracestate", "baggage"])) {
     throw new Error("Invalid sync v1 contract: correlation upgrade headers must be exhaustive");
   }
   if (value.rule !== "propagate_from_first_observed_layer_to_every_downstream_frame") {
@@ -240,7 +250,8 @@ function validateSyncContractDocument(value) {
   }
 
   const limits = requireObjectProperty(value, "limits", "limits are required");
-  // Reserve the standalone JSON object size for the three optional correlation fields:
+  // Reserve the standalone JSON object size for the three optional server-frame correlation fields
+  // (the hello-only baggage field fits the inbound frame limit and needs no reserve):
   // 1,160 bytes at their declared maxima (36-byte journey ID, 55-byte traceparent,
   // and a 512-byte W3C tracestate whose JSON-special characters may escape),
   // conservatively covering the 1,159-byte merge delta.

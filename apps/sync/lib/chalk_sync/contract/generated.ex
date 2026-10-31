@@ -208,8 +208,17 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "pattern" => "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$"
         }
       },
+      "helloOnlyFields" => %{
+        "baggage" => %{
+          "kind" => "string",
+          "minBytes" => 47,
+          "maxBytes" => 47,
+          "format" => "w3c-baggage-session-id",
+          "pattern" => "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
       "acceptedOn" => %{"hello" => "client-to-server", "serverFrames" => "server-to-client"},
-      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate"],
+      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate", "baggage"],
       "rule" => "propagate_from_first_observed_layer_to_every_downstream_frame"
     },
     "externalIntents" => [
@@ -521,6 +530,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     ]
   }
   @correlation_field_keys ["journey_id", "traceparent", "tracestate"]
+  @hello_only_correlation_field_keys ["baggage"]
   @capabilities [
     "publishAudio",
     "publishVideo",
@@ -630,6 +640,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
   @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
+  @baggage ~r/\Asession\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
   @digest ~r/\A[0-9a-f]{64}\z/
 
   def protocol_version, do: @protocol_version
@@ -673,15 +684,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp decode_hello(%{"type" => "hello", "protocol" => @protocol_version, "token" => token,
       "streams" => streams} = frame) do
     cond do
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
+      hello_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
           valid_token?(token) and valid_streams?(streams) ->
         {:ok, {:hello, %{token: token, streams: streams, extensions: [],
-            correlation: correlation_fields(frame)}}}
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
+            correlation: hello_correlation_fields(frame)}}}
+      hello_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
           valid_token?(token) and valid_streams?(streams) and
           valid_collaborations_hello_extensions?(frame["extensions"]) ->
         {:ok, {:hello, %{token: token, streams: streams, extensions: frame["extensions"],
-            correlation: correlation_fields(frame)}}}
+            correlation: hello_correlation_fields(frame)}}}
       true ->
         {:error, :invalid_hello}
     end
@@ -1557,6 +1568,14 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp correlation_fields(frame), do: Enum.reduce(@correlation_field_keys, %{}, fn key,
       fields -> if Map.has_key?(frame, key), do: Map.put(fields, key, frame[key]),
       else: fields end)
+  def valid_baggage?(value), do: bounded_string?(value, 47, 47) and value =~ @baggage
+  defp hello_correlation_fields(frame),
+      do: frame |> correlation_fields() |> Map.merge(Map.take(frame,
+      @hello_only_correlation_field_keys))
+  defp hello_exact_keys?(frame, keys), do: correlation_exact_keys?(Map.drop(frame,
+      @hello_only_correlation_field_keys), keys) and
+      Enum.all?(@hello_only_correlation_field_keys, fn key -> not Map.has_key?(frame, key) or
+      valid_baggage?(frame[key]) end)
   defp correlation_exact_keys?(map, keys) when is_map(map),
       do: valid_correlation_fields?(map) and map_size(map) >= length(keys) and Enum.all?(keys,
       &Map.has_key?(map, &1)) and Enum.all?(Map.keys(map), &(&1 in keys or

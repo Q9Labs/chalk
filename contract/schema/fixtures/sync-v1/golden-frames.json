@@ -23,7 +23,8 @@
       },
       "journey_id": "00000000-0000-4000-8000-000000000042",
       "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-      "tracestate": "vendor=value"
+      "tracestate": "vendor=value",
+      "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
     },
     {
       "type": "command",

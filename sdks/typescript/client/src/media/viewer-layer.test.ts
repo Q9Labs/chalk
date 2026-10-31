@@ -49,6 +49,38 @@ describe("viewer layer policy", () => {
     expect(policy.layer).toBe("h");
   });
 
+  it("keeps a sender-limited 4 fps camera on h after comparing both layers", () => {
+    const policy = new ViewerLayerPolicy();
+    const slow = { ...good, framesPerSecond: 4, tileHeight: 720 };
+    run(policy, slow, 300);
+    for (let i = 0; i < 300; i++) expect(policy.sample(slow)).toBe("h");
+    expect(policy.sample(severeFreeze)).toBe("l");
+  });
+
+  it("still backs off when l improves a downlink-limited frame rate", () => {
+    const policy = new ViewerLayerPolicy();
+    const slow = { ...good, framesPerSecond: 4 };
+    run(policy, slow, 2);
+    run(policy, good, 2 + 15);
+    expect(policy.layer).toBe("h");
+    run(policy, slow, 2 + 2);
+    expect(policy.layer).toBe("l");
+    run(policy, good, 2 + 29);
+    expect(policy.layer).toBe("l");
+    expect(policy.sample(good)).toBe("h");
+  });
+
+  it("relearns congestion after the sender recovers or frame rate falls further", () => {
+    for (const recovered of [false, true]) {
+      const policy = new ViewerLayerPolicy();
+      run(policy, { ...good, framesPerSecond: 4 }, 100);
+      expect(policy.layer).toBe("h");
+      if (recovered) run(policy, good, 3);
+      run(policy, { ...good, framesPerSecond: recovered ? 4 : 1 }, 2);
+      expect(policy.layer).toBe("l");
+    }
+  });
+
   it("ignores the samples that still describe the old layer after a switch", () => {
     const policy = new ViewerLayerPolicy();
     policy.sample(severeFreeze);
@@ -191,6 +223,44 @@ describe("viewer layer selector", () => {
     const [change] = selector.sample(1000, report([inbound("t", 2000, { packetsReceived: 100, framesDecoded: 30, freezeCount: 1 })]), [camera]);
     selector.applied(change!);
     expect(selector.sample(2000, report([inbound("t", 3000, { packetsReceived: 200, framesDecoded: 60, freezeCount: 1 })]), [camera])).toEqual([]);
+  });
+
+  it("does not learn a sender limit from an unapplied lower layer", () => {
+    const selector = new ViewerLayerSelector();
+    const tick = (now: number) => selector.sample(now, report([inbound("t", now, { packetsReceived: now / 10, framesDecoded: now / 250 })]), [camera]);
+    tick(0);
+    tick(1000);
+    const [change] = tick(2000);
+    expect(change?.layer).toBe("l");
+    for (let now = 3000; now <= 60_000; now += 1000) expect(tick(now)).toMatchObject([{ layer: "l" }]);
+    selector.applied(change!);
+    // The actual l now improves to 30 fps. That is downlink evidence, not a sender limit.
+    for (let i = 1; i <= 17; i++) {
+      const now = 60_000 + i * 1000;
+      const changes = selector.sample(now, report([inbound("t", now, { packetsReceived: now / 10, framesDecoded: 240 + i * 30 })]), [camera]);
+      if (i === 17) {
+        expect(changes).toMatchObject([{ layer: "h" }]);
+        selector.applied(changes[0]!);
+      }
+    }
+    let changes;
+    for (let i = 1; i <= 4; i++) {
+      const now = 77_000 + i * 1000;
+      changes = selector.sample(now, report([inbound("t", now, { packetsReceived: now / 10, framesDecoded: 750 + i * 4 })]), [camera]);
+    }
+    expect(changes).toMatchObject([{ layer: "l" }]);
+  });
+
+  it.each(["applied", "failed"] as const)("ignores a late %s result for a replaced receiver", (result) => {
+    const selector = new ViewerLayerSelector();
+    const original = { ...camera, track: track("t") };
+    setVideoRenderSize(original.track, { width: 480, height: 270 });
+    selector.sample(0, report([inbound("t", 0)]), [original]);
+    const [old] = selector.sample(1000, report([inbound("t", 1000, { packetsReceived: 100, framesDecoded: 30 })]), [original]);
+    const replacement = { ...original, track: track("new") };
+    selector.sample(2000, report([inbound("new", 2000)]), [replacement]);
+    selector[result](old!, 2000);
+    expect(selector.sample(3000, report([inbound("new", 3000, { packetsReceived: 100, framesDecoded: 30 })]), [replacement])).toMatchObject([{ track: replacement.track, layer: "l" }]);
   });
 
   it("asks for l when the UI reports a small tile", () => {

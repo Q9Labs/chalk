@@ -146,6 +146,58 @@
       "direction": "newer",
       "cursor_sequence": null,
       "limit": 101
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c,userId=alice"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "baggage": "session.id=3F2B8C1E-5D4A-4E7B-9A6C-1D2E3F4A5B6C"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "baggage": "session.id=not-a-uuid"
+    },
+    {
+      "type": "hello",
+      "protocol": 1,
+      "token": "signed-token",
+      "streams": {
+        "control": { "cursor": null },
+        "media": { "cursor": null },
+        "presence": { "cursor": null },
+        "requests": { "cursor": null }
+      },
+      "baggage": "userId=alice"
+    },
+    {
+      "type": "ping",
+      "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
     }
   ],
   "server_frames": [
@@ -211,6 +263,10 @@
       "request_id": "chat-page-req-002",
       "outcome": "cursor_reset",
       "retained_floor_sequence": "-1"
+    },
+    {
+      "type": "pong",
+      "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
     }
   ],
   "snapshot_mutations": [

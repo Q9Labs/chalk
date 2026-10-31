@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
-const mocks = vi.hoisted(() => ({ platform: vi.fn(), whiteboard: vi.fn() }));
+const mocks = vi.hoisted(() => ({ platform: vi.fn(() => ({ subscribe: vi.fn(), getSnapshot: vi.fn() })), whiteboard: vi.fn() }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({ RTCPeerConnection: vi.fn(), mediaDevices: {} }));
 vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.platform }));
