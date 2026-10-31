@@ -34,6 +34,7 @@ const config = resolveDevConfig({
   requiredTools: ['node', 'pnpm', 'go', 'elixir', 'erl', 'docker', 'openssl'],
   secretResolver: async () => credentials,
 });
+config.webJoinPath = '/synthetic';
 const services = [
   { id: 'api', command: 'go', expectedCommand: null, args: ['run', './cmd'], cwd: `${serverRoot}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
   { id: 'sync', command: 'mix', expectedCommand: null, args: ['run', '--no-halt'], cwd: `${serverRoot}/apps/sync`, dependsOn: ['api'], readiness: { url: `${config.urls.sync}/readyz` } },
