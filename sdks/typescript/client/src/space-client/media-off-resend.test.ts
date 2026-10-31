@@ -197,3 +197,209 @@ describe("an off that never reached Sync survives a replaced Sync connection", (
     }
   });
 });
+
+// The device owes Sync every off it was told to send until Sync shows the source off. The traces below come from review of the first version of this fix.
+describe("an off stays owed until Sync shows the source off", () => {
+  const offs = (command: ReturnType<typeof createConvergenceScenario>["command"]) => command.mock.calls.filter(([enabled]) => !enabled).length;
+  const ons = (command: ReturnType<typeof createConvergenceScenario>["command"]) => command.mock.calls.filter(([enabled]) => enabled).length;
+  const projectOnWith = (scenario: ReturnType<typeof createConvergenceScenario>, source: Source, publicationId: string) =>
+    scenario.platform.emitSync({ ...scenario.platform.sync.getSnapshot(), media: { projectionId: "media", sequence: (scenario.platform.sync.getSnapshot().media?.sequence ?? 0) + 1, items: [{ participantId: "participant-1", source, enabled: true, publicationId }] } });
+
+  it.each(["microphone", "camera"] as const)("keeps a %s off when a quick on is attempted during a reconnect", async (source) => {
+    const scenario = createConvergenceScenario(source);
+    try {
+      await scenario.client.join({ microphone: false, camera: false });
+      await scenario.setEnabled(true);
+      projectOn(scenario, source);
+      await enterRecovery(scenario);
+      await scenario.setEnabled(false);
+      // An on needs a live call, so it is refused and cannot cancel the owed off.
+      await expect(scenario.setEnabled(true)).rejects.toBeDefined();
+      scenario.platform.emitSync({ ...scenario.platform.sync.getSnapshot(), connection: { phase: "live" } });
+      await vi.waitFor(() => expect(scenario.client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(offs(scenario.command)).toBe(1));
+      await drain();
+      expect(ons(scenario.command)).toBe(1);
+      expect(scenario.track.enabled).toBe(false);
+      expect(uiState(scenario, source)).toBe("disabled");
+    } finally {
+      scenario.client.dispose();
+    }
+  });
+
+  it.each(["microphone", "camera"] as const)("resends a %s off that was in flight when Sync dropped and the first replacement failed", async (source) => {
+    const first = createCoreTestPlatform();
+    const next = createCoreTestPlatform();
+    const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video" });
+    const command = vi.fn(async (_enabled: boolean) => receipt);
+    let creations = 0;
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...first,
+        dependencies: {
+          ...first.dependencies,
+          mediaDevices: { getUserMedia: async () => mediaStream(track) },
+          createSyncClient: () => {
+            const attempt = creations++;
+            if (attempt === 0) return { ...first.sync, setMicrophoneEnabled: command, setCameraEnabled: command };
+            if (attempt === 1) return { ...next.sync, start: async () => Promise.reject(new Error("first recovery failed")) };
+            return { ...next.sync, setMicrophoneEnabled: command, setCameraEnabled: command };
+          },
+        },
+      },
+    );
+    const set = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
+    try {
+      await client.join({ microphone: false, camera: false });
+      await set(true);
+      project(first, source, true, track);
+      project(next, source, true, track);
+      let rejectOff: (error: Error) => void = () => undefined;
+      command.mockImplementationOnce(() => new Promise((_resolve, reject) => (rejectOff = reject)));
+      const off = set(false).catch(() => undefined);
+      await vi.waitFor(() => expect(command.mock.calls.filter(([enabled]) => !enabled)).toHaveLength(1));
+      first.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+      rejectOff(new Error("off interrupted by the disconnect"));
+      await off;
+      await vi.waitFor(() => expect(creations).toBe(3), { timeout: 10000 });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"), { timeout: 10000 });
+      await vi.waitFor(() => expect(command.mock.calls.filter(([enabled]) => !enabled).length).toBeGreaterThanOrEqual(2), { timeout: 3000 });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("resends an accepted %s off when the snapshot after a reconnect still shows its publication on", async (source) => {
+    const scenario = createConvergenceScenario(source);
+    try {
+      await scenario.client.join({ microphone: false, camera: false });
+      await scenario.setEnabled(true);
+      projectOn(scenario, source);
+      scenario.command.mockResolvedValue(receipt);
+      await scenario.setEnabled(false);
+      expect(offs(scenario.command)).toBe(1);
+      await enterRecovery(scenario);
+      // Sync restarted without the off and still shows the publication the device paused.
+      projectOnWith(scenario, source, "publication-1");
+      scenario.platform.emitSync({ ...scenario.platform.sync.getSnapshot(), connection: { phase: "live" } });
+      await vi.waitFor(() => expect(offs(scenario.command)).toBe(2));
+    } finally {
+      scenario.client.dispose();
+    }
+  });
+
+  it("does not turn off a publication from another device of the same participant", async () => {
+    const scenario = await liveThenLostOff("microphone");
+    try {
+      projectOnWith(scenario, "microphone", "publication-of-another-device");
+      await drain();
+      expect(offs(scenario.command)).toBe(1);
+    } finally {
+      scenario.client.dispose();
+    }
+  });
+
+  it("does not resend once the Sync projection already shows the source off", async () => {
+    const scenario = await liveThenLostOff("microphone");
+    try {
+      project(scenario.platform, "microphone", false);
+      await drain();
+      expect(offs(scenario.command)).toBe(1);
+    } finally {
+      scenario.client.dispose();
+    }
+  });
+
+  it("sends one retry, not one per snapshot, while an off retry is in flight", async () => {
+    const scenario = createConvergenceScenario("microphone");
+    try {
+      await scenario.client.join({ microphone: false, camera: false });
+      await scenario.setEnabled(true);
+      projectOn(scenario, "microphone");
+      scenario.command.mockRejectedValue(lost());
+      await scenario.setEnabled(false).catch(() => undefined);
+      for (let snapshot = 0; snapshot < 500; snapshot++) projectOn(scenario, "microphone");
+      await drain();
+      expect(offs(scenario.command)).toBe(2);
+    } finally {
+      scenario.client.dispose();
+    }
+  });
+
+  describe("on a quiet healthy connection", () => {
+    /** Under fake timers every await needs the clock to move, so each step runs the promise while the clock ticks. */
+    const step = async <T>(promise: Promise<T>, tickMs = 20): Promise<T> => {
+      const result = promise.then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      await vi.advanceTimersByTimeAsync(tickMs);
+      const settled = await result;
+      if ("error" in settled) throw settled.error;
+      return settled.value;
+    };
+    const offTimes: number[] = [];
+    const liveThenLostOffUnderFakeTimers = async (source: "microphone" | "camera") => {
+      vi.useFakeTimers();
+      offTimes.length = 0;
+      const scenario = createConvergenceScenario(source);
+      await step(scenario.client.join({ microphone: false, camera: false }));
+      await step(scenario.setEnabled(true));
+      projectOn(scenario, source);
+      scenario.command.mockImplementation(async (enabled) => {
+        if (!enabled) offTimes.push(Date.now());
+        throw lost();
+      });
+      await step(scenario.setEnabled(false)).catch(() => undefined);
+      return scenario;
+    };
+    it.each(["microphone", "camera"] as const)("repairs a lost %s off on a timer with doubling backoff and stops once Sync shows it off", async (source) => {
+      const scenario = await liveThenLostOffUnderFakeTimers(source);
+      try {
+        expect(offs(scenario.command)).toBe(1);
+        // No Sync snapshot arrives in this time. Retries wait 1 s, 2 s, 4 s, 8 s, 16 s, then 30 s at most.
+        await vi.advanceTimersByTimeAsync(200000);
+        const gaps = offTimes.slice(1).map((time, index) => time - offTimes[index]!);
+        // Each attempt adds a few milliseconds of its own, so the gaps are compared in 10 ms steps.
+        expect(gaps.slice(0, 7).map((gap) => Math.floor(gap / 10) * 10)).toEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000]);
+        const sent = offs(scenario.command);
+        project(scenario.platform, source, false);
+        await vi.advanceTimersByTimeAsync(120000);
+        expect(offs(scenario.command)).toBe(sent);
+      } finally {
+        scenario.client.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops retrying when the client is disposed", async () => {
+      const scenario = await liveThenLostOffUnderFakeTimers("microphone");
+      try {
+        scenario.client.dispose();
+        await vi.advanceTimersByTimeAsync(120000);
+        expect(offs(scenario.command)).toBe(1);
+      } finally {
+        scenario.client.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it("stops retrying an off that a newer on replaced", async () => {
+      const scenario = await liveThenLostOffUnderFakeTimers("microphone");
+      try {
+        scenario.command.mockReset();
+        scenario.command.mockResolvedValue(receipt);
+        const on = step(scenario.setEnabled(true));
+        scenario.track.enabled = true;
+        projectOn(scenario, "microphone");
+        await on;
+        await vi.advanceTimersByTimeAsync(120000);
+        expect(offs(scenario.command)).toBe(0);
+      } finally {
+        scenario.client.dispose();
+        vi.useRealTimers();
+      }
+    });
+  });
+});
