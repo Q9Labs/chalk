@@ -87,9 +87,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #latestViews = new Map<string, Extract<ChalkWhiteboardV1Event, { readonly type: "view" }>>();
   readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
+  readonly #savingOperations = new Map<string, OperationEntry>();
   /** Strictly increasing, so a restore replays operations made in the same millisecond in the order they were made. */
   #lastCreatedAt = 0;
-  readonly #reservedOperationIds = new Set<string>();
   /**
    * Policy changes and per-person choices in the order the host made them. Only the first one is sent, and only once it
    * is saved, so the order comes from creation and never from which save finishes first.
@@ -417,6 +417,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         void this.#store.remove(pending.operationId).catch(() => undefined);
         continue;
       }
+      if (!isAccessChange(pending.frame) && this.#savingOperations.has(pending.operationId)) continue;
       if (this.#operationCount() >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) return;
       this.#lastCreatedAt = Math.max(this.#lastCreatedAt, pending.createdAt);
       if (!isAccessChange(pending.frame)) this.#operations.set(pending.operationId, { pending, retries: 0 });
@@ -764,7 +765,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
   }
 
-  async #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" }>): Promise<ChalkWhiteboardV1Commit> {
+  #queueOperation(frame: Extract<WhiteboardV1ClientFrame, { readonly type: "submit_update" | "clear" | "set_draw_permission" | "set_draw_policy" | "set_presentation" }>): Promise<ChalkWhiteboardV1Commit> {
     this.#assertOperationCapacity();
     whiteboardV1OperationFrames(frame);
     const pending = {
@@ -779,16 +780,25 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     const { promise, deferred } = commitDeferred();
     if (isAccessChange(frame)) return this.#queueAccessChange({ pending, deferred, retries: 0 }, deferred, promise);
-    this.#reservedOperationIds.add(frame.operation_id);
-    const saveFailure = await this.#persist(pending);
-    this.#reservedOperationIds.delete(frame.operation_id);
-    if (saveFailure) throw saveFailure;
-    this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    if (this.#phase === "live" && this.#snapshots.size === 0) {
-      if (this.#waitingForOperations) this.#awaitingOperationIds.add(frame.operation_id);
-      this.#sendOperation(frame);
-    }
+    const entry = { pending, deferred, retries: 0 };
+    this.#savingOperations.set(frame.operation_id, entry);
+    void this.#saveOperation(entry, deferred);
     return promise;
+  }
+
+  async #saveOperation(entry: OperationEntry, deferred: Deferred<ChalkWhiteboardV1Commit>): Promise<void> {
+    const { pending } = entry;
+    const saveFailure = await this.#persist(pending);
+    this.#savingOperations.delete(pending.operationId);
+    if (saveFailure) {
+      rejectDeferred(deferred, saveFailure);
+      return;
+    }
+    this.#operations.set(pending.operationId, entry);
+    if (this.#phase === "live" && this.#snapshots.size === 0) {
+      if (this.#waitingForOperations) this.#awaitingOperationIds.add(pending.operationId);
+      this.#sendOperation(pending.frame);
+    }
   }
 
   /**
@@ -964,11 +974,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #pendingEntries(): OperationEntry[] {
-    return [...this.#operations.values(), ...this.#accessChanges.map((change) => change.entry)];
+    return [...this.#operations.values(), ...this.#savingOperations.values(), ...this.#accessChanges.map((change) => change.entry)];
   }
 
   #operationCount(): number {
-    return this.#operations.size + this.#accessChanges.length;
+    return this.#operations.size + this.#savingOperations.size + this.#accessChanges.length;
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -1077,14 +1087,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #assertOperationCapacity(): void {
-    if (this.#operationCount() + this.#reservedOperationIds.size >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) {
+    if (this.#operationCount() >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation capacity is full."));
     }
   }
 
   #nextId(): string {
     const id = this.#options.ids?.next() ?? crypto.randomUUID();
-    if (this.#operations.has(id) || this.#accessChange(id) || this.#reservedOperationIds.has(id) || this.#snapshots.has(id)) {
+    if (this.#operations.has(id) || this.#savingOperations.has(id) || this.#accessChange(id) || this.#snapshots.has(id)) {
       throw error(failure("submit_update", "invalid_payload", false, "Whiteboard operation ID is already pending."));
     }
     return id;
