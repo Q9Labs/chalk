@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -127,11 +128,70 @@ func TestParticipantMediaAddTracksLabelsProviderCallWithRouteIDs(t *testing.T) {
 	}
 }
 
+type listenerPullObserverStub struct {
+	mediapublications.Registry
+	inputs   []mediapublications.ListenerPullInput
+	captures []mediapublications.ReceiveHealthEpisode
+}
+
+func (s *listenerPullObserverStub) CaptureListenerPull(episode mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture {
+	s.captures = append(s.captures, episode)
+	return mediapublications.ListenerPullCapture{}
+}
+
+func (s *listenerPullObserverStub) ObserveListenerPull(_ context.Context, input mediapublications.ListenerPullInput) {
+	s.inputs = append(s.inputs, input)
+}
+
+func TestParticipantMediaAddTracksObservesSuccessfulAndFailedPulls(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(fmt.Sprint(failed), func(t *testing.T) {
+			subject := participantMediaSubject(t)
+			plane := &addTracksRouteFixture{}
+			if failed {
+				plane.err = mediaplane.ErrProviderFailed
+				plane.response.TrackErrors = []mediaplane.TrackError{{ConnectionID: "sender", TrackName: "audio", Code: "empty_track_error"}}
+			} else {
+				plane.response.Tracks = []mediaplane.Track{{Location: "remote", SessionID: "sender", TrackName: "audio", Mid: "0"}}
+			}
+			observer := &listenerPullObserverStub{}
+			plane.beforeAdd = func() {
+				if len(observer.captures) != 1 || len(observer.inputs) != 0 {
+					t.Fatal("pull identity was not captured before the provider call")
+				}
+			}
+			router := chi.NewRouter()
+			router.Use(requireParticipantMedia(&participantMediaVerifierStub{subject: subject}, &activeParticipantAuthorizerStub{}))
+			sfuAddTracksEndpoint(plane, plane, plane, plane, observer).Mount(router, RateLimitOptions{})
+			path := fmt.Sprintf("/tenants/%s/spaces/%s/episodes/%s/participants/%s/media/sfu/tracks", subject.TenantID, subject.SpaceID, subject.EpisodeID, subject.ParticipantID)
+			request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"connection_id":"connection-123","tracks":[{"location":"remote","sessionId":"sender","trackName":"audio"}]}`))
+			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+			router.ServeHTTP(httptest.NewRecorder(), request)
+			if len(observer.inputs) != 1 {
+				t.Fatalf("observations = %d", len(observer.inputs))
+			}
+			input := observer.inputs[0]
+			if len(observer.captures) != 1 || observer.captures[0] != input.ReceiveHealthEpisode {
+				t.Fatal("pull identity was not captured for the observed Episode")
+			}
+			if input.ParticipantID != subject.ParticipantID || input.ParticipantGeneration != subject.ParticipantGeneration || input.EpisodeID != subject.EpisodeID || input.SpaceID != subject.SpaceID || input.TenantID != subject.TenantID || input.ConnectionID != subject.CloudflareConnectionID || (input.Err != nil) != failed || len(input.Requested) != 1 {
+				t.Fatalf("observation = %+v", input)
+			}
+			if failed && (len(input.Response.TrackErrors) != 1 || input.Response.TrackErrors[0].Code != "empty_track_error") {
+				t.Fatalf("per-track failure lost: %+v", input.Response)
+			}
+		})
+	}
+}
+
 type addTracksRouteFixture struct {
 	SpaceService
 	TenantService
 	mediaplane.Plane
-	request mediaplane.TracksRequest
+	request   mediaplane.TracksRequest
+	response  mediaplane.TracksResponse
+	err       error
+	beforeAdd func()
 }
 
 func (*addTracksRouteFixture) GetSpace(context.Context, utilities.ID, utilities.ID) (spaces.Space, error) {
@@ -148,8 +208,11 @@ func (f *addTracksRouteFixture) Resolve(context.Context, tenants.Tenant, spaces.
 	return &service, nil
 }
 func (f *addTracksRouteFixture) AddTracks(_ context.Context, request mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	if f.beforeAdd != nil {
+		f.beforeAdd()
+	}
 	f.request = request
-	return mediaplane.TracksResponse{}, nil
+	return f.response, f.err
 }
 func (*addTracksRouteFixture) Renegotiate(context.Context, mediaplane.RenegotiateRequest) error {
 	return nil

@@ -1587,6 +1587,41 @@ async function expectStalledRequestRecovers(transport: CloudflareSFUSignalingTra
   expect(wasAborted()).toBe(true);
   await expect(transport.listPublications()).resolves.toMatchObject({ publications: [] });
 }
+describe("peer connection ICE servers", () => {
+  it("builds the peer connection from the bootstrap STUN and TURN entries", async () => {
+    const harness = createHarness();
+    const iceServers = [{ urls: ["stun:stun.example.test:3478"] }, { urls: ["turn:turn.example.test:3478?transport=udp", "turn:turn.example.test:3478?transport=tcp", "turns:turn.example.test:443?transport=tcp"], username: "user", credential: "secret" }];
+    await harness.client.restart({ ...bootstrap("connection-2"), iceServers });
+    const configuration = (harness.peerConnectionFactory.mock.calls.at(-1) as unknown as [RTCConfiguration])[0];
+    expect(configuration.iceServers).toEqual(iceServers);
+    expect(configuration.bundlePolicy).toBe("max-bundle");
+  });
+  it("takes ICE servers from the newest bootstrap on every restart, never from an earlier one", async () => {
+    const harness = createHarness();
+    const first = [{ urls: ["turn:first.example.test:3478"], username: "first-user", credential: "first-credential" }];
+    const second = [{ urls: ["turn:second.example.test:3478"], username: "second-user", credential: "second-credential" }];
+    await harness.client.restart({ ...bootstrap("connection-2"), iceServers: first });
+    await harness.client.restart({ ...bootstrap("connection-3"), iceServers: second });
+    const servers = harness.peerConnectionFactory.mock.calls.map((call) => (call as unknown as [RTCConfiguration])[0].iceServers);
+    expect(servers.at(-2)).toEqual(first);
+    expect(servers.at(-1)).toEqual(second);
+  });
+  it("takes ICE servers from the replacement bootstrap when recovery replaces the media connection", async () => {
+    const renewed = [{ urls: ["turn:renewed.example.test:443?transport=tcp"], username: "renewed-user", credential: "renewed-credential" }];
+    const harness = createHarness({ replaceMediaConnection: async () => ({ ...bootstrap("replacement"), iceServers: renewed }) });
+    try {
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio"), new FakeTrack("camera", "video")));
+      vi.spyOn(harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("Close transport failed", "signaling_failed", { status: 503, retryableConnection: true }));
+      await harness.client.closeForcedLocalPublication("microphone");
+      const servers = harness.peerConnectionFactory.mock.calls.map((call) => (call as unknown as [RTCConfiguration])[0].iceServers);
+      expect(servers).toHaveLength(2);
+      expect(servers[0]).toEqual([{ urls: "stun:example.test" }]);
+      expect(servers[1]).toEqual(renewed);
+    } finally {
+      harness.client.stop();
+    }
+  });
+});
 describe("Cloudflare SFU HTTP signaling", () => {
   it("reads a fresh media credential before every signaling request", async () => {
     const authoritativePublicationId = versionedPublicationID("connection-1", "0", "camera-track");
@@ -1653,6 +1688,36 @@ describe("Cloudflare SFU HTTP signaling", () => {
     expect(String(fetch.mock.calls[0]?.[0])).toMatch(/\/tracks$/);
     expect(String(fetch.mock.calls[1]?.[0])).toMatch(/\/tracks\?allow_partial_remote_tracks=true$/);
     expect(fetch.mock.calls[1]?.[1]?.body).toBe(fetch.mock.calls[0]?.[1]?.body);
+  });
+  it("uploads periodic call stats with a fresh credential so a hidden tab never reuses an expired one", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));
+    const tokens = ["token-1", "token-2"];
+    const credential = vi.fn(async () => tokens.shift() ?? "token-3");
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
+
+    await transport.uploadCallStats?.(stats, false);
+    await transport.uploadCallStats?.(stats, false);
+    const [url, init] = fetch.mock.calls[1] ?? [];
+    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer token-2");
+    expect(credential).toHaveBeenCalledTimes(2);
+  });
+  it("uploads the closing call stats with the last token and never asks the credential provider, which can refresh access", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ incarnation: 0, sequence: 0, publications: [] }), { status: 200 }));
+    const credential = vi.fn(async () => "media-token");
+    const transport = createCloudflareSFUHTTPTransport({ apiBaseURL: "http://localhost", credential, tenantId: "t", spaceId: "r", episodeId: "s", participantId: "p", fetch });
+    const stats = { version: 1 as const, samples: [{ elapsed_ms: 0, window_ms: 1000, connection_type: "udp" as const }] };
+
+    await transport.uploadCallStats?.(stats, true);
+    expect(fetch).not.toHaveBeenCalled();
+
+    await transport.listPublications();
+    await transport.uploadCallStats?.(stats, true);
+    const [url, init] = fetch.mock.calls[1] ?? [];
+    expect(String(url)).toBe("http://localhost/v1/tenants/t/call-stats");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer media-token");
+    expect(credential).toHaveBeenCalledTimes(1);
   });
   it("sends replacement diagnostics in an optional query without changing legacy bodies or CORS headers", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify({ tracks: [] }), { status: 200 }));
@@ -2388,6 +2453,28 @@ function reviewStats(h: ReturnType<typeof createHarness>, packets: (source: stri
   const codec = { id: "review-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
   return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
 }
+it("sends the closing call stats through the transport that was live at leave, even after a receive-only stop clears it", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream());
+    const uploads: { readonly samples: number; readonly closing: boolean }[] = [];
+    let finishPeriodic: () => void = () => undefined;
+    h.transport.uploadCallStats = (stats, closing) => {
+      uploads.push({ samples: stats.samples.length, closing });
+      return closing ? Promise.resolve() : new Promise<void>((resolve) => void (finishPeriodic = resolve));
+    };
+    vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+      const seconds = Date.now() / 1000;
+      return new Map([["O", { id: "O", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: seconds * 100, bytesSent: seconds * 125_000 }]]);
+    });
+    await vi.advanceTimersByTimeAsync(70_000);
+    expect(uploads).toEqual([{ samples: 6, closing: false }]);
+
+    h.client.stop();
+    finishPeriodic();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(uploads.at(-1)?.closing).toBe(true);
+  });
+});
 describe("viewer layer switching", () => {
   const healthyCameraStats = (h: ReturnType<typeof createHarness>) => {
     for (const camera of h.client.getSnapshot().remoteTracks.filter((p) => p.source === "camera")) setVideoRenderSize(camera.track, { width: 480, height: 270 });
@@ -2788,6 +2875,131 @@ async function restartWithRetainedPublications(harness: ReturnType<typeof create
   }
 }
 
+it.each(["waited", "rapid"] as const)("a %s unmute during a media connection swap publishes with real media and coordinator", (scenario) => unmuteDuringSwap(scenario));
+// Known gap: past the 250 ms lifecycle grace, #pauseRecoveredIntents cancels the unsent click as lost to Sync.
+// The recovery-rule fix (pause only when Sync's own state says off) is owned by a separate PR; drop `.fails` when it lands.
+it.fails("a cross-grace unmute during a media connection swap publishes with real media and coordinator", () => unmuteDuringSwap("cross-grace"));
+
+function createSwapCall() {
+  const harness = createHarness();
+  const platform = createCoreTestPlatform();
+  const track = new FakeTrack("swap-microphone", "audio");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platform.dependencies.clock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn(async (enabled: boolean) => {
+    const receipt = await coordinator.send("set_microphone_enabled", "microphone", enabled);
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "swap", sequence: command.mock.calls.length, items: [{ participantId: "participant-1", source: "microphone", enabled, publicationId: publication?.publicationId ?? null }] } });
+    return receipt;
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("swap") },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+  );
+  const startSwap = async () => {
+    command.mockClear();
+    harness.peers[0].setStates("disconnected", "disconnected");
+    await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+  };
+  const enable = () =>
+    client.media.setMicrophoneEnabled(true).then(
+      () => "enabled",
+      (cause: unknown) => cause,
+    );
+  const publishedMicrophone = () => [...harness.transport.localPublications.values()].some((item) => item.source === "microphone" && item.enabled !== false);
+  const dispose = () => {
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  };
+  return { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose };
+}
+
+async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): Promise<void> {
+  const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
+  try {
+    await client.join({ microphone: true, camera: false });
+    if (scenario !== "rapid") {
+      await client.media.setMicrophoneEnabled(false);
+      expect(track.enabled).toBe(false);
+    }
+    await startSwap();
+    const muted = scenario === "rapid" ? client.media.setMicrophoneEnabled(false).catch((cause: unknown) => cause) : Promise.resolve();
+    const enabled = enable();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(command).not.toHaveBeenCalledWith(true);
+    if (scenario === "cross-grace") await new Promise((resolve) => setTimeout(resolve, 400));
+    await harness.client.restart(bootstrap("connection-2"));
+    expect(await enabled).toBe("enabled");
+    await muted;
+    expect(command.mock.calls.at(-1)).toEqual([true]);
+    expect(track.enabled).toBe(true);
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    expect(publication).toMatchObject({ enabled: true });
+    expect(harness.transport.localPublications.has(publication!.publicationId!)).toBe(true);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+  } finally {
+    dispose();
+  }
+}
+
+it.each(["superseded", "timeout", "sync-loss", "call-ended"] as const)("an unmute during a media connection swap is not published after it is %s", async (ending) => {
+  const { harness, platform, track, command, client, startSwap, enable, publishedMicrophone, dispose } = createSwapCall();
+  let expire: (() => void) | undefined;
+  const schedule = platform.dependencies.clock.setTimeout;
+  const timer = vi.spyOn(platform.dependencies.clock, "setTimeout").mockImplementation((callback, milliseconds) => {
+    if (milliseconds === 10000) {
+      expire = callback;
+      return null;
+    }
+    return schedule(callback, milliseconds);
+  });
+  try {
+    await client.join({ microphone: true, camera: false });
+    await client.media.setMicrophoneEnabled(false);
+    await startSwap();
+    const enabled = enable();
+    await vi.waitFor(() => expect(expire).toBeTypeOf("function"));
+    if (ending === "superseded") await client.media.setMicrophoneEnabled(false);
+    if (ending === "timeout") expire!();
+    if (ending === "call-ended") await client.leave();
+    if (ending === "sync-loss") {
+      // Sync is lost and restored while the swap is still in flight; the pending click settles on restoration.
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await harness.client.restart(bootstrap("connection-2"));
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+    }
+    const outcome = await enabled;
+    if (ending === "superseded") expect(outcome).toBe("enabled");
+    else expect(outcome).toMatchObject({ code: ending === "timeout" ? "media.timeout" : expect.any(String) });
+    if (ending === "superseded" || ending === "timeout") await harness.client.restart(bootstrap("connection-2"));
+    if (ending !== "call-ended") {
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(command).not.toHaveBeenCalledWith(true);
+    expect(track.enabled).toBe(false);
+    expect(publishedMicrophone()).toBe(false);
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+  } finally {
+    timer.mockRestore();
+    dispose();
+  }
+});
+
 function createHarness(
   options: {
     readonly autoConnect?: boolean;
@@ -2831,6 +3043,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     readonly force: boolean;
   }[] = [];
   blockPublicationList = false;
+  uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
   failNextStaleLocalPublish = false;
