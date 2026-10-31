@@ -53,7 +53,11 @@ export function setCameraBackground(deviceId: string, background: CameraBackgrou
 
 /** Capture boundary: only this processed track reaches preview or the SFU. */
 export async function processCameraStream(stream: MediaStream, signal?: AbortSignal): Promise<MediaStream> {
-  if (!signal?.aborted && !(assets && provider)) return stream;
+  if (signal?.aborted) {
+    for (const track of stream.getTracks()) track.stop();
+    signal.throwIfAborted();
+  }
+  if (!(assets && provider) || stream.getVideoTracks().length === 0) return stream;
   const controls = await loadControlsOwning(stream.getTracks());
   return controls.processStream(store, stream, assets, provider, signal);
 }

@@ -45,6 +45,33 @@ it("carries a failed processor through camera termination into the bounded repor
   }
 });
 
+it.each([false, true])("does not load camera controls for microphone-only capture (aborted: %s)", async (aborted) => {
+  vi.resetModules();
+  const load = vi.fn(async () => {
+    throw new Error("camera controls unavailable");
+  });
+  vi.doMock("./camera-effect-operations", load);
+  try {
+    const { configureCameraEffectProvider, processCameraStream } = await import("./camera-effects");
+    configureCameraEffectProvider({ wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
+      throw new Error("Unexpected segmenter creation");
+    });
+    const audio = track("audio");
+    const captured = stream([audio]);
+    const controller = new AbortController();
+    const cancelled = new Error("capture cancelled");
+    if (aborted) controller.abort(cancelled);
+    const result = processCameraStream(captured, controller.signal);
+    if (aborted) await expect(result).rejects.toBe(cancelled);
+    else await expect(result).resolves.toBe(captured);
+    expect(audio.readyState).toBe(aborted ? "ended" : "live");
+    expect(load).not.toHaveBeenCalled();
+  } finally {
+    vi.doUnmock("./camera-effect-operations");
+    vi.resetModules();
+  }
+});
+
 it("stops captured tracks when camera controls fail to load", async () => {
   vi.resetModules();
   const failure = new Error("original controls chunk failure");
