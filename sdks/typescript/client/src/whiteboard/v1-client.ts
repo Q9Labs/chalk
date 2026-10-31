@@ -50,7 +50,7 @@ const encoder = new TextEncoder();
 
 type Deferred<T> = {
   readonly resolve: (value: T) => void;
-  readonly reject: (error: Error) => void;
+  readonly reject: (error: unknown) => void;
   settled: boolean;
 };
 
@@ -782,7 +782,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (isAccessChange(frame)) return this.#queueAccessChange({ pending, deferred, retries: 0 }, deferred, promise);
     const entry = { pending, deferred, retries: 0 };
     this.#savingOperations.set(frame.operation_id, entry);
-    void this.#saveOperation(entry, deferred);
+    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, cause));
     return promise;
   }
 
@@ -1458,7 +1458,7 @@ function resolveDeferred<T>(deferred: Deferred<T>, value: T): void {
   deferred.resolve(value);
 }
 
-function rejectDeferred<T>(deferred: Deferred<T>, value: Error): void {
+function rejectDeferred<T>(deferred: Deferred<T>, value: unknown): void {
   if (deferred.settled) return;
   deferred.settled = true;
   deferred.reject(value);

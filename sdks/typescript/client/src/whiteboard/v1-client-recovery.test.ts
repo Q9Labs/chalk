@@ -540,6 +540,36 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("rejects a drawing when the socket send fails after its save", async () => {
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
+    const unhandled = unhandledRejections();
+    const sendFailure = new Error("socket send failed");
+    try {
+      const socket = sockets[0];
+      if (!socket) throw new Error("missing socket");
+      const send = socket.send.bind(socket);
+      socket.send = (data) => {
+        if (JSON.parse(data).type === "submit_update") throw sendFailure;
+        send(data);
+      };
+
+      const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+      const expectedRejection = expect(drawing).rejects.toBe(sendFailure);
+      const boundedAssertion = Promise.race([expectedRejection, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("drawing did not settle")), 0))]);
+      const assertionResult = boundedAssertion.then(
+        () => ({ passed: true }),
+        (cause: unknown) => ({ passed: false, cause }),
+      );
+      await settle();
+      const unhandledReasons = await unhandled.after();
+      expect(unhandledReasons).toEqual([]);
+      expect(await assertionResult).toMatchObject({ passed: true });
+    } finally {
+      await client.stopSceneSubscription();
+      unhandled.stop();
+    }
+  });
+
   it("sends a live drawing once after its save resolves", async () => {
     const save = Promise.withResolvers<void>();
     const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
