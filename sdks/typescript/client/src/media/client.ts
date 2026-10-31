@@ -1037,7 +1037,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #deferRemotePulls(publications: readonly CloudflareSFUPublication[], error: unknown): void {
     for (const publication of publications) {
       const audio = this.#receiveProgress.isAudio(publication.publicationId);
-      const delay = audio ? (retryableRemotePull(error) && !isRateLimited(error) ? jitter(AUDIO_PULL_RETRY_CAP_MS) : AUDIO_PULL_REFUSED_RETRY_MS) : retryableRemotePull(error) ? 15_000 : Number.POSITIVE_INFINITY;
+      const delay = audio ? (isRateLimited(error) || permanentRemotePull(error) ? AUDIO_PULL_REFUSED_RETRY_MS : jitter(AUDIO_PULL_RETRY_CAP_MS)) : retryableRemotePull(error) ? 15_000 : Number.POSITIVE_INFINITY;
       const retryAfter = Date.now() + delay;
       const failures = this.#remotePullRetries.get(publication.publicationId)?.failures ?? 0;
       this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures, receiveStalled: this.#remotePullRetries.get(publication.publicationId)?.receiveStalled });
@@ -1495,7 +1495,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
       } catch {
         // Keep the first retry prompt, then return toward the idle polling cadence.
-        if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
+        if ((this.#pollFailedPull && this.#remotePullIncomplete) || this.#receiveProgress.hasUnhealthyAudio(this.#remoteTracks.values())) nextDelay = this.#incompletePullDelay();
         else {
           this.#pollFailures = Math.min(this.#pollFailures + 1, 6);
           nextDelay = Math.min(this.#pollIntervalMs, (500 + Math.random() * 500) * 2 ** (this.#pollFailures - 1));
@@ -1717,6 +1717,11 @@ function jitter(delayMs: number): number {
 }
 function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;
+}
+// A client error other than a missing session or a rate limit will not change by retrying quickly.
+function permanentRemotePull(error: unknown): boolean {
+  const status = error instanceof CloudflareSFUError ? error.options.status : undefined;
+  return status !== undefined && status >= 400 && status < 500 && ![404, 408, 410, 429].includes(status);
 }
 function retryableRemotePull(error: unknown): boolean {
   if (!(error instanceof CloudflareSFUError)) return false;

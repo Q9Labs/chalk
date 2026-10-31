@@ -4315,7 +4315,7 @@ describe("listener audio reconcile loop", () => {
     let replacements = 0;
     await withTimedHarness(
       async (h) => {
-        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await h.client.start(fakeStream());
         receivePackets(h, () => true);
         await vi.advanceTimersByTimeAsync(9000);
         desire(h, ["a"]);
