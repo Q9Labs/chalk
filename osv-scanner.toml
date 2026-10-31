@@ -4,11 +4,6 @@ ignoreUntil = 2026-11-28
 reason = "deepmerge 4.3.1 has no released fix (npm latest checked 2026-10-28). Every locked copy comes through @expo/config 55.0.11, used by Expo CLI, Metro/prebuild and expo-constants build scripts from apps/mobile and sdks/typescript/react-native. Its only deepmerge calls are mergeConfigModifications in build/Config.js, merging local app config and plugin options; Chalk does not import deepmerge or @expo/config in runtime code. Attacker-controlled merge inputs cannot reach these build-time calls. Revisit if runtime usage or untrusted config inputs are added, or upstream ships a fix. Evidence: https://github.com/TehShrike/deepmerge/issues/273."
 
 [[IgnoredVulns]]
-id = "GHSA-86w9-cpqp-85rv"
-ignoreUntil = 2026-11-17
-reason = "node-forge 1.4.0 has no released fix for this unreviewed low-exponent RSA verification advisory. The locked consumers are Expo CLI and its development code-signing tools, not Chalk's production signature verification; Chalk has no Expo update code-signing configuration. Expo's generated keys use Forge's default exponent 65537 rather than the vulnerable low exponents. Revisit if Forge is used at a production trust boundary, Expo code signing is configured, or upstream ships a fix."
-
-[[IgnoredVulns]]
 id = "GHSA-238p-pmpm-9mq7"
 ignoreUntil = 2026-11-17
 reason = "KaTeX 0.16.47 reaches browser whiteboards through Excalidraw/Mermaid; user-authored diagram math can reach it. The advisory requires separate prototype pollution and unsanitized insertion; Mermaid defaults to strict security and sanitizes rendered math and SVG. Chalk math uses MathJax, not KaTeX. The 0.18.2 bump changes renderer CSS classes (base/strut/sizing) in all seven compatibility samples, so defer this minor upgrade to a Mermaid/whiteboard compatibility change. Re-reviewed 17 Oct 2026: 0.18.2 is still the only fix and the whiteboard compatibility change has not been scheduled. Revisit by this date, if sanitizer/security settings change, or if a prototype-pollution path is found."
