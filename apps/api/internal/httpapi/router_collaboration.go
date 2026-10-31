@@ -14,6 +14,7 @@ func mountSpaceEpisodeRoutes(r chi.Router, options Options) {
 func mountLiveParticipantRoutes(r chi.Router, options Options) {
 	participantEpisodeStatusEndpoint(options.Episodes, options.ParticipantMediaVerify).Mount(r, options.RateLimit)
 	connectionReportEndpoint(options.ParticipantMediaVerify).Mount(r, options.RateLimit)
+	callStatsEndpoint(options.ParticipantMediaVerify).Mount(r, options.RateLimit)
 	for _, endpoint := range problemReportEndpoints(options.ProblemReports, options.ParticipantMediaVerify, options.RateLimit) {
 		endpoint.Mount(r, options.RateLimit)
 	}
