@@ -394,12 +394,19 @@ describe("media readiness", () => {
   const swapMediaConnection = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering", peerConnectionState: "connecting", iceConnectionState: "checking" }, failure: null });
   const finishMediaSwap = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live", peerConnectionState: "connected", iceConnectionState: "connected" }, failure: null });
 
-  it.each(["microphone", "camera"] as const)("applies a %s click made while the media connection is being replaced", async (source) => {
+  // The lifecycle itself enters reconnecting once the swap outlasts its 250 ms grace period.
+  it.each([
+    ["microphone", 0],
+    ["camera", 0],
+    ["microphone", 300],
+    ["camera", 300],
+  ] as const)("applies a %s click made %i ms into a media connection replacement", async (source, delayMs) => {
     const { client, platform, capture, command, setEnabled, track } = createConvergenceScenario(source);
     try {
       await client.join({ microphone: false, camera: false });
       swapMediaConnection(platform);
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
       const result = setEnabled(true).then(
         () => "enabled",
         (cause: unknown) => cause,

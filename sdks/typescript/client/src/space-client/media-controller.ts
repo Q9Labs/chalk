@@ -339,7 +339,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   /** Sync is live and only the media connection is being replaced, e.g. while another source moves to a fresh SFU connection. */
   #replacingMediaConnection(): boolean {
     const { state, connection } = this.#connection.getSnapshot();
-    return state === "live" && connection.sync === "healthy" && (connection.media === "connecting" || connection.media === "recovering");
+    return (state === "live" || state === "reconnecting") && connection.sync === "healthy" && (connection.media === "connecting" || connection.media === "recovering");
   }
   #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     return this.#act("screen", true, options);
