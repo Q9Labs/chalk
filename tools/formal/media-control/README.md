@@ -190,7 +190,7 @@ Each removes one mechanism and runs the same property set; the results are in `t
 
 ### Bounds and what is not proved
 
-Default bounds: one listener, four publication ids, two user actions, each fault kind at most once, at most two faults together. The `deep-heal-*` rows add three faults together and two listeners; their liveness rows use one user action so they fit in 8 GB. Liveness runs do not use symmetry. Not proved:
+Default bounds: one listener, four publication ids, two user actions, each fault kind at most once, at most two faults together. The `deep-heal-*` rows add three faults together (one user action for liveness, so it fits in 8 GB), and two listeners (one fault, one user action, three publication ids). Two listeners at the default bounds (two faults, four publications, two user actions) did not finish: the run was stopped after 80 minutes on an 8 GB machine at over 7 million distinct states, so no result exists for that size. Liveness runs do not use symmetry. Not proved:
 
 - Time. Backoff, the 7 s stall window, 30 s Cloudflare expiry and pending-publication timing are counters or absent. The model says nothing about how long a listener waits.
 - More than two (three on the deep rows) faults together, more than two listeners, more than one source, camera, screen and recording.
