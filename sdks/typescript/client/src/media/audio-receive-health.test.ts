@@ -288,6 +288,29 @@ describe("AudioReceiveHealth", () => {
     expect(h.events.find((e) => e.event === "audio_receive_summary")?.receive_counts).toEqual({ track_received: 1 });
   });
 
+  it("prefers a playing matching element and falls back to the first paused match", async () => {
+    const h = harness();
+    const p = remote();
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.pullSucceeded([p.publicationId]);
+    h.tracker.observeAudioElement(p.track, element(remote("other").track, false));
+    h.tracker.observeAudioElement(p.track, element(p.track)).played(new DOMException("private", "NotAllowedError"));
+    h.tracker.observeAudioElement(p.track, element(p.track)).played(undefined);
+    const playing = h.tracker.observeAudioElement(p.track, element(p.track, false));
+    h.bytes(p.track, 1);
+    await h.tracker.sample();
+    vi.setSystemTime(11000);
+    h.bytes(p.track, 2);
+    await h.tracker.sample();
+    expect(h.events).toEqual([]);
+    playing.detach();
+    vi.setSystemTime(22000);
+    h.bytes(p.track, 3);
+    await h.tracker.sample();
+    expect(h.events[0]).toMatchObject({ receive_state: "element_bound", element_state: "paused", play_result: "NotAllowedError" });
+  });
+
   it("detached or wrong-stream elements cannot make a track healthy", async () => {
     const h = harness();
     const p = remote();
