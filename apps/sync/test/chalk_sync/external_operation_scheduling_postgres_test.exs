@@ -105,7 +105,7 @@ defmodule ChalkSync.ExternalOperationSchedulingPostgresTest do
     # let end overtake the still-pending durable cleanup operation.
     Postgrex.query!(
       connection,
-      "update sync_publication_fences set expires_at = now() - interval '1 second' where external_operation_id = $1",
+      "update sync_publication_fences set created_at = now() - interval '2 seconds', expires_at = now() - interval '1 second' where external_operation_id = $1",
       [ChalkSync.UUID.dump!(second_id)]
     )
 

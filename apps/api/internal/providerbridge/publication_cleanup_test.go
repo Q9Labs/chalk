@@ -12,11 +12,14 @@ import (
 )
 
 type cleanupPublicationRepository struct {
+	mu           sync.Mutex
 	observations []provideroperations.Observation
 	participants []mediapublications.PublicationParticipant
 }
 
 func (r *cleanupPublicationRepository) ClosePublication(ctx context.Context, input mediapublications.CloseInput) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var latest *provideroperations.Observation
 	if len(r.observations) > 0 {
 		latest = &r.observations[len(r.observations)-1]
