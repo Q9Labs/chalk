@@ -1865,7 +1865,7 @@
   background: var(--chalk-raised);
 }
 
-@media (min-width: 641px) {
+@container chalk-call (min-width: 641px) {
   .chalk-device-menu {
     width: 320px;
   }
