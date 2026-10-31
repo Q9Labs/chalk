@@ -2019,6 +2019,39 @@ describe("remote publication recovery", () => {
       expect(harness.peers).toHaveLength(2);
     });
   });
+  it("holds a publication announced mid-call until its publisher has had time to connect, but pulls the first snapshot at once", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "publisher-1", source: "microphone", publicationId: "remote-connection|microphone-1" }] };
+        await harness.client.refreshRemotePublications();
+        expect(remotePullCount(harness)).toBe(1);
+        harness.transport.snapshot = {
+          incarnation: 1,
+          sequence: 2,
+          publications: [
+            { participantId: "publisher-1", source: "microphone", publicationId: "remote-connection|microphone-1" },
+            { participantId: "publisher-2", source: "microphone", publicationId: "remote-connection|microphone-2" },
+          ],
+        };
+        await harness.client.refreshRemotePublications();
+        expect(remotePullCount(harness)).toBe(1);
+        await vi.advanceTimersByTimeAsync(499);
+        await harness.client.refreshRemotePublications();
+        expect(remotePullCount(harness)).toBe(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await harness.client.refreshRemotePublications();
+        expect(remotePullCount(harness)).toBe(2);
+        expect(
+          harness.client
+            .getSnapshot()
+            .remoteTracks.map((track) => track.publicationId)
+            .sort(),
+        ).toEqual(["remote-connection|microphone-1", "remote-connection|microphone-2"]);
+      },
+      { newPublicationPullDelayMs: 500 },
+    );
+  });
   it("receives join bursts within the shared sixty-write signaling quota", async () => {
     await withTimedHarness(async (harness) => {
       await harness.client.start(fakeStream());
@@ -2795,6 +2828,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly newPublicationPullDelayMs?: number;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -2810,6 +2844,7 @@ function createHarness(
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
+    newPublicationPullDelayMs: options.newPublicationPullDelayMs ?? 0,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory,
