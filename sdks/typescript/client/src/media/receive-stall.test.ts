@@ -223,4 +223,21 @@ describe("audio receive recovery", () => {
     expect(sampleAudio(recovery, RECEIVE_ESCALATION_MS, {}, [], true).escalate).toBe(false);
     expect(sampleAudio(recovery, RECEIVE_REBUILD_COOLDOWN_MS, {}, [], true).escalate).toBe(true);
   });
+  it("doubles the cooldown while nothing flows and starts over once audio is heard", () => {
+    const recovery = audioRecovery();
+    let now = 0;
+    const escalations: number[] = [];
+    for (; now <= 200_000; now += 500) {
+      if (sampleAudio(recovery, now, { a: 10, b: 10 }, []).escalate) {
+        escalations.push(now);
+        recovery.replaced();
+      }
+    }
+    expect(escalations.slice(1).map((at, index) => at - escalations[index]!)).toEqual([RECEIVE_REBUILD_COOLDOWN_MS * 2, RECEIVE_REBUILD_COOLDOWN_MS * 4, 120_000]);
+    for (const end = now + 2000; now <= end; now += 500) sampleAudio(recovery, now, { a: now, b: now });
+    const heardAt = now;
+    let next: number | undefined;
+    for (; next === undefined && now <= heardAt + 60_000; now += 500) if (sampleAudio(recovery, now, {}, []).escalate) next = now;
+    expect(next! - heardAt).toBeLessThan(RECEIVE_REBUILD_COOLDOWN_MS * 2);
+  });
 });

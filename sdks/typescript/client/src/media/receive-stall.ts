@@ -10,6 +10,8 @@ export const AUDIO_STARTUP_GRACE_MS = 3000;
 // Nothing desired is flowing for this long: the receive session itself is suspect, not one publisher.
 export const RECEIVE_ESCALATION_MS = 8000;
 export const RECEIVE_REBUILD_COOLDOWN_MS = 15_000;
+// Rebuilding the receive session republishes every local track, so back off while nothing flows.
+const MAX_REBUILD_COOLDOWN_MS = 120_000;
 const MAX_SAMPLE_GAP_MS = 3000;
 
 export type ReceivePacketSample = {
@@ -106,6 +108,7 @@ export class ReceiveStallRecovery {
   readonly #unhealthySince = new Map<string, number>();
   #audio = new Set<string>();
   #lastRebuildAt = Number.NEGATIVE_INFINITY;
+  #rebuildStreak = 0;
   #now = 0;
   #expected = new Set<string>();
   #screens = new Set<string>();
@@ -221,6 +224,7 @@ export class ReceiveStallRecovery {
     this.#awaiting.clear();
     this.#unhealthySince.clear();
     this.#lastRebuildAt = this.#now;
+    this.#rebuildStreak++;
     this.clear();
   }
 
@@ -261,8 +265,10 @@ export class ReceiveStallRecovery {
       if (healthy) this.#unhealthySince.delete(id);
       else if (!this.#unhealthySince.has(id)) this.#unhealthySince.set(id, now);
     }
+    if (this.#audio.size > this.#unhealthySince.size) this.#rebuildStreak = 0;
     if (this.#audio.size === 0 || this.#unhealthySince.size < this.#audio.size) return false;
-    return now - Math.min(...this.#unhealthySince.values()) >= RECEIVE_ESCALATION_MS && now - this.#lastRebuildAt >= RECEIVE_REBUILD_COOLDOWN_MS;
+    const cooldown = Math.min(RECEIVE_REBUILD_COOLDOWN_MS * 2 ** Math.max(this.#rebuildStreak - 1, 0), MAX_REBUILD_COOLDOWN_MS);
+    return now - Math.min(...this.#unhealthySince.values()) >= RECEIVE_ESCALATION_MS && now - this.#lastRebuildAt >= cooldown;
   }
 
   #isExpected(publication: CloudflareSFURemoteTrack): boolean {
