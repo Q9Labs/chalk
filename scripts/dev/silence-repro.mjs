@@ -264,9 +264,22 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
   const killed = new Set();
   const participants = [];
   try {
+    // Admission creates an SFU session; admit one at a time and retry a provider timeout.
+    const admissions = [];
+    for (let index = 0; index < participantsCount; index++) {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          admissions.push(await chalk.participants.admit(space.id, episode.id, { name: index === 0 ? "Synthetic teacher" : `Synthetic student ${index}`, role: index === 0 ? "owner" : "collaborator" }));
+          break;
+        } catch (error) {
+          if (attempt === 3) throw error;
+          run.faults.push({ kind: "admit-retry", participant: index, message: error.message });
+        }
+      }
+    }
     await Promise.all(
       Array.from({ length: participantsCount }, async (_, index) => {
-        const admission = await chalk.participants.admit(space.id, episode.id, { name: index === 0 ? "Synthetic teacher" : `Synthetic student ${index}`, role: index === 0 ? "owner" : "collaborator" });
+        const admission = admissions[index];
         let access = admission.access;
         connections[index].add(access.media.client_payload.connectionId);
         let firstAccess = true;
