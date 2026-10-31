@@ -667,7 +667,7 @@ func addTrackResultFailed(track addTrackResult) bool {
 
 func closedTrackAbsent(code string) bool {
 	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "session_not_found", "connection_not_found", "track_already_closed", "track_not_found":
+	case "session_not_found", "connection_not_found", "track_already_closed", "track_not_found", "close_track_error":
 		return true
 	default:
 		return false

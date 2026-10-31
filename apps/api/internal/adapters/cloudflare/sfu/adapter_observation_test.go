@@ -128,6 +128,10 @@ func TestForcedCloseStaleConnectionConverges(t *testing.T) {
 		{"top level absent", 200, `{"errorCode":"session_not_found"}`, true},
 		{"already closed", 200, `{"errorCode":"track_already_closed"}`, true},
 		{"track absent", 200, `{"tracks":[{"mid":"0","errorCode":"connection_not_found"}]}`, true},
+		{"provider already closed item", 200, `{"tracks":[{"mid":"0","errorCode":"close_track_error","errorDescription":"Track does not exist or was already closed"}]}`, true},
+		{"request level close error", 200, `{"errorCode":"close_track_error"}`, false},
+		{"missing item", 200, `{"tracks":[]}`, false},
+		{"wrong item", 200, `{"tracks":[{"mid":"1","errorCode":"close_track_error"}]}`, false},
 		{"unauthorized", 403, `{}`, false},
 		{"rate limited", 429, `{}`, false},
 		{"server failure", 503, `{}`, false},
@@ -177,5 +181,12 @@ func TestForcedCloseBudgetDoesNotChangeInteractiveBudget(t *testing.T) {
 	}
 	if adapter.client.(*http.Client).Timeout != 6*time.Second || adapter.forcedCloseClient.(*http.Client).Timeout != 25*time.Second {
 		t.Fatal("teardown must allow the delayed disconnected response without slowing interactive requests")
+	}
+}
+
+func TestAlreadyClosedReceiveItemDoesNotHideAnotherFailure(t *testing.T) {
+	response := closeTracksResponse{requestedTracks: []mediaplane.CloseTrack{{Mid: "0"}, {Mid: "1"}}, Tracks: []closeTrackResult{{Mid: "0", ErrorCode: "close_track_error"}, {Mid: "1", ErrorCode: "internal_error"}}}
+	if err := response.providerError("close_tracks"); err == nil {
+		t.Fatal("unresolved item must remain a failure")
 	}
 }
