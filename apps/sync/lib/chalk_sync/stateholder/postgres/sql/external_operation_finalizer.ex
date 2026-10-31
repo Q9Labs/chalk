@@ -282,7 +282,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       producing_traceparent, producing_tracestate
     )
     select tenant_id, space_id, episode_id, $5, $5::uuid::text,
-      request_fingerprint, 'participant_leave_cleanup', target_participant_id,
+      request_fingerprint, 'remove_participant', target_participant_id,
       target_participant_generation, jsonb_build_object('departureOperationId', $4::uuid), false,
       journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
       producing_traceparent, producing_tracestate

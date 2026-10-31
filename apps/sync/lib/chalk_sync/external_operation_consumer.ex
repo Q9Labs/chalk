@@ -153,7 +153,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
     result =
-      if operation.name == :participant_leave_cleanup and operation.attempt_count >= @max_attempts,
+      if ExternalOperation.leave_cleanup?(operation) and operation.attempt_count >= @max_attempts,
         do: {:terminal_failure, :retry_exhausted},
         else:
           dispatch_with_context(
@@ -267,7 +267,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
               :stop_participant_camera,
               :stop_participant_screen_share,
               :remove_participant,
-              :participant_leave_cleanup,
               :role_transition_source_stop
             ] do
     invoke_media_plane(media_plane, episode, operation, timeout_ms)
@@ -298,7 +297,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     do: revoke_arguments(adapter, episode, operation, operation.source)
 
   defp media_arguments(adapter, episode, %{name: name} = operation)
-       when name in [:remove_participant, :participant_leave_cleanup] do
+       when name in [:remove_participant] do
     {:remove_participant,
      [adapter, operation.external_operation_id, episode, operation.target_participant_id]}
   end

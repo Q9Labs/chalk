@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   @moduledoc false
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
@@ -32,7 +33,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
       external.status != :pending ->
         ExternalOperationDecision.build(external, :duplicate)
 
-      external.name == :participant_leave_cleanup ->
+      ExternalOperation.leave_cleanup?(external) ->
         settle_leave_cleanup(connection, episode, external, outcome)
 
       stale_maximum_duration?(external, policy) ->

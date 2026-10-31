@@ -463,7 +463,7 @@ Explicit Leave confirms after the Postgres departure transaction, before provide
 teardown. The existing `sync.external_operation.accepted` journey remains the
 Leave acceptance boundary. The transaction writes `participant.left` to the
 webhook outbox with its occurrence time taken from Leave acceptance, alongside
-the committed receipt and a `participant_leave_cleanup` external operation.
+the committed receipt and a `remove_participant` cleanup operation identified by its departure operation ID.
 Cleanup inherits the journey and trace context, so its provider span and retained
 terminal failure can be inspected separately from the confirmed Leave. The
 Postgres durable Leave proof blocks a fake cleanup provider and checks the

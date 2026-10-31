@@ -102,10 +102,10 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     {:ok, own} = Operation.new("newer_own_leave_001", :participant_leave, %{})
 
-    assert {:ok, %{result: :pending, external_operation_id: id}} =
+    assert {:ok, %{result: :applied, external_operation_id: id}} =
              Postgres.begin_operation(current, own)
 
-    assert {:ok, %{result: :already_applied}} = Postgres.confirm_admission(first)
+    assert {:error, :invalid_admission_intent} = Postgres.confirm_admission(first)
 
     assert {:ok, %{result: :applied}} =
              Postgres.finalize_operation(fixture.episode, id, {:confirmed, :provider})
@@ -197,32 +197,21 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   end
 
   @tag :entry_generation
-  test "entry admission waits for already claimed provider work and an abandoned admission expires",
-       %{
-         connections: connections
-       } do
+  test "an abandoned newer admission defers Leave until its deterministic expiry", %{
+    connections: connections
+  } do
     connection = hd(connections)
     fixture = managed_pending_join(connection)
     on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
     assert {:ok, first} = Postgres.admit_entry(fixture.identity, :new)
     assert {:ok, %{result: :applied}} = Postgres.confirm_admission(first)
-    {:ok, leave} = Operation.new("claimed_entry_leave_001", :participant_leave, %{})
-    assert {:ok, %{external_operation_id: id}} = Postgres.begin_operation(first, leave)
-    assert {:ok, _} = Postgres.claim_operations(64)
-    assert :ready = Postgres.prepare_entry_leave(fixture.episode, id)
-    assert {:retryable, :admission_pending} = Postgres.admit_entry(fixture.identity, :new)
-
-    assert {:ok, %{result: :failed}} =
-             Postgres.finalize_operation(
-               fixture.episode,
-               id,
-               {:failed, :provider_unavailable}
-             )
-
     assert {:ok, abandoned} = Postgres.admit_entry(fixture.identity, :new)
-    {:ok, retry} = Operation.new("abandoned_entry_leave_001", :participant_leave, %{})
-    assert {:ok, %{external_operation_id: retry_id}} = Postgres.begin_operation(first, retry)
-    assert :pending = Postgres.prepare_entry_leave(fixture.episode, retry_id)
+    {:ok, leave} = Operation.new("abandoned_entry_leave_001", :participant_leave, %{})
+
+    assert {:ok, %{result: :pending, external_operation_id: id}} =
+             Postgres.begin_operation(first, leave)
+
+    assert :pending = Postgres.prepare_entry_leave(fixture.episode, id)
 
     Postgrex.query!(
       connection,
@@ -231,10 +220,22 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     )
 
     assert {:error, :entry_expired} = Postgres.confirm_admission(abandoned)
-    assert :ready = Postgres.prepare_entry_leave(fixture.episode, retry_id)
+    assert :ready = Postgres.prepare_entry_leave(fixture.episode, id)
+    assert {:ok, operations} = Postgres.claim_operations(64)
 
-    assert {:ok, %{result: :applied}} =
-             Postgres.finalize_operation(fixture.episode, retry_id, {:confirmed, :provider})
+    {_, claimed} =
+      Enum.find(operations, fn {_, operation} -> operation.external_operation_id == id end)
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               fixture.episode,
+               claimed,
+               nil,
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert [["left", "left"]] = entry_rows(connection, first)
   end
 
   @tag :entry_generation
@@ -286,7 +287,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
   defp leave_entry(connection, identity, key) do
     {:ok, leave} = Operation.new(key, :participant_leave, %{})
 
-    assert {:ok, %{result: :pending, external_operation_id: id}} =
+    assert {:ok, %{external_operation_id: id}} =
              Postgres.begin_operation(identity, leave)
 
     assert {:ok, %{result: :applied}} =
@@ -320,7 +321,7 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
 
     {:ok, current_leave} = Operation.new("current_entry_leave_001", :participant_leave, %{})
 
-    assert {:ok, %{result: :pending}} = Postgres.begin_operation(current, current_leave)
+    assert {:ok, %{result: :applied}} = Postgres.begin_operation(current, current_leave)
   end
 
   for state <- ["pending", "cancelled", "expired"] do

@@ -271,7 +271,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
     {_, cleanup} =
       Enum.find(operations, fn {_, operation} ->
-        operation.name == :participant_leave_cleanup and
+        operation.name == :remove_participant and
           operation.payload["departureOperationId"] == id
       end)
 

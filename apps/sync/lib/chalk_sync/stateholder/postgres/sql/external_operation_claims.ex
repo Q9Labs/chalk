@@ -37,7 +37,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
-        and (attempt_count < 100 or operation_name = 'participant_leave_cleanup')
+        and (attempt_count < 100 or (operation_name = 'remove_participant' and payload ? 'departureOperationId'))
         and #{operation_filter}
         and (
           (
@@ -55,7 +55,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
             )
           )
           or (
-            operation_name in ('remove_participant', 'participant_leave_cleanup')
+            operation_name in ('remove_participant')
             and not exists (
               select 1
               from sync_publication_grant_reservations reservation
@@ -81,7 +81,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
           or (
             source is null
             and operation_name not in (
-              'remove_participant', 'participant_leave_cleanup',
+              'remove_participant',
               'end_episode', 'tenant_end_episode', 'maximum_duration_expired'
             )
           )
