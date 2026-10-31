@@ -1,4 +1,6 @@
 -- +goose Up
+select set_config('chalk.entry_writer', '1', true);
+
 alter table sync_external_operations add column acceptance_order bigint;
 
 -- Historical acceptance cannot be reconstructed from transaction timestamps.
