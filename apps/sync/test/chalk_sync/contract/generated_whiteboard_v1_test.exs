@@ -7,6 +7,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
   @request_id "request-00000000001"
   @scene_id "10000000-0000-4000-8000-000000000001"
   @participant_id "20000000-0000-4000-8000-000000000002"
+  @session_id "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
 
   test "decodes strict update and explicit clear operations" do
     element = %{
@@ -36,6 +37,25 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1Test do
                "operation_id" => @operation_id,
                "scene_id" => @scene_id
              })
+  end
+
+  test "keeps valid hello baggage and ignores invalid values" do
+    hello = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => "participant-token",
+      "cursor" => nil
+    }
+
+    assert {:ok, {:hello, %{baggage: "session.id=" <> @session_id}}} =
+             GeneratedWhiteboardV1.decode_client_frame(
+               Map.put(hello, "baggage", "session.id=#{@session_id}")
+             )
+
+    for baggage <- ["session.id=invalid", 7] do
+      assert {:ok, {:hello, %{baggage: nil}}} =
+               GeneratedWhiteboardV1.decode_client_frame(Map.put(hello, "baggage", baggage))
+    end
   end
 
   test "negotiates relay origins and accepts optional paired view versions" do

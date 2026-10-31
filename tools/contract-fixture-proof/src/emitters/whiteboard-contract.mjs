@@ -55,6 +55,27 @@ function validateWhiteboardContract(contract) {
   requireExactStrings(contract.frames?.view?.serverExactFields, ["type", "participant_id", "display_name", "x", "y", "width", "height", "bring", "occurred_at"], "frames.view.serverExactFields");
   requireExactStrings(contract.frames?.hello?.exactFields, ["type", "protocol", "token", "cursor"], "frames.hello.exactFields");
   requireExactStrings(contract.frames?.hello?.extendedExactFields, ["type", "protocol", "token", "cursor", "extensions"], "frames.hello.extendedExactFields");
+  const helloOptionalFields = contract.frames?.hello?.optionalFields;
+  const baggage = helloOptionalFields?.baggage;
+  if (
+    typeof helloOptionalFields !== "object" ||
+    helloOptionalFields === null ||
+    Object.keys(helloOptionalFields).join(",") !== "baggage" ||
+    typeof baggage !== "object" ||
+    baggage === null ||
+    baggage.kind !== "string" ||
+    baggage.minBytes !== 47 ||
+    baggage.maxBytes !== 47 ||
+    baggage.format !== "w3c-baggage-session-id" ||
+    baggage.pattern !== "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+  ) {
+    throw new Error("Invalid whiteboard contract: hello baggage must be the single lowercase session.id member");
+  }
+  try {
+    new RegExp(baggage.pattern, "u");
+  } catch {
+    throw new Error("Invalid whiteboard contract: hello baggage pattern must be a valid regular expression");
+  }
   requireExactStrings(contract.frames?.welcome?.exactFields, ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw"], "frames.welcome.exactFields");
   requireExactStrings(contract.frames?.welcome?.extendedExactFields, ["type", "protocol", "participant_id", "participant_generation", "capabilities", "participant_capabilities", "scene_id", "revision", "can_draw", "presenting"], "frames.welcome.extendedExactFields");
 

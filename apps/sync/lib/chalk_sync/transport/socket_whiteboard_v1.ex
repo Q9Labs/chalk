@@ -470,13 +470,15 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   end
 
   defp handle_frame(
-         {:hello, %{token: token, extensions: extensions}},
+         {:hello, %{token: token, extensions: extensions, baggage: baggage}},
          %{phase: :awaiting_hello} = state
        ) do
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- identity(claims) do
       authenticated_hello(
-        SocketContext.authenticated(state, identity),
+        state
+        |> merge_hello_observability(baggage)
+        |> SocketContext.authenticated(identity),
         identity,
         claims,
         extensions
@@ -1128,6 +1130,19 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1 do
 
   defp put_scene_id(attributes, _scene_id) do
     attributes
+  end
+
+  defp merge_hello_observability(state, nil), do: state
+
+  defp merge_hello_observability(state, baggage) do
+    observability =
+      Observability.merge(
+        state.observability,
+        Observability.context(%{"baggage" => baggage})
+      )
+
+    Observability.bind_logger(observability)
+    %{state | observability: observability}
   end
 
   defp authenticated_hello(state, identity, claims, extensions) do
