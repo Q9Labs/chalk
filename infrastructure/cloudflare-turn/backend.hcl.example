@@ -1,0 +1,6 @@
+# Replace ACCOUNT_ID privately. Use the environment's own state bucket.
+bucket = "chalk-ENVIRONMENT-state-ACCOUNT_ID"
+key    = "cloudflare-turn/terraform.tfstate"
+region = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

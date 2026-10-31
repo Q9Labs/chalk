@@ -124,6 +124,11 @@ HTTP 200 acceptance rules are unchanged. The regression in
 checks the recorded logs and span events against provider responses with
 credential-shaped fields.
 
+When the API cannot mint Cloudflare TURN credentials it logs
+`cloudflare_turn.credentials_failed` at warning level with the failure cause and
+no credential, and the join continues with STUN only. A sustained stream of this
+event means clients behind strict networks cannot connect.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport

@@ -27,6 +27,9 @@ type Registry struct {
 	processConfig   runtimeconfig.CloudflareRealtimeConfig
 	defaultProvider spaces.MediaPlaneProvider
 	telemetry       providercontracts.Telemetry
+	// turn outlives a single Resolve, so TURN credentials are minted once for
+	// all joins. It is nil without a TURN key.
+	turn *sfuadapter.TurnCredentials
 }
 
 type providerConfig struct {
@@ -52,6 +55,7 @@ func NewRegistry(config Config) Registry {
 		processConfig:   config.ProcessConfig,
 		defaultProvider: config.DefaultProvider,
 		telemetry:       config.Telemetry,
+		turn:            sfuadapter.NewTurnCredentials(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
 
@@ -246,6 +250,11 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 		configured, err := sfuadapter.NewAdapter(providerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
+		}
+		// Only Chalk's Cloudflare account has a TURN key. Tenant-managed
+		// accounts carry none, so their joins use STUN alone.
+		if providerConfig.TurnKeyID != "" {
+			configured = configured.WithTurnCredentials(r.turn)
 		}
 		plane = configured
 	default:
