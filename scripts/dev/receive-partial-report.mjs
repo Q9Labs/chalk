@@ -84,6 +84,20 @@ const summaries = report.versions.map((run) => {
   return {
     version: run.version,
     partialFault: run.partialFault,
+    targetedCloses: run.network.filter((event) => event.receiveOnly).length,
+    receiveRebuilds: run.network.filter((event) => event.replacementCause === "receive_stalled").length,
+    healthyReceiversPreserved: (() => {
+      if (!run.partialFault) return null;
+      const fault = run.partialFault;
+      const before =
+        run.samples
+          .filter((sample) => sample.t < fault.t)
+          .at(-1)
+          ?.states.find((state) => state.listener === fault.listener)?.tracks ?? [];
+      const after = run.samples.find((sample) => sample.t >= fault.t + 20)?.states.find((state) => state.listener === fault.listener)?.tracks ?? [];
+      const healthy = before.filter((track) => track.speaker !== fault.speaker);
+      return healthy.length === 2 && healthy.every((track) => after.some((next) => next.speaker === track.speaker && next.track === track.track));
+    })(),
     partialRecoverySeconds: (() => {
       if (!run.partialFault) return null;
       const fault = run.partialFault;
