@@ -28,10 +28,14 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
 
   setup_all do
     previous = Application.get_env(:chalk_sync, :database_connections)
+    stateholder = Application.fetch_env!(:chalk_sync, :stateholder)
     connections = SyncPostgres.start_connections(@database_url, 4)
     Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
+    Application.put_env(:chalk_sync, :stateholder, Postgres)
 
     on_exit(fn ->
+      Application.put_env(:chalk_sync, :stateholder, stateholder)
+
       if previous,
         do: Application.put_env(:chalk_sync, :database_connections, previous),
         else: Application.delete_env(:chalk_sync, :database_connections)
@@ -66,6 +70,7 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
     release_cleanups()
   end
 
+  # Production topology on master: one consumer per node.
   defp start_consumers do
     start_supervised!(
       {ExternalOperationConsumer,
@@ -134,5 +139,6 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
     fixture
   end
 
-  defp unique_key(prefix), do: prefix <> "_" <> Integer.to_string(System.unique_integer([:positive]))
+  defp unique_key(prefix),
+    do: prefix <> "_" <> Integer.to_string(System.unique_integer([:positive]))
 end
