@@ -37,9 +37,9 @@ emits it after accepting the fenced report, so it reaches the managed API log
 exporter even when the disposable node has no log exporter. The worker sends
 W3C trace context independently of global telemetry initialization.
 
-`error_detail` retains only diagnostic vocabulary, capped at 512 bytes. Unknown
-words, paths, identifiers, numbers, URLs, credentials, and media-derived text are
-redacted. The private job row still retains the existing bounded diagnostic
+`error_detail` emits only fixed internal diagnostic phrases, capped at 512 bytes.
+Other text, including individual diagnostic words, paths, identifiers, numbers,
+URLs, credentials, and media-derived text, is redacted. The private job row still retains the existing bounded diagnostic
 error. No new durable journey event or lifecycle transition is introduced.
 Tests in `apps/api/internal/recordingdecode/writer_test.go` cover H264 with more than 512 variable
 frame intervals in both copy and re-encode paths, checking every decoded frame's

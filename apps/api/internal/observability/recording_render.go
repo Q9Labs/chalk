@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"go.opentelemetry.io/otel/trace"
@@ -26,23 +25,40 @@ func renderFailureDetail(detail string) string {
 	const maximumBytes = 512
 	if len(detail) > maximumBytes {
 		detail = detail[:maximumBytes]
-		for !utf8.ValidString(detail) {
-			detail = detail[:len(detail)-1]
-		}
 	}
-	// Retain diagnostic vocabulary only, never arbitrary provider text, object
-	// paths, signed URLs, credentials, identifiers, or media-derived text.
-	const words = " access already asset attempt audio authenticated authority bound bundle capture chunk clean clock codec command commit context count could deadline decode decrypt duration empty encode end error exceeds expired failed failure ffmpeg file frame generation h264 hash heartbeat input interrupted invalid key lease manifest match media missing mismatch mux no not object output packet parse presentation recording render renderer report resolve resource sequence source start stopped stream terminal the timed timeout timing too track transcription unexpected unsupported upload validate variable video vp8 was without workspace write "
+	// Emit canonical internal diagnostics, not words copied out of untrusted
+	// provider errors, object paths, credentials, or media-derived text.
+	phrases := [...]string{
+		"decode authenticated recording media", "decode authenticated recording microphone media",
+		"recording media decode failed", "invalid production recording render attempt",
+		"H264 variable frame timing exceeds bound", "H264 access unit exceeds size bound",
+		"H264 timestamp regressed", "H264 interval is empty", "VP8 frame exceeds size bound",
+		"recording capture sequence or byte bound", "recording transcription chunk count exceeds bound",
+		"recording asset manifest authority mismatch", "recording asset manifest has trailing data",
+		"recording presentation does not match render authority or profile",
+		"recording presentation does not match transcription authority",
+		"resolved recording render input does not match its claim",
+		"recording has no decodable video or audio", "context canceled", "context deadline exceeded",
+		"resolve recording render input", "resolve recording transcription input",
+		"download recording presentation", "download recording asset manifest",
+		"read recording presentation", "decode recording presentation", "verify encoded recording",
+		"compose recording video", "commit recording Artifact", "commit recording transcription preparation",
+		"render attempt failed without a cause", "write H264 RTP", "parse H264 access unit", "mux H264 access unit",
+	}
 	var result []string
-	for _, field := range strings.Fields(detail) {
-		word := strings.ToLower(strings.TrimSuffix(field, ":"))
-		if strings.Contains(words, " "+word+" ") {
-			result = append(result, field)
-		} else if len(result) == 0 || result[len(result)-1] != "[redacted]" {
-			result = append(result, "[redacted]")
+	for _, part := range strings.Split(detail, ": ") {
+		canonical := "[redacted]"
+		for _, phrase := range phrases {
+			if part == phrase {
+				canonical = phrase
+				break
+			}
+		}
+		if canonical != "[redacted]" || len(result) == 0 || result[len(result)-1] != canonical {
+			result = append(result, canonical)
 		}
 	}
-	redacted := strings.Join(result, " ")
+	redacted := strings.Join(result, ": ")
 	if len(redacted) > maximumBytes {
 		redacted = redacted[:maximumBytes]
 	}

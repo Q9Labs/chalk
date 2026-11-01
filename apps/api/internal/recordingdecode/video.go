@@ -392,6 +392,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		return Source{}, nil, fmt.Errorf("initialize H264 timed stream: %w", err)
 	}
 	var frame bytes.Buffer
+	var frameInputBytes int
 	var frameTimestamps []uint64
 	var writer *h264writer.H264Writer
 	quality := vp8Quality{}
@@ -411,6 +412,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 			return fmt.Errorf("close H264 segment: %w", err)
 		}
 		frame.Reset()
+		frameInputBytes = 0
 		return nil
 	}
 	startSegment := func() {
@@ -454,6 +456,12 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 			}
 			waitingForKeyFrame = false
 		}
+		// Bound wire bytes before depacketization: FU-A fragments can accumulate
+		// inside Pion even before they reach the access-unit buffer.
+		if len(packet.Payload) > h264.MaxAccessUnitSize-frameInputBytes {
+			return fmt.Errorf("%w: H264 access unit exceeds size bound", ErrDecode)
+		}
+		frameInputBytes += len(packet.Payload)
 		rtpPacket := toRTPPacket(packet)
 		if err := writer.WriteRTP(&rtpPacket); err != nil {
 			return fmt.Errorf("%w: write H264 RTP: %v", ErrDecode, err)
@@ -468,6 +476,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 				return fmt.Errorf("%w: mux H264 access unit: %v", ErrDecode, err)
 			}
 			frame.Reset()
+			frameInputBytes = 0
 			frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
 		}
 		previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp

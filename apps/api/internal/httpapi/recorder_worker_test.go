@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -385,23 +384,30 @@ func TestRecorderWorkerLeaseEndpointsUseFencingAndProgressShape(t *testing.T) {
 }
 
 func TestRecorderWorkerRenderFailureLogsOnlyAcceptedReport(t *testing.T) {
-	for _, accepted := range []bool{false, true} {
-		t.Run(strconv.FormatBool(accepted), func(t *testing.T) {
+	for _, test := range []struct {
+		kind     recordingpipeline.JobKind
+		accepted bool
+	}{
+		{recordingpipeline.JobKindRender, false},
+		{recordingpipeline.JobKindRender, true},
+		{recordingpipeline.JobKindTranscription, true},
+	} {
+		t.Run(fmt.Sprintf("%s/%t", test.kind, test.accepted), func(t *testing.T) {
 			var logs bytes.Buffer
 			service := recorderWorkerServiceStub{fail: func(_ context.Context, input recordingpipeline.FailureInput) (recordingpipeline.Job, error) {
-				if !accepted {
+				if !test.accepted {
 					return recordingpipeline.Job{}, recordingpipeline.ErrInvalidLease
 				}
-				return recorderWorkerJobFixture(t, recordingpipeline.JobKindRender), nil
+				return recorderWorkerJobFixture(t, test.kind), nil
 			}}
 			verifier := recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: mustRecorderWorkerID(t, workerTestID), Role: workeridentity.RoleRender}}
 			router := NewRecorderWorkerRouterWithControls(service, verifier, RecorderWorkerControlServices{Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
-			body := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"private-lease-token","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `","error_code":"render_attempt_failed","error_detail":"decode recording media: https://example.invalid/media?token=secret failed"}`
+			body := `{"job_id":"` + workerTestJob + `","attempt_count":1,"fencing_generation":2,"lease_token":"private-lease-token","lease_for_seconds":60,"capture_epoch":1,"envelope_digest":"` + workerTestDigest + `","error_code":"render_attempt_failed","error_detail":"decode authenticated recording media: https://example.invalid/media?token=secret"}`
 			traceID := trace.TraceID{1}
 			ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: trace.SpanID{2}}))
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/jobs/fail", body).WithContext(ctx))
-			if !accepted {
+			if !test.accepted {
 				if response.Code == http.StatusOK || logs.Len() != 0 {
 					t.Fatalf("rejected report logged or accepted: status=%d log=%s", response.Code, logs.String())
 				}
@@ -414,7 +420,7 @@ func TestRecorderWorkerRenderFailureLogsOnlyAcceptedReport(t *testing.T) {
 			if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
 				t.Fatal(err)
 			}
-			for field, want := range map[string]string{"event": "recording.render_attempt_failed", "job_id": workerTestJob, "trace_id": traceID.String(), "error_detail": "decode recording media: [redacted] failed"} {
+			for field, want := range map[string]string{"event": "recording.render_attempt_failed", "job_id": workerTestJob, "trace_id": traceID.String(), "error_detail": "decode authenticated recording media: [redacted]"} {
 				var got string
 				if err := json.Unmarshal(entry[field], &got); err != nil || got != want {
 					t.Fatalf("%s = %s, want %q", field, entry[field], want)

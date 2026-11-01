@@ -930,7 +930,7 @@ func (c *ControlPlaneClient) doRequest(ctx context.Context, method, path string,
 	if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
 		request.Header.Set("X-Chalk-Journey-ID", journeyID.String())
 	}
-	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(request.Header))
+	propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}).Inject(ctx, propagation.HeaderCarrier(request.Header))
 	response, err := c.client.Do(request)
 	if err != nil {
 		return nil, 0, TransportError{Err: err}
