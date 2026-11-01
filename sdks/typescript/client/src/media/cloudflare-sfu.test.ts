@@ -1171,7 +1171,7 @@ it.each(["microphone", "camera"] as const)("off retires a cached %s publication 
 
 it("an already-off local target waits for retirement and exposes close failure before retry", async () => {
   const harness = createHarness();
-  const failure = new CloudflareSFUError("close failed", "signaling_failed");
+  const failure = new CloudflareSFUError("close failed", "signaling_failed", { status: 503, retryableConnection: true });
   try {
     await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
     const close = vi.spyOn(harness.transport, "closeTracks").mockRejectedValue(failure);
@@ -1185,6 +1185,113 @@ it("an already-off local target waits for retirement and exposes close failure b
   } finally {
     harness.client.stop();
   }
+});
+
+it("keeps a failed space-client microphone enable off without retrying a non-retryable publish", async () => {
+  const onError = vi.fn();
+  const harness = createHarness({ onError });
+  const basePlatform = createCoreTestPlatform();
+  const clock = new ManualClock();
+  const platformClock = {
+    now: () => clock.now(),
+    setTimeout: (callback: () => void, milliseconds: number) => clock.setTimeout(callback, milliseconds),
+    clearTimeout: (handle: unknown) => clock.clearTimeout(handle),
+  };
+  const platform = { ...basePlatform, dependencies: { ...basePlatform.dependencies, clock: platformClock } };
+  const microphone = new FakeTrack("failed-space-microphone", "audio");
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => platformClock,
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+    },
+  });
+  const command = vi.fn((enabled: boolean) => coordinator.send("set_microphone_enabled", "microphone", enabled));
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("failed-enable") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(microphone) },
+        createMediaClient: () => harness.client,
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
+      },
+    },
+  );
+  const failure = new CloudflareSFUError("invalid_request", "signaling_failed", { status: 400, providerCode: "invalid_request" });
+  try {
+    await client.join({ microphone: false, camera: false });
+    const setTarget = vi.spyOn(harness.client, "setLocalPublicationTarget");
+    harness.transport.nextLocalPublishFailure = failure;
+    const enabling = client.media.setMicrophoneEnabled(true).then(
+      () => null,
+      (cause: unknown) => cause,
+    );
+    await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(1));
+    await vi.waitFor(() => expect(microphone.enabled).toBe(false));
+    await setTarget.mock.results[0]!.value;
+    await Promise.resolve();
+
+    clock.advance(30_000);
+    const enableError = await enabling;
+
+    expect(enableError).toBeInstanceOf(Error);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    expect(microphone.enabled).toBe(false);
+    expect(onError).toHaveBeenCalled();
+    const localMicrophone = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    expect(localMicrophone?.enabled ?? false).toBe(false);
+    expect(localMicrophone?.publicationId ?? null).toBeNull();
+    expect(setTarget.mock.calls.filter(([target]) => target.source === "microphone" && target.enabled)).toHaveLength(1);
+    expect(localAddCount(harness, "microphone")).toBe(1);
+  } finally {
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  }
+});
+
+it("leaves a failed microphone enable off after a non-retryable publish error", async () => {
+  const onError = vi.fn();
+  await withTimedHarness(
+    async (harness) => {
+      await harness.client.start(fakeStream());
+      const track = new FakeTrack("failed-microphone", "audio");
+      harness.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
+      harness.transport.nextLocalPublishFailure = new CloudflareSFUError("invalid_request", "signaling_failed", { status: 400, providerCode: "invalid_request" });
+      const publish = vi.spyOn(harness.transport, "addTracks");
+
+      const result = await harness.client.setLocalPublicationTarget({
+        operationId: "failed-microphone-enable",
+        participantId: "participant-1",
+        source: "microphone",
+        enabled: true,
+      });
+
+      expect(result).toEqual({ outcome: "terminal_failure", errorCode: "signaling_failed" });
+      expect(onError).toHaveBeenCalled();
+      expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
+        enabled: false,
+        publicationId: null,
+      });
+      expect(track.enabled).toBe(false);
+      expect(localAddCount(harness, "microphone")).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(localAddCount(harness, "microphone")).toBe(1);
+      expect(publish).toHaveBeenCalledTimes(1);
+    },
+    { onError },
+  );
 });
 
 it("returns all video-close failures together after attempting both screen-audio handles", async () => {
@@ -3868,6 +3975,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
+  nextLocalPublishFailure: CloudflareSFUError | null = null;
   failNextStaleLocalPublish = false;
   failNextRemotePull = false;
   readonly omittedRemoteTrackNames = new Set<string>();
@@ -3922,6 +4030,11 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (this.failNextLocalPublish) {
       this.failNextLocalPublish = false;
       throw new CloudflareSFUError("local publish failed", "signaling_failed");
+    }
+    if (this.nextLocalPublishFailure) {
+      const failure = this.nextLocalPublishFailure;
+      this.nextLocalPublishFailure = null;
+      throw failure;
     }
     if (this.failNextStaleLocalPublish) {
       this.failNextStaleLocalPublish = false;

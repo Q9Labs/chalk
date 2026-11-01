@@ -1873,5 +1873,7 @@ function simulcastUnsupported(error: unknown): boolean {
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
   const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
   const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
-  return { outcome: ambiguous ? "ambiguous" : "retryable_failure", errorCode: code };
+  const failures = error instanceof AggregateError ? error.errors : [error];
+  const retryable = failures.length > 0 && failures.every((failure) => failure instanceof CloudflareSFUError && failure.code === "signaling_failed" && (failure.options.retryableConnection === true || failure.options.status === 429));
+  return { outcome: ambiguous ? "ambiguous" : retryable ? "retryable_failure" : "terminal_failure", errorCode: code };
 }
