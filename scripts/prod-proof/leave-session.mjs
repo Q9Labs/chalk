@@ -55,8 +55,7 @@ try {
   const cleanup = await Promise.allSettled(runs.map((run) => cleanupRun(run)));
   report.cleanup = cleanup.every((result) => result.status === "fulfilled") ? "passed" : "failed";
   if (runs[0]) await save(`${runs[0].directory}/session-report.json`, report);
-  const sessionReport = { result: report.result, cleanup: report.cleanup, comparison: report.comparison };
-  if (report.error) sessionReport.error = report.error;
-  console.log(JSON.stringify(sessionReport));
+  // Raw error evidence stays in the private session report; the console gets only publicFailure's bounded reason.
+  console.log(JSON.stringify({ result: report.result, cleanup: report.cleanup, comparison: report.comparison }));
   if (report.result !== "passed" || report.cleanup !== "passed") process.exitCode = 1;
 }
