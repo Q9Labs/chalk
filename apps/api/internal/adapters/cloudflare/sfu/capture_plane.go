@@ -531,7 +531,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	requestTracks := make([]captureTrackRequest, 0, len(tracks))
 	for _, track := range tracks {
 		providerTrack := captureTrackRequest{
-			providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: track.OwnerReference.String()},
+			providerConnectionEnvelope: providerConnectionEnvelope{ConnectionReference: a.sessions.providerID(track.OwnerReference.String())},
 			Location:                   "remote",
 			TrackName:                  track.TrackReference.String(),
 			Kind:                       track.Kind.String(),
@@ -544,7 +544,11 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 	request := captureTracksRequest{providerDescriptionEnvelope: providerDescriptionEnvelope{Description: captureDescription(input.LocalDescription)}, Tracks: requestTracks, AutoDiscover: false}
 	var response captureTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/new", url.PathEscape(input.Connection.String()))
-	if err := a.request(ctx, http.MethodPost, path, request, &response, "add_tracks"); err != nil {
+	err = a.request(ctx, http.MethodPost, path, request, &response, "add_tracks")
+	for index := range response.Tracks {
+		response.Tracks[index].ConnectionReference = a.sessions.clientID(response.Tracks[index].ConnectionReference)
+	}
+	if err != nil {
 		if result, handled, unavailableErr := captureUnavailablePullResult(err, response, input); handled {
 			if unavailableErr != nil {
 				return captureplane.PullCaptureTracksResult{}, unavailableErr
