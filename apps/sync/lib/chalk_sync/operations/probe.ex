@@ -491,22 +491,23 @@ defmodule ChalkSync.Operations.Probe do
     :exit, _reason -> {:error, :retention_cleanup_unavailable}
   end
 
-  defp observe_external_operation_lanes(boot?) do
-    Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn lane,
+  @doc false
+  def observe_external_operation_lanes(boot?) do
+    Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn {lane, name},
                                                                            {:ok, failures} ->
-      case observe_external_operation_lane(lane, boot?) do
+      case observe_external_operation_lane(lane, name, boot?) do
         {:ok, health} -> {:cont, {:ok, max(failures, health.consecutive_failures)}}
         error -> {:halt, error}
       end
     end)
   end
 
-  defp observe_external_operation_lane(lane, boot?) do
-    with :ok <- observe_process(lane),
-         {:ok, health} <- observe(lane, fn -> safe_external_operation_health(lane) end),
+  defp observe_external_operation_lane(lane, name, boot?) do
+    with :ok <- observe_process(name),
+         {:ok, health} <- observe(name, fn -> safe_external_operation_health(name) end),
          :ok <-
            observe(
-             :external_operation_consumer,
+             external_operation_check(lane),
              fn -> validate_external_operation_health(health, boot?) end,
              consumer_measurements(health)
            ) do
@@ -514,8 +515,10 @@ defmodule ChalkSync.Operations.Probe do
     end
   end
 
-  defp safe_external_operation_health(lane) do
-    {:ok, ExternalOperationConsumer.health(lane)}
+  defp external_operation_check(_lane), do: :external_operation_consumer
+
+  defp safe_external_operation_health(name) do
+    {:ok, ExternalOperationConsumer.health(name)}
   catch
     :exit, _reason -> {:error, :external_operation_consumer_unavailable}
   end

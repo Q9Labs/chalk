@@ -4,6 +4,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationColumns
 
+  # A claim hides an operation from other nodes for this long. A page of provider
+  # calls must finish inside it, or another node can claim and rerun the operation.
+  @lease_seconds 60
+
+  def lease_seconds, do: @lease_seconds
+
   def read_operation do
     """
     select #{ExternalOperationColumns.columns()}
@@ -95,7 +101,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       update sync_external_operations operation
       set
         attempt_count = least(operation.attempt_count + 1, 100),
-        next_attempt_at = now() + interval '60 seconds'
+        next_attempt_at = now() + interval '#{@lease_seconds} seconds'
       from candidates
       where operation.external_operation_id = candidates.external_operation_id
       returning operation.*
