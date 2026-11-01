@@ -32,8 +32,12 @@ The Leave plan runs the integrity-verified published 5.2.6 client and the candid
 on the same host and backend. It compares five ordinary baseline samples with
 five ordinary and five publications-403 candidate samples, and independently
 reproduces the old client's premature peer close. It does not start recording.
-The separate comparison session uses the actual restored 2ec22c54 production
-backend for the old SDK and staging for the candidate. Supply production's
+The separate comparison session uses the currently deployed production backend
+for the old SDK and staging for the candidate. Set
+CHALK_PROOF_EXPECTED_PRODUCTION_SHA to the full SHA shown by production's
+release.json; the comparison refuses to start if the live identity differs and
+checks it again before and after measurement. Pass this separately as a direct
+process environment variable, not inside CHALK_PROOF_BASELINE_ENV. Supply production's
 CHALK*PROOF*\* environment mapping as JSON in CHALK_PROOF_BASELINE_ENV, with
 credentials injected only at runtime. Promote requires that session's captured
 median and encrypted evidence hash, and uses the captured median for its limit.
