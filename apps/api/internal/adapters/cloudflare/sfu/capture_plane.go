@@ -38,11 +38,11 @@ type captureCreateConnectionResponse struct {
 	ErrorDescription string `json:"errorDescription"`
 }
 
-func (r *captureCreateConnectionResponse) providerError(operation string) error {
+func (r *captureCreateConnectionResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) == "" && strings.TrimSpace(r.ErrorDescription) == "" {
 		return nil
 	}
-	return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, 0, 0)
+	return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, 0, 0)
 }
 
 type captureSimulcast struct {
@@ -83,13 +83,13 @@ type captureTracksResponse struct {
 	RequiresImmediateRenegotiation bool                 `json:"requiresImmediateRenegotiation"`
 }
 
-func (r *captureTracksResponse) providerError(operation string) error {
+func (r *captureTracksResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
+		return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
 	}
 	for _, track := range r.Tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			failure := newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
+			failure := newProviderResponseFailure(operation, failureStageTrack, statusCode, track.ErrorCode, track.ErrorDescription, len(r.Tracks), captureTrackFailureCount(r.Tracks))
 			failure.trackCode = boundedCaptureTrackCode(track.ErrorCode)
 			return failure
 		}
@@ -123,11 +123,11 @@ type captureRenegotiateResponse struct {
 	ErrorDescription string `json:"errorDescription"`
 }
 
-func (r *captureRenegotiateResponse) providerError(operation string) error {
+func (r *captureRenegotiateResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) == "" && strings.TrimSpace(r.ErrorDescription) == "" {
 		return nil
 	}
-	return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, 0, 0)
+	return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, 0, 0)
 }
 
 type captureCloseTrack struct {
@@ -153,9 +153,9 @@ type captureCloseTracksResponse struct {
 	RequiresImmediateRenegotiation bool                      `json:"requiresImmediateRenegotiation"`
 }
 
-func (r *captureCloseTracksResponse) providerError(operation string) error {
+func (r *captureCloseTracksResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), captureCloseTrackFailureCount(r.Tracks))
+		return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), captureCloseTrackFailureCount(r.Tracks))
 	}
 	return nil
 }
@@ -176,11 +176,11 @@ type captureInspectResponse struct {
 	Tracks           []captureObservedTrack `json:"tracks"`
 }
 
-func (r *captureInspectResponse) providerError(operation string) error {
+func (r *captureInspectResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) == "" && strings.TrimSpace(r.ErrorDescription) == "" {
 		return nil
 	}
-	return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), 0)
+	return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), 0)
 }
 
 type captureTrackKey struct {
@@ -312,7 +312,7 @@ func captureDescriptionValue(value *providerDescription) (*captureplane.Descript
 func retryableCaptureTrackAvailability(err error, response captureTracksResponse, requested []captureplane.CaptureTrack) error {
 	var failure providerFailure
 	if !errors.As(err, &failure) || failure.operation != "add_tracks" ||
-		failure.stage != failureStageTrack || failure.statusCode != http.StatusOK ||
+		failure.stage != failureStageTrack || !isSuccessfulHTTPStatus(failure.statusCode) ||
 		!allCaptureTracksTemporarilyUnavailable(response, requested) {
 		return err
 	}
@@ -371,7 +371,7 @@ func captureProviderError(err error) error {
 	class := captureplane.ProviderFailureProtocol
 	retryable := false
 	switch {
-	case failure.retryableTrackAvailability && failure.operation == "add_tracks" && failure.stage == failureStageTrack && failure.statusCode == http.StatusOK:
+	case failure.retryableTrackAvailability && failure.operation == "add_tracks" && failure.stage == failureStageTrack && isSuccessfulHTTPStatus(failure.statusCode):
 		class = captureplane.ProviderFailureNotFound
 		retryable = true
 	case failure.statusCode == http.StatusUnauthorized,
@@ -396,7 +396,7 @@ func captureProviderError(err error) error {
 		class = captureplane.ProviderFailureUnavailable
 		retryable = true
 	}
-	if failure.operation == "add_tracks" && failure.stage == failureStageTrack && failure.statusCode == http.StatusOK && !failure.retryableTrackAvailability {
+	if failure.operation == "add_tracks" && failure.stage == failureStageTrack && isSuccessfulHTTPStatus(failure.statusCode) && !failure.retryableTrackAvailability {
 		// A successful HTTP request can have a mixed or unrelated per-track
 		// failure. Replaying it could duplicate subscriptions or negotiation.
 		retryable = false
@@ -595,7 +595,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 // classification and retry behavior.
 func captureUnavailablePullResult(requestErr error, response captureTracksResponse, input captureplane.PullCaptureTracksInput) (captureplane.PullCaptureTracksResult, bool, error) {
 	var failure providerFailure
-	if !errors.As(requestErr, &failure) || failure.operation != "add_tracks" || failure.stage != failureStageTrack || failure.statusCode != http.StatusOK {
+	if !errors.As(requestErr, &failure) || failure.operation != "add_tracks" || failure.stage != failureStageTrack || !isSuccessfulHTTPStatus(failure.statusCode) {
 		return captureplane.PullCaptureTracksResult{}, false, nil
 	}
 	if response.ErrorCode != "" || response.ErrorDescription != "" || len(response.Tracks) != len(input.Tracks) {
@@ -866,12 +866,12 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 	request := captureCloseTracksRequest{Tracks: closeTracks, Force: true}
 	var response captureCloseTracksResponse
 	path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/close", url.PathEscape(input.Connection.String()))
-	requestErr := a.request(ctx, http.MethodPut, path, request, &response, "close_tracks")
+	statusCode, requestErr := a.requestStatus(ctx, http.MethodPut, path, request, &response, "close_tracks")
 	if requestErr != nil && !captureCloseSessionGone(requestErr) {
 		return captureplane.CloseCaptureTracksResult{}, captureProviderError(requestErr)
 	}
 	if requestErr == nil {
-		if err := validateCaptureCloseResponse(ctx, response, closeTracks); err != nil {
+		if err := validateCaptureCloseResponse(ctx, response, closeTracks, statusCode); err != nil {
 			return captureplane.CloseCaptureTracksResult{}, err
 		}
 	}
@@ -886,7 +886,7 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 	return result, nil
 }
 
-func validateCaptureCloseResponse(ctx context.Context, response captureCloseTracksResponse, requested []captureCloseTrack) error {
+func validateCaptureCloseResponse(ctx context.Context, response captureCloseTracksResponse, requested []captureCloseTrack, statusCode int) error {
 	wanted := make(map[string]struct{}, len(requested))
 	for _, track := range requested {
 		wanted[track.Mid] = struct{}{}
@@ -902,7 +902,7 @@ func validateCaptureCloseResponse(ctx context.Context, response captureCloseTrac
 		}
 		seen[mid] = struct{}{}
 		if (strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "") && !closedTrackAbsent(track.ErrorCode) {
-			failure := newProviderResponseFailure("close_tracks", failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(response.Tracks), captureCloseTrackFailureCount(response.Tracks))
+			failure := newProviderResponseFailure("close_tracks", failureStageTrack, statusCode, track.ErrorCode, track.ErrorDescription, len(response.Tracks), captureCloseTrackFailureCount(response.Tracks))
 			recordProviderFailure(ctx, trace.SpanFromContext(ctx), failure)
 			return captureProviderError(failure)
 		}
@@ -965,12 +965,12 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 	if len(closeTracks) > 0 {
 		var closeResponse captureCloseTracksResponse
 		path := fmt.Sprintf(providerConnectionsPath+"/%s/tracks/close", url.PathEscape(input.Connection.String()))
-		requestErr := a.request(ctx, http.MethodPut, path, captureCloseTracksRequest{Tracks: closeTracks, Force: input.Force}, &closeResponse, "close_tracks")
+		statusCode, requestErr := a.requestStatus(ctx, http.MethodPut, path, captureCloseTracksRequest{Tracks: closeTracks, Force: input.Force}, &closeResponse, "close_tracks")
 		if requestErr != nil && !captureCloseSessionGone(requestErr) {
 			return captureplane.CloseCaptureConnectionResult{}, captureProviderError(requestErr)
 		}
 		if requestErr == nil {
-			if err := validateCaptureCloseResponse(ctx, closeResponse, closeTracks); err != nil {
+			if err := validateCaptureCloseResponse(ctx, closeResponse, closeTracks, statusCode); err != nil {
 				return captureplane.CloseCaptureConnectionResult{}, err
 			}
 		}
