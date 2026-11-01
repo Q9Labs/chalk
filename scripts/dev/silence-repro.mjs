@@ -39,7 +39,8 @@ const profiles = {
 // toggle: after the first unmute every speaker mutes for 4 s and unmutes for 8 s, repeatedly, so each unmute is a fresh publication.
 // mute-cycle: speaker 0 alone taps mute and unmute ten times each, 2 to 6 s apart (same gaps for every build); the other speakers stay unmuted.
 // ghost-end: 8 people, 4 speakers; at 35 s four browsers (two speakers, two listeners) are killed without leaving, 5 s later the owner ends the Episode for everyone.
-const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle", "ghost-end"];
+// natural-idle: everyone joins, 20 s of quiet, then the first speaker unmutes (a class start); SR_FIRST_UNMUTE_S sets the delay for any other condition. Cloudflare drops a session unused for 15 s.
+const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle", "ghost-end", "natural-idle"];
 // A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
 const conditionOf = (name) => {
   const parts = name.split("+");
@@ -59,13 +60,19 @@ const runStart = Number(process.env.SR_RUN_START || 0);
 const participantsCount = Number(process.env.SR_N || 8);
 const speakerCount = Number(process.env.SR_SPEAKERS || 4);
 const runSeconds = Number(process.env.SR_SECONDS || 105);
+const firstUnmuteSeconds = Number(process.env.SR_FIRST_UNMUTE_S || 3);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
 const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
 const output = resolve(root, process.env.SR_OUTPUT || "artifacts/silence-repro");
 await mkdir(output, { recursive: true });
 // "sdk:<git ref>" tests that ref's SDK and React source on the master server tree; "ref:<git ref>" takes both from the ref.
+// "npm:<version>@<git ref>" runs the published client <version> against the server built from that ref (what a customer on an old SDK sees after a server deploy).
 const buildSpec = (name) => {
+  if (name.startsWith("npm:")) {
+    const [npm, serverRev] = name.slice(4).split("@");
+    return { serverRev, sdkRev: builds[npm]?.sdkRev, npm };
+  }
   if (name.startsWith("sdk:")) return { serverRev: "origin/master", sdkRev: name.slice(4) };
   if (name.startsWith("ref:")) return { serverRev: name.slice(4), sdkRev: name.slice(4) };
   return builds[name];
@@ -358,6 +365,7 @@ async function runBuild(name) {
           toggle: condition.faults.includes("toggle"),
           muteCycle: condition.faults.includes("mute-cycle"),
           ghostEnd: condition.faults.includes("ghost-end"),
+          firstUnmuteSeconds: condition.faults.includes("natural-idle") ? 20 : firstUnmuteSeconds,
           runIndex,
           started: new Date().toISOString(),
           network: [],
@@ -503,7 +511,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     const startWall = Date.now();
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {
-      schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
+      schedule.push({ at: run.firstUnmuteSeconds + speaker * 7, participant: speaker, kind: "unmute", first: true });
       if (run.toggle) {
         for (let mute = 30 + speaker * 3; mute + 12 <= runSeconds; mute += 12) schedule.push({ at: mute, participant: speaker, kind: "mute" }, { at: mute + 4, participant: speaker, kind: "unmute", first: false });
       } else {
@@ -514,8 +522,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     if (run.muteCycle) {
       const gaps = seededRandom(run.runIndex * 104729 + 17);
       schedule.length = 0;
-      for (let speaker = 0; speaker < speakerCount; speaker++) schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
-      let at = 3;
+      for (let speaker = 0; speaker < speakerCount; speaker++) schedule.push({ at: run.firstUnmuteSeconds + speaker * 7, participant: speaker, kind: "unmute", first: true });
+      let at = run.firstUnmuteSeconds;
       for (let cycle = 0; cycle < 10; cycle++) {
         at += 2 + gaps() * 4;
         schedule.push({ at, participant: 0, kind: "mute" });
