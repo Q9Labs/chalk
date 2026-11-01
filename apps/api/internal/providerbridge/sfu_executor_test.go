@@ -193,6 +193,30 @@ func TestEndEpisodeReturnsWithinCloseBudget(t *testing.T) {
 	}
 }
 
+func TestEndEpisodeKeepsProviderFailureAheadOfCloseBudget(t *testing.T) {
+	registry, connectionIDs, _ := newMultiExecutorPublicationRegistry(t, 4)
+	plans := map[string][]multiExecutorClosePlan{
+		connectionIDs[0]: {{err: fmt.Errorf("provider A: %w", mediaplane.ErrProviderFailed)}},
+		connectionIDs[1]: {{waitForContext: true}},
+		connectionIDs[2]: {{}},
+		connectionIDs[3]: {{}},
+	}
+	closer := newMultiExecutorTrackCloser(plans)
+	executor := NewSFUExecutor(registry, closer)
+	executor.closeBudget = testProviderCloseBudget
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	result := executor.Dispatch(ctx, testEndOperation(t))
+	if result.Outcome != provideroperations.OutcomeAmbiguous || result.Reason != "provider_result_ambiguous" {
+		t.Fatalf("end episode outcome = %+v, want A's ambiguous provider failure", result)
+	}
+	wantRecorded := registry.publicationIDsForConnections(connectionIDs[2:])
+	if got := registry.recordedPublicationIDs(); !equalStrings(got, wantRecorded) {
+		t.Fatalf("recorded publications = %v, want fast successful closes %v", got, wantRecorded)
+	}
+}
+
 func TestEndEpisodeRetryAfterPartialCloseConverges(t *testing.T) {
 	registry, connectionIDs, _ := newMultiExecutorPublicationRegistry(t, 12)
 	plans := make(map[string][]multiExecutorClosePlan, len(connectionIDs))

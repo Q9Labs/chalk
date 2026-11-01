@@ -168,15 +168,13 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	closeWaitGroup.Wait()
 
 	allAlreadyClosed := true
-	var firstCloseFailure error
+	var closeFailures []error
 	recordFailed := false
 	for index, connectionID := range connectionIDs {
 		closeResult := closeResults[index]
 		if closeResult.err != nil {
 			allAlreadyClosed = false
-			if firstCloseFailure == nil {
-				firstCloseFailure = closeResult.err
-			}
+			closeFailures = append(closeFailures, closeResult.err)
 			continue
 		}
 		allAlreadyClosed = allAlreadyClosed && closeResult.closed.AlreadyClosed
@@ -195,14 +193,26 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if recordFailed {
 		return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
 	}
-	if firstCloseFailure != nil {
-		if closeCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-			slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", "timeout")
-			return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "timeout"}
+	budgetExpired := closeCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+	var firstNonBudgetFailure error
+	budgetFailure := false
+	for _, err := range closeFailures {
+		if budgetExpired && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
+			budgetFailure = true
+			continue
 		}
-		result := providerExecutionFailure(firstCloseFailure)
+		if firstNonBudgetFailure == nil {
+			firstNonBudgetFailure = err
+		}
+	}
+	if firstNonBudgetFailure != nil {
+		result := providerExecutionFailure(firstNonBudgetFailure)
 		slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
 		return result
+	}
+	if budgetFailure {
+		slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", "timeout")
+		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "timeout"}
 	}
 	if allAlreadyClosed {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
