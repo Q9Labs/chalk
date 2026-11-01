@@ -41,7 +41,7 @@ W3C trace context independently of global telemetry initialization.
 words, paths, identifiers, numbers, URLs, credentials, and media-derived text are
 redacted. The private job row still retains the existing bounded diagnostic
 error. No new durable journey event or lifecycle transition is introduced.
-Tests in `recordingdecode/writer_test.go` cover H264 with more than 512 variable
+Tests in `apps/api/internal/recordingdecode/writer_test.go` cover H264 with more than 512 variable
 frame intervals in both copy and re-encode paths, checking every decoded frame's
 timestamp. Worker and API tests check accepted-failure evidence, trace correlation,
 and redaction; rejected failure reports do not emit accepted-failure evidence.
