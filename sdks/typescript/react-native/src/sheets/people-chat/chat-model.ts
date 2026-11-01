@@ -84,7 +84,7 @@ export type MessageGroup = {
 
 export function formatTime(iso: string): string {
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 /** Whether a message with only attachments should read as "Sent a photo" and so on, for announcements and labels. */

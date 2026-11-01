@@ -1,7 +1,7 @@
-// How the dashboard writes dates and times: 24-hour clock, day before month, in the viewer's time zone.
+// Dashboard dates keep day before month; clock times use AM/PM in the viewer's time zone.
+import { formatClockTime } from "@q9labsai/chalk-react/utils";
 
 const DAY = 86400000;
-const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const weekdayShort = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
 const weekdayLong = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long" });
 const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
@@ -15,9 +15,9 @@ const startOfDay = (value: number) => {
 };
 const daysBefore = (iso: string, now: number) => Math.round((startOfDay(now) - startOfDay(Date.parse(iso))) / DAY);
 
-/** 10:02 */
+/** 10:02 AM */
 export function clock(iso: string): string {
-  return time.format(new Date(iso));
+  return formatClockTime(iso);
 }
 
 /** "Today", "Yesterday", then "Thu 15 Oct". */
@@ -28,7 +28,7 @@ export function sessionDay(iso: string, now = Date.now()): string {
   return weekdayShort.format(new Date(iso)).replace(",", "").replace("Sept", "Sep");
 }
 
-/** When a call was last used: "Today, 10:02", "Yesterday, 16:30", "Thursday" within a week, then "12 Oct". */
+/** When a call was last used: "Today, 10:02 AM", "Yesterday, 4:30 PM", "Thursday" within a week, then "12 Oct". */
 export function lastActive(iso: string, now = Date.now()): string {
   const days = daysBefore(iso, now);
   if (days === 0) return `Today, ${clock(iso)}`;
