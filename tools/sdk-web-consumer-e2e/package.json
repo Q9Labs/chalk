@@ -6,7 +6,7 @@
   "scripts": {
     "consumer:build": "node ./consumer/build.mjs",
     "consumer:server": "node ./consumer/server.mjs",
-    "test": "node ./scripts/run.mjs --browsers=chromium",
+    "test": "node ./scripts/run.mjs --browsers=chromium --agreement-fast",
     "test:chromium": "node ./scripts/run.mjs --browsers=chromium"
   },
   "dependencies": {

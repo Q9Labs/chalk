@@ -1,4 +1,5 @@
 import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
+import { CloudflareSFUError } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -7,8 +8,12 @@ type PeerState = {
   readonly connection: RTCPeerConnection;
   readonly senders: Map<MediaSource, RTCRtpSender>;
   readonly remoteByMid: Map<string, MediaSource>;
+  readonly offerer: boolean;
   makingOffer: boolean;
+  negotiateAgain: boolean;
 };
+
+type LocalTrack = { track: MediaStreamTrack; enabled: boolean; publicationId: string | null };
 
 type FixtureMediaClientInput = {
   readonly access: {
@@ -16,7 +21,7 @@ type FixtureMediaClientInput = {
     readonly media: FixtureMediaAccess;
   };
   readonly credential: () => Promise<string>;
-  readonly onFailure: (error: unknown) => void;
+  readonly onFailure: (error: unknown, binding?: string) => void;
   readonly onScreenEnded: () => void;
 };
 
@@ -29,8 +34,10 @@ export class FixtureMediaClient {
   readonly #listeners = new Set<() => void>();
   readonly #localListeners = new Set<(items: readonly MediaPublication[]) => void>();
   readonly #remoteListeners = new Set<(items: readonly MediaPublication[]) => void>();
-  readonly #local = new Map<MediaSource, { track: MediaStreamTrack; enabled: boolean }>();
-  readonly #onFailure: (error: unknown) => void;
+  readonly #local = new Map<MediaSource, LocalTrack>();
+  readonly #advertised = new Map<MediaSource, MediaPublication>();
+  readonly #pausedSources = new Set<MediaSource>();
+  readonly #onFailure: (error: unknown, binding?: string) => void;
   readonly #onScreenEnded: () => void;
   readonly #participantId: string;
   readonly #peers = new Map<string, PeerState>();
@@ -40,6 +47,7 @@ export class FixtureMediaClient {
   #remotePublications: readonly MediaPublication[] = [];
   #snapshot: CloudflareSFUSnapshot;
   #socket: WebSocket | null = null;
+  #publicationSequence = 0;
 
   constructor(signalingURL: string, input: FixtureMediaClientInput) {
     this.#signalingURL = signalingURL;
@@ -59,21 +67,30 @@ export class FixtureMediaClient {
   // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
   prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     if (source === "screen_audio") return;
-    this.#local.set(source, { track, enabled: false });
+    this.#prepareSource(source, track);
+  }
+
+  #prepareSource(source: MediaSource, track: MediaStreamTrack): void {
+    if (this.#pausedSources.has(source)) track.enabled = false;
+    const publication = this.#advertised.get(source) ?? { publicationId: null };
+    this.#local.set(source, { track, enabled: false, publicationId: publication.publicationId });
     if (source === "screen") track.addEventListener("ended", this.#onScreenEnded, { once: true });
     this.#publish();
   }
 
-  async clearPreparedLocalTrack(source: MediaPublicationSource): Promise<void> {
+  async clearPreparedLocalTrack(source: MediaPublicationSource, options: { readonly stopTrack?: boolean } = {}): Promise<void> {
     if (source === "screen_audio") return;
     const local = this.#local.get(source);
     if (!local) return;
     local.enabled = false;
+    local.track.enabled = false;
     await this.#detachLocalTrack(source);
-    releaseTrack(local.track);
+    if (options.stopTrack !== false) releaseTrack(local.track);
     this.#local.delete(source);
+    // Screen cleanup ends the publication; microphone/camera advertisements
+    // stay reusable so clearing capture cannot silently repair a stale Sync On.
+    if (source === "screen") this.#advertised.delete(source);
     this.#sendPublications();
-    await this.#renegotiateAll();
     this.#publish();
   }
 
@@ -81,13 +98,12 @@ export class FixtureMediaClient {
     for (const peer of this.#peers.values()) {
       const sender = peer.senders.get(source);
       if (sender) await sender.replaceTrack(null);
-      peer.senders.delete(source);
     }
   }
 
   async start(stream: MediaStream): Promise<void> {
-    for (const track of stream.getTracks()) this.prepareLocalTrack(track.kind === "audio" ? "microphone" : "camera", track);
-    for (const local of this.#local.values()) local.enabled = true;
+    for (const track of stream.getTracks()) this.#prepareSource(track.kind === "audio" ? "microphone" : "camera", track);
+    this.#advertiseTracks();
     this.#publish("connecting");
     await this.#connect();
     this.#sendPublications();
@@ -96,11 +112,26 @@ export class FixtureMediaClient {
 
   async restart(input: CloudflareSFUBootstrap | FixtureMediaAccess): Promise<void> {
     this.#bootstrap = fixtureBootstrap(input);
+    this.#advertised.clear();
+    for (const local of this.#local.values()) local.publicationId = null;
+    this.#advertiseTracks();
     this.#publish("recovering");
     this.#closeNetwork();
-    await this.#connect();
+    try {
+      await this.#connect();
+    } catch (cause) {
+      this.#snapshot = this.#makeSnapshot("failed", { code: "signaling_failed", recoverable: this.#recoverableFailure(cause) });
+      this.#emit();
+      this.#onFailure(cause, this.#bootstrap.connectionId);
+      throw cause;
+    }
     this.#sendPublications();
     this.#publish("live");
+  }
+
+  #recoverableFailure(cause: unknown): boolean {
+    const status = cause instanceof CloudflareSFUError ? cause.options.status : undefined;
+    return status !== 401 && status !== 403;
   }
 
   stop = (): void => {
@@ -108,6 +139,7 @@ export class FixtureMediaClient {
     for (const local of this.#local.values()) releaseTrack(local.track);
     for (const remote of this.#received.values()) releaseTrack(remote.track);
     this.#local.clear();
+    this.#advertised.clear();
     this.#received.clear();
     this.#remotePublications = [];
     this.#publish("stopped");
@@ -118,7 +150,8 @@ export class FixtureMediaClient {
 
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     const local = this.#local.get(target.source);
-    if (!local) return target.enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
+    if (!local) return this.#absentSourceResult(target.enabled);
+    if (this.#sourcePaused(target)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     if (local.enabled === target.enabled) return { outcome: "satisfied", errorCode: null };
     await this.#applyLocalTarget(target, local);
     this.#sendPublications();
@@ -126,11 +159,43 @@ export class FixtureMediaClient {
     return { outcome: "confirmed", errorCode: null };
   }
 
-  async #applyLocalTarget(target: MediaPlaneTarget, local: { track: MediaStreamTrack; enabled: boolean }): Promise<void> {
+  #sourcePaused(target: MediaPlaneTarget): boolean {
+    return target.enabled && this.#pausedSources.has(target.source);
+  }
+
+  #absentSourceResult(enabled: boolean): MediaPlaneResult {
+    return enabled ? { outcome: "terminal_failure", errorCode: "source_unavailable" } : { outcome: "satisfied", errorCode: null };
+  }
+
+  setLocalSourceIntent(source: MediaSource, enabled: boolean): void {
+    if (enabled) {
+      this.#pausedSources.delete(source);
+      return;
+    }
+    this.#pausedSources.add(source);
+    const local = this.#local.get(source);
+    if (local) local.track.enabled = false;
+  }
+
+  async closeForcedLocalPublication(source: MediaSource): Promise<void> {
+    this.setLocalSourceIntent(source, false);
+    const local = this.#local.get(source);
+    if (local) {
+      local.enabled = false;
+      local.publicationId = null;
+    }
+    this.#advertised.delete(source);
+    await this.#detachLocalTrack(source);
+    this.#sendPublications();
+    this.#publish();
+  }
+
+  async #applyLocalTarget(target: MediaPlaneTarget, local: LocalTrack): Promise<void> {
     local.enabled = target.enabled;
     local.track.enabled = target.enabled;
+    this.#advertise(target.source, local);
     if (!target.enabled) return;
-    for (const peer of this.#peers.values()) this.#addSender(peer, target.source, local.track);
+    for (const peer of this.#peers.values()) await this.#addSender(peer, target.source, local.track);
     await this.#renegotiateAll();
   }
 
@@ -147,6 +212,8 @@ export class FixtureMediaClient {
   }
 
   async #connect(): Promise<void> {
+    const status = await fetch(`/test/media-recovery?participant=${encodeURIComponent(this.#participantId)}`);
+    if (!status.ok) throw new CloudflareSFUError(`Fixture SFU HTTP ${status.status}`, "signaling_failed", { status: status.status, retryableConnection: status.status >= 500 });
     const token = await this.#credential();
     await new Promise<void>((resolve, reject) => {
       const socket = registerSocket(new WebSocket(`${this.#signalingURL}?token=${encodeURIComponent(token)}&connection=${encodeURIComponent(this.#bootstrap.connectionId)}`));
@@ -176,7 +243,7 @@ export class FixtureMediaClient {
   #handleStateOrFailure(message: Exclude<ServerMessage, { readonly type: "signal" | "peers" }>): void {
     if (message.type === "state") {
       this.#remotePublications = message.state.publications.filter((item) => item.participantId !== this.#participantId && item.enabled);
-      this.#reconcileRemoteSnapshot();
+      this.#publish();
       for (const listener of this.#remoteListeners) listener(this.#remotePublications);
       return;
     }
@@ -184,7 +251,7 @@ export class FixtureMediaClient {
       this.#closeNetwork();
       this.#snapshot = this.#makeSnapshot("failed", { code: "peer_connection_failed", recoverable: true });
       this.#emit();
-      this.#onFailure(new TypeError("Fixture forced media failure"));
+      this.#onFailure(new TypeError("Fixture forced media failure"), this.#bootstrap.connectionId);
     }
   }
 
@@ -213,32 +280,81 @@ export class FixtureMediaClient {
 
   async #applyRemoteDescription(remote: string, peer: PeerState, description: RTCSessionDescriptionInit): Promise<void> {
     await peer.connection.setRemoteDescription(description);
-    if (description.type !== "offer") return;
+    if (description.type !== "offer") {
+      if (peer.negotiateAgain) await this.#negotiate(remote, peer);
+      return;
+    }
+    for (const transceiver of peer.connection.getTransceivers()) await this.#answerTransceiver(peer, transceiver);
     const answer = await peer.connection.createAnswer();
     await peer.connection.setLocalDescription(answer);
     this.#sendSignal(remote, { description: peer.connection.localDescription!, mids: this.#localMids(peer) });
+  }
+
+  async #answerTransceiver(peer: PeerState, transceiver: RTCRtpTransceiver): Promise<void> {
+    const source = this.#sourceForMid(peer, transceiver.mid);
+    if (!source) return;
+    transceiver.direction = "sendrecv";
+    peer.senders.set(source, transceiver.sender);
+    const local = this.#local.get(source);
+    if (!local?.enabled) return;
+    await transceiver.sender.replaceTrack(local.track);
+    transceiver.sender.setStreams(new MediaStream([local.track]));
   }
 
   #ensurePeer(remote: string): PeerState {
     const existing = this.#peers.get(remote);
     if (existing) return existing;
     const connection = registerPeer(new RTCPeerConnection());
-    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), makingOffer: false };
+    const peer: PeerState = { connection, senders: new Map(), remoteByMid: new Map(), offerer: this.#participantId < remote, makingOffer: false, negotiateAgain: false };
     this.#peers.set(remote, peer);
-    for (const [source, local] of this.#local) if (local.enabled) this.#addSender(peer, source, local.track);
+    if (peer.offerer) this.#reserveSenders(peer);
     connection.addEventListener("icecandidate", (event) => this.#sendSignal(remote, { candidate: event.candidate?.toJSON() ?? null }));
     connection.addEventListener("track", (event) => {
-      const mid = event.transceiver.mid;
-      const source = (mid ? peer.remoteByMid.get(mid) : undefined) ?? (event.track.kind === "audio" ? "microphone" : "camera");
+      const source = this.#remoteSource(peer, event);
       recordFixtureRemoteTrack(this.#received, { participantId: remote, source, publicationId: `${remote}|${source}`, track: event.track });
       this.#publish();
     });
     return peer;
   }
 
-  #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): void {
-    if (peer.senders.has(source)) return;
-    peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
+  #sourceForMid(peer: PeerState, mid: string | null): MediaSource | undefined {
+    return mid ? peer.remoteByMid.get(mid) : undefined;
+  }
+
+  #enabledTrack(source: MediaSource): MediaStreamTrack | null {
+    const local = this.#local.get(source);
+    return local?.enabled ? local.track : null;
+  }
+
+  #remoteSource(peer: PeerState, event: RTCTrackEvent): MediaSource {
+    const mid = event.transceiver.mid;
+    const mapped = this.#sourceForMid(peer, mid);
+    return mapped ?? (event.track.kind === "audio" ? "microphone" : "camera");
+  }
+
+  #reserveTransceiver(peer: PeerState, source: "microphone" | "camera"): void {
+    const track = this.#enabledTrack(source);
+    const kind = { microphone: "audio", camera: "video" }[source];
+    const streams = track ? [new MediaStream([track])] : [];
+    const transceiver = peer.connection.addTransceiver(track ?? kind, { direction: "sendrecv", streams });
+    peer.senders.set(source, transceiver.sender);
+  }
+
+  #reserveSenders(peer: PeerState): void {
+    // Reserve both directions before the first offer, so late initial capture
+    // can use replaceTrack without winning another negotiation.
+    this.#reserveTransceiver(peer, "microphone");
+    this.#reserveTransceiver(peer, "camera");
+    for (const [source, local] of this.#local) {
+      if (["microphone", "camera"].includes(source)) continue;
+      if (local.enabled) peer.senders.set(source, peer.connection.addTrack(local.track, new MediaStream([local.track])));
+    }
+  }
+
+  async #addSender(peer: PeerState, source: MediaSource, track: MediaStreamTrack): Promise<void> {
+    const sender = peer.senders.get(source);
+    if (sender) await sender.replaceTrack(track);
+    else if (peer.offerer) peer.senders.set(source, peer.connection.addTrack(track, new MediaStream([track])));
   }
 
   async #renegotiateAll(): Promise<void> {
@@ -246,6 +362,13 @@ export class FixtureMediaClient {
   }
 
   async #negotiate(remote: string, peer: PeerState): Promise<void> {
+    // Capture changes can arrive together. Do not replace an outstanding offer
+    // before its answer, or attach tracks to an obsolete negotiation.
+    if (peer.makingOffer || peer.connection.signalingState !== "stable") {
+      peer.negotiateAgain = true;
+      return;
+    }
+    peer.negotiateAgain = false;
     peer.makingOffer = true;
     try {
       const offer = await peer.connection.createOffer();
@@ -271,16 +394,23 @@ export class FixtureMediaClient {
 
   #sendPublications(): void {
     if (this.#socket?.readyState !== WebSocket.OPEN) return;
-    this.#socket.send(JSON.stringify({ type: "publications", publications: this.#localProjection() }));
+    this.#socket.send(JSON.stringify({ type: "publications", publications: [...this.#advertised.values()] }));
+  }
+
+  #advertiseTracks(): void {
+    for (const [source, local] of this.#local) {
+      local.enabled = local.track.enabled;
+      this.#advertise(source, local);
+    }
+  }
+
+  #advertise(source: MediaSource, local: LocalTrack): void {
+    if (local.enabled && !local.publicationId) local.publicationId = `${this.#bootstrap.connectionId}|${source}|${++this.#publicationSequence}`;
+    this.#advertised.set(source, { participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.publicationId });
   }
 
   #localProjection(): readonly MediaPublication[] {
-    return [...this.#local].map(([source, local]) => ({ participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null }));
-  }
-
-  #reconcileRemoteSnapshot(): void {
-    reconcileFixtureRemoteTracks(this.#remotePublications, this.#received);
-    this.#publish();
+    return [...this.#local].map(([source, local]) => ({ participantId: this.#participantId, source, enabled: local.enabled, publicationId: local.publicationId }));
   }
 
   #removePeer(remote: string): void {
@@ -303,7 +433,7 @@ export class FixtureMediaClient {
   }
 
   #makeSnapshot(phase: CloudflareSFUSnapshot["connection"]["phase"], failure: CloudflareSFUSnapshot["failure"]): CloudflareSFUSnapshot {
-    const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.enabled ? `${this.#bootstrap.connectionId}|${source}` : null, track: local.track }));
+    const localTracks: readonly CloudflareSFULocalTrack[] = [...this.#local].map(([source, local]) => ({ source, enabled: local.enabled, publicationId: local.publicationId, track: local.track }));
     const remoteTracks = projectFixtureRemoteTracks(this.#remotePublications, this.#received);
     return { connection: { phase, peerConnectionState: null, iceConnectionState: null }, cursor: null, localTracks, remoteTracks, failure };
   }
@@ -325,22 +455,19 @@ function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): C
   return input.clientPayload;
 }
 
-function reconcileFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: Map<string, CloudflareSFURemoteTrack>): void {
-  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
-  for (const [key, remote] of received) {
-    if (wanted.has(key)) continue;
-    releaseTrack(remote.track);
-    received.delete(key);
-  }
-}
-
 function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {
   received.set(`${remote.participantId}:${remote.source}`, remote);
 }
 
 function projectFixtureRemoteTracks(remotePublications: readonly MediaPublication[], received: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
-  const wanted = new Set(remotePublications.map((item) => `${item.participantId}:${item.source}`));
-  return [...received].filter(([key]) => wanted.has(key)).map(([, remote]) => remote);
+  // Projection can arrive after ontrack or disappear during a mute. Keep the
+  // receiver owned by its peer; stopping it here permanently silences a reused
+  // transceiver. Only expose tracks with a current physical publication.
+  return remotePublications.flatMap((publication) => {
+    if (!publication.enabled || !publication.publicationId) return [];
+    const remote = received.get(`${publication.participantId}:${publication.source}`);
+    return remote ? [{ ...remote, publicationId: publication.publicationId }] : [];
+  });
 }
 
 export function bindFixtureMediaClient(client: FixtureMediaClient) {
@@ -353,6 +480,8 @@ export function bindFixtureMediaClient(client: FixtureMediaClient) {
     prepareLocalTrack: client.prepareLocalTrack.bind(client),
     clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
+    closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
   };
