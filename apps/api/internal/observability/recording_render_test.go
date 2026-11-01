@@ -9,10 +9,10 @@ import (
 func TestRenderFailureDetailRedactsUntrustedText(t *testing.T) {
 	for _, private := range []string{
 		"https://example.invalid/media?token=secret", "Bearer privatecredential",
-		"/tmp/private/recording.mp4", "customer-spoken-words", "123456789", "日本語",
+		"/tmp/private/recording.mp4", "customer-spoken-words", "123456789", "日本語", "recording", "Bearer render", "frame timing",
 	} {
-		detail := renderFailureDetail("decode recording media: " + private + " failed")
-		if detail != "decode recording media: [redacted] failed" {
+		detail := renderFailureDetail("decode authenticated recording media: " + private)
+		if detail != "decode authenticated recording media: [redacted]" {
 			t.Fatalf("untrusted detail retained: %q", detail)
 		}
 	}

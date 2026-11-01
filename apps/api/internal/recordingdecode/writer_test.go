@@ -702,6 +702,46 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 	})
 }
 
+func TestH264RejectsUnterminatedAccessUnit(t *testing.T) {
+	for _, fragmented := range []bool{false, true} {
+		t.Run("fragmented="+strconv.FormatBool(fragmented), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "source.rtp")
+			file, err := os.Create(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload := make([]byte, recordingbundle.MaxPacketPayloadBytes)
+			copy(payload, []byte{0x67, 0x42, 0, 0x0c})
+			if fragmented {
+				copy(payload, []byte{0x7c, 0x87})
+			}
+			for sequence := uint16(1); sequence <= 129; sequence++ {
+				if fragmented && sequence == 2 {
+					payload[1] = 0x07
+				}
+				if err := writeSpoolPacket(file, recordingbundle.RTPPacket{
+					SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence),
+					Timestamp: 9_000, SSRC: 85, PayloadType: 102, Payload: payload,
+				}); err != nil {
+					_ = file.Close()
+					t.Fatal(err)
+				}
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			state := &sourceState{spoolPath: path, presentation: recordingpresentation.MediaSource{
+				SourceID: "camera", Kind: recordingpresentation.MediaKindCamera,
+			}}
+			_, _, err = decodeH264Source(context.Background(), rejectDecodeRunner{}, "ffmpeg", root, root, state, 1_000, true)
+			if !errors.Is(err, ErrDecode) || !strings.Contains(err.Error(), "H264 access unit exceeds size bound") {
+				t.Fatalf("unterminated access unit was not bounded before FFmpeg: %v", err)
+			}
+		})
+	}
+}
+
 func readAnnexBAccessUnits(t *testing.T, path string) [][]byte {
 	t.Helper()
 	value, err := os.ReadFile(path)
