@@ -494,19 +494,24 @@ defmodule ChalkSync.Operations.Probe do
   defp observe_external_operation_lanes(boot?) do
     Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn lane,
                                                                            {:ok, failures} ->
-      with :ok <- observe_process(lane),
-           {:ok, health} <- observe(lane, fn -> safe_external_operation_health(lane) end),
-           :ok <-
-             observe(
-               :external_operation_consumer,
-               fn -> validate_external_operation_health(health, boot?) end,
-               consumer_measurements(health)
-             ) do
-        {:cont, {:ok, max(failures, health.consecutive_failures)}}
-      else
+      case observe_external_operation_lane(lane, boot?) do
+        {:ok, health} -> {:cont, {:ok, max(failures, health.consecutive_failures)}}
         error -> {:halt, error}
       end
     end)
+  end
+
+  defp observe_external_operation_lane(lane, boot?) do
+    with :ok <- observe_process(lane),
+         {:ok, health} <- observe(lane, fn -> safe_external_operation_health(lane) end),
+         :ok <-
+           observe(
+             :external_operation_consumer,
+             fn -> validate_external_operation_health(health, boot?) end,
+             consumer_measurements(health)
+           ) do
+      {:ok, health}
+    end
   end
 
   defp safe_external_operation_health(lane) do
