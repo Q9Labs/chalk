@@ -78,6 +78,33 @@ func TestConfirmRemoteTrackFailuresDeduplicatesAndExpiresClaims(t *testing.T) {
 	}
 }
 
+// Cloudflare can list a pushed track as active while every listener pull of it fails
+// with "track not found on remote peer" for tens of seconds. The publisher is
+// connected and sending, so only a new publication gets listeners audio again.
+func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, func() time.Time { return now })
+	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
+	reader := func(context.Context, string) (PublisherSession, error) {
+		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
+	}
+	input := RemoteTrackFailureInput{TenantID: tenantID, EpisodeID: episodeID, Failed: []RemoteTrackIdentity{identity}}
+
+	first, err := service.ConfirmRemoteTrackFailures(context.Background(), input, reader)
+	if err != nil || first.Present != 1 || first.Closed != 0 {
+		t.Fatalf("first confirmation result=%+v err=%v, want the track kept while it may still be starting", first, err)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", true)
+
+	now = now.Add(publicationLivenessDedupeWindow)
+	second, err := service.ConfirmRemoteTrackFailures(context.Background(), input, reader)
+	if err != nil || second.Closed != 1 || second.Present != 0 {
+		t.Fatalf("second confirmation result=%+v err=%v, want the track still failing for listeners withdrawn", second, err)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
+}
+
 func TestConfirmRemoteTrackFailuresInspectsPublisherOnceForMultipleTracks(t *testing.T) {
 	repository := &reconciliationRepositoryStub{}
 	service := newService(repository, time.Now)

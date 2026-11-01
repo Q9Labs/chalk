@@ -13,7 +13,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-const publicationLivenessDedupeWindow = 2 * time.Second
+const (
+	publicationLivenessDedupeWindow = 2 * time.Second
+	publicationStillFailingWindow   = 30 * time.Second
+)
 
 type PublisherTrack struct {
 	MID       string
@@ -50,10 +53,32 @@ type publicationLivenessChecks struct {
 	mu      sync.Mutex
 	now     func() time.Time
 	claimed map[publicationCandidateKey]time.Time
+	// present records when the publisher session last listed a failing track as active.
+	present map[publicationCandidateKey]time.Time
 }
 
 func newPublicationLivenessChecks(now func() time.Time) *publicationLivenessChecks {
-	return &publicationLivenessChecks{now: now, claimed: make(map[publicationCandidateKey]time.Time)}
+	return &publicationLivenessChecks{now: now, claimed: make(map[publicationCandidateKey]time.Time), present: make(map[publicationCandidateKey]time.Time)}
+}
+
+// stillFailing reports whether listeners kept failing a track the publisher session lists as active.
+// The first sighting is normal start-up, because the publication is announced before its media flows.
+// Failures that outlast one dedupe window mean the provider will not serve the track, and only a new publication helps.
+func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey) bool {
+	checks.mu.Lock()
+	defer checks.mu.Unlock()
+	now := checks.now()
+	for candidate, seenAt := range checks.present {
+		if now.Sub(seenAt) >= publicationStillFailingWindow {
+			delete(checks.present, candidate)
+		}
+	}
+	if _, ok := checks.present[key]; ok {
+		delete(checks.present, key)
+		return true
+	}
+	checks.present[key] = now
+	return false
 }
 
 func (checks *publicationLivenessChecks) claim(key publicationCandidateKey) bool {
@@ -151,7 +176,7 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					}
 				}
 			}
-			if present {
+			if present && !s.liveness.stillFailing(candidate.key) {
 				result.Present++
 				continue
 			}
