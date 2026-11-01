@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -250,6 +251,13 @@ const report = { started: new Date().toISOString(), options: { runsPerCell, part
 const save = async () => writeFile(`${output}/silence-repro.json`, JSON.stringify(report));
 const allBrowsers = [];
 let http;
+
+// Box CPU for the harness-load check: cumulative jiffies [total, idle, steal] from /proc/stat plus the 1 minute load; null off Linux.
+function boxCpu() {
+  if (process.platform !== "linux") return null;
+  const [, user, nice, system, idle, iowait, irq, softirq, steal] = readFileSync("/proc/stat", "utf8").split("\n")[0].split(/\s+/u).map(Number);
+  return { jiffies: [user + nice + system + idle + iowait + irq + softirq + steal, idle + iowait, steal], load1: Number(readFileSync("/proc/loadavg", "utf8").split(" ")[0]) };
+}
 
 async function runBuild(name) {
   const spec = buildSpec(name);
@@ -528,7 +536,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           }
         }),
       );
-      run.samples.push({ t: (performance.now() - start) / 1000, atMs: Date.now() - origin, states });
+      run.samples.push({ t: (performance.now() - start) / 1000, atMs: Date.now() - origin, cpu: boxCpu(), states });
       // The cloud box sometimes freezes for tens of seconds; the analyzer drops rooms that recorded a stall.
       const sleepStart = performance.now();
       await sleep(1000);

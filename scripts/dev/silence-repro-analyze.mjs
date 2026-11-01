@@ -119,6 +119,32 @@ function sessionChanges(run, participant) {
 }
 const REAL_SILENCE = 2; // seconds; the 1 s sampling makes anything shorter a normal join or heal
 
+// Harness load per room: box CPU busy and steal over the join phase (first 40 s) and the load average peak.
+function roomLoad(run) {
+  const withCpu = run.samples.filter((sample) => sample.cpu);
+  if (!withCpu.length) return null;
+  const phase = withCpu.filter((sample) => sample.t <= 40);
+  const delta = (list) => {
+    const [a, b] = [list[0].cpu.jiffies, list.at(-1).cpu.jiffies];
+    const total = b[0] - a[0];
+    return total > 0 ? { busy: 1 - (b[1] - a[1]) / total, steal: (b[2] - a[2]) / total } : { busy: NaN, steal: NaN };
+  };
+  const join = delta(phase);
+  return { busy: join.busy, steal: join.steal, load1Max: Math.max(...withCpu.map((sample) => sample.cpu.load1)) };
+}
+// ICE connect time of the room's receive connections: from the first SFU offer to ice:connected.
+function iceConnect(run) {
+  const times = [];
+  for (const timelines of run.peerTimelines ?? [])
+    for (const line of timelines ?? []) {
+      const offer = line.find(([name]) => name === "setRemote:offer")?.[1];
+      const connected = line.find(([name]) => name === "ice:connected")?.[1];
+      if (offer !== undefined && connected !== undefined && connected >= offer) times.push(connected - offer);
+    }
+  return times;
+}
+const rooms = [];
+
 const cells = new Map();
 const failures = [];
 const slowExamples = [];
@@ -144,6 +170,8 @@ files.forEach((file, fileIndex) => {
       unmutes: 0,
       speakerDeaf: 0,
       stagesSilent: new Map(),
+      // Tap-to-heard: from the unmute tap to each listener hearing audio; an unmute whose publisher never reaches enabled counts every listener as silent.
+      tap: { taps: 0, neverEnabled: 0, neverStatus: new Map(), pairs: 0, silent: 0, slow: 0, clusters: [], worst: [], heard: [] },
       reconnect: { pairs: 0, silent: 0, slow: 0, openAtEnd: 0, worst: [] },
       pulls: 0,
       trackErrors: 0,
@@ -178,6 +206,7 @@ files.forEach((file, fileIndex) => {
       }
       if (entry.status === 503) cell.s503++;
     }
+    const roomBefore = { taps: cell.tap.taps, never: cell.tap.neverEnabled, pairs: cell.tap.pairs, slow: cell.tap.slow };
     const n = run.samples[0].states.length;
     const lastT = run.samples.at(-1).t;
     const byParticipant = new Map();
@@ -190,9 +219,26 @@ files.forEach((file, fileIndex) => {
         const deadline = run.toggle ? TOGGLE_DEADLINE : DEADLINE; // toggle rooms hold the mic open for 8 s only
         if (end - action.t < deadline) return; // censored: the run or the next mute came before the deadline
         cell.unmutes++;
+        cell.tap.taps++;
+        const tapCluster = { pairs: 0, silent: 0, slow: 0 };
         const enabled = run.samples.find((sample) => sample.t >= action.t && sample.t <= action.t + deadline && sample.states[speaker]?.mic === "enabled");
         if (!enabled) {
           cell.neverEnabled++; // the publisher itself never reached enabled: not a listener-side failure
+          cell.tap.neverEnabled++;
+          const tapState = run.samples.find((sample) => sample.t >= action.t)?.states[speaker];
+          const label = `${tapState?.status}/${tapState?.mic}`;
+          cell.tap.neverStatus.set(label, (cell.tap.neverStatus.get(label) ?? 0) + 1);
+          for (let listener = 0; listener < n; listener++) {
+            if (listener === speaker) continue;
+            cell.tap.pairs++;
+            cell.tap.silent++;
+            cell.tap.slow++;
+            cell.tap.worst.push(deadline);
+            tapCluster.pairs++;
+            tapCluster.silent++;
+            tapCluster.slow++;
+          }
+          cell.tap.clusters.push(tapCluster);
           return;
         }
         const cluster = { pairs: 0, silent: 0, slow: 0 };
@@ -214,6 +260,21 @@ files.forEach((file, fileIndex) => {
             if (worst > SLOW) cell.reconnect.slow++;
             if (heard === null || heard > deadline) cell.reconnect.silent++;
             if (reconnected.some((episode) => episode.open)) cell.reconnect.openAtEnd++;
+          }
+          const tapFirst = run.samples.findIndex((sample, index) => series[index] && sample.t >= action.t && sample.t < end);
+          const tapHeard = tapFirst === -1 ? null : run.samples[tapFirst].t - action.t;
+          const tapWorst = Math.max(worst, tapHeard ?? end - action.t);
+          cell.tap.pairs++;
+          tapCluster.pairs++;
+          cell.tap.worst.push(tapWorst);
+          if (tapHeard !== null) cell.tap.heard.push(tapHeard);
+          if (tapHeard === null || tapHeard > deadline) {
+            cell.tap.silent++;
+            tapCluster.silent++;
+          }
+          if (tapWorst > SLOW) {
+            cell.tap.slow++;
+            tapCluster.slow++;
           }
           const bucket = action.first ? cell.first : cell.again;
           cell.pairs++;
@@ -244,8 +305,19 @@ files.forEach((file, fileIndex) => {
         }
         if (!anyListener) cell.speakerDeaf++;
         cell.clusters.push(cluster);
+        cell.tap.clusters.push(tapCluster);
       });
     }
+    rooms.push({
+      key,
+      participants: n,
+      load: roomLoad(run),
+      ice: iceConnect(run),
+      taps: cell.tap.taps - roomBefore.taps,
+      never: cell.tap.neverEnabled - roomBefore.never,
+      pairs: cell.tap.pairs - roomBefore.pairs,
+      slow: cell.tap.slow - roomBefore.slow,
+    });
   }
 });
 
@@ -273,6 +345,20 @@ const summaries = rows.map((cell) => ({
   healP50: quantile(cell.worst, 0.5),
   healP99: quantile(cell.worst, 0.99),
   healMax: quantile(cell.worst, 1),
+  tap: {
+    taps: cell.tap.taps,
+    neverEnabled: cell.tap.neverEnabled,
+    neverStatus: Object.fromEntries(cell.tap.neverStatus),
+    pairs: cell.tap.pairs,
+    silent: cell.tap.silent,
+    silentCluster: clusterInterval(cell.tap.clusters, "silent"),
+    slow: cell.tap.slow,
+    slowCluster: clusterInterval(cell.tap.clusters, "slow"),
+    heardP50: quantile(cell.tap.heard, 0.5),
+    worstP50: quantile(cell.tap.worst, 0.5),
+    worstP99: quantile(cell.tap.worst, 0.99),
+    worstMax: quantile(cell.tap.worst, 1),
+  },
   speakersHeardByNobody: cell.speakerDeaf,
   publisherNeverEnabled: cell.neverEnabled,
   unmutesAnalysed: cell.unmutes,
@@ -304,6 +390,45 @@ if (asJson) {
     console.log(
       `| ${s.build} | ${s.condition} | ${s.rooms} | ${s.pairs} | ${s.silent} | ${pct(s.silentRate)} (${interval(s.silentCluster)}) | ${interval(s.silentWilson)} | ${s.slow} | ${pct(s.slowRate)} (${interval(s.slowCluster)}) | ${seconds(s.timeToAudioP50)} s | ${seconds(s.healP50)} / ${seconds(s.healP99)} / ${seconds(s.healMax)} s | ${s.publisherNeverEnabled} of ${s.unmutesAnalysed} | ${s.speakersHeardByNobody} |`,
     );
+  const noFault = rooms.filter((room) => room.load && /\| (open|home|mobile)$/u.test(room.key) && room.pairs);
+  if (noFault.length) {
+    const rank = (values) => values.map((value) => values.filter((other) => other < value).length + (values.filter((other) => other === value).length - 1) / 2);
+    const correlation = (x, y) => {
+      const [rx, ry] = [rank(x), rank(y)];
+      const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      const [mx, my] = [mean(rx), mean(ry)];
+      const num = rx.reduce((sum, value, i) => sum + (value - mx) * (ry[i] - my), 0);
+      const den = Math.sqrt(rx.reduce((sum, value) => sum + (value - mx) ** 2, 0) * ry.reduce((sum, value) => sum + (value - my) ** 2, 0));
+      return den ? num / den : NaN;
+    };
+    const slowShare = noFault.map((room) => room.slow / room.pairs);
+    console.log("\nHarness load check (rooms with no fault and CPU data; busy and steal are the box CPU over the first 40 s):\n");
+    console.log("| build | condition | participants | busy | steal | load1 peak | ICE p50 / p90 (ms, n) | taps never enabled | pairs >5 s from tap |");
+    console.log("|---|---|---|---|---|---|---|---|---|");
+    for (const room of noFault)
+      console.log(
+        `| ${room.key.replace(" | ", " | ")} | ${room.participants} | ${pct(room.load.busy)} | ${pct(room.load.steal)} | ${room.load.load1Max.toFixed(1)} | ${room.ice.length ? `${quantile(room.ice, 0.5)} / ${quantile(room.ice, 0.9)} (${room.ice.length})` : "-"} | ${room.never} of ${room.taps} | ${room.slow} of ${room.pairs} |`,
+      );
+    console.log(
+      `\nRank correlation across ${noFault.length} rooms: busy vs share of pairs >5 s ${correlation(
+        noFault.map((room) => room.load.busy),
+        slowShare,
+      ).toFixed(2)}; steal vs share ${correlation(
+        noFault.map((room) => room.load.steal),
+        slowShare,
+      ).toFixed(2)}; busy vs share of taps never enabled ${correlation(
+        noFault.map((room) => room.load.busy),
+        noFault.map((room) => room.never / room.taps),
+      ).toFixed(2)}.`,
+    );
+  }
+  console.log("\nTap-to-heard (from the unmute tap to each listener hearing audio; a tap whose publisher never reaches enabled makes every listener pair silent for the whole window):\n");
+  console.log("| build | condition | taps | taps never enabled | pairs | silent at deadline, cluster 95% | pairs >5 s, cluster 95% | tap-to-heard p50 | worst p50 / p99 / max |");
+  console.log("|---|---|---|---|---|---|---|---|---|");
+  for (const s of summaries)
+    console.log(
+      `| ${s.build} | ${s.condition} | ${s.tap.taps} | ${s.tap.neverEnabled} | ${s.tap.pairs} | ${s.tap.silent} ${pct(s.tap.pairs ? s.tap.silent / s.tap.pairs : NaN)} (${interval(s.tap.silentCluster)}) | ${s.tap.slow} ${pct(s.tap.pairs ? s.tap.slow / s.tap.pairs : NaN)} (${interval(s.tap.slowCluster)}) | ${seconds(s.tap.heardP50)} s | ${seconds(s.tap.worstP50)} / ${seconds(s.tap.worstP99)} / ${seconds(s.tap.worstMax)} s |`,
+    );
   console.log("\nPairs that went through a reconnect (a silent episode over 2 s that overlaps an SFU session change of the listener or the speaker):\n");
   console.log("| build | condition | reconnected pairs | silent (15 s) | silent >5 s | still silent at run end | heal p50 / p99 / max |");
   console.log("|---|---|---|---|---|---|---|");
@@ -312,6 +437,7 @@ if (asJson) {
     console.log(
       `\n${s.build} | ${s.condition}: rooms dropped for a stall ${s.stalledRooms}, errored ${s.erroredRooms}, first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}`,
     );
+    if (s.tap.neverEnabled) console.log(`  taps that never reached enabled, by speaker status/mic at the tap: ${JSON.stringify(s.tap.neverStatus)}`);
     for (const [stage, count] of Object.entries(s.stagesSilent)) console.log(`  silent pairs by furthest stage: ${stage}: ${count}`);
   }
   console.log("\nFirst silent examples:");
