@@ -1077,7 +1077,12 @@ defmodule ChalkSync.LifecycleConsumerPostgresTest do
     start_supervised!({ChalkSync.Fanout.PostgresNotifications, url: @database_url})
     start_supervised!({ChalkSync.LifecycleConsumer, poll_interval_ms: 60_000})
     ChalkSync.LifecycleConsumer.health()
-    start_supervised!({ExternalOperationConsumer, poll_interval_ms: 60_000})
+
+    Enum.each(
+      ExternalOperationConsumer.child_specs(poll_interval_ms: 60_000),
+      &start_supervised!/1
+    )
+
     start_supervised!({ChalkSync.Retention.Scheduler, auto_run?: false})
 
     # Boot probes check the real dependencies without requiring background poll freshness.

@@ -52,6 +52,8 @@ defmodule ChalkSync.Stateholder do
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback claim_local_operations(pos_integer()) ::
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback claim_provider_operations(pos_integer()) ::
+              {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback read_operation(EpisodeKey.t(), String.t()) ::
               {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
   @callback finalize_operation(EpisodeKey.t(), String.t(), tuple()) ::
@@ -213,6 +215,11 @@ defmodule ChalkSync.Stateholder do
           {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
     do: impl().claim_local_operations(limit)
+
+  @spec claim_provider_operations(pos_integer()) ::
+          {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  def claim_provider_operations(limit) when is_integer(limit) and limit in 1..64,
+    do: impl().claim_provider_operations(limit)
 
   @spec read_operation(EpisodeKey.t(), String.t()) ::
           {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}

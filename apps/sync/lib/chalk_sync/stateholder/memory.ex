@@ -109,6 +109,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:claim_local_operations, limit})
 
   @impl ChalkSync.Stateholder
+  def claim_provider_operations(limit),
+    do: GenServer.call(__MODULE__, {:claim_provider_operations, limit})
+
+  @impl ChalkSync.Stateholder
   def read_operation(%EpisodeKey{} = episode, external_operation_id),
     do: GenServer.call(__MODULE__, {:read_operation, episode, external_operation_id})
 
@@ -408,19 +412,11 @@ defmodule ChalkSync.Stateholder.Memory do
   def handle_call({:claim_operations, limit}, _from, server_state),
     do: claim_memory_operations(server_state, limit, fn _operation -> true end)
 
-  def handle_call({:claim_local_operations, limit}, _from, server_state) do
-    claim_memory_operations(server_state, limit, fn operation ->
-      operation.name in [
-        :participant_leave,
-        :end_episode,
-        :tenant_end_episode,
-        :maximum_duration_expired,
-        :recording_capture_ready,
-        :recording_capture_stopped,
-        :recording_capture_failed
-      ]
-    end)
-  end
+  def handle_call({:claim_local_operations, limit}, _from, server_state),
+    do: claim_memory_operations(server_state, limit, &ExternalOperation.local?/1)
+
+  def handle_call({:claim_provider_operations, limit}, _from, server_state),
+    do: claim_memory_operations(server_state, limit, &(not ExternalOperation.local?(&1)))
 
   def handle_call({:read_operation, episode_key, external_operation_id}, _from, server_state) do
     key = EpisodeKey.authority_key(episode_key)

@@ -14,6 +14,9 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
   def claim_local_operations(connection, limit),
     do: claim_operation_rows(connection, SQL.claim_local_operations(), limit)
 
+  def claim_provider_operations(connection, limit),
+    do: claim_operation_rows(connection, SQL.claim_provider_operations(), limit)
+
   defp claim_operation_rows(connection, query, limit) do
     %{rows: rows} = Postgrex.query!(connection, query, [limit], timeout: 2_000)
 

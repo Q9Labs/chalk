@@ -236,6 +236,10 @@ defmodule ChalkSync.Stateholder.Postgres do
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
     do: claim_operation_rows(&ExternalOperationClaims.claim_local_operations(&1, limit))
 
+  @impl ChalkSync.Stateholder
+  def claim_provider_operations(limit) when is_integer(limit) and limit in 1..64,
+    do: claim_operation_rows(&ExternalOperationClaims.claim_provider_operations(&1, limit))
+
   defp claim_operation_rows(claim) do
     episode = %EpisodeKey{
       tenant_id: "background",

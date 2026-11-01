@@ -6,6 +6,13 @@ defmodule ChalkSync.ExternalOperationConsumer do
   after the claim transaction and retain the stable external operation id.
   Ambiguous and retryable outcomes remain pending for the durable claim
   schedule; only confirmed or terminal outcomes are finalized.
+
+  A node runs two lanes (see `child_specs/1`). The local lane claims operations
+  that only change Sync's database, such as admission, so they never wait for a
+  provider call. The provider lane claims the rest and runs a page of them with
+  bounded concurrency, so one slow provider call delays only itself. Finalizers
+  lock the Episode and the operation row in one transaction, so rows may run in
+  any order and in parallel, as they already do across nodes.
   """
 
   use GenServer
@@ -20,22 +27,19 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Telemetry
 
+  require ExternalOperation
+
   @default_page_size 32
   @default_max_backoff_ms 5_000
   @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
   @worker_completion_grace_ms 5_000
   @max_attempts 100
-  @local_operations [
-    :admit_participant,
-    :participant_leave,
-    :deny_admission,
-    :admission_request_expired,
-    :tenant_set_deadline,
-    :recording_capture_ready,
-    :recording_capture_stopped,
-    :recording_capture_failed
-  ]
+  @lanes %{
+    all: %{claim: :claim_operations, concurrency: 1},
+    local: %{claim: :claim_local_operations, concurrency: 4},
+    provider: %{claim: :claim_provider_operations, concurrency: 8}
+  }
   @end_episode_operations [
     :end_episode,
     :tenant_end_episode,
@@ -47,19 +51,40 @@ defmodule ChalkSync.ExternalOperationConsumer do
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
+  @doc "Names of the two production lanes, for health checks."
+  @spec lane_names() :: [atom()]
+  def lane_names, do: [lane_name(:local), lane_name(:provider)]
+
+  @doc "Child specs for the local and provider lanes. `options` apply to both."
+  @spec child_specs(keyword()) :: [Supervisor.child_spec()]
+  def child_specs(options) do
+    for lane <- [:local, :provider] do
+      Supervisor.child_spec(
+        {__MODULE__, Keyword.merge(options, lane: lane, name: lane_name(lane))},
+        id: lane_name(lane)
+      )
+    end
+  end
+
+  defp lane_name(lane),
+    do: Module.concat(__MODULE__, lane |> Atom.to_string() |> Macro.camelize())
+
   @spec health(GenServer.server()) :: map()
   def health(server \\ __MODULE__), do: GenServer.call(server, :health, @health_timeout_ms)
 
   @impl GenServer
   def init(options) do
     poll_interval_ms = Keyword.fetch!(options, :poll_interval_ms)
+    lane = Map.fetch!(@lanes, Keyword.get(options, :lane, :all))
 
     state = %{
       page_size: Keyword.get(options, :page_size, @default_page_size),
+      concurrency: lane.concurrency,
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
-      claim_operations: Keyword.get(options, :claim_operations, &Stateholder.claim_operations/1),
+      claim_operations:
+        Keyword.get(options, :claim_operations, Function.capture(Stateholder, lane.claim, 1)),
       media_plane: Keyword.get(options, :media_plane),
       recording_plane: Keyword.get(options, :recording_plane),
       last_success_at_ms: nil,
@@ -220,40 +245,46 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp execute_page(operations, state) do
-    Enum.reduce(operations, {%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
-      {episode, operation}, {counts, failures} ->
-        started_at = System.monotonic_time()
+    operations
+    |> Task.async_stream(&execute_claimed(&1, state),
+      max_concurrency: state.concurrency,
+      ordered: false,
+      timeout: :infinity
+    )
+    |> Enum.reduce({%{confirmed: 0, terminal_failure: 0, pending: 0}, 0}, fn
+      {:ok, :confirmed}, {counts, failures} ->
+        {%{counts | confirmed: counts.confirmed + 1}, failures}
 
-        result =
-          execute_operation(
-            episode,
-            operation,
-            state.media_plane,
-            state.recording_plane,
-            &Stateholder.finalize_operation/3,
-            state.adapter_timeout_ms
-          )
+      {:ok, :terminal_failure}, {counts, failures} ->
+        {%{counts | terminal_failure: counts.terminal_failure + 1}, failures}
 
-        report_result(operation.name, result, started_at)
+      {:ok, :pending}, {counts, failures} ->
+        {%{counts | pending: counts.pending + 1}, failures}
 
-        case result do
-          :confirmed ->
-            {%{counts | confirmed: counts.confirmed + 1}, failures}
-
-          :terminal_failure ->
-            {%{counts | terminal_failure: counts.terminal_failure + 1}, failures}
-
-          :pending ->
-            {%{counts | pending: counts.pending + 1}, failures}
-
-          :finalization_failure ->
-            {counts, failures + 1}
-        end
+      {:ok, :finalization_failure}, {counts, failures} ->
+        {counts, failures + 1}
     end)
   end
 
+  defp execute_claimed({episode, operation}, state) do
+    started_at = System.monotonic_time()
+
+    result =
+      execute_operation(
+        episode,
+        operation,
+        state.media_plane,
+        state.recording_plane,
+        &Stateholder.finalize_operation/3,
+        state.adapter_timeout_ms
+      )
+
+    report_result(operation.name, result, started_at)
+    result
+  end
+
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
-       when name in @local_operations,
+       when ExternalOperation.is_local_name(name),
        do: {:confirmed, :local}
 
   defp dispatch(episode, %{name: name} = operation, media_plane, recording_plane, timeout_ms)

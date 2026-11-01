@@ -1,6 +1,7 @@
 defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   @moduledoc false
 
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationColumns
 
   def read_operation do
@@ -17,17 +18,18 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   end
 
   def claim_local_operations do
+    claim_operations_where("operation_name in (#{local_names()})")
+  end
+
+  def claim_provider_operations do
     claim_operations_where("""
-    operation_name in (
-      'participant_leave',
-      'deny_admission',
-      'admission_request_expired',
-      'tenant_set_deadline',
-      'recording_capture_ready',
-      'recording_capture_stopped',
-      'recording_capture_failed'
-    )
+    operation_name not in (#{local_names()}) and operation_name <> 'role_transition_cleanup'
     """)
+  end
+
+  defp local_names do
+    ExternalOperation.local_names()
+    |> Enum.map_join(", ", &"'#{&1}'")
   end
 
   defp claim_operations_where(operation_filter) do
