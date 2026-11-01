@@ -93,7 +93,7 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
+  if (startsWithAny(file, ["apps/api", "features/mcp", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
@@ -344,7 +344,7 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", ...deploymentRoots]));
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", ...deploymentRoots]));
   const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));

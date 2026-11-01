@@ -5,6 +5,11 @@ title = "Chalk gitleaks policy"
 useDefault = true
 
 [[allowlists]]
+description = "The MCP Postgres fixture uses this non-secret idempotency key."
+regexTarget = "secret"
+regexes = ['''^mcp-admission-deny-01$''']
+
+[[allowlists]]
 description = "Local mobile and app credentials are ignored files, not part of the public gate surface."
 paths = ['''^apps/mobile/\.gplay/''', '''^apps/mobile/android/app/keystore\.properties$''', '''^apps/mobile/ios/Pods/''', '''^apps/web/\.dev\.vars$''']
 

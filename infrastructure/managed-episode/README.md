@@ -41,6 +41,7 @@ docker buildx build \
   --platform linux/arm64 \
   --provenance=mode=max \
   --build-context api_source=apps/api \
+  --build-context mcp_source=features/mcp/api \
   --file infrastructure/managed-episode/images/api.Dockerfile \
   --build-arg RELEASE_ID="$RELEASE_ID" \
   --build-arg SOURCE_REVISION="$GIT_SHA" \

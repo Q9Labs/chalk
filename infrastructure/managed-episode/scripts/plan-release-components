@@ -97,7 +97,7 @@ classify_path() {
       # CPU worker image; they are not imported by the managed API service.
       add_classification none
       ;;
-    apps/api|apps/api/*|infrastructure/managed-episode/images/api.Dockerfile)
+    apps/api|apps/api/*|features/mcp/*|infrastructure/managed-episode/images/api.Dockerfile)
       add_classification api
       ;;
     apps/sync|apps/sync/*|infrastructure/managed-episode/images/sync.Dockerfile)

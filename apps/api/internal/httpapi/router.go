@@ -34,6 +34,7 @@ type CapabilityStatus struct {
 }
 
 type Options struct {
+	MCP                  http.Handler
 	RecorderWorkerLogger *slog.Logger
 	Capabilities         CapabilityStatus
 	CORS                 CORSOptions
@@ -133,6 +134,9 @@ func NewRouter(options Options) http.Handler {
 	mountWorkerRoutes(r, options)
 
 	mountV1Routes(r, options)
+	if options.MCP != nil {
+		r.Handle("/mcp", options.MCP)
+	}
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
