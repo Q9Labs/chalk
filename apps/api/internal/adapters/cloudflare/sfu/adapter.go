@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -24,7 +25,7 @@ import (
 
 const (
 	forcedCloseTimeout      = 25 * time.Second
-	sfuHTTP2SendPingTimeout = 10 * time.Second
+	sfuHTTP2SendPingTimeout = 5 * time.Second
 	sfuHTTP2PingTimeout     = 5 * time.Second
 	sfuIdleConnTimeout      = 90 * time.Second
 	defaultEndpoint         = "https://rtc.live.cloudflare.com/v1"
@@ -33,6 +34,8 @@ const (
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
+
+var sharedSFUTransport = sync.OnceValue(newSFUTransport)
 
 const (
 	failureStageTransport  providerFailureStage = "transport"
@@ -216,6 +219,10 @@ type closeTrackResult struct {
 }
 
 func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
+	return newAdapter(cfg, sharedSFUTransport())
+}
+
+func newAdapter(cfg config.CloudflareRealtimeConfig, transport *http.Transport) (Adapter, error) {
 	appID := strings.TrimSpace(cfg.RealtimeAppID)
 	appSecret := strings.TrimSpace(cfg.RealtimeAppSecret)
 	if appID == "" || appSecret == "" || cfg.RequestTimeout <= 0 {
@@ -227,7 +234,6 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		endpoint = strings.TrimRight(strings.TrimSpace(cfg.RealtimeBaseURL), "/")
 	}
 
-	transport := newSFUTransport()
 	return Adapter{
 		appID:             appID,
 		appSecret:         appSecret,

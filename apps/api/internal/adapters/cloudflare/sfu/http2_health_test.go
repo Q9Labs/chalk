@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -22,7 +23,14 @@ const (
 	http2HealthRecoveryTimeout = 15 * time.Second
 	http2HealthFaultWindow     = 3 * time.Second
 	http2HealthIdleWait        = 16 * time.Second
+	http2HealthHandlerDelay    = 500 * time.Millisecond
 )
+
+type http2HealthServerState struct {
+	protocol               atomic.Int32
+	delayNextRequest       atomic.Bool
+	delayedRequestReceived chan struct{}
+}
 
 type http2HealthProxy struct {
 	listener   net.Listener
@@ -50,19 +58,47 @@ type http2HealthResult struct {
 
 func TestAdapterRecoversAfterDeadHTTP2Connection(t *testing.T) {
 	t.Run("mid-use", func(t *testing.T) {
-		adapter, proxy, protocol := newHTTP2HealthAdapter(t)
-		assertInitialHTTP2Request(t, adapter, protocol)
+		adapter, proxy, serverState := newHTTP2HealthAdapter(t)
+		assertInitialHTTP2Request(t, adapter, serverState)
 
+		serverState.delayNextRequest.Store(true)
+		requestResult := make(chan error, 1)
+		requestStarted := time.Now()
+		go func() {
+			_, err := adapter.VerifyConnectionMetadata(context.Background(), "connection")
+			requestResult <- err
+		}()
+		select {
+		case <-serverState.delayedRequestReceived:
+		case <-time.After(http2HealthRequestTimeout + time.Second):
+			t.Fatal("server did not receive delayed request")
+		}
+
+		faultStarted := time.Now()
 		proxy.blackhole()
-		time.Sleep(http2HealthFaultWindow)
+		var requestErr error
+		select {
+		case requestErr = <-requestResult:
+		case <-time.After(http2HealthRequestTimeout + time.Second):
+			t.Fatal("in-flight request did not time out")
+		}
+		var timeoutFailure interface{ ProviderFailureCode() string }
+		if !errors.As(requestErr, &timeoutFailure) || timeoutFailure.ProviderFailureCode() != "timeout" {
+			t.Fatalf("in-flight request error = %v, want adapter timeout", requestErr)
+		}
+		t.Logf("in-flight request timed out after %s", time.Since(requestStarted))
+
+		if remaining := http2HealthFaultWindow - time.Since(faultStarted); remaining > 0 {
+			time.Sleep(remaining)
+		}
 		proxy.endFault()
 
 		waitForHTTP2HealthRecovery(t, adapter)
 	})
 
 	t.Run("idle", func(t *testing.T) {
-		adapter, proxy, protocol := newHTTP2HealthAdapter(t)
-		assertInitialHTTP2Request(t, adapter, protocol)
+		adapter, proxy, serverState := newHTTP2HealthAdapter(t)
+		assertInitialHTTP2Request(t, adapter, serverState)
 
 		proxy.blackhole()
 		time.Sleep(http2HealthFaultWindow)
@@ -78,22 +114,85 @@ func TestAdapterRecoversAfterDeadHTTP2Connection(t *testing.T) {
 	})
 }
 
-func newHTTP2HealthAdapter(t *testing.T) (Adapter, *http2HealthProxy, *atomic.Int32) {
+func TestNewAdapterSharesOneConfiguredTransport(t *testing.T) {
+	firstConfig := config.CloudflareRealtimeConfig{
+		RealtimeAppID:     "first-test-app",
+		RealtimeAppSecret: "first-test-secret",
+		RequestTimeout:    2 * time.Second,
+	}
+	secondConfig := config.CloudflareRealtimeConfig{
+		RealtimeAppID:     "second-test-app",
+		RealtimeAppSecret: "second-test-secret",
+		RequestTimeout:    30 * time.Second,
+	}
+	first, err := NewAdapter(firstConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewAdapter(secondConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstClient := first.client.(*http.Client)
+	firstForcedCloseClient := first.forcedCloseClient.(*http.Client)
+	secondClient := second.client.(*http.Client)
+	secondForcedCloseClient := second.forcedCloseClient.(*http.Client)
+	transport, ok := firstClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client transport has type %T, want *http.Transport", firstClient.Transport)
+	}
+	for name, client := range map[string]*http.Client{
+		"first forced-close":  firstForcedCloseClient,
+		"second":              secondClient,
+		"second forced-close": secondForcedCloseClient,
+	} {
+		if client.Transport != transport {
+			t.Errorf("%s client does not share the configured transport", name)
+		}
+	}
+	if firstClient.Timeout != firstConfig.RequestTimeout || secondClient.Timeout != secondConfig.RequestTimeout {
+		t.Errorf("normal client timeouts = %s and %s, want %s and %s", firstClient.Timeout, secondClient.Timeout, firstConfig.RequestTimeout, secondConfig.RequestTimeout)
+	}
+	if firstForcedCloseClient.Timeout != forcedCloseTimeout || secondForcedCloseClient.Timeout != secondConfig.RequestTimeout {
+		t.Errorf("forced-close client timeouts = %s and %s, want %s and %s", firstForcedCloseClient.Timeout, secondForcedCloseClient.Timeout, forcedCloseTimeout, secondConfig.RequestTimeout)
+	}
+	if transport.HTTP2 == nil {
+		t.Fatal("shared transport has no HTTP/2 config")
+	}
+	if transport.HTTP2.SendPingTimeout != 5*time.Second {
+		t.Errorf("HTTP/2 send-ping timeout = %s, want 5s", transport.HTTP2.SendPingTimeout)
+	}
+	if transport.HTTP2.PingTimeout != 5*time.Second {
+		t.Errorf("HTTP/2 ping timeout = %s, want 5s", transport.HTTP2.PingTimeout)
+	}
+	if transport.IdleConnTimeout != 90*time.Second {
+		t.Errorf("idle connection timeout = %s, want 90s", transport.IdleConnTimeout)
+	}
+	if !transport.ForceAttemptHTTP2 {
+		t.Error("shared transport does not force HTTP/2")
+	}
+}
+
+func newHTTP2HealthAdapter(t *testing.T) (Adapter, *http2HealthProxy, *http2HealthServerState) {
 	t.Helper()
-	endpoint, roots, protocol, proxy := newHTTP2HealthServer(t)
-	adapter, err := NewAdapter(config.CloudflareRealtimeConfig{
+	endpoint, roots, serverState, proxy := newHTTP2HealthServer(t)
+	transport := newSFUTransport()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots}
+	adapter, err := newAdapter(config.CloudflareRealtimeConfig{
 		RealtimeAppID:     "test-app",
 		RealtimeAppSecret: "test-secret",
 		RealtimeBaseURL:   endpoint,
 		RequestTimeout:    http2HealthRequestTimeout,
-	})
+	}, transport)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	client := adapter.client.(*http.Client)
-	transport := client.Transport.(*http.Transport)
-	transport.TLSClientConfig = &tls.Config{RootCAs: roots}
+	if client.Transport != transport {
+		t.Fatal("client does not use the test transport")
+	}
 	if transport.IdleConnTimeout != sfuIdleConnTimeout {
 		t.Fatalf("transport idle timeout is %s, want %s", transport.IdleConnTimeout, sfuIdleConnTimeout)
 	}
@@ -102,14 +201,20 @@ func newHTTP2HealthAdapter(t *testing.T) (Adapter, *http2HealthProxy, *atomic.In
 		t.Fatal("forced-close client does not share the configured transport")
 	}
 	t.Cleanup(client.CloseIdleConnections)
-	return adapter, proxy, protocol
+	return adapter, proxy, serverState
 }
 
-func newHTTP2HealthServer(t *testing.T) (string, *x509.CertPool, *atomic.Int32, *http2HealthProxy) {
+func newHTTP2HealthServer(t *testing.T) (string, *x509.CertPool, *http2HealthServerState, *http2HealthProxy) {
 	t.Helper()
-	protocol := &atomic.Int32{}
+	serverState := &http2HealthServerState{
+		delayedRequestReceived: make(chan struct{}, 1),
+	}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		protocol.CompareAndSwap(0, int32(r.ProtoMajor))
+		serverState.protocol.CompareAndSwap(0, int32(r.ProtoMajor))
+		if serverState.delayNextRequest.CompareAndSwap(true, false) {
+			serverState.delayedRequestReceived <- struct{}{}
+			time.Sleep(http2HealthHandlerDelay)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{}`)
 	}))
@@ -126,15 +231,15 @@ func newHTTP2HealthServer(t *testing.T) (string, *x509.CertPool, *atomic.Int32, 
 	roots := x509.NewCertPool()
 	roots.AddCert(server.Certificate())
 	endpoint := "https://" + proxy.listener.Addr().String()
-	return endpoint, roots, protocol, proxy
+	return endpoint, roots, serverState, proxy
 }
 
-func assertInitialHTTP2Request(t *testing.T, adapter Adapter, protocol *atomic.Int32) {
+func assertInitialHTTP2Request(t *testing.T, adapter Adapter, serverState *http2HealthServerState) {
 	t.Helper()
 	if _, err := adapter.VerifyConnectionMetadata(context.Background(), "connection"); err != nil {
 		t.Fatalf("initial verify request: %v", err)
 	}
-	if got := protocol.Load(); got != 2 {
+	if got := serverState.protocol.Load(); got != 2 {
 		t.Fatalf("initial request used HTTP/2 major version %d, want 2", got)
 	}
 }
