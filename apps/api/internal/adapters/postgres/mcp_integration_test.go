@@ -229,10 +229,17 @@ for (const space of list.result.data.spaces) {
   const episodes = await chalk.list_episodes({space_id:space.id});
   const recordings = await chalk.list_recordings({space_id:space.id});
   if (!episodes.ok || !recordings.ok) throw new Error("join failed");
-  rows.push({space_id:space.id, episodes:episodes.result.data.episodes.length, recordings:recordings.result.data.recordings.length});
+  let transcriptCount = 0;
+  for (const recording of recordings.result.data.recordings) {
+    const transcripts = await chalk.list_transcripts({recording_id:recording.id});
+    if (!transcripts.ok) throw new Error("transcript join failed");
+    transcriptCount += transcripts.result.data.transcripts.length;
+  }
+  rows.push({space_id:space.id, episodes:episodes.result.data.episodes.length, recordings:recordings.result.data.recordings.length, transcripts:transcriptCount});
 }
 const foreign = await chalk.inspect_space({space_id:%q});
 const injection = await chalk.list_spaces({tenant_id:%q});
+if (foreign.ok || injection.ok) throw new Error("tenant boundary failed");
 return {rows, foreign, injection};`, foreignSpace, foreignTenant)
 		args, err := json.Marshal(map[string]string{"code": program})
 		if err != nil {
@@ -240,7 +247,7 @@ return {rows, foreign, injection};`, foreignSpace, foreignTenant)
 		}
 		result := callMCP(t, codeSession, "execute", string(args))
 		text := mcpText(result)
-		if result.IsError || !strings.Contains(text, `"recordings":1`) || strings.Contains(text, "Foreign private Space") || !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "mcp.invalid_arguments") {
+		if result.IsError || !strings.Contains(text, `"recordings":1`) || !strings.Contains(text, `"transcripts":1`) || strings.Contains(text, "Foreign private Space") || !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "mcp.invalid_arguments") {
 			t.Fatalf("code join/isolation failed: %s", text)
 		}
 		deniedArgs, err := json.Marshal(map[string]string{"code": fmt.Sprintf(`return await chalk.delete_transcript({transcript_id:%q});`, transcriptID)})

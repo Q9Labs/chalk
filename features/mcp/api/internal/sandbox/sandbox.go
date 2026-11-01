@@ -58,7 +58,7 @@ func Execute(parent context.Context, code string, names []string, call func(cont
 		return result
 	}
 	// Transform only: no bundling, imports, plugins, filesystem reads, or source maps.
-	transformed := api.Transform("async function __chalk_program() {\n"+code+"\n}", api.TransformOptions{Loader: api.LoaderTS, Target: api.ES2022, LegalComments: api.LegalCommentsNone})
+	transformed := api.Transform("async function __chalk_program() {\n"+code+"\n}", api.TransformOptions{Loader: api.LoaderTS, Target: api.ES2022, LegalComments: api.LegalCommentsNone, LogLevel: api.LogLevelSilent})
 	if len(transformed.Errors) != 0 {
 		fail("code.invalid_code", "Invalid TypeScript function body")
 		return result
@@ -145,7 +145,7 @@ func Execute(parent context.Context, code string, names []string, call func(cont
 	}
 	// Default WASI has no env, preopened directories, network, host randomness or
 	// real clocks. Do not add WithFSConfig, WithEnv, WithSys* or WithRandSource.
-	module, err := runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().WithName(""))
+	module, err := runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig().WithName("").WithStartFunctions("_initialize"))
 	if err == nil {
 		var encodedNames []byte
 		if names == nil {
