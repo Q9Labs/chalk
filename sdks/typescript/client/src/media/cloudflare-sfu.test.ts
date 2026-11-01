@@ -8,6 +8,7 @@ import { V1SyncError } from "../sync/v1-error";
 import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
+import { provenShort } from "../../tests/helpers/media-convergence";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
@@ -2852,7 +2853,15 @@ function createSwapCall() {
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("swap") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) }, createMediaClient: () => harness.client, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }) } },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(track) },
+        createMediaClient: () => harness.client,
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, offReasonNegotiated: () => true, link: provenShort }),
+      },
+    },
   );
   const startSwap = async () => {
     command.mockClear();

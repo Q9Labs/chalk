@@ -1008,6 +1008,7 @@ defmodule ChalkSync.Transport.SocketV1 do
              self(),
              protocol_options
              |> Map.put(:entry_confirmation, state.entry_confirmation)
+             |> Map.put(:media_off_reason, state.media_off_reason)
              |> Map.put(
                :entry_generation,
                state.requested_entry_generation != :legacy &&

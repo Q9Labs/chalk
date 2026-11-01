@@ -623,6 +623,61 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  // Sync says per connection whether its media items carry `off_reason`; a rolling deploy can put the next connection on an older Sync.
+  it("reports media_off_reason for the connection whose welcome carried it and resets on the next", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      expect(client.offReasonNegotiated()).toBe(false);
+      for (const advertised of [true, false, true]) {
+        socket.close(1012);
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        socket.open();
+        await settle();
+        expect(client.offReasonNegotiated()).toBe(false);
+        await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, undefined, advertised);
+        expect(client.offReasonNegotiated()).toBe(advertised);
+      }
+    } finally {
+      client.stop();
+    }
+  });
+  it("judges a drop from frames that followed each other, listens to the page while started and stops listening on stop", async () => {
+    const clock = new TestClock();
+    const listeners = new Set<() => void>();
+    const registered = new Set<string>();
+    const page = {
+      addEventListener: (type: "freeze" | "resume", listener: () => void) => {
+        registered.add(type);
+        listeners.add(listener);
+      },
+      removeEventListener: (type: "freeze" | "resume", listener: () => void) => {
+        registered.delete(type);
+        listeners.delete(listener);
+      },
+    };
+    let mono = 0;
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1, monotonic: () => mono, page });
+    try {
+      expect([...registered].sort()).toEqual(["freeze", "resume"]);
+      const proof = client.link.proof();
+      expect(proof).not.toBeNull();
+      clock.advance(10_000);
+      mono += 10_000;
+      expect(client.link.longSince(proof)).toBe(false);
+      for (const listener of listeners) listener();
+      expect(client.link.longSince(proof)).toBe(true);
+      socket.receive({ type: "heartbeat_ack" });
+      await settle();
+      expect(state.revision).toBeGreaterThanOrEqual(0);
+    } finally {
+      client.stop();
+    }
+    expect(registered.size).toBe(0);
+    expect(listeners.size).toBe(0);
+  });
   it("resends unacknowledged entry after transport recovery", async () => {
     const clock = new TestClock();
     const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
@@ -2520,7 +2575,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2534,6 +2589,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     ...(mode === "snapshot" ? { snapshot } : {}),
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
+    ...(mediaOffReason ? { media_off_reason: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

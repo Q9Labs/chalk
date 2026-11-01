@@ -113,11 +113,6 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
       satisfy_failed_grant_child(connection, episode, reservation)
     end
 
-    # The bound is persisted with the reservation, so a retry of this completion clears the same stops and no others.
-    if reservation.status == :confirmed and not cleanup_required do
-      Postgrex.query!(connection, SQL.clear_answered_stop(), params)
-    end
-
     Map.put(reservation, :result, if(cleanup_required, do: :cleanup_required, else: :authorized))
   end
 

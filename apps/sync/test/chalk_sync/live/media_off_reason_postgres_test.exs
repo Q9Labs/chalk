@@ -5,7 +5,6 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
   alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
-  alias ChalkSync.Live.Projection
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.Stateholder.Postgres.MediaPauses
@@ -59,7 +58,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     {:ok, fixture: fixture, host: host, guest: guest}
   end
 
-  test "a host mute is stored with its stop revision, survives a fresh process and clears on an accepted on",
+  test "a host mute is stored with its stop revision, survives a fresh process and an accepted on",
        %{fixture: fixture, host: host, guest: guest} do
     key = {guest.participant_id, "microphone"}
     assert {:ok, stops} = Postgres.media_stops(fixture.episode)
@@ -86,10 +85,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
 
     use_adapter(%{})
     assert accept_on(live, guest)["outcome"] == "confirmed"
-    assert {:ok, stops} = Postgres.media_stops(fixture.episode)
-    refute Map.has_key?(stops, key)
-    assert {:ok, cleared, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-    assert cleared.media_items == []
+    assert {:ok, %{^key => ^revision}} = Postgres.media_stops(fixture.episode)
   end
 
   test "a device pause alone does not store a stop", %{fixture: fixture, guest: guest} do
@@ -127,75 +123,39 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     assert fixture.episode == guest.episode
   end
 
-  test "an accepted on keeps a stop committed between its grant and its completion",
-       %{connection: connection, fixture: fixture, host: host, guest: guest} do
-    key = {guest.participant_id, "microphone"}
-    first = mute(host, guest)
-    second = first + 1
-
-    use_adapter(%{
-      grant_publication: fn ->
-        record_stop(connection, fixture, guest, second)
-        :confirmed
-      end
-    })
-
-    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-
-    assert accept_on(live, guest)["outcome"] == "confirmed"
-    assert {:ok, %{^key => ^second}} = Postgres.media_stops(fixture.episode)
-  end
-
-  test "an accepted on clears the stop that was in place when it was granted",
+  # Intent revisions are per device. Device A went offline with an older on; device B heard the stop and its on was
+  # accepted, and B's publication is not listed yet. A recovers from a fresh Sync process (or a snapshot fallback) and
+  # must still see the stop, or it resumes an on that predates the host's stop.
+  test "an accepted on from one device leaves the stop for a device whose on is older",
        %{fixture: fixture, host: host, guest: guest} do
-    mute(host, guest)
+    key = {guest.participant_id, "microphone"}
+    revision = mute(host, guest)
     use_adapter(%{})
 
     {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-
-    assert accept_on(live, guest)["outcome"] == "confirmed"
-    assert {:ok, stops} = Postgres.media_stops(fixture.episode)
-    assert stops == %{}
-  end
-
-  test "a stop committed after the live state was read and before the grant is cleared, and recovery shows no reason",
-       %{connection: connection, fixture: fixture, host: host, guest: guest} do
-    first = mute(host, guest)
-    use_adapter(%{})
-
-    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-    record_stop(connection, fixture, guest, first + 1)
-
     {next, result} = accept_on_state(live, guest)
 
     assert result["outcome"] == "confirmed"
-    assert {:ok, stops} = Postgres.media_stops(fixture.episode)
-    assert stops == %{}
-    assert next.media_stops == %{}
+    assert {:ok, %{^key => ^revision}} = Postgres.media_stops(fixture.episode)
+    assert next.media_stops == %{key => revision}
+
     assert {:ok, recovered, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-    assert recovered.media_items == []
+
+    assert [
+             %{
+               "participant_id" => participant_id,
+               "source" => "microphone",
+               "enabled" => false,
+               "publication_id" => nil,
+               "off_reason" => "host",
+               "off_revision" => ^revision
+             }
+           ] = recovered.media_items
+
+    assert participant_id == guest.participant_id
   end
 
-  test "a retry of the same operation after a retryable failure keeps a stop committed between the attempts",
-       %{connection: connection, fixture: fixture, host: host, guest: guest} do
-    key = {guest.participant_id, "microphone"}
-    first = mute(host, guest)
-    adapter = use_adapter(%{grant_publication: {:error, :dependency_unavailable}})
-    operation_id = UUID.generate()
-
-    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-    assert accept_on(live, guest, operation_id)["outcome"] == "retryable_failure"
-    assert {:ok, %{^key => ^first}} = Postgres.media_stops(fixture.episode)
-
-    second = first + 1
-    record_stop(connection, fixture, guest, second)
-    MediaPlaneTestAdapter.put_outcome(adapter, :grant_publication, :confirmed)
-
-    assert accept_on(live, guest, operation_id)["outcome"] == "confirmed"
-    assert {:ok, %{^key => ^second}} = Postgres.media_stops(fixture.episode)
-  end
-
-  test "a repeat of an operation whose stop was already cleared keeps a stop committed after it",
+  test "a newer stop replaces the older one and a repeated on changes nothing",
        %{connection: connection, fixture: fixture, host: host, guest: guest} do
     key = {guest.participant_id, "microphone"}
     first = mute(host, guest)
@@ -204,8 +164,6 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
 
     {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
     assert accept_on(live, guest, operation_id)["outcome"] == "confirmed"
-    assert {:ok, stops} = Postgres.media_stops(fixture.episode)
-    assert stops == %{}
 
     second = first + 1
     record_stop(connection, fixture, guest, second)
@@ -214,27 +172,15 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     assert {:ok, %{^key => ^second}} = Postgres.media_stops(fixture.episode)
   end
 
-  test "an accepted on drops the reason from the live items it clears",
-       %{fixture: fixture, host: host, guest: guest} do
+  test "the welcome carries media_off_reason only on a socket that negotiated it",
+       %{port: port, host: host, guest: guest} do
     mute(host, guest)
-    use_adapter(%{})
 
-    {:ok, live, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
-    assert [%{"off_reason" => "host"}] = live.media_items
+    {welcome, _items} = media_session(port, "/v1/sync?media_off_reason=1", guest, nil)
+    assert welcome["media_off_reason"] == true
 
-    {next, _result} = accept_on_state(live, guest)
-    assert {:ok, cleared, [frame]} = LiveEpisode.reconcile(next)
-
-    assert frame["item"] == %{
-             "participant_id" => guest.participant_id,
-             "source" => "microphone",
-             "enabled" => false,
-             "publication_id" => nil
-           }
-
-    assert cleared.media_items == []
-    assert [%{"enabled" => false} = item] = Projection.items(cleared.media_projection)
-    refute Map.has_key?(item, "off_reason")
+    {welcome, _items} = media_session(port, "/v1/sync", guest, nil)
+    refute Map.has_key?(welcome, "media_off_reason")
   end
 
   defp accept_on(live, guest, operation_id \\ UUID.generate()) do
@@ -317,7 +263,10 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     }
   end
 
-  defp media_items(port, path, identity, cursor) do
+  defp media_items(port, path, identity, cursor),
+    do: port |> media_session(path, identity, cursor) |> elem(1)
+
+  defp media_session(port, path, identity, cursor) do
     {:ok, client} = Client.connect(port, path)
 
     client =
@@ -338,7 +287,7 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     {items, client} = recv_media(client, welcome)
 
     Client.close_tcp(client)
-    items
+    {welcome, items}
   end
 
   defp stale?(%{"state_digest" => digest}), do: digest == String.duplicate("0", 64)

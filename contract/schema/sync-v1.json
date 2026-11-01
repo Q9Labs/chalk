@@ -425,6 +425,12 @@
       "optional": true,
       "value": true
     },
+    "mediaOffReason": {
+      "wireName": "media_off_reason",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated media_off_reason=1: this Sync sends off_reason and off_revision on media items. A client that does not see it must not rely on them."
+    },
     "entryGeneration": {
       "wireName": "entry_generation",
       "optional": true,

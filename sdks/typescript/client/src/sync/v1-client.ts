@@ -2,6 +2,7 @@ import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
+import { LinkWatch, type LinkJudge } from "./link-watch";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
 import { sessionBaggage } from "../session";
@@ -109,7 +110,11 @@ export class V1SyncClient implements V1CollaborationClient {
   #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
-  #lastHeardAt: number | null = null;
+  /** Whether this connection's welcome advertised `media_off_reason`; reset for each connection. */
+  #offReasonNegotiated = false;
+  readonly #watch: LinkWatch;
+  /** Tells a recovery whether the drop was proven short. */
+  readonly link: LinkJudge;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
@@ -136,6 +141,8 @@ export class V1SyncClient implements V1CollaborationClient {
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
     this.#options = options;
+    this.#watch = new LinkWatch({ wall: () => this.#now(), mono: options.monotonic ?? (() => performance.now()) }, options.page === undefined ? (typeof document === "object" ? document : null) : options.page);
+    this.link = this.#watch;
     this.#commandScheduler = new V1CommandScheduler({
       store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
       ids: options.ids,
@@ -182,6 +189,7 @@ export class V1SyncClient implements V1CollaborationClient {
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
+    this.#watch.open();
     this.#connectAttemptCount = 0;
     this.#socketCloses = [];
     this.#omittedSocketCloses = 0;
@@ -205,6 +213,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   stop(): void {
     this.#started = false;
+    this.#watch.close();
     this.#entryPending = false;
     this.#entryGeneration = null;
     this.#startupGeneration += 1;
@@ -239,9 +248,9 @@ export class V1SyncClient implements V1CollaborationClient {
     if (!this.#entryNegotiated) return;
     this.#send({ type: "entered" });
   }
-  /** Wall-clock time of the last frame decoded from Sync, or null before the first. */
-  lastHeardAt(): number | null {
-    return this.#lastHeardAt;
+  /** True when the connected Sync advertised `media_off_reason` in its welcome, so media items may carry `off_reason`. */
+  offReasonNegotiated(): boolean {
+    return this.#offReasonNegotiated;
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -413,6 +422,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
     this.#entryNegotiated = false;
+    this.#offReasonNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(entryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -514,7 +524,7 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
-      this.#lastHeardAt = this.#now();
+      this.#watch.heard();
       await this.#handleFrame(frame);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
@@ -653,6 +663,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
+    this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;

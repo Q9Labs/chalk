@@ -633,10 +633,12 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
+  if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
     ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
+    ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -1301,6 +1303,7 @@ const WelcomeBase = {
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };

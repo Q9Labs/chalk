@@ -331,8 +331,8 @@ then carry `off_reason`:
   the stop in `sync_media_stops` in the same transaction as the event and
   projects it even when the media plane lists no publication, so a client that
   missed the stop event (replay beyond retention, a fresh Sync process, a
-  snapshot fallback) still sees it. A later accepted on for the same source
-  clears the stop.
+  snapshot fallback) still sees it. An accepted on does not clear the stop
+  (see below).
 - `self`: the device paused the source itself (a Sync-held device pause).
 - `dead`: reserved for a tombstone Sync writes on purpose. It never means the
   user or host turned the source off.
@@ -343,17 +343,24 @@ query keep the exact earlier four-key item shape, and new SDKs accept items from
 older servers that never send the fields. The fields do not change the canonical
 control digest.
 
-Apply `20261031120000_sync_media_stops` and
-`20261101030000_sync_publication_grant_answered_stop` before Sync. Every live
-registration reads `sync_media_stops` and every grant reservation writes
-`answered_stop_revision`, so the compatibility floor
-`minimum_compatible_sync_migration` is the later version: a database without
-them fails readiness with `incompatible_database_migration` and Sync does not
-serve. A rollback leaves the table and the column in place.
+A host stop stays in `sync_media_stops` until a newer host stop for the same
+participant and source replaces it. An accepted on does not clear it. Intent
+revisions are per device, but a stop's revision and the control revision a device
+had seen when the user acted are positions in the one control stream of the
+Episode, so every device of one participant compares the same numbers. A device
+that was offline with an older on still sees the stop after another device's on
+was accepted, and pauses; a device whose intent is newer than the stop ignores
+it. The cost is one row for each participant and source that a host has stopped,
+deleted with the Episode's other rows.
 
-An accepted on clears the host stop that stood when its publication grant was
-reserved, and no newer one. The reservation stores that revision
-(`answered_stop_revision`) in the same transaction that holds the episode lock,
-and the grant's completion transaction deletes the stops up to it. A retry of the
-same operation id finds the stored revision, so it cannot reach a stop committed
-after the first attempt.
+A socket that negotiated `media_off_reason=1` gets `"media_off_reason": true` in
+its welcome frame. The SDK applies the rule that depends on `off_reason` only on
+a connection whose welcome carried it. A Sync that never sends it makes the SDK
+keep the rule it used before: pause a wanted-on source when Sync's own item is
+missing or not enabled. Deploy Sync before, or together with, this SDK.
+
+Apply `20261031120000_sync_media_stops` before Sync. Every live registration reads
+`sync_media_stops`, so the compatibility floor `minimum_compatible_sync_migration`
+is that version: a database without the table fails readiness with
+`incompatible_database_migration` and Sync does not serve. A rollback leaves the
+table in place.

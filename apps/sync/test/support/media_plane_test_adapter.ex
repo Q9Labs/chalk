@@ -73,10 +73,6 @@ defmodule ChalkSync.Live.MediaPlaneTestAdapter do
      %{state | observation_sequence: sequence}}
   end
 
-  # A zero-arity outcome runs at the call, so a test can commit another change between a grant and what follows it.
-  defp normalize_outcome(_operation, outcome, state) when is_function(outcome, 0),
-    do: {outcome.(), state}
-
   defp normalize_outcome(:observe_episode_publications, outcome, state), do: {outcome, state}
   defp normalize_outcome(_operation, outcome, state), do: {outcome, state}
 

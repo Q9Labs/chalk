@@ -993,6 +993,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base
     base = if Map.has_key?(frame, "entry_confirmation"), do: base ++ ["entry_confirmation"],
         else: base
+    base = if Map.has_key?(frame, "media_off_reason"), do: base ++ ["media_off_reason"],
+        else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
     base = if Map.has_key?(frame, "participant_identity_id"),
@@ -1006,9 +1008,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         valid_collaborations_welcome_extensions?(frame["extensions"])
     valid_entry = not Map.has_key?(frame, "entry_confirmation") or
         frame["entry_confirmation"] == true
+    valid_off_reason = not Map.has_key?(frame, "media_off_reason") or
+        frame["media_off_reason"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_generation and valid_identity
+        valid_off_reason and valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,

@@ -421,9 +421,18 @@ defmodule ChalkSync.Live.Episode do
   defp apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
     {next, result} = enable_publication(state, identity, authority, source, target)
 
-    if result["outcome"] in ["confirmed", "satisfied"],
-      do: clear_answered(next, identity, authority, source, result, target),
-      else: {next, result}
+    if source in [:camera, :microphone, :screen] and
+         result["outcome"] in ["confirmed", "satisfied"] do
+      key = {authority.participant_id, Atom.to_string(source)}
+
+      case Stateholder.set_media_pause(identity, source, nil) do
+        :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
+        {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
+        {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
+      end
+    else
+      {next, result}
+    end
   end
 
   defp apply_live_target(state, identity, authority, source, target)
@@ -457,20 +466,6 @@ defmodule ChalkSync.Live.Episode do
     else
       next = maybe_release_screen_lease(state, authority, source, false, :confirmed)
       {next, live_result(target, :confirmed)}
-    end
-  end
-
-  # The grant's completion transaction already cleared the host stop the on followed. This drops the pause and
-  # refreshes the cached stops, which still hold a stop committed after the reservation.
-  defp clear_answered(next, identity, authority, source, result, target) do
-    key = {authority.participant_id, Atom.to_string(source)}
-
-    with :ok <- Stateholder.set_media_pause(identity, source, nil),
-         {:ok, stops} <- Stateholder.media_stops(next.episode) do
-      {%{next | media_pauses: Map.delete(next.media_pauses, key), media_stops: stops}, result}
-    else
-      {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
-      {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
     end
   end
 

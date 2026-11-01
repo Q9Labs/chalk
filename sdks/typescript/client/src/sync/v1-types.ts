@@ -1,4 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -248,6 +249,10 @@ export type V1SyncClientOptions = {
   readonly ids?: SyncIdGenerator;
   readonly requestIds?: SyncIdGenerator;
   readonly clock?: SyncClock;
+  /** Monotonic milliseconds, `performance.now()` by default. */
+  readonly monotonic?: () => number;
+  /** The page whose `freeze` and `resume` events show a suspend; the browser document by default, null for none. */
+  readonly page?: PageLifecycle | null;
   readonly lifecycle?: SyncLifecycle;
   readonly reconnectDelayMs?: number;
   /** Per-attempt WebSocket opening allowance, clamped to 10–60 seconds; defaults to 10 seconds. */

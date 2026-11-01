@@ -1,29 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createConvergenceScenario, enterRecovery } from "../../tests/helpers/media-convergence";
-
-const sources = ["microphone", "camera"] as const;
-type Source = (typeof sources)[number];
-type Scenario = ReturnType<typeof createConvergenceScenario>;
-const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
-const live = (platform: Scenario["platform"]) => ({ ...platform.sync.getSnapshot(), connection: { phase: "live" as const } });
-const mediaPhase = (platform: Scenario["platform"], phase: "recovering" | "live") =>
-  platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase, peerConnectionState: phase === "live" ? "connected" : "connecting", iceConnectionState: phase === "live" ? "connected" : "checking" }, failure: null });
-
-// The media plane publishes after recovery and Sync lists it: a source the recovery kept wanted-on confirms.
-function confirmPublication(platform: Scenario["platform"], track: MediaStreamTrack, source: Source): void {
-  const publication = { participantId: "participant-1", source, enabled: true, publicationId: "publication-2" };
-  platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
-  platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 1, items: [publication] } });
-}
-
-const hostStop = (source: Source, offRevision: number) => ({ participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "host" as const, offRevision });
-
-function recoveryScenario(source: Source, overrides: Parameters<typeof createConvergenceScenario>[1] = {}) {
-  const setLocalSourceIntent = vi.fn(async () => {});
-  const closeForcedLocalPublication = vi.fn(async () => undefined);
-  const scenario = createConvergenceScenario(source, { ...overrides, media: { setLocalSourceIntent, closeForcedLocalPublication, ...overrides.media } });
-  return { ...scenario, setLocalSourceIntent, closeForcedLocalPublication };
-}
+import { enterRecovery } from "../../tests/helpers/media-convergence";
+import { confirmPublication, dropAndRecover, hostStop, live, mediaPhase, recoveryScenario, sources, tick, type Scenario } from "../../tests/helpers/media-recovery";
 
 describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
   // Trace A: Sync holds the grant but lists no publication yet, and the session reconnects before the first publication exists.
@@ -225,42 +202,12 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     }
   });
 
-  // The bounded variant: with no stop evidence, a drop under LONG_DROP_MS resumes without a tap, and a drop of that length or more is a turn-off.
+  // The bounded variant: with no stop evidence, a drop proven short (under 60 s) resumes without a tap, and any other drop is a turn-off.
   describe("after Sync lost the publication with no stop evidence", () => {
     const longDropMs = 60_000;
 
-    async function dropAndRecover(source: Source, downMs: number, items: readonly object[] = [], duringDrop: (setEnabled: Scenario["setEnabled"]) => Promise<unknown> = async () => undefined) {
-      const heardAt = Date.now();
-      let now = heardAt;
-      const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
-      const scenario = recoveryScenario(source, { sync: { lastHeardAt: () => heardAt } });
-      const { client, platform, setEnabled } = scenario;
-      try {
-        await client.join({ microphone: false, camera: false });
-        await setEnabled(true);
-        await enterRecovery({ platform, client });
-        const user = duringDrop(setEnabled);
-        now = heardAt + downMs;
-        platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items } });
-        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-        await user;
-        await tick(20);
-      } catch (cause) {
-        client.dispose();
-        clock.mockRestore();
-        throw cause;
-      }
-      return {
-        ...scenario,
-        finish: () => {
-          client.dispose();
-          clock.mockRestore();
-        },
-      };
-    }
-
     it.each(sources)("%s: a drop of 59.9 s keeps it on and resumes without a tap", async (source) => {
-      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs - 100);
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs - 100) });
       try {
         expect(track.enabled).toBe(true);
         confirmPublication(platform, track, source);
@@ -272,7 +219,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     });
 
     it.each(sources)("%s: a drop of 60 s turns it off like a tap", async (source) => {
-      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs);
+      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs) });
       try {
         expect(track.enabled).toBe(false);
         expect(client.getSnapshot().media.local[source].state).toBe("disabled");
@@ -284,7 +231,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
 
     it.each(sources)("%s: a long drop leaves it on when Sync still lists the publication", async (source) => {
       const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
-      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, longDropMs * 5, [item]);
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs * 5), items: [item] });
       try {
         expect(track.enabled).toBe(true);
         confirmPublication(platform, track, source);
@@ -296,7 +243,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     });
 
     it.each(sources)("%s: a host stop newer than the intent pauses it whatever the drop length", async (source) => {
-      const { track, setLocalSourceIntent, finish } = await dropAndRecover(source, 1_000, [hostStop(source, 9)]);
+      const { track, setLocalSourceIntent, finish } = await dropAndRecover(source, { items: [hostStop(source, 9)] });
       try {
         await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
         expect(track.enabled).toBe(false);
@@ -312,7 +259,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     };
 
     it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs, longDropMs * 2].map((downMs) => ({ source, downMs }))))("$source: a turn-off and turn-on during a drop of $downMs ms keeps the new on and applies it once", async ({ source, downMs }) => {
-      const { command, setLocalSourceIntent, finish } = await dropAndRecover(source, downMs, [], offThenOn);
+      const { command, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(downMs), duringDrop: offThenOn });
       try {
         expect(command.mock.calls.filter(([enabled]) => enabled === true)).toHaveLength(2);
         const intents = setLocalSourceIntent.mock.calls;
@@ -324,7 +271,7 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     });
 
     it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs].map((downMs) => ({ source, downMs }))))("$source: a tap off during a drop of $downMs ms stays off", async ({ source, downMs }) => {
-      const { client, track, command, finish } = await dropAndRecover(source, downMs, [], (setEnabled) => setEnabled(false));
+      const { client, track, command, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(downMs), duringDrop: (setEnabled) => setEnabled(false) });
       try {
         expect(track.enabled).toBe(false);
         expect(client.getSnapshot().media.local[source].state).toBe("disabled");

@@ -7,6 +7,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
+import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -15,15 +16,6 @@ import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
-/**
- * How long a drop may last before recovery fails closed. A source Sync lost without stop evidence resumes by itself after a drop
- * shorter than this and turns off like a tap after a drop of this length or more, so a short blip never silences a speaker and a
- * call that lost someone for a long time never captures for them without their knowing (#597). Down time is wall-clock time from the
- * last frame Sync sent before the drop (`lastHeardAt`) to the recovery, so a sleeping laptop or a frozen tab counts as down. A quiet
- * call hears a frame only every 20 s, so measured down time can read up to 20 s too long: the effective cutoff is 40 to 60 s of real
- * downtime, and the error is toward fail closed.
- */
-const LONG_DROP_MS = 60_000;
 const OFF_RETRY_INITIAL_MS = 1000;
 const OFF_RETRY_MAX_MS = 30000;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
@@ -171,8 +163,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #disposed = false;
   /** The wanted-on sources when recovery began, with the intent revision each one had then. */
   #recovering: ReadonlyMap<MediaSource, number> | null = null;
-  /** The last moment Sync was heard before the current recovery began: the start of its down time. */
-  #lastConfirmedAt: number | null = null;
+  /** The Sync client's last proof of contact when the current recovery began: where its drop is measured from. */
+  #proof: LinkReading | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -690,7 +682,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #resetObservations(): void {
     if (this.#connection.getSnapshot().state !== "reconnecting") {
       this.#recovering = null;
-      this.#lastConfirmedAt = null;
+      this.#proof = null;
     }
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
@@ -787,7 +779,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!resumed) return;
     if (this.#ports) {
       const snapshot = this.#ports.sync.getSnapshot();
-      this.#pauseIntentsTheHostStopped(this.#ports, snapshot);
+      this.#applyRecoveryRule(this.#ports, snapshot);
       this.#oweOffsSyncStillShows(snapshot);
     }
     this.#resumePendingActions();
@@ -1322,22 +1314,35 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
-    if (this.#recovering === null) this.#lastConfirmedAt = this.#ports.sync.lastHeardAt?.() ?? this.#now();
+    if (this.#recovering === null) this.#proof = this.#ports.sync.link?.proof() ?? null;
     this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
   /**
-   * Recovery turns a wanted-on source off in two cases. When Sync's snapshot item says the host stopped it after the user's intent
-   * (`off_reason: "host"` with a newer stop revision), the intent is paused; a replayed stop event reaches `#subscribePauses` the same
-   * way. When Sync lost the source with no such evidence (a missing item, a plain tombstone, a device pause or a dead tombstone), the
-   * source stays wanted-on after a drop shorter than `LONG_DROP_MS` and turns off, like a tap, after a drop of that length or more.
-   * That cutoff applies only to the intent the source had when recovery began: a newer intent from the user is left alone.
+   * The rule depends on what the connected Sync advertised. Sync's snapshot items carry `off_reason` only when its welcome said
+   * `media_off_reason`, and only then can recovery tell a host stop from a publication that is merely missing. Without it the rule
+   * is the one this SDK had before: a wanted-on source whose own item is missing or not enabled is paused (#597).
    */
-  #pauseIntentsTheHostStopped(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
-    const recovering = this.#recovering;
-    const longDrop = this.#now() - (this.#lastConfirmedAt ?? this.#now()) >= LONG_DROP_MS;
+  #applyRecoveryRule(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
+    const recovering = this.#recovering ?? new Map<MediaSource, number>();
+    const proof = this.#proof;
     this.#recovering = null;
-    this.#lastConfirmedAt = null;
-    for (const [source, intentRevision] of recovering ?? []) {
+    this.#proof = null;
+    if (ports.sync.offReasonNegotiated?.() === true) this.#pauseOnEvidence(ports, snapshot, recovering, ports.sync.link?.longSince(proof) ?? true);
+    else this.#pauseWhenSyncLostIt(ports, snapshot, recovering);
+  }
+  #pauseWhenSyncLostIt(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>): void {
+    for (const [source, revision] of recovering) {
+      if (!ownProjection(snapshot, source)?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
+    }
+  }
+  /**
+   * A wanted-on source is paused when Sync's item says the host stopped it after the user's intent (`off_reason: "host"` with a newer
+   * `off_revision`; a replayed stop event reaches `#subscribePauses` the same way). With no such evidence the drop decides: the source
+   * stays wanted-on after a drop proven short and turns off, like a tap, after any other. The drop cutoff applies only to the intent the
+   * source had when recovery began, so a newer intent from the user is left alone.
+   */
+  #pauseOnEvidence(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>, longDrop: boolean): void {
+    for (const [source, intentRevision] of recovering) {
       const item = ownProjection(snapshot, source);
       const stopRevision = this.#hostStopNewerThanIntent(source, item);
       if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);

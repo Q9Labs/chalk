@@ -2065,7 +2065,6 @@ create table sync_publication_grant_reservations (
     expires_at timestamptz not null,
     created_at timestamptz not null default now(),
     completed_at timestamptz,
-    answered_stop_revision bigint,
     unique (tenant_id, episode_id, operation_id),
     foreign key (tenant_id, space_id, episode_id)
         references sync_episode_control(tenant_id, space_id, episode_id)
