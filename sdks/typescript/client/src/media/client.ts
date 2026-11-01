@@ -360,7 +360,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retireDeadLocalPublication(recovery: LocalRecovery): void {
     if (recovery.retiring || recovery.deadPublicationId === null || recovery.state.providerPublicationId !== recovery.deadPublicationId) return;
     recovery.retiring = true;
-    this.#pauseLocalSource(recovery.state.source, "discovery_absent");
+    this.#pauseLocalSource(recovery.state.source, "discovery_absent", { group: false });
   }
   async #retireLocalRecoveryIfNeeded(recovery: LocalRecovery): Promise<boolean> {
     if (!this.#hasRetiringLocalPublications(recovery.state.source)) return false;
@@ -421,11 +421,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#scheduleLocalRecovery(recovery, recoveryBackoffMs(recovery.attempt++));
   }
   #hasRetiringLocalPublications(source: MediaPublicationSource): boolean {
-    const sources = localSourceGroup(source);
-    return [...this.#ownedPublications].some((publication) => sources.includes(publication.state.source) && publication.lifecycle.kind === "retiring" && publication.lifecycle.handle !== null);
+    return [...this.#ownedPublications].some((publication) => publication.state.source === source && publication.lifecycle.kind === "retiring" && publication.lifecycle.handle !== null);
   }
   #retireLocalRecoveryPublications(source: MediaPublicationSource): Promise<void> {
-    return this.#retireOwnedPublications(() => {}, { sources: localSourceGroup(source), goneIsComplete: true });
+    return this.#retireOwnedPublications(() => {}, { sources: [source], goneIsComplete: true });
   }
   #dropLocalRecovery(source: MediaPublicationSource, expected?: LocalRecovery): void {
     for (const item of localSourceGroup(source)) {
@@ -571,8 +570,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pauseLocalSource(state.source, "discovery_absent");
     await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
   }
-  #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): void {
-    const sources = localSourceGroup(source);
+  #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause", options: { readonly group?: boolean } = {}): void {
+    const sources = options.group === false ? [source] : localSourceGroup(source);
     for (const publication of this.#ownedPublications) {
       if (!sources.includes(publication.state.source)) continue;
       this.#markPublicationRetiring(publication, cause);

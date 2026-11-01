@@ -417,6 +417,34 @@ it("poll recovery republishes a withdrawn screen publication without a withdrawa
   });
 });
 
+it.each(["poll", "localPublicationWithdrawn"] as const)("screen-video %s recovery keeps healthy screen audio untouched", async (recoveryPath) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream());
+    const audio = new FakeTrack("screen-audio", "audio");
+    h.client.prepareLocalTrack("screen_audio", audio as unknown as MediaStreamTrack);
+    await startScreenPublication(h, new FakeTrack("screen-video", "video"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const oldVideoId = h.client.getSnapshot().localTracks.find((track) => track.source === "screen")!.publicationId!;
+    const audioId = h.client.getSnapshot().localTracks.find((track) => track.source === "screen_audio")!.publicationId!;
+    const audioAddsBefore = h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local" && track.source === "screen_audio")).length;
+    h.transport.withdrawPublication(oldVideoId);
+
+    if (recoveryPath === "poll") await h.client.refreshRemotePublications();
+    else h.client.localPublicationWithdrawn(oldVideoId);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const liveVideo = [...h.transport.localPublications.values()].filter((publication) => publication.source === "screen");
+    expect(liveVideo).toHaveLength(1);
+    expect(liveVideo[0]!.publicationId).not.toBe(oldVideoId);
+    expect(h.transport.localPublications.get(audioId)?.publicationId).toBe(audioId);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === "screen_audio")).toMatchObject({ enabled: true, publicationId: audioId });
+    expect(audio.enabled).toBe(true);
+    expect(h.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local" && track.source === "screen_audio"))).toHaveLength(audioAddsBefore);
+    expect(h.transport.closeInputs.flatMap((input) => input.tracks).some((track) => track.publicationId === audioId)).toBe(false);
+  });
+});
+
 it.each(["microphone", "camera"] as const)("a %s enable during remote connection replacement publishes on the replacement", async (source) => {
   const replacementStarted = Promise.withResolvers<void>();
   const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
