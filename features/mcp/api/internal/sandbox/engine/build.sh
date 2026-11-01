@@ -14,8 +14,14 @@ tar -xzf quickjs.tar.gz
 tar -xzf sdk.tar.gz
 sdk="$work/wasi-sdk-29.0-x86_64-linux"
 qjs="$work/quickjs-0.18.0"
-"$sdk/bin/clang" -O2 -D_GNU_SOURCE -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_SIGNAL \
+"$sdk/bin/clang" -O2 -ffile-prefix-map="$work"=. -ffile-prefix-map="$here"=. \
+  -D_GNU_SOURCE -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_SIGNAL \
   -I"$qjs" -mexec-model=reactor -Wl,-z,stack-size=1048576 -Wl,--max-memory=33554432 \
   "$here/bridge.c" "$qjs/quickjs.c" "$qjs/dtoa.c" "$qjs/libregexp.c" "$qjs/libunicode.c" \
-  -lwasi-emulated-process-clocks -lwasi-emulated-signal -lm -o "$here/quickjs.wasm"
+  -lwasi-emulated-process-clocks -lwasi-emulated-signal -lm -o "$work/quickjs.wasm"
+if [[ "${1:-}" == --check ]]; then
+  cmp "$work/quickjs.wasm" "$here/quickjs.wasm"
+else
+  cp "$work/quickjs.wasm" "$here/quickjs.wasm"
+fi
 sha256sum "$here/quickjs.wasm"

@@ -10,8 +10,8 @@ __attribute__((import_module("chalk"), import_name("emit")))
 extern void host_emit(int32_t, const char *, uint32_t);
 
 static unsigned interrupts;
-static int interrupt(JSRuntime *rt, void *opaque) {
-    (void)rt;
+static int interrupt(JSContext *ctx, void *opaque) {
+	(void)ctx;
     (void)opaque;
     return ++interrupts > 1000;
 }

@@ -2,6 +2,7 @@ package mcpapi
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -13,6 +14,14 @@ type Definition struct {
 	Scope       string
 	Hints       byte
 	Schema      *Schema
+	ResultType  reflect.Type
+}
+
+// WithResult derives discovery's result type from the application port's actual
+// response, rather than maintaining a second code-mode API model.
+func WithResult[T any](d Definition) Definition {
+	d.ResultType = reflect.TypeFor[T]()
+	return d
 }
 
 // Action-specific requirements prevent omitted booleans or payloads from
@@ -49,7 +58,7 @@ func define(name, description, scope string, hints byte, p map[string]*Schema, r
 	if hints == 'R' {
 		read(p)
 	}
-	return Definition{name, description, scope, hints, object(p, required...)}
+	return Definition{Name: name, Description: description, Scope: scope, Hints: hints, Schema: object(p, required...)}
 }
 
 var GetConnection = define("get_connection", "Identify this connection's tenant profile and granted scopes. This is the profile tool. Reconnect with a different key for another tenant.", "tenants:read", 'R', fields())
