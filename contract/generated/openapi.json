@@ -10535,6 +10535,133 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/transcripts/{transcript_id}/text": {
+      "get": {
+        "description": "Download a UTF-8 transcript with a Space title, UTC recording date, duration, detected language when known, and recording-relative speaker lines. Requires transcriptions:read.",
+        "operationId": "getTranscriptText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transcript_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TranscriptId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptText"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Content-Disposition": {
+                "required": true,
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["tenant.invalid_id", "transcript.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["recording_artifact.not_found", "transcript.not_found"]
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict",
+            "x-chalk-error-codes": ["transcript.not_ready"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get transcript text"
+      }
+    },
     "/v1/tenants/{tenant_id}/webhook-endpoints": {
       "get": {
         "operationId": "listWebhookEndpoints",
@@ -15807,6 +15934,9 @@
         },
         "required": ["job_id", "status", "transcript"],
         "type": "object"
+      },
+      "TranscriptText": {
+        "type": "string"
       },
       "URLString": {
         "format": "uri",

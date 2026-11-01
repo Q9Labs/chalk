@@ -1057,3 +1057,24 @@ it.each(["ready", "pending"])("keeps a newer %s transcript source reachable besi
     expect(requests.find((request) => request.action === "create-transcript")?.recordingId).toBe(id);
   }
 });
+
+it("downloads only the text transcript through the session-authenticated BFF", async () => {
+  await open();
+  await clickButton("Download");
+  expect(screen.queryByRole("menuitem", { name: /JSON/i })).toBeNull();
+  const assign = vi.fn();
+  const browser = window;
+  vi.stubGlobal(
+    "window",
+    new Proxy(browser, {
+      get(target, property) {
+        return property === "location" ? { assign } : Reflect.get(target, property, target);
+      },
+    }),
+  );
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Transcript (text)" }));
+  });
+  expect(assign).toHaveBeenCalledWith(`/dashboard-api/transcript-text?spaceId=${id}&episodeId=${id}&transcriptId=${id}`);
+  expect(requests.some((request) => request.action === "transcript-url")).toBe(false);
+});

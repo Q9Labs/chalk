@@ -1168,6 +1168,9 @@ export const TranscriptRequestAcceptedResponseSchema = Schema.Struct({
 });
 export type TranscriptRequestAcceptedResponse = typeof TranscriptRequestAcceptedResponseSchema.Type;
 
+export const TranscriptTextSchema = Schema.String;
+export type TranscriptText = typeof TranscriptTextSchema.Type;
+
 export const UpdateMembershipRequestSchema = Schema.Struct({
   role: Schema.Literals(["owner", "collaborator", "observer"]),
 });
@@ -2010,6 +2013,20 @@ export type GetTranscriptDocumentPathParams = typeof GetTranscriptDocumentPathPa
 
 export const GetTranscriptDocumentResponseSchema = TranscriptDocumentSchema;
 export type GetTranscriptDocumentResponse = typeof GetTranscriptDocumentResponseSchema.Type;
+
+export const GetTranscriptTextPathParamsSchema = Schema.Struct({
+  tenant_id: TenantIdSchema,
+  transcript_id: TranscriptIdSchema,
+});
+export type GetTranscriptTextPathParams = typeof GetTranscriptTextPathParamsSchema.Type;
+
+export const GetTranscriptTextResponseSchema = TranscriptTextSchema;
+export type GetTranscriptTextResponse = typeof GetTranscriptTextResponseSchema.Type;
+
+export const GetTranscriptText200ResponseHeadersSchema = Schema.Struct({
+  "Content-Disposition": Schema.String,
+});
+export type GetTranscriptText200ResponseHeaders = typeof GetTranscriptText200ResponseHeadersSchema.Type;
 
 export const GetWebhookDeliveryPathParamsSchema = Schema.Struct({
   delivery_id: UUIDSchema,
@@ -5565,6 +5582,19 @@ export type GetTranscriptDocumentError = typeof GetTranscriptDocumentErrorSchema
 
 export const GetTranscriptErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema, TranscriptInvalidIdErrorSchema, TranscriptNotFoundErrorSchema]);
 export type GetTranscriptError = typeof GetTranscriptErrorSchema.Type;
+
+export const GetTranscriptTextErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  RecordingArtifactNotFoundErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+  TranscriptInvalidIdErrorSchema,
+  TranscriptNotFoundErrorSchema,
+  TranscriptNotReadyErrorSchema,
+]);
+export type GetTranscriptTextError = typeof GetTranscriptTextErrorSchema.Type;
 
 export const GetWebhookDeliveryErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,

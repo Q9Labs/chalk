@@ -103,6 +103,14 @@ func (e Endpoint[Request, Response]) Responds(status int, name string, sample an
 	return e
 }
 
+type textResponseBody string
+
+func (e Endpoint[Request, Response]) RespondsText(status int, name string) Endpoint[Request, Response] {
+	e = e.Responds(status, name, textResponseBody(""))
+	e.contract.Responses[0].ContentType = "text/plain"
+	return e
+}
+
 func (e Endpoint[Request, Response]) RespondsNoBody(status int) Endpoint[Request, Response] {
 	e.contract.Responses = []APIResponseContract{{Status: status}}
 	return e

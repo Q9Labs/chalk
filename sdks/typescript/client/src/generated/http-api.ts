@@ -1668,6 +1668,23 @@ const transcriptsGroup = HttpApiGroup.make("transcripts")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getTranscriptText", "/v1/tenants/:tenant_id/transcripts/:transcript_id/text", {
+      params: S.GetTranscriptTextPathParamsSchema,
+      success: S.GetTranscriptTextResponseSchema.pipe(HttpApiSchema.asText()).pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TranscriptInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RecordingArtifactNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.TranscriptNotReadyErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listTranscripts", "/v1/tenants/:tenant_id/transcripts", {
       params: S.ListTranscriptsPathParamsSchema,
       query: S.ListTranscriptsQueryParamsSchema,

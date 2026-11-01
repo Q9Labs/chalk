@@ -599,6 +599,7 @@ func run() error {
 		// Transcription work is claimed and fenced through the internal worker
 		// boundary after the request transaction commits.
 		TranscriptArtifacts:    transcriptArtifacts,
+		TranscriptTextMetadata: postgres.NewTranscriptTextRepository(operationQueries),
 		TranscriptWorker:       transcriptWorker,
 		WorkloadAuthorizer:     workloadAuthorizer,
 		ChunkAuthority:         transcriptionAuthority,

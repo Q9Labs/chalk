@@ -44,40 +44,49 @@ type transcriptDocumentCueIdentity struct {
 
 func transcriptDocumentEndpoint(service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptDocumentResponse] {
 	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
-		if service == nil || objects == nil {
-			return transcriptDocumentResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-			return transcriptDocumentResponse{}, err
-		}
-
-		transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
+		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
 		if err != nil {
 			return transcriptDocumentResponse{}, err
-		}
-		if !transcriptDocumentReady(transcript) {
-			return transcriptDocumentResponse{}, apiErrorTranscriptNotReady
-		}
-
-		artifact, err := objects.GetObject(ctx, *transcript.ArtifactKey)
-		if err != nil {
-			return transcriptDocumentResponse{}, err
-		}
-		if !transcriptDocumentArtifactMatches(transcript, artifact) {
-			if artifact.Body != nil {
-				_ = artifact.Body.Close()
-			}
-			return transcriptDocumentResponse{}, apiErrorInternal
-		}
-
-		document, readErr := transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
-		closeErr := artifact.Body.Close()
-		if readErr != nil || closeErr != nil {
-			return transcriptDocumentResponse{}, apiErrorInternal
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
 	}).Auth(APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+}
+
+func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
+	if service == nil || objects == nil {
+		return transcripts.Transcript{}, transcripts.Document{}, apiErrorServiceUnavailable
+	}
+	if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
+		return transcripts.Transcript{}, transcripts.Document{}, err
+	}
+
+	transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
+	if err != nil {
+		return transcripts.Transcript{}, transcripts.Document{}, err
+	}
+	if !transcriptDocumentReady(transcript) {
+		return transcripts.Transcript{}, transcripts.Document{}, apiErrorTranscriptNotReady
+	}
+
+	artifact, err := objects.GetObject(ctx, *transcript.ArtifactKey)
+	if err != nil {
+		return transcripts.Transcript{}, transcripts.Document{}, err
+	}
+	if !transcriptDocumentArtifactMatches(transcript, artifact) {
+		if artifact.Body != nil {
+			_ = artifact.Body.Close()
+		}
+		return transcripts.Transcript{}, transcripts.Document{}, apiErrorInternal
+	}
+
+	document, readErr := transcripts.ReadDocument(artifact.Body, transcripts.MaxDocumentBytes)
+	closeErr := artifact.Body.Close()
+	if readErr != nil || closeErr != nil {
+		return transcripts.Transcript{}, transcripts.Document{}, apiErrorInternal
+	}
+
+	return transcript, document, nil
 }
 
 func decodeTranscriptDocumentRequest(r *http.Request) (transcriptDocumentRequest, error) {
