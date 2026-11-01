@@ -37,7 +37,7 @@ func TestTranscriptTextRouteAuthorizationAndAttachment(t *testing.T) {
 			key, contentType := "fixture/transcript.json", "application/json"
 			body := []byte(validHTTPDocumentJSON)
 			size := int64(len(body))
-			service := documentTranscriptServiceStub{transcript: transcripts.Transcript{ID: transcriptID, TenantID: tenantID, Status: transcripts.StatusComplete, ArtifactKey: &key, ArtifactSize: &size, ArtifactContentType: &contentType}}
+			service := documentTranscriptServiceStub{transcript: transcripts.Transcript{ID: transcriptID, TenantID: tenantID, Status: transcripts.StatusComplete, Languages: []string{"en", "ur"}, ArtifactKey: &key, ArtifactSize: &size, ArtifactContentType: &contentType}}
 			objects := &documentObjectServiceStub{object: objectstorage.ObjectReader{Object: objectstorage.Object{Key: key, Size: size, ContentType: contentType}, Body: io.NopCloser(bytes.NewReader(body))}}
 			endpoint := transcriptTextEndpoint(service, objects, textMetadataStub{}, authorization.NewTenantPolicy(nil, nil))
 			router := chi.NewRouter()
@@ -63,7 +63,7 @@ func TestTranscriptTextRouteAuthorizationAndAttachment(t *testing.T) {
 			if response.Header().Get("Content-Disposition") != `attachment; filename="Release-planning-2026-11-01.txt"` {
 				t.Fatalf("filename = %q", response.Header().Get("Content-Disposition"))
 			}
-			if response.Body.String() != "Release planning · 1 Nov 2026 · 42 min\n\n[00:00:00] Speaker One: Cobalt marker\n" {
+			if response.Body.String() != "Release planning · 1 Nov 2026 · 42 min\nLanguages: English, Urdu\n\n[00:00:00] Speaker One: Cobalt marker\n" {
 				t.Fatalf("body = %q", response.Body.String())
 			}
 		})

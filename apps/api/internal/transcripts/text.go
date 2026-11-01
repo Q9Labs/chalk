@@ -14,6 +14,7 @@ type TextMetadata struct {
 	SpaceTitle string
 	StartedAt  time.Time
 	Duration   time.Duration
+	Languages  []string
 }
 
 // FormatText renders the validated reader projection, never provider metadata.
@@ -25,10 +26,22 @@ func FormatText(document Document, metadata TextMetadata) string {
 		duration = fmt.Sprintf("%d min", int64(metadata.Duration.Round(time.Minute)/time.Minute))
 	}
 	fmt.Fprintf(&output, "%s · %s · %s\n", metadata.SpaceTitle, metadata.StartedAt.UTC().Format("2 Jan 2006"), duration)
+	languages := slices.Clone(metadata.Languages)
 	if document.Language != nil {
-		if tag, err := language.Parse(*document.Language); err == nil && tag != language.Und {
-			fmt.Fprintf(&output, "Languages: %s\n", display.English.Languages().Name(tag))
+		languages = append(languages, *document.Language)
+	}
+	seen := make(map[language.Tag]bool)
+	var languageNames []string
+	for _, value := range languages {
+		tag, err := language.Parse(value)
+		if err == nil && tag != language.Und && !seen[tag] {
+			seen[tag] = true
+			languageNames = append(languageNames, display.English.Languages().Name(tag))
 		}
+	}
+	if len(languageNames) > 0 {
+		slices.Sort(languageNames)
+		fmt.Fprintf(&output, "Languages: %s\n", strings.Join(languageNames, ", "))
 	}
 	output.WriteByte('\n')
 	if len(document.Cues) == 0 {
