@@ -324,7 +324,7 @@ export const webhookEventSchemaV1 = {
           minItems: 1,
           uniqueItems: true,
           items: {
-            enum: ["admission_policy", "default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "slug"],
+            enum: ["admission_policy", "default_episode_duration_seconds", "linger_window_seconds", "maximum_episode_duration_seconds", "media_plane", "metadata", "name", "recurring_policy", "slug", "transcript_language"],
           },
         },
       },
