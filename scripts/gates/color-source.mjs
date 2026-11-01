@@ -27,7 +27,7 @@ export function namedColorMatches(source, file) {
   return matches.sort((a, b) => a.index - b.index);
 }
 
-export const literalColorPattern = /(?<![\w/#?=&-])#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})(?![\w-])|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/giu;
+export const literalColorPattern = /(?<![\da-z/#?=&-])#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})(?![\da-z-])|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/giu;
 
 // Preserve offsets, including line numbers, while removing comments and non-color URL fragments.
 export function colorSource(source, file) {
