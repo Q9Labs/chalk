@@ -19,12 +19,7 @@ func bindMCPTenantTools(server *mcp.Server, o Options) {
 		if err := json.Unmarshal(raw, &tenant); err != nil {
 			return nil, mcpError(apiErrorInternal)
 		}
-		return json.Marshal(struct {
-			ProfileID string   `json:"profile_id"`
-			Label     string   `json:"label"`
-			TenantID  string   `json:"tenant_id"`
-			Scopes    []string `json:"scopes"`
-		}{ProfileID: "tenant:" + tenant.ID, Label: tenant.Name, TenantID: tenant.ID, Scopes: mcpapi.Connection(ctx).Scopes})
+		return json.Marshal(mcpapi.Profile{ID: mcpapi.Connection(ctx).ProfileID, Name: tenant.Name})
 	})
 	bindMCPEndpoint(server, mcpapi.UpdateTenant, updateTenantEndpoint(o.Tenants, o.TenantAuthz), func(b *mcpRequest, i mcpapi.BodyInput[updateTenantRequest]) updateTenantEndpointRequest {
 		return updateTenantEndpointRequest{TenantID: b.tenant, Body: i.Body}

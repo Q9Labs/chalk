@@ -80,16 +80,6 @@ func mcpText(result *mcp.CallToolResult) string {
 	}
 	return text.String()
 }
-func mcpData(t *testing.T, result *mcp.CallToolResult) json.RawMessage {
-	t.Helper()
-	var envelope struct {
-		Data json.RawMessage `json:"data"`
-	}
-	if err := json.Unmarshal([]byte(mcpText(result)), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	return envelope.Data
-}
 
 type mcpToolCase struct {
 	name, args string
@@ -226,6 +216,11 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if len(listed.Tools) != len(cases) {
 		t.Fatalf("tools/list count=%d want=%d", len(listed.Tools), len(cases))
 	}
+	for _, tool := range listed.Tools {
+		if tool.Name == "chalk_get_connection" && (tool.Meta["openai/profile"] != true || tool.OutputSchema == nil || !tool.Annotations.ReadOnlyHint) {
+			t.Fatal("connection profile is not discoverable with a read-only output schema")
+		}
+	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			deniedResult := callMCP(t, deniedSession, test.name, test.args)
@@ -239,6 +234,12 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 				}
 			} else if result.IsError {
 				t.Fatalf("authorized tool failed: %s", mcpText(result))
+			}
+			if test.name == "get_connection" {
+				profile, ok := result.StructuredContent.(map[string]any)
+				if !ok || profile["id"] != tenantID.String() || profile["name"] != "MCP own" {
+					t.Fatal("profile must identify the authenticated tenant, not the credential or session")
+				}
 			}
 		})
 	}
@@ -276,8 +277,9 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 		t.Run("isolation/"+version, func(t *testing.T) {
 			session := connectMCP(t, server, full.RawKey, version)
 			result := callMCP(t, session, "get_connection", `{}`)
-			if result.IsError || !strings.Contains(string(mcpData(t, result)), tenantID.String()) {
-				t.Fatal("connection lost its tenant binding")
+			profile, ok := result.StructuredContent.(map[string]any)
+			if result.IsError || !ok || profile["id"] != tenantID.String() || profile["name"] != "MCP changed" || !strings.Contains(mcpText(result), "tenants:read") {
+				t.Fatal("profile identity changed after reconnection or tenant rename, or lost its scopes")
 			}
 			result = callMCP(t, session, "inspect_space", fmt.Sprintf(`{"space_id":%q}`, foreignSpace))
 			if !result.IsError || strings.Contains(mcpText(result), "MCP foreign private") {

@@ -15,9 +15,15 @@ import (
 const MaxResultBytes = 64 << 10
 
 type Principal struct {
-	TenantID string
-	ActorID  string
-	Scopes   []string
+	ProfileID string
+	TenantID  string
+	ActorID   string
+	Scopes    []string
+}
+
+type Profile struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 type principalKey struct{}
 
@@ -120,8 +126,26 @@ func Bind[I any](server *mcp.Server, d Definition, call func(context.Context, I)
 		if marshalErr != nil {
 			return nil, nil, marshalErr
 		}
+		reply := &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}}, StructuredContent: json.RawMessage(encoded)}
+		if d.Name == GetConnection.Name {
+			if len(data) > MaxResultBytes {
+				return nil, nil, Error{Code: "internal.error", Message: "Profile exceeds response limit"}
+			}
+			connection, err := json.Marshal(struct {
+				Source   string   `json:"source"`
+				TenantID string   `json:"tenant_id"`
+				Scopes   []string `json:"scopes"`
+			}{citation, Connection(ctx).TenantID, Connection(ctx).Scopes})
+			if err != nil {
+				return nil, nil, err
+			}
+			// Profile discovery requires the standard identity at the top level.
+			// Authorization context remains separate from that strict schema.
+			reply.StructuredContent = data
+			reply.Content = []mcp.Content{&mcp.TextContent{Text: string(data)}, &mcp.TextContent{Text: string(connection)}}
+		}
 		slog.InfoContext(ctx, "MCP tool completed", "event", "mcp.tool.completed", "tool", d.Tool().Name, "tenant_id", Connection(ctx).TenantID, "actor_id", Connection(ctx).ActorID, "outcome", code)
-		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}}, StructuredContent: encoded}, nil, nil
+		return reply, nil, nil
 	})
 }
 func (r ReadInput) Offset() int { return r.ResultOffset }

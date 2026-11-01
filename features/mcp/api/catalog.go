@@ -26,6 +26,7 @@ func requireActions(d Definition, requirements map[string][]string) Definition {
 }
 
 func init() {
+	GetConnection.Schema = object(fields())
 	SetMembership = requireActions(SetMembership, map[string][]string{"create": {"create"}, "update": {"membership_id", "update"}})
 	IssueAPIKey = requireActions(IssueAPIKey, map[string][]string{"create": {"create", "request_key"}, "rotate": {"api_key_id", "request_key"}})
 	ConfigureWebhook = requireActions(ConfigureWebhook, map[string][]string{"create": {"create", "request_key"}, "update": {"endpoint_id", "revision", "update", "request_key"}, "rotate_secret": {"endpoint_id", "rotate", "request_key"}, "delete": {"endpoint_id", "revision", "request_key"}})
@@ -36,7 +37,13 @@ func init() {
 
 func (d Definition) Tool() *mcp.Tool {
 	destructive := d.Hints == 'M'
-	return &mcp.Tool{Name: "chalk_" + d.Name, Description: d.Description, InputSchema: d.Schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: d.Hints == 'R', DestructiveHint: &destructive, IdempotentHint: d.Hints == 'R'}}
+	tool := &mcp.Tool{Name: "chalk_" + d.Name, Description: d.Description, InputSchema: d.Schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: d.Hints == 'R', DestructiveHint: &destructive, IdempotentHint: d.Hints == 'R'}}
+	if d.Name == GetConnection.Name {
+		tool.Meta = mcp.Meta{"openai/profile": true}
+		tool.OutputSchema = object(map[string]*Schema{"id": {Type: "string", MinLength: 1, Pattern: `\S`}, "name": text("Profile display name")}, "id")
+		tool.Annotations.OpenWorldHint = new(bool)
+	}
+	return tool
 }
 func define(name, description, scope string, hints byte, p map[string]*Schema, required ...string) Definition {
 	if hints == 'R' {

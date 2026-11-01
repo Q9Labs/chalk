@@ -126,6 +126,11 @@ restart at zero if the underlying resource changes. Mutations never offer a
 continuation that could repeat a side effect. If a mutation's response exceeds
 the limit, inspect its resource with a read tool.
 
+`chalk_get_connection` is the [profile tool](https://developers.openai.com/plugins/build/auth#support-multiple-accounts).
+Its structured result contains the stable profile `id` and display `name`.
+Separate text content carries the tenant ID, granted scopes, and source citation.
+The profile ID stays the same across API-key rotation, reconnection, and tenant renaming.
+
 Preserve your `request_key` and expected revision when retrying a mutation.
 Webhook changes require the current revision. Participant removal requires the
 current participant generation. Do not guess either value. Jobs such as recording

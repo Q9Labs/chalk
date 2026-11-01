@@ -17,10 +17,10 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 	payload, _ := json.Marshal(struct {
 		Text string `json:"text"`
 	}{strings.Repeat("untrusted 🖍️ ", 10000)})
-	Bind(server, GetConnection, func(context.Context, ReadInput) (json.RawMessage, error) { return payload, nil })
+	Bind(server, ListSpaces, func(context.Context, PageInput) (json.RawMessage, error) { return payload, nil })
 	transport := NewHandler(server, []string{"https://trusted.example"})
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		transport.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{TenantID: "fixture-tenant", Scopes: []string{"tenants:read"}})))
+		transport.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{TenantID: "fixture-tenant", Scopes: []string{"spaces:read"}})))
 	})
 	instance := httptest.NewServer(handler)
 	defer instance.Close()
@@ -33,12 +33,15 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 	var collected strings.Builder
 	offset := 0
 	for {
-		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_get_connection", Arguments: ReadInput{ResultOffset: offset}})
+		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_list_spaces", Arguments: PageInput{ReadInput: ReadInput{ResultOffset: offset}}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if result.IsError {
 			t.Fatalf("read fragment failed: %#v", result.Content)
+		}
+		if _, ok := result.StructuredContent.(map[string]any); !ok {
+			t.Fatal("structured result must be a JSON object, not base64-encoded bytes")
 		}
 		block := result.Content[0].(*mcp.TextContent)
 		var envelope boundedResult
