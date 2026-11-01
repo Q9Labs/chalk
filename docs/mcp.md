@@ -15,7 +15,7 @@ Run this command in the project where you want to use Chalk:
 claude mcp add --transport http --scope project chalk https://api.chalkmeet.com/mcp --header 'Authorization: Bearer ${CHALK_API_KEY}'
 ```
 
-The single quotes preserve the environment reference in `.mcp.json` instead of
+The single quotes preserve the environment reference in the project MCP configuration instead of
 saving the key value. Start Claude Code with `CHALK_API_KEY` in its environment.
 Open `/mcp` to check the connection.
 
@@ -51,7 +51,7 @@ Every request authenticates the key again. Its tenant is the only tenant the
 connection can access. Tools have no `tenant_id` argument or `switch_tenant`
 action. Use another key and connection for another tenant.
 
-`tools/list` describes the whole catalog. A listed tool is not a permission
+The MCP tool list describes the whole catalog. A listed tool is not a permission
 grant: every call checks its required scope and the same tenant policy used by
 `/v1`. Revoked or expired keys cannot keep using an initialized connection.
 Creating, rotating, or revoking keys cannot exceed the caller's scope authority.

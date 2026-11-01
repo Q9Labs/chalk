@@ -101,7 +101,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'MCP own'),($2,'MCP foreign private')`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','disabled')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
-	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,deadline_at,config_snapshot,artifact_policy,media_plane_binding) values($1,$2,$3,'active',now()+interval '1 hour','{}','{}','{}')`, uuid(episodeID), uuid(tenantID), uuid(spaceID))
+	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,deadline_at,config_snapshot) values($1,$2,$3,'active',now()+interval '1 hour','{}')`, uuid(episodeID), uuid(tenantID), uuid(spaceID))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,name,generation,status,role,capabilities) values($1,$2,$3,$4,'MCP participant',1,'active','collaborator',array['sendChat'])`, uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values($1,$2,$3,$4,'completed','r2')`, uuid(recordingID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages) values($1,$2,$3,$4,$5,'not_requested','{}')`, uuid(transcriptID), uuid(tenantID), uuid(recordingID), uuid(spaceID), uuid(episodeID))
@@ -201,6 +201,32 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 				t.Fatalf("authorized tool failed: %s", mcpText(result))
 			}
 		})
+	}
+	// Exhaust the public HTTP write budget with invalid bodies, then prove MCP
+	// cannot evade that same per-key bucket. Read tools must remain usable.
+	limitedOptions := options
+	limitedOptions.RateLimit.DisableAuthenticated = false
+	limitedOptions.MCP = httpapi.NewMCPHandler(limitedOptions)
+	limitedRouter := httpapi.NewRouter(limitedOptions)
+	for range 60 {
+		request := httptest.NewRequest(http.MethodPost, "/v1/tenants/"+tenantID.String()+"/spaces", strings.NewReader("{"))
+		request.Header.Set("Authorization", "Bearer "+full.RawKey)
+		response := httptest.NewRecorder()
+		limitedRouter.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("write-budget setup status=%d", response.Code)
+		}
+	}
+	limitedServer := httptest.NewServer(limitedRouter)
+	t.Cleanup(limitedServer.Close)
+	limitedSession := connectMCP(t, limitedServer, full.RawKey, "2026-07-28")
+	result := callMCP(t, limitedSession, "create_space", `{"request_key":"mcp-rate-limit-proof","body":{"name":"must not exist","slug":"mcp-rate-limit-proof"}}`)
+	if !result.IsError || !strings.Contains(mcpText(result), "rate_limited") {
+		t.Fatalf("MCP escaped the HTTP write quota: %s", mcpText(result))
+	}
+	result = callMCP(t, limitedSession, "list_spaces", `{}`)
+	if result.IsError {
+		t.Fatal("exhausting writes also denied reads")
 	}
 	var name string
 	if err := pool.QueryRow(ctx, `select name from spaces where id=$1`, uuid(spaceID)).Scan(&name); err != nil || name != "MCP changed Space" {
