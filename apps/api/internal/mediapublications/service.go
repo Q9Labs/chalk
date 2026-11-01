@@ -247,11 +247,10 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 	references = publishedReferences(input)
 	// The publisher is pending before the publication can be read, so a listener that sees the new
 	// publication cannot get past the gate.
-	pending := s.pullGate.publish(input.ConnectionID)
-	next, err := s.appendPublication(ctx, input, references)
-	if pending {
-		s.pullGate.settle(input.ConnectionID, err == nil)
+	if s.pullGate.publish(input.ConnectionID) {
+		defer func() { s.pullGate.settle(input.ConnectionID, err == nil) }()
 	}
+	next, err := s.appendPublication(ctx, input, references)
 	if err != nil {
 		return nil, err
 	}

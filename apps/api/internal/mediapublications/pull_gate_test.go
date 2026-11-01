@@ -160,6 +160,12 @@ func TestAwaitPullableHoldsAPullThatArrivesWhilePublicationIsBeingRecorded(t *te
 	fixture := newPullGateFixture(t)
 	repository := &pullDuringAppendRepository{reconciliationRepositoryStub: &reconciliationRepositoryStub{}}
 	fixture.service.repository = repository
+	// The pull runs inside the write here, so the write cannot settle while it waits. The listener's
+	// request ends the wait instead.
+	fixture.service.pullGate.wait = func(_ context.Context, duration time.Duration, _ <-chan struct{}) error {
+		fixture.waited = append(fixture.waited, duration)
+		return context.Canceled
+	}
 	var pullErr error
 	repository.pull = func() {
 		pullErr = fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{{ConnectionID: "publisher-1", TrackName: "microphone-a"}})
@@ -167,8 +173,8 @@ func TestAwaitPullableHoldsAPullThatArrivesWhilePublicationIsBeingRecorded(t *te
 
 	fixture.publish(t, "publisher-1", "microphone-a")
 
-	if pullErr != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
-		t.Fatalf("a pull during the append must wait for the fallback age: waited=%v error=%v", fixture.waited, pullErr)
+	if !errors.Is(pullErr, context.Canceled) || len(fixture.waited) != 1 || fixture.waited[0] < publisherConnectFallbackAge {
+		t.Fatalf("a pull during the append must be held: waited=%v error=%v", fixture.waited, pullErr)
 	}
 }
 
@@ -239,5 +245,47 @@ func TestFailedWriteDoesNotLeaveTheRetriedPublicationUngated(t *testing.T) {
 
 	if err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{identity}); err != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
 		t.Fatalf("a retried publication must be held like a new one: waited=%v error=%v", fixture.waited, err)
+	}
+}
+
+// Two publish requests on one connection can overlap. A failed write must not ungate a publication
+// that another write on the same connection already committed.
+func TestFailedWriteKeepsTheGateWhenAnotherWriteOnTheConnectionCommitted(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	gate := fixture.service.pullGate
+	gate.publish("publisher-1")
+	gate.publish("publisher-1")
+	gate.settle("publisher-1", true)
+	gate.settle("publisher-1", false)
+
+	err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{{ConnectionID: "publisher-1", TrackName: "microphone-a"}})
+
+	if err != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
+		t.Fatalf("the committed publication must stay gated: waited=%v error=%v", fixture.waited, err)
+	}
+}
+
+// The publisher cannot connect before its publish request answers, so a connection stays held for as
+// long as a write on it is in flight, even past the fallback age.
+func TestAwaitPullableHoldsAConnectionWhileItsWriteIsInFlight(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	gate := fixture.service.pullGate
+	gate.publish("publisher-1")
+	fixture.now = fixture.now.Add(publisherConnectFallbackAge + time.Second)
+	settled := false
+	gate.wait = func(_ context.Context, duration time.Duration, _ <-chan struct{}) error {
+		fixture.waited = append(fixture.waited, duration)
+		if !settled {
+			settled = true
+			gate.settle("publisher-1", true)
+		}
+		fixture.now = fixture.now.Add(duration)
+		return nil
+	}
+
+	err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{{ConnectionID: "publisher-1", TrackName: "microphone-a"}})
+
+	if err != nil || len(fixture.waited) == 0 {
+		t.Fatalf("a pull while the write is in flight must wait: waited=%v error=%v", fixture.waited, err)
 	}
 }

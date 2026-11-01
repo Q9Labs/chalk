@@ -41,6 +41,30 @@ type pullGate struct {
 type pendingConnection struct {
 	readyAt  time.Time
 	released chan struct{}
+	// writing counts publication writes in flight on the connection. The publisher cannot connect
+	// before its publish request answers, so the connection stays held while any write is in flight.
+	writing int
+	// committed records that a write on the connection succeeded, so a later failed write keeps the gate.
+	committed bool
+}
+
+func (entry *pendingConnection) isReleased() bool {
+	select {
+	case <-entry.released:
+		return true
+	default:
+		return false
+	}
+}
+
+// heldUntil is when the connection becomes pullable, as seen at now.
+func (entry *pendingConnection) heldUntil(now time.Time) time.Time {
+	if entry.writing > 0 && !entry.isReleased() {
+		if held := now.Add(publisherConnectFallbackAge); held.After(entry.readyAt) {
+			return held
+		}
+	}
+	return entry.readyAt
 }
 
 func newPullGate(now func() time.Time) *pullGate {
@@ -60,15 +84,21 @@ func waitForRelease(ctx context.Context, duration time.Duration, released <-chan
 	}
 }
 
-// publish marks a connection pending the first time it publishes a track and reports whether it did.
-// Later tracks on the same connection ride its existing peer connection, so they stay pullable.
+// publish starts a publication write on a connection and reports whether the gate holds the
+// connection for it, in which case the caller must settle the write. A connection is held from its
+// first published track. Later tracks on a connection that is already pullable ride its existing peer
+// connection, so they are not held again.
 func (g *pullGate) publish(connectionID string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := g.now()
 	waiting := g.sweepLocked(now)
-	if _, known := g.pending[connectionID]; known {
-		return false
+	if entry, known := g.pending[connectionID]; known {
+		if !entry.heldUntil(now).After(now) {
+			return false
+		}
+		entry.writing++
+		return true
 	}
 	if waiting >= pullGateMaxConnections {
 		if !g.capLogged {
@@ -78,13 +108,13 @@ func (g *pullGate) publish(connectionID string) bool {
 		return false
 	}
 	g.capLogged = false
-	g.pending[connectionID] = &pendingConnection{readyAt: now.Add(publisherConnectFallbackAge), released: make(chan struct{})}
+	g.pending[connectionID] = &pendingConnection{readyAt: now.Add(publisherConnectFallbackAge), released: make(chan struct{}), writing: 1}
 	return true
 }
 
-// settle ends a publish that marked the connection pending. The publisher starts connecting only after
-// the publish request answers, so a committed publication restarts the fallback age from now, and a
-// failed write forgets the connection so that a retry is held like a new publisher.
+// settle ends a write that publish held the connection for. The publisher starts connecting only after
+// the publish request answers, so a committed write restarts the fallback age from now. A failed write
+// forgets the connection only when no write on it committed, so that a retry is held like a new publisher.
 func (g *pullGate) settle(connectionID string, committed bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -92,16 +122,22 @@ func (g *pullGate) settle(connectionID string, committed bool) {
 	if !ok {
 		return
 	}
-	select {
-	case <-entry.released:
-		return
-	default:
+	if entry.writing > 0 {
+		entry.writing--
 	}
-	if !committed {
+	if entry.isReleased() {
+		return
+	}
+	if committed {
+		entry.committed = true
+		if readyAt := g.now().Add(publisherConnectFallbackAge); readyAt.After(entry.readyAt) {
+			entry.readyAt = readyAt
+		}
+		return
+	}
+	if !entry.committed && entry.writing == 0 {
 		delete(g.pending, connectionID)
-		return
 	}
-	entry.readyAt = g.now().Add(publisherConnectFallbackAge)
 }
 
 func (g *pullGate) confirm(connectionID string) {
@@ -135,15 +171,20 @@ func (g *pullGate) latestPending(tracks []RemoteTrackIdentity) (*pendingConnecti
 	now := g.now()
 	g.sweepLocked(now)
 	var latest *pendingConnection
+	var latestHeldUntil time.Time
 	for _, track := range tracks {
-		if entry, ok := g.pending[track.ConnectionID]; ok && entry.readyAt.After(now) && (latest == nil || entry.readyAt.After(latest.readyAt)) {
-			latest = entry
+		entry, ok := g.pending[track.ConnectionID]
+		if !ok {
+			continue
+		}
+		if heldUntil := entry.heldUntil(now); heldUntil.After(now) && (latest == nil || heldUntil.After(latestHeldUntil)) {
+			latest, latestHeldUntil = entry, heldUntil
 		}
 	}
 	if latest == nil {
 		return nil, 0
 	}
-	return latest, latest.readyAt.Sub(now)
+	return latest, latestHeldUntil.Sub(now)
 }
 
 // sweepLocked forgets connections past the retention time and returns how many are still waiting.
@@ -152,7 +193,7 @@ func (g *pullGate) sweepLocked(now time.Time) int {
 	for connectionID, entry := range g.pending {
 		if !entry.readyAt.Add(pullGateRetention).After(now) {
 			delete(g.pending, connectionID)
-		} else if entry.readyAt.After(now) {
+		} else if entry.heldUntil(now).After(now) {
 			waiting++
 		}
 	}
@@ -165,7 +206,7 @@ func (g *pullGate) pendingCount() int {
 	g.sweepLocked(g.now())
 	pending := 0
 	for _, entry := range g.pending {
-		if entry.readyAt.After(g.now()) {
+		if entry.heldUntil(g.now()).After(g.now()) {
 			pending++
 		}
 	}
