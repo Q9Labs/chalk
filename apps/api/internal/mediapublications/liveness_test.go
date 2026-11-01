@@ -439,6 +439,27 @@ func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
 			},
 		},
 		{
+			name: "failing listener left before the threshold",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "B fails for the first time after A leaves", advance: 2500 * time.Millisecond, listenerID: listenerB, connectionID: "b1", kind: "fail", presence: presence(listener(listenerB, "b1")), wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "failing listener reconnected before the threshold",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "B fails while A is present on a2", advance: 2500 * time.Millisecond, listenerID: listenerB, connectionID: "b1", kind: "fail", presence: presence(listener(listenerA, "a2"), listener(listenerB, "b1")), wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "reconnected listener's new failure restarts its window",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "A fails on a2 after reconnecting", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a2", kind: "fail", presence: presence(listener(listenerA, "a2")), wantReaderCalls: 2},
+			},
+		},
+		{
 			name: "listener who left",
 			steps: []step{
 				{name: "listener B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerB, "b"))},

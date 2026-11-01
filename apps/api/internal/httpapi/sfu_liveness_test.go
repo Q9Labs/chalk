@@ -120,6 +120,16 @@ func TestConfirmFailedRemoteTracksOnlyCountsMissingPublications(t *testing.T) {
 			body:       `{"errorCode":"session_error"}`,
 		},
 		{
+			name:       "top-level 404 listener session",
+			statusCode: http.StatusNotFound,
+			body:       `{"errorCode":"session_error"}`,
+		},
+		{
+			name:       "top-level 404 listener connection",
+			statusCode: http.StatusNotFound,
+			body:       `{"errorCode":"connection_not_found"}`,
+		},
+		{
 			name: "per-track connection_not_found for listener session",
 			body: `{"tracks":[{"location":"remote","sessionId":"listener-connection","trackName":"camera-track","errorCode":"connection_not_found"}]}`,
 		},
