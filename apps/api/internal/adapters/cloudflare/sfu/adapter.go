@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -23,13 +24,18 @@ import (
 )
 
 const (
-	forcedCloseTimeout = 25 * time.Second
-	defaultEndpoint    = "https://rtc.live.cloudflare.com/v1"
-	stunServer         = "stun:stun.cloudflare.com:3478"
-	syncOwner          = "elixir"
+	forcedCloseTimeout      = 25 * time.Second
+	sfuHTTP2SendPingTimeout = 5 * time.Second
+	sfuHTTP2PingTimeout     = 5 * time.Second
+	sfuIdleConnTimeout      = 90 * time.Second
+	defaultEndpoint         = "https://rtc.live.cloudflare.com/v1"
+	stunServer              = "stun:stun.cloudflare.com:3478"
+	syncOwner               = "elixir"
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
+
+var sharedSFUTransport = sync.OnceValue(newSFUTransport)
 
 const (
 	failureStageTransport  providerFailureStage = "transport"
@@ -213,6 +219,10 @@ type closeTrackResult struct {
 }
 
 func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
+	return newAdapter(cfg, sharedSFUTransport())
+}
+
+func newAdapter(cfg config.CloudflareRealtimeConfig, transport *http.Transport) (Adapter, error) {
 	appID := strings.TrimSpace(cfg.RealtimeAppID)
 	appSecret := strings.TrimSpace(cfg.RealtimeAppSecret)
 	if appID == "" || appSecret == "" || cfg.RequestTimeout <= 0 {
@@ -228,10 +238,20 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		appID:             appID,
 		appSecret:         appSecret,
 		endpoint:          endpoint,
-		client:            &http.Client{Timeout: cfg.RequestTimeout},
-		forcedCloseClient: &http.Client{Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
+		client:            &http.Client{Transport: transport, Timeout: cfg.RequestTimeout},
+		forcedCloseClient: &http.Client{Transport: transport, Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
 		captureReplay:     newCaptureReplayRegistry(),
 	}, nil
+}
+
+func newSFUTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.IdleConnTimeout = sfuIdleConnTimeout
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: sfuHTTP2SendPingTimeout,
+		PingTimeout:     sfuHTTP2PingTimeout,
+	}
+	return transport
 }
 
 func NewAdapterWithClient(cfg config.CloudflareRealtimeConfig, client httpClient, endpoint string) (Adapter, error) {
