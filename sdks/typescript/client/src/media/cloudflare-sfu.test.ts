@@ -12,7 +12,17 @@ import { provenShort } from "../../tests/helpers/media-convergence";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
-import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import type {
+  CloudflareSFUBootstrap,
+  CloudflareSFUClientOptions,
+  CloudflareSFUCloseTrackRequest,
+  CloudflareSFULocalOfferDiagnostic,
+  CloudflareSFUPublicationSnapshot,
+  CloudflareSFUSessionDescription,
+  CloudflareSFUSignalingTransport,
+  CloudflareSFUTrackRequest,
+  CloudflareSFUTracksResponse,
+} from "./cloudflare-sfu";
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
@@ -2996,6 +3006,7 @@ const observedPullOfferCollision = [
 ] as const;
 describe("SFU offers during negotiation", () => {
   it("answers the pull reply offer that arrives while an unrequested local offer is pending", async () => {
+    const diagnostics: CloudflareSFULocalOfferDiagnostic[] = [];
     await withTimedHarness(
       async (harness) => {
         const [first, second, third] = observedPullOfferCollision;
@@ -3012,8 +3023,27 @@ describe("SFU offers during negotiation", () => {
         expect(peer.descriptionLog).toEqual(["setLocal:offer", "setRemote:answer", "setLocal:offer", "setLocal:rollback", "setRemote:offer", "setLocal:answer"]);
         expect(harness.transport.renegotiateInputs).toEqual([expect.objectContaining({ sessionDescription: expect.objectContaining({ type: "answer" }) })]);
         expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+        // No SDK call started the offer, so the log names no origin.
+        expect(diagnostics).toEqual([
+          { event: "local_offer_pending", where: "sdp_operation_start", origin: "outside_sdk", pendingMs: null },
+          { event: "local_offer_pending", where: "remote_offer", origin: "outside_sdk", pendingMs: null },
+        ]);
       },
-      { pollIntervalMs: 100 },
+      { pollIntervalMs: 100, onDiagnostic: (event) => diagnostics.push(event) },
+    );
+  });
+  it("logs nothing when every SDP operation leaves the connection stable", async () => {
+    const diagnostics: CloudflareSFULocalOfferDiagnostic[] = [];
+    await withTimedHarness(
+      async (harness) => {
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await vi.advanceTimersByTimeAsync(100);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        expect(diagnostics).toEqual([]);
+      },
+      { pollIntervalMs: 100, onDiagnostic: (event) => diagnostics.push(event) },
     );
   });
 });
@@ -4285,6 +4315,7 @@ function createHarness(
   options: {
     readonly autoConnect?: boolean;
     readonly onError?: (error: unknown, binding: string) => void;
+    readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
@@ -4304,6 +4335,7 @@ function createHarness(
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
     onError: options.onError,
+    onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory,
   });

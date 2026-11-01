@@ -14,6 +14,7 @@ import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
   CloudflareSFUFailureCode,
+  CloudflareSFULocalOfferDiagnostic,
   CloudflareSFULocalTrack,
   CloudflareSFUPublication,
   CloudflareSFUPublicationSnapshot,
@@ -74,6 +75,7 @@ const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
+  readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -117,6 +119,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #pollFailedPull = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
+  // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
+  #localOffer: { readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
   #retirement: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
   #started = false;
@@ -132,6 +136,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
+    this.#onDiagnostic = options.onDiagnostic;
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -655,7 +660,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!closed) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await createLocalOffer(connection);
+      const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
       const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
@@ -936,7 +941,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number): Promise<void> {
     let sessionDescription: Awaited<ReturnType<typeof createLocalOffer>>;
     try {
-      sessionDescription = await createLocalOffer(connection);
+      sessionDescription = await this.#createLocalOffer(connection, "publish");
     } catch (error) {
       const cameras = publications.filter(({ state, transceiver }) => state.source === "camera" && transceiver.sender.getParameters().encodings.length > 1);
       if (!simulcastUnsupported(error) || cameras.length === 0) throw error;
@@ -948,7 +953,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         publication.transceiver = connection.addTransceiver(publication.state.track, { direction: "sendonly" });
         publication.state.transceiver = publication.transceiver;
       }
-      sessionDescription = await createLocalOffer(connection);
+      sessionDescription = await this.#createLocalOffer(connection, "publish_without_simulcast");
     }
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
@@ -996,10 +1001,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.enabled = false;
     state.track.enabled = false;
   }
+  async #createLocalOffer(connection: RTCPeerConnection, origin: LocalOfferOrigin) {
+    const description = await createLocalOffer(connection);
+    this.#localOffer = { origin, at: Date.now() };
+    return description;
+  }
+  // SDP operations are serialized, so a local offer must not outlive its operation. If one does, name its origin.
+  #reportPendingLocalOffer(connection: RTCPeerConnection, where: CloudflareSFULocalOfferDiagnostic["where"]): void {
+    if (connection.signalingState !== "have-local-offer") return;
+    this.#onDiagnostic?.({ event: "local_offer_pending", where, origin: this.#localOffer?.origin ?? "outside_sdk", pendingMs: this.#localOffer ? Date.now() - this.#localOffer.at : null });
+  }
   async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
     if (connection.signalingState !== "have-local-offer") return;
     try {
       await connection.setLocalDescription({ type: "rollback" });
+      this.#localOffer = null;
     } catch (error) {
       this.#reportError(error);
     }
@@ -1353,8 +1369,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const description = requireSFUDescription(response.sessionDescription);
     if (description.type !== "offer") {
       await connection.setRemoteDescription(description);
+      this.#localOffer = null;
       return;
     }
+    this.#reportPendingLocalOffer(connection, "remote_offer");
     await this.#rollbackLocalOffer(connection);
     await connection.setRemoteDescription(description);
     const answer = await connection.createAnswer();
@@ -1376,6 +1394,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     const run = () => {
       if (expired || (!retirement && generation !== this.#generation)) throw timeout;
+      this.#reportPendingLocalOffer(this.#connection, "sdp_operation_start");
       return operation();
     };
     const pending = this.#sdpTail.then(run, run);
@@ -1850,6 +1869,7 @@ function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULoc
 function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }
+type LocalOfferOrigin = Exclude<CloudflareSFULocalOfferDiagnostic["origin"], "outside_sdk">;
 async function createLocalOffer(connection: RTCPeerConnection) {
   const offer = await connection.createOffer();
   await connection.setLocalDescription(offer);
