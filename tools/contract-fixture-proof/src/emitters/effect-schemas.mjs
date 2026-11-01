@@ -130,7 +130,7 @@ function renderSchema(schema, context = {}) {
   if (Array.isArray(schema.type)) {
     const nonNullTypes = schema.type.filter((type) => type !== "null");
     if (nonNullTypes.length === 1 && schema.type.includes("null")) {
-      return `Schema.NullOr(${renderSchema({ ...schema, type: nonNullTypes[0] }, context)})`;
+      return `Schema.NullOr(${renderSchema({ ...schema, type: nonNullTypes[0], ...(schema.enum ? { enum: schema.enum.filter((value) => value !== null) } : {}) }, context)})`;
     }
 
     return "Schema.Unknown";
@@ -278,6 +278,11 @@ function renderRegex(pattern) {
 }
 
 function renderLiteral(values) {
+  if (values.includes(null)) {
+    const nonNullValues = values.filter((value) => value !== null);
+    return nonNullValues.length === 0 ? "Schema.Null" : `Schema.NullOr(${renderLiteral(nonNullValues)})`;
+  }
+
   if (values.length === 1) {
     return `Schema.Literal(${JSON.stringify(values[0])})`;
   }

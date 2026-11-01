@@ -259,7 +259,7 @@ it("shows a render deadline as expired with the server reason while capture sour
   expect(screen.getByText("The recording could not be rendered before its deadline.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Make a transcript in English" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Make a transcript" })).toBeTruthy();
 });
 
 it("names the call from the session's own read, so a failing Call overview can't fail the page", async () => {
@@ -570,8 +570,9 @@ it.each([404, 410])("uses an older transcript source after the newest pending tr
   transcriptHTTPStatus = status;
   await tick();
   expect(screen.queryByText("Couldn’t load the transcript")).toBeNull();
-  await clickButton("Make a transcript in English");
+  await clickButton("Make a transcript");
   expect(requests.filter((request) => request.action === "create-transcript").at(-1)?.recordingId).toBe(older);
+  expect(requests.filter((request) => request.action === "create-transcript").at(-1)).not.toHaveProperty("languages");
 });
 
 it("shares metadata polling across pending attempts with one request per tick", async () => {
@@ -732,10 +733,10 @@ it("reads the transcript list again when the recording's answer comes without it
   transcriptStatus = "preparing";
   transcriptHTTPStatus = 503;
   await tick();
-  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Make a transcript" })).toBeNull();
   transcriptHTTPStatus = 200;
   await tick();
-  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Make a transcript" })).toBeNull();
   expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
   expect(requests.filter((request) => request.action === "transcripts")).toHaveLength(1);
 });
