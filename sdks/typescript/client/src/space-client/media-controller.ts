@@ -12,6 +12,7 @@ import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
+import { srDiag, srStack } from "../sr-diag";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
@@ -434,6 +435,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #recordIntent(source: MediaSource, enabled: boolean, options?: ScreenShareOptions): MediaIntent {
     const state = this.#sources[source];
+    srDiag("controller.recordIntent", `source=${source} enabled=${enabled} at ${srStack()}`);
     const controlRevision = Math.max(state.serverSequence, this.#ports?.sync.getSnapshot().control?.revision ?? -1);
     const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
@@ -1241,6 +1243,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #pausePublication(ports: ConnectionPorts, source: MediaSource, revision: number, cause: LocalPublicationRetirementCause): void {
     const state = this.#sources[source];
+    srDiag("controller.pausePublication", `source=${source} cause=${cause} at ${srStack()}`);
     if (state.desired.revision !== revision || state.forcedRevision === revision || ports.sync.getSnapshot().control?.status === "ended") return;
     state.forcedRevision = revision;
     state.localEnabled = false;

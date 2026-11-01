@@ -8,6 +8,7 @@ import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationK
 import { matchRemotePullTracks } from "./remote-track-response";
 import { createCallStatsCollector } from "./call-stats";
 import { CloudflareSFUError } from "./types";
+import { srDiag, srStack } from "../sr-diag";
 import { iceServersFor } from "./ice-servers";
 import { classifyMediaFailure } from "./failure-diagnostics";
 import type {
@@ -170,6 +171,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   localPublicationWithdrawn(publicationId: string): void {
     const owned = [...this.#ownedPublications].find((publication) => publication.lifecycle.kind === "confirmed" && publication.lifecycle.handle.publicationId === publicationId && publication.state.providerPublicationId === publicationId);
     const state = owned?.state;
+    srDiag("withdrawn", `id=${publicationId.slice(-12)} owned=${owned !== undefined} desired=${state?.desiredEnabled} enabled=${state?.enabled} current=${state ? this.#localTracks.get(state.source) === state : "-"} ownedCount=${this.#ownedPublications.size}`);
     if (!state || !state.desiredEnabled || this.#localTracks.get(state.source) !== state) return;
     this.#beginLocalRecovery(state, publicationId, false);
   }
@@ -307,6 +309,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const state of unlisted) this.#beginLocalRecovery(state, state.providerPublicationId, true);
   }
   #beginLocalRecovery(state: LocalTrackState, deadPublicationId: string | null, relist: boolean): void {
+    srDiag("recovery.begin", `source=${state.source} relist=${relist} can=${this.#canBeginLocalRecovery(state)} enabled=${state.enabled} desired=${state.desiredEnabled} stopped=${this.#stopped} paused=${this.#locallyPausedSources.has(state.source)} running=${this.#localRecoveries.has(state.source)}`);
     if (!this.#canBeginLocalRecovery(state)) return;
     const now = Date.now();
     const delayMs = this.#recoveryStartDelay(state.source, now);
@@ -349,6 +352,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   async #attemptLocalRecovery(recovery: LocalRecovery): Promise<void> {
+    srDiag("recovery.attempt", `source=${recovery.state.source} attempt=${recovery.attempt} retiring=${recovery.retiring} relist=${recovery.relist}`);
     if (!(await this.#relistLocalRecoveryIfNeeded(recovery)) || !this.#canContinueLocalRecovery(recovery)) {
       this.#dropLocalRecovery(recovery.state.source, recovery);
       return;
@@ -387,6 +391,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#discardUnrecoverableIntent(recovery);
   }
   async #retryLocalRecovery(recovery: LocalRecovery, error: unknown): Promise<void> {
+    srDiag("recovery.error", `source=${recovery.state.source} attempt=${recovery.attempt} ${error instanceof Error ? error.message : String(error)}`);
     if (this.#discardUnrecoverableIntent(recovery)) return;
     this.#reportLocalRecoveryError(error);
     await this.#replaceConnectionForLocalRecovery(error);
@@ -440,6 +445,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const item of localSourceGroup(source)) {
       const recovery = this.#localRecoveries.get(item);
       if (!recovery || (expected && recovery !== expected)) continue;
+      srDiag("recovery.drop", `source=${item} attempt=${recovery.attempt} at ${srStack()}`);
       if (recovery.timer !== undefined) globalThis.clearTimeout(recovery.timer);
       this.#localRecoveries.delete(item);
     }
@@ -564,6 +570,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#beginLocalRecovery(state, publicationId, true);
   }
   #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): void {
+    srDiag("pauseLocalSource", `source=${source} cause=${cause} at ${srStack()}`);
     const sources = localSourceGroup(source);
     for (const publication of this.#ownedPublications) {
       if (!sources.includes(publication.state.source)) continue;

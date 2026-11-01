@@ -142,6 +142,7 @@ const clearNetem = () => {
 function browserInstrumentation({ frequency }) {
   window.matrixErrors = [];
   window.matrixPeers = [];
+  window.matrixDiag = [];
   const Native = window.RTCPeerConnection;
   window.RTCPeerConnection = class extends Native {
     constructor(...args) {
@@ -251,6 +252,7 @@ function browserInstrumentation({ frequency }) {
     return {
       send,
       localMic,
+      diag: window.matrixDiag.splice(0),
       status: snapshot.connection.status,
       mic: snapshot.media.local.microphone.state,
       self: snapshot.self.participantId,
@@ -556,7 +558,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         participants.map(async ({ page }, listener) => {
           try {
             const sample = await page.evaluate(() => window.srSample());
-            return { listener, send: sample.send, localMic: sample.localMic, status: sample.status, mic: sample.mic, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
+            return { listener, send: sample.send, localMic: sample.localMic, diag: sample.diag, status: sample.status, mic: sample.mic, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
           } catch (error) {
             return { listener, error: error.message, remote: [] };
           }
