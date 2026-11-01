@@ -15,8 +15,9 @@ import (
 //
 // sessionRegistry lets a connection outlive the session it was issued with. It tracks connections this
 // adapter issued and that have not negotiated yet. When the first negotiation finds the session gone,
-// the adapter creates a fresh session, keeps the client's connection ID as an alias for it, and
-// retries once. Every later call translates the client's ID to the live session, and every answer
+// or the connection has been idle long enough that it probably is (sessionProbeLimit), the adapter
+// creates a fresh session, keeps the client's connection ID as an alias for it, and uses it, retrying
+// once if Cloudflare still reports the session gone. Every later call translates the client's ID to the live session, and every answer
 // translates back, so the client, the access grant, and the publication registry never see the swap.
 //
 // State is per API instance. Production runs one chalk-api per host. After a restart an aliased
@@ -31,13 +32,22 @@ const (
 	sessionEntryRetention     = 12 * time.Hour
 	sessionAliasRetention     = 8 * 24 * time.Hour
 	sessionEntrySweepInterval = 10 * time.Minute
+	// Cloudflare answers a call on a dropped session only after about 5 s, so retrying after the 410
+	// costs a listener 5 s of silence. Probes of an idle session succeed for about 10 s and fail after
+	// that, so a connection idle for this long gets a fresh session before its first call. A session
+	// that was still alive is swapped needlessly, which costs one session create and nothing else.
+	sessionProbeLimit = 10 * time.Second
 )
 
 type sessionEntry struct {
-	swap       sync.Mutex // serializes replacement so concurrent first calls share one fresh session
+	swap       sync.Mutex    // serializes replacement after a 410 so concurrent calls share one fresh session
+	gate       chan struct{} // one call at a time picks the session it uses, see claim
 	provider   string
 	negotiated bool
+	created    time.Time // when the current provider session was created
 	touched    time.Time
+	inflight   int           // calls running on the current session while the connection has not negotiated
+	drained    chan struct{} // closed when inflight reaches 0, and replaced by the next call
 }
 
 type sessionRegistry struct {
@@ -79,7 +89,7 @@ func (r *sessionRegistry) issue(connectionID string) {
 	defer r.mu.Unlock()
 	now := r.now()
 	r.sweepLocked(now)
-	r.entries[connectionID] = &sessionEntry{provider: connectionID, touched: now}
+	r.entries[connectionID] = &sessionEntry{gate: make(chan struct{}, 1), drained: make(chan struct{}), provider: connectionID, created: now, touched: now}
 }
 
 // providerID returns the live Cloudflare session behind a client connection ID.
@@ -95,6 +105,87 @@ func (r *sessionRegistry) providerID(connectionID string) string {
 	}
 	entry.touched = r.now()
 	return entry.provider
+}
+
+// claim picks the session a call on the connection uses and registers the call on it until release.
+// A call on a connection that has not negotiated never goes to a session that is likely expired,
+// because Cloudflare answers such a call only after about 5 s. While calls that started earlier still
+// run on that session it waits for them, then follows their result: the connection negotiated, or its
+// session moved after a 410. With none left it swaps to a fresh session itself, and reports swapped.
+// A failed creation lets the call use the old session, so the call reports its own outcome and the
+// caller's 410 retry applies. Only the context ends the wait, with its error.
+func (r *sessionRegistry) claim(ctx context.Context, connectionID string, create func(context.Context) (string, error)) (session string, swapped bool, release func(), err error) {
+	if r == nil {
+		return connectionID, false, func() {}, nil
+	}
+	r.mu.Lock()
+	entry, ok := r.entries[connectionID]
+	if !ok || entry.negotiated {
+		defer r.mu.Unlock()
+		if !ok {
+			return connectionID, false, func() {}, nil
+		}
+		entry.touched = r.now()
+		return entry.provider, false, func() {}, nil
+	}
+	r.mu.Unlock()
+
+	// The gate is held while the call waits, so only calls that are past this point run on the session
+	// and a waiting call never waits for another waiting call.
+	select {
+	case entry.gate <- struct{}{}:
+	case <-ctx.Done():
+		return "", false, nil, ctx.Err()
+	}
+	defer func() { <-entry.gate }()
+
+	for {
+		r.mu.Lock()
+		tracked := r.entries[connectionID] == entry
+		if !tracked || entry.negotiated || r.now().Sub(entry.created) < sessionProbeLimit {
+			return r.registerLocked(entry, false)
+		}
+		if entry.inflight > 0 {
+			drained := entry.drained
+			r.mu.Unlock()
+			select {
+			case <-drained:
+				continue
+			case <-ctx.Done():
+				return "", false, nil, ctx.Err()
+			}
+		}
+		r.mu.Unlock()
+
+		fresh, createErr := create(ctx)
+		r.mu.Lock()
+		if createErr != nil || r.entries[connectionID] != entry || entry.negotiated {
+			// A session created for a connection that negotiated meanwhile is left to expire unused.
+			return r.registerLocked(entry, false)
+		}
+		delete(r.byProvider, entry.provider)
+		entry.provider = fresh
+		entry.created = r.now()
+		r.byProvider[fresh] = connectionID
+		return r.registerLocked(entry, true)
+	}
+}
+
+// registerLocked ends claim with r.mu held and releases it.
+func (r *sessionRegistry) registerLocked(entry *sessionEntry, swapped bool) (string, bool, func(), error) {
+	entry.touched = r.now()
+	entry.inflight++
+	provider := entry.provider
+	r.mu.Unlock()
+	return provider, swapped, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		entry.inflight--
+		if entry.inflight == 0 {
+			close(entry.drained)
+			entry.drained = make(chan struct{})
+		}
+	}, nil
 }
 
 // clientID returns the connection ID a client knows for a Cloudflare session.
@@ -160,9 +251,19 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The create took a network round trip. Another call may have negotiated on the old session, or the
+	// entry may be gone because it did. Later signaling must keep reaching that session, so the new one
+	// is dropped unused and Cloudflare expires it.
+	if r.entries[connectionID] != entry || entry.negotiated {
+		return "", false, nil
+	}
+	if entry.provider != failed {
+		return entry.provider, true, nil
+	}
 	delete(r.byProvider, failed)
 	entry.provider = fresh
-	entry.touched = r.now()
+	entry.created = r.now()
+	entry.touched = entry.created
 	r.byProvider[fresh] = connectionID
 	return fresh, true, nil
 }
