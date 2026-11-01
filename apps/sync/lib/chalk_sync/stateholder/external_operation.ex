@@ -40,6 +40,27 @@ defmodule ChalkSync.Stateholder.ExternalOperation do
   ]
 
   @type t :: %__MODULE__{}
+
+  # Operations that only change Sync's own database. Everything else calls a provider.
+  @local_names [
+    :admit_participant,
+    :participant_leave,
+    :deny_admission,
+    :admission_request_expired,
+    :tenant_set_deadline,
+    :recording_capture_ready,
+    :recording_capture_stopped,
+    :recording_capture_failed
+  ]
+
+  defguard is_local_name(name) when name in @local_names
+
+  @doc false
+  def local_names, do: @local_names
+
+  @doc false
+  def local?(%__MODULE__{name: name}), do: is_local_name(name)
+
   @doc false
   def leave_cleanup?(%__MODULE__{name: :remove_participant, payload: payload}),
     do: is_binary(payload["departureOperationId"])

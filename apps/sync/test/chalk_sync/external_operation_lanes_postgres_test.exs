@@ -70,16 +70,15 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
     release_cleanups()
   end
 
-  # Production topology on master: one consumer per node.
   defp start_consumers do
-    start_supervised!(
-      {ExternalOperationConsumer,
-       poll_interval_ms: 10,
-       page_size: 8,
-       max_backoff_ms: 100,
-       adapter_timeout_ms: 30_000,
-       media_plane: {SlowProvider, self()}}
+    ExternalOperationConsumer.child_specs(
+      poll_interval_ms: 10,
+      page_size: 8,
+      max_backoff_ms: 100,
+      adapter_timeout_ms: 30_000,
+      media_plane: {SlowProvider, self()}
     )
+    |> Enum.each(&start_supervised!/1)
   end
 
   defp queue_slow_cleanups(connection, count) do

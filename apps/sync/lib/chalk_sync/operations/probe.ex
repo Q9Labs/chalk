@@ -381,13 +381,11 @@ defmodule ChalkSync.Operations.Probe do
          :ok <- observe_process(ChalkSync.Episodes.CommandIntake),
          :ok <- observe_process(PostgresNotifications),
          :ok <- observe_process(LifecycleConsumer),
-         :ok <- observe_process(ExternalOperationConsumer),
          :ok <- observe_process(RetentionScheduler),
          {:ok, fanout} <-
            observe(PostgresNotifications, fn -> safe_health(PostgresNotifications) end),
          {:ok, lifecycle} <- observe(LifecycleConsumer, fn -> safe_health(LifecycleConsumer) end),
-         {:ok, external_operations} <-
-           observe(ExternalOperationConsumer, fn -> safe_health(ExternalOperationConsumer) end),
+         {:ok, external_operation_failures} <- observe_external_operation_lanes(boot?),
          {:ok, retention} <-
            observe(RetentionScheduler, fn -> safe_health(RetentionScheduler) end),
          :ok <-
@@ -395,12 +393,6 @@ defmodule ChalkSync.Operations.Probe do
              :lifecycle_consumer,
              fn -> validate_lifecycle_health(lifecycle, boot?) end,
              consumer_measurements(lifecycle)
-           ),
-         :ok <-
-           observe(
-             :external_operation_consumer,
-             fn -> validate_external_operation_health(external_operations, boot?) end,
-             consumer_measurements(external_operations)
            ) do
       {:ok,
        %{
@@ -411,8 +403,7 @@ defmodule ChalkSync.Operations.Probe do
          lifecycle_consumer: "ok",
          lifecycle_consecutive_failures: lifecycle.consecutive_failures,
          external_operation_consumer: "ok",
-         external_operation_consumer_consecutive_failures:
-           external_operations.consecutive_failures,
+         external_operation_consumer_consecutive_failures: external_operation_failures,
          retention_cleanup: retention.status,
          retention_cleanup_consecutive_failures: retention.consecutive_failures
        }}
@@ -494,8 +485,26 @@ defmodule ChalkSync.Operations.Probe do
     :exit, _reason -> {:error, :lifecycle_consumer_unavailable}
   end
 
-  defp safe_health(ExternalOperationConsumer) do
-    {:ok, ExternalOperationConsumer.health()}
+  defp observe_external_operation_lanes(boot?) do
+    Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn lane,
+                                                                           {:ok, failures} ->
+      with :ok <- observe_process(lane),
+           {:ok, health} <- observe(lane, fn -> safe_external_operation_health(lane) end),
+           :ok <-
+             observe(
+               :external_operation_consumer,
+               fn -> validate_external_operation_health(health, boot?) end,
+               consumer_measurements(health)
+             ) do
+        {:cont, {:ok, max(failures, health.consecutive_failures)}}
+      else
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp safe_external_operation_health(lane) do
+    {:ok, ExternalOperationConsumer.health(lane)}
   catch
     :exit, _reason -> {:error, :external_operation_consumer_unavailable}
   end

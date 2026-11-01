@@ -110,6 +110,13 @@ transaction. The departure timestamp is Leave acceptance time. Cleanup uses the
 existing external-operation leases and bounded retries; exhaustion is retained as
 a failed cleanup without changing attendance or the committed receipt. A newer
 entry already awaiting confirmation can defer or supersede an older Leave.
+
+Each node runs two external-operation lanes. The local lane claims operations that
+only change Postgres (admission, denial, expiry, deadline, Leave, capture
+callbacks), so a provider call never delays them. The provider lane claims the
+rest and runs up to eight at a time. Both claim with `FOR UPDATE SKIP LOCKED` and
+finalize under the Episode control lock, so rows may run in any order and in
+parallel.
 Other provider operations execute effects outside the transaction and finalize
 durable facts after confirmation. Opening or losing a socket never directly
 creates a durable join or leave.
