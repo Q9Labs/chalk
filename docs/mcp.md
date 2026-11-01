@@ -215,15 +215,15 @@ randomness, module loader, or Go-object access. `Date`, `performance`, `Temporal
 `Math.random`, shared memory and weak-reference/finalization APIs are removed.
 Prototype changes stay inside the disposable guest heap.
 
-| Budget | Limit |
-| ------ | ----- |
-| Source | 32 KiB UTF-8 |
-| Deadline | 5 seconds, including application calls |
-| Guest CPU | Single-threaded, at most the 5-second wall deadline; also interrupted after 1,000 QuickJS interrupt polls |
-| Memory | 32 MiB hard WASM linear-memory cap; 24 MiB QuickJS heap; 512 KiB JS stack |
-| Chalk calls | 32 per execution, including denied calls |
-| Output | 48 KiB combined console/value JSON after wire escaping; at most 128 console entries; 64 KiB encoded MCP result |
-| Concurrency | 4 executions per endpoint instance; excess calls return `code.busy` |
+| Budget      | Limit                                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| Source      | 32 KiB UTF-8                                                                                                   |
+| Deadline    | 5 seconds, including application calls                                                                         |
+| Guest CPU   | Single-threaded, at most the 5-second wall deadline; also interrupted after 1,000 QuickJS interrupt polls      |
+| Memory      | 32 MiB hard WASM linear-memory cap; 24 MiB QuickJS heap; 512 KiB JS stack                                      |
+| Chalk calls | 32 per execution, including denied calls                                                                       |
+| Output      | 48 KiB combined console/value JSON after wire escaping; at most 128 console entries; 64 KiB encoded MCP result |
+| Concurrency | 4 executions per endpoint instance; excess calls return `code.busy`                                            |
 
 Programs cannot choose a tenant or bypass application policy. Both endpoints
 share API-key reauthentication on every HTTP request, origin checks, rate-limit
