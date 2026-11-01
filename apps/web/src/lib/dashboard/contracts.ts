@@ -1,4 +1,4 @@
-import { whisperLanguages, type TranscriptLanguage } from "@chalk/transcript-language";
+import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
@@ -11,7 +11,7 @@ const name = z
   .min(1)
   .refine((value) => Array.from(value).length <= spaceNameMaxCodePoints, "Call name is too long");
 const idempotencyKey = z.uuid();
-const transcriptLanguage = z.enum(["auto", ...(Object.keys(whisperLanguages) as (keyof typeof whisperLanguages)[])]);
+const transcriptLanguage = z.enum(["auto", ...whisperLanguageCodes]);
 const admission = z.enum(["anyone", "knock"]);
 export const knockDecisionState = z.enum(["none", "in_flight", "retryable"]);
 export const knockDecisionAction = z.enum(["approve", "deny"]).nullable();
