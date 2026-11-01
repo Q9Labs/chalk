@@ -2,6 +2,7 @@
 """Run fresh Claude Code trials against a disposable real Chalk API."""
 
 import argparse
+import atexit
 import concurrent.futures
 import hashlib
 import json
@@ -14,6 +15,7 @@ import tempfile
 import time
 from urllib.parse import urlparse
 import uuid
+import urllib.request
 
 from fixture import Database, seed
 from report import markdown, summarize, write_report
@@ -53,7 +55,8 @@ def parse_stream(stdout):
     models = {e.get("message", {}).get("model") for e in assistants}
     wrong_model = any(model and model != MODEL for model in models)
     metrics.update(cost_usd=result.get("total_cost_usd", 0), cost_accounting_complete="total_cost_usd" in result,
-                   turns=len(assistants), tool_calls=len(calls), tool_errors=len(errors),
+                   turns=result.get("num_turns", len(assistants)), assistant_messages=len(assistants),
+                   tool_calls=len(calls), tool_errors=len(errors),
                    used_tools=[c["name"] for c in calls], offered_tools=offered,
                    models=sorted(m for m in models if m), model_usage=usage,
                    wrong_tools=wrong_tools, wrong_model=wrong_model)
@@ -78,6 +81,38 @@ print(json.dumps({'server_calls':len(calls),'server_errors':sum(e['outcome']!='o
         command = ["ssh", "-F", args.ssh_config, args.ssh_host, shlex.join(command)]
     result = subprocess.run(command, capture_output=True, text=True, timeout=45, check=True)
     return json.loads(result.stdout)
+
+
+def rpc(endpoint, key, method, params):
+    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    request = urllib.request.Request(endpoint, payload, {
+        "Authorization": "Bearer " + key, "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25",
+    })
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.load(response)
+    if "error" in result or result.get("result", {}).get("isError"):
+        raise RuntimeError("MCP preflight failed for " + method + ":" + params.get("name", ""))
+    return result["result"]
+
+
+def preflight(args, db, run_id):
+    f = seed(db, run_id + ":preflight")
+    base = args.base_url.rstrip("/") + "/mcp"
+    endpoint = base if args.arm == "tools" else base + "/code"
+    catalog = rpc(endpoint, f["key"], "tools/list", {})["tools"]
+    if not catalog or args.arm == "tools" and len(catalog) != 33:
+        raise RuntimeError("Unexpected MCP tool catalog; update the suite deliberately")
+    for name, arguments in [
+        ("get_connection", {}), ("list_spaces", {}), ("list_recordings", {}),
+        ("list_transcripts", {}), ("list_admission_requests", {"space_id": f["spaces"]["Atlas"]}),
+        ("inspect_webhooks", {}),
+    ]:
+        rpc(base, f["key"], "tools/call", {"name": "chalk_" + name, "arguments": arguments})
+    evidence = server_evidence(args, f["tenant"])
+    if evidence["server_calls"] != 6 or evidence["server_errors"]:
+        raise RuntimeError("API-side preflight evidence missing or contains errors")
+    return {"catalog": [t["name"] for t in catalog], **evidence}
 
 
 def trial(args, task_id, repetition, run_id):
@@ -121,6 +156,9 @@ def trial(args, task_id, repetition, run_id):
         evidence_error = True
         evidence = {"server_calls": 0, "server_errors": 0, "server_tools": {}}
     good, checks = grade(task, answer, db)
+    if task.id == "missing-scope":
+        checks["scope_rejection_observed"] = evidence["server_errors"] > 0
+        good = good and checks["scope_rejection_observed"]
     category = "pass"
     if timed_out:
         category = "timeout"
@@ -136,6 +174,8 @@ def trial(args, task_id, repetition, run_id):
         category = "unsupported_capability"
     elif not checks["state"]:
         category = "wrong_state"
+    elif checks.get("scope_rejection_observed") is False:
+        category = "no_scope_rejection"
     elif not good:
         category = "wrong_facts"
     # Persist only checks/metrics, never raw output, credential issuance or transcript text.
@@ -181,13 +221,13 @@ def main():
             parser.error("Unknown task ID")
         tasks = list(dict.fromkeys(args.task))
     db = Database(args.database_url)
-    # Session advisory lock lasts across subprocess queries through a dedicated psql.
-    # A filesystem lock also protects simultaneous arm invocations on this runner.
-    import fcntl
-    lock = open(Path(tempfile.gettempdir()) / "chalk-mcp-eval.lock", "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    # Keep a DB-scoped advisory lock alive even when the runner is on another machine.
+    lock = subprocess.Popen(["psql", db.url, "-X", "-qAt", "-v", "ON_ERROR_STOP=1"],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    atexit.register(lock.terminate)
+    lock.stdin.write("select pg_try_advisory_lock(776, 20261101);\n")
+    lock.stdin.flush()
+    if lock.stdout.readline().strip() != "t":
         parser.error("Another eval run is active; do not reset its database")
     db.reset()
     started = time.monotonic()
@@ -202,13 +242,16 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     records = []
     run_id = str(uuid.uuid4())
+    proof = preflight(args, db, run_id)
+    print("Preflight passed: catalog and six API-side calls verified", flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
         futures = [executor.submit(trial, args, task_id, repetition, run_id)
                    for repetition in range(1, args.k + 1) for task_id in tasks]
         for future in concurrent.futures.as_completed(futures):
             records.append(future.result())
             records.sort(key=lambda t: (tasks.index(t["task"]), t["repetition"]))
-            run_result = {"config": config, "elapsed_seconds": time.monotonic() - started,
+            run_result = {"config": config, "preflight": proof, "complete": len(records) == len(tasks) * args.k,
+                          "elapsed_seconds": time.monotonic() - started,
                           "summary": summarize(records), "trials": records}
             output.write_text(json.dumps(run_result, indent=2) + "\n")
             output.with_suffix(".md").write_text(markdown([run_result]))

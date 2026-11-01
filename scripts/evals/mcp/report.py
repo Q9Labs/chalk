@@ -33,6 +33,7 @@ def summarize(trials):
         )},
         "median_wall_seconds": statistics.median(t["wall_seconds"] for t in trials) if trials else 0,
         "failures": dict(collections.Counter(t["category"] for t in trials if not t["passed"])),
+        "incomplete_cost_accounting": sum(not t.get("cost_accounting_complete", False) for t in trials),
     }
 
 
@@ -58,6 +59,7 @@ def markdown(runs):
                        ("Server completed calls", "server_calls"), ("Server error calls", "server_errors")]:
         row(label, lambda r, k=key: str(r["summary"][k]))
     row("Cost (CLI list-price accounting, USD)", lambda r: f'${r["summary"]["cost_usd"]:.4f}')
+    row("Trials with incomplete cost accounting", lambda r: str(r["summary"]["incomplete_cost_accounting"]))
     row("Sum of trial wall times (seconds)", lambda r: f'{r["summary"]["wall_seconds"]:.1f}')
     row("Run elapsed (seconds, including fixtures)", lambda r: f'{r["elapsed_seconds"]:.1f}')
     row("Median trial (seconds)", lambda r: f'{r["summary"]["median_wall_seconds"]:.1f}')
@@ -77,7 +79,7 @@ def markdown(runs):
         lines.append("| " + task_id + marker + " | " + " | ".join(cells) + " |")
     lines += ["", "## Interpretation", "",
               "- Every trial must have a successful fresh Claude session and API-side completed calls. Missing server evidence fails the trial even if the answer matches.",
-              "- Passes require exact JSON facts and, for writes, the resulting DB state plus read-back evidence. No LLM graders are used.",
+              "- Passes require exact JSON facts and, for writes, the resulting DB state. Prompts require read-back, but graders do not infer verification from code text. No LLM graders are used.",
               "- The base /mcp catalog has no transcript text-read/search tools. Four text tasks remain failures, also reported separately from the 20 operational tasks. Their synthetic corpus is stored in a fixture-only table, not a production object-store emulator.",
               "- Wilson 95% intervals treat trials as independent. Repeated tasks are correlated; these intervals are descriptive and understate task-selection uncertainty. k=1 is only a harness proof.",
               "- CLI accounting includes auxiliary-model overhead (if any), caching, startup and MCP discovery; wall time includes retries. Server counts include rejected calls. Expected scope rejection is not itself a failed task.",
@@ -95,7 +97,9 @@ def write_report(paths, output):
     runs = [json.loads(Path(p).read_text()) for p in paths]
     if len({r["config"]["arm"] for r in runs}) != len(runs):
         raise ValueError("Compare at most one result per arm")
-    fields = ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "cli_version")
+    if any(not r.get("complete") for r in runs):
+        raise ValueError("Cannot compare incomplete runs")
+    fields = ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "cli_version", "tasks")
     if any(any(r["config"][field] != runs[0]["config"][field] for field in fields) for r in runs[1:]):
         raise ValueError("Cannot compare runs with different revisions, tasks, prompts, CLI or settings")
     Path(output).write_text(markdown(runs))
