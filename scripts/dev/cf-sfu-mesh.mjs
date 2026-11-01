@@ -241,10 +241,11 @@ async function oneRun(runIndex) {
     })();
 
     // Wait until every pair hears every other.
-    const allHeard = () => participants.every((participant) => {
-      const wanted = wantedFor(participant);
-      return wanted.every((target) => participant.pulled.get(`${target.sessionId}/${target.trackName}`)?.heardAt != null);
-    });
+    const allHeard = () =>
+      participants.every((participant) => {
+        const wanted = wantedFor(participant);
+        return wanted.every((target) => participant.pulled.get(`${target.sessionId}/${target.trackName}`)?.heardAt != null);
+      });
     for (let waited = 0; !allHeard() && waited < 40000; waited += 250) await sleep(250);
     result.steadyAtMs = clock();
     result.steady = allHeard();
@@ -268,13 +269,15 @@ async function oneRun(runIndex) {
       const closed = await sfu("PUT", `/sessions/${killedSession}/tracks/close`, { tracks: mids, force: true });
       const killAt = clock();
       kills.push({ participant: victim.index, killAt, tracksClosed: mids.length, status: closed.status });
-      rebuilds.push((async () => {
-        await sleep(rebuildDelayMs);
-        const oldPeer = victim.peer;
-        await publishNew(victim, "again");
-        victim.page.evaluate((id) => window.cf.close(id), oldPeer).catch(() => undefined);
-        kills[k].rebuiltAtMs = clock();
-      })());
+      rebuilds.push(
+        (async () => {
+          await sleep(rebuildDelayMs);
+          const oldPeer = victim.peer;
+          await publishNew(victim, "again");
+          victim.page.evaluate((id) => window.cf.close(id), oldPeer).catch(() => undefined);
+          kills[k].rebuiltAtMs = clock();
+        })(),
+      );
     }
     await Promise.all(rebuilds);
     const lastKillAt = kills.at(-1).killAt;
@@ -356,14 +359,24 @@ for (let index = 0; index < runs; index++) {
   const run = await oneRun(index);
   results.push(run);
   const pairs = run.pairs ?? [];
-  const heals = pairs.map((pair) => pair.healMsAfterBothReady).filter((value) => value !== null).sort((a, b) => a - b);
-  console.log(JSON.stringify({
-    run: index, invalid: run.invalid, error: run.error, pairs: pairs.length, healed: heals.length,
-    healAfterReadyMsP50: heals[Math.floor(heals.length / 2)] ?? null, healAfterReadyMsMax: heals.at(-1) ?? null,
-    pairsWithFailures: pairs.filter((pair) => pair.pullFailures > 0).length,
-    errorCodes: [...new Set(pairs.flatMap((pair) => pair.errorCodes))],
-    stuckTracks: run.stuck?.length ?? null,
-    stuck: process.env.CF_VERBOSE ? run.stuck : undefined,
-  }));
+  const heals = pairs
+    .map((pair) => pair.healMsAfterBothReady)
+    .filter((value) => value !== null)
+    .sort((a, b) => a - b);
+  console.log(
+    JSON.stringify({
+      run: index,
+      invalid: run.invalid,
+      error: run.error,
+      pairs: pairs.length,
+      healed: heals.length,
+      healAfterReadyMsP50: heals[Math.floor(heals.length / 2)] ?? null,
+      healAfterReadyMsMax: heals.at(-1) ?? null,
+      pairsWithFailures: pairs.filter((pair) => pair.pullFailures > 0).length,
+      errorCodes: [...new Set(pairs.flatMap((pair) => pair.errorCodes))],
+      stuckTracks: run.stuck?.length ?? null,
+      stuck: process.env.CF_VERBOSE ? run.stuck : undefined,
+    }),
+  );
   await writeFile(process.env.CF_OUTPUT || "/tmp/cf-mesh.json", JSON.stringify(results, null, 1));
 }
