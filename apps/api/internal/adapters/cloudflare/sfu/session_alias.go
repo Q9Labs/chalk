@@ -15,8 +15,9 @@ import (
 //
 // sessionRegistry lets a connection outlive the session it was issued with. It tracks connections this
 // adapter issued and that have not negotiated yet. When the first negotiation finds the session gone,
-// the adapter creates a fresh session, keeps the client's connection ID as an alias for it, and
-// retries once. Every later call translates the client's ID to the live session, and every answer
+// or the connection has been idle long enough that it probably is (sessionProbeLimit), the adapter
+// creates a fresh session, keeps the client's connection ID as an alias for it, and uses it, retrying
+// once if Cloudflare still reports the session gone. Every later call translates the client's ID to the live session, and every answer
 // translates back, so the client, the access grant, and the publication registry never see the swap.
 //
 // State is per API instance. Production runs one chalk-api per host. After a restart an aliased
@@ -31,12 +32,18 @@ const (
 	sessionEntryRetention     = 12 * time.Hour
 	sessionAliasRetention     = 8 * 24 * time.Hour
 	sessionEntrySweepInterval = 10 * time.Minute
+	// Cloudflare answers a call on a dropped session only after about 5 s, so retrying after the 410
+	// costs a listener 5 s of silence. Probes of an idle session succeed for about 10 s and fail after
+	// that, so a connection idle for this long gets a fresh session before its first call. A session
+	// that was still alive is swapped needlessly, which costs one session create and nothing else.
+	sessionProbeLimit = 10 * time.Second
 )
 
 type sessionEntry struct {
 	swap       sync.Mutex // serializes replacement so concurrent first calls share one fresh session
 	provider   string
 	negotiated bool
+	created    time.Time // when the current provider session was created
 	touched    time.Time
 }
 
@@ -79,7 +86,7 @@ func (r *sessionRegistry) issue(connectionID string) {
 	defer r.mu.Unlock()
 	now := r.now()
 	r.sweepLocked(now)
-	r.entries[connectionID] = &sessionEntry{provider: connectionID, touched: now}
+	r.entries[connectionID] = &sessionEntry{provider: connectionID, created: now, touched: now}
 }
 
 // providerID returns the live Cloudflare session behind a client connection ID.
@@ -95,6 +102,18 @@ func (r *sessionRegistry) providerID(connectionID string) string {
 	}
 	entry.touched = r.now()
 	return entry.provider
+}
+
+// likelyExpired reports whether a connection that has not negotiated has been idle long enough for
+// Cloudflare to have dropped its session.
+func (r *sessionRegistry) likelyExpired(connectionID string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.entries[connectionID]
+	return ok && !entry.negotiated && r.now().Sub(entry.created) >= sessionProbeLimit
 }
 
 // clientID returns the connection ID a client knows for a Cloudflare session.
@@ -162,7 +181,8 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	defer r.mu.Unlock()
 	delete(r.byProvider, failed)
 	entry.provider = fresh
-	entry.touched = r.now()
+	entry.created = r.now()
+	entry.touched = entry.created
 	r.byProvider[fresh] = connectionID
 	return fresh, true, nil
 }

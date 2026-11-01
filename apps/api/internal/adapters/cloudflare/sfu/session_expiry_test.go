@@ -14,6 +14,9 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 // fakeIdleExpiryCloudflare models the Cloudflare behavior that strands listeners: a session whose
@@ -469,4 +472,210 @@ func TestRecoveredAddTracksLogsARecoveredCallWithTheProviderError(t *testing.T) 
 	if retry["outcome"] != "ok" || retry["level"] != "INFO" || retry["retry"] != "after_session_replaced" {
 		t.Fatalf("the retry must log its own success: %v", retry)
 	}
+}
+
+// Cloudflare answers a call on a dropped session only after about 5 s, so the swap must happen
+// before the first call when the connection has been idle long enough to be dropped.
+func (f *fakeIdleExpiryCloudflare) elapsed() time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.clock
+}
+
+func followFakeClock(adapter Adapter, fake *fakeIdleExpiryCloudflare) {
+	base := time.Unix(1_700_000_000, 0)
+	adapter.sessions.mu.Lock()
+	defer adapter.sessions.mu.Unlock()
+	adapter.sessions.now = func() time.Time { return base.Add(fake.elapsed()) }
+}
+
+func requestsOnSession(fake *fakeIdleExpiryCloudflare, session string) int {
+	count := 0
+	for _, request := range fake.requestLog() {
+		if strings.Contains(request, "/sessions/"+session+"/") {
+			count++
+		}
+	}
+	return count
+}
+
+func TestFirstPullOnAConnectionIdleForLongerThanTheProbeLimitNeverCallsItsDeadSession(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	followFakeClock(adapter, fake)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.advance(12 * time.Second)
+
+	response, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+	if err != nil {
+		t.Fatalf("first pull after 12 s idle: %v", err)
+	}
+	if len(response.Tracks) != 1 || response.Tracks[0].SessionID != publisher {
+		t.Fatalf("pull must still name the publisher's connection ID %q: %+v", publisher, response.Tracks)
+	}
+	if got := requestsOnSession(fake, listener); got != 0 {
+		t.Fatalf("the idle connection's own session must not be called: %d requests", got)
+	}
+}
+
+func TestFirstPullOnAYoungConnectionUsesItsOwnSession(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	followFakeClock(adapter, fake)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	sessions := fake.sessionCount()
+	fake.advance(5 * time.Second)
+
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("first pull after 5 s: %v", err)
+	}
+	if got := requestsOnSession(fake, listener); got != 1 {
+		t.Fatalf("a young connection must use its own session once, got %d requests", got)
+	}
+	if got := fake.sessionCount(); got != sessions {
+		t.Fatalf("a young connection must not be swapped: sessions %d -> %d", sessions, got)
+	}
+}
+
+func TestNegotiatedConnectionIsNeverSwappedBeforeItsNextCallHoweverLongItIdles(t *testing.T) {
+	negotiate := map[string]func(t *testing.T, adapter Adapter, listener string){
+		"partial pull with an answer": func(t *testing.T, adapter Adapter, listener string) {
+			partial := mediaplane.TracksRequest{ConnectionID: listener, Tracks: []mediaplane.Track{
+				{Location: "remote", SessionID: listener, TrackName: "mic"},
+				{Location: "remote", SessionID: "cf-unknown", TrackName: "mic"},
+			}}
+			response, err := adapter.AddTracks(context.Background(), partial)
+			if !mediaplane.IsPartialRemoteTrackResponse(err) || response.SessionDescription == nil {
+				t.Fatalf("setup: want an accepted partial pull, got response=%+v err=%v", response, err)
+			}
+		},
+		"renegotiate": func(t *testing.T, adapter Adapter, listener string) {
+			answer := mediaplane.SessionDescription{Type: "answer", SDP: "v=0"}
+			if err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{ConnectionID: listener, SessionDescription: answer}); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, negotiated := range negotiate {
+		t.Run(name, func(t *testing.T) {
+			adapter, fake := newExpiryAdapter(t)
+			followFakeClock(adapter, fake)
+			listener := joinParticipant(t, adapter, "listener")
+			negotiated(t, adapter, listener)
+			sessions, own := fake.sessionCount(), requestsOnSession(fake, listener)
+			fake.advance(12 * time.Second)
+
+			if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, listener)); err != nil {
+				t.Fatalf("pull on a negotiated connection: %v", err)
+			}
+			if got := fake.sessionCount(); got != sessions {
+				t.Fatalf("a negotiated connection must not be swapped: sessions %d -> %d", sessions, got)
+			}
+			if got := requestsOnSession(fake, listener); got != own+1 {
+				t.Fatalf("the pull must use the connection's own session: requests %d -> %d", own, got)
+			}
+		})
+	}
+}
+
+func TestSwappedConnectionThatNegotiatedIsNotSwappedAgainWhenItIdles(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	followFakeClock(adapter, fake)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.advance(12 * time.Second)
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("first pull swaps and negotiates: %v", err)
+	}
+	sessions := fake.sessionCount()
+	fake.advance(12 * time.Second)
+
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("second pull: %v", err)
+	}
+	if got := fake.sessionCount(); got != sessions {
+		t.Fatalf("a negotiated swapped connection must keep its live session: sessions %d -> %d", sessions, got)
+	}
+}
+
+func replacementOutcomes(t *testing.T, run func()) map[string]int64 {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	counter, err := meterProvider.Meter("replacement-test").Int64Counter("chalk.api.cloudflare_sfu.session_replacements")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := sfuSessionReplacements
+	sfuSessionReplacements = counter
+	t.Cleanup(func() {
+		sfuSessionReplacements = old
+		_ = meterProvider.Shutdown(context.Background())
+	})
+	run()
+	var collected metricdata.ResourceMetrics
+	if err := reader.Collect(context.Background(), &collected); err != nil {
+		t.Fatal(err)
+	}
+	outcomes := map[string]int64{}
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			if !ok {
+				continue
+			}
+			for _, point := range sum.DataPoints {
+				outcome, _ := point.Attributes.Value("outcome")
+				outcomes[outcome.AsString()] += point.Value
+			}
+		}
+	}
+	return outcomes
+}
+
+func TestSessionReplacementsAreCountedByOutcome(t *testing.T) {
+	t.Run("proactive swap of a long-idle connection", func(t *testing.T) {
+		adapter, fake := newExpiryAdapter(t)
+		followFakeClock(adapter, fake)
+		publisher := joinParticipant(t, adapter, "speaker")
+		listener := joinParticipant(t, adapter, "listener")
+		if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+			t.Fatal(err)
+		}
+		fake.advance(12 * time.Second)
+		got := replacementOutcomes(t, func() {
+			if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+				t.Fatal(err)
+			}
+		})
+		if len(got) != 1 || got["proactive"] != 1 {
+			t.Fatalf("want one proactive replacement, got %v", got)
+		}
+	})
+	t.Run("reactive recovery when the registry clock has not reached the probe limit", func(t *testing.T) {
+		adapter, fake := newExpiryAdapter(t)
+		publisher := joinParticipant(t, adapter, "speaker")
+		listener := joinParticipant(t, adapter, "listener")
+		if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+			t.Fatal(err)
+		}
+		fake.advance(20 * time.Second)
+		got := replacementOutcomes(t, func() {
+			if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+				t.Fatal(err)
+			}
+		})
+		if len(got) != 1 || got["recovered"] != 1 {
+			t.Fatalf("want one recovered replacement, got %v", got)
+		}
+	})
 }

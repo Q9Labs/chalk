@@ -57,7 +57,7 @@ var (
 	)
 	sfuSessionReplacements, _ = sfuMeter.Int64Counter(
 		"chalk.api.cloudflare_sfu.session_replacements",
-		metric.WithDescription("Never-negotiated Cloudflare sessions swapped for a fresh one, by outcome (recovered or failed)"),
+		metric.WithDescription("Never-negotiated Cloudflare sessions swapped for a fresh one, by outcome (proactive, recovered or failed)"),
 	)
 )
 
@@ -330,6 +330,14 @@ func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInpu
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	session := a.sessions.providerID(input.ConnectionID)
+	if a.sessions.likelyExpired(input.ConnectionID) {
+		// Cloudflare answers a call on a dropped session only after about 5 s, so swap before the call. A
+		// failed creation falls through: the call then reports its own outcome and the path below retries.
+		if fresh, replaced, err := a.sessions.replace(ctx, input.ConnectionID, session, a.createConnection); err == nil && replaced {
+			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "proactive")))
+			session = fresh
+		}
+	}
 	result, attempt, err := a.addTracks(ctx, input, session)
 	retry := addTracksRetryNone
 	if errors.Is(err, mediaplane.ErrConnectionNotFound) {
