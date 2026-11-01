@@ -17,12 +17,13 @@ import (
 func TestPerTrackErrorCodeIsRecordedOnSpanAndLog(t *testing.T) {
 	for _, test := range []struct{ name, raw, want string }{
 		{"known code", "not_found_track_error", "not_found_track_error"},
-		{"unlisted but well formed code", "future_track_error_9", "future_track_error_9"},
+		{"unlisted but well formed code", "future_track_error_9", "other"},
+		{"credential-like snake case", "invalid_privatecredential_state", "other"},
 		{"uppercase", "NOT_FOUND_TRACK_ERROR", "other"},
 		{"junk with spaces", "private-credential and more", "other"},
 		{"email", "audio@example.invalid", "other"},
 		{"over 64 characters", strings.Repeat("a", 65), "other"},
-		{"exactly 64 characters", strings.Repeat("a", 64), strings.Repeat("a", 64)},
+		{"exactly 64 characters", strings.Repeat("a", 64), "other"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			adapter := remoteTrackTestAdapter(t, `{"tracks":[{"sessionId":"publisher","trackName":"private-track","errorCode":"`+test.raw+`","errorDescription":"private provider detail"}]}`)

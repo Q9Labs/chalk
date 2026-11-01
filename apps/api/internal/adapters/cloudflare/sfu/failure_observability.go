@@ -20,7 +20,6 @@ const maxProviderMessageRunes = 240
 
 var (
 	providerCodePattern    = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
-	trackErrorCodePattern  = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 	providerURLPattern     = regexp.MustCompile(`https?://\S+`)
 	providerUUIDPattern    = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b`)
 	providerTokenPattern   = regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`)
@@ -210,14 +209,32 @@ func observableProviderCode(rawCode string, normalizedCode string) string {
 	return rawCode
 }
 
-// observableTrackErrorCode keeps Cloudflare's per-track errorCode countable
-// without trusting provider text: only short snake_case codes pass.
+// knownTrackErrorCodes lists the per-track errorCode values Cloudflare documents
+// or that this adapter already handles. Provider text can't be trusted, so any
+// other value is exported only as "other".
+var knownTrackErrorCodes = map[string]struct{}{
+	"not_found_track_error":       {},
+	"empty_track_error":           {},
+	"repeated_local_track_error":  {},
+	"update_track_error":          {},
+	"invalid_track":               {},
+	"invalid_session_description": {},
+	"session_error":               {},
+	"session_not_found":           {},
+	"session_not_connected":       {},
+	"session_not_ready":           {},
+	"connection_not_found":        {},
+	"track_not_found":             {},
+	"track_already_closed":        {},
+	"internal_error":              {},
+}
+
 func observableTrackErrorCode(rawCode string) string {
 	rawCode = strings.TrimSpace(rawCode)
 	if rawCode == "" {
 		return ""
 	}
-	if !trackErrorCodePattern.MatchString(rawCode) {
+	if _, known := knownTrackErrorCodes[rawCode]; !known {
 		return "other"
 	}
 	return rawCode
