@@ -116,14 +116,14 @@ defmodule ChalkSync.ProviderBridge.ErlangHTTPTest do
   end
 
   defp content_length(headers) do
-    Enum.find_value(headers, 0, fn header ->
-      case String.split(header, ":", parts: 2) do
-        [name, value] ->
-          if String.downcase(name) == "content-length", do: String.to_integer(String.trim(value))
+    headers
+    |> Enum.map(&String.split(&1, ":", parts: 2))
+    |> Enum.find_value(0, fn
+      [name, value] ->
+        if String.downcase(name) == "content-length", do: String.to_integer(String.trim(value))
 
-        _other ->
-          nil
-      end
+      _other ->
+        nil
     end)
   end
 
