@@ -109,6 +109,8 @@ export type CloudflareSFUClientOptions = {
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
+  /** How long a publication announced after the first snapshot waits before its first pull. Defaults to 500 ms. */
+  readonly newPublicationPullDelayMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
   readonly onScreenEnded?: () => void;
