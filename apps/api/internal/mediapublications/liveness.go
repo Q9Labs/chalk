@@ -36,6 +36,7 @@ type RemoteTrackFailureInput struct {
 	TenantID              utilities.ID
 	EpisodeID             utilities.ID
 	ListenerParticipantID utilities.ID
+	ListenerConnectionID  string
 	Failed                []RemoteTrackIdentity
 }
 

@@ -32,6 +32,7 @@ type RemoteTrackObservationInput struct {
 	TenantID              utilities.ID
 	EpisodeID             utilities.ID
 	ListenerParticipantID utilities.ID
+	ListenerConnectionID  string
 	Requested             []RemoteTrackIdentity
 	Missing               []RemoteTrackIdentity
 }
