@@ -40,6 +40,7 @@ for (const path of [
   "/dashboard-api/call-metadata",
   "/dashboard-api/home-status",
   "/dashboard-api/past-session",
+  "/dashboard-api/transcript-text",
   "/dashboard-api/developer",
 ]) {
   assert(
