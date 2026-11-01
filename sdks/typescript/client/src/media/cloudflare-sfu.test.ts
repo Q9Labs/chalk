@@ -2200,6 +2200,98 @@ it.each(["microphone", "camera"] as const)("only retiring the negotiated BUNDLE 
   }
 });
 
+it.each(["microphone", "camera"] as const)("keeps the BUNDLE transport when explicitly muting its %s sender", async (source) => {
+  await expectExplicitMuteToKeepBundleTransport(source, false);
+});
+
+it.each(["microphone", "camera"] as const)("keeps the transport when explicitly muting %s without BUNDLE information", async (source) => {
+  await expectExplicitMuteToKeepBundleTransport(source, true);
+});
+
+async function expectExplicitMuteToKeepBundleTransport(source: "microphone" | "camera", omitBundleInfo: boolean): Promise<void> {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  await withTimedHarness(
+    async (harness) => {
+      const otherSource = source === "microphone" ? "camera" : "microphone";
+      const mutedTrack = new FakeTrack(`muted-${source}`, source === "microphone" ? "audio" : "video");
+      const otherTrack = new FakeTrack(`other-${source}`, otherSource === "microphone" ? "audio" : "video");
+      await harness.client.start(fakeStream(mutedTrack, otherTrack));
+      const mutedTransceiver = harness.peers[0]!.getTransceivers().find((transceiver) => transceiver.sender.track === (mutedTrack as unknown as MediaStreamTrack))!;
+      expect(mutedTransceiver.mid).toBe("0");
+      if (omitBundleInfo) harness.peers[0]!.localDescription = { type: "offer", sdp: "v=0\r\n" };
+
+      remoteMedia(harness);
+      await harness.client.refreshRemotePublications();
+      const localTracks = harness.client.getSnapshot().localTracks;
+      const mutedPublicationId = localTracks.find((track) => track.source === source)!.publicationId!;
+      const otherPublicationId = localTracks.find((track) => track.source === otherSource)!.publicationId;
+      const remoteTracks = harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+        participantId,
+        publicationId,
+        source: remoteSource,
+        trackId: track.id,
+      }));
+      const remotePulls = remotePullCount(harness);
+
+      await harness.client.setLocalSourceIntent(source, false, "user_pause");
+      await expect(harness.client.setLocalPublicationTarget({ operationId: `mute-${source}`, participantId: "participant-1", source, enabled: false })).resolves.toMatchObject({ outcome: "satisfied" });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(harness.transport.closeInputs).toHaveLength(1);
+      expect(harness.transport.closeInputs[0]?.tracks).toEqual([expect.objectContaining({ publicationId: mutedPublicationId, source })]);
+      expect(harness.transport.localPublications.has(mutedPublicationId)).toBe(false);
+      expect(harness.transport.localPublications.has(otherPublicationId)).toBe(true);
+      expect(harness.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: false, publicationId: null });
+      expect(harness.client.getSnapshot().localTracks.find((track) => track.source === otherSource)?.publicationId).toBe(otherPublicationId);
+      expect(mutedTransceiver.sender.track).toBeNull();
+      expect(mutedTrack.enabled).toBe(false);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
+      expect(remotePullCount(harness)).toBe(remotePulls);
+      expect(replaceMediaConnection).not.toHaveBeenCalled();
+      expect(harness.peers).toHaveLength(1);
+      expect(harness.peers[0]?.connectionState).toBe("connected");
+      expect(harness.peers[0]?.closed).toBe(false);
+
+      await harness.client.setLocalSourceIntent(source, true);
+      await expect(harness.client.setLocalPublicationTarget({ operationId: `unmute-${source}`, participantId: "participant-1", source, enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(replaceMediaConnection).not.toHaveBeenCalled();
+      expect(harness.peers).toHaveLength(1);
+      expect(harness.peers[0]?.connectionState).toBe("connected");
+      expect(harness.peers[0]?.closed).toBe(false);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
+      expect(remotePullCount(harness)).toBe(remotePulls);
+      expect(harness.transport.closeInputs).toHaveLength(1);
+      expect(harness.transport.closeInputs[0]).toMatchObject({ sessionDescription: undefined, force: true });
+      const updatedLocalTracks = harness.client.getSnapshot().localTracks;
+      expect(updatedLocalTracks.find((track) => track.source === source)).toMatchObject({ enabled: true });
+      expect(updatedLocalTracks.find((track) => track.source === source)?.publicationId).not.toBe(mutedPublicationId);
+      expect(updatedLocalTracks.find((track) => track.source === otherSource)?.publicationId).toBe(otherPublicationId);
+      expect(mutedTrack.enabled).toBe(true);
+      const replacementTransceiver = harness.peers[0]!.getTransceivers().find((transceiver) => transceiver.sender.track === (mutedTrack as unknown as MediaStreamTrack))!;
+      expect(replacementTransceiver).not.toBe(mutedTransceiver);
+      expect(replacementTransceiver.mid).not.toBe(mutedTransceiver.mid);
+      expect(mutedTransceiver.direction).toBe("inactive");
+    },
+    { replaceMediaConnection },
+  );
+}
+
 it.each(["microphone", "camera"] as const)("ownership: failed-close recovery can fence the old %s publication", async (source) => {
   const replace = vi.fn(async () => {
     // Mirror the server's old-connection retirement on replacement.
@@ -2227,8 +2319,14 @@ it.each(["user_pause", "moderation_pause", "sync_recovery_loss"] as const)("repo
     await harness.client.closeForcedLocalPublication("microphone", cause);
     harness.client.setLocalSourceIntent("microphone", true);
     await harness.client.setLocalPublicationTarget({ operationId: "resume", participantId: "participant-1", source: "microphone", enabled: true });
-    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual([cause]);
-    expect(harness.peers).toHaveLength(2);
+    const replacementCauses = add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []));
+    if (cause === "user_pause") {
+      expect(replacementCauses).toEqual([]);
+      expect(harness.peers).toHaveLength(1);
+    } else {
+      expect(replacementCauses).toEqual([cause]);
+      expect(harness.peers).toHaveLength(2);
+    }
   } finally {
     harness.client.stop();
   }
