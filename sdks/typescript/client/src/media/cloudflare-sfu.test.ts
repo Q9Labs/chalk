@@ -3349,7 +3349,8 @@ describe("remote publication recovery", () => {
   });
 });
 describe("first connection deadline", () => {
-  const DEADLINE_WITH_MARGIN_MS = 3500;
+  const DEADLINE_MS = 5000;
+  const DEADLINE_WITH_MARGIN_MS = DEADLINE_MS + 500;
   const stuckFirstPeer = (connectsAfterMs?: number, stuckPeers = 1) => {
     const replaceMediaConnection = sequentialReplacementConnections();
     const harness = createHarness({ autoConnect: (index) => index >= stuckPeers, replaceMediaConnection });
@@ -3374,7 +3375,7 @@ describe("first connection deadline", () => {
   };
   it.each([
     ["never connects", undefined],
-    ["connects after 4 s", 4000],
+    ["connects after 7 s", 7000],
   ])("replaces a listener's first peer connection that %s", async (_name, connectsAfterMs) => {
     vi.useFakeTimers();
     try {
@@ -3405,7 +3406,7 @@ describe("first connection deadline", () => {
       harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
       const startedAt = Date.now();
       const pull = harness.client.refreshRemotePublications();
-      const budgetWithMarginMs = 3000 + 3000 + 1000 + 500;
+      const budgetWithMarginMs = DEADLINE_MS + DEADLINE_MS + 1000 + 500;
       expect(await settlesWithin(pull, budgetWithMarginMs)).toBe(true);
       await pull;
       expect(Date.now() - startedAt).toBeLessThanOrEqual(budgetWithMarginMs);
@@ -3420,7 +3421,7 @@ describe("first connection deadline", () => {
   });
   it.each([
     ["never connects", undefined],
-    ["connects after 4 s", 4000],
+    ["connects after 7 s", 7000],
   ])("replaces a speaker's first peer connection that %s, with one live publication", async (_name, connectsAfterMs) => {
     vi.useFakeTimers();
     try {
@@ -3466,7 +3467,7 @@ describe("first connection deadline", () => {
   it("does not replace a connection that connects inside the deadline", async () => {
     vi.useFakeTimers();
     try {
-      const { harness, replaceMediaConnection } = stuckFirstPeer(2000);
+      const { harness, replaceMediaConnection } = stuckFirstPeer(4000);
       const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
       await vi.advanceTimersByTimeAsync(DEADLINE_WITH_MARGIN_MS);
       await start;
@@ -3476,6 +3477,45 @@ describe("first connection deadline", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+  describe("a connection that is still making progress", () => {
+    const iceStats = (responsesReceived: number) => async () => new Map([["pair", { id: "pair", type: "candidate-pair", state: "in-progress", responsesReceived }]]) as unknown as RTCStatsReport;
+    it.each([
+      ["ICE connected while DTLS is still finishing", "connecting", "connected", 0],
+      ["ICE checking with a response from the server", "connecting", "checking", 3],
+    ] as const)("keeps %s", async (_name, connectionState, iceState, responses) => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(responses));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates(connectionState, iceState), 1000);
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connected", "connected"), 6500);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        expect(await settlesWithin(start, 7000)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).not.toHaveBeenCalled();
+        expect(harness.peers).toHaveLength(1);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+    it("still replaces ICE that is checking without any response", async () => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(0));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connecting", "checking"), 1000);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        expect(await settlesWithin(start, DEADLINE_WITH_MARGIN_MS)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expectOnlyLastPeerOpen(harness);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
 function sequentialReplacementConnections() {

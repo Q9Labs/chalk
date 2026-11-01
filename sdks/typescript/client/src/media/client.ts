@@ -59,11 +59,15 @@ const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
-// A new Cloudflare session connects in 1.5-3 s. About 1% of first ICE
-// negotiations never get a STUN reply, and Chrome only reports `failed` after
-// 15 s. Past this deadline a replacement is the faster bet; each entry is the
-// wait before one replacement, so the list also bounds the attempts.
-const FIRST_CONNECT_DEADLINE_MS = 3000;
+// A new Cloudflare session connects in 1.5-3 s, but replacing at 3 s hurt:
+// in rig runs only 6 of 383 first connections took more than 5 s, and a
+// replacement costs more than the wait it saves for any connection that is
+// merely slow. About 1% of first ICE negotiations never get a STUN reply, and
+// Chrome only reports `failed` after 15 s, so those are the ones worth
+// replacing. At this deadline a connection with ICE progress keeps waiting;
+// each backoff entry is the wait before one replacement, so the list also
+// bounds the attempts.
+const FIRST_CONNECT_DEADLINE_MS = 5000;
 const FIRST_CONNECT_REPLACEMENT_BACKOFF_MS = [0, 1000] as const;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
 const RECOVERY_HEALTHY_RESET_MS = 10_000;
@@ -1409,22 +1413,28 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#setFailure(error, "media_failed");
   }
   async #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    const firstConnect = !this.#connectedConnections.has(connection) && this.#replaceMediaConnection !== undefined && this.#firstConnectReplacements < FIRST_CONNECT_REPLACEMENT_BACKOFF_MS.length;
     const message = "Timed out waiting for the Cloudflare SFU peer connection";
-    await waitFor(
-      () => {
-        this.#requireGeneration(generation);
-        return connectionIsLive(connection);
-      },
-      firstConnect ? FIRST_CONNECT_DEADLINE_MS : CONNECTION_TIMEOUT_MS,
-      message,
-      () => {
-        if (!firstConnect) return new CloudflareSFUError(message, "media_failed");
-        const unconnected = new CloudflareSFUError(message, "ice_connection_failed");
-        this.#unconnectedFailures.set(unconnected, connection);
-        return unconnected;
-      },
-    );
+    const isLive = () => {
+      this.#requireGeneration(generation);
+      return connectionIsLive(connection);
+    };
+    const firstConnect = !this.#connectedConnections.has(connection) && this.#replaceMediaConnection !== undefined && this.#firstConnectReplacements < FIRST_CONNECT_REPLACEMENT_BACKOFF_MS.length;
+    if (!firstConnect) {
+      await waitFor(isLive, CONNECTION_TIMEOUT_MS, message);
+    } else {
+      const unconnected = new CloudflareSFUError(message, "ice_connection_failed");
+      try {
+        await waitFor(isLive, FIRST_CONNECT_DEADLINE_MS, message, () => unconnected);
+      } catch (error) {
+        if (error !== unconnected) throw error;
+        // Replacing a connection that is still progressing loses the progress. Only a stuck one is replaced.
+        if (!(await iceIsProgressing(connection))) {
+          this.#unconnectedFailures.set(unconnected, connection);
+          throw unconnected;
+        }
+        await waitFor(isLive, CONNECTION_TIMEOUT_MS - FIRST_CONNECT_DEADLINE_MS, message);
+      }
+    }
     this.#connectedConnections.add(connection);
     this.#firstConnectReplacements = 0;
   }
@@ -1835,6 +1845,19 @@ function observeConnectionState(
   if (peerState === "disconnected" || iceState === "disconnected") return { phase: "recovering", failure: null };
   if (started && peerState === "connected" && (iceState === "connected" || iceState === "completed")) return { phase: "live", failure: null };
   return null;
+}
+// ICE reached connected, or it is checking and the server has answered at least one check.
+async function iceIsProgressing(connection: RTCPeerConnection): Promise<boolean> {
+  if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") return true;
+  if (connection.iceConnectionState !== "checking") return false;
+  try {
+    for (const stat of (await connection.getStats()).values()) {
+      if (stat.type === "candidate-pair" && (stat.state === "succeeded" || stat.responsesReceived > 0)) return true;
+    }
+  } catch {
+    // Without stats there is no evidence of progress, so the connection counts as stuck.
+  }
+  return false;
 }
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
