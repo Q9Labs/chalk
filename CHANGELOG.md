@@ -1,27 +1,16 @@
 # Changelog
 
-## Unreleased
+## 5.4.0
 
-### media-recovery-pause
+- Share Chalk board controls, notes, surfaces and Follow across web and mobile, including boards started on web and opened in a native tile.
+- Add short Space invite links while keeping existing long links compatible; add SDK helpers to parse short links, codes and long links.
+- Preserve a person's requested microphone and camera state through short reconnects when Sync has no newer host-stop evidence, while still pausing after long or uncertain drops.
+- Keep media-toggle clicks through connection replacement and wait for media readiness during call startup and recovery.
+- Retry publication recovery after the SFU withdraws a track, replace expired receiver sessions, and keep unrelated audio and video flowing while senders retire.
+- Show full call names in desktop and phone header-button titles when names are truncated.
+- Advance the seven synchronized Chalk SDK packages to 5.4.0.
 
-After a reconnect, the SDK no longer turns off a microphone or camera the person left on just because Sync's own record of it was missing. It turns the source off when Sync turned it off (a host stop newer than the person's own on), or when the drop lasted 60 seconds or more or could not be shown to be shorter (a clock stepped back or jumped, or the page was frozen, resumed or discarded). Otherwise capture resumes without a tap. A hidden tab alone does not count as a long drop. One exception: in a tab hidden for over 5 minutes that holds no live WebRTC connection, Chrome runs timers once a minute, a short drop can read as long, and the source then turns off until one tap.
-
-The SDK applies this rule only on a connection whose welcome carried `media_off_reason`. Any other Sync gets the old rule, which pauses a wanted-on source whose Sync record is missing or off.
-
-A lost or late pong never makes a drop look shorter: a pong pairs with the oldest ping in flight, and a mismatch only pairs it with an older ping. If the oldest ping stays unanswered for 60 seconds, the SDK replaces the Sync socket through its normal reconnect and proof of contact resumes on the new socket. This assumes Sync sends exactly one pong per ping.
-
-**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Never release the SDK while old and new Sync run side by side: an old instance can commit a host stop without filling the new table, and a new instance then advertises the extension without that evidence.
-
-### short-invite-links
-
-Public Space invite links are now short, Google Meet–style links such as
-`https://chalkmeet.com/abc-defg-hij`. The API accepts the invite code anywhere it
-accepted a `cspi1` invite token, and existing long links keep working. React
-Native requests receive short links only when they send
-`X-Chalk-Invite-Format: code`, so shipped native builds keep their long links.
-The React Native SDK adds `parseChalkInviteLink`, which reads short links, bare
-codes and long links; `parseSpaceInviteLink` is unchanged. The client SDK adds
-`parseInviteCode`.
+**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Do not release the SDK while old and new Sync run side by side.
 
 ## 5.3.1
 
