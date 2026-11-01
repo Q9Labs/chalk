@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -12,6 +13,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type mcpQuotaKey struct{}
@@ -42,12 +47,13 @@ func NewMCPHandler(options Options) http.Handler {
 		for _, s := range principal.Scopes {
 			scopes = append(scopes, string(s))
 		}
-		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{TenantID: principal.TenantID.String(), Scopes: scopes})
+		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{TenantID: principal.TenantID.String(), ActorID: "api_key:" + principal.APIKeyID.String(), Scopes: scopes})
 		quota := mcpQuota{key: rateLimitKey(r, options.RateLimit.ClientIP), options: options.RateLimit}
 		ctx = context.WithValue(ctx, mcpQuotaKey{}, quota)
 		ctx = context.WithValue(ctx, writeBudgetContextKey{}, func() error { return quota.allow(ctx, authenticatedWriteRateLimit) })
 		if err := quota.allow(ctx, authenticatedReadRateLimit); err != nil {
-			writeAPIError(w, apiErrorRateLimited)
+			apiErr, _ := errorAsAPIError(err)
+			writeAPIError(w, apiErr)
 			return
 		}
 		transport.ServeHTTP(w, r.WithContext(ctx))
@@ -75,6 +81,7 @@ func (q mcpQuota) allow(ctx context.Context, policy ratelimit.Policy) error {
 	case ratelimit.Exhausted:
 		return apiErrorRateLimited
 	default:
+		recordRateLimiterUnavailable(ctx, policy.Name)
 		return apiErrorServiceUnavailable
 	}
 }
@@ -151,9 +158,18 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 			return nil, mcpError(endpoint.apiError(err))
 		}
 	}
-	response, err := endpoint.handle(b.ctx, request)
+	ctx, span := otel.Tracer("chalk/mcp").Start(b.ctx, "mcp."+endpoint.contract.OperationID, trace.WithAttributes(attribute.String("tenant_id", b.tenant.String()), attribute.String("operation", endpoint.contract.OperationID)))
+	defer span.End()
+	response, err := endpoint.handle(ctx, request)
+	outcome := "ok"
 	if err != nil {
-		return nil, mcpError(endpoint.apiError(err))
+		outcome = endpoint.apiError(err).Code
+	}
+	slog.InfoContext(ctx, "MCP application operation completed", "event", "mcp.operation.completed", "operation", endpoint.contract.OperationID, "tenant_id", b.tenant.String(), "actor_id", mcpapi.Connection(ctx).ActorID, "outcome", outcome)
+	if err != nil {
+		apiErr := endpoint.apiError(err)
+		span.SetStatus(codes.Error, apiErr.Code)
+		return nil, mcpError(apiErr)
 	}
 	if len(endpoint.contract.Responses) > 0 && endpoint.contract.Responses[0].Schema == nil {
 		return json.RawMessage(`{"completed":true}`), nil

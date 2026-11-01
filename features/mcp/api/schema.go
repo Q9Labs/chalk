@@ -46,7 +46,7 @@ func page(p map[string]*Schema) map[string]*Schema {
 	p["cursor"] = text("Use pagination.next_cursor from the previous page.")
 	return p
 }
-func read(p map[string]*Schema) map[string]*Schema { p["result_offset"] = integer(0, 16<<20); return p }
+func read(p map[string]*Schema) map[string]*Schema { p["result_offset"] = integer(0, 1<<30); return p }
 func requestKey(p map[string]*Schema) map[string]*Schema {
 	p["request_key"] = text("Caller-supplied idempotency key, preserved unchanged on retries.")
 	return p

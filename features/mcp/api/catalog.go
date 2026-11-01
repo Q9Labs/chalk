@@ -1,6 +1,10 @@
 package mcpapi
 
-import "github.com/modelcontextprotocol/go-sdk/mcp"
+import (
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"maps"
+	"slices"
+)
 
 type Definition struct {
 	Name        string
@@ -10,10 +14,28 @@ type Definition struct {
 	Schema      *Schema
 }
 
+// Action-specific requirements prevent omitted booleans or payloads from
+// silently becoming destructive zero values after typed JSON decoding.
+func requireActions(d Definition, requirements map[string][]string) Definition {
+	for _, action := range slices.Sorted(maps.Keys(requirements)) {
+		required := requirements[action]
+		d.Schema.AnyOf = append(d.Schema.AnyOf, &Schema{Properties: map[string]*Schema{"action": choice(action)}, Required: append([]string{"action"}, required...)})
+	}
+	return d
+}
+
+func init() {
+	SetMembership = requireActions(SetMembership, map[string][]string{"create": {"create"}, "update": {"membership_id", "update"}})
+	IssueAPIKey = requireActions(IssueAPIKey, map[string][]string{"create": {"create", "request_key"}, "rotate": {"api_key_id", "request_key"}})
+	ConfigureWebhook = requireActions(ConfigureWebhook, map[string][]string{"create": {"create", "request_key"}, "update": {"endpoint_id", "revision", "update", "request_key"}, "rotate_secret": {"endpoint_id", "rotate", "request_key"}, "delete": {"endpoint_id", "revision", "request_key"}})
+	ConfigureSpace = requireActions(ConfigureSpace, map[string][]string{"settings": {"settings"}, "invite": {"enabled"}, "rotate_invite": {"request_key"}})
+	PrepareRecording = requireActions(PrepareRecording, map[string][]string{"inspect": {}, "prepare": {"starts_at", "expected_revision"}, "cancel": {"expected_revision"}})
+	SendWebhook = requireActions(SendWebhook, map[string][]string{"test": {"request_key"}, "redeliver": {"delivery_id", "request_key"}})
+}
+
 func (d Definition) Tool() *mcp.Tool {
 	destructive := d.Hints == 'M'
-	closed := false
-	return &mcp.Tool{Name: "chalk_" + d.Name, Description: d.Description, InputSchema: d.Schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: d.Hints == 'R', DestructiveHint: &destructive, IdempotentHint: d.Hints == 'R', OpenWorldHint: &closed}}
+	return &mcp.Tool{Name: "chalk_" + d.Name, Description: d.Description, InputSchema: d.Schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: d.Hints == 'R', DestructiveHint: &destructive, IdempotentHint: d.Hints == 'R'}}
 }
 func define(name, description, scope string, hints byte, p map[string]*Schema, required ...string) Definition {
 	if hints == 'R' {
@@ -27,7 +49,7 @@ var UpdateTenant = define("update_tenant", "Change this tenant's settings and ar
 var ListMemberships = define("list_memberships", "List tenant members and roles with cursor pagination.", "memberships:read", 'R', page(fields()))
 var SetMembership = define("set_membership", "Explicitly add a member or change an existing member's role.", "memberships:write", 'M', map[string]*Schema{"action": choice("create", "update"), "membership_id": id(), "create": object(map[string]*Schema{"user_id": id(), "role": text("")}, "user_id", "role"), "update": object(fields("role"), "role")}, "action")
 var ListAPIKeys = define("list_api_keys", "List key metadata only, never secret values.", "api_keys:read", 'R', page(fields()))
-var IssueAPIKey = define("issue_api_key", "Explicitly create or rotate a tenant API key. Returns the secret ONCE. Cannot grant scopes beyond this connection; do not put the secret in logs.", "api_keys:write", 'M', requestKey(map[string]*Schema{"action": choice("create", "rotate"), "api_key_id": id(), "create": object(map[string]*Schema{"name": text(""), "scopes": stringsSchema(40), "expires_at": nullable(text("RFC3339 timestamp"))}, "name", "scopes"), "rotate": object(map[string]*Schema{"expires_at": nullable(text("RFC3339 timestamp"))})}), "action")
+var IssueAPIKey = define("issue_api_key", "Explicitly create or rotate a tenant API key. Returns the secret ONCE. Cannot grant scopes beyond this connection; do not put the secret in logs.", "api_keys:write", 'M', requestKey(map[string]*Schema{"action": choice("create", "rotate"), "api_key_id": id(), "create": object(map[string]*Schema{"name": text(""), "scopes": stringsSchema(40), "expires_at": text("RFC3339 timestamp")}, "name", "scopes", "expires_at"), "rotate": object(map[string]*Schema{"expires_at": nullable(text("RFC3339 timestamp"))})}), "action")
 var RevokeAPIKey = define("revoke_api_key", "Revoke a tenant API key; may disable this connection.", "api_keys:delete", 'M', map[string]*Schema{"api_key_id": id()}, "api_key_id")
 var InspectWebhooks = define("inspect_webhooks", "List webhook endpoints, or inspect one endpoint by ID. Secrets are redacted.", "webhooks:read", 'R', page(map[string]*Schema{"endpoint_id": id()}))
 var ConfigureWebhook = define("configure_webhook", "Explicitly create, update, rotate a signing secret, or delete an endpoint. Update/delete require the current revision. Delete requires webhooks:delete; other actions require webhooks:write. Secret issuance returns sensitive data once.", "", 'M', requestKey(map[string]*Schema{"action": choice("create", "update", "rotate_secret", "delete"), "endpoint_id": id(), "revision": integer(1, 2147483647), "create": webhookSettings(true), "update": webhookSettings(false), "rotate": object(map[string]*Schema{"revoke_previous_immediately": boolean()}, "revoke_previous_immediately")}), "action")
