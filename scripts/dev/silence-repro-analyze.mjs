@@ -150,9 +150,12 @@ const failures = [];
 const slowExamples = [];
 const files = process.argv.slice(2).filter((argument) => !argument.startsWith("--"));
 const asJson = process.argv.includes("--json");
+// --only=v1 keeps rooms whose taps were blind clicks on the mic toggle; --only=v2 keeps rooms whose taps wait for the button to offer the action.
+const only = process.argv.find((argument) => argument.startsWith("--only="))?.slice(7);
 files.forEach((file, fileIndex) => {
   const report = JSON.parse(readFileSync(file, "utf8"));
   for (const run of report.runs) {
+    if (only && (run.harness === "ui-ready-v2" ? "v2" : "v1") !== only) continue;
     const key = `${run.build} | ${run.condition}`;
     const cell = cells.get(key) ?? {
       build: run.build,
@@ -171,7 +174,7 @@ files.forEach((file, fileIndex) => {
       speakerDeaf: 0,
       stagesSilent: new Map(),
       // Tap-to-heard: from the unmute tap to each listener hearing audio; an unmute whose publisher never reaches enabled counts every listener as silent.
-      tap: { taps: 0, neverEnabled: 0, neverStatus: new Map(), pairs: 0, silent: 0, slow: 0, clusters: [], worst: [], heard: [] },
+      tap: { taps: 0, neverEnabled: 0, neverStatus: new Map(), pairs: 0, silent: 0, slow: 0, clusters: [], worst: [], heard: [], blocked: 0, waited: [] },
       reconnect: { pairs: 0, silent: 0, slow: 0, openAtEnd: 0, worst: [] },
       pulls: 0,
       trackErrors: 0,
@@ -221,12 +224,14 @@ files.forEach((file, fileIndex) => {
         cell.unmutes++;
         cell.tap.taps++;
         const tapCluster = { pairs: 0, silent: 0, slow: 0 };
-        const enabled = run.samples.find((sample) => sample.t >= action.t && sample.t <= action.t + deadline && sample.states[speaker]?.mic === "enabled");
+        if (action.waitedMs !== undefined) cell.tap.waited.push(action.waitedMs / 1000);
+        if (action.blocked !== undefined) cell.tap.blocked++;
+        const enabled = action.blocked !== undefined ? undefined : run.samples.find((sample) => sample.t >= action.t && sample.t <= action.t + deadline && sample.states[speaker]?.mic === "enabled");
         if (!enabled) {
           cell.neverEnabled++; // the publisher itself never reached enabled: not a listener-side failure
           cell.tap.neverEnabled++;
           const tapState = run.samples.find((sample) => sample.t >= action.t)?.states[speaker];
-          const label = `${tapState?.status}/${tapState?.mic}`;
+          const label = action.blocked !== undefined ? `blocked 10 s, button offered ${JSON.stringify(action.blocked)}` : `${tapState?.status}/${tapState?.mic}`;
           cell.tap.neverStatus.set(label, (cell.tap.neverStatus.get(label) ?? 0) + 1);
           for (let listener = 0; listener < n; listener++) {
             if (listener === speaker) continue;
@@ -348,6 +353,10 @@ const summaries = rows.map((cell) => ({
   tap: {
     taps: cell.tap.taps,
     neverEnabled: cell.tap.neverEnabled,
+    blocked: cell.tap.blocked,
+    waitP50: quantile(cell.tap.waited, 0.5),
+    waitP99: quantile(cell.tap.waited, 0.99),
+    waitMax: quantile(cell.tap.waited, 1),
     neverStatus: Object.fromEntries(cell.tap.neverStatus),
     pairs: cell.tap.pairs,
     silent: cell.tap.silent,
@@ -423,11 +432,11 @@ if (asJson) {
     );
   }
   console.log("\nTap-to-heard (from the unmute tap to each listener hearing audio; a tap whose publisher never reaches enabled makes every listener pair silent for the whole window):\n");
-  console.log("| build | condition | taps | taps never enabled | pairs | silent at deadline, cluster 95% | pairs >5 s, cluster 95% | tap-to-heard p50 | worst p50 / p99 / max |");
-  console.log("|---|---|---|---|---|---|---|---|---|");
+  console.log("| build | condition | taps | taps never enabled (of which blocked 10 s) | UI wait before tap p50 / p99 / max | pairs | silent at deadline, cluster 95% | pairs >5 s, cluster 95% | tap-to-heard p50 | worst p50 / p99 / max |");
+  console.log("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of summaries)
     console.log(
-      `| ${s.build} | ${s.condition} | ${s.tap.taps} | ${s.tap.neverEnabled} | ${s.tap.pairs} | ${s.tap.silent} ${pct(s.tap.pairs ? s.tap.silent / s.tap.pairs : NaN)} (${interval(s.tap.silentCluster)}) | ${s.tap.slow} ${pct(s.tap.pairs ? s.tap.slow / s.tap.pairs : NaN)} (${interval(s.tap.slowCluster)}) | ${seconds(s.tap.heardP50)} s | ${seconds(s.tap.worstP50)} / ${seconds(s.tap.worstP99)} / ${seconds(s.tap.worstMax)} s |`,
+      `| ${s.build} | ${s.condition} | ${s.tap.taps} | ${s.tap.neverEnabled} (${s.tap.blocked}) | ${seconds(s.tap.waitP50)} / ${seconds(s.tap.waitP99)} / ${seconds(s.tap.waitMax)} s | ${s.tap.pairs} | ${s.tap.silent} ${pct(s.tap.pairs ? s.tap.silent / s.tap.pairs : NaN)} (${interval(s.tap.silentCluster)}) | ${s.tap.slow} ${pct(s.tap.pairs ? s.tap.slow / s.tap.pairs : NaN)} (${interval(s.tap.slowCluster)}) | ${seconds(s.tap.heardP50)} s | ${seconds(s.tap.worstP50)} / ${seconds(s.tap.worstP99)} / ${seconds(s.tap.worstMax)} s |`,
     );
   console.log("\nPairs that went through a reconnect (a silent episode over 2 s that overlaps an SFU session change of the listener or the speaker):\n");
   console.log("| build | condition | reconnected pairs | silent (15 s) | silent >5 s | still silent at run end | heal p50 / p99 / max |");

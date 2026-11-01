@@ -36,9 +36,40 @@ function Controls() {
       });
   }, [media.remote]);
   window.matrixClient = client;
+  // Click trace for the harness: what the UI offered, whether the handler fired, and what the SDK call did.
+  window.srUi = { state: media.local.microphone.state, canToggle: controls.surfaceProps.onToggleMute !== undefined };
+  const trace = (window.srTrace ??= []);
+  if (!client.media.srWrapped) {
+    try {
+      const original = client.media.setMicrophoneEnabled.bind(client.media);
+      client.media.setMicrophoneEnabled = async (...args) => {
+        const entry = { kind: "setMicrophoneEnabled", args, at: Date.now() };
+        trace.push(entry);
+        try {
+          const result = await original(...args);
+          entry.ok = true;
+          return result;
+        } catch (error) {
+          entry.error = error?.message ?? String(error);
+          throw error;
+        } finally {
+          entry.endAt = Date.now();
+        }
+      };
+      client.media.srWrapped = true;
+    } catch (error) {
+      trace.push({ kind: "wrap-failed", message: error.message, at: Date.now() });
+    }
+  }
   return (
     <>
-      <button id="mic" onClick={controls.surfaceProps.onToggleMute}>
+      <button
+        id="mic"
+        onClick={() => {
+          trace.push({ kind: "click", at: Date.now(), state: media.local.microphone.state, handler: controls.surfaceProps.onToggleMute !== undefined });
+          controls.surfaceProps.onToggleMute?.();
+        }}
+      >
         Microphone
       </button>
       <button id="camera" onClick={controls.surfaceProps.onToggleVideo}>

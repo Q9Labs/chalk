@@ -509,17 +509,38 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     let killCursor = 0;
     let cursor = 0;
+    // A user taps the microphone button only when it offers that action: unmute when the call is live and the mic is off,
+    // mute when the mic is on. The button is a blind toggle, so a click at any other moment does the opposite or nothing.
+    // Each speaker's actions run in order on their own chain; a tap that finds no ready button for 10 s is recorded as blocked.
+    const READY_WAIT_MS = 10_000;
+    const chains = participants.map(() => Promise.resolve());
+    const tap = async (event) => {
+      const page = participants[event.participant].page;
+      const wantOn = event.kind === "unmute";
+      const waitStart = performance.now();
+      try {
+        await page.waitForFunction((on) => (on ? window.srUi?.canToggle && window.srUi.state !== "enabled" && window.srUi.state !== "requesting" : window.srUi?.state === "enabled"), wantOn, { timeout: READY_WAIT_MS, polling: 50 });
+      } catch {
+        event.blocked = await page.evaluate(() => window.srUi).catch(() => null);
+        event.waitedMs = Math.round(performance.now() - waitStart);
+        return;
+      }
+      event.waitedMs = Math.round(performance.now() - waitStart);
+      event.t = (performance.now() - start) / 1000;
+      event.clickedAtMs = Date.now() - origin;
+      try {
+        await page.locator("#mic").click({ timeout: 3000 });
+      } catch (error) {
+        event.error = error.message;
+      }
+    };
     while ((performance.now() - start) / 1000 < runSeconds) {
       const t = (performance.now() - start) / 1000;
       while (cursor < schedule.length && schedule[cursor].at <= t) {
         const action = schedule[cursor++];
-        const event = { ...action, t, clickedAtMs: Date.now() - origin };
+        const event = { ...action, t, scheduledT: t, clickedAtMs: Date.now() - origin };
         run.actions.push(event);
-        try {
-          await participants[action.participant].page.locator("#mic").click({ timeout: 3000 });
-        } catch (error) {
-          event.error = error.message;
-        }
+        chains[action.participant] = chains[action.participant].then(() => tap(event));
       }
       while (killCursor < pairKills.length && pairKills[killCursor].at <= t) {
         const { listener, speaker } = pairKills[killCursor++];
@@ -546,6 +567,10 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     run.wallMinusMonotonicMs = Date.now() - startWall - (performance.now() - start);
     run.sessionsPerParticipant = connections.map((set) => set.size);
+    await Promise.allSettled(chains);
+    run.harness = "ui-ready-v2";
+    run.originMs = origin;
+    run.clickTrace = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.srTrace ?? []).catch(() => [])));
     run.peerTimelines = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.matrixPeers.map((pc) => pc.srTimeline)).catch(() => [])));
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(() => undefined);
   } finally {
