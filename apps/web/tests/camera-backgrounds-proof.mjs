@@ -86,6 +86,9 @@ try {
     await page.keyboard.press("Escape");
     await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
     await page.getByRole("button", { name: "Select camera", exact: true }).click();
+    // Stop measuring the previous effect while the image preset loads on software WebGL.
+    await page.getByRole("menuitemradio", { name: "None", exact: true }).click();
+    await waitForProcessedPixels("none", [blurred]);
     await page.getByRole("menuitemradio", { name: "Office", exact: true }).click();
     await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
     await page.getByRole("button", { name: "Select camera", exact: true }).click();
