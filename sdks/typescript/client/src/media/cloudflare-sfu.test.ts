@@ -2984,19 +2984,36 @@ describe("Cloudflare SFU HTTP signaling", () => {
     );
   });
 });
+// Sanitized from three collisions on the test rig (two on SDK 5.4.0 and one on the #786 build), which
+// all had this shape. Times are milliseconds after the connection was created. The second local offer
+// has no request and no rollback in the trace; the remote offer is the reply to a pull with
+// requiresImmediateRenegotiation set. No track event and no local answer follow it in the trace.
+const observedPullOfferCollision = [
+  { call: "setLocal:offer", at: 3 },
+  { call: "setRemote:answer", at: 210 },
+  { call: "setLocal:offer", at: 4223 },
+  { call: "setRemote:offer", at: 8257 },
+] as const;
 describe("SFU offers during negotiation", () => {
-  it("answers an SFU offer that arrives while the publish offer is pending, then publishes again", async () => {
+  it("answers the pull reply offer that arrives while an unrequested local offer is pending", async () => {
     await withTimedHarness(
       async (harness) => {
-        harness.transport.offerRepliesToPublish = 1;
+        const [first, second, third] = observedPullOfferCollision;
         await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
-        const [first, second] = harness.peers;
-        expect(harness.transport.renegotiateInputs).toEqual([expect.objectContaining({ connectionId: "connection-1", sessionDescription: expect.objectContaining({ type: "answer" }) })]);
-        expect(first!.signalingState).not.toBe("have-remote-offer");
-        expect(second).toBeDefined();
-        expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
+        const peer = harness.peers[0]!;
+        expect(peer.descriptionLog).toEqual([first.call, second.call]);
+        await vi.advanceTimersByTimeAsync(third.at - second.at);
+        await peer.setLocalDescription(await peer.createOffer());
+        await vi.advanceTimersByTimeAsync(observedPullOfferCollision[3].at - third.at);
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await vi.advanceTimersByTimeAsync(100);
+        // The SDK rolls the stray offer back before it takes the SFU offer, then answers it.
+        expect(peer.descriptionLog).toEqual(["setLocal:offer", "setRemote:answer", "setLocal:offer", "setLocal:rollback", "setRemote:offer", "setLocal:answer"]);
+        expect(harness.transport.renegotiateInputs).toEqual([expect.objectContaining({ sessionDescription: expect.objectContaining({ type: "answer" }) })]);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
       },
-      { replaceMediaConnection: async () => bootstrap("replacement") },
+      { pollIntervalMs: 100 },
     );
   });
 });
@@ -4322,7 +4339,6 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
   readonly remotePullFailures: unknown[] = [];
-  offerRepliesToPublish = 0;
   readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
   failRenegotiation = false;
   immediateRenegotiation = false;
@@ -4393,10 +4409,6 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.#withdrawnLocalPublications.delete(track.publicationId);
         this.#localPublicationRevision++;
       }
-    }
-    if (this.offerRepliesToPublish > 0) {
-      this.offerRepliesToPublish--;
-      return { requiresImmediateRenegotiation: true, sessionDescription: { type: "offer", sdp: "remote-offer" }, tracks };
     }
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
@@ -4561,9 +4573,9 @@ class FakePeerConnection extends EventTarget {
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
     return Promise.resolve(stats);
   }
-  readonly signalingLog: RTCSignalingState[] = [];
+  readonly descriptionLog: string[] = [];
   async setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void> {
-    this.signalingLog.push(this.signalingState);
+    this.descriptionLog.push(`setLocal:${description?.type}`);
     this.localDescription = description ?? null;
     if (description?.type === "rollback") {
       this.rollbackCalls++;
@@ -4575,6 +4587,8 @@ class FakePeerConnection extends EventTarget {
     }
   }
   async setRemoteDescription(description?: RTCSessionDescriptionInit): Promise<void> {
+    this.descriptionLog.push(`setRemote:${description?.type}`);
+    if (description?.type === "offer" && this.signalingState === "have-local-offer") throw new DOMException("Called in wrong state: have-local-offer", "InvalidStateError");
     this.signalingState = description?.type === "offer" ? "have-remote-offer" : "stable";
     if (this.#nextRemoteDescriptionStates) {
       const next = this.#nextRemoteDescriptionStates;

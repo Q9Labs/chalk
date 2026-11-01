@@ -961,10 +961,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks }), { generation, connectionId });
     this.#recordLocalPublicationHandles(publications, response.tracks);
     this.#requireGeneration(generation);
-    if ((await this.#applyProviderDescription(response, connection, { generation, connectionId })) === "offer") {
-      // The SFU answered with its own offer, so it did not accept ours. Retire these publications and publish again.
-      throw new CloudflareSFUError("Cloudflare SFU answered the publish with an offer", "signaling_failed", { retryableConnection: true });
-    }
+    await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
   #recordLocalPublicationHandles(publications: readonly OwnedLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
     for (const publication of publications) {
@@ -1347,16 +1344,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
-    if (response.requiresImmediateRenegotiation) await this.#applyProviderDescription(response, connection, { generation, connectionId });
+    if (response.sessionDescription?.type === "offer") await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
   // An answer completes our own offer. An offer comes from the SFU and must always be answered:
   // this peer is the polite one, so it rolls back a pending local offer first. A browser that
   // rolls back on its own would otherwise leave the SFU's offer unanswered.
-  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<"answer" | "offer"> {
+  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
     const description = requireSFUDescription(response.sessionDescription);
     if (description.type !== "offer") {
       await connection.setRemoteDescription(description);
-      return "answer";
+      return;
     }
     await this.#rollbackLocalOffer(connection);
     await connection.setRemoteDescription(description);
@@ -1364,7 +1361,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await connection.setLocalDescription(answer);
     await this.#signal(() => this.#requireTransport().renegotiate({ connectionId: owner.connectionId, sessionDescription: requireDescription(answer) }), owner);
     this.#requireGeneration(owner.generation);
-    return "offer";
   }
   #serializeSDP<T>(operation: () => Promise<T>, retirement = false): Promise<T> {
     const generation = this.#generation;
