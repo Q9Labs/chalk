@@ -1598,6 +1598,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearRemoteTracks();
     this.#cursor = null;
     this.#bootstrap = bootstrap;
+    srDiag("conn.new", `conn=${bootstrap.connectionId.slice(0, 6)} pcs=${(globalThis as { matrixPeers?: unknown[] }).matrixPeers?.length}`);
     this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
     this.#replacementCause = cause;
     this.#retiredLocalConnection = null;

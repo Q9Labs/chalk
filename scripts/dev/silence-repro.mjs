@@ -238,12 +238,17 @@ function browserInstrumentation({ frequency }) {
       if (pc.connectionState === "closed") continue;
       if (!pc.getSenders().some((sender) => sender.track?.kind === "audio")) continue;
       let outbound = null;
+      let rr = null;
+      let pair = null;
       try {
         (await pc.getStats()).forEach((stat) => {
-          if (stat.type === "outbound-rtp" && stat.kind === "audio") outbound = { bytes: stat.bytesSent || 0, packets: stat.packetsSent || 0 };
+          if (stat.type === "outbound-rtp" && stat.kind === "audio") outbound = { bytes: stat.bytesSent || 0, packets: stat.packetsSent || 0, mid: stat.mid, ssrc: stat.ssrc };
+          if (stat.type === "remote-inbound-rtp" && stat.kind === "audio") rr = { lost: stat.packetsLost, rtt: stat.roundTripTime, reports: stat.roundTripTimeMeasurements };
+          if (stat.type === "candidate-pair" && stat.nominated && stat.state === "succeeded") pair = { sent: stat.bytesSent, recv: stat.bytesReceived, resp: stat.responsesReceived };
         });
       } catch {} // closed between checks
-      send.push({ pc: pcIndex, conn: pc.connectionState, ice: pc.iceConnectionState, outbound });
+      const senders = pc.getTransceivers().filter((t) => t.sender.track?.kind === "audio").map((t) => `${t.mid}:${t.direction}/${t.currentDirection}:${t.sender.track.readyState}:m${t.sender.track.muted ? 1 : 0}:e${t.sender.track.enabled ? 1 : 0}`);
+      send.push({ pc: pcIndex, conn: pc.connectionState, ice: pc.iceConnectionState, outbound, rr, pair, senders });
     }
     let localMic = null;
     try {
