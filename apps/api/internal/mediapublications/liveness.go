@@ -53,11 +53,10 @@ type RemoteTrackFailureConfirmer interface {
 }
 
 type publicationLivenessChecks struct {
-	mu      sync.Mutex
-	now     func() time.Time
-	claimed map[publicationCandidateKey]time.Time
-	present map[publicationCandidateKey]stillFailingEvidence
-	served  map[servedKey]map[utilities.ID]struct{}
+	mu       sync.Mutex
+	now      func() time.Time
+	claimed  map[publicationCandidateKey]time.Time
+	evidence map[listenerEvidenceKey]map[utilities.ID]listenerReport
 }
 
 type servedKey struct {
@@ -66,86 +65,127 @@ type servedKey struct {
 	identity  RemoteTrackIdentity
 }
 
-type stillFailingEvidence struct {
-	firstSeen time.Time
-	listeners map[utilities.ID]struct{}
+type listenerEvidenceKey = servedKey
+
+type listenerReport struct {
+	connectionID string
+	failing      bool
+	firstFailed  time.Time
+	updatedAt    time.Time
 }
 
 func newPublicationLivenessChecks(now func() time.Time) *publicationLivenessChecks {
 	return &publicationLivenessChecks{
-		now:     now,
-		claimed: make(map[publicationCandidateKey]time.Time),
-		present: make(map[publicationCandidateKey]stillFailingEvidence),
-		served:  make(map[servedKey]map[utilities.ID]struct{}),
+		now:      now,
+		claimed:  make(map[publicationCandidateKey]time.Time),
+		evidence: make(map[listenerEvidenceKey]map[utilities.ID]listenerReport),
 	}
 }
 
-func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey, identity RemoteTrackIdentity, listenerID utilities.ID) bool {
-	checks.mu.Lock()
-	defer checks.mu.Unlock()
-	now := checks.now()
-	for candidate, evidence := range checks.present {
-		if now.Sub(evidence.firstSeen) >= publicationStillFailingWindow {
-			delete(checks.present, candidate)
+func (checks *publicationLivenessChecks) pruneEvidenceKeyLocked(key listenerEvidenceKey, now time.Time) {
+	reports := checks.evidence[key]
+	for listenerID, report := range reports {
+		if now.Sub(report.updatedAt) >= publicationStillFailingWindow {
+			delete(reports, listenerID)
 		}
 	}
-	evidence, exists := checks.present[key]
-	if !exists || now.Sub(evidence.firstSeen) >= publicationStillFailingWindow {
-		if !exists && len(checks.present) >= publicationLivenessEvidenceMaxKeys {
-			for candidate := range checks.present {
-				delete(checks.present, candidate)
-				break
+	if len(reports) == 0 {
+		delete(checks.evidence, key)
+	}
+}
+
+func (checks *publicationLivenessChecks) sweepExpiredEvidenceLocked(now time.Time) {
+	for key := range checks.evidence {
+		checks.pruneEvidenceKeyLocked(key, now)
+	}
+}
+
+func (checks *publicationLivenessChecks) reportForWriteLocked(key listenerEvidenceKey, listenerID utilities.ID, now time.Time) map[utilities.ID]listenerReport {
+	checks.pruneEvidenceKeyLocked(key, now)
+	reports, exists := checks.evidence[key]
+	if !exists {
+		if len(checks.evidence) >= publicationLivenessEvidenceMaxKeys {
+			checks.sweepExpiredEvidenceLocked(now)
+			if len(checks.evidence) >= publicationLivenessEvidenceMaxKeys {
+				for candidate := range checks.evidence {
+					delete(checks.evidence, candidate)
+					break
+				}
 			}
 		}
-		evidence = stillFailingEvidence{firstSeen: now, listeners: make(map[utilities.ID]struct{}, 2)}
-		if !listenerID.IsZero() {
-			evidence.listeners[listenerID] = struct{}{}
+		reports = make(map[utilities.ID]listenerReport)
+		checks.evidence[key] = reports
+	}
+	if _, exists := reports[listenerID]; !exists && len(reports) >= 64 {
+		var oldestID utilities.ID
+		var oldest time.Time
+		for candidate, report := range reports {
+			if oldestID.IsZero() || report.updatedAt.Before(oldest) {
+				oldestID, oldest = candidate, report.updatedAt
+			}
 		}
-		checks.present[key] = evidence
-		return false
+		delete(reports, oldestID)
 	}
-	if now.Sub(evidence.firstSeen) < publicationLivenessDedupeWindow {
-		return false
-	}
-	if !listenerID.IsZero() && len(evidence.listeners) < 2 {
-		evidence.listeners[listenerID] = struct{}{}
-	}
-	checks.present[key] = evidence
-	if len(evidence.listeners) >= 2 {
-		return true
-	}
-	if len(evidence.listeners) == 0 {
-		return false
-	}
-	servedKey := servedKey{tenantID: key.tenantID, episodeID: key.episodeID, identity: identity}
-	for servedBy := range checks.served[servedKey] {
-		if _, reported := evidence.listeners[servedBy]; !reported {
-			return false
-		}
-	}
-	return true
+	return reports
 }
 
-func (checks *publicationLivenessChecks) recordServed(key servedKey, listenerID utilities.ID) {
+func (checks *publicationLivenessChecks) recordFailure(key listenerEvidenceKey, listenerID utilities.ID, connectionID string) {
 	if checks == nil || listenerID.IsZero() {
 		return
 	}
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
-	listeners, exists := checks.served[key]
-	if !exists {
-		if len(checks.served) >= publicationLivenessEvidenceMaxKeys {
-			for candidate := range checks.served {
-				delete(checks.served, candidate)
-				break
-			}
+	now := checks.now()
+	reports := checks.reportForWriteLocked(key, listenerID, now)
+	report, exists := reports[listenerID]
+	if exists && report.failing && report.connectionID == connectionID && now.Sub(report.updatedAt) < publicationStillFailingWindow {
+		report.updatedAt = now
+		reports[listenerID] = report
+		return
+	}
+	reports[listenerID] = listenerReport{connectionID: connectionID, failing: true, firstFailed: now, updatedAt: now}
+}
+
+func (checks *publicationLivenessChecks) recordServed(key listenerEvidenceKey, listenerID utilities.ID, connectionID string) {
+	if checks == nil || listenerID.IsZero() {
+		return
+	}
+	checks.mu.Lock()
+	defer checks.mu.Unlock()
+	now := checks.now()
+	reports := checks.reportForWriteLocked(key, listenerID, now)
+	if _, exists := reports[listenerID]; !exists && len(reports) >= 64 {
+		return
+	}
+	reports[listenerID] = listenerReport{connectionID: connectionID, updatedAt: now}
+}
+
+func (checks *publicationLivenessChecks) withdrawDue(key listenerEvidenceKey, present map[utilities.ID]string) bool {
+	if checks == nil {
+		return false
+	}
+	checks.mu.Lock()
+	defer checks.mu.Unlock()
+	now := checks.now()
+	checks.pruneEvidenceKeyLocked(key, now)
+	reports := checks.evidence[key]
+	failing, served := 0, 0
+	repeat := false
+	for listenerID, report := range reports {
+		connectionID, isPresent := present[listenerID]
+		if !isPresent || connectionID == "" || report.connectionID == "" || connectionID != report.connectionID {
+			continue
 		}
-		listeners = make(map[utilities.ID]struct{}, 2)
-		checks.served[key] = listeners
+		if report.failing {
+			failing++
+			if now.Sub(report.firstFailed) >= publicationLivenessDedupeWindow {
+				repeat = true
+			}
+		} else {
+			served++
+		}
 	}
-	if _, recorded := listeners[listenerID]; !recorded && len(listeners) < 2 {
-		listeners[listenerID] = struct{}{}
-	}
+	return repeat && (failing >= 2 || served == 0)
 }
 
 func (checks *publicationLivenessChecks) forget(candidate publicationCandidate) {
@@ -154,8 +194,7 @@ func (checks *publicationLivenessChecks) forget(candidate publicationCandidate) 
 	}
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
-	delete(checks.present, candidate.key)
-	delete(checks.served, servedKey{
+	delete(checks.evidence, servedKey{
 		tenantID:  candidate.key.tenantID,
 		episodeID: candidate.key.episodeID,
 		identity:  candidate.identity,
@@ -229,6 +268,7 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 			continue
 		}
 		candidate := matches[0]
+		s.liveness.recordFailure(servedKey{tenantID: input.TenantID.String(), episodeID: input.EpisodeID.String(), identity: identity}, input.ListenerParticipantID, input.ListenerConnectionID)
 		if !s.liveness.claim(candidate.key) {
 			result.Deduped++
 			continue
@@ -237,6 +277,9 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 		grouped[candidate.closeInput.ConnectionID] = append(grouped[candidate.closeInput.ConnectionID], candidate)
 	}
 	result.Checked = len(claimed)
+	var currentListeners map[utilities.ID]string
+	presenceLoaded := false
+	presenceUnavailable := false
 	for connectionID, publications := range grouped {
 		session, readErr := reader(ctx, connectionID)
 		if readErr != nil {
@@ -257,9 +300,26 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					}
 				}
 			}
-			if present && !s.liveness.stillFailing(candidate.key, candidate.identity, input.ListenerParticipantID) {
-				result.Present++
-				continue
+			if present {
+				if !presenceLoaded && !presenceUnavailable {
+					participants, presenceErr := s.repository.ListPublicationParticipants(ctx, input.TenantID, input.EpisodeID)
+					if presenceErr != nil {
+						presenceUnavailable = true
+						slog.WarnContext(ctx, "media publication listener presence unavailable",
+							"event", "media_publication.listener_presence_unavailable",
+						)
+					} else {
+						currentListeners = make(map[utilities.ID]string, len(participants))
+						for _, participant := range participants {
+							currentListeners[participant.ID] = participant.ConnectionID
+						}
+					}
+					presenceLoaded = true
+				}
+				if presenceUnavailable || !s.liveness.withdrawDue(servedKey{tenantID: input.TenantID.String(), episodeID: input.EpisodeID.String(), identity: candidate.identity}, currentListeners) {
+					result.Present++
+					continue
+				}
 			}
 			closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
 			if errors.Is(closeErr, ErrInvalidPublication) {

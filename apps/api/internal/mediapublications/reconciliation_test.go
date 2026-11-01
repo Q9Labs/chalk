@@ -43,15 +43,16 @@ func TestObserveRemoteTracksRecordsServedWithoutReadingRegistryOnSuccess(t *test
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: "listener-" + listenerID.String(),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("observe successful pull: %v", err)
 	}
 	key := servedKey{tenantID: tenantID.String(), episodeID: episodeID.String(), identity: identity}
 	service.liveness.mu.Lock()
-	_, recorded := service.liveness.served[key][listenerID]
+	report, recorded := service.liveness.evidence[key][listenerID]
 	service.liveness.mu.Unlock()
-	if !recorded {
+	if !recorded || report.failing || report.connectionID != "listener-"+listenerID.String() {
 		t.Fatal("successful pull did not record the listener as served")
 	}
 }
@@ -203,7 +204,17 @@ func (r *reconciliationRepositoryStub) ListPublicationParticipants(_ context.Con
 		return r.participants, nil
 	}
 	id, _ := utilities.ParseID("33333333-3333-4333-8333-333333333333")
-	return []PublicationParticipant{{ID: id, Generation: 1}}, nil
+	listeners := []string{
+		"44444444-4444-4444-8444-444444444444",
+		"55555555-5555-4555-8555-555555555555",
+		"66666666-6666-4666-8666-666666666666",
+	}
+	participants := []PublicationParticipant{{ID: id, Generation: 1, ConnectionID: "publisher-connection"}}
+	for _, rawID := range listeners {
+		listenerID, _ := utilities.ParseID(rawID)
+		participants = append(participants, PublicationParticipant{ID: listenerID, Generation: 1, ConnectionID: "listener-" + listenerID.String()})
+	}
+	return participants, nil
 }
 
 func (r *reconciliationRepositoryStub) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {

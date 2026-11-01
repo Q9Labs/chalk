@@ -304,6 +304,7 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 		TenantID:              request.TenantID,
 		EpisodeID:             request.EpisodeID,
 		ListenerParticipantID: request.ParticipantID,
+		ListenerConnectionID:  request.Body.ConnectionID,
 		Failed:                failedTracks,
 	}, reader); err != nil {
 		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
@@ -397,7 +398,8 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 	}
 	return mediapublications.RemoteTrackObservationInput{
 		TenantID: request.TenantID, EpisodeID: request.EpisodeID, ListenerParticipantID: request.ParticipantID,
-		Requested: requested, Missing: missingPublications,
+		ListenerConnectionID: request.Body.ConnectionID,
+		Requested:            requested, Missing: missingPublications,
 	}, true
 }
 

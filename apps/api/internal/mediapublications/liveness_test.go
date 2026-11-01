@@ -95,7 +95,8 @@ func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *tes
 	}
 	input := RemoteTrackFailureInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Failed: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerID),
+		Failed:               []RemoteTrackIdentity{identity},
 	}
 
 	first, err := service.ConfirmRemoteTrackFailures(context.Background(), input, reader)
@@ -123,7 +124,8 @@ func TestConfirmRemoteTrackFailuresRequiresAnotherListenerWhenOthersWereServed(t
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerB),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener B's successful pull: %v", err)
 	}
@@ -155,7 +157,8 @@ func TestConfirmRemoteTrackFailuresIgnoresReporterOwnSuccessfulPull(t *testing.T
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerA,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerA),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener A's successful pull: %v", err)
 	}
@@ -182,7 +185,8 @@ func TestConfirmRemoteTrackFailuresDoesNotCountUnknownListener(t *testing.T) {
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerB),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener B's successful pull: %v", err)
 	}
@@ -234,7 +238,8 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 
 		if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-			Requested: []RemoteTrackIdentity{identity},
+			ListenerConnectionID: livenessListenerConnectionID(listenerID),
+			Requested:            []RemoteTrackIdentity{identity},
 		}); err != nil {
 			t.Fatalf("record successful pull: %v", err)
 		}
@@ -264,12 +269,15 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 		candidate := candidates[0]
 		service.liveness.recordServed(servedKey{
 			tenantID: tenantID.String(), episodeID: episodeID.String(), identity: candidate.identity,
-		}, listenerID)
-		service.liveness.stillFailing(candidate.key, candidate.identity, listenerID)
+		}, listenerID, livenessListenerConnectionID(listenerID))
+		service.liveness.recordFailure(servedKey{
+			tenantID: tenantID.String(), episodeID: episodeID.String(), identity: candidate.identity,
+		}, listenerID, livenessListenerConnectionID(listenerID))
 
 		input := RemoteTrackObservationInput{
 			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-			Requested: []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity},
+			ListenerConnectionID: livenessListenerConnectionID(listenerID),
+			Requested:            []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity},
 		}
 		for _, advance := range []time.Duration{0, 8 * time.Second, 7 * time.Second} {
 			now = now.Add(advance)
@@ -284,16 +292,23 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 func TestPublicationLivenessEvidenceMapsAreBounded(t *testing.T) {
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	checks := newPublicationLivenessChecks(func() time.Time { return now })
-	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
-	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
-		key := publicationCandidateKey{publicationID: fmt.Sprintf("publication-%d", index)}
-		identity := RemoteTrackIdentity{ConnectionID: fmt.Sprintf("connection-%d", index), TrackName: "track"}
-		checks.recordServed(servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}, listenerID)
-		checks.stillFailing(key, identity, listenerID)
+	identity := RemoteTrackIdentity{ConnectionID: "connection-0", TrackName: "track"}
+	key := servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}
+	for index := 1; index <= 65; index++ {
+		listenerID := reconciliationTestID(t, fmt.Sprintf("00000000-0000-4000-8000-%012x", index))
+		checks.recordServed(key, listenerID, fmt.Sprintf("listener-%d", index))
+		now = now.Add(time.Nanosecond)
 	}
-	if len(checks.served) > publicationLivenessEvidenceMaxKeys || len(checks.present) > publicationLivenessEvidenceMaxKeys {
-		t.Fatalf("liveness evidence sizes served=%d present=%d, want at most %d each",
-			len(checks.served), len(checks.present), publicationLivenessEvidenceMaxKeys)
+	if got := len(checks.evidence[key]); got != 64 {
+		t.Fatalf("listeners for one key=%d, want 64", got)
+	}
+	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
+		identity := RemoteTrackIdentity{ConnectionID: fmt.Sprintf("connection-%d", index), TrackName: "track"}
+		listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+		checks.recordServed(servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}, listenerID, "listener")
+	}
+	if len(checks.evidence) > publicationLivenessEvidenceMaxKeys {
+		t.Fatalf("liveness evidence keys=%d, want at most %d", len(checks.evidence), publicationLivenessEvidenceMaxKeys)
 	}
 }
 
@@ -336,7 +351,8 @@ func confirmActiveTrackFailure(t *testing.T, service Service, tenantID, episodeI
 	t.Helper()
 	result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Failed: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerID),
+		Failed:               []RemoteTrackIdentity{identity},
 	}, func(context.Context, string) (PublisherSession, error) {
 		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
 	})
@@ -350,9 +366,13 @@ func assertLivenessEvidenceEmpty(t *testing.T, service Service) {
 	t.Helper()
 	service.liveness.mu.Lock()
 	defer service.liveness.mu.Unlock()
-	if len(service.liveness.served) != 0 || len(service.liveness.present) != 0 {
-		t.Fatalf("liveness evidence served=%d present=%d, want both empty", len(service.liveness.served), len(service.liveness.present))
+	if len(service.liveness.evidence) != 0 {
+		t.Fatalf("liveness evidence keys=%d, want empty", len(service.liveness.evidence))
 	}
+}
+
+func livenessListenerConnectionID(listenerID utilities.ID) string {
+	return "listener-" + listenerID.String()
 }
 
 func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
