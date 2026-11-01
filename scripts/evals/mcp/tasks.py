@@ -53,9 +53,9 @@ def suite(f):
         Task("recording-settings", 'Change Atlas recording policy to disabled without changing its transcription policy. Read settings back. Return {"recording_policy":string,"transcription_policy":string}.',
              {"recording_policy": "disabled", "transcription_policy": "on_demand"},
              f"select recording_policy || ':' || transcription_policy from spaces where id={atlas}", "disabled:on_demand"),
-        Task("rotate-key", 'Rotate the API key named Automation key, NOT the Evaluation runner key. Verify the old key is revoked and the replacement has the same name and scopes. Never print secrets. Return {"rotated":boolean,"old_revoked":boolean,"scopes":[strings]}.',
-             {"rotated": True, "old_revoked": True, "scopes": ["spaces:read"]},
-             f"select (select revoked_at is not null from api_keys where id={key}) and (select count(*)=1 from api_keys where tenant_id={tenant} and name='Automation key' and id<>{key} and revoked_at is null and scopes=ARRAY['spaces:read'])", "t"),
+        Task("rotate-key", 'Rotate the API key named Automation key, NOT the Evaluation runner key. Verify its ID, name and scopes are preserved and the key remains active with newly issued credentials. Never print secrets. Return {"rotated":boolean,"same_key_id":boolean,"scopes":[strings]}.',
+             {"rotated": True, "same_key_id": True, "scopes": ["spaces:read"]},
+             f"select count(*)=1 and bool_and(id={key} and revoked_at is null and key_hash<>{quote(f['rotate_key_hash'])} and key_prefix<>{quote(f['rotate_key_prefix'])} and scopes=ARRAY['spaces:read']) from api_keys where tenant_id={tenant} and name='Automation key'", "t"),
         Task("create-test-webhook", 'Create an ENABLED webhook named Eval events with URL https://example.invalid/eval and event type episode.ended. Send one test event, then inspect deliveries to verify the test was queued (actual network delivery is not required). Return {"created":boolean,"test_queued":boolean}. Never print signing secrets.',
              {"created": True, "test_queued": True},
              f"select count(*)=1 from webhook_endpoints e join webhook_endpoint_revisions r on r.endpoint_id=e.id and r.revision=e.current_target_revision join webhook_deliveries d on e.id=d.endpoint_id join webhook_events v on v.id=d.event_id where e.tenant_id={tenant} and e.name='Eval events' and e.enabled and r.url_redacted='https://example.invalid/eval' and r.event_types=ARRAY['episode.ended'] and v.event_name='endpoint.test'", "t"),
@@ -79,7 +79,11 @@ def suite(f):
     ]
 
 
-def grade(task, answer, db):
+def grade(task, answer, db, evidence=None):
     facts = json.dumps(answer, sort_keys=True) == json.dumps(task.expected, sort_keys=True)
     state = task.sql is None or db.query(task.sql) == task.state
-    return facts and state, {"facts": facts, "state": state}
+    checks = {"facts": facts, "state": state}
+    if task.id == "missing-scope":
+        outcomes = (evidence or {}).get("server_outcomes", {})
+        checks["scope_rejection_observed"] = outcomes.get("chalk_update_tenant:auth.forbidden", 0) > 0
+    return all(checks.values()), checks

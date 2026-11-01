@@ -79,7 +79,9 @@ class Database:
 
 def seed(db, label):
     def identifier(name):
-        return str(uuid.uuid5(NAMESPACE, label + ":" + name))
+        digest = hashlib.sha256(NAMESPACE.bytes + (label + ":" + name).encode()).digest()
+        # Webhook event contracts require v4-shaped resource IDs, including tenant.
+        return str(uuid.UUID(bytes=digest[:16], version=4))
 
     statements = []
 
@@ -94,8 +96,11 @@ def seed(db, label):
     insert("api_keys", id=identifier("runner-key"), tenant_id=tenant, name="Evaluation runner",
            key_hash=hashlib.sha256(raw.encode()).hexdigest(), key_prefix=prefix,
            scopes=SCOPES, expires_at="2099-01-01T00:00:00Z")
+    rotate_prefix = base64.urlsafe_b64encode(secrets.token_bytes(9)).decode().rstrip("=")
+    rotate_raw = "chalk_sk_" + rotate_prefix + "." + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
+    rotate_hash = hashlib.sha256(rotate_raw.encode()).hexdigest()
     insert("api_keys", id=identifier("rotate-key"), tenant_id=tenant, name="Automation key",
-           key_hash=hashlib.sha256(secrets.token_bytes(32)).hexdigest(), key_prefix=secrets.token_hex(6),
+           key_hash=rotate_hash, key_prefix=rotate_prefix,
            scopes=["spaces:read"], expires_at="2099-01-01T00:00:00Z")
     for name, role in [("Amina", "owner"), ("Bilal", "collaborator"), ("Chen", "observer")]:
         insert("users", id=identifier(name), name=name, email=f"{name.lower()}-{tenant}@example.invalid")
@@ -211,4 +216,5 @@ def seed(db, label):
                terminal_journey_event_id=identifier("terminal-" + state))
     db.query("begin;\n" + "\n".join(statements) + "\ncommit;")
     return {"tenant": tenant, "key": raw, "spaces": spaces, "episodes": episodes,
-            "recordings": recordings, "rotate_key": identifier("rotate-key"), "webhook": endpoint}
+            "recordings": recordings, "rotate_key": identifier("rotate-key"),
+            "rotate_key_hash": rotate_hash, "rotate_key_prefix": rotate_prefix, "webhook": endpoint}

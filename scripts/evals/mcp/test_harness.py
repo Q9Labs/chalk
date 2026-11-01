@@ -4,13 +4,27 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import uuid
 
+from fixture import seed
 from report import wilson, write_report
 from run import MODEL, parse_stream
 from tasks import Task, grade
 
 
 class HarnessTests(unittest.TestCase):
+    def test_fixture_ids_repeat_and_satisfy_webhook_v4_contract(self):
+        class SeedOnlyDatabase:
+            def query(self, _):
+                return ""
+
+        first = seed(SeedOnlyDatabase(), "integrity")
+        second = seed(SeedOnlyDatabase(), "integrity")
+        self.assertEqual(first["tenant"], second["tenant"])
+        self.assertEqual(first["spaces"], second["spaces"])
+        self.assertEqual(uuid.UUID(first["tenant"]).version, 4)
+        self.assertNotEqual(first["key"], second["key"])
+
     def test_stream_accounts_all_models_and_detects_unwanted_tools(self):
         stream = [
             {"type": "system", "subtype": "init", "tools": ["Bash", "mcp__chalk__chalk_list_spaces"]},
@@ -45,6 +59,13 @@ class HarnessTests(unittest.TestCase):
         self.assertFalse(grade(task, {"archived": True}, UnchangedDatabase())[0])
         task = Task("count", "count", {"count": 1})
         self.assertFalse(grade(task, {"count": True}, UnchangedDatabase())[0])
+
+    def test_scope_grader_requires_the_requested_operation_and_rejection(self):
+        task = Task("missing-scope", "attempt rename", {"changed": False, "missing_scope": "tenants:write"})
+        unrelated = {"server_outcomes": {"chalk_inspect_space:auth.forbidden": 1}}
+        self.assertFalse(grade(task, task.expected, None, unrelated)[0])
+        requested = {"server_outcomes": {"chalk_update_tenant:auth.forbidden": 1}}
+        self.assertTrue(grade(task, task.expected, None, requested)[0])
 
     def test_comparison_rejects_partial_or_different_task_sets(self):
         with tempfile.TemporaryDirectory() as directory:

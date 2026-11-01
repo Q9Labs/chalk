@@ -86,7 +86,7 @@ with open(sys.argv[1]) as log:
    calls.append({'tool':e.get('tool'),'outcome':e.get('outcome')})
   if e.get('event')=='mcp.code.completed' and e.get('tenant_id')==sys.argv[2]:
    code.append(e)
-print(json.dumps({'server_calls':len(calls),'server_errors':sum(e['outcome']!='ok' for e in calls),'server_tools':dict(collections.Counter(e['tool'] for e in calls)), 'server_code_calls':len(code), 'server_code_errors':sum(e.get('outcome')!='ok' for e in code), 'server_code_api_calls':sum(e.get('api_calls',0) for e in code)}))
+print(json.dumps({'server_calls':len(calls),'server_errors':sum(e['outcome']!='ok' for e in calls),'server_tools':dict(collections.Counter(e['tool'] for e in calls)), 'server_outcomes':dict(collections.Counter(e['tool']+':'+str(e['outcome']) for e in calls)), 'server_code_calls':len(code), 'server_code_errors':sum(e.get('outcome')!='ok' for e in code), 'server_code_api_calls':sum(e.get('api_calls',0) for e in code)}))
 """
     command = ["python3", "-c", script, args.server_log, tenant]
     if args.ssh_host:
@@ -101,7 +101,7 @@ def evidence_delta(after, before):
             for key, value in after.items()}
 
 
-def rpc(endpoint, key, method, params):
+def rpc(endpoint, key, method, params, allow_tool_error=False):
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     request = urllib.request.Request(endpoint, payload, {
         "Authorization": "Bearer " + key, "Content-Type": "application/json",
@@ -109,7 +109,7 @@ def rpc(endpoint, key, method, params):
     })
     with urllib.request.urlopen(request, timeout=30) as response:
         result = json.load(response)
-    if "error" in result or result.get("result", {}).get("isError"):
+    if "error" in result or result.get("result", {}).get("isError") and not allow_tool_error:
         raise RuntimeError("MCP preflight failed for " + method + ":" + params.get("name", ""))
     return result["result"]
 
@@ -138,8 +138,30 @@ def preflight(args, db):
             raise RuntimeError("Fixture does not expose the expected export states")
         if name == "list_admission_requests" and [r["display_name"] for r in data["requests"]] != ["Esha"]:
             raise RuntimeError("Fixture does not expose canonical pending admissions")
+    rotation = next(t for t in suite(f) if t.id == "rotate-key")
+    if grade(rotation, rotation.expected, db)[0]:
+        raise RuntimeError("Rotation oracle accepts an unchanged credential")
+    rpc(base, f["key"], "tools/call", {"name": "chalk_issue_api_key", "arguments": {
+        "action": "rotate", "api_key_id": f["rotate_key"], "request_key": "eval-preflight-rotate-0001"}})
+    if not grade(rotation, rotation.expected, db)[0]:
+        raise RuntimeError("Rotation oracle rejects a real in-place rotation")
+    rpc(base, f["key"], "tools/call", {"name": "chalk_configure_webhook", "arguments": {
+        "action": "create", "request_key": "eval-preflight-hook-0001", "create": {
+            "name": "Eval events", "url": "https://example.invalid/eval", "enabled": True,
+            "api_version": 1, "event_types": ["episode.ended"]}}})
+    endpoint_id = db.query("select id from webhook_endpoints where tenant_id='" + f["tenant"] + "' and name='Eval events'")
+    rpc(base, f["key"], "tools/call", {"name": "chalk_send_webhook", "arguments": {
+        "action": "test", "endpoint_id": endpoint_id, "request_key": "eval-preflight-test-0001"}})
+    webhook = next(t for t in suite(f) if t.id == "create-test-webhook")
+    if not grade(webhook, webhook.expected, db)[0]:
+        raise RuntimeError("Webhook test did not create the expected queued delivery")
+    denied = rpc(base, f["key"], "tools/call", {"name": "chalk_update_tenant", "arguments": {
+        "body": {"name": "Forbidden rename"}}}, allow_tool_error=True)
     evidence = evidence_delta(server_evidence(args, f["tenant"]), before)
-    if evidence["server_calls"] != (7 if args.arm == "code" else 6) or evidence["server_errors"] or evidence["server_code_errors"]:
+    scope = next(t for t in suite(f) if t.id == "missing-scope")
+    if not denied.get("isError") or not grade(scope, scope.expected, db, evidence)[0]:
+        raise RuntimeError("Missing-scope oracle did not observe the requested auth.forbidden")
+    if evidence["server_calls"] != (11 if args.arm == "code" else 10) or evidence["server_errors"] != 1 or evidence["server_code_errors"]:
         raise RuntimeError("API-side preflight evidence missing or contains errors")
     return {"catalog": [t["name"] for t in catalog], **evidence}
 
@@ -185,12 +207,9 @@ def trial(args, task_id, repetition):
         evidence = evidence_delta(server_evidence(args, f["tenant"]), before)
     except (OSError, ValueError, subprocess.SubprocessError):
         evidence_error = True
-        evidence = {"server_calls": 0, "server_errors": 0, "server_tools": {},
+        evidence = {"server_calls": 0, "server_errors": 0, "server_tools": {}, "server_outcomes": {},
                     "server_code_calls": 0, "server_code_errors": 0, "server_code_api_calls": 0}
-    good, checks = grade(task, answer, db)
-    if task.id == "missing-scope":
-        checks["scope_rejection_observed"] = evidence["server_errors"] > 0
-        good = good and checks["scope_rejection_observed"]
+    good, checks = grade(task, answer, db, evidence)
     category = "pass"
     if timed_out:
         category = "timeout"
@@ -249,7 +268,7 @@ def main():
     parsed = urlparse(args.base_url)
     if parsed.hostname not in ("localhost", "127.0.0.1") or parsed.scheme != "http":
         parser.error("API must be loopback HTTP (forward a disposable stack with SSH)")
-    tasks = [t.id for t in suite({"tenant": "", "spaces": {"Atlas": "", "Retired": ""}, "rotate_key": ""})]
+    tasks = [t.id for t in suite({"tenant": "", "spaces": {"Atlas": "", "Retired": ""}, "rotate_key": "", "rotate_key_hash": "", "rotate_key_prefix": ""})]
     if args.task:
         if set(args.task) - set(tasks):
             parser.error("Unknown task ID")
