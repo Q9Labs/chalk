@@ -55,19 +55,24 @@ try {
       throw error;
     });
     const waitForProcessedPixels = async (background, references) => {
-      const frame = await page.waitForFunction(
-        ({ background, references, localOnly }) => {
-          if (window.cameraBackgroundProof.backgroundState().selected !== background) return false;
-          const pixels = window.cameraBackgroundProof.pixels(localOnly);
-          const differences = references.map((previous) => {
-            let sum = 0;
-            for (let i = 0; i < pixels.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2]);
-            return sum / (24 * 72 * 3);
-          });
-          return differences.every((difference) => difference > 12) ? { pixels, differences } : false;
-        },
-        { background, references, localOnly },
-      );
+      const frame = await page
+        .waitForFunction(
+          ({ background, references, localOnly }) => {
+            if (window.cameraBackgroundProof.backgroundState().selected !== background) return false;
+            const pixels = window.cameraBackgroundProof.pixels(localOnly);
+            const differences = references.map((previous) => {
+              let sum = 0;
+              for (let i = 0; i < pixels.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2]);
+              return sum / (24 * 72 * 3);
+            });
+            return differences.every((difference) => difference > 12) ? { pixels, differences } : false;
+          },
+          { background, references, localOnly },
+        )
+        .catch(async (error) => {
+          console.log("Processed background failure", background, await page.evaluate(() => ({ background: window.cameraBackgroundProof.backgroundState(), frames: window.cameraBackgroundProof.frames(), publication: window.cameraBackgroundProof.publication() })));
+          throw error;
+        });
       const decoded = await frame.jsonValue();
       console.log("Decoded processed background", background, decoded.differences);
       return decoded.pixels;
