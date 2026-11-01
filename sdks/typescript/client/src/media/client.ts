@@ -468,6 +468,24 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return mediaTargetFailure(error);
     }
   }
+  async #waitForReplacementBeforeEnable(state: LocalTrackState, generation: number, replacement: { readonly generation: number; readonly promise: Promise<void> } | null): Promise<MediaPlaneResult | null> {
+    if (replacement?.generation !== generation) return null;
+    state.desiredEnabled = true;
+    await replacement.promise.catch(() => {});
+    if (this.#locallyPausedSources.has(state.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+    if (!state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
+    state.track.enabled = true;
+    return null;
+  }
+  #postReplacementEnableOutcome(state: LocalTrackState, generation: number, replacement: { readonly generation: number; readonly promise: Promise<void> } | null): MediaPlaneResult | null {
+    if (this.#locallyPausedSources.has(state.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+    if (replacement?.generation === generation && !state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
+    if (state.enabled) {
+      state.track.enabled = true;
+      return { outcome: "satisfied", errorCode: null };
+    }
+    return null;
+  }
   async #enablePublicationTarget(target: Omit<MediaPlaneTarget, "source"> & { readonly source: MediaPublicationSource }): Promise<MediaPlaneResult> {
     const generation = this.#generation;
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
@@ -476,20 +494,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     try {
       const replacement = this.#replacement;
-      if (replacement?.generation === generation) {
-        state.desiredEnabled = true;
-        await replacement.promise.catch(() => {});
-        if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
-        if (!state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
-        state.track.enabled = true;
-      }
+      const replacementOutcome = await this.#waitForReplacementBeforeEnable(state, generation, replacement);
+      if (replacementOutcome) return replacementOutcome;
       await this.#retireUnavailableLocalPublication(state);
-      if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
-      if (replacement?.generation === generation && !state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
-      if (state.enabled) {
-        state.track.enabled = true;
-        return { outcome: "satisfied", errorCode: null };
-      }
+      const postReplacementOutcome = this.#postReplacementEnableOutcome(state, generation, replacement);
+      if (postReplacementOutcome) return postReplacementOutcome;
       if (!(await this.#enablePreparedTrack(state))) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
