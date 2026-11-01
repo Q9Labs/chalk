@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
-func bindMCPSpaceTools(server *mcp.Server, o Options) {
+func bindMCPSpaceTools(server *mcpapi.Server, o Options) {
 	bindMCPEndpoint(server, mcpapi.ListSpaceActivity, listSpaceActivityEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpaceSetInput) listSpaceActivityRequest {
 		return listSpaceActivityRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumActivitySpaces)}
 	})

@@ -45,11 +45,15 @@ func (h mcpHeaderTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	clone.Header.Set("Authorization", "Bearer "+h.token)
 	return h.next.RoundTrip(clone)
 }
-func connectMCP(t *testing.T, server *httptest.Server, token, version string) *mcp.ClientSession {
+func connectMCP(t *testing.T, server *httptest.Server, token, version string, paths ...string) *mcp.ClientSession {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "chalk-integration", Version: "1"}, nil)
 	httpClient := &http.Client{Transport: mcpHeaderTransport{token: token, next: server.Client().Transport}}
-	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: httpClient}, &mcp.ClientSessionOptions{ProtocolVersion: version})
+	path := "/mcp"
+	if len(paths) > 0 {
+		path = paths[0]
+	}
+	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + path, HTTPClient: httpClient}, &mcp.ClientSessionOptions{ProtocolVersion: version})
 	if err != nil {
 		t.Fatalf("MCP initialize (%s): %v", version, err)
 	}
@@ -188,14 +192,16 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	server := httptest.NewServer(httpapi.NewRouter(options))
 	t.Cleanup(server.Close)
 	for _, token := range []string{"", "mcp-system-fixture"} {
-		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{}`))
-		if token != "" {
-			request.Header.Set("Authorization", "Bearer "+token)
-		}
-		response := httptest.NewRecorder()
-		httpapi.NewRouter(options).ServeHTTP(response, request)
-		if response.Code != http.StatusUnauthorized {
-			t.Fatalf("non-key credential accepted: %d", response.Code)
+		for _, path := range []string{"/mcp", "/mcp/code"} {
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+			if token != "" {
+				request.Header.Set("Authorization", "Bearer "+token)
+			}
+			response := httptest.NewRecorder()
+			httpapi.NewRouter(options).ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("non-key credential accepted: %d", response.Code)
+			}
 		}
 	}
 	fullSession := connectMCP(t, server, full.RawKey, "2026-07-28")
@@ -206,6 +212,44 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 		_, err := pool.Exec(context.Background(), `delete from spaces where id=$1`, uuid(foreignSpace))
 		if err != nil {
 			t.Error(err)
+		}
+	})
+	codeSession := connectMCP(t, server, full.RawKey, "2026-07-28", "/mcp/code")
+	codeDenied := connectMCP(t, server, denied.RawKey, "2025-11-25", "/mcp/code")
+	t.Run("code mode joins and permission boundaries", func(t *testing.T) {
+		listed, err := codeSession.ListTools(ctx, nil)
+		if err != nil || len(listed.Tools) != 2 {
+			t.Fatalf("code tool surface: %+v %v", listed, err)
+		}
+		program := fmt.Sprintf(`
+const list = await chalk.list_spaces({});
+if (!list.ok) throw new Error("list failed");
+const rows = [];
+for (const space of list.result.data.spaces) {
+  const episodes = await chalk.list_episodes({space_id:space.id});
+  const recordings = await chalk.list_recordings({space_id:space.id});
+  if (!episodes.ok || !recordings.ok) throw new Error("join failed");
+  rows.push({space_id:space.id, episodes:episodes.result.data.episodes.length, recordings:recordings.result.data.recordings.length});
+}
+const foreign = await chalk.inspect_space({space_id:%q});
+const injection = await chalk.list_spaces({tenant_id:%q});
+return {rows, foreign, injection};`, foreignSpace, foreignTenant)
+		args, err := json.Marshal(map[string]string{"code": program})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := callMCP(t, codeSession, "execute", string(args))
+		text := mcpText(result)
+		if result.IsError || !strings.Contains(text, `"recordings":1`) || strings.Contains(text, "Foreign private Space") || !strings.Contains(text, `"ok":false`) || !strings.Contains(text, "mcp.invalid_arguments") {
+			t.Fatalf("code join/isolation failed: %s", text)
+		}
+		deniedArgs, err := json.Marshal(map[string]string{"code": fmt.Sprintf(`return await chalk.delete_transcript({transcript_id:%q});`, transcriptID)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		deniedResult := callMCP(t, codeDenied, "execute", string(deniedArgs))
+		if deniedResult.IsError || !strings.Contains(mcpText(deniedResult), `"code":"auth.forbidden"`) {
+			t.Fatalf("sandbox escaped scope denial: %s", mcpText(deniedResult))
 		}
 	})
 	cases := mcpCases(t, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, disposable.Key.ID, hook.Endpoint.ID, endSpace, endEpisode)
@@ -261,6 +305,11 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	limitedServer := httptest.NewServer(limitedRouter)
 	t.Cleanup(limitedServer.Close)
 	limitedSession := connectMCP(t, limitedServer, full.RawKey, "2026-07-28")
+	limitedCode := connectMCP(t, limitedServer, full.RawKey, "2026-07-28", "/mcp/code")
+	codeQuota := callMCP(t, limitedCode, "execute", `{"code":"return await chalk.create_space({request_key:'mcp-code-quota-proof',body:{name:'must not exist',slug:'mcp-code-quota-proof'}});"}`)
+	if codeQuota.IsError || !strings.Contains(mcpText(codeQuota), "rate_limited") {
+		t.Fatalf("code mode escaped shared write quota: %s", mcpText(codeQuota))
+	}
 	result := callMCP(t, limitedSession, "create_space", `{"request_key":"mcp-rate-limit-proof","body":{"name":"must not exist","slug":"mcp-rate-limit-proof"}}`)
 	if !result.IsError || !strings.Contains(mcpText(result), "rate_limited") {
 		t.Fatalf("MCP escaped the HTTP write quota: %s", mcpText(result))
@@ -331,5 +380,8 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	}
 	if _, err := deniedSession.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_get_connection", Arguments: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("revoked key retained an initialized MCP connection")
+	}
+	if _, err := codeDenied.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_execute", Arguments: map[string]string{"code": "return 1"}}); err == nil {
+		t.Fatal("revoked key retained code execution access")
 	}
 }

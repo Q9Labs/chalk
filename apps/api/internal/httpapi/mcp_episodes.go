@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
-func bindMCPEpisodeTools(server *mcp.Server, o Options) {
+func bindMCPEpisodeTools(server *mcpapi.Server, o Options) {
 	bindMCPEndpoint(server, mcpapi.ListEpisodes, listEpisodesEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpacePageInput) listEpisodesRequest {
 		return listEpisodesRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), Page: b.page(i.PageInput)}
 	})

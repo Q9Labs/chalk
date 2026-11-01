@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
-func bindMCPTenantTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.GetConnection, func(ctx context.Context, _ mcpapi.ReadInput) (json.RawMessage, error) {
+func bindMCPTenantTools(server *mcpapi.Server, o Options) {
+	mcpapi.Bind(server, mcpapi.WithResult[mcpapi.Profile](mcpapi.GetConnection), func(ctx context.Context, _ mcpapi.ReadInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		raw, err := mcpInvoke(b, getTenantEndpoint(o.Tenants, o.TenantAuthz), getTenantRequest{TenantID: b.tenant})
 		if err != nil {

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
@@ -35,6 +34,7 @@ func NewMCPHandler(options Options) http.Handler {
 	bindMCPArtifactTools(server, options)
 	bindMCPWebhookTools(server, options)
 	transport := mcpapi.NewHandler(server, options.CORS.AllowedOrigins)
+	codeTransport := mcpapi.NewHandler(mcpapi.NewCodeServer(server), options.CORS.AllowedOrigins)
 	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok := authentication.PrincipalFromContext(r.Context())
 		// Phase 1 only accepts tenant API keys. A future OAuth authenticator can
@@ -56,7 +56,11 @@ func NewMCPHandler(options Options) http.Handler {
 			writeAPIError(w, apiErr)
 			return
 		}
-		transport.ServeHTTP(w, r.WithContext(ctx))
+		if r.URL.Path == "/mcp/code" {
+			codeTransport.ServeHTTP(w, r.WithContext(ctx))
+		} else {
+			transport.ServeHTTP(w, r.WithContext(ctx))
+		}
 	})
 	return requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP)(authenticated)
 }
@@ -181,8 +185,8 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	return data, nil
 }
 func mcpError(err APIError) error { return mcpapi.Error{Code: err.Code, Message: err.Message} }
-func bindMCPEndpoint[Input, Request, Response any](server *mcp.Server, definition mcpapi.Definition, endpoint Endpoint[Request, Response], request func(*mcpRequest, Input) Request) {
-	mcpapi.Bind(server, definition, func(ctx context.Context, input Input) (json.RawMessage, error) {
+func bindMCPEndpoint[Input, Request, Response any](server *mcpapi.Server, definition mcpapi.Definition, endpoint Endpoint[Request, Response], request func(*mcpRequest, Input) Request) {
+	mcpapi.Bind(server, mcpapi.WithResult[Response](definition), func(ctx context.Context, input Input) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		return mcpInvoke(b, endpoint, request(b, input))
 	})
