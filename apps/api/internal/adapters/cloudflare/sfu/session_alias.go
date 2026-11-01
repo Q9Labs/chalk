@@ -45,6 +45,7 @@ type sessionEntry struct {
 	negotiated bool
 	created    time.Time // when the current provider session was created
 	touched    time.Time
+	inflight   int // calls running on the current session while the connection has not negotiated
 }
 
 type sessionRegistry struct {
@@ -104,6 +105,26 @@ func (r *sessionRegistry) providerID(connectionID string) string {
 	return entry.provider
 }
 
+// begin marks a call in flight on a connection that has not negotiated, so a proactive swap cannot move
+// the connection to another session underneath it. The returned function ends the call.
+func (r *sessionRegistry) begin(connectionID string) func() {
+	if r == nil {
+		return func() {}
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.entries[connectionID]
+	if !ok || entry.negotiated {
+		return func() {}
+	}
+	entry.inflight++
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		entry.inflight--
+	}
+}
+
 // likelyExpired reports whether a connection that has not negotiated has been idle long enough for
 // Cloudflare to have dropped its session.
 func (r *sessionRegistry) likelyExpired(connectionID string) bool {
@@ -152,6 +173,16 @@ func (r *sessionRegistry) negotiated(connectionID string) {
 // connection is unknown or already negotiated, and the create error when the fresh session cannot be
 // created, so the caller can tell a gone connection from a provider failure.
 func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error)) (fresh string, replaced bool, err error) {
+	fresh, _, err = r.swap(ctx, connectionID, failed, create, false)
+	return fresh, fresh != "", err
+}
+
+// swap is replace with two more outputs. created is true only for the caller that made the fresh
+// session, so a caller that reuses another caller's session is not counted twice. With idleOnly the
+// connection is swapped before its first call without a 410 as evidence, so the swap is skipped, or
+// the created session discarded, when another call is in flight or has negotiated: that call used the
+// old session, and later signaling must keep reaching it.
+func (r *sessionRegistry) swap(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error), idleOnly bool) (fresh string, created bool, err error) {
 	if r == nil {
 		return "", false, nil
 	}
@@ -165,12 +196,12 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	entry.swap.Lock()
 	defer entry.swap.Unlock()
 	r.mu.Lock()
-	provider, negotiated := entry.provider, entry.negotiated
+	provider, negotiated, inflight := entry.provider, entry.negotiated, entry.inflight
 	r.mu.Unlock()
 	if provider != failed {
-		return provider, true, nil
+		return provider, false, nil
 	}
-	if negotiated {
+	if negotiated || (idleOnly && inflight > 1) {
 		return "", false, nil
 	}
 	fresh, err = create(ctx)
@@ -179,6 +210,9 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if idleOnly && (r.entries[connectionID] != entry || entry.negotiated || entry.inflight > 1) {
+		return "", false, nil
+	}
 	delete(r.byProvider, failed)
 	entry.provider = fresh
 	entry.created = r.now()

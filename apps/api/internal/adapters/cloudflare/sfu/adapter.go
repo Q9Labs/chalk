@@ -329,12 +329,15 @@ func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInpu
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	defer a.sessions.begin(input.ConnectionID)()
 	session := a.sessions.providerID(input.ConnectionID)
 	if a.sessions.likelyExpired(input.ConnectionID) {
 		// Cloudflare answers a call on a dropped session only after about 5 s, so swap before the call. A
 		// failed creation falls through: the call then reports its own outcome and the path below retries.
-		if fresh, replaced, err := a.sessions.replace(ctx, input.ConnectionID, session, a.createConnection); err == nil && replaced {
-			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "proactive")))
+		if fresh, created, err := a.sessions.swap(ctx, input.ConnectionID, session, a.createConnection, true); err == nil && fresh != "" {
+			if created {
+				sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "proactive")))
+			}
 			session = fresh
 		}
 	}
