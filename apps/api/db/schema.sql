@@ -43,6 +43,7 @@ create table tenants (
 create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
 
 create table tenant_artifact_policies (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     tenant_id uuid primary key references tenants(id) on delete cascade,
     transcription_ceiling text not null default 'automatic',
     transcription_default_mode text not null default 'automatic',
@@ -227,6 +228,7 @@ create table spaces (
         check (recording_policy in ('disabled', 'manual', 'automatic')),
     transcription_policy text not null default 'automatic'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
+    transcript_language text check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
@@ -2221,6 +2223,7 @@ create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id
 create index recordings_tenant_space_created_at_id_idx on recordings(tenant_id, space_id, created_at desc, id desc);
 
 create table transcriptions (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
     recording_id uuid not null references recordings(id),
@@ -2304,6 +2307,7 @@ create table recording_transcription_source_chunks (
 create index recording_transcription_source_chunks_recording_idx on recording_transcription_source_chunks(recording_id, generation, chunk_index);
 
 create table artifact_jobs (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     id uuid primary key,
     idempotency_key text not null,
     tenant_id uuid not null references tenants(id),

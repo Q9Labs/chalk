@@ -41,6 +41,7 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
+	TranscriptLanguage  string                      `json:"transcript_language"`
 	RecordingRenderMode tenants.RecordingRenderMode `json:"recording_render_mode"`
 	ID                  string                      `json:"id"`
 	Name                string                      `json:"name"`
@@ -80,8 +81,9 @@ type createTenantRequest struct {
 }
 
 type updateTenantRequest struct {
-	RecordingRenderMode utilities.OptionalString `json:"recording_render_mode"`
-	Name                utilities.OptionalString `json:"name"`
+	TranscriptLanguage  artifactpolicy.OptionalTranscriptLanguage `json:"transcript_language"`
+	RecordingRenderMode utilities.OptionalString                  `json:"recording_render_mode"`
+	Name                utilities.OptionalString                  `json:"name"`
 
 	DefaultMediaPlane                utilities.OptionalString    `json:"default_media_plane"`
 	MediaPlaneProviderConfig         utilities.OptionalJSON      `json:"media_plane_provider_config"`
@@ -418,6 +420,7 @@ func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 		Website:                          tenant.Website,
 		TranscriptionCeiling:             tenant.ArtifactPolicy.TranscriptionCeiling,
 		TranscriptionDefaultMode:         tenant.ArtifactPolicy.TranscriptionDefault,
+		TranscriptLanguage:               tenant.ArtifactPolicy.TranscriptLanguage.String(),
 		ProviderPolicyVersion:            tenant.ArtifactPolicy.ProviderPolicyVersion,
 		RecordingRetentionSeconds:        int64(tenant.ArtifactPolicy.RecordingRetention / time.Second),
 		TranscriptRetentionSeconds:       int64(tenant.ArtifactPolicy.TranscriptRetention / time.Second),
@@ -454,6 +457,7 @@ func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 		ArtifactPolicy: tenants.ArtifactPolicyUpdate{
 			TranscriptionCeiling:             r.TranscriptionCeiling,
 			TranscriptionDefaultMode:         r.TranscriptionDefaultMode,
+			TranscriptLanguage:               r.TranscriptLanguage,
 			ProviderPolicyVersion:            r.ProviderPolicyVersion,
 			RecordingRetentionSeconds:        r.RecordingRetentionSeconds,
 			TranscriptRetentionSeconds:       r.TranscriptRetentionSeconds,

@@ -478,6 +478,9 @@ importers:
       '@aws-sdk/client-ssm':
         specifier: 3.1085.0
         version: 3.1085.0
+      '@chalk/transcript-language':
+        specifier: workspace:*
+        version: link:../../packages/transcript-language
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -494,6 +497,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@chalk/transcript-language':
+        specifier: workspace:*
+        version: link:../../packages/transcript-language
       '@cloudflare/vite-plugin':
         specifier: ^1.43.0
         version: 1.43.0(@types/node@22.19.15)(vite@8.1.6(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260903.1)(wrangler@4.107.0(@cloudflare/workers-types@4.20260702.1)(@types/node@22.19.15))
@@ -649,6 +655,18 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+
+  packages/transcript-language:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@24.12.0)(@vitest/coverage-v8@4.1.12)(happy-dom@21.0.4)(jsdom@30.0.1(@noble/hashes@2.3.0))(msw@2.12.14(@types/node@24.12.0)(typescript@6.0.3))(vite@8.1.6(@types/node@24.12.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/ui:
     dependencies:

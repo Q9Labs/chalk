@@ -1,0 +1,20 @@
+{
+  "name": "@chalk/transcript-language",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node ../../scripts/test/run.mjs vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}

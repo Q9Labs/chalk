@@ -29,6 +29,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -57,6 +58,7 @@ func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpace
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -236,6 +238,7 @@ insert into spaces (
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -252,12 +255,13 @@ select
     $8,
     coalesce($9::text, 'automatic'),
     coalesce($10::text, tenant_facts.transcription_default_mode),
-    $11,
+    $11::text,
     $12,
     $13,
-    $14
+    $14,
+    $15
 from tenant_facts
-returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -301,7 +305,7 @@ returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, ad
     select
         inserted.tenant_id,
         inserted.id,
-        $15,
+        $16,
         1,
         1,
         true,
@@ -323,6 +327,7 @@ select
     inserted.admission_policy,
     inserted.recording_policy,
     inserted.transcription_policy,
+    inserted.transcript_language,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -344,6 +349,7 @@ type CreateSpaceParams struct {
 	AdmissionPolicy               []byte      `json:"admission_policy"`
 	RecordingPolicy               pgtype.Text `json:"recording_policy"`
 	TranscriptionPolicy           pgtype.Text `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text `json:"transcript_language"`
 	DefaultEpisodeDurationSeconds int32       `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32       `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32       `json:"linger_window_seconds"`
@@ -362,6 +368,7 @@ type CreateSpaceRow struct {
 	AdmissionPolicy               []byte             `json:"admission_policy"`
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -383,6 +390,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		arg.AdmissionPolicy,
 		arg.RecordingPolicy,
 		arg.TranscriptionPolicy,
+		arg.TranscriptLanguage,
 		arg.DefaultEpisodeDurationSeconds,
 		arg.MaximumEpisodeDurationSeconds,
 		arg.LingerWindowSeconds,
@@ -401,6 +409,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -667,6 +676,7 @@ select
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -699,6 +709,7 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -893,6 +904,7 @@ select
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -957,6 +969,7 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 			&i.AdmissionPolicy,
 			&i.RecordingPolicy,
 			&i.TranscriptionPolicy,
+			&i.TranscriptLanguage,
 			&i.DefaultEpisodeDurationSeconds,
 			&i.MaximumEpisodeDurationSeconds,
 			&i.LingerWindowSeconds,
@@ -1034,6 +1047,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1062,6 +1076,7 @@ func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpace
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,
@@ -1304,26 +1319,27 @@ set
         when $13::boolean then $14::text
         else recording_policy
     end,
+    transcript_language = case when $15::boolean then $16::text else transcript_language end,
     transcription_policy = case
-        when $15::boolean then $16::text
+        when $17::boolean then $18::text
         else transcription_policy
     end,
     default_episode_duration_seconds = case
-        when $17::boolean then $18::integer
+        when $19::boolean then $20::integer
         else default_episode_duration_seconds
     end,
     maximum_episode_duration_seconds = case
-        when $19::boolean then $20::integer
+        when $21::boolean then $22::integer
         else maximum_episode_duration_seconds
     end,
     linger_window_seconds = case
-        when $21::boolean then $22::integer
+        when $23::boolean then $24::integer
         else linger_window_seconds
     end,
     updated_at = now()
 where
-    tenant_id = $23
-    and id = $24
+    tenant_id = $25
+    and id = $26
 returning
     id,
     name,
@@ -1335,6 +1351,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -1359,6 +1376,8 @@ type UpdateTenantSpaceParams struct {
 	AdmissionPolicy                  []byte      `json:"admission_policy"`
 	RecordingPolicySet               bool        `json:"recording_policy_set"`
 	RecordingPolicy                  string      `json:"recording_policy"`
+	TranscriptLanguageSet            bool        `json:"transcript_language_set"`
+	TranscriptLanguage               pgtype.Text `json:"transcript_language"`
 	TranscriptionPolicySet           bool        `json:"transcription_policy_set"`
 	TranscriptionPolicy              string      `json:"transcription_policy"`
 	DefaultEpisodeDurationSecondsSet bool        `json:"default_episode_duration_seconds_set"`
@@ -1387,6 +1406,8 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		arg.AdmissionPolicy,
 		arg.RecordingPolicySet,
 		arg.RecordingPolicy,
+		arg.TranscriptLanguageSet,
+		arg.TranscriptLanguage,
 		arg.TranscriptionPolicySet,
 		arg.TranscriptionPolicy,
 		arg.DefaultEpisodeDurationSecondsSet,
@@ -1410,6 +1431,7 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

@@ -36,6 +36,7 @@ type ApiKeyMutationRequest struct {
 }
 
 type ArtifactJob struct {
+	TranscriptLanguage   string             `json:"transcript_language"`
 	ID                   pgtype.UUID        `json:"id"`
 	IdempotencyKey       string             `json:"idempotency_key"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
@@ -928,6 +929,7 @@ type Space struct {
 	AdmissionPolicy               []byte             `json:"admission_policy"`
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -1485,6 +1487,7 @@ type Tenant struct {
 }
 
 type TenantArtifactPolicy struct {
+	TranscriptLanguage         string             `json:"transcript_language"`
 	TenantID                   pgtype.UUID        `json:"tenant_id"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
@@ -1541,6 +1544,7 @@ type TranscriptChunk struct {
 }
 
 type Transcription struct {
+	TranscriptLanguage        string             `json:"transcript_language"`
 	ID                        pgtype.UUID        `json:"id"`
 	TenantID                  pgtype.UUID        `json:"tenant_id"`
 	RecordingID               pgtype.UUID        `json:"recording_id"`

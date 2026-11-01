@@ -49,6 +49,7 @@ returning id, name, created_by_service_id, external_id, default_media_plane, med
         tenant_id,
         transcription_ceiling,
         transcription_default_mode,
+        transcript_language,
         provider_policy_version,
         recording_retention_seconds,
         transcript_retention_seconds,
@@ -68,6 +69,7 @@ select
     inserted.recording_render_mode,
     seeded.transcription_ceiling,
     seeded.transcription_default_mode,
+    seeded.transcript_language,
     seeded.provider_policy_version,
     seeded.recording_retention_seconds,
     seeded.transcript_retention_seconds,
@@ -105,6 +107,7 @@ type CreateTenantRow struct {
 	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	TranscriptLanguage         string             `json:"transcript_language"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
 	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
 	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
@@ -141,6 +144,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
+		&i.TranscriptLanguage,
 		&i.ProviderPolicyVersion,
 		&i.RecordingRetentionSeconds,
 		&i.TranscriptRetentionSeconds,
@@ -183,6 +187,7 @@ select
     tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
+    tenant_artifact_policies.transcript_language,
     tenant_artifact_policies.provider_policy_version,
     tenant_artifact_policies.recording_retention_seconds,
     tenant_artifact_policies.transcript_retention_seconds,
@@ -208,6 +213,7 @@ type GetTenantRow struct {
 	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	TranscriptLanguage         string             `json:"transcript_language"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
 	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
 	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
@@ -233,6 +239,7 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
+		&i.TranscriptLanguage,
 		&i.ProviderPolicyVersion,
 		&i.RecordingRetentionSeconds,
 		&i.TranscriptRetentionSeconds,
@@ -271,6 +278,7 @@ select
     tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
+    tenant_artifact_policies.transcript_language,
     tenant_artifact_policies.provider_policy_version,
     tenant_artifact_policies.recording_retention_seconds,
     tenant_artifact_policies.transcript_retention_seconds,
@@ -314,6 +322,7 @@ type ListTenantsRow struct {
 	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	TranscriptLanguage         string             `json:"transcript_language"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
 	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
 	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
@@ -351,6 +360,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.RecordingRenderMode,
 			&i.TranscriptionCeiling,
 			&i.TranscriptionDefaultMode,
+			&i.TranscriptLanguage,
 			&i.ProviderPolicyVersion,
 			&i.RecordingRetentionSeconds,
 			&i.TranscriptRetentionSeconds,
@@ -411,33 +421,34 @@ returning id, name, created_by_service_id, external_id, default_media_plane, med
 ), updated_policy as (
 update tenant_artifact_policies
 set
+    transcript_language = case when $18::boolean then $19::text else transcript_language end,
     transcription_ceiling = case
-        when $18::boolean then $19::text
+        when $20::boolean then $21::text
         else transcription_ceiling
     end,
     transcription_default_mode = case
-        when $20::boolean then $21::text
+        when $22::boolean then $23::text
         else transcription_default_mode
     end,
     provider_policy_version = case
-        when $22::boolean then $23::text
+        when $24::boolean then $25::text
         else provider_policy_version
     end,
     recording_retention_seconds = case
-        when $24::boolean then $25::bigint
+        when $26::boolean then $27::bigint
         else recording_retention_seconds
     end,
     transcript_retention_seconds = case
-        when $26::boolean then $27::bigint
+        when $28::boolean then $29::bigint
         else transcript_retention_seconds
     end,
     source_window_seconds = case
-        when $28::boolean then $29::bigint
+        when $30::boolean then $31::bigint
         else source_window_seconds
     end,
     updated_at = now()
 where tenant_id = (select id from updated_tenant)
-returning tenant_id, transcription_ceiling, transcription_default_mode, provider_policy_version, recording_retention_seconds, transcript_retention_seconds, source_window_seconds, updated_at, created_at
+returning transcript_language, tenant_id, transcription_ceiling, transcription_default_mode, provider_policy_version, recording_retention_seconds, transcript_retention_seconds, source_window_seconds, updated_at, created_at
 )
 select
     updated_tenant.id::uuid as id,
@@ -453,6 +464,7 @@ select
     updated_tenant.recording_render_mode,
     updated_policy.transcription_ceiling,
     updated_policy.transcription_default_mode,
+    updated_policy.transcript_language,
     updated_policy.provider_policy_version,
     updated_policy.recording_retention_seconds,
     updated_policy.transcript_retention_seconds,
@@ -481,6 +493,8 @@ type UpdateTenantParams struct {
 	WebsiteSet                    bool        `json:"website_set"`
 	Website                       pgtype.Text `json:"website"`
 	ID                            pgtype.UUID `json:"id"`
+	TranscriptLanguageSet         bool        `json:"transcript_language_set"`
+	TranscriptLanguage            string      `json:"transcript_language"`
 	TranscriptionCeilingSet       bool        `json:"transcription_ceiling_set"`
 	TranscriptionCeiling          string      `json:"transcription_ceiling"`
 	TranscriptionDefaultModeSet   bool        `json:"transcription_default_mode_set"`
@@ -509,6 +523,7 @@ type UpdateTenantRow struct {
 	RecordingRenderMode        string             `json:"recording_render_mode"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
+	TranscriptLanguage         string             `json:"transcript_language"`
 	ProviderPolicyVersion      string             `json:"provider_policy_version"`
 	RecordingRetentionSeconds  int64              `json:"recording_retention_seconds"`
 	TranscriptRetentionSeconds int64              `json:"transcript_retention_seconds"`
@@ -536,6 +551,8 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		arg.WebsiteSet,
 		arg.Website,
 		arg.ID,
+		arg.TranscriptLanguageSet,
+		arg.TranscriptLanguage,
 		arg.TranscriptionCeilingSet,
 		arg.TranscriptionCeiling,
 		arg.TranscriptionDefaultModeSet,
@@ -564,6 +581,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		&i.RecordingRenderMode,
 		&i.TranscriptionCeiling,
 		&i.TranscriptionDefaultMode,
+		&i.TranscriptLanguage,
 		&i.ProviderPolicyVersion,
 		&i.RecordingRetentionSeconds,
 		&i.TranscriptRetentionSeconds,

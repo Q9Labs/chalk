@@ -1,12 +1,12 @@
 -- name: CreateArtifactJob :one
 insert into artifact_jobs (
     id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id,
-    chunk_id, artifact_kind, payload_schema_version, state, priority,
+    chunk_id, transcript_language, artifact_kind, payload_schema_version, state, priority,
     available_at, attempt_limit, journey_id, traceparent, tracestate
 ) values (
     sqlc.arg(id), sqlc.arg(idempotency_key), sqlc.arg(tenant_id), sqlc.narg(episode_id),
     sqlc.narg(recording_id), sqlc.narg(transcript_id), sqlc.narg(chunk_id),
-    sqlc.arg(artifact_kind), sqlc.arg(payload_schema_version), 'pending', sqlc.arg(priority),
+    coalesce(sqlc.narg(transcript_language)::text, 'auto'), sqlc.arg(artifact_kind), sqlc.arg(payload_schema_version), 'pending', sqlc.arg(priority),
     sqlc.arg(available_at), sqlc.arg(attempt_limit), sqlc.narg(journey_id),
     sqlc.narg(traceparent), sqlc.narg(tracestate)
 )
@@ -15,11 +15,11 @@ returning *;
 -- name: CreateTranscriptionFinalizerJobIfReady :one
 insert into artifact_jobs (
     id, idempotency_key, tenant_id, episode_id, recording_id, transcript_id,
-    artifact_kind, payload_schema_version, state, priority, available_at,
+    transcript_language, artifact_kind, payload_schema_version, state, priority, available_at,
     attempt_limit, journey_id, traceparent, tracestate
 )
 select sqlc.arg(id), 'transcription-finalize-' || t.id::text, t.tenant_id, t.episode_id,
-    t.recording_id, t.id, 'transcription_finalize', 1, 'pending', sqlc.arg(priority),
+    t.recording_id, t.id, t.transcript_language, 'transcription_finalize', 1, 'pending', sqlc.arg(priority),
     sqlc.arg(available_at), sqlc.arg(attempt_limit), sqlc.narg(journey_id),
     sqlc.narg(traceparent), sqlc.narg(tracestate)
 from transcriptions t

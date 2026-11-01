@@ -11,7 +11,8 @@
     "test": "node ../../scripts/test/run.mjs vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-ssm": "3.1085.0"
+    "@aws-sdk/client-ssm": "3.1085.0",
+    "@chalk/transcript-language": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

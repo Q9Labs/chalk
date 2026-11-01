@@ -17,6 +17,7 @@ type workerClaimResponse struct {
 	Assignments []workerAssignment `json:"assignments"`
 }
 type workerAssignment struct {
+	TranscriptLanguage    string                   `json:"transcript_language"`
 	JobID                 string                   `json:"job_id"`
 	TenantID              string                   `json:"tenant_id"`
 	EpisodeID             string                   `json:"episode_id"`
@@ -123,7 +124,8 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				return
 			}
 			assignments = append(assignments, workerAssignment{
-				JobID: assignment.Job.ID.String(), TenantID: assignment.Job.TenantID.String(), EpisodeID: assignment.Job.EpisodeID.String(), RecordingID: assignment.Job.RecordingID.String(),
+				TranscriptLanguage: assignment.Job.TranscriptLanguage.String(),
+				JobID:              assignment.Job.ID.String(), TenantID: assignment.Job.TenantID.String(), EpisodeID: assignment.Job.EpisodeID.String(), RecordingID: assignment.Job.RecordingID.String(),
 				PresentationSHA256: hex.EncodeToString(assignment.Source.PresentationSHA256), SourceExpiresAt: utilities.FormatTimestamp(assignment.Source.ExpiresAt), Attempt: assignment.Job.Attempt,
 				LeaseToken: assignment.LeaseToken, LeaseExpiresAt: utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt),
 				Chunk: workerChunkAssignment{

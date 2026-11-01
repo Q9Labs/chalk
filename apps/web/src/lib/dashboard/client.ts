@@ -1,4 +1,5 @@
 import type {
+  TranscriptLanguageSettingsDTO,
   AllowedWebsitesDTO,
   RecordingRenderSettingsDTO,
   ArtifactURLDTO,
@@ -50,6 +51,8 @@ type Results = {
   "create-call": { call: CallDTO };
   "rename-call": { call: CallDTO };
   "set-admission": { call: CallDTO };
+  "set-transcript-language": { call: CallDTO };
+  "set-default-transcript-language": TranscriptLanguageSettingsDTO;
   "archive-call": { call: CallDTO };
   "restore-call": { call: CallDTO };
   join: OwnerAccessDTO;

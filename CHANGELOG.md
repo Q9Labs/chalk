@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add an account transcript language default and an inheritable Space override. Fixed languages pin Whisper; Auto keeps unpinned Whisper until a code-switching provider is qualified. Record the resolved mode on jobs and transcript documents.
+
 ## 5.4.0
 
 - Share Chalk board controls, notes, surfaces and Follow across web and mobile, including boards started on web and opened in a native tile.
