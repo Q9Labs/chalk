@@ -100,6 +100,14 @@ const space = {
 describe("generated Space update contract", () => {
   const decodeUpdate = Schema.decodeUnknownSync(UpdateSpaceRequestBodySchema);
 
+  it.each([null, "auto", "en", "ur", "ar"])("preserves transcript language %s in the generated contract", (language) => {
+    expect(decodeUpdate({ transcript_language: language })).toEqual({ transcript_language: language });
+  });
+
+  it.each(["en-US", "unknown", ""])("rejects unsupported transcript language %s", (language) => {
+    expect(() => decodeUpdate({ transcript_language: language })).toThrow();
+  });
+
   it("renames a Space through the client with a name-only body", async () => {
     const bodies: unknown[] = [];
     const client = await Effect.runPromise(
