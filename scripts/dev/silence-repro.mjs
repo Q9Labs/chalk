@@ -232,7 +232,25 @@ function browserInstrumentation({ frequency }) {
         element: element ? { bound: element.audio.srcObject?.getAudioTracks()[0]?.id === track.id, paused: element.audio.paused, play: element.play } : null,
       });
     }
+    const send = [];
+    for (const [pcIndex, pc] of window.matrixPeers.entries()) {
+      if (pc.connectionState === "closed") continue;
+      if (!pc.getSenders().some((sender) => sender.track?.kind === "audio")) continue;
+      let outbound = null;
+      try {
+        (await pc.getStats()).forEach((stat) => {
+          if (stat.type === "outbound-rtp" && stat.kind === "audio") outbound = { bytes: stat.bytesSent || 0, packets: stat.packetsSent || 0 };
+        });
+      } catch {} // closed between checks
+      send.push({ pc: pcIndex, conn: pc.connectionState, ice: pc.iceConnectionState, outbound });
+    }
+    let localMic = null;
+    try {
+      localMic = JSON.parse(JSON.stringify(snapshot.media.local.microphone));
+    } catch {} // not serializable
     return {
+      send,
+      localMic,
       status: snapshot.connection.status,
       mic: snapshot.media.local.microphone.state,
       self: snapshot.self.participantId,

@@ -330,8 +330,12 @@ func (a Adapter) InspectSession(ctx context.Context, connectionID string) (media
 	if err != nil {
 		diagErr = err.Error()
 	}
+	diagTracks := make([]string, 0, len(response.Tracks))
+	for _, track := range response.Tracks {
+		diagTracks = append(diagTracks, fmt.Sprintf("%s mid=%s %s status=%s", track.Location, track.Mid, track.TrackName, track.Status))
+	}
 	slog.WarnContext(ctx, "diag inspect session", "event", "diag.inspect_session", "connection", connectionID,
-		"status", statusCode, "ms", time.Since(diagStart).Milliseconds(), "tracks", len(response.Tracks), "error", diagErr, "ctx_err", fmt.Sprint(ctx.Err()))
+		"status", statusCode, "ms", time.Since(diagStart).Milliseconds(), "tracks", len(response.Tracks), "track_list", diagTracks, "error", diagErr, "ctx_err", fmt.Sprint(ctx.Err()))
 	if err != nil {
 		var failure providerFailure
 		if errors.As(err, &failure) && (failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone) {
