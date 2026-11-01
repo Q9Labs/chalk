@@ -227,6 +227,9 @@ var knownTrackErrorCodes = map[string]struct{}{
 	"track_not_found":             {},
 	"track_already_closed":        {},
 	"internal_error":              {},
+	"transport_unavailable_error": {},
+	"decoding_error":              {},
+	"upstream_error":              {},
 }
 
 func observableTrackErrorCode(rawCode string) string {

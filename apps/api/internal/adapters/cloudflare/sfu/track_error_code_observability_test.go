@@ -17,6 +17,7 @@ import (
 func TestPerTrackErrorCodeIsRecordedOnSpanAndLog(t *testing.T) {
 	for _, test := range []struct{ name, raw, want string }{
 		{"known code", "not_found_track_error", "not_found_track_error"},
+		{"known transport code", "transport_unavailable_error", "transport_unavailable_error"},
 		{"unlisted but well formed code", "future_track_error_9", "other"},
 		{"credential-like snake case", "invalid_privatecredential_state", "other"},
 		{"uppercase", "NOT_FOUND_TRACK_ERROR", "other"},
