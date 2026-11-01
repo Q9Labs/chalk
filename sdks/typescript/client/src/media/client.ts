@@ -1423,16 +1423,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await waitFor(isLive, CONNECTION_TIMEOUT_MS, message);
     } else {
       const unconnected = new CloudflareSFUError(message, "ice_connection_failed");
+      this.#unconnectedFailures.set(unconnected, connection);
       try {
         await waitFor(isLive, FIRST_CONNECT_DEADLINE_MS, message, () => unconnected);
       } catch (error) {
         if (error !== unconnected) throw error;
         // Replacing a connection that is still progressing loses the progress. Only a stuck one is replaced.
-        if (!(await iceIsProgressing(connection))) {
-          this.#unconnectedFailures.set(unconnected, connection);
-          throw unconnected;
-        }
-        await waitFor(isLive, CONNECTION_TIMEOUT_MS - FIRST_CONNECT_DEADLINE_MS, message);
+        if (!(await iceIsProgressing(connection))) throw unconnected;
+        // Progress is no promise of a connection: if the extended wait ends unconnected, the budget still applies.
+        await waitFor(isLive, CONNECTION_TIMEOUT_MS - FIRST_CONNECT_DEADLINE_MS, message, () => unconnected);
       }
     }
     this.#connectedConnections.add(connection);

@@ -3500,6 +3500,24 @@ describe("first connection deadline", () => {
         vi.useRealTimers();
       }
     });
+    it("replaces a connection that gets ICE responses but never goes live, once the extended wait ends", async () => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(3));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connecting", "checking"), 1000);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        const extendedWaitWithMarginMs = 8000 + 500;
+        expect(await settlesWithin(start, extendedWaitWithMarginMs)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(harness.peers).toHaveLength(2);
+        expectOnlyLastPeerOpen(harness);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
     it("still replaces ICE that is checking without any response", async () => {
       vi.useFakeTimers();
       try {
