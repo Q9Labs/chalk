@@ -106,3 +106,24 @@ func TestAddTracksLogsTheSessionAgeAndWhetherTheConnectionNegotiated(t *testing.
 		}
 	}
 }
+
+// Another call can replace a session after this call chose it. The log must then describe the session the
+// attempt really contacts, which is no longer the connection's current one.
+func TestSessionContextDescribesTheSessionTheAttemptContacts(t *testing.T) {
+	registry := newSessionRegistry()
+	clock := time.Unix(1_700_000_000, 0)
+	registry.now = func() time.Time { return clock }
+	registry.issue("conn")
+	clock = clock.Add(11 * time.Second)
+	if _, replaced, err := registry.replace(context.Background(), "conn", "conn", func(context.Context) (string, error) { return "moved", nil }); err != nil || !replaced {
+		t.Fatalf("setup: replace failed: replaced=%v err=%v", replaced, err)
+	}
+	clock = clock.Add(2 * time.Second)
+
+	if age, negotiated := registry.sessionContext("conn", "moved"); age != 2_000 || negotiated {
+		t.Errorf("current session: age=%d negotiated=%v, want 2000 false", age, negotiated)
+	}
+	if age, negotiated := registry.sessionContext("conn", "conn"); age != -1 || negotiated {
+		t.Errorf("replaced session: age=%d negotiated=%v, want unknown (-1) and not negotiated", age, negotiated)
+	}
+}

@@ -384,7 +384,7 @@ func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, 
 		Tracks:             tracks,
 	}
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
-	ageMs, negotiated := a.sessions.sessionContext(input.ConnectionID)
+	ageMs, negotiated := a.sessions.sessionContext(input.ConnectionID, session)
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(session)), request, &response, "add_tracks")
 	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode, sessionAgeMs: ageMs, sessionNegotiated: negotiated}, err

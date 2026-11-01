@@ -188,10 +188,13 @@ func (r *sessionRegistry) registerLocked(entry *sessionEntry, swapped bool) (str
 	}, nil
 }
 
-// sessionContext describes the session behind a connection for the add-tracks log: its age in
-// milliseconds and whether the connection has negotiated. A connection with no entry either negotiated
-// without ever being swapped or predates this process, so its age is unknown (-1) and it reads as negotiated.
-func (r *sessionRegistry) sessionContext(connectionID string) (ageMs int64, negotiated bool) {
+// sessionContext describes the session an add-tracks attempt contacts, for its log: the session's age in
+// milliseconds and whether the connection has negotiated. The age counts from the registry noting the
+// session, which is a little after Cloudflare created it. A connection with no entry either negotiated
+// without ever being swapped or predates this process, so its age is unknown (-1) and it reads as
+// negotiated. When the connection has moved on from session, another call replaced it after this call
+// chose it: that session was gone and never negotiated, and its age is no longer known.
+func (r *sessionRegistry) sessionContext(connectionID, session string) (ageMs int64, negotiated bool) {
 	if r == nil {
 		return -1, true
 	}
@@ -200,6 +203,9 @@ func (r *sessionRegistry) sessionContext(connectionID string) (ageMs int64, nego
 	entry, ok := r.entries[connectionID]
 	if !ok {
 		return -1, true
+	}
+	if entry.provider != session {
+		return -1, false
 	}
 	return r.now().Sub(entry.created).Milliseconds(), entry.negotiated
 }
