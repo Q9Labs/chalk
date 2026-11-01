@@ -599,13 +599,13 @@ try {
   insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,participant_ref,participant_generation,track_id,track_epoch,identity_kind,track_class,display_name_snapshot,overlap,storage_key,checksum,size,content_type)
   values(gen_random_uuid(),'${freshRecordingId}','${firstTenant}',0,1,0,1000,0,1000,'participant-1',1,'track-1','1','participant','microphone','Speaker',false,'transcription/source/${freshRecordingId}/chunk-0.flac',decode(repeat('00',32),'hex'),1,'audio/flac')`);
     const transcriptRequest = { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
-    const beforeMissingLanguages = unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length;
-    const { languages: requestedLanguages, ...withoutLanguages } = transcriptRequest;
-    assert.deepEqual(requestedLanguages, ["en"]);
-    assert.equal((await post(ada, "/dashboard-api/past-session", withoutLanguages, session.csrfToken)).status, 400);
-    assert.equal(unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length, beforeMissingLanguages);
+    const requestsBeforeInvalid = unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length;
+    assert.equal((await post(ada, "/dashboard-api/past-session", { ...transcriptRequest, idempotencyKey: "" }, session.csrfToken)).status, 400);
+    assert.equal(unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length, requestsBeforeInvalid);
     const requestedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
     assert.equal(requestedTranscript.status, 200, await requestedTranscript.clone().text());
+    const submitted = unsupportedBodies.findLast((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`));
+    assert.equal("languages" in JSON.parse(submitted.body), false);
     const transcriptId = (await requestedTranscript.json()).transcript.id;
     const replayedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
     assert.equal(replayedTranscript.status, 200, await replayedTranscript.clone().text());
@@ -640,7 +640,6 @@ try {
           spaceId: foreign.spaceId,
           episodeId: foreign.episodeId,
           recordingId: foreign.recordingId,
-          ...(action === "create-transcript" ? { languages: ["en"] } : {}),
           ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}),
         },
       ]),
