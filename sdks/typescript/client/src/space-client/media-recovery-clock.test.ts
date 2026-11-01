@@ -188,10 +188,9 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
     });
   });
 
-  // A pong is paired with the oldest ping in flight, so one lost, late or evicted ping would pair every later pong with a ping that is
-  // too young. A ping that stays unanswered past 5 s therefore stalls the socket: it proves nothing from then on, and the client
-  // replaces it (`V1SyncClient`), which calls `restart()` on the new socket.
-  describe("a socket that stalled", () => {
+  // A pong answers the oldest ping in flight and nothing is evicted, so a mismatch can only pair a pong with an older ping. That
+  // records an earlier contact and a longer round trip, which fails closed. A late pong proves nothing and changes nothing else.
+  describe("pongs that are late or lost", () => {
     // The judge's trace: probes every 500 ms for 30 s with no answer, then ten buffered replies to the earliest pings.
     it.each(sources)("%s: ten buffered replies after 60 unanswered probes do not make a 45 s drop look short", async (source) => {
       await expectOutcome(source, "off", {
@@ -206,55 +205,75 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
       });
     });
 
-    it.each(sources)("%s: a late pong stalls the socket, and healthy pings after it prove nothing", async (source) => {
-      await expectOutcome(source, "off", {
+    it.each(sources)("%s: a late pong proves nothing, and the pings after it prove contact again", async (source) => {
+      await expectOutcome(source, "resumes", {
         beforeLoss: (rig) => {
           rig.ping();
           rig.elapse(6_000);
           rig.pong();
-          rig.heartbeats(80_000);
+          rig.heartbeats(60_000);
         },
         drop: (rig) => rig.elapse(3_000),
       });
     });
 
-    it.each(sources)("%s: a ping that never got a pong stalls the socket, and healthy pings after it prove nothing", async (source) => {
-      await expectOutcome(source, "off", {
-        beforeLoss: (rig) => {
-          rig.ping();
-          rig.elapse(6_000);
-          rig.heartbeats(80_000);
-        },
-        drop: (rig) => rig.elapse(3_000),
-      });
-    });
-
-    it.each(sources)("%s: a ping answered after exactly 5 s does not stall the socket", async (source) => {
+    it.each(sources)("%s: a ping answered after exactly 5 s proves contact", async (source) => {
       await expectOutcome(source, "resumes", {
         beforeLoss: (rig) => {
+          rig.elapse(50_000);
           rig.ping();
           rig.elapse(5_000);
           rig.pong();
-          rig.heartbeats(80_000);
         },
         drop: (rig) => rig.elapse(3_000),
       });
     });
 
-    // A 6 s stall, then the client replaces the socket; the new socket proves contact again and a 3 s drop resumes without a tap.
-    it.each(sources)("%s: after the socket is replaced, proof resumes and a 3 s drop resumes without a tap", async (source) => {
+    // Round trips of 7 s for 10 s on one socket: the socket stays, and proof resumes as soon as the round trips recover.
+    it.each(sources)("%s: a 7 s round-trip spike lasting 10 s neither replaces the socket nor ends proof for good", async (source) => {
+      const alive: boolean[] = [];
       await expectOutcome(source, "resumes", {
         beforeLoss: (rig) => {
-          rig.ping();
-          rig.elapse(6_000);
-          rig.pong();
-          expect(rig.watch.stalled).toBe(true);
-          rig.watch.restart();
-          expect(rig.watch.stalled).toBe(false);
-          rig.heartbeats(80_000);
+          let waiting = 0;
+          for (let step = 0; step < 20; step += 1) {
+            rig.elapse(500);
+            alive.push(rig.ping());
+            waiting += 1;
+            if (step >= 14) {
+              rig.pong();
+              waiting -= 1;
+            }
+          }
+          for (let step = 0; step < 6; step += 1) {
+            rig.elapse(500);
+            rig.pong();
+            waiting -= 1;
+          }
+          expect(waiting).toBeGreaterThan(0);
+          for (; waiting > 0; waiting -= 1) rig.pong();
+          rig.heartbeats(40_000);
         },
         drop: (rig) => rig.elapse(3_000),
       });
+      expect(alive.every(Boolean)).toBe(true);
+    });
+
+    // With every reply lost the oldest ping ages past 60 s, the old heartbeat timeout, and the client replaces the socket.
+    it.each(sources)("%s: continuous reply loss ends the socket within 60 s, and the new socket proves contact again", async (source) => {
+      let died: number | null = null;
+      await expectOutcome(source, "resumes", {
+        beforeLoss: (rig) => {
+          for (let probe = 1; probe <= 130 && died === null; probe += 1) {
+            rig.elapse(500);
+            if (!rig.ping()) died = probe * 500;
+          }
+          expect(died).not.toBeNull();
+          rig.watch.restart();
+          rig.heartbeats(40_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+      expect(died).toBeLessThanOrEqual(61_000);
     });
   });
 

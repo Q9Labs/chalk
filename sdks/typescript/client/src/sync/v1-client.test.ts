@@ -778,92 +778,105 @@ describe("V1SyncClient", () => {
       }
     });
   });
-  // A pong is paired with the oldest ping in flight, so a ping that stays unanswered past 5 s stalls the socket. The client replaces
-  // a stalled socket through its normal reconnect path, and the new socket starts with an empty queue.
-  describe("a ping unanswered for over 5 s stalls the socket", () => {
+  // A pong answers the oldest ping in flight and no ping is evicted, so a mismatch can only pair a pong with an older ping, which
+  // fails closed. A late pong proves nothing and changes nothing else. The oldest ping unanswered for over 60 s, the old
+  // heartbeat timeout, ends the socket through the normal reconnect.
+  describe("pongs that are late or lost", () => {
     // The probe sends a ping every 500 ms. The monotonic clock follows the test clock.
-    async function stallClient() {
+    async function probeClient() {
       const clock = new TestClock();
       const { client, socket, state } = await liveClient({ clock, monotonic: () => clock.now(), reconnectDelayMs: 1 });
-      const answer = async () => {
-        socket.receive({ type: "pong" });
+      const pings = () => socket.frames().filter((frame) => frame.type === "ping").length;
+      let answered = 0;
+      const answer = async (count = 1) => {
+        for (let reply = 0; reply < count; reply += 1) {
+          socket.receive({ type: "pong" });
+          answered += 1;
+        }
         await settle();
       };
+      const waiting = () => pings() - answered;
       const reconnect = async () => {
         clock.advance(1);
         socket.open();
         await settle();
+        answered = 0;
         await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date");
+        answered = pings();
       };
       const phase = () => client.getSnapshot().connection.phase;
-      return { client, clock, socket, answer, reconnect, phase };
+      const unknown = () => client.link.longSince(client.link.proof());
+      return { client, clock, socket, answer, waiting, reconnect, phase, unknown };
     }
 
     it("keeps a socket whose pings are answered", async () => {
-      const { client, clock, answer, phase } = await stallClient();
+      const { client, clock, answer, phase, unknown } = await probeClient();
       try {
         for (let probe = 0; probe < 120; probe += 1) {
           clock.advance(500);
           await answer();
         }
         expect(phase()).toBe("live");
-        expect(client.link.longSince(client.link.proof())).toBe(false);
+        expect(unknown()).toBe(false);
       } finally {
         client.stop();
       }
     });
 
-    it("replaces the socket through the normal reconnect, and proof resumes on the new socket", async () => {
-      const { client, clock, answer, reconnect, phase } = await stallClient();
+    it("keeps the socket through a 7 s round-trip spike of 10 s, and proof resumes when round trips recover", async () => {
+      const { client, clock, answer, waiting, phase, unknown } = await probeClient();
       try {
-        for (let probe = 0; probe < 10; probe += 1) {
+        for (let step = 0; step < 20; step += 1) {
           clock.advance(500);
           await settle();
+          if (step >= 14) await answer();
+        }
+        for (let step = 0; step < 6; step += 1) {
+          clock.advance(500);
+          await answer();
+        }
+        expect(waiting()).toBeGreaterThan(0);
+        await answer(waiting());
+        expect(phase()).toBe("live");
+        const resumedAfter = client.link.proof()?.wall ?? 0;
+        for (let step = 0; step < 10; step += 1) {
+          clock.advance(500);
+          await answer();
         }
         expect(phase()).toBe("live");
-        clock.advance(500);
-        await settle();
-        expect(phase()).toBe("connecting");
-        // The pongs of the stalled socket arrive late and prove nothing.
-        const stalled = client.link.proof();
-        await answer();
-        expect(client.link.proof()).toEqual(stalled);
-
-        await reconnect();
-        const sentAt = clock.now();
-        await answer();
-        expect(client.link.proof()).toMatchObject({ wall: sentAt });
-        expect(client.link.longSince(client.link.proof())).toBe(false);
+        expect(client.link.proof()?.wall ?? 0).toBeGreaterThan(resumedAfter);
+        expect(unknown()).toBe(false);
       } finally {
         client.stop();
       }
     });
 
-    // The reconnect delay applies to every replacement, and a replacement needs a stall of over 5 s on the new socket first.
-    it("replaces a socket that stalls again no earlier than 5 s after it went live", async () => {
-      const { client, clock, reconnect, phase } = await stallClient();
+    it("replaces the socket within 60 s of continuous reply loss, and proof resumes on the new socket", async () => {
+      const { client, socket, clock, answer, reconnect, phase, unknown } = await probeClient();
       try {
-        for (let probe = 0; probe < 11; probe += 1) {
+        // Three replies in four are lost. Every reply pairs with an older ping, the pairing skew grows, and proof stops.
+        let step = 0;
+        for (; step < 400 && phase() === "live"; step += 1) {
           clock.advance(500);
           await settle();
+          if (step % 4 === 3) await answer();
         }
         expect(phase()).toBe("connecting");
+        expect(clock.now()).toBeLessThanOrEqual(121_000);
+        expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "ping unanswered for 60 s" });
         await reconnect();
-        for (let probe = 0; probe < 10; probe += 1) {
+        for (let probe = 0; probe < 4; probe += 1) {
           clock.advance(500);
-          await settle();
+          await answer();
         }
         expect(phase()).toBe("live");
-        clock.advance(500);
-        await settle();
-        expect(phase()).toBe("connecting");
+        expect(unknown()).toBe(false);
       } finally {
         client.stop();
       }
     });
 
-    // A hidden tab's timers can be late, so the first sign of the stall can be the pong itself.
-    it("replaces the socket when the pong of a ping sent over 5 s ago is delivered", async () => {
+    it("a pong delivered late proves nothing and does not replace the socket", async () => {
       const time = { wall: 0, mono: 0 };
       const clock = { now: () => time.wall, setTimeout: new TestClock().setTimeout.bind(new TestClock()), clearTimeout: () => undefined };
       const { client, socket } = await liveClient({ clock, monotonic: () => time.mono });
@@ -872,7 +885,7 @@ describe("V1SyncClient", () => {
         time.mono = 6_000;
         socket.receive({ type: "pong" });
         await settle();
-        expect(client.getSnapshot().connection.phase).toBe("connecting");
+        expect(client.getSnapshot().connection.phase).toBe("live");
         expect(client.link.proof()).toBeNull();
       } finally {
         client.stop();
@@ -1058,9 +1071,8 @@ describe("V1SyncClient", () => {
     expect(authenticationSocket.closeCalls).toEqual([{ code: 4000, reason: "authentication failed" }]);
     const clock = new TestClock();
     const { socket: heartbeatSocket } = await liveClient({ clock });
-    // A silent Sync leaves the 500 ms probe pings unanswered, so the link watch replaces the socket long before the heartbeat would.
     clock.advance(60000);
-    expect(heartbeatSocket.closeCalls).toContainEqual({ code: 4000, reason: "ping stalled" });
+    expect(heartbeatSocket.closeCalls).toContainEqual({ code: 4000, reason: "heartbeat timeout" });
     const recoverySocket = new TestSocket();
     const recoveryClient = new V1SyncClient({
       url: "ws://sync.test/v1/sync",
@@ -1105,12 +1117,11 @@ describe("V1SyncClient", () => {
       send.mockRestore();
     }
   });
-  // A pong that is late by less than 5 s degrades health without replacing the socket; over 5 s replaces it (see the stall tests).
   it("keeps one-in-four pong loss non-blocking and clears degradation only after stable pongs", async () => {
     const clock = new TestClock();
     const { client, socket } = await liveClient({ clock });
     try {
-      for (let tick = 1; tick <= 8; tick++) {
+      for (let tick = 1; tick <= 16; tick++) {
         clock.advance(500);
         if (tick % 4 === 0) {
           socket.receive({ type: "pong" });
@@ -1912,10 +1923,10 @@ describe("V1SyncClient", () => {
   });
   it("bounds self-media confirmation when the server never responds", async () => {
     const clock = new TestClock();
-    const { client, mediaPlane, socket } = await liveClient({ clock });
+    const { client, mediaPlane } = await liveClient({ clock });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
     const rejected = expect(result).rejects.toMatchObject({ code: "retry_exhausted" });
-    await quietFor(clock, socket, 15000);
+    clock.advance(15000);
     await rejected;
     expect(mediaPlane.targets).toEqual([]);
   });
@@ -1924,11 +1935,11 @@ describe("V1SyncClient", () => {
     const mediaPlane = new BlockingMediaPlane();
     const { client, socket } = await liveClient({ clock, mediaPlane });
     const result = client.setCameraEnabled(false, { requestId: commandIds[0] });
-    await quietFor(clock, socket, 14999);
+    clock.advance(14999);
     socket.receive({ type: "live_target_result", operation_id: commandIds[0], name: "set_camera_enabled", outcome: "confirmed", error_code: null });
     await settle();
     expect(mediaPlane.targets).toHaveLength(1);
-    await quietFor(clock, socket, 44999);
+    clock.advance(44999);
     expect(client.getSnapshot().localMedia.camera).toBe("requesting");
     const rejected = expect(result).rejects.toMatchObject({ code: "media_timeout" });
     clock.advance(1);
@@ -2173,7 +2184,7 @@ describe("V1SyncClient", () => {
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     clock.advance(1);
     await rejected;
-    await quietFor(clock, socket, 10000);
+    clock.advance(10000);
     expect(operationFrames(socket, commandIds[0])).toHaveLength(3);
     void client.leave({ commandId: commandIds[1] }).catch(() => undefined);
     expect(operationFrames(socket, commandIds[1])).toHaveLength(1);
@@ -2756,14 +2767,6 @@ async function liveClient(overrides: Partial<ConstructorParameters<typeof V1Sync
   for (let attempt = 0; attempt < 50 && client.getSnapshot().connection.phase !== "live"; attempt += 1) await settle();
   expect(client.getSnapshot().connection.phase).toBe("live");
   return { client, socket, state, mediaPlane, urls };
-}
-// Time passes while Sync answers every ping at once, the way a healthy connection does, so the link watch sees no stall.
-async function quietFor(clock: TestClock, socket: TestSocket, milliseconds: number): Promise<void> {
-  for (let left = milliseconds; left > 0; left -= 500) {
-    clock.advance(Math.min(500, left));
-    socket.receive({ type: "pong" });
-    await settle();
-  }
 }
 async function liveCollaborationClient(overrides: Partial<ConstructorParameters<typeof V1SyncClient>[0]> = {}) {
   const socket = new TestSocket();

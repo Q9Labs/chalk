@@ -67,7 +67,7 @@ export function linkRig() {
       clocks.wall += wall;
       clocks.mono += mono;
     },
-    /** The page sends a ping. */
+    /** The page sends a ping. False when the oldest ping has gone unanswered so long that the client replaces the socket. */
     ping: () => watch.pinged(),
     /** A pong arrives from Sync, answering the oldest ping in flight. */
     pong: () => watch.ponged(),

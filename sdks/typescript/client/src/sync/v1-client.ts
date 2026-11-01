@@ -643,10 +643,6 @@ export class V1SyncClient implements V1CollaborationClient {
       case "pong": {
         this.#requireLive();
         this.#watch.ponged();
-        if (this.#watch.stalled) {
-          this.#recover("ping stalled");
-          return;
-        }
         this.#missedHeartbeats = 0;
         this.#lastHeartbeatReplyAt = this.#now();
         const previous = this.#health.health;
@@ -1097,12 +1093,11 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#emit();
     }, SYNC_HEALTH_BUDGET.degradedAfterMs);
   }
-  // The link watch times each ping, so every ping goes through here. A ping that stalls the socket is not sent: the socket is
-  // replaced through the normal reconnect, which also bounds a stall loop by the reconnect delay.
+  // The link watch times each ping, so every ping goes through here. When the oldest ping has gone unanswered for over 60 s, the
+  // old heartbeat timeout, the socket is dead: it is replaced through the normal reconnect and this ping is not sent.
   #sendPing(): boolean {
-    this.#watch.pinged();
-    if (this.#watch.stalled) {
-      this.#recover("ping stalled");
+    if (!this.#watch.pinged()) {
+      this.#recover("ping unanswered for 60 s");
       return false;
     }
     this.#send({ type: "ping" });

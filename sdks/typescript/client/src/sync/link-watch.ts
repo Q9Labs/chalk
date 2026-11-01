@@ -5,11 +5,12 @@
  * trip, a clock step back shows a negative one, and neither proves anything. No other frame proves contact, because a frame says
  * when the page processed it, not when Sync sent it.
  *
- * A pong answers the oldest ping in flight, so pairing is only sound while every ping is answered in time and none is dropped. A
- * ping that stays unanswered past `ROUND_TRIP_MS`, a pong that arrives that late, or more than `PINGS_IN_FLIGHT` pings in flight
- * stalls the socket: from then on no pong on it proves contact, because a pong could pair with a younger ping than the one it
- * answers. The stall lasts until `restart()`, which the client calls on the next socket. `V1SyncClient` replaces a stalled
- * socket through its normal reconnect, so proof pauses while the socket is being replaced and resumes on the new one.
+ * A pong answers the oldest ping in flight, and no ping is ever evicted. A ping or pong that is lost therefore only makes later
+ * pongs pair with an older ping, which records an earlier contact and a longer round trip: it fails closed, and proof stops once the
+ * pairing skew passes `ROUND_TRIP_MS`. The one assumption is that Sync sends exactly one pong per ping; a duplicate pong is the only
+ * way to pair with a newer ping, and a ping sequence number would remove it. A late pong proves nothing and changes nothing else.
+ * When the oldest ping has gone unanswered for over `UNANSWERED_LIMIT_MS`, the old heartbeat timeout, `pinged()` returns false and
+ * the client replaces the socket; `restart()` empties the queue on the next one.
  *
  * A drop is long when any of these holds, and nothing else makes it long (a hidden tab, throttled timers and a slow network do not):
  * - no contact was ever proven;
@@ -26,9 +27,8 @@
  */
 export const LONG_DROP_MS = 60_000;
 const ROUND_TRIP_MS = 5_000;
-// Pings sent and not answered yet. A connection answers in order, so a pong belongs to the oldest one. At one probe every
-// 500 ms and a 5 s limit, a healthy socket holds about 10; more than this means a stall.
-const PINGS_IN_FLIGHT = 16;
+// A socket whose oldest ping stays unanswered this long is dead: this is the heartbeat timeout of three 20 s heartbeats.
+const UNANSWERED_LIMIT_MS = 60_000;
 
 export type LinkReading = { readonly wall: number; readonly mono: number; readonly suspends: number };
 
@@ -54,7 +54,6 @@ export class LinkWatch implements LinkJudge {
   #suspends = 0;
   #pings: LinkReading[] = [];
   #proof: LinkReading | null = null;
-  #stalled = false;
   readonly #suspended = (): void => {
     this.#suspends += 1;
   };
@@ -76,38 +75,31 @@ export class LinkWatch implements LinkJudge {
     this.#page?.removeEventListener("resume", this.#suspended);
   }
 
-  /** True once a ping went unanswered in time on this socket; no pong proves contact until `restart()`. */
-  get stalled(): boolean {
-    return this.#stalled;
-  }
-
-  /** Call when a connection goes live: the previous socket's pings will not be answered, and a stall ends with it. */
+  /** Call when a connection goes live: the previous socket's pings will not be answered. */
   restart(): void {
     this.#pings = [];
-    this.#stalled = false;
   }
 
-  /** Call as a ping goes out, in the same order as the pings. */
-  pinged(): void {
-    if (this.#stalled) return;
+  /**
+   * Call as a ping goes out, in the same order as the pings. False means the oldest ping has gone unanswered for over
+   * `UNANSWERED_LIMIT_MS`: the socket is dead and this ping must not be sent on it.
+   */
+  pinged(): boolean {
     const now = this.#read();
     const oldest = this.#pings[0];
-    if (oldest !== undefined && (!this.#inTime(oldest, now) || this.#pings.length >= PINGS_IN_FLIGHT)) {
-      this.#stall();
-      return;
-    }
+    if (oldest !== undefined && (now.wall - oldest.wall > UNANSWERED_LIMIT_MS || now.mono - oldest.mono > UNANSWERED_LIMIT_MS)) return false;
     this.#pings.push(now);
+    return true;
   }
 
-  /** Call as a pong is received. It answers the oldest ping in flight. */
+  /** Call as a pong is received. It answers the oldest ping in flight, and proves contact only if the round trip was short. */
   ponged(): void {
-    if (this.#stalled) return;
     const sent = this.#pings.shift();
     if (sent === undefined) return;
-    if (!this.#inTime(sent, this.#read())) {
-      this.#stall();
-      return;
-    }
+    const now = this.#read();
+    const wall = now.wall - sent.wall;
+    const mono = now.mono - sent.mono;
+    if (wall < 0 || wall > ROUND_TRIP_MS || mono < 0 || mono > ROUND_TRIP_MS || now.suspends !== sent.suspends) return;
     this.#proof = sent;
   }
 
@@ -121,18 +113,6 @@ export class LinkWatch implements LinkJudge {
     const wall = now.wall - proof.wall;
     const mono = now.mono - proof.mono;
     return wall < 0 || mono < 0 || wall >= LONG_DROP_MS || mono >= LONG_DROP_MS || now.suspends !== proof.suspends;
-  }
-
-  #stall(): void {
-    this.#stalled = true;
-    this.#pings = [];
-  }
-
-  // A ping counts as answered in time when it took 0 to `ROUND_TRIP_MS` on both clocks with no page freeze or resume between.
-  #inTime(sent: LinkReading, now: LinkReading): boolean {
-    const wall = now.wall - sent.wall;
-    const mono = now.mono - sent.mono;
-    return wall >= 0 && wall <= ROUND_TRIP_MS && mono >= 0 && mono <= ROUND_TRIP_MS && now.suspends === sent.suspends;
   }
 
   #read(): LinkReading {
