@@ -196,6 +196,10 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
 	}
 	if firstCloseFailure != nil {
+		if closeCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", "timeout")
+			return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "timeout"}
+		}
 		result := providerExecutionFailure(firstCloseFailure)
 		slog.WarnContext(ctx, "Provider media cleanup failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "close_tracks", "error_code", result.Reason)
 		return result
