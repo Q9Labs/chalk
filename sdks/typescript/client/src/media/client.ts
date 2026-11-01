@@ -884,7 +884,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
       await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
       srDiag("pub.negotiated", `conn=${connectionId.slice(0, 6)} pc=${connection.connectionState}/${connection.iceConnectionState}/${connection.signalingState}`);
-      if (!wasLive) await this.#waitForConnection(connection, generation);
+      // The peer can lose its transport while it negotiates, so check again instead of trusting the state from before.
+      if (!connectionIsLive(connection)) await this.#waitForConnection(connection, generation);
       srDiag("pub.connected", `conn=${connectionId.slice(0, 6)} pc=${connection.connectionState}`);
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
@@ -1475,16 +1476,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
   }
-  #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return (() =>
-      waitFor(
+  async #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
+    try {
+      await waitFor(
         () => {
           this.#requireGeneration(generation);
           return connectionIsLive(connection);
         },
         CONNECTION_TIMEOUT_MS,
         "Timed out waiting for the Cloudflare SFU peer connection",
-      ))();
+      );
+    } catch (error) {
+      // A peer that never connects is replaced like any other failed connection.
+      if (error instanceof CloudflareSFUError && error.code === "media_failed") throw new CloudflareSFUError(error.message, "signaling_failed", { retryableConnection: true });
+      throw error;
+    }
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;

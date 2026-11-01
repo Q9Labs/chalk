@@ -1602,6 +1602,27 @@ it.each(["microphone", "camera"] as const)("replaces conservatively on %s retire
   }
 });
 
+// The API announces a publication when add-tracks returns, before the answer is applied.
+// A peer that was live when publishing began can lose its transport while it negotiates.
+it("replaces the connection when the peer is not live after the answer instead of reporting the publication as sent", async () => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  await withTimedHarness(
+    async (harness) => {
+      await harness.client.start(fakeStream(new FakeTrack("camera", "video")));
+      expect(harness.peers[0]!.connectionState).toBe("connected");
+      harness.client.prepareLocalTrack("microphone", new FakeTrack("mic", "audio") as unknown as MediaStreamTrack);
+      harness.peers[0]!.setNextRemoteDescriptionStates("new", "new");
+      const enabling = harness.client.setLocalPublicationTarget({ operationId: "enable-on-dead-peer", participantId: "participant-1", source: "microphone", enabled: true });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(enabling).resolves.toMatchObject({ outcome: "confirmed" });
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+      expect(harness.peers.at(-1)!.connectionState).toBe("connected");
+      expect(harness.client.getSnapshot().localTracks.find((track) => track.source === "microphone")?.enabled).toBe(true);
+    },
+    { replaceMediaConnection },
+  );
+});
+
 it.each(["microphone", "camera"] as const)("only retiring the negotiated BUNDLE sender replaces the connection (%s first)", async (firstSource) => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });
