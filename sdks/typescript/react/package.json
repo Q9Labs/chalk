@@ -93,7 +93,8 @@
     "@q9labsai/recording-presentation": "workspace:^0.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
