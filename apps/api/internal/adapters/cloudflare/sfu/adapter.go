@@ -435,6 +435,10 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.CloseTracksResponse{}, mediaplane.ErrInvalidProvider
 	}
+	providerSession := a.sessions.providerID(input.ConnectionID)
+	if input.Force && !input.ReceiveOnly && a.sessions.isGone(providerSession) {
+		return mediaplane.CloseTracksResponse{AlreadyClosed: true, Tracks: input.Tracks}, nil
+	}
 	if input.ReceiveOnly {
 		// The participant grant already binds this session to the caller. Verify
 		// the MID's direction so this path cannot bypass publication retirement.
@@ -483,6 +487,10 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 		a.client = a.forcedCloseClient
 	}
 	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(a.sessions.providerID(input.ConnectionID))), request, &providerResponse, "close_tracks")
+	var closeFailure providerFailure
+	if errors.As(err, &closeFailure) && closeFailure.statusCode == http.StatusGone {
+		a.sessions.markGone(a.sessions.providerID(input.ConnectionID))
+	}
 	if err != nil && !(input.Force && forcedCloseSatisfied(err)) {
 		return mediaplane.CloseTracksResponse{}, err
 	}

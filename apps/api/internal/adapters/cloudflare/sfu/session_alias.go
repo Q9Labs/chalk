@@ -56,10 +56,11 @@ type sessionRegistry struct {
 	lastSweep  time.Time
 	entries    map[string]*sessionEntry // by the client's connection ID
 	byProvider map[string]string        // live session ID of a swapped connection -> client's connection ID
+	gone       map[string]time.Time     // provider session ID -> when Cloudflare last answered 410 on it
 }
 
 func newSessionRegistry() *sessionRegistry {
-	return &sessionRegistry{now: time.Now, entries: map[string]*sessionEntry{}, byProvider: map[string]string{}}
+	return &sessionRegistry{now: time.Now, entries: map[string]*sessionEntry{}, byProvider: map[string]string{}, gone: map[string]time.Time{}}
 }
 
 // The provider registry builds a new Adapter for every request, so the registry lives per Cloudflare
@@ -223,6 +224,29 @@ func (r *sessionRegistry) clientID(providerID string) string {
 	return providerID
 }
 
+// markGone records that Cloudflare answered 410 on a provider session. Session IDs are never reused,
+// so the session stays gone, and a later forced close can skip the call that would wait about 5 s.
+func (r *sessionRegistry) markGone(providerSession string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	now := r.now()
+	r.sweepLocked(now)
+	r.gone[providerSession] = now
+}
+
+func (r *sessionRegistry) isGone(providerSession string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, gone := r.gone[providerSession]
+	return gone
+}
+
 // negotiated stops further replacement. A connection that never swapped needs no entry afterwards.
 func (r *sessionRegistry) negotiated(connectionID string) {
 	if r == nil {
@@ -295,6 +319,11 @@ func (r *sessionRegistry) sweepLocked(now time.Time) {
 		return
 	}
 	r.lastSweep = now
+	for providerSession, markedAt := range r.gone {
+		if now.Sub(markedAt) >= sessionEntryRetention {
+			delete(r.gone, providerSession)
+		}
+	}
 	for connectionID, entry := range r.entries {
 		retention := sessionEntryRetention
 		if entry.provider != connectionID {
