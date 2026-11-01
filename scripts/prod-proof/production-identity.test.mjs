@@ -49,7 +49,8 @@ test("entrypoint reports a missing or invalid expected SHA through its session f
     const sessionReport = JSON.parse(execution.stdout.trim().split(/\r?\n/).at(-1));
     assert.equal(sessionReport.result, "failed");
     assert.equal(sessionReport.cleanup, "passed");
-    assert.match(sessionReport.error.stack, /CHALK_PROOF_EXPECTED_PRODUCTION_SHA/);
+    assert.equal(sessionReport.error, undefined);
+    assert.doesNotMatch(execution.stdout, /CHALK_PROOF_EXPECTED_PRODUCTION_SHA/);
     assert.match(execution.stderr, /PROOF leave-session: failed \(configuration\)/);
   }
 });
