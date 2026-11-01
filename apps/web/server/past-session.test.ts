@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { createChalkEffectClient, TenantIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { configuration } from "./config";
 import { pastTranscriptText } from "./past-session";
@@ -41,7 +41,7 @@ it("streams the text attachment and API filename without exposing its service cr
   expect(result.body).toBe(upstream.body);
   expect(result.headers.get("Content-Disposition")).toBe(filename);
   expect(result.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
-  expect(result.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(result.headers.get("Cache-Control")).toBe("no-store");
   expect(result.headers.has("Set-Cookie")).toBe(false);
   expect(await result.text()).toBe(text);
   expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([`${env.CHALK_API_ORIGIN}/v1/tenants/${id(4)}/transcripts/${id(3)}`, `${env.CHALK_API_ORIGIN}/v1/tenants/${id(4)}/transcripts/${id(3)}/text`]);
@@ -72,11 +72,4 @@ it("requires a dashboard session before downloading text", async () => {
   }));
   expect(response.status).toBe(401);
   expect(fetcher).not.toHaveBeenCalled();
-});
-
-it("the generated client reads the public text route as UTF-8 text, not JSON", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": filename } }));
-  const client = await engine();
-  const result = await Effect.runPromise(client.api.transcripts.getTranscriptText({ params: { tenant_id: client.tenantId, transcript_id: Schema.decodeUnknownSync(TranscriptIdSchema)(id(3)) } }));
-  expect(result).toBe(text);
 });

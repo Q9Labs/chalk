@@ -48,6 +48,12 @@ function collectOperations(document) {
         continue;
       }
 
+      // Attachment downloads use raw HTTP to retain streaming bodies and filenames.
+      // Keep them in OpenAPI, not the generated JSON client loaded by live calls.
+      if (Object.values(operation.responses ?? {}).some((response) => response.content?.["text/plain"])) {
+        continue;
+      }
+
       const operationName = pascalCase(operation.operationId);
       operations.push({
         method,
@@ -103,7 +109,7 @@ function renderEndpoint(operation) {
     options.push(`  payload: S.${operation.operationName}RequestBodySchema`);
   }
   if (operation.success) {
-    const schema = operation.success.text ? `S.${operation.operationName}ResponseSchema.pipe(HttpApiSchema.asText())` : operation.success.hasSchema ? `S.${operation.operationName}ResponseSchema` : `HttpApiSchema.Empty(${operation.success.status})`;
+    const schema = operation.success.hasSchema ? `S.${operation.operationName}ResponseSchema` : `HttpApiSchema.Empty(${operation.success.status})`;
     options.push(`  success: ${schema}.pipe(HttpApiSchema.status(${operation.success.status}))`);
   }
   if (operation.errors.length > 0) {
@@ -146,7 +152,6 @@ function successResponse(responses = {}) {
 
   return {
     status: Number(status),
-    text: Boolean(responses[status]?.content?.["text/plain"]?.schema),
     hasSchema: Boolean(responses[status]?.content?.["application/json"]?.schema),
   };
 }

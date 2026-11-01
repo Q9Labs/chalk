@@ -77,7 +77,7 @@ export async function pastTranscriptText(engine: Engine, env: DashboardEnvironme
     console.warn(JSON.stringify({ event: "dashboard.engine_response_failed", engine_status: response.status, trace_id: traceId }));
     throw new DashboardError(response.status === 404 ? 404 : response.status === 409 ? 409 : 502, "transcript_download_failed");
   }
-  const headers = new Headers({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
+  const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
   for (const name of ["Content-Type", "Content-Disposition"]) {
     const value = response.headers.get(name);
     if (value) headers.set(name, value);

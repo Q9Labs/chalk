@@ -264,8 +264,9 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithTransactor(lingerTestTransactor{tx})),
 		RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(nil), spaceService),
 		RecordingObjects:      storage, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
-		Webhooks:        webhooks.NewService(NewWebhookRepository(nil), nil),
-		ChatAttachments: chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
+		TranscriptTextMetadata: NewTranscriptTextRepository(q),
+		Webhooks:               webhooks.NewService(NewWebhookRepository(nil), nil),
+		ChatAttachments:        chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
 		WhiteboardFiles: whiteboardfiles.NewService(NewWhiteboardFileRepository(tx), storage), WhiteboardParticipants: whiteboardfiles.NewParticipantVerifier(syncVerifier),
 	}
 	matrixMountWorkers(&fixture.options, transcriptService)

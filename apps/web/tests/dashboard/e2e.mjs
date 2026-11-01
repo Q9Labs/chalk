@@ -592,6 +592,12 @@ try {
     const documentResponse = await post(ada, "/dashboard-api/past-session", { action: "transcript-document", spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }, session.csrfToken);
     assert.equal(documentResponse.status, 200, await documentResponse.clone().text());
     assert.deepEqual((await documentResponse.json()).cues, [{ startMs: 0, endMs: 1000, text: "Hello", speaker: { name: "Speaker name", participantRef: "speaker-1" } }]);
+    sql(`update recordings set duration_millis=2520000, created_at='2026-11-01T00:00:00Z' where id='${foreign.recordingId}'`);
+    const textDownload = await ada.request(`/dashboard-api/transcript-text?spaceId=${spaceId}&episodeId=${foreign.episodeId}&transcriptId=${foreign.transcriptId}`);
+    assert.equal(textDownload.status, 200, await textDownload.clone().text());
+    assert.equal(textDownload.headers.get("content-type"), "text/plain; charset=utf-8");
+    assert.match(textDownload.headers.get("content-disposition"), /attachment; filename="[^"]+-2026-11-01\.txt"/);
+    assert.equal(await textDownload.text(), `${sql(`select name from spaces where id='${spaceId}'`)} · 1 Nov 2026 · 42 min\nLanguages: English\n\n[00:00:00] Speaker name: Hello\n`);
     const freshRecordingId = crypto.randomUUID();
     sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${freshRecordingId}','${firstTenant}','${spaceId}','${foreign.episodeId}','failed','r2');
   insert into recording_transcription_sources(recording_id,tenant_id,manifest_key,manifest_sha256,manifest_size,manifest_content_type,schema_version,committed_at,generation,commit_digest,presentation_sha256,status,expires_at)
@@ -616,6 +622,7 @@ try {
       `/dashboard-api/call-metadata?kind=transcript&spaceId=${spaceId}&id=${foreign.transcriptId}`,
       `/dashboard-api/home-status?spaceIds=${spaceId}`,
       `/dashboard-api/past-session?spaceId=${spaceId}&episodeId=${foreign.episodeId}`,
+      `/dashboard-api/transcript-text?spaceId=${spaceId}&episodeId=${foreign.episodeId}&transcriptId=${foreign.transcriptId}`,
     ])
       assert.equal((await malik.request(path)).status, 404);
     const foreignStatus = await malik.request(`/dashboard-api/call-status?spaceId=${spaceId}`);
@@ -644,7 +651,7 @@ try {
           ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}),
         },
       ]),
-      ...["transcript-document", "transcript-url", "delete-transcript"].map((action) => ["past-session", { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }]),
+      ...["transcript-document", "delete-transcript"].map((action) => ["past-session", { action, spaceId: foreign.spaceId, episodeId: foreign.episodeId, transcriptId: foreign.transcriptId }]),
       ["developer", { action: "rotate-key", keyId: foreign.keyId, expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }],
       ["developer", { action: "revoke-key", keyId: foreign.keyId }],
       ["developer", { action: "update-webhook", webhookId: foreign.webhookId, name: "Test", url: "https://example.test/hook", enabled: true, eventTypes: ["episode.ended"], revision: 1, idempotencyKey: crypto.randomUUID() }],
