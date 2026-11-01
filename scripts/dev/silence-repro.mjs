@@ -481,6 +481,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
             connectionNumber: connectionId ? [...connections[index]].indexOf(connectionId) + 1 : null,
             errorCode: body.code ?? body.error?.code ?? body.errorCode ?? null,
             trackErrors: (body.trackErrors ?? body.tracks?.filter((track) => track.errorCode || track.errorDescription))?.map((track) => track.code ?? track.errorCode ?? "unknown"),
+            trackErrorDetail: body.tracks?.filter((track) => track.errorCode || track.errorDescription).map((track) => ({ code: track.errorCode ?? null, description: String(track.errorDescription ?? "").slice(0, 200) })),
           };
           run.network.push(entry);
           // First local publish by this participant's first SFU session: schedule the session kill.
