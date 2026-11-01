@@ -457,7 +457,51 @@ it.each(["microphone", "camera"] as const)("a %s enable during remote connection
       const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
       expect(live).toHaveLength(1);
       expect(h.client.getSnapshot().localTracks.find((item) => item.source === source)).toMatchObject({ enabled: true, publicationId: live[0]!.publicationId });
+      expect(track.enabled).toBe(true);
       expect(enableResult).toMatchObject({ outcome: "confirmed", errorCode: null });
+    },
+    { replaceMediaConnection },
+  );
+});
+
+it("does not publish a microphone muted during remote connection replacement", async () => {
+  const replacementStarted = Promise.withResolvers<void>();
+  const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
+  const replaceMediaConnection = vi.fn(() => {
+    replacementStarted.resolve();
+    return replacement.promise;
+  });
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream());
+      await vi.advanceTimersByTimeAsync(0);
+      const track = new FakeTrack("local-microphone", "audio");
+      h.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
+      h.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+      const addTracks = h.transport.addTracks.bind(h.transport);
+      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+        if (input.connectionId === "connection-1") {
+          throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+        }
+        return addTracks(input);
+      });
+
+      const pulling = h.client.refreshRemotePublications();
+      await replacementStarted.promise;
+      const enabling = h.client.setLocalPublicationTarget({ operationId: "tap-on", participantId: "participant-1", source: "microphone", enabled: true });
+      await vi.advanceTimersByTimeAsync(0);
+      const disabling = h.client.setLocalPublicationTarget({ operationId: "tap-off", participantId: "participant-1", source: "microphone", enabled: false });
+      await expect(disabling).resolves.toEqual({ outcome: "satisfied", errorCode: null });
+      expect(track.enabled).toBe(false);
+
+      replacement.resolve(bootstrap("replacement"));
+      await expect(enabling).resolves.toEqual({ outcome: "satisfied", errorCode: null });
+      await expect(pulling).resolves.toBeUndefined();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(h.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local" && item.source === "microphone"))).toHaveLength(0);
+      expect([...h.transport.localPublications.values()].filter((publication) => publication.source === "microphone")).toHaveLength(0);
+      expect(track.enabled).toBe(false);
     },
     { replaceMediaConnection },
   );
@@ -4295,42 +4339,39 @@ it.each([401, 403])("reports a current %s after an inner replacement within the 
   }
 });
 
-it("publishes an enable on the replacement connection when a tap lands during replacement", async () => {
+it("does not attribute an old publication rejection to an inner replacement in the same generation", async () => {
   const onError = vi.fn();
-  let finishReplacement: (value: CloudflareSFUBootstrap) => void = () => {};
-  const replacement = new Promise<CloudflareSFUBootstrap>((resolve) => {
-    finishReplacement = resolve;
-  });
-  const replaceMediaConnection = vi.fn(() => replacement);
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ onError, replaceMediaConnection });
+  const oldPublication = Promise.withResolvers<CloudflareSFUTracksResponse>();
+  const oldPublicationStarted = Promise.withResolvers<void>();
   const addTracks = harness.transport.addTracks.bind(harness.transport);
+  const rejection = new CloudflareSFUError("Obsolete publication rejected", "signaling_failed", { status: 503, retryableConnection: true });
   vi.spyOn(harness.transport, "addTracks").mockImplementation(async (input) => {
-    if (input.connectionId === "connection-1" && input.tracks.some((track) => track.location === "remote")) {
-      throw new CloudflareSFUError("Unavailable", "signaling_failed", { status: 503, retryableConnection: true });
+    if (input.connectionId === "connection-1" && input.tracks.some((track) => track.location === "local")) {
+      oldPublicationStarted.resolve();
+      return oldPublication.promise;
     }
     return addTracks(input);
   });
-  let poll: Promise<unknown> | undefined;
   let local: Promise<unknown> | undefined;
   try {
     await harness.client.start(fakeStream());
-    harness.transport.snapshot = publicationSnapshot(1, 1, "remote|missing");
-    poll = harness.client.refreshRemotePublications().catch((cause: unknown) => cause);
-    await vi.waitFor(() => expect(replaceMediaConnection).toHaveBeenCalledTimes(1));
+    harness.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+    await harness.client.refreshRemotePublications();
     harness.client.prepareLocalTrack("microphone", fakeStream(new FakeTrack("mic", "audio")).getTracks()[0]!);
     local = harness.client.setLocalPublicationTarget({ operationId: "old-on", participantId: "participant-1", source: "microphone", enabled: true });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local"))).toHaveLength(0);
-    finishReplacement(bootstrap("connection-2"));
+    await oldPublicationStarted.promise;
+    expect(replaceMediaConnection).not.toHaveBeenCalled();
+    oldPublication.reject(rejection);
+
     await local;
-    await poll;
-    const localPosts = harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local"));
-    expect(localPosts).toHaveLength(1);
-    expect(localPosts[0]!.connectionId).toBe("connection-2");
-    expect(onError).not.toHaveBeenCalled();
+    expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+    expect(harness.transport.addInputs.filter((input) => input.connectionId === "connection-2" && input.tracks.some((track) => track.location === "local"))).toHaveLength(1);
+    expect(onError).not.toHaveBeenCalledWith(rejection, expect.any(String));
   } finally {
-    finishReplacement(bootstrap("connection-2"));
-    await Promise.allSettled([local, poll]);
+    oldPublication.reject(new Error("Test cleanup"));
+    await Promise.allSettled([local]);
     harness.client.stop();
   }
 });

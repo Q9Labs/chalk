@@ -479,14 +479,18 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       const replacement = this.#replacement;
       if (replacement?.generation === generation) {
         state.desiredEnabled = true;
-        state.track.enabled = true;
         await replacement.promise.catch(() => {});
-        state.desiredEnabled = true;
+        if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+        if (!state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
         state.track.enabled = true;
       }
       await this.#retireUnavailableLocalPublication(state);
       if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
-      if (state.enabled) return { outcome: "satisfied", errorCode: null };
+      if (replacement?.generation === generation && !state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
+      if (state.enabled) {
+        state.track.enabled = true;
+        return { outcome: "satisfied", errorCode: null };
+      }
       if (!(await this.#enablePreparedTrack(state))) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
