@@ -22,6 +22,10 @@ const (
 type addTracksAttempt struct {
 	latency    time.Duration
 	statusCode int
+	// The session's age and whether its connection had negotiated when the attempt started, so a
+	// timeout on a dead session reads differently from one on a live session. Age is -1 when unknown.
+	sessionAgeMs      int64
+	sessionNegotiated bool
 }
 
 // logAddTracksCall records one structured line per add-tracks attempt so a single
@@ -65,6 +69,8 @@ func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, track
 		"http_status", attempt.statusCode,
 		"provider_code", providerCode,
 		"retry", retry,
+		"session_age_ms", attempt.sessionAgeMs,
+		"session_negotiated", attempt.sessionNegotiated,
 	)
 }
 
