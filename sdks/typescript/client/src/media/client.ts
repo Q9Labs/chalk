@@ -59,6 +59,16 @@ const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
+// A new Cloudflare session connects in 1.5-3 s, but replacing at 3 s hurt:
+// in rig runs only 6 of 383 first connections took more than 5 s, and a
+// replacement costs more than the wait it saves for any connection that is
+// merely slow. About 1% of first ICE negotiations never get a STUN reply, and
+// Chrome only reports `failed` after 15 s, so those are the ones worth
+// replacing. At this deadline a connection with ICE progress keeps waiting;
+// each backoff entry is the wait before one replacement, so the list also
+// bounds the attempts.
+const FIRST_CONNECT_DEADLINE_MS = 5000;
+const FIRST_CONNECT_REPLACEMENT_BACKOFF_MS = [0, 1000] as const;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
 const RECOVERY_HEALTHY_RESET_MS = 10_000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
@@ -81,6 +91,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #remoteListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #snapshotListeners = new Set<() => void>();
   readonly #failureOwners = new WeakMap<Error, { readonly generation: number; readonly connectionId: string }>();
+  readonly #connectedConnections = new WeakSet<RTCPeerConnection>();
+  readonly #unconnectedFailures = new WeakMap<Error, RTCPeerConnection>();
+  #firstConnectReplacements = 0;
   readonly #locallyPausedSources = new Map<MediaPublicationSource, LocalPublicationRetirementCause>();
   readonly #localTracks = new Map<MediaPublicationSource, LocalTrackState>();
   readonly #ownedPublications = new Set<OwnedLocalPublication>();
@@ -839,18 +852,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (states.length === 0) return;
     try {
       await this.#serializeSDP(async () => {
-        const pending = await this.#prepareConnectionForPublication(states, generation);
+        const publish = (pending: readonly LocalTrackState[]) => this.#publishPreparedTracksSerialized(pending, generation, this.#connection, this.#bootstrap.connectionId);
         try {
-          await this.#publishPreparedTracksSerialized(pending, generation, this.#connection, this.#bootstrap.connectionId);
+          await publish(await this.#prepareConnectionForPublication(states, generation));
         } catch (error) {
-          if (!this.#replaceMediaConnection || !this.#isRetryableConnectionFailure(error) || this.#replacementAttemptedGeneration === generation) throw error;
-          await this.#replaceMediaConnectionForRecovery(generation, "local_signaling_failure");
-          await this.#publishPreparedTracksSerialized(
-            [...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended"),
-            generation,
-            this.#connection,
-            this.#bootstrap.connectionId,
-          );
+          await this.#retryOnReplacedConnection(generation, "local_signaling_failure", error, () => publish([...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended")));
         }
       });
     } finally {
@@ -1084,7 +1090,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#observeRemotePublicationCursor(cursor, retryableRemotePull(error));
         throw error;
       }
-      return this.#retryRemotePullOnReplacement(publications, cursor, generation);
+      return this.#retryRemotePullOnReplacement(publications, cursor, generation, "remote_signaling_failure", error);
     }
   }
   async #recoverStalledRemotePublications(stalled: readonly CloudflareSFUPublication[], desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
@@ -1129,18 +1135,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
-    return this.#isRetryableConnectionFailure(error) && (gone || !this.#hasLiveRemoteTracks()) && this.#replaceMediaConnection !== undefined && this.#replacementAttemptedGeneration !== generation;
+    return this.#mayReplaceAfter(error, generation) && (gone || !this.#hasLiveRemoteTracks());
   }
   #hasLiveRemoteTracks(): boolean {
     return [...this.#remoteTracks.values()].some((publication) => publication.track.readyState === "live");
   }
-  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure"): Promise<readonly CloudflareSFURemoteTrack[] | null> {
+  async #retryRemotePullOnReplacement(publications: readonly CloudflareSFUPublication[], cursor: PublicationCursor, generation: number, cause: MediaConnectionReplacementCause = "remote_signaling_failure", failure?: unknown): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     this.#remoteRecoveryGeneration = generation;
     const connection = this.#connection;
     try {
-      await this.#replaceMediaConnectionForRecovery(generation, cause);
-      await this.#republishPreparedTracksAfterRecovery(generation);
-      return await this.#pull(publications, generation);
+      return await this.#retryOnReplacedConnection(generation, cause, failure, async () => {
+        await this.#republishPreparedTracksAfterRecovery(generation);
+        return this.#pull(publications, generation);
+      });
     } catch (error) {
       if (generation !== this.#generation || this.#stopped) throw error;
       if (cause === "receive_stalled" && connection === this.#connection) {
@@ -1405,16 +1412,30 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
   }
-  #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return (() =>
-      waitFor(
-        () => {
-          this.#requireGeneration(generation);
-          return connectionIsLive(connection);
-        },
-        CONNECTION_TIMEOUT_MS,
-        "Timed out waiting for the Cloudflare SFU peer connection",
-      ))();
+  async #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
+    const message = "Timed out waiting for the Cloudflare SFU peer connection";
+    const isLive = () => {
+      this.#requireGeneration(generation);
+      return connectionIsLive(connection);
+    };
+    const firstConnect = !this.#connectedConnections.has(connection) && this.#replaceMediaConnection !== undefined && this.#firstConnectReplacements < FIRST_CONNECT_REPLACEMENT_BACKOFF_MS.length;
+    if (!firstConnect) {
+      await waitFor(isLive, CONNECTION_TIMEOUT_MS, message);
+    } else {
+      const unconnected = new CloudflareSFUError(message, "ice_connection_failed");
+      this.#unconnectedFailures.set(unconnected, connection);
+      try {
+        await waitFor(isLive, FIRST_CONNECT_DEADLINE_MS, message, () => unconnected);
+      } catch (error) {
+        if (error !== unconnected) throw error;
+        // Replacing a connection that is still progressing loses the progress. Only a stuck one is replaced.
+        if (!(await iceIsProgressing(connection))) throw unconnected;
+        // Progress is no promise of a connection: if the extended wait ends unconnected, the budget still applies.
+        await waitFor(isLive, CONNECTION_TIMEOUT_MS - FIRST_CONNECT_DEADLINE_MS, message, () => unconnected);
+      }
+    }
+    this.#connectedConnections.add(connection);
+    this.#firstConnectReplacements = 0;
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;
@@ -1503,49 +1524,78 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementCause = undefined;
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }
-  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
+  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause, failure?: unknown): Promise<void> {
     this.#requireGeneration(generation);
     if (this.#replacement?.generation === generation) return this.#replacement.promise;
-    if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
+    const unconnected = this.#unconnectedConnection(failure);
+    // Another recovery already replaced the connection that timed out; the caller retries on the new one.
+    if (unconnected && unconnected !== this.#connection) return Promise.resolve();
+    const replaceMediaConnection = this.#replacementSource(generation, unconnected);
+    if (!replaceMediaConnection) {
       return Promise.reject(new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed"));
     }
     this.#replacementAttemptedGeneration = generation;
-    const replaceMediaConnection = this.#replaceMediaConnection;
-    const promise = Promise.resolve().then(async () => {
-      const bootstrap = await replaceMediaConnection();
-      this.#requireGeneration(generation);
-      validateBootstrap(bootstrap);
-      if (bootstrap.connectionId === this.#bootstrap.connectionId) {
-        throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
-      }
-      this.#fenceLocalPublications();
-      const connectionEpoch = ++this.#connectionEpoch;
-      this.#disposeConnection(false);
-      this.#clearRemoteTracks();
-      this.#cursor = null;
-      this.#bootstrap = bootstrap;
-      this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
-      this.#replacementCause = cause;
-      this.#retiredLocalConnection = null;
-      this.#negotiatedGeneration = null;
-      for (const state of this.#localTracks.values()) {
-        state.transceiver = null;
-        state.enabled = false;
-        state.providerPublicationId = null;
-      }
-      this.remotePublicationsChanged();
-    });
+    const backoffMs = this.#replacementBackoffMs(unconnected);
+    const promise = Promise.resolve().then(() => this.#installReplacementConnection(replaceMediaConnection, generation, cause, backoffMs));
     const replacement = { generation, promise };
     this.#replacement = replacement;
-    void promise.then(
-      () => {
-        if (this.#replacement === replacement) this.#replacement = null;
-      },
-      () => {
-        if (this.#replacement === replacement) this.#replacement = null;
-      },
-    );
+    const settle = () => {
+      if (this.#replacement === replacement) this.#replacement = null;
+    };
+    void promise.then(settle, settle);
     return promise;
+  }
+  /** Each generation gets one replacement, except after a first-connect timeout, which has its own budget. */
+  #replacementSource(generation: number, unconnected: RTCPeerConnection | undefined): (() => Promise<CloudflareSFUBootstrap>) | undefined {
+    return !unconnected && this.#replacementAttemptedGeneration === generation ? undefined : this.#replaceMediaConnection;
+  }
+  #replacementBackoffMs(unconnected: RTCPeerConnection | undefined): number {
+    return unconnected ? (FIRST_CONNECT_REPLACEMENT_BACKOFF_MS[this.#firstConnectReplacements++] ?? 0) : 0;
+  }
+  async #installReplacementConnection(replaceMediaConnection: () => Promise<CloudflareSFUBootstrap>, generation: number, cause: MediaConnectionReplacementCause, backoffMs: number): Promise<void> {
+    if (backoffMs > 0) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, backoffMs));
+      this.#requireGeneration(generation);
+    }
+    const bootstrap = await replaceMediaConnection();
+    this.#requireGeneration(generation);
+    validateBootstrap(bootstrap);
+    if (bootstrap.connectionId === this.#bootstrap.connectionId) {
+      throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
+    }
+    this.#fenceLocalPublications();
+    const connectionEpoch = ++this.#connectionEpoch;
+    this.#disposeConnection(false);
+    this.#clearRemoteTracks();
+    this.#cursor = null;
+    this.#bootstrap = bootstrap;
+    this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
+    this.#replacementCause = cause;
+    this.#retiredLocalConnection = null;
+    this.#negotiatedGeneration = null;
+    for (const state of this.#localTracks.values()) {
+      state.transceiver = null;
+      state.enabled = false;
+      state.providerPublicationId = null;
+    }
+    this.remotePublicationsChanged();
+  }
+  /**
+   * Runs `attempt` on a new connection, and again on another while each failure may still be
+   * replaced. `failure` is what made the caller ask; `undefined` means it chose to replace. The
+   * replacement budget (one per generation, or the first-connect list) ends the loop.
+   */
+  async #retryOnReplacedConnection<T>(generation: number, cause: MediaConnectionReplacementCause, failure: unknown, attempt: () => Promise<T>): Promise<T> {
+    let latest = failure;
+    for (;;) {
+      if (latest !== undefined && !this.#mayReplaceAfter(latest, generation)) throw latest;
+      await this.#replaceMediaConnectionForRecovery(generation, cause, latest);
+      try {
+        return await attempt();
+      } catch (error) {
+        latest = error;
+      }
+    }
   }
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
@@ -1561,7 +1611,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#observeRemotePublicationCursor({ incarnation: authoritative.incarnation, sequence: authoritative.sequence, signature: INVALID_PUBLICATION_SIGNATURE });
   }
   #isRetryableConnectionFailure(error: unknown): boolean {
-    return error instanceof CloudflareSFUError && error.code === "signaling_failed" && error.options.retryableConnection === true;
+    return error instanceof CloudflareSFUError && (this.#unconnectedFailures.has(error) || (error.code === "signaling_failed" && error.options.retryableConnection === true));
+  }
+  #unconnectedConnection(failure: unknown): RTCPeerConnection | undefined {
+    return failure instanceof CloudflareSFUError ? this.#unconnectedFailures.get(failure) : undefined;
+  }
+  /** A first-connect timeout has its own bounded budget; any other failure gets one replacement per generation. */
+  #mayReplaceAfter(error: unknown, generation: number): boolean {
+    if (!this.#replaceMediaConnection || !this.#isRetryableConnectionFailure(error)) return false;
+    const unconnected = this.#unconnectedConnection(error);
+    if (unconnected) return unconnected !== this.#connection || this.#firstConnectReplacements < FIRST_CONNECT_REPLACEMENT_BACKOFF_MS.length;
+    return this.#replacementAttemptedGeneration !== generation;
   }
   #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
@@ -1785,6 +1845,19 @@ function observeConnectionState(
   if (started && peerState === "connected" && (iceState === "connected" || iceState === "completed")) return { phase: "live", failure: null };
   return null;
 }
+// ICE reached connected, or it is checking and the server has answered at least one check.
+async function iceIsProgressing(connection: RTCPeerConnection): Promise<boolean> {
+  if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") return true;
+  if (connection.iceConnectionState !== "checking") return false;
+  try {
+    for (const stat of (await connection.getStats()).values()) {
+      if (stat.type === "candidate-pair" && (stat.state === "succeeded" || stat.responsesReceived > 0)) return true;
+    }
+  } catch {
+    // Without stats there is no evidence of progress, so the connection counts as stuck.
+  }
+  return false;
+}
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
 }
@@ -1862,7 +1935,7 @@ function unwrapAggregateErrors(error: unknown): unknown[] {
 function retryableRemotePull(error: unknown): boolean {
   if (!(error instanceof CloudflareSFUError)) return false;
   if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
-  return ["signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);
+  return ["signaling_timeout", "media_failed", "negotiation_timeout", "ice_connection_failed"].includes(error.code);
 }
 function firefoxCameraSimulcastUnsupported(): boolean {
   // Firefox accepts RID encodings but can pause 720p h on an unthrottled link.

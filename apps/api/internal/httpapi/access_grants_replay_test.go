@@ -77,7 +77,7 @@ func TestAccessGrantRefreshReplayDeadline(t *testing.T) {
 				t.Fatal("original binding must be revoked")
 			}
 			fixture := &refreshGrantPlane{issuer: freshIssuer}
-			active := accessgrants.NewActiveAuthorizer(repo)
+			active := accessgrants.NewActiveAuthorizer(repo, nil)
 			endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 			ctx = authentication.ContextWithPrincipal(ctx, authentication.Principal{Kind: authentication.PrincipalUser, UserID: original.ParticipantID})
 			request := issueAccessGrantRequest{TenantID: original.TenantID, SpaceID: original.SpaceID, EpisodeID: original.EpisodeID, ParticipantID: original.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: original.ParticipantGeneration, CurrentMediaToken: requestToken.Token}}

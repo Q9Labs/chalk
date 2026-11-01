@@ -3348,6 +3348,194 @@ describe("remote publication recovery", () => {
     );
   });
 });
+describe("first connection deadline", () => {
+  const DEADLINE_MS = 5000;
+  const DEADLINE_WITH_MARGIN_MS = DEADLINE_MS + 500;
+  const stuckFirstPeer = (connectsAfterMs?: number, stuckPeers = 1) => {
+    const replaceMediaConnection = sequentialReplacementConnections();
+    const harness = createHarness({ autoConnect: (index) => index >= stuckPeers, replaceMediaConnection });
+    if (connectsAfterMs !== undefined) globalThis.setTimeout(() => harness.peers[0]!.setStates("connected", "connected"), connectsAfterMs);
+    return { harness, replaceMediaConnection };
+  };
+  const settlesWithin = async (operation: Promise<unknown>, ms: number): Promise<boolean> => {
+    let settled = false;
+    void operation.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await vi.advanceTimersByTimeAsync(ms);
+    return settled;
+  };
+  const expectOnlyLastPeerOpen = (harness: ReturnType<typeof createHarness>) => {
+    for (const peer of harness.peers.slice(0, -1)) {
+      expect(peer.closed).toBe(true);
+      expect(peer.activeTransceiverCount()).toBe(0);
+    }
+    expect(harness.peers.at(-1)!.closed).toBe(false);
+  };
+  it.each([
+    ["never connects", undefined],
+    ["connects after 7 s", 7000],
+  ])("replaces a listener's first peer connection that %s", async (_name, connectsAfterMs) => {
+    vi.useFakeTimers();
+    try {
+      const { harness, replaceMediaConnection } = stuckFirstPeer(connectsAfterMs);
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      const startedAt = Date.now();
+      const pull = harness.client.refreshRemotePublications();
+      expect(await settlesWithin(pull, DEADLINE_WITH_MARGIN_MS)).toBe(true);
+      await pull;
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(DEADLINE_WITH_MARGIN_MS);
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+      expect(harness.peers).toHaveLength(2);
+      expectOnlyLastPeerOpen(harness);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(harness.peers).toHaveLength(2);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("spends the whole replacement budget for a listener whose first two peer connections never connect", async () => {
+    vi.useFakeTimers();
+    try {
+      const { harness, replaceMediaConnection } = stuckFirstPeer(undefined, 2);
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      const startedAt = Date.now();
+      const pull = harness.client.refreshRemotePublications();
+      const budgetWithMarginMs = DEADLINE_MS + DEADLINE_MS + 1000 + 500;
+      expect(await settlesWithin(pull, budgetWithMarginMs)).toBe(true);
+      await pull;
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(budgetWithMarginMs);
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+      expect(harness.peers).toHaveLength(3);
+      expectOnlyLastPeerOpen(harness);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it.each([
+    ["never connects", undefined],
+    ["connects after 7 s", 7000],
+  ])("replaces a speaker's first peer connection that %s, with one live publication", async (_name, connectsAfterMs) => {
+    vi.useFakeTimers();
+    try {
+      const { harness, replaceMediaConnection } = stuckFirstPeer(connectsAfterMs);
+      const startedAt = Date.now();
+      const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+      expect(await settlesWithin(start, DEADLINE_WITH_MARGIN_MS)).toBe(true);
+      await start;
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(DEADLINE_WITH_MARGIN_MS);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+      expect(harness.peers).toHaveLength(2);
+      expectOnlyLastPeerOpen(harness);
+      expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone")).toHaveLength(1);
+      // The API supersedes the first session's publication when it issues the replacement grant; the client must not keep or retire it.
+      const onReplacement = [...harness.transport.localPublications.keys()].filter((id) => parseCloudflareSFUPublicationID(id).connectionId === "replacement-1");
+      expect(onReplacement).toHaveLength(1);
+      expect(harness.transport.closeInputs).toHaveLength(0);
+      expect(harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).map((input) => input.connectionId)).toEqual(["connection-1", "replacement-1"]);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("gives up replacing after a bounded number of attempts and then follows the existing failure path", async () => {
+    vi.useFakeTimers();
+    try {
+      const replaceMediaConnection = sequentialReplacementConnections();
+      const harness = createHarness({ autoConnect: false, replaceMediaConnection });
+      const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+      const outcome = start.then(
+        () => "started",
+        () => "failed",
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await outcome).toBe("failed");
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+      expect(harness.peers).toHaveLength(3);
+      for (const peer of harness.peers.slice(0, -1)) expect(peer.closed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not replace a connection that connects inside the deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const { harness, replaceMediaConnection } = stuckFirstPeer(4000);
+      const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+      await vi.advanceTimersByTimeAsync(DEADLINE_WITH_MARGIN_MS);
+      await start;
+      expect(replaceMediaConnection).not.toHaveBeenCalled();
+      expect(harness.peers).toHaveLength(1);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  describe("a connection that is still making progress", () => {
+    const iceStats = (responsesReceived: number) => async () => new Map([["pair", { id: "pair", type: "candidate-pair", state: "in-progress", responsesReceived }]]) as unknown as RTCStatsReport;
+    it.each([
+      ["ICE connected while DTLS is still finishing", "connecting", "connected", 0],
+      ["ICE checking with a response from the server", "connecting", "checking", 3],
+    ] as const)("keeps %s", async (_name, connectionState, iceState, responses) => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(responses));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates(connectionState, iceState), 1000);
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connected", "connected"), 6500);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        expect(await settlesWithin(start, 7000)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).not.toHaveBeenCalled();
+        expect(harness.peers).toHaveLength(1);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+    it("replaces a connection that gets ICE responses but never goes live, once the extended wait ends", async () => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(3));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connecting", "checking"), 1000);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        const extendedWaitWithMarginMs = 8000 + 500;
+        expect(await settlesWithin(start, extendedWaitWithMarginMs)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(harness.peers).toHaveLength(2);
+        expectOnlyLastPeerOpen(harness);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+    it("still replaces ICE that is checking without any response", async () => {
+      vi.useFakeTimers();
+      try {
+        const { harness, replaceMediaConnection } = stuckFirstPeer(undefined);
+        vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(iceStats(0));
+        globalThis.setTimeout(() => harness.peers[0]!.setStates("connecting", "checking"), 1000);
+        const start = harness.client.start(fakeStream(new FakeTrack("microphone-track", "audio")));
+        expect(await settlesWithin(start, DEADLINE_WITH_MARGIN_MS)).toBe(true);
+        await start;
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expectOnlyLastPeerOpen(harness);
+        harness.client.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+});
 function sequentialReplacementConnections() {
   const replacement = vi.fn(async () => bootstrap(`replacement-${replacement.mock.calls.length}`));
   return replacement;
@@ -4192,7 +4380,7 @@ it("an unmute during a media connection swap is published when Sync is lost and 
 
 function createHarness(
   options: {
-    readonly autoConnect?: boolean;
+    readonly autoConnect?: boolean | ((peerIndex: number) => boolean);
     readonly onError?: (error: unknown, binding: string) => void;
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
@@ -4202,7 +4390,8 @@ function createHarness(
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const peerConnectionFactory = vi.fn(() => {
-    const peer = new FakePeerConnection(options.autoConnect ?? true);
+    const autoConnect = typeof options.autoConnect === "function" ? options.autoConnect(peers.length) : (options.autoConnect ?? true);
+    const peer = new FakePeerConnection(autoConnect);
     peers.push(peer);
     return peer as unknown as RTCPeerConnection;
   });

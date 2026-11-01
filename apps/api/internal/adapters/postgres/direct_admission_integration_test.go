@@ -158,7 +158,7 @@ func TestDirectAdmissionHTTP(t *testing.T) {
 	server := httptest.NewServer(httpapi.NewRouter(httpapi.Options{
 		APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(nil, nil), Episodes: episodes.NewService(repository),
 		Spaces: spaces.NewService(NewSpaceRepository(queries, pool)), Tenants: tenants.NewService(NewTenantRepository(queries)),
-		SyncTokens: syncTokens, ParticipantMediaIssuer: mediaTokens, ParticipantGeneration: accessgrants.NewActiveAuthorizer(repository), MediaPlane: media,
+		SyncTokens: syncTokens, ParticipantMediaIssuer: mediaTokens, ParticipantGeneration: accessgrants.NewActiveAuthorizer(repository, nil), MediaPlane: media,
 	}))
 	defer server.Close()
 	post := func(t *testing.T, path, token, requestKey, body string, status int) directAdmissionResponse {

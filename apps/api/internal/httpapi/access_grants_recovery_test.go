@@ -38,7 +38,7 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 				t.Fatal(err)
 			}
 			fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
-			active := accessgrants.NewActiveAuthorizer(repo)
+			active := accessgrants.NewActiveAuthorizer(repo, nil)
 			endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 			ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
 			expected := repo.connection
@@ -120,7 +120,7 @@ func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
 	}
 	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
 	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
-	active := accessgrants.NewActiveAuthorizer(repo)
+	active := accessgrants.NewActiveAuthorizer(repo, nil)
 	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
 	expected := subject.CloudflareConnectionID
@@ -174,7 +174,7 @@ func TestAccessGrantRecoveryDuplicateDuringIssuanceIsRetryable(t *testing.T) {
 	}
 	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
 	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
-	active := accessgrants.NewActiveAuthorizer(repo)
+	active := accessgrants.NewActiveAuthorizer(repo, nil)
 	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
 	expected := subject.CloudflareConnectionID
