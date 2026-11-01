@@ -221,10 +221,10 @@ retention policy. The provisioned Tenant and bootstrap API key are retained.
   CHALK_PROOF_CANDIDATE_SDK_ENTRY, for example an installed package's built entry). The second uses the integrity-verified published 5.2.6 client.
   The candidate's welcome must carry `media_off_reason: true`, and the stopped item
   must be `enabled: false`, `publication_id: null`, `off_reason: "host"` with an
-  `off_revision`, and still be so in a snapshot after the socket closes and
-  reopens. The 5.2.6 welcome must not carry the field, no socket may close
-  unexpectedly, and its item must be off with neither `off_reason` nor
-  `off_revision`, before and after the reopen. A Sync without the extension fails
+  `off_revision`, and the SDK's decoded media state must keep the same
+  `offReason` and `offRevision`, also in a snapshot after the socket closes and
+  reopens. Both SDKs must stay live with no unexpected socket close. The 5.2.6 welcome must not carry the field, and its wire item and decoded
+  state must be off with no reason or revision, before and after the reopen. A Sync without the extension fails
   the candidate checks, and the baseline item checks need an item for an
   unpublished stop, which only a Sync with the extension projects. The criteria
   live in `off-reason-criteria.mjs`; the evidence is saved in the run directory.
