@@ -601,6 +601,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       try {
         await this.#serializeSDP(() => this.#closeOwnedPublication(publication), true);
       } catch (error) {
+        srDiag("retire.error", `conn=${publication.connectionId.slice(0, 6)} mid=${publication.transceiver.mid} gone=${goneIsComplete} ${String(error).slice(0, 140)}`);
         if (goneIsComplete && this.#retireGonePublication(publication, error)) continue;
         errors.push(error);
         if (!this.#stopped) reportFailure(error);
@@ -636,6 +637,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
+    srDiag("retire.close", `conn=${connectionId.slice(0, 6)} mid=${transceiver.mid} cause=${phase.cause} pc=${connection.connectionState} cur=${connectionId === this.#bootstrap.connectionId}`);
     this.#markBundledTransportRetiring(publication);
     let closed = connection.connectionState === "closed";
     try {
@@ -878,15 +880,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const wasLive = connectionIsLive(connection);
     const publications: OwnedLocalPublication[] = [];
     try {
+      srDiag("pub.start", `conn=${connectionId.slice(0, 6)} gen=${generation} live=${wasLive} pc=${connection.connectionState}/${connection.signalingState}`);
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
       await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
+      srDiag("pub.negotiated", `conn=${connectionId.slice(0, 6)} pc=${connection.connectionState}/${connection.iceConnectionState}/${connection.signalingState}`);
       if (!wasLive) await this.#waitForConnection(connection, generation);
+      srDiag("pub.connected", `conn=${connectionId.slice(0, 6)} pc=${connection.connectionState}`);
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       this.#settleLocalPublications(publications);
       this.#publishSnapshot();
       this.#emitLocal();
     } catch (error) {
+      srDiag("pub.failed", `conn=${connectionId.slice(0, 6)} gen=${generation}/${this.#generation} pc=${connection.connectionState}/${connection.signalingState} ${String(error).slice(0, 140)}`);
       await this.#rollbackLocalOffer(connection);
       for (const publication of publications) this.#markPublicationRetiring(publication);
       this.#settleLocalPublications(publications);
@@ -948,7 +954,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         source: state.source,
       }),
     );
+    srDiag("pub.addTracks", `conn=${connectionId.slice(0, 6)} mids=${tracks.map((t) => t.mid).join(",")}`);
     const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks }), { generation, connectionId });
+    srDiag("pub.addTracks_done", `conn=${connectionId.slice(0, 6)} gen=${generation}/${this.#generation}`);
     this.#recordLocalPublicationHandles(publications, response.tracks);
     this.#requireGeneration(generation);
     await this.#applyProviderDescription(response, connection);
