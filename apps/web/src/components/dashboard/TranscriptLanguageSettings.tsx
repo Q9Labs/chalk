@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
-import { parseTranscriptLanguage, transcriptLanguageValue, whisperLanguages, type TranscriptLanguage } from "@chalk/transcript-language";
+import { parseTranscriptLanguage, transcriptLanguageValue, whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { errorMessage } from "../../lib/dashboard/client";
 import { useToast } from "./kit";
 
-const priority = ["en", "ur", "ar"] as const;
-const languages = [
-  ...priority,
-  ...Object.keys(whisperLanguages)
-    .filter((code) => !priority.some((value) => value === code))
-    .sort((a, b) => whisperLanguages[a as keyof typeof whisperLanguages].localeCompare(whisperLanguages[b as keyof typeof whisperLanguages])),
-];
 const names = new Intl.DisplayNames(["en"], { type: "language" });
+const priority = ["en", "ur", "ar"] as const;
+const languages = [...priority, ...whisperLanguageCodes.filter((code) => !priority.some((value) => value === code)).sort((a, b) => (names.of(a) ?? a).localeCompare(names.of(b) ?? b))];
 export function TranscriptLanguageSettings({ value, inherit = false, onSave }: { readonly value: TranscriptLanguage | null; readonly inherit?: boolean; readonly onSave: (value: TranscriptLanguage | null) => Promise<void> }) {
   const [draft, setDraft] = useState(value);
   const [busy, setBusy] = useState(false);
