@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -602,6 +604,8 @@ func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, part
 	if connectionID == "" {
 		connectionID = subject.CloudflareConnectionID
 	}
+	diagSum := sha256.Sum256([]byte(connectionID))
+	slog.InfoContext(ctx, "cf_diag_auth", "event", "cf_diag_auth", "participant", participantID.String()[:8], "conn", hex.EncodeToString(diagSum[:3]), "generation", subject.ParticipantGeneration)
 	return requireParticipantMediaRoute(
 		ctx, tenantID, spaceID, episodeID, participantID, subject.ParticipantGeneration,
 		accessgrants.ProviderCloudflareSFU, connectionID,
