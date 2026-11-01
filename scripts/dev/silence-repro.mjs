@@ -25,6 +25,10 @@ const builds = {
   pr716: { serverRev: "origin/master", sdkRev: "origin/fix/mic-mute-keeps-publication" },
   // #716 + #736 + the listener loop + #735, server and SDK together.
   proof: { serverRev: "origin/diag/silence-proof-build", sdkRev: "origin/diag/silence-proof-build" },
+  // The same releases with Cloudflare request logging on the server (diag/cf-session-log = origin/master + logging).
+  "5.2.6d": { serverRev: "origin/diag/cf-session-log", sdkRev: "2ec22c54b", npm: "5.2.6" },
+  "5.3.1d": { serverRev: "origin/diag/cf-session-log", sdkRev: "3f9fe4385e", npm: "5.3.1" },
+  masterd: { serverRev: "origin/diag/cf-session-log", sdkRev: "origin/master" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
 // Per-direction impairment (RTT = egress + ingress delay). Only the default interface is shaped, so browser-to-local
