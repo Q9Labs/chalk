@@ -67,41 +67,41 @@ All names below start with `chalk_`. `Read` means read-only; `Add` means an
 additive operation; `Change` means a potentially destructive mutation. These
 annotations guide agents but do not authorize calls.
 
-| Tool | Required scope | Annotation |
-| --- | --- | --- |
-| `get_connection` | `tenants:read` | Read |
-| `update_tenant` | `tenants:write` | Change |
-| `list_memberships` | `memberships:read` | Read |
-| `set_membership` | `memberships:write` | Change |
-| `list_api_keys` | `api_keys:read` | Read |
-| `issue_api_key` | `api_keys:write` | Change |
-| `revoke_api_key` | `api_keys:delete` | Change |
-| `inspect_webhooks` | `webhooks:read` | Read |
-| `configure_webhook` | `webhooks:write`; delete: `webhooks:delete` | Change |
-| `inspect_webhook_deliveries` | `webhooks:read` | Read |
-| `send_webhook` | `webhooks:write` | Change |
-| `list_space_activity` | `episodes:read` | Read |
-| `list_spaces` | `spaces:read` | Read |
-| `inspect_space` | `spaces:read` | Read |
-| `create_space` | `spaces:write` | Add |
-| `configure_space` | `spaces:write` | Change |
-| `set_space_archived` | `spaces:write` | Change |
-| `prepare_recording` | inspect: `spaces:read`; prepare or cancel: `spaces:write` | Change |
-| `list_episodes` | `episodes:read` | Read |
-| `inspect_episode` | `episodes:read` | Read |
-| `create_episode` | `episodes:write` | Add |
-| `list_live_episodes` | `episodes:read` | Read |
-| `end_episode` | `episodes:write` | Change |
-| `set_episode_deadline` | `episodes:write` | Change |
-| `list_admission_requests` | `episodes:read` | Read |
-| `decide_admission_request` | `episodes:write` | Change |
-| `remove_participant` | `episodes:write` | Change |
-| `list_recordings` | `recordings:read` | Read |
-| `get_recording` | `recordings:read` | Read |
-| `get_recording_download` | `recordings:read` | Read |
-| `export_recording` | `recordings:read` | Add |
-| `list_transcripts` | `transcriptions:read` | Read |
-| `delete_transcript` | `transcriptions:delete` | Change |
+| Tool                         | Required scope                                            | Annotation |
+| ---------------------------- | --------------------------------------------------------- | ---------- |
+| `get_connection`             | `tenants:read`                                            | Read       |
+| `update_tenant`              | `tenants:write`                                           | Change     |
+| `list_memberships`           | `memberships:read`                                        | Read       |
+| `set_membership`             | `memberships:write`                                       | Change     |
+| `list_api_keys`              | `api_keys:read`                                           | Read       |
+| `issue_api_key`              | `api_keys:write`                                          | Change     |
+| `revoke_api_key`             | `api_keys:delete`                                         | Change     |
+| `inspect_webhooks`           | `webhooks:read`                                           | Read       |
+| `configure_webhook`          | `webhooks:write`; delete: `webhooks:delete`               | Change     |
+| `inspect_webhook_deliveries` | `webhooks:read`                                           | Read       |
+| `send_webhook`               | `webhooks:write`                                          | Change     |
+| `list_space_activity`        | `episodes:read`                                           | Read       |
+| `list_spaces`                | `spaces:read`                                             | Read       |
+| `inspect_space`              | `spaces:read`                                             | Read       |
+| `create_space`               | `spaces:write`                                            | Add        |
+| `configure_space`            | `spaces:write`                                            | Change     |
+| `set_space_archived`         | `spaces:write`                                            | Change     |
+| `prepare_recording`          | inspect: `spaces:read`; prepare or cancel: `spaces:write` | Change     |
+| `list_episodes`              | `episodes:read`                                           | Read       |
+| `inspect_episode`            | `episodes:read`                                           | Read       |
+| `create_episode`             | `episodes:write`                                          | Add        |
+| `list_live_episodes`         | `episodes:read`                                           | Read       |
+| `end_episode`                | `episodes:write`                                          | Change     |
+| `set_episode_deadline`       | `episodes:write`                                          | Change     |
+| `list_admission_requests`    | `episodes:read`                                           | Read       |
+| `decide_admission_request`   | `episodes:write`                                          | Change     |
+| `remove_participant`         | `episodes:write`                                          | Change     |
+| `list_recordings`            | `recordings:read`                                         | Read       |
+| `get_recording`              | `recordings:read`                                         | Read       |
+| `get_recording_download`     | `recordings:read`                                         | Read       |
+| `export_recording`           | `recordings:read`                                         | Add        |
+| `list_transcripts`           | `transcriptions:read`                                     | Read       |
+| `delete_transcript`          | `transcriptions:delete`                                   | Change     |
 
 `chalk_get_transcript` and `chalk_request_transcript` are deferred until the
 separate transcript text-export and language-mode changes are merged. This

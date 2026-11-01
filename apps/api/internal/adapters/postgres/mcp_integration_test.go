@@ -19,6 +19,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
@@ -51,6 +52,9 @@ func connectMCP(t *testing.T, server *httptest.Server, token, version string) *m
 	session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/mcp", HTTPClient: httpClient}, &mcp.ClientSessionOptions{ProtocolVersion: version})
 	if err != nil {
 		t.Fatalf("MCP initialize (%s): %v", version, err)
+	}
+	if result := session.InitializeResult(); result.ProtocolVersion != version {
+		t.Fatalf("negotiated %s, want %s", result.ProtocolVersion, version)
 	}
 	t.Cleanup(func() {
 		if err := session.Close(); err != nil {
@@ -101,7 +105,14 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'MCP own'),($2,'MCP foreign private')`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','disabled')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
-	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,deadline_at,config_snapshot) values($1,$2,$3,'active',now()+interval '1 hour','{}')`, uuid(episodeID), uuid(tenantID), uuid(spaceID))
+	binding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "fixture-app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	episodeRepo := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, directAdmissionMedia{binding: binding})
+	if _, err := episodes.NewService(episodeRepo).CreateEpisode(ctx, episodes.CreateEpisodeInput{ID: episodeID, TenantID: tenantID, SpaceID: spaceID, Request: episodes.Request{Key: "mcp-fixture-episode-0001"}}); err != nil {
+		t.Fatal(err)
+	}
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,name,generation,status,role,capabilities) values($1,$2,$3,$4,'MCP participant',1,'active','collaborator',array['sendChat'])`, uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values($1,$2,$3,$4,'completed','r2')`, uuid(recordingID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages) values($1,$2,$3,$4,$5,'not_requested','{}')`, uuid(transcriptID), uuid(tenantID), uuid(recordingID), uuid(spaceID), uuid(episodeID))
@@ -139,7 +150,6 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	}
 	spaceService := spaces.NewService(NewSpaceRepository(q, pool))
 	tenantService := tenants.NewService(NewTenantRepository(q))
-	episodeRepo := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, directAdmissionMedia{})
 	inviteRepo := NewPublicInviteRepositoryWithPool(pool).WithEpisodeLifecycle(episodeRepo)
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -165,9 +175,21 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	storage := objectstorage.NewService(matrixObjectStore{})
 	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
 	options.RateLimit.DisableAuthenticated = true
+	options.LocalSystemToken = "mcp-system-fixture"
 	options.MCP = httpapi.NewMCPHandler(options)
 	server := httptest.NewServer(httpapi.NewRouter(options))
 	t.Cleanup(server.Close)
+	for _, token := range []string{"", "mcp-system-fixture"} {
+		request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(`{}`))
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		response := httptest.NewRecorder()
+		httpapi.NewRouter(options).ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("non-key credential accepted: %d", response.Code)
+		}
+	}
 	fullSession := connectMCP(t, server, full.RawKey, "2026-07-28")
 	deniedSession := connectMCP(t, server, denied.RawKey, "2025-11-25")
 	foreignSpace := ids()
