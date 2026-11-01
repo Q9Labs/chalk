@@ -443,6 +443,8 @@ func (a Adapter) request(ctx context.Context, method string, path string, body a
 func (a Adapter) requestStatus(ctx context.Context, method string, path string, body any, output any, operation string) (statusCode int, err error) {
 	ctx, span := sfuTracer.Start(ctx, "mediaplane.cloudflare.sfu."+operation, trace.WithSpanKind(trace.SpanKindClient))
 	responseBytes := 0
+	var diagResponse []byte
+	defer func() { diagRequest(ctx, method, path, operation, body, statusCode, err, diagResponse) }()
 	defer func() {
 		if err != nil {
 			err = enrichProviderFailure(err, body, responseBytes)
@@ -486,6 +488,7 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 		return providerResponse.StatusCode, newTransportFailure(ctx, operation, providerResponse.StatusCode, err)
 	}
 	responseBytes = len(payload)
+	diagResponse = payload
 	if providerResponse.StatusCode < 200 || providerResponse.StatusCode >= 300 {
 		return providerResponse.StatusCode, sfuStatusError(operation, providerResponse.StatusCode, payload)
 	}
