@@ -182,8 +182,8 @@ func TestEndEpisodeReturnsWithinCloseBudget(t *testing.T) {
 	started := time.Now()
 	result := executor.Dispatch(ctx, testEndOperation(t))
 	elapsed := time.Since(started)
-	if result.Outcome != provideroperations.OutcomeRetryableFailure {
-		t.Fatalf("end episode outcome = %+v, want retryable failure", result)
+	if result.Outcome != provideroperations.OutcomeRetryableFailure || result.Reason != "timeout" {
+		t.Fatalf("end episode outcome = %+v, want retryable timeout", result)
 	}
 	if elapsed >= 2*testProviderCloseBudget {
 		t.Fatalf("end episode took %s, want within the close budget plus margin", elapsed)
@@ -212,8 +212,8 @@ func TestEndEpisodeRetryAfterPartialCloseConverges(t *testing.T) {
 	started := time.Now()
 	first := executor.Dispatch(ctx, testEndOperation(t))
 	elapsed := time.Since(started)
-	if first.Outcome != provideroperations.OutcomeRetryableFailure {
-		t.Fatalf("first end episode outcome = %+v, want retryable failure", first)
+	if first.Outcome != provideroperations.OutcomeRetryableFailure || first.Reason != "timeout" {
+		t.Fatalf("first end episode outcome = %+v, want retryable timeout", first)
 	}
 	if elapsed >= 2*testProviderCloseBudget {
 		t.Fatalf("first end episode took %s, want within the close budget plus margin", elapsed)
