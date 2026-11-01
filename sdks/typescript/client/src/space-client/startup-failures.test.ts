@@ -63,6 +63,32 @@ afterEach(() => {
 });
 
 describe("public client startup failure contract", () => {
+  it("shares overlapping joins while the first admission is slow", async () => {
+    const sockets = await liveBrowser();
+    let release!: (grant: ReturnType<typeof accessGrant>) => void;
+    const getAccess = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof accessGrant>>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const client = makeClient(getAccess);
+    const first = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+    try {
+      await vi.waitFor(() => expect(getAccess).toHaveBeenCalledTimes(1));
+      expect(client.getSnapshot().connection.status).toBe("joining");
+      const second = client.join({ microphone: false, camera: false }).catch((cause: unknown) => cause);
+      release(accessGrant());
+      expect(await Promise.all([first, second])).toEqual([undefined, undefined]);
+      expect(getAccess).toHaveBeenCalledTimes(1);
+      expect(sockets).toHaveLength(1);
+      expect(client.getSnapshot().connection.status).toBe("live");
+    } finally {
+      client.dispose();
+      await first;
+    }
+  });
+
   it("joins after a stalled upgrade and a slow replacement without a manual retry", async () => {
     const sockets = await liveBrowser(false, { stallFirstUpgrade: true, upgradeDelayMs: 8000 });
     vi.useFakeTimers();
