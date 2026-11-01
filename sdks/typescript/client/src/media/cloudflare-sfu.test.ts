@@ -3350,9 +3350,9 @@ describe("remote publication recovery", () => {
 });
 describe("first connection deadline", () => {
   const DEADLINE_WITH_MARGIN_MS = 3500;
-  const stuckFirstPeer = (connectsAfterMs?: number) => {
+  const stuckFirstPeer = (connectsAfterMs?: number, stuckPeers = 1) => {
     const replaceMediaConnection = sequentialReplacementConnections();
-    const harness = createHarness({ autoConnect: (index) => index > 0, replaceMediaConnection });
+    const harness = createHarness({ autoConnect: (index) => index >= stuckPeers, replaceMediaConnection });
     if (connectsAfterMs !== undefined) globalThis.setTimeout(() => harness.peers[0]!.setStates("connected", "connected"), connectsAfterMs);
     return { harness, replaceMediaConnection };
   };
@@ -3392,6 +3392,27 @@ describe("first connection deadline", () => {
       expectOnlyLastPeerOpen(harness);
       await vi.advanceTimersByTimeAsync(5000);
       expect(harness.peers).toHaveLength(2);
+      harness.client.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("spends the whole replacement budget for a listener whose first two peer connections never connect", async () => {
+    vi.useFakeTimers();
+    try {
+      const { harness, replaceMediaConnection } = stuckFirstPeer(undefined, 2);
+      await harness.client.start(fakeStream());
+      harness.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|camera-a");
+      const startedAt = Date.now();
+      const pull = harness.client.refreshRemotePublications();
+      const budgetWithMarginMs = 3000 + 3000 + 1000 + 500;
+      expect(await settlesWithin(pull, budgetWithMarginMs)).toBe(true);
+      await pull;
+      expect(Date.now() - startedAt).toBeLessThanOrEqual(budgetWithMarginMs);
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+      expect(harness.peers).toHaveLength(3);
+      expectOnlyLastPeerOpen(harness);
       harness.client.stop();
     } finally {
       vi.useRealTimers();
