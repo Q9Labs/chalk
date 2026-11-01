@@ -190,6 +190,7 @@ files.forEach((file, fileIndex) => {
       // Tap-to-heard: from the unmute tap to each listener hearing audio; an unmute whose publisher never reaches enabled counts every listener as silent.
       tap: { taps: 0, neverEnabled: 0, neverStatus: new Map(), pairs: 0, silent: 0, slow: 0, clusters: [], worst: [], heard: [], blocked: 0, waited: [] },
       reconnect: { pairs: 0, silent: 0, slow: 0, openAtEnd: 0, worst: [] },
+      heal: { pairs: 0, slow: 0, never: 0, neverHeard: 0, healed: [] },
       pulls: 0,
       trackErrors: 0,
       s503: 0,
@@ -255,6 +256,10 @@ files.forEach((file, fileIndex) => {
             cell.tap.silent++;
             cell.tap.slow++;
             cell.tap.worst.push(deadline);
+            cell.heal.pairs++;
+            cell.heal.slow++;
+            cell.heal.never++;
+            cell.heal.neverHeard++;
             tapCluster.pairs++;
             tapCluster.silent++;
             tapCluster.slow++;
@@ -292,6 +297,13 @@ files.forEach((file, fileIndex) => {
           if (tapHeard === null || tapHeard > deadline) {
             cell.tap.silent++;
             tapCluster.silent++;
+          }
+          cell.heal.pairs++;
+          if (tapWorst > SLOW) {
+            cell.heal.slow++;
+            if (tapHeard === null) cell.heal.neverHeard++;
+            if (tapHeard === null || episodes.some((episode) => episode.open && episode.end - episode.start > SLOW)) cell.heal.never++;
+            else cell.heal.healed.push(tapWorst);
           }
           if (tapWorst > SLOW) {
             cell.tap.slow++;
@@ -364,6 +376,7 @@ const summaries = rows.map((cell) => ({
   slowWilson: wilson(cell.slow, cell.pairs),
   slowCluster: clusterInterval(cell.clusters, "slow"),
   timeToAudioP50: quantile(cell.timeToAudio, 0.5),
+  heal: { pairs: cell.heal.pairs, slow: cell.heal.slow, never: cell.heal.never, neverHeard: cell.heal.neverHeard, healedP50: quantile(cell.heal.healed, 0.5), healedP90: quantile(cell.heal.healed, 0.9), healedP99: quantile(cell.heal.healed, 0.99), healedMax: quantile(cell.heal.healed, 1) },
   healP50: quantile(cell.worst, 0.5),
   healP99: quantile(cell.worst, 0.99),
   healMax: quantile(cell.worst, 1),
@@ -455,6 +468,11 @@ if (asJson) {
     console.log(
       `| ${s.build} | ${s.condition} | ${s.tap.taps} | ${s.tap.neverEnabled} (${s.tap.blocked}) | ${seconds(s.tap.waitP50)} / ${seconds(s.tap.waitP99)} / ${seconds(s.tap.waitMax)} s | ${s.tap.pairs} | ${s.tap.silent} ${pct(s.tap.pairs ? s.tap.silent / s.tap.pairs : NaN)} (${interval(s.tap.silentCluster)}) | ${s.tap.slow} ${pct(s.tap.pairs ? s.tap.slow / s.tap.pairs : NaN)} (${interval(s.tap.slowCluster)}) | ${seconds(s.tap.heardP50)} s | ${seconds(s.tap.worstP50)} / ${seconds(s.tap.worstP99)} / ${seconds(s.tap.worstMax)} s |`,
     );
+  console.log("\nSilence that never heals against silence that heals late (per tap and listener; slow = a silent stretch over 5 s; never healed = still silent when the window ended, or the speaker never reached enabled; healed time = longest silent stretch from the tap):\n");
+  console.log("| build | condition | pairs | slow (>5 s) | never healed (of which never heard at all) | healed late | healed p50 / p90 / p99 / max |");
+  console.log("|---|---|---|---|---|---|---|");
+  for (const s of summaries)
+    console.log(`| ${s.build} | ${s.condition} | ${s.heal.pairs} | ${s.heal.slow} | ${s.heal.never} (${s.heal.neverHeard}) | ${s.heal.slow - s.heal.never} | ${seconds(s.heal.healedP50)} / ${seconds(s.heal.healedP90)} / ${seconds(s.heal.healedP99)} / ${seconds(s.heal.healedMax)} s |`);
   console.log("\nPairs that went through a reconnect (a silent episode over 2 s that overlaps an SFU session change of the listener or the speaker):\n");
   console.log("| build | condition | reconnected pairs | silent (15 s) | silent >5 s | still silent at run end | heal p50 / p99 / max |");
   console.log("|---|---|---|---|---|---|---|");

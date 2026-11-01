@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -498,12 +498,16 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
             path: path.replace(/\/[0-9a-f-]{20,}/gu, "/:id"),
             status: response.status(),
             locations: input?.tracks?.map((track) => track.location).join(",") ?? null,
+            targets: input?.tracks?.filter((track) => track.location === "remote").map((track) => ({ sessionId: track.sessionId ?? null, trackName: track.trackName ?? null })),
+            bodyKeys: input?.tracks?.some((track) => track.location === "local") ? Object.keys(body).slice(0, 12) : undefined,
+            localSessionId: input?.tracks?.some((track) => track.location === "local") ? (body.sessionId ?? body.session_id ?? null) : undefined,
             connectionNumber: connectionId ? [...connections[index]].indexOf(connectionId) + 1 : null,
             errorCode: body.code ?? body.error?.code ?? body.errorCode ?? null,
             trackErrors: (body.trackErrors ?? body.tracks?.filter((track) => track.errorCode || track.errorDescription))?.map((track) => track.code ?? track.errorCode ?? "unknown"),
             trackErrorDetail: body.tracks?.filter((track) => track.errorCode || track.errorDescription).map((track) => ({ code: track.errorCode ?? null, description: String(track.errorDescription ?? "").slice(0, 200) })),
           };
           run.network.push(entry);
+          if (entry.targets?.length) appendFileSync(process.env.SR_TARGETS_FILE ?? "/tmp/sr-targets.jsonl", `${JSON.stringify({ at: Date.now(), participant: index, targets: entry.targets })}\n`);
           // First local publish by this participant's first SFU session: schedule the session kill.
           if (run.kill && entry.method === "POST" && entry.locations === "local" && entry.status < 300 && connectionId && !killed.has(index)) {
             killed.add(index);
