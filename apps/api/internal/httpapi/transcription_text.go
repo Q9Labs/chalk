@@ -27,7 +27,7 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 		if metadata == nil {
 			return transcriptTextResponse{}, apiErrorServiceUnavailable
 		}
-		_, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
+		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
 		if err != nil {
 			return transcriptTextResponse{}, err
 		}
@@ -35,6 +35,7 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 		if err != nil {
 			return transcriptTextResponse{}, err
 		}
+		info.Languages = transcript.Languages
 		return transcriptTextResponse{
 			text:        transcripts.FormatText(document, info),
 			disposition: transcriptTextDisposition(info.SpaceTitle, info.StartedAt),

@@ -71,3 +71,17 @@ func textTestMetadata() TextMetadata {
 func textTestCue(start, end int64, ref string, generation int64, name, text string) DocumentCue {
 	return DocumentCue{StartMS: start, EndMS: end, Text: text, Identity: &DocumentCueIdentity{ParticipantRef: ref, ParticipantGeneration: generation, DisplayName: &name}}
 }
+
+func TestFormatTextCompletedDetectedLanguages(t *testing.T) {
+	metadata := textTestMetadata()
+	metadata.Languages = []string{"ur", "en", "ur"}
+	language := "en"
+	text := FormatText(Document{Language: &language}, metadata)
+	if !strings.Contains(text, "Languages: English, Urdu\n") {
+		t.Fatalf("detected languages missing or repeated: %q", text)
+	}
+	text = FormatText(Document{}, metadata)
+	if !strings.Contains(text, "Languages: English, Urdu\n") {
+		t.Fatalf("multilingual artifact without a single language lost detected languages: %q", text)
+	}
+}
