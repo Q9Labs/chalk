@@ -348,11 +348,16 @@ func TestFailedReplacementCreationReportsTheProviderFailure(t *testing.T) {
 	listener := joinParticipant(t, adapter, "listener")
 	fake.advance(20 * time.Second)
 	fake.failNewSessions(http.StatusTooManyRequests)
+	logs := captureAddTracksLogs(t)
 
 	_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
 
 	if !errors.Is(err, mediaplane.ErrProviderRateLimited) || errors.Is(err, mediaplane.ErrConnectionNotFound) {
 		t.Fatalf("a rate-limited replacement must surface the rate limit, got %v", err)
+	}
+	record := addTracksRecord(t, logs)
+	if record["http_status"] != float64(http.StatusGone) || record["provider_code"] == "rate_limited" {
+		t.Fatalf("the add-tracks record must describe the call to the gone session, not the failed replacement: %v", record)
 	}
 	fake.failNewSessions(0)
 	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {

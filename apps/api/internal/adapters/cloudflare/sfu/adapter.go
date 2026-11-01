@@ -337,7 +337,9 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		switch {
 		case replaceErr != nil:
 			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "failed")))
-			err = replaceErr
+			// The record keeps the gone session's own status; the failed creation logs its own provider failure.
+			logAddTracksCall(ctx, input, result.TrackErrors, attempt, err, addTracksRetryNone, false)
+			return a.toClientIDs(result), a.errorWithClientIDs(replaceErr)
 		case replaced:
 			firstResult, first, firstErr := result, attempt, err
 			result, attempt, err = a.addTracks(ctx, input, fresh)
