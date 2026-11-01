@@ -37,7 +37,8 @@ const profiles = {
 // listener-kill: every listener's pulled track of each speaker is force-closed once, mid-call.
 // pull503: the browser's remote-pull requests fail with 503 media.unavailable at a fixed rate.
 // toggle: after the first unmute every speaker mutes for 4 s and unmutes for 8 s, repeatedly, so each unmute is a fresh publication.
-const faults = ["kill", "listener-kill", "pull503", "toggle"];
+// mute-cycle: speaker 0 alone taps mute and unmute ten times each, 2 to 6 s apart (same gaps for every build); the other speakers stay unmuted.
+const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle"];
 // A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
 const conditionOf = (name) => {
   const parts = name.split("+");
@@ -354,6 +355,7 @@ async function runBuild(name) {
           listenerKill: condition.faults.includes("listener-kill"),
           pull503: condition.faults.includes("pull503") ? pull503Rate : 0,
           toggle: condition.faults.includes("toggle"),
+          muteCycle: condition.faults.includes("mute-cycle"),
           runIndex,
           started: new Date().toISOString(),
           network: [],
@@ -448,6 +450,9 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           accessQueue = next.catch(() => undefined);
           return next;
         });
+        page.on("console", (message) => {
+          if (message.type() === "error") run.faults.push({ at: Date.now() - origin, participant: index, kind: "console-error", message: message.text().slice(0, 400) });
+        });
         page.on("pageerror", (error) => run.faults.push({ at: Date.now() - origin, participant: index, kind: "pageerror", message: error.message }));
         page.on("response", async (response) => {
           const path = new URL(response.url()).pathname;
@@ -498,6 +503,20 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
       }
     }
+    let roomSeconds = runSeconds;
+    if (run.muteCycle) {
+      const gaps = seededRandom(run.runIndex * 104729 + 17);
+      schedule.length = 0;
+      for (let speaker = 0; speaker < speakerCount; speaker++) schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
+      let at = 3;
+      for (let cycle = 0; cycle < 10; cycle++) {
+        at += 2 + gaps() * 4;
+        schedule.push({ at, participant: 0, kind: "mute" });
+        at += 2 + gaps() * 4;
+        schedule.push({ at, participant: 0, kind: "unmute", first: false });
+      }
+      roomSeconds = Math.max(runSeconds, at + 10);
+    }
     schedule.sort((a, b) => a.at - b.at);
     run.speakerCount = speakerCount;
     // Every listener-speaker pair loses its pulled track once, in shuffled order, 0.7 s apart while all speakers are on.
@@ -534,7 +553,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         event.error = error.message;
       }
     };
-    while ((performance.now() - start) / 1000 < runSeconds) {
+    while ((performance.now() - start) / 1000 < roomSeconds) {
       const t = (performance.now() - start) / 1000;
       while (cursor < schedule.length && schedule[cursor].at <= t) {
         const action = schedule[cursor++];

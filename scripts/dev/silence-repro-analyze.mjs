@@ -152,6 +152,19 @@ const files = process.argv.slice(2).filter((argument) => !argument.startsWith("-
 const asJson = process.argv.includes("--json");
 // --only=v1 keeps rooms whose taps were blind clicks on the mic toggle; --only=v2 keeps rooms whose taps wait for the button to offer the action.
 const only = process.argv.find((argument) => argument.startsWith("--only="))?.slice(7);
+// --pauses=<json>: box pauses per invocation, keyed "D3/c10" (file name without .json, then the invocation), each with first and last API log time and its gaps of 8 s or more.
+// A room is flagged when the harness recorded a stall or a pause overlaps the room. --flagged=keep analyses flagged rooms too; --flagged=drop leaves them out.
+// Without either flag, rooms with a recorded stall are dropped and pauses are not applied (the earlier behaviour).
+const flaggedMode = process.argv.find((argument) => argument.startsWith("--flagged="))?.slice(10);
+const pausesPath = process.argv.find((argument) => argument.startsWith("--pauses="))?.slice(9);
+const pauses = pausesPath ? JSON.parse(readFileSync(pausesPath, "utf8")) : {};
+function pausedDuringRoom(run, invocationKey) {
+  const info = pauses[invocationKey];
+  if (!info) return false;
+  const start = run.originMs ?? info.first;
+  const end = run.originMs !== undefined && run.samples?.length ? run.originMs + (run.samples.at(-1).t + 1) * 1000 : info.last;
+  return info.gaps.some((gap) => gap.from < end && gap.to > start);
+}
 files.forEach((file, fileIndex) => {
   const report = JSON.parse(readFileSync(file, "utf8"));
   for (const run of report.runs) {
@@ -163,6 +176,7 @@ files.forEach((file, fileIndex) => {
       runs: 0,
       errored: 0,
       stalled: 0,
+      flagged: 0,
       pairs: 0,
       silent: 0,
       slow: 0,
@@ -190,8 +204,10 @@ files.forEach((file, fileIndex) => {
     cells.set(key, cell);
     cell.runs++;
     cell.shas.add(`${run.serverSha?.slice(0, 9)}/${run.sdkSha?.slice(0, 9)}`);
-    if (run.stalls?.length) {
-      cell.stalled++; // the box froze mid-room; its timings are not comparable
+    const flagged = Boolean(run.stalls?.length) || pausedDuringRoom(run, `${file.split("/").at(-1).replace(".json", "")}/${run.invocation}`);
+    if (flagged) cell.flagged++;
+    if (flaggedMode === "drop" ? flagged : run.stalls?.length && flaggedMode !== "keep") {
+      cell.stalled++; // the box froze or paused mid-room; its timings are not comparable
       continue;
     }
     if (run.error || !run.samples.length) {
@@ -335,6 +351,7 @@ const summaries = rows.map((cell) => ({
   condition: cell.condition,
   rooms: cell.runs - cell.errored - cell.stalled,
   stalledRooms: cell.stalled,
+  flaggedRooms: cell.flagged,
   erroredRooms: cell.errored,
   unmutes: cell.clusters.length,
   pairs: cell.pairs,
