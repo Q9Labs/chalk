@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -103,7 +104,7 @@ func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerS
 		r.Post("/jobs/claim", recorderWorkerClaimHandler(service))
 		r.Post("/jobs/heartbeat", recorderWorkerHeartbeatHandler(service))
 		r.Post("/jobs/progress", recorderWorkerProgressHandler(service))
-		r.Post("/jobs/fail", recorderWorkerFailHandler(service))
+		r.Post("/jobs/fail", recorderWorkerFailHandler(service, controls.Logger))
 		r.Post("/jobs/capture/relinquish", recorderWorkerRelinquishCaptureHandler(service))
 		r.Post("/jobs/complete", recorderWorkerCompleteHandler(service, controls.Logger))
 		r.Post("/pool-health", recorderWorkerPoolHealthHandler(service, controls.FleetAuthority, controls.Logger))
@@ -419,7 +420,10 @@ func recorderWorkerProgressHandler(service RecorderWorkerService) http.HandlerFu
 	}
 }
 
-func recorderWorkerFailHandler(service RecorderWorkerService) http.HandlerFunc {
+func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logger) http.HandlerFunc {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := recorderWorkerRequestIdentity(w, request)
 		if !ok {
@@ -447,10 +451,14 @@ func recorderWorkerFailHandler(service RecorderWorkerService) http.HandlerFunc {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
-		job, err := service.Fail(request.Context(), recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail})
+		input := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail}
+		job, err := service.Fail(request.Context(), input)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
 			return
+		}
+		if job.Kind == recordingpipeline.JobKindRender && body.ErrorCode == "render_attempt_failed" {
+			observability.LogRenderAttemptFailure(request.Context(), logger, input)
 		}
 		writeJSON(w, http.StatusOK, recorderWorkerJobResponseValue(job))
 	}

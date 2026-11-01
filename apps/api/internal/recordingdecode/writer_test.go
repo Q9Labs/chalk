@@ -605,6 +605,80 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 		t.Fatalf("H264 duration = %q, want 0.1 seconds", probeOutput)
 	}
 	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "h264")
+	t.Run("more than 512 variable frame intervals", func(t *testing.T) {
+		// The retained production failure proves more than 512 non-nominal
+		// intervals in one H264 source. This fixture recreates that shape without
+		// retaining any production media or identifiers.
+		const frameCount = 1_050
+		var variablePackets []recordingbundle.RTPPacket
+		timestamps := make([]uint64, frameCount)
+		timestamp := uint32(9_000)
+		sequence := uint16(1)
+		payloader := codecs.H264Payloader{}
+		for frameIndex := range frameCount {
+			timestamps[frameIndex] = uint64(timestamp)
+			payloads := payloader.Payload(1_200, accessUnits[frameIndex%len(accessUnits)])
+			for payloadIndex, payload := range payloads {
+				variablePackets = append(variablePackets, recordingbundle.RTPPacket{
+					SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence),
+					Timestamp: timestamp, SSRC: 85, PayloadType: 102,
+					Marker: payloadIndex == len(payloads)-1, Payload: payload,
+				})
+				sequence++
+			}
+			timestamp += 900 + uint32(frameIndex%2)*450
+		}
+		variableBundle := bundle
+		variableBundle.Fragments = []recordingbundle.RTPFragment{{Track: track, Packets: variablePackets}}
+		endMS := ticksToMillisecondsCeil(timestamps[len(timestamps)-1]+900, videoClockRate)
+		variableBundle.Manifest.MonotonicRange.EndMilliseconds = endMS
+		variableBundle.Manifest.MediaRange.EndMilliseconds = endMS
+		value, err := recordingbundle.Encrypt(key, variableBundle)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(root, "variable.bundle")
+		if err := os.WriteFile(path, value, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, passthrough := range []bool{false, true} {
+			t.Run("passthrough="+strconv.FormatBool(passthrough), func(t *testing.T) {
+				variableRequest := request
+				variableRequest.VideoPassthrough = passthrough
+				variableRequest.OutputDirectory = filepath.Join(root, "variable-"+strconv.FormatBool(passthrough))
+				variableRequest.DurationMS = endMS
+				variableRequest.Presentation.Clock.DurationMillis = endMS
+				variableRequest.Bundles = append([]BundleFile(nil), request.Bundles...)
+				variableRequest.Bundles[0].Path = path
+				variableRequest.Bundles[0].ExpectedSHA256 = recordingbundle.ObjectChecksumHex(value)
+				result, err := Write(context.Background(), variableRequest)
+				if err != nil {
+					t.Fatalf("decode variable H264: %v", err)
+				}
+				media := filepath.Join(variableRequest.OutputDirectory, filepath.FromSlash(result.Index.Sources[0].Path))
+				output, err := exec.Command("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts", "-of", "csv=p=0", media).Output()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var got []uint64
+				for _, line := range strings.Fields(string(output)) {
+					pts, err := strconv.ParseUint(strings.TrimSuffix(line, ","), 10, 64)
+					if err != nil {
+						t.Fatalf("parse frame timestamp %q: %v", line, err)
+					}
+					got = append(got, pts)
+				}
+				if len(got) != len(timestamps) {
+					t.Fatalf("decoded %d frames, want %d", len(got), len(timestamps))
+				}
+				for index, pts := range got {
+					if want := timestamps[index] - timestamps[0]; pts != want {
+						t.Fatalf("frame %d PTS = %d, want %d", index, pts, want)
+					}
+				}
+			})
+		}
+	})
 	t.Run("loss through EOF holds last frame", func(t *testing.T) {
 		last := &bundle.Fragments[0].Packets[len(bundle.Fragments[0].Packets)-1]
 		last.SequenceNumber++
@@ -787,15 +861,5 @@ func assertPassthroughFrameTimes(t *testing.T, request Request, outputDirectory,
 	}
 	if got := strings.Fields(string(output)); strings.Join(got, " ") != "0.000000 0.033000 0.067000" && strings.Join(got, " ") != "0.000000 0.033333 0.066667" {
 		t.Fatalf("passthrough frame times = %q", got)
-	}
-}
-
-func TestH264SetTSEscapesAdjustmentsForTheFilterList(t *testing.T) {
-	got, err := h264SetTS([]uint64{9_000, 12_000, 16_500, 19_500}, 9_000, 3_000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := `N*3000+if(gte(N\,2)\,1500\,0)`; got != want {
-		t.Fatalf("h264SetTS = %q, want %q", got, want)
 	}
 }

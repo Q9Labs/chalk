@@ -411,7 +411,7 @@ func TestControlPlaneClientClassifiesErrorsWithoutResponseBody(t *testing.T) {
 
 func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 	oldPropagator := otel.GetTextMapPropagator()
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
 	defer otel.SetTextMapPropagator(oldPropagator)
 	journeyID := testID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	traceID, err := trace.TraceIDFromHex("0af7651916cd43dd8448eb211c80319c")
