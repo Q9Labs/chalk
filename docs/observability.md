@@ -586,19 +586,19 @@ announced → pull_requested → pull_failed / pull_succeeded → track_received
 Read the state with the companion fields, rather than treating an attached track
 or a resolved `play()` promise alone as proof of audible audio:
 
-| Furthest state   | Interpretation                                                                                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                               |
-| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                  |
-| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                           |
-| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                      |
-| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path. |
-| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                    |
-| `element_bound`  | Audio is progressing and an element is bound, but the element is paused. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path.                     |
-| `playing`        | Audio is progressing and the bound element is not paused. This does not prove the output device is audible or its volume is nonzero.                                                           |
+| Furthest state   | Interpretation                                                                                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                                                                    |
+| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                                                       |
+| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                                                                |
+| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                                                           |
+| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path.                                      |
+| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                                                         |
+| `element_bound`  | Audio is progressing and an element is bound, but playback has not started or its `currentTime` has not advanced between samples. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path. |
+| `playing`        | Audio is progressing, the bound element's play promise resolved or its `playing` event fired, and its `currentTime` advanced between samples. This does not prove the output device is audible or its volume is nonzero.            |
 
 Companion fields are bounded labels: `track_state` is `live`, `muted`, or `ended`;
-`element_state` is `paused` or `playing`; `play_result` is `ok`,
+`element_state` is `paused` or `playing`, reflecting the observed `paused` flag rather than confirmed playback; `play_result` is `ok`,
 `NotAllowedError`, `AbortError`, or `unknown`. Rejected playback contributes only
 that label, never raw error text. Summaries carry `receive_counts`, a fixed-key
 object with optional counts from 0 to 10000 for each ladder state plus
