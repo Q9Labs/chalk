@@ -25,6 +25,7 @@ type callTrace struct {
 	dnsDone, connectDone, tlsDone    time.Time
 	wroteRequest, firstByte          time.Time
 	bodyDone                         time.Time
+	connected                        bool
 	reused                           bool
 	idle                             time.Duration
 	family                           string
@@ -34,11 +35,10 @@ type callTrace struct {
 // on several goroutines, because the dialer races IPv4 against IPv6.
 func (t *callTrace) attach(ctx context.Context) context.Context {
 	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
-		DNSStart:     func(httptrace.DNSStartInfo) { t.stamp(&t.dnsStart) },
-		DNSDone:      func(httptrace.DNSDoneInfo) { t.stamp(&t.dnsDone) },
-		ConnectStart: func(string, string) { t.stampFirst(&t.connectStart) },
-		// A failed dial is stamped too, so a connect that timed out still shows how long it took.
-		ConnectDone:       func(string, string, error) { t.stamp(&t.connectDone) },
+		DNSStart:          func(httptrace.DNSStartInfo) { t.stamp(&t.dnsStart) },
+		DNSDone:           func(httptrace.DNSDoneInfo) { t.stamp(&t.dnsDone) },
+		ConnectStart:      func(string, string) { t.stampFirst(&t.connectStart) },
+		ConnectDone:       func(_ string, _ string, err error) { t.connectFinished(err) },
 		TLSHandshakeStart: func() { t.stamp(&t.tlsStart) },
 		TLSHandshakeDone:  func(tls.ConnectionState, error) { t.stamp(&t.tlsDone) },
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -51,6 +51,18 @@ func (t *callTrace) attach(ctx context.Context) context.Context {
 		WroteRequest:         func(httptrace.WroteRequestInfo) { t.stamp(&t.wroteRequest) },
 		GotFirstResponseByte: func() { t.stamp(&t.firstByte) },
 	})
+}
+
+// connectFinished stamps the end of the connect phase. A failed dial is stamped too, so a connect that
+// timed out still shows how long it took, but a losing dual-stack dial never overwrites a successful one.
+func (t *callTrace) connectFinished(err error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.connected {
+		return
+	}
+	t.connectDone = time.Now()
+	t.connected = err == nil
 }
 
 func (t *callTrace) stamp(at *time.Time) {
@@ -69,7 +81,8 @@ func (t *callTrace) stampFirst(at *time.Time) {
 }
 
 // log writes one line for the call. Phases that did not happen, such as DNS on a reused connection, log 0.
-// A failed call logs at warn, so its phases survive a production log level of warn.
+// A failed call logs at warn, so its phases survive a production log level of warn. A call the caller
+// canceled stays at info, as it does in recordProviderFailure.
 func (t *callTrace) log(ctx context.Context, operation string, input traceInput, statusCode int, header http.Header, failed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

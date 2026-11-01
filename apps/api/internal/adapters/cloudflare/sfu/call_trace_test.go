@@ -3,6 +3,7 @@ package sfu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -186,4 +187,39 @@ func keysOf(record map[string]any) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+// A losing dual-stack dial that fails after the winner connected must not stretch connect_ms.
+func TestCallTraceKeepsTheWinningConnect(t *testing.T) {
+	var trace callTrace
+	trace.connectFinished(nil)
+	won := trace.connectDone
+	time.Sleep(5 * time.Millisecond)
+	trace.connectFinished(errors.New("connection refused"))
+	if !trace.connectDone.Equal(won) {
+		t.Fatalf("connectDone moved from %v to %v after a losing dial", won, trace.connectDone)
+	}
+}
+
+// A call the caller canceled is expected, so its trace stays at info like recordProviderFailure.
+func TestCallTraceLogsACallerCancelAtInfo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	adapter := addTracksRecordAdapter(t, server.URL, time.Second)
+	logs := captureAddTracksLogs(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+
+	_, err := adapter.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: "publisher", Tracks: []mediaplane.Track{{Location: "local", Mid: "0", TrackName: "a"}}})
+	if err == nil {
+		t.Fatal("want a canceled call")
+	}
+	records := callTraceRecords(t, logs.String())
+	if len(records) == 0 || records[len(records)-1]["level"] != "INFO" {
+		t.Fatalf("records = %v, want the canceled call at INFO", records)
+	}
 }

@@ -569,7 +569,7 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	}
 	timing := &callTrace{}
 	var responseHeader http.Header
-	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader, err != nil) }()
+	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader, traceFailed(err)) }()
 	providerResponse, err := a.client.Do(request.WithContext(timing.attach(ctx)))
 	if err != nil {
 		return 0, newTransportFailure(ctx, operation, 0, err)
@@ -1008,6 +1008,15 @@ func normalizedProviderCode(code string) string {
 	default:
 		return "unknown"
 	}
+}
+
+// traceFailed reports whether a call trace should log at warn: any failure except a caller cancel.
+func traceFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	var failure providerFailure
+	return !errors.As(err, &failure) || failure.transportCause != transportCauseCallerCanceled
 }
 
 func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
