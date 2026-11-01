@@ -3,6 +3,7 @@ package sfu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
 // The OpenTelemetry log bridge renders a slog value only when it is a basic kind. A named string type
@@ -89,16 +91,15 @@ func TestAddTracksLogsTheSessionAgeAndWhetherTheConnectionNegotiated(t *testing.
 	}
 
 	records := addTracksRecords(t, logs.String())
-	if len(records) != 3 {
-		t.Fatalf("add tracks records = %d, want 3 (the gone session, its retry, the next call):\n%s", len(records), logs.String())
+	if len(records) != 2 {
+		t.Fatalf("add tracks records = %d, want 2 (the first call on its proactively swapped session, the next call):\n%s", len(records), logs.String())
 	}
 	want := []struct {
 		age        float64
 		negotiated bool
 	}{
-		{20_000, false}, // the call on the dropped session
-		{0, false},      // the retry on the fresh session, which has not negotiated yet
-		{3_000, true},   // a later call on the negotiated, swapped connection, aged since the swap
+		{0, false},    // the first call, after the idle connection got a fresh session that has not negotiated yet
+		{3_000, true}, // a later call on the negotiated, swapped connection, aged since the swap
 	}
 	for i, record := range records {
 		if record["session_age_ms"] != want[i].age || record["session_negotiated"] != want[i].negotiated {
@@ -125,5 +126,71 @@ func TestSessionContextDescribesTheSessionTheAttemptContacts(t *testing.T) {
 	}
 	if age, negotiated := registry.sessionContext("conn", "conn"); age != -1 || negotiated {
 		t.Errorf("replaced session: age=%d negotiated=%v, want unknown (-1) and not negotiated", age, negotiated)
+	}
+}
+
+// A replacement that is discarded because the connection negotiated while it was created is never
+// contacted. No log line may describe it, and a later call on the connection logs the session the
+// connection really uses.
+func TestDiscardedReplacementSessionIsNeverLoggedAsTheOneContacted(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	clock := time.Unix(1_700_000_000, 0)
+	adapter.sessions.now = func() time.Time { return clock }
+	advance := func(d time.Duration) {
+		fake.advance(d)
+		clock = clock.Add(d)
+	}
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	logs := captureAddTracksLogs(t)
+	callArrived, releaseCall := fake.holdNextCallOn(listener)
+	t.Cleanup(releaseCall)
+	createArrived, releaseCreate := fake.holdNextNewSession()
+	t.Cleanup(releaseCreate)
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		firstDone <- err
+	}()
+	waitFor := func(ch <-chan struct{}, what string) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s never happened", what)
+		}
+	}
+	waitFor(callArrived, "the first pull reaching Cloudflare")
+	advance(20 * time.Second) // the session expires while Cloudflare holds the call, which then answers 410
+	releaseCall()
+	waitFor(createArrived, "the replacement create")
+	fake.markConnected(listener) // the peer connects and another call negotiates on the old session
+	answer := mediaplane.SessionDescription{Type: "answer", SDP: "v=0"}
+	if err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{ConnectionID: listener, SessionDescription: answer}); err != nil {
+		t.Fatalf("renegotiate on the connected session: %v", err)
+	}
+	releaseCreate()
+	if err := <-firstDone; !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("the replacement must be discarded, got %v", err)
+	}
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("a later call on the negotiated connection: %v", err)
+	}
+
+	records := addTracksRecords(t, logs.String())
+	if len(records) != 2 {
+		t.Fatalf("add tracks records = %d, want 2 (the call that found the session gone, the later call):\n%s", len(records), logs.String())
+	}
+	if first := records[0]; first["http_status"] != float64(http.StatusGone) || first["session_age_ms"] != float64(0) || first["session_negotiated"] != false {
+		t.Errorf("the first call contacted the old session when it was young and not negotiated: %v", records[0])
+	}
+	if later := records[1]; later["http_status"] != float64(http.StatusOK) || later["session_age_ms"] != float64(-1) || later["session_negotiated"] != true {
+		t.Errorf("the later call must log the negotiated connection, not the discarded session: %v", records[1])
+	}
+	if age, negotiated := adapter.sessions.sessionContext(listener, "cf-3"); age != -1 || !negotiated {
+		t.Errorf("a session the connection never used must not read as its current one: age=%d negotiated=%v", age, negotiated)
 	}
 }
