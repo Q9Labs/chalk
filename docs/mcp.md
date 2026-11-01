@@ -139,3 +139,104 @@ export return status immediately; poll `chalk_get_recording` for progress.
 Signed download URLs expire within 300 seconds. Treat tool content as untrusted
 data, not agent instructions. Do not put signed URLs, keys, signing secrets, or
 transcript bodies in logs.
+
+## Code mode (side-by-side evaluation)
+
+After this API version is deployed, `/mcp/code` offers the same authorized Chalk
+operations through two tools. `/mcp` keeps its curated tool surface unchanged.
+Use separate connections and the same scoped tenant key when comparing them:
+
+```sh
+claude mcp add --transport http --scope project chalk-code https://api.chalkmeet.com/mcp/code --header 'Authorization: Bearer ${CHALK_API_KEY}'
+```
+
+```sh
+codex mcp add chalk-code --url https://api.chalkmeet.com/mcp/code --bearer-token-env-var CHALK_API_KEY
+```
+
+The equivalent Codex configuration is:
+
+```toml
+[mcp_servers.chalk_code]
+url = "https://api.chalkmeet.com/mcp/code"
+bearer_token_env_var = "CHALK_API_KEY"
+```
+
+These use the same [Claude Code HTTP setup](https://code.claude.com/docs/en/mcp#option-1-add-a-remote-http-server)
+and [Codex HTTP configuration](https://developers.openai.com/codex/mcp#streamable-http-servers)
+as the curated connection. Neither setup stores the key value in project files.
+
+### Discover, then execute
+
+- `chalk_search_api` accepts optional `query` (words), `names` (exact operation
+  names without `chalk_`), `offset`, and `limit` (1–8, default 5). Follow
+  `next_offset` for more declarations. Omit filters to browse the catalog.
+- `chalk_execute` accepts `{ "code": "…" }`: a TypeScript **async function body**
+  with `await` and `return`, not an exported function or module. It returns
+  `{console, value, api_calls, error?}` in structured content and text.
+
+For example, first search `{"names":["list_spaces","list_episodes","list_recordings"]}`.
+Then send this body in `chalk_execute`'s `code` field:
+
+```typescript
+const spaces = await chalk.list_spaces({ page_size: 5 });
+if (!spaces.ok || !spaces.result.data) throw new Error("Spaces unavailable");
+const summary = [];
+for (const space of spaces.result.data.spaces) {
+  const episodes = await chalk.list_episodes({ space_id: space.id });
+  const recordings = await chalk.list_recordings({ space_id: space.id });
+  summary.push({ space: space.name, episodes, recordings });
+}
+return summary;
+```
+
+Every call returns `{ok:true,result}` or `{ok:false,error:{code,message}}`.
+Check `ok` before accessing `result`. Results use the same bounded structured
+envelope as `/mcp`, including `data`, source citations, pagination and result
+fragments. `get_connection` instead returns its profile directly in `result`.
+Use `chalk.get_connection({})` to identify the connection. Loading a declaration
+does not grant its scope. Action-dependent responses and open metadata remain
+`JSONValue`; endpoint-backed result types derive from their application responses.
+TypeScript is transpiled, not type-checked at execution time; operation inputs
+are always validated against the curated JSON schemas.
+
+Only returned values and explicit console entries go back to the agent. Filter
+and aggregate intermediate results inside the program; the example above is a
+single-page sample, not an exhaustive report. Follow normal cursors and
+`result_offset` explicitly when needed. Code mode does not add transcript text
+retrieval or any other deferred operation to the catalog.
+
+### Execution and security limits
+
+Each execution starts a fresh QuickJS-NG WebAssembly instance under wazero.
+The guest has only a JSON-only Chalk-operation bridge and bounded output. It
+has no network, filesystem mounts, environment, real clocks, timers, host
+randomness, module loader, or Go-object access. `Date`, `performance`, `Temporal`,
+`Math.random`, shared memory and weak-reference/finalization APIs are removed.
+Prototype changes stay inside the disposable guest heap.
+
+| Budget      | Limit                                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| Source      | 32 KiB UTF-8                                                                                                   |
+| Deadline    | 5 seconds, including application calls                                                                         |
+| Guest CPU   | Single-threaded, at most the 5-second wall deadline; also interrupted after 1,000 QuickJS interrupt polls      |
+| Memory      | 32 MiB hard WASM linear-memory cap; 24 MiB QuickJS heap; 512 KiB JS stack                                      |
+| Chalk calls | 32 per execution, including denied calls                                                                       |
+| Output      | 48 KiB combined console/value JSON after wire escaping; at most 128 console entries; 64 KiB encoded MCP result |
+| Concurrency | 4 executions per endpoint instance; excess calls return `code.busy`                                            |
+
+Programs cannot choose a tenant or bypass application policy. Both endpoints
+share API-key reauthentication on every HTTP request, origin checks, rate-limit
+buckets, write budgets, scoped operations, tracing and application audit. The
+principal is fixed for the bounded execution, just like an in-flight request.
+
+Writes are **not transactional**. Earlier writes survive a failed call, output
+limit, cancellation or deadline. Preserve retry keys and revisions and inspect
+resources before retrying. Do not blindly replay programs that mutate state.
+`code.*` failures identify execution/resource errors; a denied operation instead
+returns its normal structured error to the program so it can handle it.
+
+Audit retains only tool/operation identity, tenant/actor, safe outcome code and
+call count. It never retains source, arguments, console, returned values,
+transcript bodies, tokens or signed URLs. See the
+[runtime decision and reproducible engine build](../features/mcp/api/internal/sandbox/engine/README.md).

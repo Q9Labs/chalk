@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
-func bindMCPWebhookTools(server *mcp.Server, o Options) {
+func bindMCPWebhookTools(server *mcpapi.Server, o Options) {
 	mcpapi.Bind(server, mcpapi.InspectWebhooks, func(ctx context.Context, i mcpapi.WebhookInspectInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		if i.EndpointID != "" {

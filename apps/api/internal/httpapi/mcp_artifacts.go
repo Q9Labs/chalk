@@ -1,11 +1,10 @@
 package httpapi
 
 import (
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
-func bindMCPArtifactTools(server *mcp.Server, o Options) {
+func bindMCPArtifactTools(server *mcpapi.Server, o Options) {
 	bindMCPEndpoint(server, mcpapi.ListRecordings, listRecordingsEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingsInput) listRecordingsRequest {
 		return listRecordingsRequest{TenantID: b.tenant, SpaceID: b.optionalID(i.SpaceID), EpisodeID: b.optionalID(i.EpisodeID), Page: b.page(i.PageInput)}
 	})

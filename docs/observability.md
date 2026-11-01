@@ -1,5 +1,15 @@
 # Production observability
 
+MCP code-mode executions emit `mcp.code.completed` with the fixed tool name,
+tenant/actor, allowlisted execution outcome and API-call count. Discovery and
+capacity rejections use the same event. Every nested application call preserves
+the existing `mcp.operation.completed` audit and `chalk/mcp` tracing; durable
+Space/Episode actions still use their existing journey events. No source,
+arguments, guest exceptions, console or result bodies are recorded. In
+particular, transcript text, issued credentials and signed URLs must never be
+added to this event or span attributes. `code.resource_limit`, `code.output_limit`
+and `code.api_call_limit` are bounded terminal reasons, not application retries.
+
 API request logs and Sync event spans export to Axiom. Use W3C trace IDs and
 Space or Episode IDs to correlate them. The private
 `observability_journey_events` table holds the durable correlation record for
