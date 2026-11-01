@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Compare the current production baseline and staging in one alternating session.
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { cleanupRun } from "./cleanup.mjs";
 import { evaluateLeaves } from "./leave-criteria.mjs";
@@ -8,7 +9,7 @@ import { requireExpectedProductionSha, verifyExpectedProductionSha } from "./pro
 import { prepareIntegration } from "./proofs.mjs";
 import { check, createRun, environmentConfig, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
 
-const expectedProductionSha = requireExpectedProductionSha();
+let expectedProductionSha;
 
 async function compare(candidateRun, referenceRun) {
   await verifyExpectedProductionSha(expectedProductionSha);
@@ -38,6 +39,7 @@ const session = randomUUID();
 const report = { result: "failed", cleanup: "not-started" };
 const runs = [];
 try {
+  expectedProductionSha = requireExpectedProductionSha();
   await verifyExpectedProductionSha(expectedProductionSha);
   const candidateRun = await createRun(await loadConfig(), resolve(".private/prod-proof", `candidate-${session}`), undefined, `candidate-${session}`);
   runs.push(candidateRun);
@@ -53,6 +55,8 @@ try {
   const cleanup = await Promise.allSettled(runs.map((run) => cleanupRun(run)));
   report.cleanup = cleanup.every((result) => result.status === "fulfilled") ? "passed" : "failed";
   if (runs[0]) await save(`${runs[0].directory}/session-report.json`, report);
-  console.log(JSON.stringify({ result: report.result, cleanup: report.cleanup, comparison: report.comparison }));
+  const sessionReport = { result: report.result, cleanup: report.cleanup, comparison: report.comparison };
+  if (report.error) sessionReport.error = report.error;
+  console.log(JSON.stringify(sessionReport));
   if (report.result !== "passed" || report.cleanup !== "passed") process.exitCode = 1;
 }
