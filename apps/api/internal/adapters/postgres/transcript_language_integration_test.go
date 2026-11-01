@@ -26,7 +26,7 @@ func TestTranscriptLanguageMigrationAndAdmission(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, tenantID.Bytes())
+	exec(`insert into tenant_artifact_policies(tenant_id) values($1) on conflict do nothing`, tenantID.Bytes())
 	// Exercise Down/Up with real pre-existing tenant, Space, and source data.
 	raw, err := migrations.Files.ReadFile("20261101120000_transcript_language.sql")
 	if err != nil {
@@ -48,7 +48,7 @@ func TestTranscriptLanguageMigrationAndAdmission(t *testing.T) {
 	// Previous-release inserts omit the new columns and still work.
 	newerTenant := mustTenantPolicyTestID(t)
 	exec(`insert into tenants(id,name) values($1,'old binary')`, newerTenant.Bytes())
-	exec(`insert into tenant_artifact_policies(tenant_id) values($1)`, newerTenant.Bytes())
+	exec(`insert into tenant_artifact_policies(tenant_id) values($1) on conflict do nothing`, newerTenant.Bytes())
 	if err := connection.QueryRow(ctx, `select transcript_language from tenant_artifact_policies where tenant_id=$1`, newerTenant.Bytes()).Scan(&mode); err != nil || mode != "auto" {
 		t.Fatalf("new tenant: %q %v", mode, err)
 	}

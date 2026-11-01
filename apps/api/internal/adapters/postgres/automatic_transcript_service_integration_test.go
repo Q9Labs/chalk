@@ -95,6 +95,9 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if _, err := tx.Exec(ctx, `insert into tenant_artifact_policies(tenant_id) values($1) on conflict do nothing`, row.TenantID); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := tx.Exec(ctx, `update spaces set transcript_language='ur' where id=$1`, row.SpaceID); err != nil {
 				t.Fatal(err)
 			}
