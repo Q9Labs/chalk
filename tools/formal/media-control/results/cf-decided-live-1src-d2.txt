@@ -1,0 +1,17 @@
+TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+Implied-temporal checking--satisfiability problem has 1 branches.
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-10-31 14:16:17.
+Checking temporal properties for the current state space with 10594 total distinct states at (2026-10-31 14:16:20)
+Finished checking temporal properties in 00s at 2026-10-31 14:16:20
+Checking temporal properties for the complete state space with 224087 total distinct states at (2026-10-31 14:16:41)
+Finished checking temporal properties in 03s at 2026-10-31 14:16:44
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 1.3E-8
+  based on the actual fingerprints:  val = 5.8E-9
+1328652 states generated, 224087 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 31.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 9 and the 95th percentile is 3).
+Finished in 28s at (2026-10-31 14:16:44)

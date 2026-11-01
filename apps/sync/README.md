@@ -319,3 +319,53 @@ from the admitted participant's tenant-scoped database row. Device type is a
 best-effort user-agent hint. These fields do not change the canonical control
 digest. Sockets without the query retain the previous exact presence shape;
 new SDKs also accept presence from older servers without these optional hints.
+
+## Media off reasons
+
+New web SDKs opt into the reason a media item is off with the
+`media_off_reason=1` WebSocket query. A media item that is `enabled: false` may
+then carry `off_reason`, and a retained host stop also rides on an enabled item
+(see `host`):
+
+- `host`: a host mute, camera stop or screen stop committed. The item also
+  carries `off_revision`, the control revision of that stop event. Sync stores
+  the stop in `sync_media_stops` in the same transaction as the event and
+  projects it even when the media plane lists no publication, so a client that
+  missed the stop event (replay beyond retention, a fresh Sync process, a
+  snapshot fallback) still sees it. An accepted on does not clear the stop,
+  and the stop stays on the item while another device of the participant has
+  published since (`enabled: true`): that device's on answers the stop for that
+  device only, and a device whose intent is older than `off_revision` must still
+  see it. A device compares its own intent's control revision with
+  `off_revision`, so the newer intent keeps and the older one stays off.
+- `self`: the device paused the source itself (a Sync-held device pause).
+- `dead`: reserved for a tombstone Sync writes on purpose. It never means the
+  user or host turned the source off.
+
+A plain tombstone, a source with no publication yet, and every other item carry
+no reason. A missing reason means no evidence, never "off". Sockets without the
+query keep the exact earlier four-key item shape, and new SDKs accept items from
+older servers that never send the fields. The fields do not change the canonical
+control digest.
+
+A host stop stays in `sync_media_stops` until a newer host stop for the same
+participant and source replaces it. An accepted on does not clear it. Intent
+revisions are per device, but a stop's revision and the control revision a device
+had seen when the user acted are positions in the one control stream of the
+Episode, so every device of one participant compares the same numbers. A device
+that was offline with an older on still sees the stop after another device's on
+was accepted, and pauses; a device whose intent is newer than the stop ignores
+it. The cost is one row for each participant and source that a host has stopped,
+deleted with the Episode's other rows.
+
+A socket that negotiated `media_off_reason=1` gets `"media_off_reason": true` in
+its welcome frame. The SDK applies the rule that depends on `off_reason` only on
+a connection whose welcome carried it. A Sync that never sends it makes the SDK
+keep the rule it used before: pause a wanted-on source when Sync's own item is
+missing or not enabled. Finish the Sync rollout on every instance first, then release the SDK: while old and new Sync run side by side, an old instance can commit a host stop without filling the new table, and a new instance then advertises the extension without that evidence.
+
+Apply `20261031120000_sync_media_stops` before Sync. Every live registration reads
+`sync_media_stops`, so the compatibility floor `minimum_compatible_sync_migration`
+is that version: a database without the table fails readiness with
+`incompatible_database_migration` and Sync does not serve. A rollback leaves the
+table in place.

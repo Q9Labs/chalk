@@ -17,30 +17,33 @@ function matchesChunkLoadFailure(message: string): boolean {
   return m.includes("failed to fetch dynamically imported module") || m.includes("failed to load module script") || m.includes("importing a module script failed") || (m.includes("mime type") && m.includes("text/html")) || m.includes("loading chunk") || m.includes("chunkloaderror");
 }
 
+function reasonMessage(reason: unknown): string {
+  if ((typeof reason === "object" || typeof reason === "function") && reason !== null && "message" in reason && typeof reason.message === "string") return reason.message;
+  return typeof reason === "string" ? reason : "";
+}
+
+function reloadLatest(): void {
+  // Bust any cached HTML and ensure we fetch the latest entrypoints.
+  const url = new URL(window.location.href);
+  url.searchParams.set("__reload", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
+/** Reloads once for a handled chunk-load failure. Returns whether the page is reloading. */
+export function reloadAfterChunkLoadFailure(reason: unknown): boolean {
+  if (typeof window === "undefined" || !matchesChunkLoadFailure(reasonMessage(reason)) || !shouldReloadOnce()) return false;
+  reloadLatest();
+  return true;
+}
+
 export function installChunkLoadAutoReload() {
   if (typeof window === "undefined") return;
 
-  const reload = () => {
-    if (!shouldReloadOnce()) return;
-
-    // Bust any cached HTML and ensure we fetch the latest entrypoints.
-    const url = new URL(window.location.href);
-    url.searchParams.set("__reload", Date.now().toString());
-    window.location.replace(url.toString());
-  };
-
   window.addEventListener("unhandledrejection", (event) => {
-    const reason: unknown = event.reason;
-    const msg = (typeof reason === "object" || typeof reason === "function") && reason !== null && "message" in reason && typeof reason.message === "string" ? reason.message : typeof reason === "string" ? reason : "";
-    if (!msg) return;
-    if (!matchesChunkLoadFailure(msg)) return;
-    reload();
+    reloadAfterChunkLoadFailure(event.reason);
   });
 
   window.addEventListener("error", (event) => {
-    const msg = typeof event.message === "string" ? event.message : "";
-    if (!msg) return;
-    if (!matchesChunkLoadFailure(msg)) return;
-    reload();
+    reloadAfterChunkLoadFailure(typeof event.message === "string" ? event.message : "");
   });
 }

@@ -29,10 +29,11 @@ type RemoteTrackIdentity struct {
 }
 
 type RemoteTrackObservationInput struct {
-	TenantID  utilities.ID
-	EpisodeID utilities.ID
-	Requested []RemoteTrackIdentity
-	Missing   []RemoteTrackIdentity
+	TenantID              utilities.ID
+	EpisodeID             utilities.ID
+	ListenerParticipantID utilities.ID
+	Requested             []RemoteTrackIdentity
+	Missing               []RemoteTrackIdentity
 }
 
 type publicationCandidate struct {
@@ -111,6 +112,16 @@ func (s Service) ObserveRemoteTracks(ctx context.Context, input RemoteTrackObser
 		return err
 	}
 	s.absenceEvidence.resetPresent(input.TenantID, input.EpisodeID, requested, missing)
+	for identity := range requested {
+		if _, isMissing := missing[identity]; isMissing {
+			continue
+		}
+		s.liveness.recordServed(servedKey{
+			tenantID:  input.TenantID.String(),
+			episodeID: input.EpisodeID.String(),
+			identity:  identity,
+		}, input.ListenerParticipantID)
+	}
 	if len(missing) == 0 {
 		return nil
 	}
@@ -124,6 +135,7 @@ func (s Service) ObserveRemoteTracks(ctx context.Context, input RemoteTrackObser
 		closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
 		if closeErr == nil || errors.Is(closeErr, ErrInvalidPublication) {
 			s.absenceEvidence.forget(candidate.key)
+			s.liveness.forget(candidate)
 			if closeErr == nil {
 				confirmed++
 				outcome = "confirmed"

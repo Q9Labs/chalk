@@ -8,7 +8,7 @@ import (
 	"net/url"
 )
 
-func (a Adapter) closeSessionTerminated(ctx context.Context, connectionID string, closeErr error) bool {
+func (a Adapter) closeSessionTerminated(ctx context.Context, providerSessionID string, closeErr error) bool {
 	var closeFailure providerFailure
 	if !errors.As(closeErr, &closeFailure) ||
 		closeFailure.operation != "close_tracks" ||
@@ -19,7 +19,7 @@ func (a Adapter) closeSessionTerminated(ctx context.Context, connectionID string
 	}
 
 	// An empty snapshot can miss an in-flight tracks/new allocation, and a 404 may be app-level or transient.
-	path := fmt.Sprintf("/sessions/%s", url.PathEscape(connectionID))
+	path := fmt.Sprintf("/sessions/%s", url.PathEscape(providerSessionID))
 	var response captureInspectResponse
 	err := a.request(ctx, http.MethodGet, path, nil, &response, "verify_connection")
 	var inspectionFailure providerFailure

@@ -15,7 +15,10 @@ describe("recovery publication authority", () => {
       await enterRecovery({ platform, client });
       // A later local action must not be treated as the generation whose publication was lost.
       if (newerAction) await setEnabled(false);
-      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      // Without a newer action, Sync turned it off while the device was gone: the recovered item says so with a stop newer than the old action.
+      // With one, the user's Off is the owed command, and an empty projection is no evidence either way.
+      const recovered = newerAction ? [] : [{ ...publication, enabled: false, publicationId: null, offReason: "host" as const, offRevision: 9 }];
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "recovered", sequence: 0, items: recovered } });
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
       if (newerAction) {
@@ -23,7 +26,7 @@ describe("recovery publication authority", () => {
         // Only the explicit Off closes it; recovery must not close it again.
         expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
       } else {
-        await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "sync_recovery_loss"));
+        await vi.waitFor(() => expect(close).toHaveBeenCalledExactlyOnceWith(source, "moderation_pause"));
         expect(track.enabled).toBe(false);
         expect(command).toHaveBeenCalledExactlyOnceWith(true);
         // A fresh On remains available; recovery never writes the user's desired intent.

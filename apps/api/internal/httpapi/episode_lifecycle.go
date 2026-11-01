@@ -398,7 +398,7 @@ func createParticipantJoin(ctx context.Context, spacesService SpaceService, tena
 	if err != nil || service == nil {
 		return mediaplane.Join{}, err
 	}
-	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor"})
+	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor", AllowRelay: true})
 }
 
 func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantRemovalResponse] {

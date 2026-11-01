@@ -34,6 +34,28 @@ func TestObserveRemoteTracksRequiresRepeatedAgeBoundedAbsence(t *testing.T) {
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
 }
 
+func TestObserveRemoteTracksRecordsServedWithoutReadingRegistryOnSuccess(t *testing.T) {
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, time.Now)
+	tenantID, episodeID, _, identity := publishRemoteObservationFixture(t, service, repository)
+	repository.listObservationsErr = errors.New("registry read unavailable")
+	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+
+	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
+		Requested: []RemoteTrackIdentity{identity},
+	}); err != nil {
+		t.Fatalf("observe successful pull: %v", err)
+	}
+	key := servedKey{tenantID: tenantID.String(), episodeID: episodeID.String(), identity: identity}
+	service.liveness.mu.Lock()
+	_, recorded := service.liveness.served[key][listenerID]
+	service.liveness.mu.Unlock()
+	if !recorded {
+		t.Fatal("successful pull did not record the listener as served")
+	}
+}
+
 func TestObserveRemoteTracksCountsConcurrentMissesAsOneEvidenceWave(t *testing.T) {
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	repository := &reconciliationRepositoryStub{}
@@ -169,10 +191,11 @@ func TestObserveRemoteTracksDoesNotCloseReplacementPublication(t *testing.T) {
 }
 
 type reconciliationRepositoryStub struct {
-	participants   []PublicationParticipant
-	observations   []provideroperations.Observation
-	appended       provideroperations.ObservationInput
-	appendedInputs []provideroperations.ObservationInput
+	participants        []PublicationParticipant
+	observations        []provideroperations.Observation
+	appended            provideroperations.ObservationInput
+	appendedInputs      []provideroperations.ObservationInput
+	listObservationsErr error
 }
 
 func (r *reconciliationRepositoryStub) ListPublicationParticipants(_ context.Context, _, _ utilities.ID) ([]PublicationParticipant, error) {
@@ -192,7 +215,7 @@ func (r *reconciliationRepositoryStub) AppendObservation(_ context.Context, inpu
 }
 
 func (r *reconciliationRepositoryStub) ListObservations(_ context.Context, _, _ utilities.ID, _ *provideroperations.Cursor, _ int) (provideroperations.ObservationPage, error) {
-	return provideroperations.ObservationPage{Observations: r.observations}, nil
+	return provideroperations.ObservationPage{Observations: r.observations}, r.listObservationsErr
 }
 
 func publishRemoteObservationFixture(t *testing.T, service Service, repository *reconciliationRepositoryStub) (tenantID, episodeID, participantID utilities.ID, identity RemoteTrackIdentity) {

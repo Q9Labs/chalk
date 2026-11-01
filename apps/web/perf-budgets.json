@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "JS limits preserve bounded media failure reporting (#596): master measures 466.446 KiB on the route and 384.115 KiB in call scenarios. Compacting the classifier did not fit the old limits. Including media recovery (#594) and mic-state sync (#597) measures 468.243/385.808 KiB; 469/386 were the smallest whole-KiB limits above that combined build. The session ID (#670) adds its module, the Sync hello baggage and the legacy-Sync hello fallback, about 0.8 KiB gzip on the route; the combined build measures 469.5 KiB on the route in CI, which did not fit 469, so the route limit is 470, the smallest whole-KiB limit above it. The call-scenario limit (386) and all other limits stay unchanged.",
+  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage now loads the admitted call (LocalSpace, the Chalk call UI, the SDK client and media stack, problem reporting and the status and report surfaces) from SpaceCall after the participant presses Join, so with TURN credentials (#676) and per-call stats (#671) merged the route measures 216.843 KiB, down from 472.364 KiB on master (that code now loads after Join too); 217 is the smallest whole-KiB limit above it. The call-scenario JS limit still measures the full call, which this change does not shrink, so it and all other limits stay unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
@@ -32,7 +32,7 @@
     "firstCallMs": 2499,
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
-    "routeJsGzipKiB": 470,
+    "routeJsGzipKiB": 217,
     "routeCssGzipKiB": 32,
     "videoDroppedFramePercent": 5,
     "layoutShift": 0.05

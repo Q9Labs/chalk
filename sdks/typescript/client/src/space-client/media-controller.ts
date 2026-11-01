@@ -7,6 +7,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
+import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -15,25 +16,68 @@ import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
+const OFF_RETRY_INITIAL_MS = 1000;
+const OFF_RETRY_MAX_MS = 30000;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 type Fork = (effect: Effect.Effect<void, unknown, Clock.Clock>) => void;
 type MediaIntent = { readonly enabled: boolean; readonly revision: number; readonly controlRevision: number; readonly options?: ScreenShareOptions; readonly previousEnabled: boolean };
 type SourceResult = { readonly revision: number; readonly status: "confirmed" } | { readonly revision: number; readonly status: "failed"; readonly cause: unknown; cleanup: boolean };
+type OffDebt = "none" | "owed" | "sent";
 type SourceWorker = {
   desired: MediaIntent;
   result: SourceResult;
   initialRevision: number;
   localEnabled: boolean;
   pause: Promise<void> | null;
+  /** See "The owed off" below. */
+  offDebt: OffDebt;
+  offRetry: { timer: unknown; delayMs: number; running: boolean };
   serverSequence: number;
   forcedRevision: number | null;
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
+  awaitingLive: number | null;
 };
+/*
+ * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
+ * (`offDebt`) on the source until Sync is known to have it. Two rules hold it together:
+ *  1. A user off makes the debt "owed". It leaves "owed" only when Sync accepts an off ("sent"), Sync shows the source off
+ *     (or on with a publication this device never paused), Sync accepts a newer on ("none"), or the client is disposed.
+ *     A failed or rejected on, a reset after a failed Sync connection and a reconnect leave it untouched. A "sent" off
+ *     that a later snapshot still shows on with our paused publication becomes "owed" again.
+ *  2. Every resend of the debt after the user's own first attempt (reconnect replay, timer retry, snapshot retry) goes
+ *     through `#resendOwedOff`, which holds the ownership check, the "Sync already off" skip, and the one-in-flight rule.
+ */
+function locallyOff(state: SourceWorker): boolean {
+  return !state.desired.enabled || !state.localEnabled;
+}
+function owesRemoteOff(state: SourceWorker): boolean {
+  return state.offDebt === "owed" && locallyOff(state);
+}
 function sourceWorker(enabled: boolean): SourceWorker {
-  return { desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled }, result: { revision: 0, status: "confirmed" }, initialRevision: 0, localEnabled: enabled, pause: null, serverSequence: -1, forcedRevision: null, pausedPublicationId: null, capturePause: "none" };
+  return {
+    desired: { enabled, revision: 0, controlRevision: -1, previousEnabled: enabled },
+    result: { revision: 0, status: "confirmed" },
+    initialRevision: 0,
+    localEnabled: enabled,
+    pause: null,
+    offDebt: "none",
+    offRetry: { timer: null, delayMs: OFF_RETRY_INITIAL_MS, running: false },
+    serverSequence: -1,
+    forcedRevision: null,
+    pausedPublicationId: null,
+    capturePause: "none",
+    awaitingLive: null,
+  };
+}
+/** Joining/offline actions never hold a worker while waiting on the lifecycle queue. */
+function rejectOffline(state: SourceWorker, intent: MediaIntent): void {
+  if (intent.enabled) state.result = { revision: intent.revision, status: "failed", cause: new V1SyncError("Media enable requires a live call", "not_live"), cleanup: !intent.previousEnabled };
 }
 type SyncSnapshot = ReturnType<ConnectionPorts["sync"]["getSnapshot"]>;
+function ownProjection(snapshot: SyncSnapshot, source: MediaSource) {
+  return snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
+}
 type CaptureAction = "join" | "setMicrophoneEnabled" | "setCameraEnabled" | "startScreenShare";
 type CaptureRollback = {
   readonly action: CaptureAction;
@@ -117,7 +161,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
   #disposed = false;
+  /** The wanted-on sources when recovery began, with the intent revision each one had then. */
   #recovering: ReadonlyMap<MediaSource, number> | null = null;
+  /** The Sync client's last proof of contact when the current recovery began: where its drop is measured from. */
+  #proof: LinkReading | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -281,6 +328,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   dispose(): void {
     this.#disposed = true;
+    this.#cancelOffRetries();
+    for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
     this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
     this.#cancelCaptures();
@@ -333,8 +382,27 @@ class MediaControllerRuntime implements MediaControllerEffects {
       }).pipe(Effect.ensuring(Effect.sync(() => cleanup())));
     });
   }
+  /** While a user enable waits for the call, its revision belongs to that wait; another source worker must not run it. */
+  #awaitLive(source: MediaSource, revision: number): ClientEffect<void> {
+    const state = this.#sources[source];
+    return Effect.suspend(() => {
+      state.awaitingLive = revision;
+      return this.#waitForLive(source, revision);
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (state.awaitingLive === revision) state.awaitingLive = null;
+        }),
+      ),
+    );
+  }
   #set(source: "microphone" | "camera", enabled: boolean): ClientEffect<void> {
-    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+    return Effect.suspend(() => (this.#store.getSnapshot().connection.status === "joining" || this.#replacingMediaConnection() ? this.#act(source, enabled) : this.#mediaAction(enabled, this.#act(source, enabled))));
+  }
+  /** Sync is live and only the media connection is being replaced, e.g. while another source moves to a fresh SFU connection. */
+  #replacingMediaConnection(): boolean {
+    const { state, connection } = this.#connection.getSnapshot();
+    return (state === "live" || state === "reconnecting") && connection.sync === "healthy" && (connection.media === "connecting" || connection.media === "recovering");
   }
   #startScreen(options?: ScreenShareOptions): ClientEffect<void> {
     return this.#act("screen", true, options);
@@ -383,9 +451,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return Effect.suspend(() => {
       if (this.#ports?.media.getSnapshot().connection.phase === "stopped") return Effect.void;
       const desired = this.#recordIntent(source, enabled, options);
+      if (!enabled) this.#sources[source].offDebt = "owed";
+      else this.#cancelOffRetry(source);
       const ready =
         enabled && source !== "screen" && this.#store.getSnapshot().connection.status !== "live"
-          ? this.#waitForLive(source, desired.revision).pipe(
+          ? this.#awaitLive(source, desired.revision).pipe(
               Effect.tapError((cause) =>
                 Effect.sync(() => {
                   if (this.#sources[source].desired.revision === desired.revision) {
@@ -421,12 +491,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #work(source: MediaSource): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
       const state = this.#sources[source];
-      while (state.result.revision !== state.desired.revision || (state.result.status === "failed" && state.result.cleanup)) {
+      while (state.result.revision !== state.desired.revision || (state.result.status === "failed" && state.result.cleanup) || owesRemoteOff(state)) {
         const intent = state.desired;
         yield* this.#runRevision(source, intent);
         if (state.desired.revision === intent.revision) return;
       }
-    });
+    }).pipe(Effect.ensuring(Effect.sync(() => this.#scheduleOffRetry(source))));
   }
   #runRevision(source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
@@ -435,12 +505,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
       state.pause = null;
       const paused = yield* Effect.exit(pause ? foreign(() => pause) : Effect.void);
       if (state.desired.revision !== intent.revision) return;
+      if (state.awaitingLive === intent.revision) return yield* paused;
       const ports = this.#ports;
       const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
       if (state.desired.revision !== intent.revision) return;
       if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
-      // Joining/offline actions never hold a worker while waiting on the lifecycle queue.
-      else if (intent.enabled) state.result = { revision: intent.revision, status: "failed", cause: new V1SyncError("Media enable requires a live call", "not_live"), cleanup: !intent.previousEnabled };
+      else rejectOffline(state, intent);
       yield* paused;
       yield* cleanup;
     });
@@ -448,21 +518,30 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
     return Effect.gen({ self: this }, function* () {
       const state = this.#sources[source];
-      if (state.result.revision === intent.revision && state.result.status === "failed") {
-        yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
-        if (state.result.revision === intent.revision && state.result.status === "failed") state.result.cleanup = false;
-        return;
-      }
+      // This revision already ran (or its result was reset). Only the off is left to send, whatever the revision wants.
+      if (state.result.revision === intent.revision && (state.result.status === "failed" || owesRemoteOff(state))) return yield* this.#sendOwedOff(source, intent);
       const operation = source === "screen" ? this.#prepareScreen(ports, intent) : this.#prepareDevice(ports, source, intent);
       const result = yield* Effect.exit(this.#connection.runCommand(() => operation));
       if (state.desired.revision !== intent.revision) return;
       if (Exit.isSuccess(result)) {
         state.result = { revision: intent.revision, status: "confirmed" };
+        state.offDebt = intent.enabled ? "none" : "sent";
         state.localEnabled = state.forcedRevision === intent.revision ? false : intent.enabled;
       } else {
         const cause = yield* Effect.flip(result);
         yield* this.#failRevision(ports, source, intent, cause);
       }
+    });
+  }
+  #sendOwedOff(source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
+    return Effect.gen({ self: this }, function* () {
+      const state = this.#sources[source];
+      yield* this.#connection.runCommand((p) => this.#send(p, source, intent, false));
+      state.offDebt = "sent";
+      if (state.result.revision !== intent.revision || state.result.status !== "failed") return;
+      // A failed enable keeps its failure for the caller.
+      if (intent.enabled) state.result.cleanup = false;
+      else state.result = { revision: intent.revision, status: "confirmed" };
     });
   }
   #failRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent, cause: unknown): Effect.Effect<void, unknown> {
@@ -601,9 +680,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return state.desired.enabled && state.forcedRevision !== state.desired.revision;
   }
   #resetObservations(): void {
-    if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
+    if (this.#connection.getSnapshot().state !== "reconnecting") {
+      this.#recovering = null;
+      this.#proof = null;
+    }
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
+      // The result belongs to the old connection. An off Sync has not shown yet stays owed on the source and is resent after the next connect.
       state.result = { revision: state.desired.revision, status: "confirmed" };
       state.pause = null;
       state.serverSequence = -1;
@@ -687,21 +770,99 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
-    if (this.#syncLive && !live) this.#rememberRecoveryIntents();
+    if (this.#syncLive && !live) {
+      this.#rememberRecoveryIntents();
+      this.#cancelOffRetries();
+    }
     const resumed = live && !this.#syncLive;
     this.#syncLive = live;
     if (!resumed) return;
-    if (this.#ports) this.#pauseRecoveredIntents(this.#ports, this.#ports.sync.getSnapshot());
+    if (this.#ports) {
+      const snapshot = this.#ports.sync.getSnapshot();
+      this.#applyRecoveryRule(this.#ports, snapshot);
+      this.#oweOffsSyncStillShows(snapshot);
+    }
     this.#resumePendingActions();
   }
   #resumePendingActions(): void {
     for (const source of MEDIA_SOURCES) {
-      const state = this.#sources[source];
-      // Pending user enables own their readiness wait. Recovery never replays one
-      // or sends participant-wide cleanup for a failed enable on another client.
-      if (source !== "screen" && (state.desired.enabled || state.result.revision === state.desired.revision)) continue;
-      this.#fork(this.#serialize(source, this.#work(source)).pipe(Effect.ignore));
+      this.#sources[source].offRetry.delayMs = OFF_RETRY_INITIAL_MS;
+      // Screen share replays its unfinished stop; every source repays an owed off. Pending user enables own their readiness wait.
+      if (source === "screen" && !owesRemoteOff(this.#sources[source])) this.#runWork(source);
+      else this.#resendOwedOff(source);
     }
+  }
+  /** After a reconnect, Sync's snapshot decides: a source the device turned off but Sync still shows on, with the publication the device paused, is an off to resend. */
+  #oweOffsSyncStillShows(snapshot: SyncSnapshot): void {
+    for (const source of MEDIA_SOURCES) {
+      const state = this.#sources[source];
+      if (state.offDebt !== "sent" || state.pausedPublicationId === null) continue;
+      if (ownProjection(snapshot, source)?.publicationId === state.pausedPublicationId) state.offDebt = "owed";
+    }
+  }
+  /** Sync needs no off from this device: it shows the source off, or on with a publication this device never paused (another device's). */
+  #syncNeedsNoOff(source: MediaSource): boolean {
+    const snapshot = this.#ports?.sync.getSnapshot();
+    if (!snapshot?.media) return false;
+    const item = ownProjection(snapshot, source);
+    // A source Sync has no item for is unknown, not off: a recovered projection starts empty.
+    if (!item) return false;
+    return !item.enabled || (this.#sources[source].pausedPublicationId !== null && item.publicationId !== this.#sources[source].pausedPublicationId);
+  }
+  /** The one place an owed off is resent after the user's own attempt. At most one is in flight per source, and none while a user action on the source is pending. */
+  #resendOwedOff(source: MediaSource): void {
+    const state = this.#sources[source];
+    if (!this.#syncLive || this.#disposed || !owesRemoteOff(state) || state.offRetry.running || this.#pendingSources.has(source)) return;
+    this.#cancelOffRetry(source);
+    if (this.#syncNeedsNoOff(source)) {
+      state.offDebt = "none";
+      state.result = { revision: state.desired.revision, status: "confirmed" };
+      return;
+    }
+    this.#runWork(source);
+  }
+  /** A Sync snapshot repays an owed off now, unless an attempt for that source is already queued or running. */
+  #retryOffs(): void {
+    for (const source of MEDIA_SOURCES) this.#resendOwedOff(source);
+  }
+  #runWork(source: MediaSource): void {
+    const retry = this.#sources[source].offRetry;
+    retry.running = true;
+    this.#fork(
+      this.#serialize(source, this.#work(source)).pipe(
+        Effect.ignore,
+        Effect.ensuring(
+          Effect.sync(() => {
+            retry.running = false;
+          }),
+        ),
+      ),
+    );
+  }
+  /** An off that Sync still has not shown is retried on a timer with doubling backoff, one timer per source, so a quiet healthy connection repairs itself. */
+  #scheduleOffRetry(source: MediaSource): void {
+    const state = this.#sources[source];
+    const retry = state.offRetry;
+    if (!owesRemoteOff(state)) {
+      this.#cancelOffRetry(source);
+      retry.delayMs = OFF_RETRY_INITIAL_MS;
+      return;
+    }
+    if (!this.#syncLive || this.#disposed || retry.timer !== null) return;
+    retry.timer = this.#connection.scheduleUnsafe(() => {
+      retry.timer = null;
+      this.#resendOwedOff(source);
+    }, retry.delayMs);
+    retry.delayMs = Math.min(retry.delayMs * 2, OFF_RETRY_MAX_MS);
+  }
+  #cancelOffRetry(source: MediaSource): void {
+    const retry = this.#sources[source].offRetry;
+    if (retry.timer === null) return;
+    this.#connection.cancelScheduleUnsafe(retry.timer);
+    retry.timer = null;
+  }
+  #cancelOffRetries(): void {
+    for (const source of MEDIA_SOURCES) this.#cancelOffRetry(source);
   }
   #clearScreenAudio(media: ConnectionPorts["media"]): Effect.Effect<void, unknown> {
     return foreign(() => media.clearPreparedLocalTrack("screen_audio")).pipe(
@@ -1116,6 +1277,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#ports = ports;
     this.#projection.reset();
     this.#syncLive = false;
+    this.#cancelOffRetries();
     this.#bindCamera(ports);
     if (!ports) {
       this.#resetObservations();
@@ -1152,21 +1314,65 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
+    if (this.#recovering === null) this.#proof = this.#ports.sync.link?.proof() ?? null;
     this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
-  #pauseRecoveredIntents(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
-    const recovering = this.#recovering;
+  /**
+   * The rule depends on what the connected Sync advertised. Sync's snapshot items carry `off_reason` only when its welcome said
+   * `media_off_reason`, and only then can recovery tell a host stop from a publication that is merely missing. Without it the rule
+   * is the one this SDK had before: a wanted-on source whose own item is missing or not enabled is paused (#597).
+   */
+  #applyRecoveryRule(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
+    const recovering = this.#recovering ?? new Map<MediaSource, number>();
+    const proof = this.#proof;
     this.#recovering = null;
-    for (const [source, revision] of recovering ?? []) {
-      const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
-      if (!current?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
+    this.#proof = null;
+    if (ports.sync.offReasonNegotiated?.() === true) this.#pauseOnEvidence(ports, snapshot, recovering, ports.sync.link?.longSince(proof) ?? true);
+    else this.#pauseWhenSyncLostIt(ports, snapshot, recovering);
+  }
+  #pauseWhenSyncLostIt(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>): void {
+    for (const [source, revision] of recovering) {
+      if (!ownProjection(snapshot, source)?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
     }
+  }
+  /**
+   * A wanted-on source is paused when Sync's item says the host stopped it after the user's intent (`off_reason: "host"` with a newer
+   * `off_revision`; a replayed stop event reaches `#subscribePauses` the same way). This holds for every source that is wanted on when
+   * the snapshot arrives, including one the user turned on after recovery began, and for every source recovery began with. With no such
+   * evidence the drop decides, whatever Sync lists: the source stays wanted-on after a drop proven short and turns off, like a tap, after
+   * any other. The drop cutoff applies only to the intent the source had when recovery began (`recovering`), so a newer intent from the
+   * user is left alone.
+   */
+  #pauseOnEvidence(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>, longDrop: boolean): void {
+    for (const source of MEDIA_SOURCES) {
+      const intentRevision = recovering.get(source);
+      if (intentRevision === undefined && !this.#sources[source].desired.enabled) continue;
+      const item = ownProjection(snapshot, source);
+      const stopRevision = this.#hostStopNewerThanIntent(source, item);
+      if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);
+      else if (longDrop && intentRevision !== undefined && this.#sources[source].desired.revision === intentRevision) this.#turnOffLikeATap(source);
+    }
+  }
+  #hostStopNewerThanIntent(source: MediaSource, item: ReturnType<typeof ownProjection>): number | null {
+    if (item?.offReason !== "host" || item.offRevision === undefined) return null;
+    return item.offRevision > this.#sources[source].desired.controlRevision ? item.offRevision : null;
+  }
+  #pauseForHostStop(ports: ConnectionPorts, source: MediaSource, stopRevision: number): void {
+    const state = this.#sources[source];
+    state.serverSequence = Math.max(state.serverSequence, stopRevision);
+    this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
+  }
+  // The intent becomes off exactly as a tap makes it, so the UI shows it off and the user can tap to turn it on.
+  #turnOffLikeATap(source: MediaSource): void {
+    this.#recordIntent(source, false);
+    this.#sources[source].offDebt = "owed";
   }
   #subscribeSync(ports: ConnectionPorts): () => void {
     return ports.sync.subscribe((snapshot) => {
       this.#removeRequestsFromMissingParticipants(snapshot);
       this.#applyRemoteMediaState(ports, snapshot);
       this.#reconcileIntents();
+      this.#retryOffs();
       this.#notifyCapturePauses(ports);
       this.#publish();
     });

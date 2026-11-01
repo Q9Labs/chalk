@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -161,6 +162,18 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
+	var capture mediapublications.ListenerPullCapture
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			if observer, ok := publications.(interface {
+				CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
+			}); ok {
+				capture = observer.CaptureListenerPull(episode)
+			}
+			break
+		}
+	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		SessionDescription: request.Body.SessionDescription,
@@ -168,6 +181,14 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		SpaceID:            request.SpaceID.String(),
 		EpisodeID:          request.EpisodeID.String(),
 	})
+	if observer, ok := publications.(mediapublications.ListenerPullObserver); ok {
+		observer.ObserveListenerPull(ctx, mediapublications.ListenerPullInput{
+			ReceiveHealthEpisode: episode,
+			ParticipantID:        request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
+			ConnectionID: request.Body.ConnectionID, Capture: capture, Requested: request.Body.Tracks, Response: response, Err: err,
+		})
+	}
+	confirmFailedRemoteTracks(ctx, service, publications, request, response, err)
 	if err != nil {
 		observation, observed := remoteTrackObservationForFailure(request, err)
 		if observed {
@@ -217,6 +238,79 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		}
 	}
 	return response, nil
+}
+
+func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse, providerErr error) {
+	requested := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			requested[mediapublications.RemoteTrackIdentity{
+				ConnectionID: strings.TrimSpace(track.SessionID),
+				TrackName:    strings.TrimSpace(track.TrackName),
+			}] = struct{}{}
+		}
+	}
+	if len(requested) == 0 {
+		return
+	}
+	failed := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(response.TrackErrors))
+	for _, trackErr := range response.TrackErrors {
+		identity := mediapublications.RemoteTrackIdentity{
+			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
+			TrackName:    strings.TrimSpace(trackErr.TrackName),
+		}
+		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
+			failed[identity] = struct{}{}
+		}
+	}
+	for _, trackErr := range mediaplane.MissingRemoteTracks(providerErr) {
+		identity := mediapublications.RemoteTrackIdentity{
+			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
+			TrackName:    strings.TrimSpace(trackErr.TrackName),
+		}
+		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
+			failed[identity] = struct{}{}
+		}
+	}
+	if len(failed) == 0 {
+		return
+	}
+	confirmer, ok := publications.(mediapublications.RemoteTrackFailureConfirmer)
+	if !ok {
+		return
+	}
+	failedTracks := make([]mediapublications.RemoteTrackIdentity, 0, len(failed))
+	for identity := range failed {
+		failedTracks = append(failedTracks, identity)
+	}
+	reader := func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
+		state, err := service.InspectSession(ctx, connectionID)
+		if err != nil {
+			return mediapublications.PublisherSession{}, err
+		}
+		session := mediapublications.PublisherSession{Found: state.Found}
+		for _, track := range state.Tracks {
+			if track.Location == "local" {
+				session.Tracks = append(session.Tracks, mediapublications.PublisherTrack{
+					MID: track.Mid, TrackName: track.TrackName, Active: track.Active,
+				})
+			}
+		}
+		return session, nil
+	}
+	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
+		TenantID:              request.TenantID,
+		EpisodeID:             request.EpisodeID,
+		ListenerParticipantID: request.ParticipantID,
+		Failed:                failedTracks,
+	}, reader); err != nil {
+		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
+			"event", "media_publication.failure_confirmation_failed",
+			"error", err,
+		)
+	}
 }
 
 func remoteTrackObserver(publications mediapublications.Registry) (mediapublications.RemoteTrackObserver, bool) {
@@ -302,7 +396,7 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 		return mediapublications.RemoteTrackObservationInput{}, false
 	}
 	return mediapublications.RemoteTrackObservationInput{
-		TenantID: request.TenantID, EpisodeID: request.EpisodeID,
+		TenantID: request.TenantID, EpisodeID: request.EpisodeID, ListenerParticipantID: request.ParticipantID,
 		Requested: requested, Missing: missingPublications,
 	}, true
 }

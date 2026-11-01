@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### media-recovery-pause
+
+After a reconnect, the SDK no longer turns off a microphone or camera the person left on just because Sync's own record of it was missing. It turns the source off when Sync turned it off (a host stop newer than the person's own on), or when the drop lasted 60 seconds or more or could not be shown to be shorter (a clock stepped back or jumped, or the page was frozen, resumed or discarded). Otherwise capture resumes without a tap. A hidden tab alone does not count as a long drop. One exception: in a tab hidden for over 5 minutes that holds no live WebRTC connection, Chrome runs timers once a minute, a short drop can read as long, and the source then turns off until one tap.
+
+The SDK applies this rule only on a connection whose welcome carried `media_off_reason`. Any other Sync gets the old rule, which pauses a wanted-on source whose Sync record is missing or off.
+
+A lost or late pong never makes a drop look shorter: a pong pairs with the oldest ping in flight, and a mismatch only pairs it with an older ping. If the oldest ping stays unanswered for 60 seconds, the SDK replaces the Sync socket through its normal reconnect and proof of contact resumes on the new socket. This assumes Sync sends exactly one pong per ping.
+
+**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Never release the SDK while old and new Sync run side by side: an old instance can commit a host stop without filling the new table, and a new instance then advertises the extension without that evidence.
+
 ### short-invite-links
 
 Public Space invite links are now short, Google Meet–style links such as

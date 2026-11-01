@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { installChunkLoadAutoReload } from "./chunkReload";
+import { installChunkLoadAutoReload, reloadAfterChunkLoadFailure } from "./chunkReload";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,5 +29,17 @@ it("reloads once for rejection messages and browser error events", () => {
   guard.clear();
   replace.mockClear();
   target.dispatchEvent(Object.assign(new Event("error"), { message: "Loading chunk 123 failed" }));
+  expect(replace).toHaveBeenCalledOnce();
+});
+
+it("reloads once for a handled chunk-load failure", () => {
+  const replace = vi.fn();
+  const guard = new Map<string, string>();
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { location: { href: "https://example.test/space", replace } }));
+  vi.stubGlobal("sessionStorage", { getItem: (key: string) => guard.get(key), setItem: (key: string, value: string) => guard.set(key, value) });
+
+  expect(reloadAfterChunkLoadFailure(new Error("unrelated failure"))).toBe(false);
+  expect(reloadAfterChunkLoadFailure(new Error("Failed to fetch dynamically imported module"))).toBe(true);
+  expect(reloadAfterChunkLoadFailure(new Error("Failed to fetch dynamically imported module"))).toBe(false);
   expect(replace).toHaveBeenCalledOnce();
 });

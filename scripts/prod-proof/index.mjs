@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { leaveProof } from "./leave.mjs";
+import { offReasonProof } from "./off-reason.mjs";
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -10,6 +11,7 @@ import { prepareIntegration, recordProof, exportProof, transcriptProof, smokePro
 
 const plans = {
   leave: { media: false, webhooks: false, proofs: ["leave"] },
+  offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   all: {
     media: true,
     cameraShare: true,
@@ -48,11 +50,12 @@ const plans = {
     proofs: ["transcript"],
   },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|leave] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|leave|offreason] [--force-layer-switch|--no-layer-switch]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
+offreason needs no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the path to a built SDK entry to prove instead of the checkout, such as an installed package's dist/index.js.
 Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password or environment variables; API readiness checks capabilities.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
@@ -86,6 +89,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   }
   const actions = {
     leave: () => leaveProof(run),
+    offreason: () => offReasonProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);
       return captured.camera;
