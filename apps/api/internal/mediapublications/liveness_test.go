@@ -432,6 +432,13 @@ func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
 			},
 		},
 		{
+			name: "not_found_track_error for a single present listener",
+			steps: []step{
+				{name: "first missing-publication report", listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantReaderCalls: 1},
+				{name: "repeated missing-publication report", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
 			name: "listener who left",
 			steps: []step{
 				{name: "listener B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerB, "b"))},
