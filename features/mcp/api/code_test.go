@@ -82,6 +82,21 @@ func TestCodeModeOfficialClientAndSharedPermissions(t *testing.T) {
 	if mutations != 0 {
 		t.Fatal("sandbox bypassed scope checks")
 	}
+	oversized, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: ExecuteTool, Arguments: executeInput{Code: `return "<".repeat(12000)`}})
+	if err != nil || !oversized.IsError || !strings.Contains(oversized.Content[0].(*mcp.TextContent).Text, "code.output_limit") {
+		t.Fatalf("encoded output limit was not enforced: %+v %v", oversized, err)
+	}
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	var terminal struct {
+		Event   string `json:"event"`
+		Outcome string `json:"outcome"`
+	}
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if terminal.Event != "mcp.code.completed" || terminal.Outcome != "code.output_limit" {
+		t.Fatalf("terminal audit disagrees with response: %+v", terminal)
+	}
 	for _, secret := range []string{"TRANSCRIPT_BODY_SENTINEL", "TOKEN_SENTINEL", "SIGNED_URL_SENTINEL"} {
 		if strings.Contains(logs.String(), secret) {
 			t.Fatal("code or output entered audit logs")

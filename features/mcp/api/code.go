@@ -79,8 +79,7 @@ func NewCodeServer(catalog *Server) *Server {
 			result.Names = append(result.Names, matches[i])
 		}
 		result.TypeScript += "}\n"
-		auditCode(ctx, SearchAPITool, "ok", 0)
-		return codeReply(result, false), nil, nil
+		return codeReply(ctx, SearchAPITool, result, "ok", 0), nil, nil
 	})
 	mcp.AddTool(server.Server, &mcp.Tool{
 		Name:        ExecuteTool,
@@ -129,8 +128,7 @@ func NewCodeServer(catalog *Server) *Server {
 		if result.Error != nil {
 			outcome = result.Error.Code
 		}
-		auditCode(ctx, ExecuteTool, outcome, result.APICalls)
-		return codeReply(result, result.Error != nil), nil, nil
+		return codeReply(ctx, ExecuteTool, result, outcome, result.APICalls), nil, nil
 	})
 	return server
 }
@@ -143,15 +141,20 @@ func callFailure(err Error) json.RawMessage {
 	return encoded
 }
 
-func codeReply(value any, failed bool) *mcp.CallToolResult {
+// Audit the final response, including encoding/size failures, never just the
+// program's earlier outcome. No values or encoding errors enter the audit.
+func codeReply(ctx context.Context, tool string, value any, outcome string, calls int) *mcp.CallToolResult {
+	defer func() { auditCode(ctx, tool, outcome, calls) }()
 	encoded, err := json.Marshal(value)
 	if err != nil {
+		outcome = "internal.error"
 		return toolFailure(Error{Code: "internal.error", Message: "Result could not be encoded"})
 	}
 	if len(encoded) > MaxResultBytes {
-		return toolFailure(Error{Code: "code.output_limit", Message: "Encoded result exceeds 64 KiB; narrow the API search or returned data"})
+		outcome = "code.output_limit"
+		return toolFailure(Error{Code: "code.output_limit", Message: "Encoded result exceeds 64 KiB; narrow the API search or returned data. Completed mutations are not rolled back."})
 	}
-	return &mcp.CallToolResult{IsError: failed, StructuredContent: json.RawMessage(encoded), Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}}}
+	return &mcp.CallToolResult{IsError: outcome != "ok", StructuredContent: json.RawMessage(encoded), Content: []mcp.Content{&mcp.TextContent{Text: string(encoded)}}}
 }
 
 func auditCode(ctx context.Context, tool, outcome string, calls int) {

@@ -2,6 +2,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -108,7 +109,7 @@ func Execute(parent context.Context, code string, names []string, call func(cont
 		if result.Error != nil {
 			return
 		}
-		if size > MaxOutputBytes || outputBytes+int(size) > MaxOutputBytes || kind == 0 && len(result.Console) >= MaxConsoleEntries {
+		if size > MaxOutputBytes || kind == 0 && len(result.Console) >= MaxConsoleEntries {
 			fail("code.output_limit", "Console and return value exceed the output budget")
 			return
 		}
@@ -117,7 +118,16 @@ func Execute(parent context.Context, code string, names []string, call func(cont
 			fail("code.invalid_output", "Output must be JSON")
 			return
 		}
-		outputBytes += int(size)
+		// Match encoding/json's wire escaping before accepting output, rather
+		// than discovering expansion only after a mutation program completes.
+		var escaped bytes.Buffer
+		json.HTMLEscape(&escaped, data)
+		if outputBytes+escaped.Len() > MaxOutputBytes {
+			fail("code.output_limit", "Encoded console and return value exceed the output budget; completed mutations are not rolled back")
+			return
+		}
+		data = escaped.Bytes()
+		outputBytes += len(data)
 		switch kind {
 		case 0:
 			result.Console = append(result.Console, append(json.RawMessage(nil), data...))
