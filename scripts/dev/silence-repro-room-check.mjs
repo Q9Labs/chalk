@@ -54,7 +54,7 @@ const cells = new Map();
 for (const file of files) {
   const data = JSON.parse(readFileSync(file, "utf8"));
   for (const run of Array.isArray(data) ? data : (data.runs ?? [data])) {
-    if (!run.samples?.length) continue;
+    if (!run.samples?.length || run.ghostEndReport) continue;
     const key = `${run.build} | ${run.condition}`;
     const cell = cells.get(key) ?? {
       rooms: 0,
@@ -163,6 +163,51 @@ for (const [key, cell] of [...cells].sort(([a], [b]) => a.localeCompare(b))) {
 for (const [key, cell] of cells) {
   const top = [...cell.consoleErrors].sort((a, b) => b[1] - a[1]).slice(0, 4);
   if (top.length) console.log(`\nConsole errors, ${key}:\n${top.map(([text, count]) => `- ${count} x ${text}`).join("\n")}`);
+}
+
+// Ghost-end rooms: end tap to every remaining page's call ended and to the Episode ended (API), against Sync's 30 s deadline; Cloudflare failures in that window come from the API logs.
+const apiLines = logs.flatMap((path) =>
+  readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.includes("cloudflare_sfu.")),
+);
+const ghostRows = [];
+for (const file of files) {
+  const data = JSON.parse(readFileSync(file, "utf8"));
+  for (const run of data.runs ?? []) {
+    const report = run.ghostEndReport;
+    if (!report) continue;
+    const from = run.originMs + report.endTapMs;
+    const ended = report.remaining.map((entry) => (entry.endedAtMs === null ? null : (entry.endedAtMs - report.endTapMs) / 1000));
+    const episode = report.episodeEndedAtMs === null ? null : (report.episodeEndedAtMs - report.endTapMs) / 1000;
+    const until = run.originMs + (report.episodeEndedAtMs ?? report.endTapMs + 60_000) + 2000;
+    const window = apiLines.filter((line) => {
+      const time = Date.parse(/"time":"([^"]+)"/u.exec(line)?.[1] ?? "");
+      return time >= from - 500 && time <= until;
+    });
+    const count = (predicate) => window.filter((line) => predicate(Number(/"http_status":(\d+)/u.exec(line)?.[1] ?? 0), line)).length;
+    ghostRows.push({
+      build: run.build,
+      rep: run.runIndex,
+      endReturned: report.endReturnedMs === null ? null : (report.endReturnedMs - report.endTapMs) / 1000,
+      endError: report.endError,
+      lastCall: ended.includes(null) ? null : Math.max(...ended),
+      notEnded: ended.filter((value) => value === null).length,
+      episode,
+      limited: count((status) => status === 429),
+      serverErrors: count((status) => status >= 500),
+      timeouts: count((_, line) => /"failure_stage":"(timeout|transport)"/u.test(line)),
+      failures: window.length,
+    });
+  }
+}
+if (ghostRows.length) {
+  console.log("\n| build | rep | end call returned (s) | last remaining call ended (s) | calls not ended in 60 s | Episode ended by API (s) | inside 30 s | Cloudflare 429 | 5xx | timeouts | Cloudflare failure lines in window | end error |");
+  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|");
+  for (const row of ghostRows.sort((a, b) => `${a.build}${a.rep}`.localeCompare(`${b.build}${b.rep}`))) {
+    const inside = row.lastCall !== null && row.episode !== null && row.lastCall <= 30 && row.episode <= 30;
+    console.log(`| ${row.build} | ${row.rep} | ${fixed(row.endReturned ?? NaN)} | ${fixed(row.lastCall ?? NaN)} | ${row.notEnded} | ${fixed(row.episode ?? NaN)} | ${inside ? "yes" : "no"} | ${row.limited} | ${row.serverErrors} | ${row.timeouts} | ${row.failures} | ${row.endError ?? "-"} |`);
+  }
 }
 for (const path of logs) {
   const failures = new Map();

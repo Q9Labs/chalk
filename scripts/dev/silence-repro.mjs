@@ -38,7 +38,8 @@ const profiles = {
 // pull503: the browser's remote-pull requests fail with 503 media.unavailable at a fixed rate.
 // toggle: after the first unmute every speaker mutes for 4 s and unmutes for 8 s, repeatedly, so each unmute is a fresh publication.
 // mute-cycle: speaker 0 alone taps mute and unmute ten times each, 2 to 6 s apart (same gaps for every build); the other speakers stay unmuted.
-const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle"];
+// ghost-end: 8 people, 4 speakers; at 35 s four browsers (two speakers, two listeners) are killed without leaving, 5 s later the owner ends the Episode for everyone.
+const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle", "ghost-end"];
 // A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
 const conditionOf = (name) => {
   const parts = name.split("+");
@@ -356,6 +357,7 @@ async function runBuild(name) {
           pull503: condition.faults.includes("pull503") ? pull503Rate : 0,
           toggle: condition.faults.includes("toggle"),
           muteCycle: condition.faults.includes("mute-cycle"),
+          ghostEnd: condition.faults.includes("ghost-end"),
           runIndex,
           started: new Date().toISOString(),
           network: [],
@@ -369,7 +371,11 @@ async function runBuild(name) {
         report.runs.push(run);
         try {
           setNetem(condition.profile);
-          await runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName });
+          const episodeStatus = async (spaceId, episodeId) => {
+            const response = await fetch(`${config.urls.api}/v1/tenants/${tenant.id}/spaces/${spaceId}/episodes/${episodeId}`, { headers: { authorization: `Bearer ${systemToken}` } });
+            return response.ok ? (await response.json()).status : `http-${response.status}`;
+          };
+          await runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName, episodeStatus });
         } catch (error) {
           run.error = error.message;
           console.log(`Run failed ${name}/${conditionName}/${runIndex}: ${error.message}`);
@@ -388,7 +394,7 @@ async function runBuild(name) {
   }
 }
 
-async function runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName }) {
+async function runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName, episodeStatus }) {
   const space = await chalk.spaces.create({
     name: `Silence ${name}`,
     slug: `sr-${name.replaceAll(/\W/gu, "-")}-${conditionName.replaceAll(/\W/gu, "-").toLowerCase()}-${Date.now()}`.slice(0, 60),
@@ -517,6 +523,16 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
       }
       roomSeconds = Math.max(runSeconds, at + 10);
     }
+    const ghosts = [1, 2, 5, 6];
+    const ghostKillAt = 35;
+    const ghostEndAt = ghostKillAt + 5;
+    let ghostDone = false;
+    let ghostStarted = false;
+    if (run.ghostEnd) {
+      assert.equal(participantsCount, 8);
+      schedule.splice(0, schedule.length, ...schedule.filter((action) => action.first));
+      roomSeconds = Math.max(runSeconds, ghostEndAt + 75);
+    }
     schedule.sort((a, b) => a.at - b.at);
     run.speakerCount = speakerCount;
     // Every listener-speaker pair loses its pulled track once, in shuffled order, 0.7 s apart while all speakers are on.
@@ -553,8 +569,52 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         event.error = error.message;
       }
     };
-    while ((performance.now() - start) / 1000 < roomSeconds) {
+    // Hard-kill four browsers (their SFU sessions stay behind as ghosts), then the owner taps end for everyone and each remaining page and the API are polled until the call and the Episode have ended.
+    const runGhostEnd = async () => {
+      const report = (run.ghostEndReport = { ghosts, killedAtMs: null, endTapMs: null, endReturnedMs: null, endError: null, remaining: [], episodeEndedAtMs: null, episodeStatuses: [] });
+      const remaining = participants.map((_, index) => index).filter((index) => !ghosts.includes(index));
+      await Promise.all(ghosts.map((index) => participants[index].context.close().catch(() => undefined)));
+      report.killedAtMs = Date.now() - origin;
+      await sleep((ghostEndAt - ghostKillAt) * 1000);
+      report.endTapMs = Date.now() - origin;
+      const tap = participants[0].page
+        .evaluate(() => window.matrixClient.endEpisode())
+        .then(
+          () => (report.endReturnedMs = Date.now() - origin),
+          (error) => {
+            report.endError = error.message;
+            report.endReturnedMs = Date.now() - origin;
+          },
+        );
+      const deadline = performance.now() + 60_000;
+      report.remaining = remaining.map((participant) => ({ participant, endedAtMs: null, status: null }));
+      const watchPages = Promise.all(
+        report.remaining.map(async (entry) => {
+          while (performance.now() < deadline) {
+            const snapshot = await participants[entry.participant].page.evaluate(() => ({ ended: window.matrixClient.getSnapshot().connection.episodeEnded, status: window.matrixClient.getSnapshot().connection.status })).catch(() => null);
+            if (snapshot) entry.status = snapshot.status;
+            if (snapshot && (snapshot.ended || snapshot.status === "left" || snapshot.status === "failed")) return void (entry.endedAtMs = Date.now() - origin);
+            await sleep(100);
+          }
+        }),
+      );
+      const watchApi = (async () => {
+        while (performance.now() < deadline) {
+          const status = await episodeStatus(space.id, episode.id).catch((error) => `error:${error.message}`);
+          report.episodeStatuses.push({ at: Date.now() - origin, status });
+          if (status === "ended") return void (report.episodeEndedAtMs = Date.now() - origin);
+          await sleep(250);
+        }
+      })();
+      await Promise.all([tap, watchPages, watchApi]);
+      ghostDone = true;
+    };
+    while ((performance.now() - start) / 1000 < roomSeconds && !ghostDone) {
       const t = (performance.now() - start) / 1000;
+      if (run.ghostEnd && !ghostStarted && t >= ghostKillAt) {
+        ghostStarted = true;
+        void runGhostEnd();
+      }
       while (cursor < schedule.length && schedule[cursor].at <= t) {
         const action = schedule[cursor++];
         const event = { ...action, t, scheduledT: t, clickedAtMs: Date.now() - origin };
