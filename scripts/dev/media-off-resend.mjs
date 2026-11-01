@@ -5,6 +5,8 @@
 //
 //   CHALK_OFF_SCENARIO=lost-off  (default) the send of A's mic off is dropped while the link stays up, then A reconnects
 //   CHALK_OFF_SCENARIO=toggle    plain off and on with no injected failure
+//   CHALK_OFF_SCENARIO=first-publish  A turns its mic on for the first time, the publish request is held, Sync drops and
+//                                reconnects, then the publish is released: B must hear A (recovery must not pause it)
 //   CHALK_OFF_BLOCK_MEDIA_CLOSE=1 also fail A's SFU track close request (a second fault, harsher than lost-off)
 //   CHALK_OFF_SDK_REF=<git ref>  build the browser SDK from this ref (for example origin/master); default is the working tree
 //   CHALK_OFF_OUTPUT=<dir>       report directory (default artifacts/media-off-resend)
@@ -27,7 +29,7 @@ const { build } = createRequire(resolve(root, "tools/sdk-web-consumer-e2e/packag
 const { chromium } = createRequire(resolve(root, "sdks/typescript/client/package.json"))("playwright");
 const scenario = process.env.CHALK_OFF_SCENARIO || "lost-off";
 const blockMediaClose = process.env.CHALK_OFF_BLOCK_MEDIA_CLOSE === "1";
-assert.ok(["lost-off", "toggle"].includes(scenario), `unknown scenario ${scenario}`);
+assert.ok(["lost-off", "toggle", "first-publish"].includes(scenario), `unknown scenario ${scenario}`);
 const sdkRef = process.env.CHALK_OFF_SDK_REF || null;
 const output = resolve(root, process.env.CHALK_OFF_OUTPUT || "artifacts/media-off-resend");
 await mkdir(output, { recursive: true });
@@ -139,7 +141,7 @@ try {
     people.push({ name, page });
   }
   const [a, b] = people;
-  for (const person of people) person.id = await person.page.evaluate((join) => window.proof.join(join), { space: fixtureSpace.slug, baseUrl: config.urls.api, syncUrl: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: person.name });
+  for (const person of people) person.id = await person.page.evaluate((join) => window.proof.join(join), { space: fixtureSpace.slug, baseUrl: config.urls.api, syncUrl: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: person.name, microphone: scenario !== "first-publish" });
   const state = (person) => person.page.evaluate(() => window.proof.state());
   const waitFor = async (what, predicate, timeoutMs = 60000) => {
     const deadline = Date.now() + timeoutMs;
@@ -159,33 +161,16 @@ try {
   };
   const projectionOfA = async (viewer) => (await state(viewer)).projection[`${a.id}/microphone`];
 
-  await waitFor("A mic enabled for itself", async () => (await state(a)).microphone === "enabled");
-  await waitFor("B sees A mic enabled in Sync", async () => (await projectionOfA(b)) === true);
-  const start = await bHearsA();
-  const bState = await state(b);
-  check("baseline: B hears A", start.hears, { ...start, peers: bState.peers, remoteAudioTracks: bState.remoteAudioTracks });
-  check("baseline: A shows mic enabled", (await state(a)).microphone === "enabled", { a: (await state(a)).microphone });
-
-  if (scenario === "lost-off") {
-    await a.page.evaluate((flag) => {
-      window.proof.faults.dropNextMicrophoneOff = true;
-      window.proof.faults.failMediaClose = flag;
-      window.proofOff = window.proof.setMicrophone(false);
-    }, blockMediaClose);
-    note("A turned its mic off; the frame to Sync is dropped, the link stays up");
-    const observe = async (label) => {
-      const [seenByB, seenByA] = [await state(b), await state(a)];
-      note(`observe ${label}`, { projectionSeenByB: seenByB.projection[`${a.id}/microphone`], projectionSeenByA: seenByA.projection[`${a.id}/microphone`], aUi: seenByA.microphone, aConnection: seenByA.connection, bHears: (await bHearsA(1500)).hears });
-    };
-    await observe("2s after the off");
-    await sleep(6000);
-    await observe("8s after the off, before the failure is reported");
-    await waitFor("drop applied", async () => (await a.page.evaluate(() => window.proof.faults.droppedFrames)) === 1, 10000);
-    check("A's UI shows off at once", (await state(a)).microphone === "disabled", { a: (await state(a)).microphone });
-    const settled = await a.page.evaluate(() => window.proofOff);
-    const afterLoss = await state(a);
-    check("the off failed while the connection stayed up", !settled.ok && afterLoss.socketOpen && afterLoss.connection === "live", { settled, socketOpen: afterLoss.socketOpen, connection: afterLoss.connection });
-    await observe("after the failure, before the reconnect");
+  if (scenario === "first-publish") {
+    const silentStart = await bHearsA(2000);
+    check("baseline: A has not published, B hears nothing", !silentStart.hears && (await state(a)).microphone !== "enabled", { ...silentStart, a: (await state(a)).microphone });
+    await a.page.evaluate(() => {
+      window.proof.faults.holdNextPublish = true;
+      window.proofOn = window.proof.setMicrophone(true);
+    });
+    await waitFor("A's first publish request is held", async () => (await a.page.evaluate(() => window.proof.faults.heldPublishes)) === 1, 30000);
+    note("A turned its mic on; Sync has the grant, the publish request is held", { projectionSeenByB: await projectionOfA(b) });
+    const before = await state(a);
     await a.page.evaluate(() => window.proof.dropConnection());
     note("A's Sync connection closed by the page");
     await waitFor("A reconnecting", async () => (await state(a)).connection !== "live", 20000).catch(() => undefined);
@@ -193,44 +178,102 @@ try {
       "A live again on a new socket",
       async () => {
         const current = await state(a);
-        return current.connection === "live" && current.socketOpen && current.sockets > afterLoss.sockets;
+        return current.connection === "live" && current.socketOpen && current.sockets > before.sockets;
       },
       90000,
     );
-    note("A reconnected");
-    await sleep(Number(process.env.CHALK_OFF_SETTLE_MS || 20000));
-  } else {
-    const off = await a.page.evaluate(() => window.proof.setMicrophone(false));
-    note("A turned its mic off", off);
-    await sleep(10000);
-  }
-
-  const finalA = await state(a);
-  const finalB = await state(b);
-  check("A's UI shows off", finalA.microphone === "disabled", { a: finalA.microphone });
-  check("Sync projection (as B sees it) shows A's mic off", finalB.projection[`${a.id}/microphone`] !== true, { projection: finalB.projection[`${a.id}/microphone`] });
-  check("Sync projection (as A sees it) shows A's mic off", finalA.projection[`${a.id}/microphone`] !== true, { projection: finalA.projection[`${a.id}/microphone`] });
-  const silent = await bHearsA(5000);
-  check("B no longer receives A's audio", !silent.hears, silent);
-
-  if (scenario === "toggle") {
-    await a.page.evaluate(() => {
-      window.proofOn = window.proof.setMicrophone(true);
-    });
-    const earlyUi = (await state(a)).microphone;
-    check("the UI waits for Sync before showing on", earlyUi !== "enabled" || (await projectionOfA(a)) === true, { uiBeforeSync: earlyUi });
-    // Recorded, not gated: turning the mic on again after an off is unreliable on master too (the SFU sometimes refuses the republish, and B can receive silence), so it is a separate issue.
-    const onDone = await waitFor("A mic enabled again", async () => (await state(a)).microphone === "enabled", 30000).then(
+    note("A reconnected; the first publication does not exist yet", { aUi: (await state(a)).microphone });
+    await sleep(1000);
+    await a.page.evaluate(() => window.proof.release());
+    note("the held publish request is released");
+    const turnedOn = await a.page.evaluate(() => window.proofOn);
+    note("A's setMicrophone(true) settled", turnedOn);
+    const published = await waitFor("A mic enabled", async () => (await state(a)).microphone === "enabled", 30000).then(
       () => true,
       () => false,
     );
-    const onSeenByB =
-      onDone &&
+    const seenByB =
+      published &&
       (await waitFor("B sees A mic on in Sync", async () => (await projectionOfA(b)) === true, 30000).then(
         () => true,
         () => false,
       ));
-    note("after on (observation only)", { aUiEnabled: onDone, bSeesOn: onSeenByB, bHears: onSeenByB ? await bHearsA(4000) : null, aToneGraphs: (await state(a)).toneGraphs });
+    const heard = seenByB ? await bHearsA(4000) : { hears: false };
+    check("after the reconnect and the release, A's mic is on and B hears it", published && seenByB && heard.hears, { published, seenByB, ...heard, aUi: (await state(a)).microphone, toneGraphs: (await state(a)).toneGraphs });
+  } else {
+    await waitFor("A mic enabled for itself", async () => (await state(a)).microphone === "enabled");
+    await waitFor("B sees A mic enabled in Sync", async () => (await projectionOfA(b)) === true);
+    const start = await bHearsA();
+    const bState = await state(b);
+    check("baseline: B hears A", start.hears, { ...start, peers: bState.peers, remoteAudioTracks: bState.remoteAudioTracks });
+    check("baseline: A shows mic enabled", (await state(a)).microphone === "enabled", { a: (await state(a)).microphone });
+
+    if (scenario === "lost-off") {
+      await a.page.evaluate((flag) => {
+        window.proof.faults.dropNextMicrophoneOff = true;
+        window.proof.faults.failMediaClose = flag;
+        window.proofOff = window.proof.setMicrophone(false);
+      }, blockMediaClose);
+      note("A turned its mic off; the frame to Sync is dropped, the link stays up");
+      const observe = async (label) => {
+        const [seenByB, seenByA] = [await state(b), await state(a)];
+        note(`observe ${label}`, { projectionSeenByB: seenByB.projection[`${a.id}/microphone`], projectionSeenByA: seenByA.projection[`${a.id}/microphone`], aUi: seenByA.microphone, aConnection: seenByA.connection, bHears: (await bHearsA(1500)).hears });
+      };
+      await observe("2s after the off");
+      await sleep(6000);
+      await observe("8s after the off, before the failure is reported");
+      await waitFor("drop applied", async () => (await a.page.evaluate(() => window.proof.faults.droppedFrames)) === 1, 10000);
+      check("A's UI shows off at once", (await state(a)).microphone === "disabled", { a: (await state(a)).microphone });
+      const settled = await a.page.evaluate(() => window.proofOff);
+      const afterLoss = await state(a);
+      check("the off failed while the connection stayed up", !settled.ok && afterLoss.socketOpen && afterLoss.connection === "live", { settled, socketOpen: afterLoss.socketOpen, connection: afterLoss.connection });
+      await observe("after the failure, before the reconnect");
+      await a.page.evaluate(() => window.proof.dropConnection());
+      note("A's Sync connection closed by the page");
+      await waitFor("A reconnecting", async () => (await state(a)).connection !== "live", 20000).catch(() => undefined);
+      await waitFor(
+        "A live again on a new socket",
+        async () => {
+          const current = await state(a);
+          return current.connection === "live" && current.socketOpen && current.sockets > afterLoss.sockets;
+        },
+        90000,
+      );
+      note("A reconnected");
+      await sleep(Number(process.env.CHALK_OFF_SETTLE_MS || 20000));
+    } else {
+      const off = await a.page.evaluate(() => window.proof.setMicrophone(false));
+      note("A turned its mic off", off);
+      await sleep(10000);
+    }
+
+    const finalA = await state(a);
+    const finalB = await state(b);
+    check("A's UI shows off", finalA.microphone === "disabled", { a: finalA.microphone });
+    check("Sync projection (as B sees it) shows A's mic off", finalB.projection[`${a.id}/microphone`] !== true, { projection: finalB.projection[`${a.id}/microphone`] });
+    check("Sync projection (as A sees it) shows A's mic off", finalA.projection[`${a.id}/microphone`] !== true, { projection: finalA.projection[`${a.id}/microphone`] });
+    const silent = await bHearsA(5000);
+    check("B no longer receives A's audio", !silent.hears, silent);
+
+    if (scenario === "toggle") {
+      await a.page.evaluate(() => {
+        window.proofOn = window.proof.setMicrophone(true);
+      });
+      const earlyUi = (await state(a)).microphone;
+      check("the UI waits for Sync before showing on", earlyUi !== "enabled" || (await projectionOfA(a)) === true, { uiBeforeSync: earlyUi });
+      // Recorded, not gated: turning the mic on again after an off is unreliable on master too (the SFU sometimes refuses the republish, and B can receive silence), so it is a separate issue.
+      const onDone = await waitFor("A mic enabled again", async () => (await state(a)).microphone === "enabled", 30000).then(
+        () => true,
+        () => false,
+      );
+      const onSeenByB =
+        onDone &&
+        (await waitFor("B sees A mic on in Sync", async () => (await projectionOfA(b)) === true, 30000).then(
+          () => true,
+          () => false,
+        ));
+      note("after on (observation only)", { aUiEnabled: onDone, bSeesOn: onSeenByB, bHears: onSeenByB ? await bHearsA(4000) : null, aToneGraphs: (await state(a)).toneGraphs });
+    }
   }
   report.passed = report.assertions.every((assertion) => assertion.ok);
 } catch (error) {

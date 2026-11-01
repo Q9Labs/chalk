@@ -222,6 +222,7 @@ defmodule ChalkSync.Retention.SQL do
     do: delete_rows("sync_publication_grant_reservations")
 
   def delete_media_pauses, do: delete_rows("sync_media_pauses")
+  def delete_media_stops, do: delete_rows("sync_media_stops")
 
   def delete_chat_messages, do: delete_rows("sync_chat_messages")
   def delete_chat_read_receipts, do: delete_rows("sync_chat_read_receipts")

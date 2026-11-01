@@ -141,6 +141,10 @@ defmodule ChalkSync.Stateholder.Memory do
     do: GenServer.call(__MODULE__, {:media_pauses, episode})
 
   @impl ChalkSync.Stateholder
+  def media_stops(%EpisodeKey{} = episode),
+    do: GenServer.call(__MODULE__, {:media_stops, episode})
+
+  @impl ChalkSync.Stateholder
   def set_media_pause(%Identity{} = identity, source, publication_id),
     do: GenServer.call(__MODULE__, {:set_media_pause, identity, source, publication_id})
 
@@ -231,6 +235,18 @@ defmodule ChalkSync.Stateholder.Memory do
     reply =
       case :ets.lookup(@episodes, key) do
         [{^key, state}] -> {:ok, state.media_pauses}
+        [] -> {:retryable, :dependency_unavailable}
+      end
+
+    {:reply, reply, server_state}
+  end
+
+  def handle_call({:media_stops, episode}, _from, server_state) do
+    key = EpisodeKey.authority_key(episode)
+
+    reply =
+      case :ets.lookup(@episodes, key) do
+        [{^key, state}] -> {:ok, state.media_stops}
         [] -> {:retryable, :dependency_unavailable}
       end
 
@@ -528,6 +544,19 @@ defmodule ChalkSync.Stateholder.Memory do
 
   defp update_media_pauses(pauses, key, nil), do: Map.delete(pauses, key)
 
+  @stop_sources %{
+    "participant_microphone_stopped" => "microphone",
+    "participant_camera_stopped" => "camera",
+    "participant_screen_share_stopped" => "screen"
+  }
+
+  defp record_media_stop(stops, operation, %{name: name, revision: revision}) do
+    case Map.fetch(@stop_sources, to_string(name)) do
+      {:ok, source} -> Map.put(stops, {operation.target_participant_id, source}, revision)
+      :error -> stops
+    end
+  end
+
   defp claim_memory_operations(server_state, limit, operation_filter) do
     operations =
       @episodes
@@ -604,6 +633,7 @@ defmodule ChalkSync.Stateholder.Memory do
       receipts: %{},
       operations: %{},
       media_pauses: %{},
+      media_stops: %{},
       recording_capture_epochs: %{},
       events: :queue.new()
     }
@@ -1158,7 +1188,8 @@ defmodule ChalkSync.Stateholder.Memory do
         | state: state,
           participants: sync_product_roles(episode.participants, state),
           events: :queue.in(stored_event, episode.events),
-          operations: Map.put(episode.operations, operation.external_operation_id, applied)
+          operations: Map.put(episode.operations, operation.external_operation_id, applied),
+          media_stops: record_media_stop(episode.media_stops, operation, event)
       }
 
       {:ok, operation_decision(applied, :original, state), next}

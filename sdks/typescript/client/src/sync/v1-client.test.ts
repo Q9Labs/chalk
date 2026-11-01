@@ -623,6 +623,275 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
+  // Sync says per connection whether its media items carry `off_reason`; a rolling deploy can put the next connection on an older Sync.
+  it("reports media_off_reason for the connection whose welcome carried it and resets on the next", async () => {
+    const clock = new TestClock();
+    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      expect(client.offReasonNegotiated()).toBe(false);
+      for (const advertised of [true, false, true]) {
+        socket.close(1012);
+        clock.advance(0);
+        await settle();
+        clock.advance(1);
+        socket.open();
+        await settle();
+        expect(client.offReasonNegotiated()).toBe(false);
+        await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, undefined, advertised);
+        expect(client.offReasonNegotiated()).toBe(advertised);
+      }
+    } finally {
+      client.stop();
+    }
+  });
+  it("listens to the page while started and stops listening on stop", async () => {
+    const { page, listeners, registered } = pageDouble();
+    const { client } = await liveClient({ page });
+    try {
+      expect([...registered].sort()).toEqual(["freeze", "resume"]);
+    } finally {
+      client.stop();
+    }
+    expect(registered.size).toBe(0);
+    expect(listeners.size).toBe(0);
+  });
+  // A pong proves contact at the moment its ping was sent, and only when the round trip took 0 to 5 s on both clocks. The ping that
+  // opens a live connection is sent at wall 0 and mono 0 in these tests; the timers never fire, so no other ping is sent.
+  describe("a drop is short only after a ping and its pong that followed each other", () => {
+    async function linkClient(page: ReturnType<typeof pageDouble>["page"] | null = null) {
+      const time = { wall: 0, mono: 0 };
+      const clock = { now: () => time.wall, setTimeout: new TestClock().setTimeout.bind(new TestClock()), clearTimeout: () => undefined };
+      const { client, socket } = await liveClient({ clock, monotonic: () => time.mono, page });
+      const at = (wall: number, mono: number) => {
+        time.wall = wall;
+        time.mono = mono;
+      };
+      const pong = async () => {
+        socket.receive({ type: "pong" });
+        await settle();
+      };
+      return { client, at, pong, socket };
+    }
+    const long = (client: Awaited<ReturnType<typeof linkClient>>["client"]) => client.link.longSince(client.link.proof());
+
+    it("proves contact at the send time of the ping, and is short until 60 s on both clocks", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        expect(long(client)).toBe(true);
+        at(2_000, 2_000);
+        await pong();
+        at(59_999, 59_999);
+        expect(long(client)).toBe(false);
+        at(60_000, 59_999);
+        expect(long(client)).toBe(true);
+        at(59_999, 60_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    // The laptop slept for two minutes: the pong to the ping sent before it is delivered when the page wakes.
+    it("a pong buffered through a two-minute suspend proves nothing", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(120_000, 0);
+        await pong();
+        at(125_000, 5_000);
+        expect(long(client)).toBe(true);
+        at(128_000, 8_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a pong buffered through a 20 s suspend does not hide a 45 s outage", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(20_000, 0);
+        await pong();
+        at(65_000, 45_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it.each([
+      ["the wall clock is more than 5 s behind the monotonic clock", 20_000, 2_000],
+      ["the monotonic clock is more than 5 s ahead of the wall clock", 2_000, 20_000],
+      ["the wall clock stepped back", -5_000, 1_000],
+      ["the round trip took 5.001 s", 5_001, 5_001],
+    ])("a pong proves nothing when %s", async (_name, wall, mono) => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(wall, mono);
+        await pong();
+        at(wall + 1_000, mono + 1_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a pong with no ping in flight proves nothing, and neither does any other frame", async () => {
+      const { client, at, pong, socket } = await linkClient();
+      try {
+        at(1_000, 1_000);
+        await pong();
+        const proof = client.link.proof();
+        at(30_000, 30_000);
+        await pong();
+        socket.receive({ type: "heartbeat_ack" });
+        await settle();
+        expect(client.link.proof()).toEqual(proof);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a freeze or resume between the ping and its pong proves nothing", async () => {
+      const { page, listeners } = pageDouble();
+      const { client, at, pong } = await linkClient(page);
+      try {
+        for (const listener of listeners) listener();
+        at(1_000, 1_000);
+        await pong();
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a freeze or resume after the contact makes the drop long", async () => {
+      const { page, listeners } = pageDouble();
+      const { client, at, pong } = await linkClient(page);
+      try {
+        at(1_000, 1_000);
+        await pong();
+        expect(long(client)).toBe(false);
+        for (const listener of listeners) listener();
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+  });
+  // A pong answers the oldest ping in flight and no ping is evicted, so a mismatch can only pair a pong with an older ping, which
+  // fails closed. A late pong proves nothing and changes nothing else. The oldest ping unanswered for over 60 s, the old
+  // heartbeat timeout, ends the socket through the normal reconnect.
+  describe("pongs that are late or lost", () => {
+    // The probe sends a ping every 500 ms. The monotonic clock follows the test clock.
+    async function probeClient() {
+      const clock = new TestClock();
+      const { client, socket, state } = await liveClient({ clock, monotonic: () => clock.now(), reconnectDelayMs: 1 });
+      const pings = () => socket.frames().filter((frame) => frame.type === "ping").length;
+      let answered = 0;
+      const answer = async (count = 1) => {
+        for (let reply = 0; reply < count; reply += 1) {
+          socket.receive({ type: "pong" });
+          answered += 1;
+        }
+        await settle();
+      };
+      const waiting = () => pings() - answered;
+      const reconnect = async () => {
+        clock.advance(1);
+        socket.open();
+        await settle();
+        answered = 0;
+        await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date");
+        answered = pings();
+      };
+      const phase = () => client.getSnapshot().connection.phase;
+      const unknown = () => client.link.longSince(client.link.proof());
+      return { client, clock, socket, answer, waiting, reconnect, phase, unknown };
+    }
+
+    it("keeps a socket whose pings are answered", async () => {
+      const { client, clock, answer, phase, unknown } = await probeClient();
+      try {
+        for (let probe = 0; probe < 120; probe += 1) {
+          clock.advance(500);
+          await answer();
+        }
+        expect(phase()).toBe("live");
+        expect(unknown()).toBe(false);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("keeps the socket through a 7 s round-trip spike of 10 s, and proof resumes when round trips recover", async () => {
+      const { client, clock, answer, waiting, phase, unknown } = await probeClient();
+      try {
+        for (let step = 0; step < 20; step += 1) {
+          clock.advance(500);
+          await settle();
+          if (step >= 14) await answer();
+        }
+        for (let step = 0; step < 6; step += 1) {
+          clock.advance(500);
+          await answer();
+        }
+        expect(waiting()).toBeGreaterThan(0);
+        await answer(waiting());
+        expect(phase()).toBe("live");
+        const resumedAfter = client.link.proof()?.wall ?? 0;
+        for (let step = 0; step < 10; step += 1) {
+          clock.advance(500);
+          await answer();
+        }
+        expect(phase()).toBe("live");
+        expect(client.link.proof()?.wall ?? 0).toBeGreaterThan(resumedAfter);
+        expect(unknown()).toBe(false);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("replaces the socket within 60 s of continuous reply loss, and proof resumes on the new socket", async () => {
+      const { client, socket, clock, answer, reconnect, phase, unknown } = await probeClient();
+      try {
+        // Three replies in four are lost. Every reply pairs with an older ping, the pairing skew grows, and proof stops.
+        let step = 0;
+        for (; step < 400 && phase() === "live"; step += 1) {
+          clock.advance(500);
+          await settle();
+          if (step % 4 === 3) await answer();
+        }
+        expect(phase()).toBe("connecting");
+        expect(clock.now()).toBeLessThanOrEqual(121_000);
+        expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "ping unanswered for 60 s" });
+        await reconnect();
+        for (let probe = 0; probe < 4; probe += 1) {
+          clock.advance(500);
+          await answer();
+        }
+        expect(phase()).toBe("live");
+        expect(unknown()).toBe(false);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a pong delivered late proves nothing and does not replace the socket", async () => {
+      const time = { wall: 0, mono: 0 };
+      const clock = { now: () => time.wall, setTimeout: new TestClock().setTimeout.bind(new TestClock()), clearTimeout: () => undefined };
+      const { client, socket } = await liveClient({ clock, monotonic: () => time.mono });
+      try {
+        time.wall = 6_000;
+        time.mono = 6_000;
+        socket.receive({ type: "pong" });
+        await settle();
+        expect(client.getSnapshot().connection.phase).toBe("live");
+        expect(client.link.proof()).toBeNull();
+      } finally {
+        client.stop();
+      }
+    });
+  });
   it("resends unacknowledged entry after transport recovery", async () => {
     const clock = new TestClock();
     const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1 });
@@ -675,6 +944,27 @@ describe("V1SyncClient", () => {
     expect(store.loadAttempts).toBe(2);
     expect(sockets).toHaveLength(1);
     client.stop();
+  });
+  it("leaves no page listeners when startup fails without a stop", async () => {
+    const { page, registered } = pageDouble();
+    const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", pendingStore: new FailOnceLoadStore(), webSocket: { connect: () => new TestSocket() }, page });
+    await expect(client.start()).rejects.toThrow("pending store unavailable");
+    expect(registered.size).toBe(0);
+  });
+  it("keeps the listeners of a newer start when an older start fails late", async () => {
+    const { page, registered } = pageDouble();
+    const store = new RejectableLoadStore();
+    const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", pendingStore: store, webSocket: { connect: () => new TestSocket() }, page });
+    const older = client.start();
+    const failed = expect(older).rejects.toThrow("pending store unavailable");
+    client.stop();
+    await client.start();
+    expect([...registered].sort()).toEqual(["freeze", "resume"]);
+    store.rejectLoad();
+    await failed;
+    expect([...registered].sort()).toEqual(["freeze", "resume"]);
+    client.stop();
+    expect(registered.size).toBe(0);
   });
   it("preserves a durable command queued while a failing startup load is in flight", async () => {
     const store = new RejectableLoadStore();
@@ -1168,6 +1458,46 @@ describe("V1SyncClient", () => {
     expect(client.getSnapshot().presence).toMatchObject({ sequence: 1, items: [{ speaking: true }] });
     const recovering = snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
     socket.receive({ type: "projection_event", stream: "presence", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, state: "connected", speaking: false, active_speaker: false } });
+    await recovering;
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
+  });
+  it("asks Sync for media off reasons and reads them from the media projection", async () => {
+    const { client, socket, urls } = await liveClient();
+    expect(new URL(urls[0]!).searchParams.get("media_off_reason")).toBe("1");
+    const stop = { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null, off_reason: "host", off_revision: 7 } as const;
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: stop });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: null, offReason: "host", offRevision: 7 }]);
+  });
+  // Another device of the participant has published since the host stopped the source, so the item is enabled. A device with an
+  // older intent still has to see the stop.
+  it("reads the retained host stop on a media item another device has turned on", async () => {
+    const { client, socket } = await liveClient();
+    const item = { participant_id: ownerId, source: "microphone", enabled: true, publication_id: "device-b-microphone", off_reason: "host", off_revision: 7 } as const;
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: true, publicationId: "device-b-microphone", offReason: "host", offRevision: 7 }]);
+  });
+  it("recovers on an enabled media item that carries a device pause reason", async () => {
+    const { client, socket } = await liveClient();
+    const recovering = snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: true, publication_id: "p", off_reason: "self" } });
+    await recovering;
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
+  });
+  it("reads a media item from an earlier Sync that sends no off reason as no evidence", async () => {
+    const { client, socket } = await liveClient();
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null } });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: null }]);
+  });
+  it("recovers on a media item whose off reason does not fit its shape", async () => {
+    const { client, socket } = await liveClient();
+    const recovering = snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: false, publication_id: null, off_reason: "host" } });
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
@@ -2497,7 +2827,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2511,6 +2841,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     ...(mode === "snapshot" ? { snapshot } : {}),
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
+    ...(mediaOffReason ? { media_off_reason: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });
@@ -2701,6 +3032,21 @@ class TestAsyncStorage {
   async removeItem(key: string): Promise<void> {
     this.values.delete(key);
   }
+}
+function pageDouble() {
+  const listeners = new Set<() => void>();
+  const registered = new Set<string>();
+  const page = {
+    addEventListener: (type: "freeze" | "resume", listener: () => void) => {
+      registered.add(type);
+      listeners.add(listener);
+    },
+    removeEventListener: (type: "freeze" | "resume", listener: () => void) => {
+      registered.delete(type);
+      listeners.delete(listener);
+    },
+  };
+  return { page, listeners, registered };
 }
 class FailOnceLoadStore extends InMemoryV1PendingTargetStore {
   loadAttempts = 0;

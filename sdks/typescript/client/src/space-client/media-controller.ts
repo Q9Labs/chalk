@@ -7,6 +7,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
+import type { LinkReading } from "../sync/link-watch";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
@@ -160,7 +161,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
   #disposed = false;
+  /** The wanted-on sources when recovery began, with the intent revision each one had then. */
   #recovering: ReadonlyMap<MediaSource, number> | null = null;
+  /** The Sync client's last proof of contact when the current recovery began: where its drop is measured from. */
+  #proof: LinkReading | null = null;
   readonly #pendingSources = new Map<MediaSource, number>();
   readonly #pendingCaptures = new Set<() => void>();
   readonly #readinessChecks = new Set<(failure?: SpaceClientError) => void>();
@@ -676,7 +680,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return state.desired.enabled && state.forcedRevision !== state.desired.revision;
   }
   #resetObservations(): void {
-    if (this.#connection.getSnapshot().state !== "reconnecting") this.#recovering = null;
+    if (this.#connection.getSnapshot().state !== "reconnecting") {
+      this.#recovering = null;
+      this.#proof = null;
+    }
     for (const source of MEDIA_SOURCES) {
       const state = this.#sources[source];
       // The result belongs to the old connection. An off Sync has not shown yet stays owed on the source and is resent after the next connect.
@@ -772,7 +779,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!resumed) return;
     if (this.#ports) {
       const snapshot = this.#ports.sync.getSnapshot();
-      this.#pauseRecoveredIntents(this.#ports, snapshot);
+      this.#applyRecoveryRule(this.#ports, snapshot);
       this.#oweOffsSyncStillShows(snapshot);
     }
     this.#resumePendingActions();
@@ -1307,15 +1314,58 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!this.#ports) return;
     // Consent belongs to the user action, not a disposable Sync subscription or
     // a projection that may never have confirmed the publication before loss.
+    if (this.#recovering === null) this.#proof = this.#ports.sync.link?.proof() ?? null;
     this.#recovering ??= new Map(MEDIA_SOURCES.filter((source) => this.#sources[source].desired.enabled).map((source) => [source, this.#sources[source].desired.revision]));
   }
-  #pauseRecoveredIntents(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
-    const recovering = this.#recovering;
+  /**
+   * The rule depends on what the connected Sync advertised. Sync's snapshot items carry `off_reason` only when its welcome said
+   * `media_off_reason`, and only then can recovery tell a host stop from a publication that is merely missing. Without it the rule
+   * is the one this SDK had before: a wanted-on source whose own item is missing or not enabled is paused (#597).
+   */
+  #applyRecoveryRule(ports: ConnectionPorts, snapshot: SyncSnapshot): void {
+    const recovering = this.#recovering ?? new Map<MediaSource, number>();
+    const proof = this.#proof;
     this.#recovering = null;
-    for (const [source, revision] of recovering ?? []) {
-      const current = snapshot.media?.items.find((item) => item.participantId === snapshot.participantId && item.source === source);
-      if (!current?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
+    this.#proof = null;
+    if (ports.sync.offReasonNegotiated?.() === true) this.#pauseOnEvidence(ports, snapshot, recovering, ports.sync.link?.longSince(proof) ?? true);
+    else this.#pauseWhenSyncLostIt(ports, snapshot, recovering);
+  }
+  #pauseWhenSyncLostIt(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>): void {
+    for (const [source, revision] of recovering) {
+      if (!ownProjection(snapshot, source)?.enabled) this.#pausePublication(ports, source, revision, "sync_recovery_loss");
     }
+  }
+  /**
+   * A wanted-on source is paused when Sync's item says the host stopped it after the user's intent (`off_reason: "host"` with a newer
+   * `off_revision`; a replayed stop event reaches `#subscribePauses` the same way). This holds for every source that is wanted on when
+   * the snapshot arrives, including one the user turned on after recovery began, and for every source recovery began with. With no such
+   * evidence the drop decides, whatever Sync lists: the source stays wanted-on after a drop proven short and turns off, like a tap, after
+   * any other. The drop cutoff applies only to the intent the source had when recovery began (`recovering`), so a newer intent from the
+   * user is left alone.
+   */
+  #pauseOnEvidence(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>, longDrop: boolean): void {
+    for (const source of MEDIA_SOURCES) {
+      const intentRevision = recovering.get(source);
+      if (intentRevision === undefined && !this.#sources[source].desired.enabled) continue;
+      const item = ownProjection(snapshot, source);
+      const stopRevision = this.#hostStopNewerThanIntent(source, item);
+      if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);
+      else if (longDrop && intentRevision !== undefined && this.#sources[source].desired.revision === intentRevision) this.#turnOffLikeATap(source);
+    }
+  }
+  #hostStopNewerThanIntent(source: MediaSource, item: ReturnType<typeof ownProjection>): number | null {
+    if (item?.offReason !== "host" || item.offRevision === undefined) return null;
+    return item.offRevision > this.#sources[source].desired.controlRevision ? item.offRevision : null;
+  }
+  #pauseForHostStop(ports: ConnectionPorts, source: MediaSource, stopRevision: number): void {
+    const state = this.#sources[source];
+    state.serverSequence = Math.max(state.serverSequence, stopRevision);
+    this.#pausePublication(ports, source, state.desired.revision, "moderation_pause");
+  }
+  // The intent becomes off exactly as a tap makes it, so the UI shows it off and the user can tap to turn it on.
+  #turnOffLikeATap(source: MediaSource): void {
+    this.#recordIntent(source, false);
+    this.#sources[source].offDebt = "owed";
   }
   #subscribeSync(ports: ConnectionPorts): () => void {
     return ports.sync.subscribe((snapshot) => {

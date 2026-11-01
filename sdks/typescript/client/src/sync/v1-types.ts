@@ -1,4 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
+import type { PageLifecycle } from "./link-watch";
 import type { SetAdmissionPolicyCommandFrame, SyncV1ServerFrame } from "../generated/sync";
 import type { ClientMediaPlane, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaSource } from "../media/plane";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
@@ -72,7 +73,13 @@ export type V1ControlState = {
   readonly participants: readonly V1Participant[];
   readonly admissionRequests: readonly V1AdmissionRequest[];
 };
-export type V1MediaPublication = MediaPublication;
+/** Why Sync shows a media item as off. A missing reason is no evidence, never "off". */
+export type V1MediaOffReason = "host" | "self" | "dead";
+export type V1MediaPublication = MediaPublication & {
+  readonly offReason?: V1MediaOffReason;
+  /** The control revision of the host stop; only with `offReason: "host"`. */
+  readonly offRevision?: number;
+};
 export type V1Presence = {
   readonly admissionRevision?: number;
   /** Stable person identity, independent of the per-device participant ID. */
@@ -242,6 +249,10 @@ export type V1SyncClientOptions = {
   readonly ids?: SyncIdGenerator;
   readonly requestIds?: SyncIdGenerator;
   readonly clock?: SyncClock;
+  /** Monotonic milliseconds, `performance.now()` by default. */
+  readonly monotonic?: () => number;
+  /** The page whose `freeze` and `resume` events show a suspend; the browser document by default, null for none. */
+  readonly page?: PageLifecycle | null;
   readonly lifecycle?: SyncLifecycle;
   readonly reconnectDelayMs?: number;
   /** Per-attempt WebSocket opening allowance, clamped to 10–60 seconds; defaults to 10 seconds. */

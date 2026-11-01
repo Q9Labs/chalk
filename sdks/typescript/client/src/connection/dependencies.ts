@@ -3,6 +3,7 @@ import type { ConnectionReporter, ConnectionReportTransportEvent } from "./repor
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
 import type { V1AdmissionTarget, V1AssignableRole, V1CommandResult, V1EpisodeSnapshot, V1SelfMediaTargetResult } from "../sync";
+import type { LinkJudge } from "../sync/link-watch";
 import type { V1CollaborationClient, V1DirectedRequest, V1DirectedRequestResult, V1MediaPause } from "../sync/v1-types";
 import type { ChalkWhiteboardSummary, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardV1Transport } from "../whiteboard/types";
 import type { ParsedAccessGrant, ParticipantMediaAccess, ParticipantMediaCredential } from "../access/grant";
@@ -40,6 +41,10 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly restartTransport?: () => void;
   readonly stop: () => void;
   readonly getSnapshot: () => V1EpisodeSnapshot;
+  /** Judges whether a drop was proven short. Absent means unknown, which is treated as long. */
+  readonly link?: LinkJudge;
+  /** Whether the connected Sync advertised `media_off_reason`. Absent means no. */
+  readonly offReasonNegotiated?: () => boolean;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
   readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;

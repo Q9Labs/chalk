@@ -297,7 +297,7 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   end
 
   defp result(name, evidence) do
-    %{"name" => name, "evidence" => evidence, "observations" => normalized_observations()}
+    %{"name" => name, "evidence" => evidence}
   end
 
   defp normalized_observations do
@@ -315,13 +315,33 @@ defmodule ChalkSync.SyncBreakerV1.DeliveryRecoveryPhase do
   defp with_fixture(connections, fun) do
     fixture = SyncPostgres.seed_episode(hd(connections), 2)
 
-    try do: fun.(fixture),
+    try do: fixture |> fun.() |> with_observations(fixture),
         after:
           (
             Gate.stop()
             SyncPostgres.cleanup(hd(connections), fixture.episode)
           )
   end
+
+  # Joining starts a live reconcile in a task, and its result can broadcast frames after the client already holds
+  # its snapshots. Read the gate only once that reconcile is done, so the same frames are always counted.
+  defp with_observations(result, fixture) do
+    await_live_reconcile(Coordinator.whereis(fixture.episode))
+    Map.put(result, "observations", normalized_observations())
+  end
+
+  defp await_live_reconcile(coordinator) when is_pid(coordinator) do
+    case :sys.get_state(coordinator) do
+      %{live_reconcile_task: nil, live_reconcile_pending: false} ->
+        :ok
+
+      _running ->
+        Process.sleep(1)
+        await_live_reconcile(coordinator)
+    end
+  end
+
+  defp await_live_reconcile(_missing), do: :ok
 
   defp start_gate(actions) do
     Gate.stop()
