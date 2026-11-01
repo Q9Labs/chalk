@@ -3032,6 +3032,32 @@ describe("SFU offers during negotiation", () => {
       { pollIntervalMs: 100, onDiagnostic: (event) => diagnostics.push(event) },
     );
   });
+  it("still answers the pull reply offer when the diagnostic callback throws", async () => {
+    const errors: unknown[] = [];
+    await withTimedHarness(
+      async (harness) => {
+        const [, second, third] = observedPullOfferCollision;
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const peer = harness.peers[0]!;
+        await vi.advanceTimersByTimeAsync(third.at - second.at);
+        await peer.setLocalDescription(await peer.createOffer());
+        await vi.advanceTimersByTimeAsync(observedPullOfferCollision[3].at - third.at);
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await vi.advanceTimersByTimeAsync(100);
+        expect(peer.descriptionLog.slice(-3)).toEqual(["setLocal:rollback", "setRemote:offer", "setLocal:answer"]);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+        expect(errors).toContainEqual(expect.objectContaining({ message: "diagnostic consumer failed" }));
+      },
+      {
+        pollIntervalMs: 100,
+        onDiagnostic: () => {
+          throw new Error("diagnostic consumer failed");
+        },
+        onError: (error) => errors.push(error),
+      },
+    );
+  });
   it("logs nothing when every SDP operation leaves the connection stable", async () => {
     const diagnostics: CloudflareSFULocalOfferDiagnostic[] = [];
     await withTimedHarness(

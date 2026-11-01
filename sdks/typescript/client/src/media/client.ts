@@ -120,7 +120,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
   // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
-  #localOffer: { readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
+  #localOffer: { readonly connection: RTCPeerConnection; readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
   #retirement: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
   #started = false;
@@ -1003,13 +1003,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #createLocalOffer(connection: RTCPeerConnection, origin: LocalOfferOrigin) {
     const description = await createLocalOffer(connection);
-    this.#localOffer = { origin, at: Date.now() };
+    this.#localOffer = { connection, origin, at: Date.now() };
     return description;
   }
   // SDP operations are serialized, so a local offer must not outlive its operation. If one does, name its origin.
   #reportPendingLocalOffer(connection: RTCPeerConnection, where: CloudflareSFULocalOfferDiagnostic["where"]): void {
     if (connection.signalingState !== "have-local-offer") return;
-    this.#onDiagnostic?.({ event: "local_offer_pending", where, origin: this.#localOffer?.origin ?? "outside_sdk", pendingMs: this.#localOffer ? Date.now() - this.#localOffer.at : null });
+    const known = this.#localOffer?.connection === connection ? this.#localOffer : null;
+    try {
+      this.#onDiagnostic?.({ event: "local_offer_pending", where, origin: known?.origin ?? "outside_sdk", pendingMs: known ? Date.now() - known.at : null });
+    } catch (error) {
+      // A diagnostic callback must not abort the negotiation it describes.
+      this.#reportError(error);
+    }
   }
   async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
     if (connection.signalingState !== "have-local-offer") return;
