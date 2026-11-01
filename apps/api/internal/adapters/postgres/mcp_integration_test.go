@@ -105,6 +105,9 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'MCP own'),($2,'MCP foreign private')`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','disabled')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
+	for _, id := range []utilities.ID{spaceID, emptySpace} {
+		mustExec(t, pool, `insert into space_roles(id,tenant_id,space_id,name,capabilities) values($1,$2,$3,'collaborator',array['sendChat'])`, uuid(ids()), uuid(tenantID), uuid(id))
+	}
 	binding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "fixture-app")
 	if err != nil {
 		t.Fatal(err)
@@ -120,7 +123,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		for _, table := range []string{"webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "participants", "episodes", "spaces", "tenant_artifact_policies"} {
+		for _, table := range []string{"webhook_deliveries", "webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "sync_admission_requests", "sync_lifecycle_intents", "sync_episode_control", "participants", "episodes", "space_roles", "spaces", "tenant_artifact_policies"} {
 			_, _ = pool.Exec(cleanup, "delete from "+table+" where tenant_id=$1", uuid(tenantID))
 		}
 		_, _ = pool.Exec(cleanup, `delete from tenants where id=$1 or id=$2`, uuid(tenantID), uuid(foreignTenant))
