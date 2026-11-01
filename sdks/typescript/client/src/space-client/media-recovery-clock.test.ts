@@ -61,6 +61,24 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
     });
   });
 
+  describe("a hidden tab with intensively throttled timers", () => {
+    // Chrome runs timers once a minute in a page that has been hidden for 5 minutes and holds no live WebRTC connection, so both
+    // ping loops send once a minute and the replies arrive 60 s apart. Every reply follows its predecessor by 60 s, which the link
+    // watch treats as a gap, so the proof never refreshes and a 3 s drop reads long. The source turns off and one tap turns it on.
+    // Known gap, kept failing on purpose (Vitest reports it once it passes). A gap threshold of 60 s or more would also let a
+    // 45 s suspend plus a 30 s drop resume, which is the fail-open case the rule exists to stop, and a page cannot tell a
+    // suspend from throttling when both clocks keep running. Chrome exempts a page with a live WebRTC connection from this throttling.
+    it.fails.each(sources)("%s: known gap: replies 60 s apart and a 3 s drop is judged long", async (source) => {
+      await expectOutcome(source, "resumes", {
+        beforeLoss: (rig) => {
+          rig.page.visibilityState = "hidden";
+          rig.heartbeats(180_000, 60_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+  });
+
   describe("the clocks", () => {
     it.each(sources)("%s: a continuous short drop resumes", async (source) => {
       await expectOutcome(source, "resumes", { beforeLoss: (rig) => rig.heartbeats(100_000), drop: (rig) => rig.elapse(3_000) });

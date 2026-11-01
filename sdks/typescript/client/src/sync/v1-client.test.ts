@@ -646,18 +646,7 @@ describe("V1SyncClient", () => {
   });
   it("judges a drop from frames that followed each other, listens to the page while started and stops listening on stop", async () => {
     const clock = new TestClock();
-    const listeners = new Set<() => void>();
-    const registered = new Set<string>();
-    const page = {
-      addEventListener: (type: "freeze" | "resume", listener: () => void) => {
-        registered.add(type);
-        listeners.add(listener);
-      },
-      removeEventListener: (type: "freeze" | "resume", listener: () => void) => {
-        registered.delete(type);
-        listeners.delete(listener);
-      },
-    };
+    const { page, listeners, registered } = pageDouble();
     let mono = 0;
     const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1, monotonic: () => mono, page });
     try {
@@ -730,6 +719,27 @@ describe("V1SyncClient", () => {
     expect(store.loadAttempts).toBe(2);
     expect(sockets).toHaveLength(1);
     client.stop();
+  });
+  it("leaves no page listeners when startup fails without a stop", async () => {
+    const { page, registered } = pageDouble();
+    const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", pendingStore: new FailOnceLoadStore(), webSocket: { connect: () => new TestSocket() }, page });
+    await expect(client.start()).rejects.toThrow("pending store unavailable");
+    expect(registered.size).toBe(0);
+  });
+  it("keeps the listeners of a newer start when an older start fails late", async () => {
+    const { page, registered } = pageDouble();
+    const store = new RejectableLoadStore();
+    const client = new V1SyncClient({ url: "ws://sync.test/v1/sync", token: async () => "token", pendingStore: store, webSocket: { connect: () => new TestSocket() }, page });
+    const older = client.start();
+    const failed = expect(older).rejects.toThrow("pending store unavailable");
+    client.stop();
+    await client.start();
+    expect([...registered].sort()).toEqual(["freeze", "resume"]);
+    store.rejectLoad();
+    await failed;
+    expect([...registered].sort()).toEqual(["freeze", "resume"]);
+    client.stop();
+    expect(registered.size).toBe(0);
   });
   it("preserves a durable command queued while a failing startup load is in flight", async () => {
     const store = new RejectableLoadStore();
@@ -2780,6 +2790,21 @@ class TestAsyncStorage {
   async removeItem(key: string): Promise<void> {
     this.values.delete(key);
   }
+}
+function pageDouble() {
+  const listeners = new Set<() => void>();
+  const registered = new Set<string>();
+  const page = {
+    addEventListener: (type: "freeze" | "resume", listener: () => void) => {
+      registered.add(type);
+      listeners.add(listener);
+    },
+    removeEventListener: (type: "freeze" | "resume", listener: () => void) => {
+      registered.delete(type);
+      listeners.delete(listener);
+    },
+  };
+  return { page, listeners, registered };
 }
 class FailOnceLoadStore extends InMemoryV1PendingTargetStore {
   loadAttempts = 0;

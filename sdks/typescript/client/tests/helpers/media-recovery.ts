@@ -69,11 +69,11 @@ export function linkRig() {
     },
     /** A frame arrives from Sync. */
     heard: () => watch.heard(),
-    /** Heartbeats every 20 s for `ms`, as a healthy call delivers them whatever the page does. */
-    heartbeats: (ms: number) => {
-      for (let elapsed = 0; elapsed < ms; elapsed += 20_000) {
-        clocks.wall += 20_000;
-        clocks.mono += 20_000;
+    /** Heartbeat replies every `every` ms for `ms`: 20 s on a healthy page, about 60 s in a hidden tab with intensively throttled timers. */
+    heartbeats: (ms: number, every = 20_000) => {
+      for (let elapsed = 0; elapsed < ms; elapsed += every) {
+        clocks.wall += every;
+        clocks.mono += every;
         watch.heard();
       }
     },

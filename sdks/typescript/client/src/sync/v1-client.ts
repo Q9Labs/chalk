@@ -202,6 +202,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } catch (error) {
       if (startupGeneration === this.#startupGeneration) {
         this.#started = false;
+        this.#watch.close();
       }
       throw error;
     }

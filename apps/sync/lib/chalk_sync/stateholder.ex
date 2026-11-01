@@ -129,7 +129,7 @@ defmodule ChalkSync.Stateholder do
           {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
   def media_pauses(%EpisodeKey{} = episode), do: impl().media_pauses(episode)
 
-  @doc "Host stops no device has answered with a new on yet, as `{participant_id, source} => event revision`."
+  @doc "The latest host stop for each participant and source, as `{participant_id, source} => event revision`."
   @spec media_stops(EpisodeKey.t()) ::
           {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
   def media_stops(%EpisodeKey{} = episode), do: impl().media_stops(episode)

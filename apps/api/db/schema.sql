@@ -2001,7 +2001,7 @@ create table sync_media_pauses (
     check (octet_length(publication_id) between 1 and 256)
 );
 
--- A host stop (mute, camera stop, screen stop) that no device has answered with a new on yet.
+-- A host stop (mute, camera stop, screen stop) kept until a newer host stop for the same participant and source replaces it.
 -- Sync projects it as the off reason "host" so a client that missed the stop event can still see it.
 create table sync_media_stops (
     tenant_id uuid not null,
