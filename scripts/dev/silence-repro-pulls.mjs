@@ -29,6 +29,7 @@ for (const dir of process.argv.slice(2)) {
   const gate = [];
   const timeouts = new Map();
   const usage = { prior: new Map(), toFinal: [], cases: 0 };
+  const noPost = { taps: 0, cases: 0, inFlight: [], rows: [], mic: new Map() };
   let pulls = 0;
   let matched = 0;
   result.runs.forEach((run, index) => {
@@ -76,6 +77,29 @@ for (const dir of process.argv.slice(2)) {
         usage.prior.set(priorKey, (usage.prior.get(priorKey) ?? 0) + 1);
       }
     }
+    // (a) unmute taps with no local POST within 10 s: the speaker's /tracks requests in flight at the tap (start offset, duration, status), start taken from the browser or, failing that, the API request window.
+    const trackEntries = (run.network ?? []).filter((entry) => entry.method === "POST" && entry.path.endsWith("/media/sfu/tracks"));
+    const windows = trackEntries.map((entry) => {
+      const request = requests.find((candidate) => candidate.status === entry.status && Math.abs(candidate.ms - (run.originMs + entry.at)) < 150);
+      const started = entry.startedAt ?? (request ? entry.at - request.duration_ms : null);
+      return { entry, started };
+    });
+    for (const action of run.actions ?? []) {
+      if (action.kind !== "unmute") continue;
+      noPost.taps++;
+      const tap = action.clickedAtMs;
+      const mine = windows.filter((item) => item.entry.participant === action.participant);
+      if (mine.some((item) => String(item.entry.locations).includes("local") && item.entry.at >= tap && item.entry.at <= tap + 10_000)) continue;
+      noPost.cases++;
+      const inFlight = mine.filter((item) => item.started !== null && item.started <= tap && item.entry.at >= tap);
+      noPost.inFlight.push(inFlight.length);
+      for (const item of inFlight) noPost.rows.push(`first ${action.first ? "yes" : "no"} tap ${action.t.toFixed(1)}s: ${String(item.entry.locations)} start ${((item.started - tap) / 1000).toFixed(1)}s duration ${((item.entry.at - item.started) / 1000).toFixed(1)}s status ${item.entry.status}`);
+      const last = (run.samples ?? [])
+        .map((sample) => sample.states.find((state) => state.listener === action.participant))
+        .filter(Boolean)
+        .at(-1);
+      noPost.mic.set(String(last?.mic ?? "unknown"), (noPost.mic.get(String(last?.mic ?? "unknown")) ?? 0) + 1);
+    }
   });
   console.log(`## ${dir}: browser pulls ${pulls}, matched to API requests ${matched}`);
   console.log(`   (b) gate wait to first Cloudflare call, s: n ${gate.length} p50 ${fmt(quantile(gate, 0.5))} p95 ${fmt(quantile(gate, 0.95))} max ${fmt(Math.max(...gate, 0))}; over 1 s: ${gate.filter((value) => value > 1000).length}`);
@@ -83,4 +107,8 @@ for (const dir of process.argv.slice(2)) {
   for (const [key, count] of [...timeouts].sort((a, b) => b[1] - a[1])) console.log(`       ${count}\t${key}`);
   console.log(`   (c) ~8 s timeouts: ${usage.cases}; request start to final Cloudflare call start, s: p50 ${fmt(quantile(usage.toFinal, 0.5))} p95 ${fmt(quantile(usage.toFinal, 0.95))}; what ran before the final call:`);
   for (const [key, count] of [...usage.prior].sort((a, b) => b[1] - a[1])) console.log(`       ${count}\t${key}`);
+  console.log(
+    `   (a) unmute taps ${noPost.taps}; with no local POST tracks within 10 s: ${noPost.cases}; of those with a /tracks request in flight at the tap: ${noPost.inFlight.filter((count) => count > 0).length}; mic at end: ${[...noPost.mic].map(([state, count]) => `${state} ${count}`).join(", ") || "-"}`,
+  );
+  for (const row of noPost.rows) console.log(`       ${row}`);
 }
