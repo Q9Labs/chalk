@@ -226,7 +226,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	if err != nil {
 		t.Fatal(err)
 	}
-	active := accessgrants.NewActiveAuthorizer(episodeRepo)
+	active := accessgrants.NewActiveAuthorizer(episodeRepo, nil)
 	if valid, err := active.AuthorizeActiveParticipant(t.Context(), mediaSubject); err != nil || !valid {
 		t.Fatalf("matrix media credential must belong to a real active Participant: %t, %v", valid, err)
 	}

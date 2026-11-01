@@ -164,7 +164,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			fixture := &refreshGrantPlane{issuer: freshIssuer}
-			active := accessgrants.NewActiveAuthorizer(repo)
+			active := accessgrants.NewActiveAuthorizer(repo, nil)
 			var logs bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 			observed := observability.InstrumentParticipantMediaVerifier(verifier, observability.NewLaunchTelemetry(logger))
@@ -259,7 +259,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 			if tc.replacement && tc.change != "replace" {
 				// A new endpoint instance must recover from durable state alone.
 				restarted := chi.NewRouter()
-				restartedActive := accessgrants.NewActiveAuthorizer(repo)
+				restartedActive := accessgrants.NewActiveAuthorizer(repo, nil)
 				issueAccessGrantEndpoint(fixture, fixture, observed, restartedActive, restartedActive, fixture, fixture, fixture, fixture).Mount(restarted, RateLimitOptions{})
 				retry := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)).WithContext(request.Context())
 				retry.Header.Set("Content-Type", "application/json")
@@ -404,7 +404,7 @@ func TestParticipantMediaStaleGenerationStillForbidden(t *testing.T) {
 	repo := &refreshGrantRepository{current: synctokens.Input{ParticipantGeneration: subject.ParticipantGeneration + 1}}
 	verifier := &participantMediaVerifierStub{subject: subject}
 	called := false
-	handler := requireParticipantMedia(verifier, accessgrants.NewActiveAuthorizer(repo))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	handler := requireParticipantMedia(verifier, accessgrants.NewActiveAuthorizer(repo, nil))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
 	request := httptest.NewRequest(http.MethodGet, "/media", nil)
 	request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
 	response := httptest.NewRecorder()

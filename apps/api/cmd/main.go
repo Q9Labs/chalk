@@ -191,7 +191,6 @@ func run() error {
 	var participantMediaRecoveryVerifier publicinviteapp.MediaProofRecoveryVerifier
 	var syncParticipantVerifier synctokens.Verifier
 	var syncParticipantVerifierConfigured bool
-	participantActiveAuthorizer := accessgrants.NewActiveAuthorizer(episodeRepository)
 	if len(cfg.SyncToken.PrivateKey) > 0 {
 		service, err := synctokens.NewService(synctokens.Config{
 			Issuer: cfg.SyncToken.Issuer, Audience: cfg.SyncToken.Audience,
@@ -313,6 +312,7 @@ func run() error {
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
+	participantActiveAuthorizer := accessgrants.NewActiveAuthorizer(episodeRepository, mediaPublicationService)
 	var providerBridgeServer *providerbridgeserver.Server
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService
