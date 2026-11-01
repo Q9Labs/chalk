@@ -542,8 +542,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!publicationId) return;
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
-    if (state.providerPublicationId !== publicationId || !state.desiredEnabled || this.#localRecoveries.has(state.source)) return;
-    this.#beginLocalRecovery(state, publicationId, true);
+    if (state.providerPublicationId !== publicationId || this.#localRecoveries.has(state.source)) return;
+    if (state.enabled && state.desiredEnabled) {
+      this.#beginLocalRecovery(state, publicationId, true);
+      return;
+    }
+    this.#pauseLocalSource(state.source, "discovery_absent");
+    await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
   }
   #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): void {
     const sources = localSourceGroup(source);
