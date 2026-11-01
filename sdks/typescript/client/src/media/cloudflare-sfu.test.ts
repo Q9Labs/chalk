@@ -1344,6 +1344,150 @@ it("leaves a failed space-client microphone off after fetch retries are exhauste
   }
 });
 
+it.each([503, 500])("retries a 5xx local microphone publish until the microphone is published (%s)", async (status) => {
+  const platform = createCoreTestPlatform();
+  const clock = new ManualClock();
+  const platformClock = {
+    now: () => clock.now(),
+    setTimeout: (callback: () => void, milliseconds: number) => clock.setTimeout(callback, milliseconds),
+    clearTimeout: (handle: unknown) => clock.clearTimeout(handle),
+  };
+  const microphone = new FakeTrack("http-5xx-microphone", "audio");
+  const onError = vi.fn();
+  const peers: FakePeerConnection[] = [];
+  let mediaClient: CloudflareSFUClient | null = null;
+  let coordinator: V1LiveTargetCoordinator | null = null;
+  let localPublishPosts = 0;
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input, init) => {
+    if (String(input).endsWith("/tracks") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body)) as { tracks?: readonly CloudflareSFUTrackRequest[] };
+      const localTracks = (body.tracks ?? []).filter((track) => track.location === "local" && track.source === "microphone");
+      if (localTracks.length > 0 && ++localPublishPosts === 1) {
+        return new Response(JSON.stringify({ error: { code: "media.unavailable", message: "Media plane is unavailable" } }), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          sessionDescription: { type: "answer", sdp: "provider-answer" },
+          tracks: localTracks.map((track) => ({
+            ...track,
+            publication_id: versionedPublicationID("connection-1", track.mid ?? "0", track.trackName),
+          })),
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (String(input).endsWith("/publications")) {
+      return new Response(JSON.stringify({ incarnation: 1, sequence: 1, publications: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(null, { status: 204 });
+  });
+  const command = vi.fn(async (enabled: boolean) => {
+    if (!coordinator || !mediaClient) throw new Error("The media client is not ready");
+    const receipt = await coordinator.send("set_microphone_enabled", "microphone", enabled);
+    const publication = mediaClient.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    platform.emitSync({
+      ...platform.sync.getSnapshot(),
+      media: {
+        projectionId: "http-5xx-enable",
+        sequence: command.mock.calls.length,
+        items: [{ participantId: "participant-1", source: "microphone", enabled, publicationId: publication?.publicationId ?? null }],
+      },
+    });
+    return receipt;
+  });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess: async () => opaqueAccessGrant("http-5xx-enable") },
+    {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        clock: platformClock,
+        mediaDevices: { ...platform.dependencies.mediaDevices, getUserMedia: async () => fakeStream(microphone) },
+        createMediaClient: (input) => {
+          mediaClient = new CloudflareSFUClient({
+            bootstrap: input.access.media.clientPayload,
+            participantId: input.access.subject.participantId,
+            transport: createCloudflareSFUHTTPTransport({
+              apiBaseURL: "http://localhost",
+              credential: input.credential,
+              tenantId: input.access.subject.tenantId,
+              spaceId: input.access.subject.spaceId,
+              episodeId: input.access.subject.episodeId,
+              participantId: input.access.subject.participantId,
+              fetch,
+            }),
+            onError: (error, binding) => {
+              onError(error, binding);
+              input.onFailure(error, binding);
+            },
+            peerConnectionFactory: () => {
+              const peer = new FakePeerConnection(true);
+              peers.push(peer);
+              return peer as unknown as RTCPeerConnection;
+            },
+          });
+          coordinator = new V1LiveTargetCoordinator({
+            mediaPlane: mediaClient,
+            requestIds: { next: () => crypto.randomUUID() },
+            retryDelayMs: undefined,
+            clock: () => platformClock,
+            participantId: () => "participant-1",
+            isLive: () => true,
+            requestIdInUse: () => false,
+            assertCapacity: () => {},
+            stateChanged: () => {},
+            sendIfLive: (frame) => {
+              if (frame.type === "live_target") coordinator?.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
+            },
+          });
+          return bindConnectionMediaClient(mediaClient, (grant) => {
+            if ("provider" in grant) {
+              if (grant.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
+              return mediaClient!.restart(grant.clientPayload);
+            }
+            return mediaClient!.restart(grant);
+          });
+        },
+        createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command }),
+      },
+    },
+  );
+  try {
+    await client.join({ microphone: false, camera: false });
+    const enabling = client.media.setMicrophoneEnabled(true);
+
+    await vi.waitFor(() => {
+      expect(localPublishPosts).toBe(1);
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+    expect(onError.mock.calls[0]?.[0]).toMatchObject({
+      code: "signaling_failed",
+      options: { status, retryableConnection: true },
+    });
+
+    clock.advance(100);
+    await vi.waitFor(() => expect(localPublishPosts).toBe(2));
+    await expect(enabling).resolves.toBeUndefined();
+
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    expect(mediaClient?.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
+      enabled: true,
+      publicationId: expect.any(String),
+    });
+    expect(localPublishPosts).toBe(2);
+  } finally {
+    coordinator?.disconnect("test_cleanup");
+    client.dispose();
+    mediaClient?.stop();
+  }
+});
+
 it("leaves a failed microphone enable off after a non-retryable publish error", async () => {
   const onError = vi.fn();
   await withTimedHarness(
