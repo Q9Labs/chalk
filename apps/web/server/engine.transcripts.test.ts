@@ -24,7 +24,7 @@ const recording = Schema.decodeUnknownSync(RecordingSchema)({
   created_at: date,
   updated_at: date,
 });
-const transcript = (index: number, status: string) => ({ id: id(index), tenant_id: id(2), space_id: id(3), episode_id: id(4), recording_id: id(1), generation: 1, status, languages: ["en"], created_at: date, updated_at: date });
+const transcript = (index: number, status: string) => ({ id: id(index), tenant_id: id(2), space_id: id(3), episode_id: id(4), recording_id: id(1), generation: 1, status, transcript_language: "auto", languages: ["en"], created_at: date, updated_at: date });
 
 it.each(["call", "past-session"] as const)("reads exactly one %s transcript page and discards its continuation", async (view) => {
   const requests: URL[] = [];

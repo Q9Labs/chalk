@@ -21,6 +21,7 @@ try {
   await language.waitFor();
   assert.equal(await language.inputValue(), "ur");
   await page.screenshot({ path: resolve(output, "tenant-desktop.png"), fullPage: true });
+  await page.getByRole("region", { name: "Transcripts", exact: true }).screenshot({ path: resolve(output, "tenant-control.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: resolve(output, "tenant-phone.png"), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 960 });
@@ -40,6 +41,7 @@ try {
   await language.waitFor();
   assert.equal(await language.inputValue(), "ar");
   await page.screenshot({ path: resolve(output, "space-desktop.png"), fullPage: true });
+  await page.getByRole("region", { name: "Transcripts", exact: true }).screenshot({ path: resolve(output, "space-control.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: resolve(output, "space-phone.png"), fullPage: true });
   await language.selectOption("auto");

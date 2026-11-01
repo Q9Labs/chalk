@@ -475,6 +475,14 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 			property = nullableSchema(property)
 		}
 
+		if name == "transcript_language" && schemaIncludesNull(property) {
+			values := make([]any, 0, len(artifactpolicy.TranscriptLanguageValues())+1)
+			for _, value := range artifactpolicy.TranscriptLanguageValues() {
+				values = append(values, value)
+			}
+			property["enum"] = append(values, nil)
+		}
+
 		properties[name] = property
 		if !optional {
 			required = append(required, name)
@@ -629,13 +637,6 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 	}
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {
 		schema["enum"] = enum
-		if fieldName == "transcript_language" && schemaIncludesNull(schema) {
-			values := make([]any, 0, len(enum)+1)
-			for _, value := range enum {
-				values = append(values, value)
-			}
-			schema["enum"] = append(values, nil)
-		}
 	}
 	if isUUIDField(fieldName) && !isOpaqueIDField(schemaName, fieldName) {
 		schema["format"] = "uuid"
