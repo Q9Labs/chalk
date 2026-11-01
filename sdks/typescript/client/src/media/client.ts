@@ -293,6 +293,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#requireGeneration(generation);
       if (!this.#remotePullIncomplete) this.#pollFailures = 0;
     } catch (error) {
+      srDiag("rx.poll_error", `${String(error).slice(0, 160)}`);
       if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       throw error;
     } finally {
@@ -998,6 +999,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (cursor === null) return;
     const participantRevision = this.#remoteParticipantRevision;
     const desired = this.#desiredRemotePublications(authoritative, cursor);
+    srDiag("rx.reconcile", `seq=${cursor.sequence} desired=[${[...desired.values()].map((p) => `${p.participantId.slice(0, 4)}:${p.source}:${p.publicationId.slice(-18)}`).join(",")}] have=[${[...this.#remoteTracks.values()].map((p) => `${p.participantId.slice(0, 4)}:${p.publicationId.slice(-18)}:${p.track.readyState}`).join(",")}] retries=${this.#remotePullRetries.size}`);
     this.#pollFailedPull = true;
     const pulled = await this.#pullWithRecovery(desired, cursor, generation);
     if (pulled === null) return;
@@ -1064,6 +1066,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullWithRecovery(desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     const pending = this.#pendingRemotePulls(desired);
+    srDiag("rx.pending", `n=${pending.length}/${desired.size} esc=${this.#receiveEscalation} ${pending.map((p) => p.publicationId.slice(-12)).join(",")}`);
     if (this.#receiveEscalation && this.#replaceMediaConnection && desired.size > 0) {
       this.#receiveEscalation = false;
       this.#replacementAttemptedGeneration = null;
@@ -1227,6 +1230,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #deferRemotePulls(publications: readonly CloudflareSFUPublication[], error: unknown): void {
     for (const publication of publications) {
+      srDiag("rx.defer", `${publication.participantId.slice(0, 4)}:${publication.publicationId.slice(-18)} ${String(error).slice(0, 120)}`);
       const audio = this.#receiveProgress.isAudio(publication.publicationId);
       const delay = audio ? (isRateLimited(error) || permanentRemotePull(error) ? AUDIO_PULL_REFUSED_RETRY_MS : jitter(AUDIO_PULL_RETRY_CAP_MS)) : retryableRemotePull(error) ? 15_000 : Number.POSITIVE_INFINITY;
       const retryAfter = Date.now() + delay;
@@ -1268,6 +1272,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#recordRemotePullErrors(publications, response.trackErrors ?? []);
         const responseTracks = response.tracks ?? [];
         const matched = matchRemotePullTracks(publications, responseTracks);
+        srDiag("rx.pull_response", `req=[${requested.map((r) => `${(r.sessionId ?? "").slice(0, 6)}:${r.trackName.slice(-12)}`).join(",")}] tracks=${responseTracks.length} matched=${matched.length} errors=${JSON.stringify(response.trackErrors ?? []).slice(0, 200)}`);
         for (const { publication } of matched) {
           if (!this.#remotePullRetries.get(publication.publicationId)?.receiveStalled) this.#remotePullRetries.delete(publication.publicationId);
         }
@@ -1283,6 +1288,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         return Object.freeze({ ...publication, track });
       });
     } catch (error) {
+      srDiag("rx.pullbatch_error", `${publications.map((p) => p.publicationId.slice(-12)).join(",")} ${String(error).slice(0, 160)}`);
       for (const track of received.values()) safeStopTrack(track, this.#reportError.bind(this));
       throw error;
     } finally {
