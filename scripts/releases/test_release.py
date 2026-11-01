@@ -540,19 +540,22 @@ class RecoveryTests(unittest.TestCase):
         previous = dict(target_sha=SHA, release_id='previous', run_id='10', manifest_artifact_id='20', manifest_sha256='a' * 64)
         evidence = dict(restored_source_release_id='previous', release_id='fresh-recovery',
                         applied_release_id='fresh-recovery', pages_deployment_id='saved-pages')
-        cases = [('success', evidence, True), ('skipped', evidence, False), ('cancelled', evidence, False),
-                 ('failure', evidence, False), ('success', {}, False),
-                 ('success', {**evidence, 'restored_source_release_id': 'other'}, False),
-                 ('success', {**evidence, 'applied_release_id': 'other'}, False),
-                 ('success', {**evidence, 'pages_deployment_id': 'other'}, False)]
+        cases = [('success', evidence, True, 'success'), ('skipped', evidence, False, 'success'),
+                 ('cancelled', evidence, False, 'success'), ('failure', evidence, False, 'success'),
+                 ('success', {}, False, 'success'),
+                 ('success', {**evidence, 'restored_source_release_id': 'other'}, False, 'success'),
+                 ('success', {**evidence, 'applied_release_id': 'other'}, False, 'success'),
+                 ('success', {**evidence, 'pages_deployment_id': 'other'}, False, 'success'),
+                 ('success', evidence, False, 'failure')]
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / 'summary.md'
-            for status, rollback, recovered in cases:
-                with self.subTest(status=status, rollback=rollback):
+            for status, rollback, recovered, npm_rollback_result in cases:
+                with self.subTest(status=status, rollback=rollback, npm_rollback_result=npm_rollback_result):
                     summary.write_text('')
                     with patch.dict(os.environ, GITHUB_STEP_SUMMARY=str(summary), DEPLOY_RESULT='cancelled', PROOF_RESULT='failed',
                                     SELECTION=json.dumps(dict(previous=previous, selection={'release_id': 'nightly'})),
-                                    ROLLBACK_RESULT=status, ROLLBACK=json.dumps(rollback), PAGES_ID='saved-pages'):
+                                    ROLLBACK_RESULT=status, NPM_ROLLBACK_RESULT=npm_rollback_result,
+                                    ROLLBACK=json.dumps(rollback), PAGES_ID='saved-pages'):
                         result = self.run_result(directory)
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn('promotion failed', result.stderr)
@@ -576,7 +579,8 @@ class RecoveryTests(unittest.TestCase):
     def test_passing_promotion_does_not_require_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'), DEPLOY_RESULT='success',
-                            PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SELECTION=json.dumps(dict(previous={}, selection={'release_id': 'nightly'}))):
+                            PROOF_RESULT='passed', NPM_ROLLBACK_RESULT='success',
+                            WEB_E2E_RESULT='passed', SELECTION=json.dumps(dict(previous={}, selection={'release_id': 'nightly'}))):
                 result = self.run_result(directory)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
