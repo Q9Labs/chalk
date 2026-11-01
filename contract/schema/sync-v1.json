@@ -1141,7 +1141,7 @@
         "exactFields": ["participant_id", "source", "enabled", "publication_id"],
         "optionalFields": ["off_reason", "off_revision"],
         "offReason": ["host", "self", "dead"],
-        "negotiation": "media_off_reason=1 WebSocket query opts into off_reason and off_revision; omitted for older clients. off_reason only on an off item; host carries off_revision (the control revision of the stop event), self and dead carry none. Absence means no evidence, never off.",
+        "negotiation": "media_off_reason=1 WebSocket query opts into off_reason and off_revision; omitted for older clients. self and dead ride only on an off item and carry no revision. host carries off_revision (the control revision of the latest host stop for the source) and also rides on an enabled item when another device of the participant has published since, so a device whose intent is older than the stop still sees it. Absence means no evidence, never off.",
         "participantId": "uuid",
         "source": ["microphone", "camera", "screen"],
         "enabled": {

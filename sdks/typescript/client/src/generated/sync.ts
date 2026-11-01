@@ -610,9 +610,8 @@ function strictEvent(value: Record<string, unknown>): boolean {
 }
 function validMediaOffReason(item: Record<string, unknown>): boolean {
   if (!Object.hasOwn(item, "off_reason")) return !Object.hasOwn(item, "off_revision");
-  if (item.enabled !== false) return false;
   if (item.off_reason === "host") return Number.isInteger(item.off_revision) && (item.off_revision as number) > 0;
-  return (item.off_reason === "self" || item.off_reason === "dead") && !Object.hasOwn(item, "off_revision");
+  return item.enabled === false && (item.off_reason === "self" || item.off_reason === "dead") && !Object.hasOwn(item, "off_revision");
 }
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
   if (stream === "media") return isObject(value) && exactObject(value, [...["participant_id", "source", "enabled", "publication_id"], ...(Object.hasOwn(value, "off_reason") ? ["off_reason"] : []), ...(Object.hasOwn(value, "off_revision") ? ["off_revision"] : [])]) && validMediaOffReason(value);

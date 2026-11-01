@@ -1337,16 +1337,20 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   /**
    * A wanted-on source is paused when Sync's item says the host stopped it after the user's intent (`off_reason: "host"` with a newer
-   * `off_revision`; a replayed stop event reaches `#subscribePauses` the same way). With no such evidence the drop decides: the source
-   * stays wanted-on after a drop proven short and turns off, like a tap, after any other. The drop cutoff applies only to the intent the
-   * source had when recovery began, so a newer intent from the user is left alone.
+   * `off_revision`; a replayed stop event reaches `#subscribePauses` the same way). This holds for every source that is wanted on when
+   * the snapshot arrives, including one the user turned on after recovery began, and for every source recovery began with. With no such
+   * evidence the drop decides, whatever Sync lists: the source stays wanted-on after a drop proven short and turns off, like a tap, after
+   * any other. The drop cutoff applies only to the intent the source had when recovery began (`recovering`), so a newer intent from the
+   * user is left alone.
    */
   #pauseOnEvidence(ports: ConnectionPorts, snapshot: SyncSnapshot, recovering: ReadonlyMap<MediaSource, number>, longDrop: boolean): void {
-    for (const [source, intentRevision] of recovering) {
+    for (const source of MEDIA_SOURCES) {
+      const intentRevision = recovering.get(source);
+      if (intentRevision === undefined && !this.#sources[source].desired.enabled) continue;
       const item = ownProjection(snapshot, source);
       const stopRevision = this.#hostStopNewerThanIntent(source, item);
       if (stopRevision !== null) this.#pauseForHostStop(ports, source, stopRevision);
-      else if (longDrop && !item?.enabled && this.#sources[source].desired.revision === intentRevision) this.#turnOffLikeATap(source);
+      else if (longDrop && intentRevision !== undefined && this.#sources[source].desired.revision === intentRevision) this.#turnOffLikeATap(source);
     }
   }
   #hostStopNewerThanIntent(source: MediaSource, item: ReturnType<typeof ownProjection>): number | null {

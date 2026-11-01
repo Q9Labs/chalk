@@ -155,6 +155,47 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
     assert participant_id == guest.participant_id
   end
 
+  # Device A missed the stop while offline. Device B of the same participant then publishes again, so the media plane
+  # lists an enabled publication. A recovers by snapshot with an older intent; the item must still say the host stopped
+  # the source after A's intent, or A resumes without answering the stop. B's newer intent compares against the same
+  # revision and keeps.
+  test "a live publication from another device still carries the retained stop",
+       %{port: port, fixture: fixture, host: host, guest: guest} do
+    revision = mute(host, guest)
+
+    use_adapter(%{
+      observe_episode_publications:
+        {:ok,
+         [
+           %{
+             participant_id: guest.participant_id,
+             source: :microphone,
+             enabled: true,
+             publication_id: "device-b-microphone"
+           }
+         ]}
+    })
+
+    {:ok, recovered, _frames} = LiveEpisode.reconcile(LiveEpisode.new(fixture.episode))
+
+    assert [
+             %{
+               "enabled" => true,
+               "publication_id" => "device-b-microphone",
+               "off_reason" => "host",
+               "off_revision" => ^revision
+             }
+           ] = recovered.media_items
+
+    {welcome, items} = media_session(port, "/v1/sync?media_off_reason=1", guest, nil)
+    assert welcome["media_off_reason"] == true
+    assert [%{"enabled" => true, "off_reason" => "host", "off_revision" => ^revision}] = items
+
+    {_welcome, old_items} = media_session(port, "/v1/sync", guest, nil)
+    assert [item] = old_items
+    assert item |> Map.keys() |> Enum.sort() == @old_item_keys
+  end
+
   test "a newer stop replaces the older one and a repeated on changes nothing",
        %{connection: connection, fixture: fixture, host: host, guest: guest} do
     key = {guest.participant_id, "microphone"}

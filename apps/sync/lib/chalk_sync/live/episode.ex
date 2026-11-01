@@ -258,7 +258,10 @@ defmodule ChalkSync.Live.Episode do
 
   # Says why an item is off: a host stop (with its revision) wins over a device pause.
   # A stop projects even when the media plane lists no publication, so a client that
-  # missed the stop event still sees it. Everything else stays without a reason.
+  # missed the stop event still sees it. It also projects while another device of the
+  # participant has a live publication, because that device's on answers the stop for
+  # that device only; a device with an older intent must still see it. Everything else
+  # stays without a reason.
   defp project_off_reasons(items, retained, stops) do
     listed = MapSet.new(items, &{&1["participant_id"], &1["source"]})
 
@@ -277,8 +280,6 @@ defmodule ChalkSync.Live.Episode do
     |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
   end
 
-  defp put_off_reason(%{"enabled" => true} = item, _retained, _stops), do: item
-
   defp put_off_reason(item, retained, stops) do
     key = {item["participant_id"], item["source"]}
 
@@ -287,7 +288,9 @@ defmodule ChalkSync.Live.Episode do
         Map.merge(item, %{"off_reason" => "host", "off_revision" => revision})
 
       :error ->
-        if Map.has_key?(retained, key), do: Map.put(item, "off_reason", "self"), else: item
+        if item["enabled"] == false and Map.has_key?(retained, key),
+          do: Map.put(item, "off_reason", "self"),
+          else: item
     end
   end
 

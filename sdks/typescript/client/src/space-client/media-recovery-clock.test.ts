@@ -63,11 +63,9 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
 
   describe("a hidden tab with intensively throttled timers", () => {
     // Chrome runs timers once a minute in a page that has been hidden for 5 minutes and holds no live WebRTC connection, so both
-    // ping loops send once a minute and the replies arrive 60 s apart. Every reply follows its predecessor by 60 s, which the link
-    // watch treats as a gap, so the proof never refreshes and a 3 s drop reads long. The source turns off and one tap turns it on.
-    // Known gap, kept failing on purpose (Vitest reports it once it passes). A gap threshold of 60 s or more would also let a
-    // 45 s suspend plus a 30 s drop resume, which is the fail-open case the rule exists to stop, and a page cannot tell a
-    // suspend from throttling when both clocks keep running. Chrome exempts a page with a live WebRTC connection from this throttling.
+    // ping loops send once a minute. The last proven contact is then nearly 60 s old when the link drops, so a 3 s drop reads long.
+    // The source turns off and one tap turns it on. Known gap, kept failing on purpose (Vitest reports it once it passes). A page
+    // cannot tell a suspend from throttling when both clocks keep running, and Chrome exempts a page with a live WebRTC connection.
     it.fails.each(sources)("%s: known gap: replies 60 s apart and a 3 s drop is judged long", async (source) => {
       await expectOutcome(source, "resumes", {
         beforeLoss: (rig) => {
@@ -102,26 +100,78 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
     });
   });
 
-  describe("frames that arrive after a suspend", () => {
-    // The laptop sleeps, wakes, processes the frames buffered meanwhile, and only then notices the loss.
-    it.each(sources)("%s: buffered frames processed after wake and before the loss do not make the drop look short", async (source) => {
+  describe("pongs that arrive after a suspend", () => {
+    // A pong proves contact at the moment its ping was sent, and only when the round trip was short on both clocks. The laptop sleeps,
+    // wakes, and processes the pongs buffered meanwhile before it notices the loss: none of them is new contact.
+    it.each(sources)("%s: a pong buffered through a 5 minute suspend does not make the drop look short", async (source) => {
       await expectOutcome(source, "off", {
         beforeLoss: (rig) => {
+          rig.ping();
           rig.advance({ wall: 300_000, mono: 0 });
-          rig.heard();
-          rig.heard();
-          rig.heard();
+          rig.pong();
         },
         drop: (rig) => rig.elapse(3_000),
       });
     });
 
-    it.each(sources)("%s: a 45 s suspend and the buffered frames after it do not hide a 30 s drop", async (source) => {
+    // The judge's trace: a 20 s suspend and a buffered pong, then a 45 s outage, is 65 s without proven contact.
+    it.each(sources)("%s: a 20 s suspend, its buffered pong and a 45 s drop stay off", async (source) => {
       await expectOutcome(source, "off", {
         beforeLoss: (rig) => {
-          rig.elapse(45_000);
-          rig.heard();
-          rig.heard();
+          rig.ping();
+          rig.elapse(20_000);
+          rig.pong();
+        },
+        drop: (rig) => rig.elapse(45_000),
+      });
+    });
+
+    it.each(sources)("%s: a two minute suspend and its buffered pong stay off", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(120_000);
+          rig.pong();
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    it.each(sources)("%s: several buffered pings answered together after a suspend prove nothing", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(5_000);
+          rig.ping();
+          rig.elapse(5_000);
+          rig.ping();
+          rig.elapse(50_000);
+          rig.pong();
+          rig.pong();
+          rig.pong();
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    it.each(sources)("%s: a pong whose round trip ran backwards on the wall clock proves nothing", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.advance({ wall: -10_000, mono: 100 });
+          rig.pong();
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    it.each(sources)("%s: a pong that is slow on the monotonic clock only proves nothing", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.elapse(40_000);
+          rig.ping();
+          rig.advance({ wall: 100, mono: 10_000 });
+          rig.pong();
         },
         drop: (rig) => rig.elapse(30_000),
       });
@@ -131,7 +181,6 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
       await expectOutcome(source, "resumes", {
         beforeLoss: (rig) => {
           rig.advance({ wall: 300_000, mono: 0 });
-          rig.heard();
           rig.heartbeats(60_000);
         },
         drop: (rig) => rig.elapse(3_000),
@@ -140,15 +189,15 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
   });
 
   describe("page lifecycle", () => {
-    it.each(sources)("%s: a freeze before the loss, with buffered frames after it, stays off", async (source) => {
+    it.each(sources)("%s: a freeze before the loss, with the pong buffered across it, stays off", async (source) => {
       await expectOutcome(source, "off", {
         beforeLoss: (rig) => {
           rig.elapse(10_000);
+          rig.ping();
           rig.page.dispatch("freeze");
-          rig.elapse(10_000);
+          rig.elapse(1_000);
           rig.page.dispatch("resume");
-          rig.heard();
-          rig.heard();
+          rig.pong();
         },
         drop: (rig) => rig.elapse(3_000),
       });
@@ -177,7 +226,6 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
         beforeLoss: (rig) => {
           rig.page.dispatch("freeze");
           rig.page.dispatch("resume");
-          rig.heard();
           rig.heartbeats(60_000);
         },
         drop: (rig) => rig.elapse(3_000),

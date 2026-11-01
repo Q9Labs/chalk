@@ -1379,8 +1379,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false
-  defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision,
-      "enabled" => false}), do: valid_positive_integer?(revision)
+  defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision}),
+      do: valid_positive_integer?(revision)
   defp valid_media_off_reason?(%{"off_reason" => reason,
       "enabled" => false} = item) when reason in ["self", "dead"], do: not Map.has_key?(item,
       "off_revision")

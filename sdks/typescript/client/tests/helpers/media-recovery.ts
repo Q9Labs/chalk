@@ -67,14 +67,26 @@ export function linkRig() {
       clocks.wall += wall;
       clocks.mono += mono;
     },
-    /** A frame arrives from Sync. */
-    heard: () => watch.heard(),
-    /** Heartbeat replies every `every` ms for `ms`: 20 s on a healthy page, about 60 s in a hidden tab with intensively throttled timers. */
+    /** The page sends a ping. */
+    ping: () => watch.pinged(),
+    /** A pong arrives from Sync, answering the oldest ping in flight. */
+    pong: () => watch.ponged(),
+    /** A ping and its pong 50 ms later, the way a healthy link answers. */
+    contact: () => {
+      watch.pinged();
+      clocks.wall += 50;
+      clocks.mono += 50;
+      watch.ponged();
+    },
+    /** A healthy ping every `every` ms for `ms`: 20 s on a healthy page, about 60 s in a hidden tab with intensively throttled timers. */
     heartbeats: (ms: number, every = 20_000) => {
       for (let elapsed = 0; elapsed < ms; elapsed += every) {
-        clocks.wall += every;
-        clocks.mono += every;
-        watch.heard();
+        watch.pinged();
+        clocks.wall += 50;
+        clocks.mono += 50;
+        watch.ponged();
+        clocks.wall += every - 50;
+        clocks.mono += every - 50;
       }
     },
   };
@@ -105,7 +117,7 @@ export async function dropAndRecover(source: Source, { drop = (rig) => rig.elaps
   try {
     await client.join({ microphone: false, camera: false });
     await setEnabled(true);
-    rig.heard();
+    rig.contact();
     beforeLoss(rig);
     await enterRecovery({ platform, client });
     const user = duringDrop(setEnabled);

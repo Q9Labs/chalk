@@ -196,10 +196,11 @@ defmodule ChalkSync.Live.Projection do
 
   defp valid_admission_hint?(_item), do: true
 
-  # A reason says why an item is off, so only an off item can carry one.
-  # A host stop carries the control revision of its stop event; no other reason does.
-  defp valid_off_reason?(%{"off_reason" => "host", "off_revision" => revision} = item),
-    do: item["enabled"] == false and is_integer(revision) and revision > 0
+  # A device pause or tombstone says why an item is off, so only an off item carries one.
+  # A host stop is the latest one for the source and also rides on an item another device
+  # of the participant has turned on; it carries the control revision of its stop event.
+  defp valid_off_reason?(%{"off_reason" => "host", "off_revision" => revision}),
+    do: is_integer(revision) and revision > 0
 
   defp valid_off_reason?(%{"off_reason" => reason} = item) when reason in ["self", "dead"],
     do: item["enabled"] == false and not Map.has_key?(item, "off_revision")

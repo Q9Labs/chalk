@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { enterRecovery } from "../../tests/helpers/media-convergence";
-import { confirmPublication, dropAndRecover, hostStop, live, recoveryScenario, sources, tick, type Source } from "../../tests/helpers/media-recovery";
+import { confirmPublication, dropAndRecover, hostStop, live, mediaPhase, recoveryScenario, sources, tick, type Source } from "../../tests/helpers/media-recovery";
 
 // The bounded rule needs the `off_reason` keys, which only a Sync that advertised `media_off_reason` in its welcome sends.
 // Without it the SDK keeps the rule it had before: pause a wanted-on source when Sync's own item is missing or not enabled.
@@ -114,6 +114,64 @@ describe("the recovery rule follows what the connected Sync advertised", () => {
   });
 });
 
+// Recovery captures the sources that are wanted on when it begins. A source the user turns on after that is not in the capture,
+// and the host's stop in the snapshot still applies to it.
+describe("a source enabled after recovery began", () => {
+  // The media connection is being replaced and Sync is healthy, so the enable is queued. Sync then drops, and the host stops the
+  // source after the enable; the snapshot Sync recovers with carries the stop and no replayed event.
+  it.each(sources)("%s: a queued enable stays off when the snapshot carries a newer host stop", async (source) => {
+    const { client, platform, setEnabled, command, setLocalSourceIntent } = recoveryScenario(source);
+    let enabling: Promise<unknown> = Promise.resolve();
+    try {
+      await client.join({ microphone: false, camera: false });
+      mediaPhase(platform, "recovering");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      enabling = setEnabled(true).catch((error: unknown) => error);
+      await tick(20);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 90)] } });
+      mediaPhase(platform, "live");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await enabling;
+      await tick(20);
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+      expect(command.mock.calls.some(([enabled]) => enabled)).toBe(false);
+    } finally {
+      client.dispose();
+      await enabling;
+    }
+  });
+
+  // The first Sync snapshot of a join is the first recovery, and a source the user turns on while the join waits for Sync is not
+  // in its capture either.
+  it.each(sources)("%s: a host stop in the first snapshot keeps an enable queued during the join off", async (source) => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const holder: { start?: () => Promise<void> } = {};
+    const { client, platform, setEnabled, setLocalSourceIntent } = recoveryScenario(source, { sync: { start: async () => (await gate, holder.start?.()) } });
+    holder.start = () => platform.sync.start();
+    try {
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "rejoined", sequence: 0, items: [hostStop(source, 900)] } });
+      const joining = client.join({ microphone: false, camera: false });
+      await tick(20);
+      const enabling = setEnabled(true);
+      await tick(20);
+      release();
+      await joining;
+      await enabling.catch(() => undefined);
+      await tick(20);
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, true, expect.anything());
+    } finally {
+      client.dispose();
+    }
+  });
+});
+
 // Intent revisions are per device, but a stop's revision and an intent's control revision are positions in the one control stream
 // of the Episode, so every device of one participant compares the same numbers.
 describe("two devices of one participant", () => {
@@ -135,6 +193,37 @@ describe("two devices of one participant", () => {
       await enterRecovery({ platform: b.platform, client: b.client });
       // B's publication is not listed yet; A's replay of the stop is lost.
       const recovered = (stop: Source) => ({ projectionId: "recovered", sequence: 0, items: [hostStop(stop, 90)] });
+      a.platform.emitSync({ ...live(a.platform), media: recovered(source) });
+      b.platform.emitSync({ ...live(b.platform), media: recovered(source) });
+      await vi.waitFor(() => expect(a.client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(b.client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(a.track.enabled).toBe(false));
+      await tick(20);
+      expect(a.client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(a.setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+      expect(b.setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+    } finally {
+      a.client.dispose();
+      b.client.dispose();
+    }
+  });
+
+  it.each(sources)("%s: the offline device with the older on does not resume when the other device has published again, and that device keeps its on", async (source) => {
+    const a = recoveryScenario(source);
+    const b = recoveryScenario(source);
+    try {
+      await a.client.join({ microphone: false, camera: false });
+      await a.setEnabled(true);
+      await b.client.join({ microphone: false, camera: false });
+      await b.setEnabled(true);
+      b.platform.emitMediaPause({ source, revision: 90 });
+      await vi.waitFor(() => expect(b.track.enabled).toBe(false));
+      await b.setEnabled(true);
+      b.setLocalSourceIntent.mockClear();
+      await enterRecovery({ platform: a.platform, client: a.client });
+      await enterRecovery({ platform: b.platform, client: b.client });
+      // B has published again, so the item is enabled and still carries the stop; A's replay of the stop is lost.
+      const recovered = (stop: Source) => ({ projectionId: "recovered", sequence: 0, items: [{ ...hostStop(stop, 90), enabled: true, publicationId: "publication-b" }] });
       a.platform.emitSync({ ...live(a.platform), media: recovered(source) });
       b.platform.emitSync({ ...live(b.platform), media: recovered(source) });
       await vi.waitFor(() => expect(a.client.getSnapshot().connection.status).toBe("live"));

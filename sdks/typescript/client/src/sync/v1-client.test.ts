@@ -644,28 +644,139 @@ describe("V1SyncClient", () => {
       client.stop();
     }
   });
-  it("judges a drop from frames that followed each other, listens to the page while started and stops listening on stop", async () => {
-    const clock = new TestClock();
+  it("listens to the page while started and stops listening on stop", async () => {
     const { page, listeners, registered } = pageDouble();
-    let mono = 0;
-    const { client, socket, state } = await liveClient({ clock, reconnectDelayMs: 1, monotonic: () => mono, page });
+    const { client } = await liveClient({ page });
     try {
       expect([...registered].sort()).toEqual(["freeze", "resume"]);
-      const proof = client.link.proof();
-      expect(proof).not.toBeNull();
-      clock.advance(10_000);
-      mono += 10_000;
-      expect(client.link.longSince(proof)).toBe(false);
-      for (const listener of listeners) listener();
-      expect(client.link.longSince(proof)).toBe(true);
-      socket.receive({ type: "heartbeat_ack" });
-      await settle();
-      expect(state.revision).toBeGreaterThanOrEqual(0);
     } finally {
       client.stop();
     }
     expect(registered.size).toBe(0);
     expect(listeners.size).toBe(0);
+  });
+  // A pong proves contact at the moment its ping was sent, and only when the round trip took 0 to 5 s on both clocks. The ping that
+  // opens a live connection is sent at wall 0 and mono 0 in these tests; the timers never fire, so no other ping is sent.
+  describe("a drop is short only after a ping and its pong that followed each other", () => {
+    async function linkClient(page: ReturnType<typeof pageDouble>["page"] | null = null) {
+      const time = { wall: 0, mono: 0 };
+      const clock = { now: () => time.wall, setTimeout: new TestClock().setTimeout.bind(new TestClock()), clearTimeout: () => undefined };
+      const { client, socket } = await liveClient({ clock, monotonic: () => time.mono, page });
+      const at = (wall: number, mono: number) => {
+        time.wall = wall;
+        time.mono = mono;
+      };
+      const pong = async () => {
+        socket.receive({ type: "pong" });
+        await settle();
+      };
+      return { client, at, pong, socket };
+    }
+    const long = (client: Awaited<ReturnType<typeof linkClient>>["client"]) => client.link.longSince(client.link.proof());
+
+    it("proves contact at the send time of the ping, and is short until 60 s on both clocks", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        expect(long(client)).toBe(true);
+        at(2_000, 2_000);
+        await pong();
+        at(59_999, 59_999);
+        expect(long(client)).toBe(false);
+        at(60_000, 59_999);
+        expect(long(client)).toBe(true);
+        at(59_999, 60_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    // The laptop slept for two minutes: the pong to the ping sent before it is delivered when the page wakes.
+    it("a pong buffered through a two-minute suspend proves nothing", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(120_000, 0);
+        await pong();
+        at(125_000, 5_000);
+        expect(long(client)).toBe(true);
+        at(128_000, 8_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a pong buffered through a 20 s suspend does not hide a 45 s outage", async () => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(20_000, 0);
+        await pong();
+        at(65_000, 45_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it.each([
+      ["the wall clock is more than 5 s behind the monotonic clock", 20_000, 2_000],
+      ["the monotonic clock is more than 5 s ahead of the wall clock", 2_000, 20_000],
+      ["the wall clock stepped back", -5_000, 1_000],
+      ["the round trip took 5.001 s", 5_001, 5_001],
+    ])("a pong proves nothing when %s", async (_name, wall, mono) => {
+      const { client, at, pong } = await linkClient();
+      try {
+        at(wall, mono);
+        await pong();
+        at(wall + 1_000, mono + 1_000);
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a pong with no ping in flight proves nothing, and neither does any other frame", async () => {
+      const { client, at, pong, socket } = await linkClient();
+      try {
+        at(1_000, 1_000);
+        await pong();
+        const proof = client.link.proof();
+        at(30_000, 30_000);
+        await pong();
+        socket.receive({ type: "heartbeat_ack" });
+        await settle();
+        expect(client.link.proof()).toEqual(proof);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a freeze or resume between the ping and its pong proves nothing", async () => {
+      const { page, listeners } = pageDouble();
+      const { client, at, pong } = await linkClient(page);
+      try {
+        for (const listener of listeners) listener();
+        at(1_000, 1_000);
+        await pong();
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
+
+    it("a freeze or resume after the contact makes the drop long", async () => {
+      const { page, listeners } = pageDouble();
+      const { client, at, pong } = await linkClient(page);
+      try {
+        at(1_000, 1_000);
+        await pong();
+        expect(long(client)).toBe(false);
+        for (const listener of listeners) listener();
+        expect(long(client)).toBe(true);
+      } finally {
+        client.stop();
+      }
+    });
   });
   it("resends unacknowledged entry after transport recovery", async () => {
     const clock = new TestClock();
@@ -1244,6 +1355,23 @@ describe("V1SyncClient", () => {
     socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: stop });
     await applied;
     expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: false, publicationId: null, offReason: "host", offRevision: 7 }]);
+  });
+  // Another device of the participant has published since the host stopped the source, so the item is enabled. A device with an
+  // older intent still has to see the stop.
+  it("reads the retained host stop on a media item another device has turned on", async () => {
+    const { client, socket } = await liveClient();
+    const item = { participant_id: ownerId, source: "microphone", enabled: true, publication_id: "device-b-microphone", off_reason: "host", off_revision: 7 } as const;
+    const applied = snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item });
+    await applied;
+    expect(client.getSnapshot().media?.items).toEqual([{ participantId: ownerId, source: "microphone", enabled: true, publicationId: "device-b-microphone", offReason: "host", offRevision: 7 }]);
+  });
+  it("recovers on an enabled media item that carries a device pause reason", async () => {
+    const { client, socket } = await liveClient();
+    const recovering = snapshotWhen(client, (snapshot) => snapshot.connection.phase === "connecting");
+    socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, source: "microphone", enabled: true, publication_id: "p", off_reason: "self" } });
+    await recovering;
+    expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
   it("reads a media item from an earlier Sync that sends no off reason as no evidence", async () => {
     const { client, socket } = await liveClient();

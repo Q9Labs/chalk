@@ -8,7 +8,7 @@ After a reconnect, the SDK no longer turns off a microphone or camera the person
 
 The SDK applies this rule only on a connection whose welcome carried `media_off_reason`. Any other Sync gets the old rule, which pauses a wanted-on source whose Sync record is missing or off.
 
-**Deploy order:** the Sync with `media_off_reason_v1` must be live before, or together with, this SDK. Apply migration `20261031120000_sync_media_stops` before that Sync.
+**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Never release the SDK while old and new Sync run side by side: an old instance can commit a host stop without filling the new table, and a new instance then advertises the extension without that evidence.
 
 ### short-invite-links
 

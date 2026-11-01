@@ -229,14 +229,27 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
       }
     });
 
-    it.each(sources)("%s: a long drop leaves it on when Sync still lists the publication", async (source) => {
+    // Sync lists a publication, but the drop was too long to prove the same device still holds it, so the source is off and one tap turns it on.
+    it.each(sources)("%s: a long drop turns it off like a tap even when Sync still lists a publication", async (source) => {
       const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
-      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs * 5), items: [item] });
+      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs * 5), items: [item] });
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "user_pause");
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a short drop keeps it on when Sync still lists the publication", async (source) => {
+      const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(3_000), items: [item] });
       try {
         expect(track.enabled).toBe(true);
         confirmPublication(platform, track, source);
         expect(client.getSnapshot().media.local[source].state).toBe("enabled");
-        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "user_pause");
+        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
       } finally {
         finish();
       }

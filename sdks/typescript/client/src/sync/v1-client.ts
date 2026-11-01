@@ -525,7 +525,7 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
-      this.#watch.heard();
+      if (frame.type === "pong") this.#watch.ponged();
       await this.#handleFrame(frame);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
@@ -1063,7 +1063,7 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
       }
-      this.#send({ type: "ping" });
+      this.#sendPing();
       this.#startHeartbeat();
     }, 20000);
   }
@@ -1074,7 +1074,8 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
-    this.#send({ type: "ping" });
+    this.#watch.restart();
+    this.#sendPing();
     this.#health = new V1SyncHealth(this.#now());
     const tick = () => {
       this.#noticeProbeTimer = undefined;
@@ -1082,7 +1083,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const previous = this.#health.health;
       this.#health.check(this.#now());
       if (previous !== this.#health.health) this.#emit();
-      this.#send({ type: "ping" });
+      this.#sendPing();
       this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     };
     this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
@@ -1091,6 +1092,11 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#health.check(this.#now());
       this.#emit();
     }, SYNC_HEALTH_BUDGET.degradedAfterMs);
+  }
+  // The link watch times each ping, so every ping goes through here.
+  #sendPing(): void {
+    this.#watch.pinged();
+    this.#send({ type: "ping" });
   }
   #clearNoticeProbe(): void {
     if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
