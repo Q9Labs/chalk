@@ -154,9 +154,6 @@ func (checks *publicationLivenessChecks) recordServed(key listenerEvidenceKey, l
 	defer checks.mu.Unlock()
 	now := checks.now()
 	reports := checks.reportForWriteLocked(key, listenerID, now)
-	if _, exists := reports[listenerID]; !exists && len(reports) >= 64 {
-		return
-	}
 	reports[listenerID] = listenerReport{connectionID: connectionID, updatedAt: now}
 }
 
