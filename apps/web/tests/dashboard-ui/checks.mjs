@@ -304,12 +304,12 @@ try {
   }
   {
     const { tab, context } = await open(`${CALL}/session/${uuid(0x200)}`, { set: "transcript=none" });
-    const button = tab.getByRole("button", { name: "Make a transcript in English" });
+    const button = tab.getByRole("button", { name: "Make a transcript" });
     const offered = await button.count();
     await button.click();
     await tab.waitForTimeout(800);
     const [create] = await posted("create-transcript");
-    check("transcript action sends one explicit language", offered === 1 && JSON.stringify(create?.body?.languages) === '["en"]' && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
+    check("transcript action inherits the configured language", offered === 1 && !("languages" in (create?.body ?? {})) && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
     check("transcript action leaves the panel processing", (await tab.getByText("The transcript is being prepared.").count()) === 1);
     await context.close();
   }

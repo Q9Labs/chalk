@@ -26,7 +26,7 @@ from github_release import GitHub, payload
 INPUTS = {
     'capture': ('apps/api/', 'go.work', 'go.work.sum', 'infrastructure/recorder/', 'scripts/recorder/'),
     'render': ('apps/api/', 'apps/recording-renderer/', 'packages/', 'sdks/typescript/', 'tsconfig.json', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'infrastructure/recorder/', 'scripts/recorder/'),
-    'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
+    'dispatcher': ('infrastructure/opentofu/modules/aws-transcription-dispatcher/', 'infrastructure/nightly/transcription/', 'apps/transcription-dispatcher/', 'packages/transcript-language/', 'scripts/transcription-dispatcher/', '.npmrc', '.pnpmfile.cjs', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json'),
     'dispatcher_configuration': ('infrastructure/nightly/transcription/',),
 }
 # Installed releases reconstruct their root from state; this path cannot migrate root inputs.

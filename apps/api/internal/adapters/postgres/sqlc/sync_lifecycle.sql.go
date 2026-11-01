@@ -2024,7 +2024,7 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 }
 
 const lockTenantSpaceForUpdate = `-- name: LockTenantSpaceForUpdate :one
-select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 from spaces
 where
     tenant_id = $1
@@ -2051,6 +2051,7 @@ func (q *Queries) LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSp
 		&i.AdmissionPolicy,
 		&i.RecordingPolicy,
 		&i.TranscriptionPolicy,
+		&i.TranscriptLanguage,
 		&i.DefaultEpisodeDurationSeconds,
 		&i.MaximumEpisodeDurationSeconds,
 		&i.LingerWindowSeconds,

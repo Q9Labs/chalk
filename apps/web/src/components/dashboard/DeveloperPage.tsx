@@ -1,3 +1,4 @@
+import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
 import { useEffect, useState } from "react";
 
 import type { DeliveryDTO, DeveloperDTO, RecordingRenderSettingsDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
@@ -70,6 +71,16 @@ export function DeveloperPage() {
     <div className="wrap">
       {intro}
       <RecordingSettings mode={data.recordingRenderMode} onSaved={(recordingRenderMode) => update((value) => ({ ...value, recordingRenderMode }))} />
+      <section style={{ marginTop: 32 }} aria-label="Transcripts">
+        <TranscriptLanguageSettings
+          value={data.transcriptLanguage ?? "auto"}
+          onSave={async (value) => {
+            if (value === null) return;
+            const saved = await act("developer", { action: "set-default-transcript-language", transcriptLanguage: value });
+            update((current) => ({ ...current, ...saved }));
+          }}
+        />
+      </section>
       <div className="secth" style={{ marginTop: 48 }}>
         <h2>API keys</h2>
         <button type="button" className="btn sec" onClick={() => setOpen({ kind: "create-key" })}>

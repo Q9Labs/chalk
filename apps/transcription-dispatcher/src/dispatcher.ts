@@ -126,7 +126,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     const transcription = await transcribeWithFallback({
       ...(dependencies.primary === undefined ? {} : { primary: dependencies.primary }),
       ...(dependencies.fallback ? { fallback: dependencies.fallback } : {}),
-      request: { audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId, onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }) },
+      request: { transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" }, audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId, onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }) },
       policy: dependencies.config.provider,
       circuit,
       runtime: {
@@ -136,6 +136,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       },
     });
     const document = normalizeTranscriptChunk({
+      transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" },
       jobId: assignment.jobId,
       episodeId: assignment.episodeId,
       episodeStartMs: assignment.chunk.episodeStartMs,

@@ -559,7 +559,7 @@ try {
       }
       assert.equal(engineReads.slice(offset).filter((read) => read.path.startsWith(`/v1/tenants/${firstTenant}/`)).length, kind === "recording" ? 2 : 1, "Recording discovery costs two tenant reads; transcript refresh costs one");
     }
-    const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
+    const retry = await post(ada, "/dashboard-api/past-session", { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: foreign.recordingId, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(retry.status, 409, await retry.clone().text());
     assert(unsupportedBodies.some((r) => r.method === "POST" && r.path.endsWith(`/recordings/${foreign.recordingId}/transcripts`)));
     const documentFixture = JSON.stringify({
@@ -598,14 +598,14 @@ try {
   values('${freshRecordingId}','${firstTenant}','transcription/source/${freshRecordingId}/manifest.json',decode(repeat('00',32),'hex'),1,'application/json',1,now(),1,decode(repeat('00',32),'hex'),decode(repeat('00',32),'hex'),'ready',now()+interval '1 hour');
   insert into recording_transcription_source_chunks(id,recording_id,tenant_id,chunk_index,generation,start_ms,end_ms,source_start_ms,source_end_ms,participant_ref,participant_generation,track_id,track_epoch,identity_kind,track_class,display_name_snapshot,overlap,storage_key,checksum,size,content_type)
   values(gen_random_uuid(),'${freshRecordingId}','${firstTenant}',0,1,0,1000,0,1000,'participant-1',1,'track-1','1','participant','microphone','Speaker',false,'transcription/source/${freshRecordingId}/chunk-0.flac',decode(repeat('00',32),'hex'),1,'audio/flac')`);
-    const transcriptRequest = { action: "create-transcript", languages: ["en"], spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
-    const beforeMissingLanguages = unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length;
-    const { languages: requestedLanguages, ...withoutLanguages } = transcriptRequest;
-    assert.deepEqual(requestedLanguages, ["en"]);
-    assert.equal((await post(ada, "/dashboard-api/past-session", withoutLanguages, session.csrfToken)).status, 400);
-    assert.equal(unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length, beforeMissingLanguages);
+    const transcriptRequest = { action: "create-transcript", spaceId, episodeId: foreign.episodeId, recordingId: freshRecordingId, idempotencyKey: crypto.randomUUID() };
+    const requestsBeforeInvalid = unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length;
+    assert.equal((await post(ada, "/dashboard-api/past-session", { ...transcriptRequest, idempotencyKey: "" }, session.csrfToken)).status, 400);
+    assert.equal(unsupportedBodies.filter((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`)).length, requestsBeforeInvalid);
     const requestedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
     assert.equal(requestedTranscript.status, 200, await requestedTranscript.clone().text());
+    const submitted = unsupportedBodies.findLast((request) => request.method === "POST" && request.path.endsWith(`/recordings/${freshRecordingId}/transcripts`));
+    assert.equal("languages" in JSON.parse(submitted.body), false);
     const transcriptId = (await requestedTranscript.json()).transcript.id;
     const replayedTranscript = await post(ada, "/dashboard-api/past-session", transcriptRequest, session.csrfToken);
     assert.equal(replayedTranscript.status, 200, await replayedTranscript.clone().text());
@@ -640,7 +640,6 @@ try {
           spaceId: foreign.spaceId,
           episodeId: foreign.episodeId,
           recordingId: foreign.recordingId,
-          ...(action === "create-transcript" ? { languages: ["en"] } : {}),
           ...(action === "recording-url" ? { download: true } : action === "export-recording" || action === "create-transcript" ? { idempotencyKey: crypto.randomUUID() } : {}),
         },
       ]),
@@ -678,10 +677,17 @@ try {
     assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ recording_render_mode: "automatic" }) });
     assert.equal((await tenantFor("malik")).recording_render_mode, "automatic");
     assert.equal((await tenantFor("ada")).recording_render_mode, "on_demand", "Saving one account must not change another account");
+    assert.equal((await tenantFor("malik")).transcript_language, "auto");
+    const languageSetting = await post(malik, "/dashboard-api/developer", { action: "set-default-transcript-language", transcriptLanguage: "ur" }, other.csrfToken);
+    assert.equal(languageSetting.status, 200, await languageSetting.clone().text());
+    assert.deepEqual(await languageSetting.json(), { transcriptLanguage: "ur" });
+    assert.equal((await tenantFor("malik")).transcript_language, "ur");
+    assert.equal((await tenantFor("ada")).transcript_language, "auto", "Language changes stay in the signed-in account");
     const developerSettings = await malik.request("/dashboard-api/developer");
     assert.equal(developerSettings.status, 200);
     const otherDeveloperDTO = await developerSettings.json();
     assert.equal(otherDeveloperDTO.recordingRenderMode, "automatic");
+    assert.equal(otherDeveloperDTO.transcriptLanguage, "ur");
     assert.equal(otherDeveloperDTO.tenantId, secondTenant);
     for (const action of [
       { action: "set-recording-render-mode", mode: "always" },

@@ -27,6 +27,7 @@ type TranscriptArtifactService interface {
 }
 
 type transcriptArtifactResponse struct {
+	TranscriptLanguage  string   `json:"transcript_language"`
 	ID                  string   `json:"id"`
 	TenantID            string   `json:"tenant_id"`
 	RecordingID         string   `json:"recording_id"`
@@ -247,7 +248,7 @@ func decodeCreateTranscriptDownloadRequest(r *http.Request) (createTranscriptDow
 }
 
 func newTranscriptArtifactResponse(value transcripts.Transcript) transcriptArtifactResponse {
-	return transcriptArtifactResponse{ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: append([]string{}, value.Languages...), Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, SourceExpiresAt: optionalTimestampString(value.SourceExpiresAt), Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
+	return transcriptArtifactResponse{TranscriptLanguage: value.TranscriptLanguage.String(), ID: value.ID.String(), TenantID: value.TenantID.String(), RecordingID: value.RecordingID.String(), SpaceID: value.SpaceID.String(), EpisodeID: value.EpisodeID.String(), Status: value.Status, Languages: append([]string{}, value.Languages...), Provider: value.Provider, Model: value.Model, ArtifactSize: value.ArtifactSize, ArtifactContentType: value.ArtifactContentType, SourceExpiresAt: optionalTimestampString(value.SourceExpiresAt), Generation: value.Generation, CompletedAt: optionalTimestampString(value.CompletedAt), DeletedAt: optionalTimestampString(value.DeletedAt), UpdatedAt: utilities.FormatTimestamp(value.UpdatedAt), CreatedAt: utilities.FormatTimestamp(value.CreatedAt)}
 }
 
 func decodeChecksum(value string) ([]byte, error) {
@@ -292,7 +293,7 @@ func transcriptArtifactAPIError(err error) (APIError, bool) {
 		return apiErrorTranscriptNotFound, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
 		return apiErrorInvalidURLExpiration, true
-	case errors.Is(err, transcripts.ErrInvalidIdempotencyKey), errors.Is(err, transcripts.ErrInvalidManifest), errors.Is(err, transcripts.ErrInvalidChunk), errors.Is(err, transcripts.ErrInvalidArtifact):
+	case errors.Is(err, transcripts.ErrInvalidLanguages), errors.Is(err, transcripts.ErrInvalidIdempotencyKey), errors.Is(err, transcripts.ErrInvalidManifest), errors.Is(err, transcripts.ErrInvalidChunk), errors.Is(err, transcripts.ErrInvalidArtifact):
 		return apiErrorInvalidRequest, true
 	case errors.Is(err, transcripts.ErrArtifactRepository):
 		return apiErrorServiceUnavailable, true

@@ -1,3 +1,4 @@
+import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
@@ -10,6 +11,7 @@ const name = z
   .min(1)
   .refine((value) => Array.from(value).length <= spaceNameMaxCodePoints, "Call name is too long");
 const idempotencyKey = z.uuid();
+const transcriptLanguage = z.enum(["auto", ...whisperLanguageCodes]);
 const admission = z.enum(["anyone", "knock"]);
 export const knockDecisionState = z.enum(["none", "in_flight", "retryable"]);
 export const knockDecisionAction = z.enum(["approve", "deny"]).nullable();
@@ -33,6 +35,7 @@ export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).o
 export const homeAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-call"), name: name.optional(), admission, idempotencyKey }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
+  z.strictObject({ action: z.literal("set-transcript-language"), spaceId: id, transcriptLanguage: transcriptLanguage.nullable() }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
   z.strictObject({ action: z.literal("archive-call"), spaceId: id }),
   z.strictObject({ action: z.literal("restore-call"), spaceId: id }),
@@ -41,6 +44,7 @@ export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("join"), spaceId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("refresh-access"), spaceId: id, joinKey: idempotencyKey.optional(), ownerSeat: z.string().min(1).max(2048).optional(), currentMediaToken: z.string().min(1).max(8192).optional() }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
+  z.strictObject({ action: z.literal("set-transcript-language"), spaceId: id, transcriptLanguage: transcriptLanguage.nullable() }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
   z.strictObject({ action: z.literal("rotate-link"), spaceId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("extend-call"), spaceId: id, episodeId: id, deadline: z.iso.datetime(), idempotencyKey }),
@@ -49,7 +53,7 @@ export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("deny-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
 ]);
 export const pastAction = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, languages: z.array(z.string().trim().min(1).max(32)).min(1).max(16), idempotencyKey }),
+  z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("recording-url"), spaceId: id, episodeId: id, recordingId: id, download: z.boolean() }),
   z.strictObject({ action: z.literal("export-recording"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, view: z.enum(["call", "past-session"]).optional() }),
@@ -97,6 +101,7 @@ const allowedWebsites = z
   .transform((origins) => [...new Set([dashboardWebsiteOrigin, ...origins])])
   .refine((origins) => origins.length <= 32, "At most 32 origins including chalkmeet.com");
 export const developerAction = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("set-default-transcript-language"), transcriptLanguage }),
   z.strictObject({ action: z.literal("set-recording-render-mode"), mode: z.enum(["on_demand", "automatic"]) }),
   z.strictObject({ action: z.literal("allowed-websites") }),
   z.strictObject({ action: z.literal("set-allowed-websites"), origins: allowedWebsites }),
@@ -118,7 +123,7 @@ export type PastSessionAction = z.infer<typeof pastAction>;
 export type DeveloperAction = z.infer<typeof developerAction>;
 export type ProfileDTO = { id: string; name: string; email: string; avatarUrl: string | null };
 export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
-export type CallDTO = { id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
+export type CallDTO = { transcriptLanguage?: TranscriptLanguage | null; id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
 export type LiveDTO = { spaceId: string; episode: null | { id: string; count: number; participants: { id: string; name: string }[] } };
 export type EpisodeDTO = { id: string; status: "active" | "ending" | "ended"; startedAt: string; endedAt: string | null };
 export type RecordingDTO = {
@@ -152,8 +157,9 @@ export type CallPageDTO = {
 };
 export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
+export type TranscriptLanguageSettingsDTO = { transcriptLanguage: TranscriptLanguage };
 export type RecordingRenderSettingsDTO = { recordingRenderMode: Tenant["recording_render_mode"] };
-export type DeveloperDTO = AllowedWebsitesDTO & RecordingRenderSettingsDTO & { tenantId: Tenant["id"]; keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
+export type DeveloperDTO = AllowedWebsitesDTO & RecordingRenderSettingsDTO & Partial<TranscriptLanguageSettingsDTO> & { tenantId: Tenant["id"]; keys: KeyDTO[]; webhooks: WebhookDTO[]; nextKeyCursor: string | null; nextWebhookCursor: string | null };
 export type SecretDTO = { id: string; secret: string };
 export type ArtifactURLDTO = { url: string; expiresAt: string; method: string; headers: Readonly<Record<string, readonly string[]>> };
 export type DashboardErrorDTO = { error: { code: string; retryable?: true; retryAfterSeconds?: number } };

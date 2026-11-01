@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -64,6 +65,7 @@ const (
 )
 
 type Transcript struct {
+	TranscriptLanguage        artifactpolicy.TranscriptLanguage
 	ID                        utilities.ID
 	TenantID                  utilities.ID
 	RecordingID               utilities.ID

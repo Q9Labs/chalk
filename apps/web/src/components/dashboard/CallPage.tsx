@@ -1,3 +1,4 @@
+import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -283,6 +284,16 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           <p className="help">{call.admission === "anyone" ? "People with the link join right away." : "People ask to join, and someone in the call lets them in."}</p>
         </div>
       </div>
+      <section style={{ marginBottom: 32 }} aria-label="Transcripts">
+        <TranscriptLanguageSettings
+          value={call.transcriptLanguage ?? null}
+          inherit
+          onSave={async (value) => {
+            const result = await act("call", { action: "set-transcript-language", spaceId: call.id, transcriptLanguage: value });
+            update((current) => ({ ...current, call: result.call }));
+          }}
+        />
+      </section>
       <div className="secth">
         <h2>Past sessions</h2>
       </div>

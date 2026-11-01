@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -35,8 +36,16 @@ func prepareRequestInput(input *RequestInput) error {
 	// Queue priority and retry budget are release policy, never tenant input.
 	input.Priority = 0
 	input.AttemptLimit = 4
+	if input.Language != "" {
+		if _, err := artifactpolicy.ParseTranscriptLanguage(input.Language); err != nil {
+			return ErrInvalidLanguages
+		}
+	}
 	if input.Language != "" && len(input.Language) > 32 {
 		return ErrInvalidTranscriptField
+	}
+	if input.Language != "" && len(input.Languages) > 0 && (len(input.Languages) != 1 || input.Languages[0] != input.Language) {
+		return ErrInvalidLanguages
 	}
 	if len(input.Languages) == 0 && input.Language != "" {
 		input.Languages = []string{input.Language}
@@ -47,6 +56,9 @@ func prepareRequestInput(input *RequestInput) error {
 	for i := range input.Languages {
 		language, err := utilities.RequiredString(input.Languages[i])
 		if err != nil || len(language) > 32 {
+			return ErrInvalidLanguages
+		}
+		if _, err := artifactpolicy.ParseTranscriptLanguage(language); err != nil {
 			return ErrInvalidLanguages
 		}
 		input.Languages[i] = language

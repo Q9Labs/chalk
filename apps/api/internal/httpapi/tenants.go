@@ -41,6 +41,7 @@ type TenantService interface {
 }
 
 type tenantResponse struct {
+	TranscriptLanguage  string                      `json:"transcript_language"`
 	RecordingRenderMode tenants.RecordingRenderMode `json:"recording_render_mode"`
 	ID                  string                      `json:"id"`
 	Name                string                      `json:"name"`
@@ -80,8 +81,9 @@ type createTenantRequest struct {
 }
 
 type updateTenantRequest struct {
-	RecordingRenderMode utilities.OptionalString `json:"recording_render_mode"`
-	Name                utilities.OptionalString `json:"name"`
+	TranscriptLanguage  artifactpolicy.OptionalTranscriptLanguage `json:"transcript_language"`
+	RecordingRenderMode utilities.OptionalString                  `json:"recording_render_mode"`
+	Name                utilities.OptionalString                  `json:"name"`
 
 	DefaultMediaPlane                utilities.OptionalString    `json:"default_media_plane"`
 	MediaPlaneProviderConfig         utilities.OptionalJSON      `json:"media_plane_provider_config"`
@@ -312,7 +314,7 @@ func decodeUpdateTenantRequest(r *http.Request) (updateTenantEndpointRequest, er
 	return updateTenantEndpointRequest{TenantID: tenantID, Body: body}, nil
 }
 
-// Service credentials can manage Allowed websites, not other Tenant settings.
+// Service credentials can manage dashboard preferences, not other Tenant settings.
 // Check field presence before decoding, including nulls and future fields.
 func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	principal, _ := authentication.PrincipalFromContext(r.Context())
@@ -325,7 +327,7 @@ func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	}
 	var body updateTenantRequest
 	for field := range fields {
-		if field != "cors_allowed_origins" && field != "recording_render_mode" {
+		if field != "cors_allowed_origins" && field != "recording_render_mode" && field != "transcript_language" {
 			return updateTenantRequest{}, apiErrorForbidden
 		}
 	}
@@ -336,6 +338,11 @@ func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	}
 	if value, ok := fields["recording_render_mode"]; ok {
 		if err := json.Unmarshal(value, &body.RecordingRenderMode); err != nil {
+			return updateTenantRequest{}, apiErrorInvalidRequest
+		}
+	}
+	if value, ok := fields["transcript_language"]; ok {
+		if err := json.Unmarshal(value, &body.TranscriptLanguage); err != nil {
 			return updateTenantRequest{}, apiErrorInvalidRequest
 		}
 	}
@@ -418,6 +425,7 @@ func newTenantResponse(tenant tenants.Tenant) tenantResponse {
 		Website:                          tenant.Website,
 		TranscriptionCeiling:             tenant.ArtifactPolicy.TranscriptionCeiling,
 		TranscriptionDefaultMode:         tenant.ArtifactPolicy.TranscriptionDefault,
+		TranscriptLanguage:               tenant.ArtifactPolicy.TranscriptLanguage.String(),
 		ProviderPolicyVersion:            tenant.ArtifactPolicy.ProviderPolicyVersion,
 		RecordingRetentionSeconds:        int64(tenant.ArtifactPolicy.RecordingRetention / time.Second),
 		TranscriptRetentionSeconds:       int64(tenant.ArtifactPolicy.TranscriptRetention / time.Second),
@@ -454,6 +462,7 @@ func (r updateTenantRequest) input() tenants.UpdateTenantInput {
 		ArtifactPolicy: tenants.ArtifactPolicyUpdate{
 			TranscriptionCeiling:             r.TranscriptionCeiling,
 			TranscriptionDefaultMode:         r.TranscriptionDefaultMode,
+			TranscriptLanguage:               r.TranscriptLanguage,
 			ProviderPolicyVersion:            r.ProviderPolicyVersion,
 			RecordingRetentionSeconds:        r.RecordingRetentionSeconds,
 			TranscriptRetentionSeconds:       r.TranscriptRetentionSeconds,

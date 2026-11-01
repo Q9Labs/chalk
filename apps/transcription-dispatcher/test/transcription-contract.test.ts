@@ -133,16 +133,17 @@ describe("recording transcription source contract", () => {
     expect(headers.get("content-length")).toBe(String(body.byteLength));
   });
 
-  it("canonicalizes a snake_case control-plane job ID before validation", async () => {
+  it.each([undefined, "auto", "ur", "ar"])("canonicalizes and validates claimed language %s", async (language) => {
     const control = new RecorderControlApiClient({
       baseUrl: "https://control.example",
       signer: { sign: () => ({}) },
-      fetch: (async () => Response.json({ assignments: [{ ...assignment, jobId: undefined, job_id: assignment.jobId }] })) as typeof fetch,
+      fetch: (async () => Response.json({ assignments: [{ ...assignment, jobId: undefined, job_id: assignment.jobId, transcript_language: language }] })) as typeof fetch,
     });
 
     const claim = await control.claim({ limit: 1, context: { journeyId: "11111111-1111-4111-8111-111111111111" } });
 
     expect(claim.assignments[0]?.jobId).toBe(assignment.jobId);
+    expect(claim.assignments[0]?.transcriptLanguage).toEqual(language === undefined || language === "auto" ? { mode: "auto" } : { mode: "fixed", language });
   });
 
   it("accepts an active job lease during the bounded post-window source grace", () => {

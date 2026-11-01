@@ -21,6 +21,7 @@
     "build:dashboard-functions": "wrangler pages functions build --outdir dist/client/_worker.js --output-routes-path dist/client/_routes.json"
   },
   "dependencies": {
+    "@chalk/transcript-language": "workspace:*",
     "@cloudflare/vite-plugin": "^1.43.0",
     "@q9labsai/chalk-client": "workspace:^5.4.0",
     "@q9labsai/chalk-react": "workspace:^5.4.0",

@@ -96,6 +96,7 @@ type Space struct {
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
 	RecordingPolicy               artifactpolicy.RecordingMode
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode
 	DefaultEpisodeDurationSeconds int32
 	MaximumEpisodeDurationSeconds int32
@@ -158,6 +159,7 @@ type CreateSpaceInput struct {
 	AdmissionPolicy               json.RawMessage
 	RecordingPolicy               artifactpolicy.RecordingMode
 	RecordingPolicySet            bool
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode
 	TranscriptionPolicySet        bool
 	DefaultEpisodeDurationSeconds int32
@@ -176,6 +178,7 @@ type UpdateSpaceInput struct {
 	RecurringPolicy               utilities.OptionalJSON
 	AdmissionPolicy               utilities.OptionalJSON
 	RecordingPolicy               OptionalRecordingPolicy
+	TranscriptLanguage            artifactpolicy.OptionalTranscriptLanguage
 	TranscriptionPolicy           OptionalTranscriptionPolicy
 	DefaultEpisodeDurationSeconds OptionalInt32
 	MaximumEpisodeDurationSeconds OptionalInt32
@@ -588,19 +591,20 @@ func requiredOptionalString(value utilities.OptionalString, invalid error) (util
 }
 
 type createFingerprintInput struct {
-	Name                          string                           `json:"name"`
-	Slug                          string                           `json:"slug"`
-	MediaPlane                    string                           `json:"media_plane"`
-	Metadata                      json.RawMessage                  `json:"metadata"`
-	RecurringPolicy               json.RawMessage                  `json:"recurring_policy"`
-	AdmissionPolicy               json.RawMessage                  `json:"admission_policy"`
-	RecordingPolicy               artifactpolicy.RecordingMode     `json:"recording_policy"`
-	RecordingPolicySet            bool                             `json:"recording_policy_set"`
-	TranscriptionPolicy           artifactpolicy.TranscriptionMode `json:"transcription_policy"`
-	TranscriptionPolicySet        bool                             `json:"transcription_policy_set"`
-	DefaultEpisodeDurationSeconds int32                            `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32                            `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32                            `json:"linger_window_seconds"`
+	Name                          string                             `json:"name"`
+	Slug                          string                             `json:"slug"`
+	MediaPlane                    string                             `json:"media_plane"`
+	Metadata                      json.RawMessage                    `json:"metadata"`
+	RecurringPolicy               json.RawMessage                    `json:"recurring_policy"`
+	AdmissionPolicy               json.RawMessage                    `json:"admission_policy"`
+	RecordingPolicy               artifactpolicy.RecordingMode       `json:"recording_policy"`
+	RecordingPolicySet            bool                               `json:"recording_policy_set"`
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage `json:"transcript_language,omitempty"`
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode   `json:"transcription_policy"`
+	TranscriptionPolicySet        bool                               `json:"transcription_policy_set"`
+	DefaultEpisodeDurationSeconds int32                              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                              `json:"linger_window_seconds"`
 }
 
 func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
@@ -609,6 +613,7 @@ func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 		Metadata: input.Metadata, RecurringPolicy: input.RecurringPolicy, AdmissionPolicy: input.AdmissionPolicy,
 		RecordingPolicy: input.RecordingPolicy, RecordingPolicySet: input.RecordingPolicySet,
 		TranscriptionPolicy: input.TranscriptionPolicy, TranscriptionPolicySet: input.TranscriptionPolicySet,
+		TranscriptLanguage:            input.TranscriptLanguage,
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds, MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds: input.LingerWindowSeconds,
 	})

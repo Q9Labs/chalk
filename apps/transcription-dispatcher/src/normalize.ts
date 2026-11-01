@@ -1,9 +1,11 @@
+import type { TranscriptLanguageMode } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
 import type { ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult, SpeakerTurn, SpeakerTurnManifest, TrackClass } from "./types.js";
 
 type CueTurn = Pick<SpeakerTurn, "identity" | "trackClass"> & Partial<Pick<SpeakerTurn, "displayNameSnapshot" | "overlap">>;
 
 export function normalizeTranscriptChunk(input: {
+  transcriptLanguage?: TranscriptLanguageMode;
   jobId: string;
   episodeId: string;
   episodeStartMs: number;
@@ -34,6 +36,7 @@ export function normalizeTranscriptChunk(input: {
   });
   return {
     schemaVersion: "transcript.v1",
+    transcriptLanguage: input.transcriptLanguage ?? { mode: "auto" },
     jobId: input.jobId,
     episodeId: input.episodeId,
     cues,

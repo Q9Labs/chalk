@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 )
 
 const MaxDocumentBytes int64 = 25 * 1024 * 1024
@@ -83,22 +85,23 @@ func ReadDocument(reader io.Reader, maximumBytes int64) (Document, error) {
 }
 
 type persistedDocument struct {
-	SchemaVersion              string                     `json:"schemaVersion"`
-	JobID                      string                     `json:"jobId"`
-	EpisodeID                  string                     `json:"episodeId"`
-	Cues                       []persistedCue             `json:"cues"`
-	Language                   *string                    `json:"language,omitempty"`
-	Provider                   string                     `json:"provider"`
-	Model                      string                     `json:"model"`
-	VersionContract            string                     `json:"versionContract"`
-	ProviderIdentity           *persistedProviderIdentity `json:"providerIdentity,omitempty"`
-	ExecutionIdentity          *string                    `json:"executionIdentity,omitempty"`
-	Attempt                    *int64                     `json:"attempt"`
-	MeasuredAudioMS            *int64                     `json:"measuredAudioMs"`
-	ProviderObservedDurationMS *int64                     `json:"providerObservedDurationMs,omitempty"`
-	BilledAudioSeconds         *float64                   `json:"billedAudioSeconds,omitempty"`
-	ProviderReportedCostUSD    *float64                   `json:"providerReportedCostUsd,omitempty"`
-	Quality                    *persistedQuality          `json:"quality,omitempty"`
+	TranscriptLanguage         *persistedTranscriptLanguage `json:"transcriptLanguage,omitempty"`
+	SchemaVersion              string                       `json:"schemaVersion"`
+	JobID                      string                       `json:"jobId"`
+	EpisodeID                  string                       `json:"episodeId"`
+	Cues                       []persistedCue               `json:"cues"`
+	Language                   *string                      `json:"language,omitempty"`
+	Provider                   string                       `json:"provider"`
+	Model                      string                       `json:"model"`
+	VersionContract            string                       `json:"versionContract"`
+	ProviderIdentity           *persistedProviderIdentity   `json:"providerIdentity,omitempty"`
+	ExecutionIdentity          *string                      `json:"executionIdentity,omitempty"`
+	Attempt                    *int64                       `json:"attempt"`
+	MeasuredAudioMS            *int64                       `json:"measuredAudioMs"`
+	ProviderObservedDurationMS *int64                       `json:"providerObservedDurationMs,omitempty"`
+	BilledAudioSeconds         *float64                     `json:"billedAudioSeconds,omitempty"`
+	ProviderReportedCostUSD    *float64                     `json:"providerReportedCostUsd,omitempty"`
+	Quality                    *persistedQuality            `json:"quality,omitempty"`
 }
 
 type persistedCue struct {
@@ -141,6 +144,9 @@ type persistedCueQuality struct {
 }
 
 func (document persistedDocument) validate() error {
+	if document.TranscriptLanguage != nil && !document.TranscriptLanguage.validate() {
+		return ErrInvalidDocument
+	}
 	if document.SchemaVersion != "transcript.v1" || document.JobID == "" || document.EpisodeID == "" || document.Cues == nil || !validDocumentProvider(document.Provider) || document.Model == "" || document.VersionContract == "" || document.Attempt == nil || *document.Attempt < 0 || document.MeasuredAudioMS == nil || *document.MeasuredAudioMS < 0 {
 		return ErrInvalidDocument
 	}
@@ -200,4 +206,20 @@ func validCueQuality(quality *persistedCueQuality) bool {
 
 func validConfidence(value *float64) bool {
 	return value == nil || (*value >= 0 && *value <= 1)
+}
+
+type persistedTranscriptLanguage struct {
+	Mode     string `json:"mode"`
+	Language string `json:"language,omitempty"`
+}
+
+func (mode persistedTranscriptLanguage) validate() bool {
+	if mode.Mode == "auto" {
+		return mode.Language == ""
+	}
+	if mode.Mode != "fixed" || mode.Language == "auto" {
+		return false
+	}
+	_, err := artifactpolicy.ParseTranscriptLanguage(mode.Language)
+	return err == nil
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -27,6 +28,7 @@ type RequestInput struct {
 }
 
 type Job struct {
+	TranscriptLanguage   artifactpolicy.TranscriptLanguage
 	ID                   utilities.ID
 	IdempotencyKey       string
 	TenantID             utilities.ID

@@ -63,3 +63,10 @@ func TestTranscriptArtifactAPIErrorDoesNotCollapseDisabledIntoRequestInvalid(t *
 		t.Fatalf("wrapped disabled transcription API error = %#v, mapped = %t", apiError, ok)
 	}
 }
+
+func TestTranscriptLanguageValidationMapsToBadRequest(t *testing.T) {
+	value, ok := transcriptArtifactAPIError(transcripts.ErrInvalidLanguages)
+	if !ok || value.Status != 400 || value.Code != apiErrorInvalidRequest.Code {
+		t.Fatalf("language error=%+v mapped=%v", value, ok)
+	}
+}

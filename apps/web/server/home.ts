@@ -64,6 +64,10 @@ export async function homeMutation(engine: Engine, action: HomeAction) {
       return { call: callDTO(await run(engine.api.spaces.archiveSpace({ params: spaceParams }))) };
     case "restore-call":
       return { call: callDTO(await run(engine.api.spaces.restoreSpace({ params: spaceParams }))) };
+    case "set-transcript-language": {
+      const space = await run(engine.api.spaces.updateSpace({ params: spaceParams, payload: { transcript_language: action.transcriptLanguage } }));
+      return { call: callDTO(space) };
+    }
     case "rename-call":
     case "set-admission": {
       const patch = action.action === "rename-call" ? { name: action.name } : { admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" } };

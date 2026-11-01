@@ -4,7 +4,7 @@ import type { CallDTO, EpisodeDTO, KeyDTO, RecordingDTO, TranscriptDTO, WebhookD
 const admissionPolicy = z.object({ mode: z.string() });
 export function callDTO(space: Space): CallDTO {
   const policy = admissionPolicy.safeParse(space.admission_policy);
-  return { id: space.id, name: space.name, archived: space.archived, admission: policy.success && policy.data.mode === "knock" ? "knock" : "anyone", slug: space.slug, createdAt: space.created_at };
+  return { transcriptLanguage: space.transcript_language, id: space.id, name: space.name, archived: space.archived, admission: policy.success && policy.data.mode === "knock" ? "knock" : "anyone", slug: space.slug, createdAt: space.created_at };
 }
 export function episodeDTO(episode: Episode): EpisodeDTO {
   return { id: episode.id, status: episode.status, startedAt: episode.started_at, endedAt: episode.ended_at ?? null };

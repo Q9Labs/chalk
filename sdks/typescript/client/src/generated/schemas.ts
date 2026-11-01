@@ -20,28 +20,50 @@ const isCodePointLengthBetween = (minimum: number, maximum: number) =>
     { expected: `a value with ${minimum} to ${maximum} characters, counting each Unicode code point once` },
   );
 
-export const DateTimeStringSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString"));
+export const DateTimeStringSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T/)).pipe(Schema.brand("DateTimeString")))();
 export type DateTimeString = typeof DateTimeStringSchema.Type;
 
-export const UserIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId"));
+export const UserIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UserId")))();
 export type UserId = typeof UserIdSchema.Type;
 
-export const UUIDSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID"));
+export const UUIDSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("UUID")))();
 export type UUID = typeof UUIDSchema.Type;
 
-export const TenantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId"));
+export const TenantIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TenantId")))();
 export type TenantId = typeof TenantIdSchema.Type;
 
-export const PaginationSchema = Schema.Struct({
-  has_more: Schema.Boolean,
-  next_cursor: Schema.NullOr(Schema.String),
-  page_size: Schema.Number,
-});
+export const PaginationSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    has_more: Schema.Boolean,
+    next_cursor: Schema.NullOr(Schema.String),
+    page_size: Schema.Number,
+  }))();
 export type Pagination = typeof PaginationSchema.Type;
 
-export const APIKeyListSchema = Schema.Struct({
-  api_keys: Schema.Array(
-    Schema.Struct({
+export const APIKeyListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_keys: Schema.Array(
+      Schema.Struct({
+        created_at: DateTimeStringSchema,
+        created_by_user_id: Schema.NullOr(UserIdSchema),
+        expires_at: DateTimeStringSchema,
+        id: UUIDSchema,
+        key_prefix: Schema.String,
+        last_used_at: Schema.NullOr(DateTimeStringSchema),
+        name: Schema.String,
+        revoked_at: Schema.NullOr(DateTimeStringSchema),
+        scopes: Schema.Array(Schema.String),
+        tenant_id: TenantIdSchema,
+        updated_at: DateTimeStringSchema,
+      }),
+    ),
+    pagination: PaginationSchema,
+  }))();
+export type APIKeyList = typeof APIKeyListSchema.Type;
+
+export const APIKeyWithSecretSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_key: Schema.Struct({
       created_at: DateTimeStringSchema,
       created_by_user_id: Schema.NullOr(UserIdSchema),
       expires_at: DateTimeStringSchema,
@@ -54,2808 +76,3684 @@ export const APIKeyListSchema = Schema.Struct({
       tenant_id: TenantIdSchema,
       updated_at: DateTimeStringSchema,
     }),
-  ),
-  pagination: PaginationSchema,
-});
-export type APIKeyList = typeof APIKeyListSchema.Type;
-
-export const APIKeyWithSecretSchema = Schema.Struct({
-  api_key: Schema.Struct({
-    created_at: DateTimeStringSchema,
-    created_by_user_id: Schema.NullOr(UserIdSchema),
-    expires_at: DateTimeStringSchema,
-    id: UUIDSchema,
-    key_prefix: Schema.String,
-    last_used_at: Schema.NullOr(DateTimeStringSchema),
-    name: Schema.String,
-    revoked_at: Schema.NullOr(DateTimeStringSchema),
-    scopes: Schema.Array(Schema.String),
-    tenant_id: TenantIdSchema,
-    updated_at: DateTimeStringSchema,
-  }),
-  replayed: Schema.Boolean,
-  secret: Schema.String,
-});
+    replayed: Schema.Boolean,
+    secret: Schema.String,
+  }))();
 export type APIKeyWithSecret = typeof APIKeyWithSecretSchema.Type;
 
-export const EpisodeIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId"));
+export const EpisodeIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("EpisodeId")))();
 export type EpisodeId = typeof EpisodeIdSchema.Type;
 
-export const ParticipantIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("ParticipantId"));
+export const ParticipantIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("ParticipantId")))();
 export type ParticipantId = typeof ParticipantIdSchema.Type;
 
-export const SpaceIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("SpaceId"));
+export const SpaceIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("SpaceId")))();
 export type SpaceId = typeof SpaceIdSchema.Type;
 
-export const AccessGrantSchema = Schema.Struct({
-  episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  media: Schema.Struct({
-    client_payload: Schema.Record(Schema.String, Schema.Unknown),
-    expires_at: DateTimeStringSchema,
-    provider: Schema.String,
-    token: Schema.String,
-  }),
-  subject: Schema.Struct({
-    episode_id: EpisodeIdSchema,
-    participant_generation: Schema.Number,
-    participant_id: ParticipantIdSchema,
-    space_id: SpaceIdSchema,
-    tenant_id: TenantIdSchema,
-  }),
-  sync: Schema.Struct({
-    expires_at: DateTimeStringSchema,
-    token: Schema.String,
-  }),
-});
+export const AccessGrantSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    media: Schema.Struct({
+      client_payload: Schema.Record(Schema.String, Schema.Unknown),
+      expires_at: DateTimeStringSchema,
+      provider: Schema.String,
+      token: Schema.String,
+    }),
+    subject: Schema.Struct({
+      episode_id: EpisodeIdSchema,
+      participant_generation: Schema.Number,
+      participant_id: ParticipantIdSchema,
+      space_id: SpaceIdSchema,
+      tenant_id: TenantIdSchema,
+    }),
+    sync: Schema.Struct({
+      expires_at: DateTimeStringSchema,
+      token: Schema.String,
+    }),
+  }))();
 export type AccessGrant = typeof AccessGrantSchema.Type;
 
-export const AdmitEpisodeParticipantRequestSchema = Schema.Struct({
-  admission: Schema.optional(Schema.Literals(["policy", "direct"])),
-  identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
-  identity_id: Schema.optional(UUIDSchema),
-  metadata: Schema.optional(Schema.Unknown),
-  name: Schema.String.check(Schema.isMinLength(1)),
-  participant_id: Schema.optional(ParticipantIdSchema),
-  role: Schema.String.check(Schema.isMinLength(1)),
-});
+export const AdmitEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    admission: Schema.optional(Schema.Literals(["policy", "direct"])),
+    identity_external_id: Schema.optional(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256))),
+    identity_id: Schema.optional(UUIDSchema),
+    metadata: Schema.optional(Schema.Unknown),
+    name: Schema.String.check(Schema.isMinLength(1)),
+    participant_id: Schema.optional(ParticipantIdSchema),
+    role: Schema.String.check(Schema.isMinLength(1)),
+  }))();
 export type AdmitEpisodeParticipantRequest = typeof AdmitEpisodeParticipantRequestSchema.Type;
 
-export const AuditLogIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId"));
+export const AuditLogIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("AuditLogId")))();
 export type AuditLogId = typeof AuditLogIdSchema.Type;
 
-export const CallStatsRequestSchema = Schema.Struct({
-  samples: Schema.Array(
-    Schema.Struct({
-      connection_type: Schema.Literals(["udp", "tcp", "turn", "unknown"]),
-      elapsed_ms: Schema.Number,
-      freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
-      freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
-      recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
-      recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
-      recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
-      relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
-      remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
-      rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      send_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
-      send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
-      send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
-      window_ms: Schema.Number,
-    }),
-  ).check(Schema.isMinLength(1), Schema.isMaxLength(30)),
-  version: Schema.Literal(1),
-});
+export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    samples: Schema.Array(
+      Schema.Struct({
+        connection_type: Schema.Literals(["udp", "tcp", "turn", "unknown"]),
+        elapsed_ms: Schema.Number,
+        freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
+        freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+        recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+        relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
+        remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+        rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        send_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+        send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
+        send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+        window_ms: Schema.Number,
+      }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(30)),
+    version: Schema.Literal(1),
+  }))();
 export type CallStatsRequest = typeof CallStatsRequestSchema.Type;
 
-export const CancelRecordingPreparationRequestSchema = Schema.Struct({
-  expected_revision: Schema.Number,
-});
+export const CancelRecordingPreparationRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expected_revision: Schema.Number,
+  }))();
 export type CancelRecordingPreparationRequest = typeof CancelRecordingPreparationRequestSchema.Type;
 
-export const ChatAttachmentSchema = Schema.Struct({
-  attachmentId: Schema.String,
-  byteLength: Schema.Number,
-  fileName: Schema.String,
-  mimeType: Schema.String,
-});
+export const ChatAttachmentSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachmentId: Schema.String,
+    byteLength: Schema.Number,
+    fileName: Schema.String,
+    mimeType: Schema.String,
+  }))();
 export type ChatAttachment = typeof ChatAttachmentSchema.Type;
 
-export const ChatAttachmentDownloadSchema = Schema.Struct({
-  downloadUrl: Schema.String,
-  expiresAt: Schema.String,
-});
+export const ChatAttachmentDownloadSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    downloadUrl: Schema.String,
+    expiresAt: Schema.String,
+  }))();
 export type ChatAttachmentDownload = typeof ChatAttachmentDownloadSchema.Type;
 
-export const ChatAttachmentUploadSchema = Schema.Struct({
-  attachmentId: Schema.String,
-  expiresAt: Schema.String,
-  headers: Schema.Record(Schema.String, Schema.String),
-  method: Schema.String,
-  uploadId: Schema.String,
-  uploadUrl: Schema.String,
-});
+export const ChatAttachmentUploadSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachmentId: Schema.String,
+    expiresAt: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    method: Schema.String,
+    uploadId: Schema.String,
+    uploadUrl: Schema.String,
+  }))();
 export type ChatAttachmentUpload = typeof ChatAttachmentUploadSchema.Type;
 
-export const CloudflareSFUCloseTracksAPIResponseSchema = Schema.Struct({
-  requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
-  sessionDescription: Schema.optional(
-    Schema.NullOr(
+export const CloudflareSFUCloseTracksAPIResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+    sessionDescription: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String,
+          type: Schema.String,
+        }),
+      ),
+    ),
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          mid: Schema.String,
+          publication_id: Schema.String,
+          source: Schema.String,
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUCloseTracksAPIResponse = typeof CloudflareSFUCloseTracksAPIResponseSchema.Type;
+
+export const CloudflareSFUCloseTracksRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    connection_id: Schema.String.check(Schema.isMinLength(1)),
+    force: Schema.Boolean,
+    receive_only: Schema.optional(Schema.Boolean),
+    session_description: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String.check(Schema.isMinLength(1)),
+          type: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    tracks: Schema.Array(
       Schema.Struct({
-        sdp: Schema.String,
-        type: Schema.String,
+        mid: Schema.String.check(Schema.isMinLength(1)),
+        publication_id: Schema.String.check(Schema.isMinLength(1)),
+        source: Schema.String.check(Schema.isMinLength(1)),
       }),
     ),
-  ),
-  tracks: Schema.optional(
-    Schema.Array(
+  }))();
+export type CloudflareSFUCloseTracksRequest = typeof CloudflareSFUCloseTracksRequestSchema.Type;
+
+export const CloudflareSFUPublicationsResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    incarnation: Schema.Number,
+    publications: Schema.Array(
       Schema.Struct({
-        mid: Schema.String,
+        participant_id: ParticipantIdSchema,
         publication_id: Schema.String,
         source: Schema.String,
       }),
     ),
-  ),
-});
-export type CloudflareSFUCloseTracksAPIResponse = typeof CloudflareSFUCloseTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUCloseTracksRequestSchema = Schema.Struct({
-  connection_id: Schema.String.check(Schema.isMinLength(1)),
-  force: Schema.Boolean,
-  receive_only: Schema.optional(Schema.Boolean),
-  session_description: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        sdp: Schema.String.check(Schema.isMinLength(1)),
-        type: Schema.String.check(Schema.isMinLength(1)),
-      }),
-    ),
-  ),
-  tracks: Schema.Array(
-    Schema.Struct({
-      mid: Schema.String.check(Schema.isMinLength(1)),
-      publication_id: Schema.String.check(Schema.isMinLength(1)),
-      source: Schema.String.check(Schema.isMinLength(1)),
-    }),
-  ),
-});
-export type CloudflareSFUCloseTracksRequest = typeof CloudflareSFUCloseTracksRequestSchema.Type;
-
-export const CloudflareSFUPublicationsResponseSchema = Schema.Struct({
-  incarnation: Schema.Number,
-  publications: Schema.Array(
-    Schema.Struct({
-      participant_id: ParticipantIdSchema,
-      publication_id: Schema.String,
-      source: Schema.String,
-    }),
-  ),
-  sequence: Schema.Number,
-});
+    sequence: Schema.Number,
+  }))();
 export type CloudflareSFUPublicationsResponse = typeof CloudflareSFUPublicationsResponseSchema.Type;
 
-export const CloudflareSFURenegotiateRequestSchema = Schema.Struct({
-  connection_id: Schema.String.check(Schema.isMinLength(1)),
-  session_description: Schema.Struct({
-    sdp: Schema.String.check(Schema.isMinLength(1)),
-    type: Schema.String.check(Schema.isMinLength(1)),
-  }),
-});
+export const CloudflareSFURenegotiateRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    connection_id: Schema.String.check(Schema.isMinLength(1)),
+    session_description: Schema.Struct({
+      sdp: Schema.String.check(Schema.isMinLength(1)),
+      type: Schema.String.check(Schema.isMinLength(1)),
+    }),
+  }))();
 export type CloudflareSFURenegotiateRequest = typeof CloudflareSFURenegotiateRequestSchema.Type;
 
-export const CloudflareSFURenegotiateResponseSchema = Schema.Struct({
-  accepted: Schema.Boolean,
-});
+export const CloudflareSFURenegotiateResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    accepted: Schema.Boolean,
+  }))();
 export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
 
-export const CloudflareSFUUpdateTracksAPIResponseSchema = Schema.Struct({
-  requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
-  sessionDescription: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        sdp: Schema.String,
-        type: Schema.String,
-      }),
+export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+    sessionDescription: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String,
+          type: Schema.String,
+        }),
+      ),
     ),
-  ),
-  trackErrors: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        code: Schema.String,
-        connectionId: Schema.String,
-        trackName: Schema.String,
-      }),
+    trackErrors: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          code: Schema.String,
+          connectionId: Schema.String,
+          trackName: Schema.String,
+        }),
+      ),
     ),
-  ),
-  tracks: Schema.optional(
-    Schema.Array(
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          location: Schema.String,
+          mid: Schema.optional(Schema.String),
+          publication_id: Schema.optional(Schema.String),
+          sessionId: Schema.optional(Schema.String),
+          simulcast: Schema.optional(
+            Schema.NullOr(
+              Schema.Struct({
+                preferredRid: Schema.String,
+                priorityOrdering: Schema.String,
+                ridNotAvailable: Schema.String,
+              }),
+            ),
+          ),
+          source: Schema.optional(Schema.String),
+          trackName: Schema.String,
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUUpdateTracksAPIResponse = typeof CloudflareSFUUpdateTracksAPIResponseSchema.Type;
+
+export const CloudflareSFUTracksAPIResponseSchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksAPIResponseSchema)();
+export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIResponseSchema.Type;
+
+export const CloudflareSFUTracksRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    connection_id: Schema.String.check(Schema.isMinLength(1)),
+    session_description: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String.check(Schema.isMinLength(1)),
+          type: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    tracks: Schema.Array(
       Schema.Struct({
-        location: Schema.String,
-        mid: Schema.optional(Schema.String),
-        publication_id: Schema.optional(Schema.String),
-        sessionId: Schema.optional(Schema.String),
+        location: Schema.String.check(Schema.isMinLength(1)),
+        mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
         simulcast: Schema.optional(
           Schema.NullOr(
             Schema.Struct({
-              preferredRid: Schema.String,
-              priorityOrdering: Schema.String,
-              ridNotAvailable: Schema.String,
+              preferredRid: Schema.String.check(Schema.isMinLength(1)),
+              priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
+              ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
             }),
           ),
         ),
-        source: Schema.optional(Schema.String),
-        trackName: Schema.String,
+        source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        trackName: Schema.String.check(Schema.isMinLength(1)),
       }),
     ),
-  ),
-});
-export type CloudflareSFUUpdateTracksAPIResponse = typeof CloudflareSFUUpdateTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUTracksAPIResponseSchema = CloudflareSFUUpdateTracksAPIResponseSchema;
-export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIResponseSchema.Type;
-
-export const CloudflareSFUTracksRequestSchema = Schema.Struct({
-  connection_id: Schema.String.check(Schema.isMinLength(1)),
-  session_description: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        sdp: Schema.String.check(Schema.isMinLength(1)),
-        type: Schema.String.check(Schema.isMinLength(1)),
-      }),
-    ),
-  ),
-  tracks: Schema.Array(
-    Schema.Struct({
-      location: Schema.String.check(Schema.isMinLength(1)),
-      mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      simulcast: Schema.optional(
-        Schema.NullOr(
-          Schema.Struct({
-            preferredRid: Schema.String.check(Schema.isMinLength(1)),
-            priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
-            ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
-          }),
-        ),
-      ),
-      source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      trackName: Schema.String.check(Schema.isMinLength(1)),
-    }),
-  ),
-});
+  }))();
 export type CloudflareSFUTracksRequest = typeof CloudflareSFUTracksRequestSchema.Type;
 
-export const CloudflareSFUUpdateTracksRequestSchema = Schema.Struct({
-  connection_id: Schema.String.check(Schema.isMinLength(1)),
-  tracks: Schema.Array(
-    Schema.Struct({
-      location: Schema.String.check(Schema.isMinLength(1)),
-      mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      simulcast: Schema.optional(
-        Schema.NullOr(
-          Schema.Struct({
-            preferredRid: Schema.String.check(Schema.isMinLength(1)),
-            priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
-            ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
-          }),
+export const CloudflareSFUUpdateTracksRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    connection_id: Schema.String.check(Schema.isMinLength(1)),
+    tracks: Schema.Array(
+      Schema.Struct({
+        location: Schema.String.check(Schema.isMinLength(1)),
+        mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        simulcast: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              preferredRid: Schema.String.check(Schema.isMinLength(1)),
+              priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
+              ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
+            }),
+          ),
         ),
-      ),
-      source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-      trackName: Schema.String.check(Schema.isMinLength(1)),
-    }),
-  ),
-});
+        source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        trackName: Schema.String.check(Schema.isMinLength(1)),
+      }),
+    ),
+  }))();
 export type CloudflareSFUUpdateTracksRequest = typeof CloudflareSFUUpdateTracksRequestSchema.Type;
 
-export const ConnectionReportRequestSchema = Schema.Struct({
-  events: Schema.Array(
-    Schema.Struct({
-      attempt: Schema.optional(Schema.NullOr(Schema.Number)),
-      close_code: Schema.optional(Schema.NullOr(Schema.Number)),
-      code: Schema.optional(
-        Schema.Literals([
-          "invalid_state",
-          "invalid_access",
-          "access_unavailable",
-          "permission_denied",
-          "device_not_found",
-          "device_busy",
-          "device_constraint_invalid",
-          "media_capture_failed",
-          "sync_start_failed",
-          "state_digest_recovery_failed",
-          "sync_hello_timeout",
-          "media_start_failed",
-          "join_cleanup_unconfirmed",
-          "sync_recovery_exhausted",
-          "media_recovery_exhausted",
-          "command_rejected",
-          "leave_unconfirmed",
-          "episode_ended",
-          "unsupported_environment",
-          "internal_error",
-          "collaboration_unavailable",
-          "chat_cursor_reset_required",
-          "rate_limited",
-          "invalid_payload",
+export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    events: Schema.Array(
+      Schema.Struct({
+        attempt: Schema.optional(Schema.NullOr(Schema.Number)),
+        close_code: Schema.optional(Schema.NullOr(Schema.Number)),
+        code: Schema.optional(
+          Schema.Literals([
+            "invalid_state",
+            "invalid_access",
+            "access_unavailable",
+            "permission_denied",
+            "device_not_found",
+            "device_busy",
+            "device_constraint_invalid",
+            "media_capture_failed",
+            "sync_start_failed",
+            "state_digest_recovery_failed",
+            "sync_hello_timeout",
+            "media_start_failed",
+            "join_cleanup_unconfirmed",
+            "sync_recovery_exhausted",
+            "media_recovery_exhausted",
+            "command_rejected",
+            "leave_unconfirmed",
+            "episode_ended",
+            "unsupported_environment",
+            "internal_error",
+            "collaboration_unavailable",
+            "chat_cursor_reset_required",
+            "rate_limited",
+            "invalid_payload",
+          ]),
+        ),
+        duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        elapsed_ms: Schema.Number,
+        event: Schema.Literals([
+          "space_join_span",
+          "state_changed",
+          "connection_failed",
+          "sync_connect_failed",
+          "sync_dial_timeout",
+          "access_refreshed",
+          "access_refresh_failed",
+          "recovery_attempt",
+          "recovery_succeeded",
+          "recovery_exhausted",
+          "cleanup_completed",
+          "cleanup_unconfirmed",
+          "sync_socket_open",
+          "sync_socket_close",
+          "sync_heartbeat_gap",
+          "media_state",
+          "media_http_error",
+          "media_projection_mismatch",
         ]),
-      ),
-      duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      elapsed_ms: Schema.Number,
-      event: Schema.Literals([
-        "space_join_span",
-        "state_changed",
-        "connection_failed",
-        "sync_connect_failed",
-        "sync_dial_timeout",
-        "access_refreshed",
-        "access_refresh_failed",
-        "recovery_attempt",
-        "recovery_succeeded",
-        "recovery_exhausted",
-        "cleanup_completed",
-        "cleanup_unconfirmed",
-        "sync_socket_open",
-        "sync_socket_close",
-        "sync_heartbeat_gap",
-        "media_state",
-        "media_http_error",
-        "media_projection_mismatch",
-      ]),
-      granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
-      granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
-      heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
-      http_status: Schema.optional(Schema.NullOr(Schema.Number)),
-      media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
-      media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"])),
-      outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
-      phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
-      projection_state: Schema.optional(Schema.Literals(["on", "off"])),
-      publication_state: Schema.optional(Schema.Literals(["on", "off"])),
-      source: Schema.optional(Schema.Literals(["microphone", "camera"])),
-      state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
-      step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
-    }),
-  ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"]),
-  version: Schema.Literal(1),
-});
+        granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
+        granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
+        heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        http_status: Schema.optional(Schema.NullOr(Schema.Number)),
+        media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
+        media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"])),
+        outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
+        phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
+        projection_state: Schema.optional(Schema.Literals(["on", "off"])),
+        publication_state: Schema.optional(Schema.Literals(["on", "off"])),
+        source: Schema.optional(Schema.Literals(["microphone", "camera"])),
+        state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
+        step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
+      }),
+    ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
+    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"]),
+    version: Schema.Literal(1),
+  }))();
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;
 
-export const CreateAPIKeyRequestSchema = Schema.Struct({
-  expires_at: DateTimeStringSchema,
-  name: Schema.String.check(Schema.isMinLength(1)),
-  scopes: Schema.Array(Schema.String),
-});
+export const CreateAPIKeyRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    name: Schema.String.check(Schema.isMinLength(1)),
+    scopes: Schema.Array(Schema.String),
+  }))();
 export type CreateAPIKeyRequest = typeof CreateAPIKeyRequestSchema.Type;
 
-export const CreateEpisodeRequestSchema = Schema.Struct({
-  metadata: Schema.optional(Schema.Unknown),
-  started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-});
+export const CreateEpisodeRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    metadata: Schema.optional(Schema.Unknown),
+    started_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  }))();
 export type CreateEpisodeRequest = typeof CreateEpisodeRequestSchema.Type;
 
-export const CreateMembershipRequestSchema = Schema.Struct({
-  role: Schema.Literals(["owner", "collaborator", "observer"]),
-  user_id: UserIdSchema,
-});
+export const CreateMembershipRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    role: Schema.Literals(["owner", "collaborator", "observer"]),
+    user_id: UserIdSchema,
+  }))();
 export type CreateMembershipRequest = typeof CreateMembershipRequestSchema.Type;
 
-export const CreatePublicSpaceRequestSchema = Schema.Struct({
-  display_name: Schema.String.check(Schema.isMinLength(1)),
-});
+export const CreatePublicSpaceRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    display_name: Schema.String.check(Schema.isMinLength(1)),
+  }))();
 export type CreatePublicSpaceRequest = typeof CreatePublicSpaceRequestSchema.Type;
 
-export const CreateRecordingDownloadURLRequestSchema = Schema.Struct({
-  download: Schema.optional(Schema.Boolean),
-  expires_in_seconds: Schema.Number,
-});
+export const CreateRecordingDownloadURLRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    download: Schema.optional(Schema.Boolean),
+    expires_in_seconds: Schema.Number,
+  }))();
 export type CreateRecordingDownloadURLRequest = typeof CreateRecordingDownloadURLRequestSchema.Type;
 
-export const CreateSpaceRequestSchema = Schema.Struct({
-  admission_policy: Schema.optional(Schema.Unknown),
-  default_episode_duration_seconds: Schema.Number,
-  linger_window_seconds: Schema.Number,
-  maximum_episode_duration_seconds: Schema.Number,
-  media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  metadata: Schema.optional(Schema.Unknown),
-  name: Schema.String.check(isCodePointLengthBetween(1, 120)),
-  recording_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  recurring_policy: Schema.optional(Schema.Unknown),
-  slug: Schema.String.check(Schema.isMinLength(1)),
-  transcription_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-});
+export const CreateSpaceRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    admission_policy: Schema.optional(Schema.Unknown),
+    default_episode_duration_seconds: Schema.Number,
+    linger_window_seconds: Schema.Number,
+    maximum_episode_duration_seconds: Schema.Number,
+    media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    metadata: Schema.optional(Schema.Unknown),
+    name: Schema.String.check(isCodePointLengthBetween(1, 120)),
+    recording_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    recurring_policy: Schema.optional(Schema.Unknown),
+    slug: Schema.String.check(Schema.isMinLength(1)),
+    transcript_language: Schema.optional(
+      Schema.NullOr(
+        Schema.Literals([
+          "auto",
+          "af",
+          "am",
+          "ar",
+          "as",
+          "az",
+          "ba",
+          "be",
+          "bg",
+          "bn",
+          "bo",
+          "br",
+          "bs",
+          "ca",
+          "cs",
+          "cy",
+          "da",
+          "de",
+          "el",
+          "en",
+          "es",
+          "et",
+          "eu",
+          "fa",
+          "fi",
+          "fo",
+          "fr",
+          "gl",
+          "gu",
+          "ha",
+          "haw",
+          "he",
+          "hi",
+          "hr",
+          "ht",
+          "hu",
+          "hy",
+          "id",
+          "is",
+          "it",
+          "ja",
+          "jw",
+          "ka",
+          "kk",
+          "km",
+          "kn",
+          "ko",
+          "la",
+          "lb",
+          "ln",
+          "lo",
+          "lt",
+          "lv",
+          "mg",
+          "mi",
+          "mk",
+          "ml",
+          "mn",
+          "mr",
+          "ms",
+          "mt",
+          "my",
+          "ne",
+          "nl",
+          "nn",
+          "no",
+          "oc",
+          "pa",
+          "pl",
+          "ps",
+          "pt",
+          "ro",
+          "ru",
+          "sa",
+          "sd",
+          "si",
+          "sk",
+          "sl",
+          "sn",
+          "so",
+          "sq",
+          "sr",
+          "su",
+          "sv",
+          "sw",
+          "ta",
+          "te",
+          "tg",
+          "th",
+          "tk",
+          "tl",
+          "tr",
+          "tt",
+          "uk",
+          "ur",
+          "uz",
+          "vi",
+          "yi",
+          "yo",
+          "yue",
+          "zh",
+        ]),
+      ),
+    ),
+    transcription_policy: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+  }))();
 export type CreateSpaceRequest = typeof CreateSpaceRequestSchema.Type;
 
-export const MediaPlaneProviderConfigSchema = Schema.StructWithRest(
-  Schema.Struct({
-    enabled: Schema.optional(Schema.Boolean),
-    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
-    provider: Schema.optional(Schema.String),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
+export const MediaPlaneProviderConfigSchema = /* @__PURE__ */ (() =>
+  Schema.StructWithRest(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean),
+      mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
+      provider: Schema.optional(Schema.String),
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ))();
 export type MediaPlaneProviderConfig = typeof MediaPlaneProviderConfigSchema.Type;
 
-export const StorageProviderConfigSchema = Schema.StructWithRest(
-  Schema.Struct({
-    access_key_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    bucket: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    enabled: Schema.optional(Schema.Boolean),
-    mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
-    prefix: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-    provider: Schema.optional(Schema.Literals(["cloudflare_r2", "aws_s3"])),
-    secret_access_key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
+export const StorageProviderConfigSchema = /* @__PURE__ */ (() =>
+  Schema.StructWithRest(
+    Schema.Struct({
+      access_key_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      bucket: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      enabled: Schema.optional(Schema.Boolean),
+      mode: Schema.optional(Schema.Literals(["chalk_managed", "tenant_managed"])),
+      prefix: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      provider: Schema.optional(Schema.Literals(["cloudflare_r2", "aws_s3"])),
+      secret_access_key: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ))();
 export type StorageProviderConfig = typeof StorageProviderConfigSchema.Type;
 
-export const URLStringSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)).pipe(Schema.brand("URLString"));
+export const URLStringSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)).pipe(Schema.brand("URLString")))();
 export type URLString = typeof URLStringSchema.Type;
 
-export const CreateTenantRequestSchema = Schema.Struct({
-  cors_allowed_origins: Schema.optional(
-    Schema.Array(
-      Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
-    ).check(Schema.isMaxLength(32)),
-  ),
-  default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  external_id: Schema.optional(Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512)))),
-  logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
-  name: Schema.String.check(Schema.isMinLength(1)),
-  storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
-  website: Schema.optional(Schema.NullOr(URLStringSchema)),
-});
+export const CreateTenantRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cors_allowed_origins: Schema.optional(
+      Schema.Array(
+        Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+      ).check(Schema.isMaxLength(32)),
+    ),
+    default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    external_id: Schema.optional(Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512)))),
+    logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
+    name: Schema.String.check(Schema.isMinLength(1)),
+    storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
+    website: Schema.optional(Schema.NullOr(URLStringSchema)),
+  }))();
 export type CreateTenantRequest = typeof CreateTenantRequestSchema.Type;
 
-export const CreateTranscriptDownloadURLRequestSchema = Schema.Struct({
-  expires_in_seconds: Schema.Number,
-});
+export const CreateTranscriptDownloadURLRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_in_seconds: Schema.Number,
+  }))();
 export type CreateTranscriptDownloadURLRequest = typeof CreateTranscriptDownloadURLRequestSchema.Type;
 
-export const CreateWebhookEndpointRequestSchema = Schema.Struct({
-  api_version: Schema.Number,
-  enabled: Schema.Boolean,
-  event_types: Schema.Array(
-    Schema.Literals([
-      "episode.ended",
-      "episode.started",
-      "participant.joined",
-      "participant.left",
-      "recording.started",
-      "recording.completed",
-      "recording.failed",
-      "transcript.started",
-      "transcript.completed",
-      "transcript.failed",
-      "space.archived",
-      "space.created",
-      "space.restored",
-      "space.updated",
-    ]),
-  ),
-  name: Schema.String.check(Schema.isMinLength(1)),
-  url: Schema.String.check(Schema.isMinLength(1)),
-});
+export const CreateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_version: Schema.Number,
+    enabled: Schema.Boolean,
+    event_types: Schema.Array(
+      Schema.Literals([
+        "episode.ended",
+        "episode.started",
+        "participant.joined",
+        "participant.left",
+        "recording.started",
+        "recording.completed",
+        "recording.failed",
+        "transcript.started",
+        "transcript.completed",
+        "transcript.failed",
+        "space.archived",
+        "space.created",
+        "space.restored",
+        "space.updated",
+      ]),
+    ),
+    name: Schema.String.check(Schema.isMinLength(1)),
+    url: Schema.String.check(Schema.isMinLength(1)),
+  }))();
 export type CreateWebhookEndpointRequest = typeof CreateWebhookEndpointRequestSchema.Type;
 
-export const EmailSchema = Schema.String.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)).pipe(Schema.brand("Email"));
+export const EmailSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)).pipe(Schema.brand("Email")))();
 export type Email = typeof EmailSchema.Type;
 
-export const EntranceInviteSchema = Schema.Struct({
-  space_invite_token: Schema.String.check(Schema.isMinLength(1)),
-});
+export const EntranceInviteSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_invite_token: Schema.String.check(Schema.isMinLength(1)),
+  }))();
 export type EntranceInvite = typeof EntranceInviteSchema.Type;
 
-export const EntrancePreparationSchema = Schema.Struct({
-  prepared: Schema.Boolean,
-});
+export const EntrancePreparationSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    prepared: Schema.Boolean,
+  }))();
 export type EntrancePreparation = typeof EntrancePreparationSchema.Type;
 
-export const EpisodeSchema = Schema.Struct({
-  config_snapshot: Schema.Unknown,
-  created_at: DateTimeStringSchema,
-  deadline_at: DateTimeStringSchema,
-  deadline_generation: Schema.Number,
-  end_reason: Schema.optional(Schema.NullOr(Schema.String)),
-  ended_at: Schema.optional(DateTimeStringSchema),
-  id: EpisodeIdSchema,
-  metadata: Schema.Unknown,
-  space_id: SpaceIdSchema,
-  started_at: DateTimeStringSchema,
-  status: Schema.Literals(["active", "ending", "ended"]),
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
+export const EpisodeSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    config_snapshot: Schema.Unknown,
+    created_at: DateTimeStringSchema,
+    deadline_at: DateTimeStringSchema,
+    deadline_generation: Schema.Number,
+    end_reason: Schema.optional(Schema.NullOr(Schema.String)),
+    ended_at: Schema.optional(DateTimeStringSchema),
+    id: EpisodeIdSchema,
+    metadata: Schema.Unknown,
+    space_id: SpaceIdSchema,
+    started_at: DateTimeStringSchema,
+    status: Schema.Literals(["active", "ending", "ended"]),
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+  }))();
 export type Episode = typeof EpisodeSchema.Type;
 
-export const EpisodeAttendanceSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participants: Schema.Array(
-    Schema.Struct({
-      display_name: Schema.String,
-      external_id: Schema.NullOr(Schema.String),
-      first_joined_at: DateTimeStringSchema,
-      identity_kind: Schema.Literals(["user", "agent", "guest"]),
-      last_left_at: Schema.NullOr(DateTimeStringSchema),
-      left_reason: Schema.NullOr(Schema.Literals(["left", "episode_ended"])),
-      participant_id: ParticipantIdSchema,
-    }),
-  ),
-});
+export const EpisodeAttendanceSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participants: Schema.Array(
+      Schema.Struct({
+        display_name: Schema.String,
+        external_id: Schema.NullOr(Schema.String),
+        first_joined_at: DateTimeStringSchema,
+        identity_kind: Schema.Literals(["user", "agent", "guest"]),
+        last_left_at: Schema.NullOr(DateTimeStringSchema),
+        left_reason: Schema.NullOr(Schema.Literals(["left", "episode_ended"])),
+        participant_id: ParticipantIdSchema,
+      }),
+    ),
+  }))();
 export type EpisodeAttendance = typeof EpisodeAttendanceSchema.Type;
 
-export const EpisodeEndSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  external_operation: Schema.Struct({
-    created_at: DateTimeStringSchema,
-    deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
-    id: UUIDSchema,
-    operation_name: Schema.String,
-    request_key: Schema.String,
+export const EpisodeEndSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    external_operation: Schema.Struct({
+      created_at: DateTimeStringSchema,
+      deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+      id: UUIDSchema,
+      operation_name: Schema.String,
+      request_key: Schema.String,
+      status: Schema.String,
+      target_participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+      target_participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
+    }),
     status: Schema.String,
-    target_participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
-    target_participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
-  }),
-  status: Schema.String,
-});
+  }))();
 export type EpisodeEnd = typeof EpisodeEndSchema.Type;
 
-export const EpisodeDeadlineSchema = EpisodeEndSchema;
+export const EpisodeDeadlineSchema = /* @__PURE__ */ (() => EpisodeEndSchema)();
 export type EpisodeDeadline = typeof EpisodeDeadlineSchema.Type;
 
-export const EpisodeListSchema = Schema.Struct({
-  episodes: Schema.Array(EpisodeSchema),
-  pagination: PaginationSchema,
-});
+export const EpisodeListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episodes: Schema.Array(EpisodeSchema),
+    pagination: PaginationSchema,
+  }))();
 export type EpisodeList = typeof EpisodeListSchema.Type;
 
-export const ErrorResponseSchema = Schema.Struct({
-  error: Schema.Struct({
-    code: Schema.String,
-    message: Schema.String,
-  }),
-});
+export const ErrorResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    error: Schema.Struct({
+      code: Schema.String,
+      message: Schema.String,
+    }),
+  }))();
 export type ErrorResponse = typeof ErrorResponseSchema.Type;
 
-export const InitiateChatAttachmentUploadRequestSchema = Schema.Struct({
-  byteLength: Schema.Number,
-  clientAttachmentId: Schema.String.check(Schema.isMinLength(1)),
-  fileName: Schema.String.check(Schema.isMinLength(1)),
-  mimeType: Schema.String.check(Schema.isMinLength(1)),
-  sha256: Schema.String.check(Schema.isMinLength(1)),
-});
+export const InitiateChatAttachmentUploadRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    byteLength: Schema.Number,
+    clientAttachmentId: Schema.String.check(Schema.isMinLength(1)),
+    fileName: Schema.String.check(Schema.isMinLength(1)),
+    mimeType: Schema.String.check(Schema.isMinLength(1)),
+    sha256: Schema.String.check(Schema.isMinLength(1)),
+  }))();
 export type InitiateChatAttachmentUploadRequest = typeof InitiateChatAttachmentUploadRequestSchema.Type;
 
-export const IntegrationActionIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId"));
+export const IntegrationActionIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationActionId")))();
 export type IntegrationActionId = typeof IntegrationActionIdSchema.Type;
 
-export const IntegrationServiceIdSchema = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationServiceId"));
+export const IntegrationServiceIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand("IntegrationServiceId")))();
 export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
 
-export const IssueAccessGrantRequestSchema = Schema.Struct({
-  current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  participant_generation: Schema.Number,
-  replace_media_connection: Schema.Boolean,
-});
+export const IssueAccessGrantRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    participant_generation: Schema.Number,
+    replace_media_connection: Schema.Boolean,
+  }))();
 export type IssueAccessGrantRequest = typeof IssueAccessGrantRequestSchema.Type;
 
-export const MembershipIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("MembershipId"));
+export const MembershipIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("MembershipId")))();
 export type MembershipId = typeof MembershipIdSchema.Type;
 
-export const MembershipSchema = Schema.Struct({
-  created_at: DateTimeStringSchema,
-  id: MembershipIdSchema,
-  role: Schema.Literals(["owner", "collaborator", "observer"]),
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-  user_email: Schema.String,
-  user_id: UserIdSchema,
-  user_name: Schema.String,
-});
+export const MembershipSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    created_at: DateTimeStringSchema,
+    id: MembershipIdSchema,
+    role: Schema.Literals(["owner", "collaborator", "observer"]),
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+    user_email: Schema.String,
+    user_id: UserIdSchema,
+    user_name: Schema.String,
+  }))();
 export type Membership = typeof MembershipSchema.Type;
 
-export const MembershipListSchema = Schema.Struct({
-  memberships: Schema.Array(MembershipSchema),
-  pagination: PaginationSchema,
-});
+export const MembershipListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    memberships: Schema.Array(MembershipSchema),
+    pagination: PaginationSchema,
+  }))();
 export type MembershipList = typeof MembershipListSchema.Type;
 
-export const ParticipantEpisodeStatusSchema = Schema.Struct({
-  status: Schema.Literals(["active", "ending", "ended"]),
-});
+export const ParticipantEpisodeStatusSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    status: Schema.Literals(["active", "ending", "ended"]),
+  }))();
 export type ParticipantEpisodeStatus = typeof ParticipantEpisodeStatusSchema.Type;
 
-export const ParticipantJoinCancellationSchema = Schema.Struct({
-  cancelled: Schema.Boolean,
-});
+export const ParticipantJoinCancellationSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cancelled: Schema.Boolean,
+  }))();
 export type ParticipantJoinCancellation = typeof ParticipantJoinCancellationSchema.Type;
 
-export const ParticipantLifecycleSchema = Schema.Struct({
-  access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
-  admission_request: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        expires_at: DateTimeStringSchema,
-        id: ParticipantIdSchema,
-        status: Schema.String,
-      }),
-    ),
-  ),
-  expires_at: Schema.optional(DateTimeStringSchema),
-  lifecycle_intent: Schema.Struct({
-    created_at: DateTimeStringSchema,
-    id: ParticipantIdSchema,
-    intent_name: Schema.String,
-    participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
-    participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
-    request_key: Schema.String,
-    status: Schema.String,
-  }),
-  media_plane: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        client_payload: Schema.Record(Schema.String, Schema.Unknown),
-        provider: Schema.String,
-      }),
-    ),
-  ),
-  participant: Schema.Struct({
-    capabilities: Schema.Array(Schema.String),
-    episode_id: EpisodeIdSchema,
-    generation: Schema.Number,
-    id: ParticipantIdSchema,
-    identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-    role: Schema.String,
-    space_id: SpaceIdSchema,
-    status: Schema.String,
-    tenant_id: TenantIdSchema,
-  }),
-  sync_token: Schema.optional(Schema.String),
-});
-export type ParticipantLifecycle = typeof ParticipantLifecycleSchema.Type;
-
-export const ParticipantRemovalSchema = Schema.Struct({
-  external_operation: Schema.Struct({
-    created_at: DateTimeStringSchema,
-    deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
-    id: UUIDSchema,
-    operation_name: Schema.String,
-    request_key: Schema.String,
-    status: Schema.String,
-    target_participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
-    target_participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
-  }),
-  participant: Schema.Struct({
-    capabilities: Schema.Array(Schema.String),
-    episode_id: EpisodeIdSchema,
-    generation: Schema.Number,
-    id: UUIDSchema,
-    identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
-    role: Schema.String,
-    space_id: SpaceIdSchema,
-    status: Schema.String,
-    tenant_id: TenantIdSchema,
-  }),
-});
-export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
-
-export const PrepareRecordingRequestSchema = Schema.Struct({
-  expected_revision: Schema.Number,
-  starts_at: DateTimeStringSchema,
-});
-export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
-
-export const ProblemReportAvailabilitySchema = Schema.Struct({
-  available: Schema.Boolean,
-});
-export type ProblemReportAvailability = typeof ProblemReportAvailabilitySchema.Type;
-
-export const ProblemReportRequestSchema = Schema.Struct({
-  description: Schema.String.check(isCodePointLengthBetween(1, 1000), Schema.isPattern(new RegExp("[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"))),
-  diagnostics: Schema.optional(Schema.String.check(isCodePointLengthBetween(0, 2000))),
-});
-export type ProblemReportRequest = typeof ProblemReportRequestSchema.Type;
-
-export const ProblemReportSentSchema = Schema.Struct({
-  sent: Schema.Boolean,
-});
-export type ProblemReportSent = typeof ProblemReportSentSchema.Type;
-
-export const PublicAdmissionRequestSchema = Schema.Struct({
-  decision_action: Schema.optional(Schema.String),
-  decision_state: Schema.String,
-  display_name: Schema.String,
-  expires_at: DateTimeStringSchema,
-  request_handle: Schema.String,
-  requested_at: DateTimeStringSchema,
-  state: Schema.String,
-});
-export type PublicAdmissionRequest = typeof PublicAdmissionRequestSchema.Type;
-
-export const PublicAdmissionRequestPageSchema = Schema.Struct({
-  requests: Schema.Array(PublicAdmissionRequestSchema),
-});
-export type PublicAdmissionRequestPage = typeof PublicAdmissionRequestPageSchema.Type;
-
-export const PublicSpaceArrivalSchema = Schema.Struct({
-  access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
-  arrival_handle: Schema.optional(Schema.String),
-  guest_credential: Schema.optional(Schema.String),
-  identity: Schema.optional(Schema.String),
-  retry_after: Schema.optional(Schema.Number),
-  space: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        admission_mode: Schema.String,
-        maximum_episode_duration_seconds: Schema.optional(Schema.Number),
-        name: Schema.String,
-        slug: Schema.String,
-      }),
-    ),
-  ),
-  state: Schema.String,
-});
-export type PublicSpaceArrival = typeof PublicSpaceArrivalSchema.Type;
-
-export const PublicSpaceCreatedSchema = Schema.Struct({
-  arrival: PublicSpaceArrivalSchema,
-  guest_credential: Schema.optional(Schema.String),
-  invite_link: Schema.String,
-  lifecycle_until: DateTimeStringSchema,
-  space: Schema.Struct({
-    admission_mode: Schema.String,
-    maximum_episode_duration_seconds: Schema.optional(Schema.Number),
-    name: Schema.String,
-    slug: Schema.String,
-  }),
-});
-export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
-
-export const RecordingExportSchema = Schema.Struct({
-  failure_code: Schema.optional(Schema.NullOr(Schema.String)),
-  failure_message: Schema.optional(Schema.NullOr(Schema.String)),
-  job_id: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))),
-  retryable: Schema.Boolean,
-  source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
-});
-export type RecordingExport = typeof RecordingExportSchema.Type;
-
-export const RecordingIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId"));
-export type RecordingId = typeof RecordingIdSchema.Type;
-
-export const RecordingSourceSchema = Schema.Struct({
-  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  status: Schema.Literals(["pending", "available", "failed", "expired"]),
-  stop_reason: Schema.optional(Schema.Literal("duration_limit")),
-});
-export type RecordingSource = typeof RecordingSourceSchema.Type;
-
-export const RecordingTranscriptionPreparationSchema = Schema.Struct({
-  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  failure_code: Schema.optional(Schema.String),
-  status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
-});
-export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;
-
-export const RecordingSchema = Schema.Struct({
-  created_at: DateTimeStringSchema,
-  episode_id: EpisodeIdSchema,
-  export: RecordingExportSchema,
-  id: RecordingIdSchema,
-  metadata: Schema.Unknown,
-  source: RecordingSourceSchema,
-  space_id: SpaceIdSchema,
-  status: Schema.Literals(["pending", "processing", "completed", "failed"]),
-  storage_key: Schema.NullOr(Schema.String),
-  storage_provider: Schema.Literal("r2"),
-  tenant_id: TenantIdSchema,
-  transcription_policy: Schema.String,
-  transcription_preparation: RecordingTranscriptionPreparationSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type Recording = typeof RecordingSchema.Type;
-
-export const RecordingDownloadURLSchema = Schema.Struct({
-  expires_at: DateTimeStringSchema,
-  method: Schema.String,
-  signed_at: DateTimeStringSchema,
-  signed_headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
-  url: Schema.String,
-});
-export type RecordingDownloadURL = typeof RecordingDownloadURLSchema.Type;
-
-export const RecordingExportRequestAcceptedResponseSchema = Schema.Struct({
-  export: RecordingExportSchema,
-  recording: RecordingSchema,
-});
-export type RecordingExportRequestAcceptedResponse = typeof RecordingExportRequestAcceptedResponseSchema.Type;
-
-export const RecordingListSchema = Schema.Struct({
-  pagination: PaginationSchema,
-  recordings: Schema.Array(RecordingSchema),
-});
-export type RecordingList = typeof RecordingListSchema.Type;
-
-export const RecordingPreparationSchema = Schema.Struct({
-  capacity_available: Schema.Boolean,
-  expires_at: DateTimeStringSchema,
-  prepares_at: DateTimeStringSchema,
-  ready: Schema.Boolean,
-  revision: Schema.Number,
-  space_id: SpaceIdSchema,
-  starts_at: DateTimeStringSchema,
-  state: Schema.String,
-  updated_at: DateTimeStringSchema,
-});
-export type RecordingPreparation = typeof RecordingPreparationSchema.Type;
-
-export const RefreshSpacePublicInviteAccessRequestSchema = Schema.Struct({
-  media_proof: Schema.String.check(Schema.isMinLength(1)),
-  replace_media_connection: Schema.Boolean,
-});
-export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
-
-export const RemoveEpisodeParticipantRequestSchema = Schema.Struct({
-  participant_generation: Schema.Number,
-});
-export type RemoveEpisodeParticipantRequest = typeof RemoveEpisodeParticipantRequestSchema.Type;
-
-export const RequestRecordingExportRequestSchema = Schema.Struct({});
-export type RequestRecordingExportRequest = typeof RequestRecordingExportRequestSchema.Type;
-
-export const RequestTranscriptRequestSchema = Schema.Struct({
-  idempotency_key: Schema.String.check(Schema.isMinLength(1)),
-  language: Schema.optional(Schema.String),
-  languages: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
-});
-export type RequestTranscriptRequest = typeof RequestTranscriptRequestSchema.Type;
-
-export const RotateAPIKeyRequestSchema = Schema.Struct({
-  expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-});
-export type RotateAPIKeyRequest = typeof RotateAPIKeyRequestSchema.Type;
-
-export const RotateWebhookSecretRequestSchema = Schema.Struct({
-  revoke_previous_immediately: Schema.Boolean,
-});
-export type RotateWebhookSecretRequest = typeof RotateWebhookSecretRequestSchema.Type;
-
-export const RotateWebhookSecretResponseSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  previous_secret_expires_at: Schema.NullOr(DateTimeStringSchema),
-  revision: Schema.Number,
-  secret: Schema.String,
-});
-export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
-
-export const SetEpisodeDeadlineRequestSchema = Schema.Struct({
-  deadline_at: DateTimeStringSchema,
-});
-export type SetEpisodeDeadlineRequest = typeof SetEpisodeDeadlineRequestSchema.Type;
-
-export const SpaceSchema = Schema.Struct({
-  admission_policy: Schema.Unknown,
-  archived: Schema.Boolean,
-  archived_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  created_at: DateTimeStringSchema,
-  created_by_user_id: Schema.NullOr(UserIdSchema),
-  default_episode_duration_seconds: Schema.Number,
-  id: SpaceIdSchema,
-  linger_window_seconds: Schema.Number,
-  maximum_episode_duration_seconds: Schema.Number,
-  media_plane: Schema.String,
-  metadata: Schema.Unknown,
-  name: Schema.String,
-  recording_policy: Schema.String,
-  recurring_policy: Schema.Unknown,
-  roles: Schema.Array(
-    Schema.Struct({
-      capabilities: Schema.Array(Schema.String),
-      id: SpaceIdSchema,
-      name: Schema.String,
-    }),
-  ),
-  slug: Schema.String,
-  tenant_id: TenantIdSchema,
-  transcription_policy: Schema.String,
-  updated_at: DateTimeStringSchema,
-});
-export type Space = typeof SpaceSchema.Type;
-
-export const SpaceActivityListSchema = Schema.Struct({
-  spaces: Schema.Array(
-    Schema.Struct({
-      archived: Schema.Boolean,
-      latest_episode: Schema.NullOr(
+export const ParticipantLifecycleSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
+    admission_request: Schema.optional(
+      Schema.NullOr(
         Schema.Struct({
-          ended_at: Schema.NullOr(DateTimeStringSchema),
-          episode_id: EpisodeIdSchema,
-          started_at: DateTimeStringSchema,
+          expires_at: DateTimeStringSchema,
+          id: ParticipantIdSchema,
           status: Schema.String,
         }),
       ),
-      live_episode: Schema.NullOr(
-        Schema.Struct({
-          episode_id: EpisodeIdSchema,
-          participant_count: Schema.Number,
-          participants: Schema.Array(
-            Schema.Struct({
-              display_name: Schema.String,
-              participant_id: ParticipantIdSchema,
-            }),
-          ),
-        }),
-      ),
-      recent_participants: Schema.Array(
-        Schema.Struct({
-          display_name: Schema.String,
-          participant_id: ParticipantIdSchema,
-        }),
-      ),
-      space_id: SpaceIdSchema,
+    ),
+    expires_at: Schema.optional(DateTimeStringSchema),
+    lifecycle_intent: Schema.Struct({
+      created_at: DateTimeStringSchema,
+      id: ParticipantIdSchema,
+      intent_name: Schema.String,
+      participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+      participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
+      request_key: Schema.String,
+      status: Schema.String,
     }),
-  ),
-});
-export type SpaceActivityList = typeof SpaceActivityListSchema.Type;
-
-export const SpaceListSchema = Schema.Struct({
-  pagination: PaginationSchema,
-  spaces: Schema.Array(SpaceSchema),
-});
-export type SpaceList = typeof SpaceListSchema.Type;
-
-export const SpaceLiveEpisodeListSchema = Schema.Struct({
-  spaces: Schema.Array(
-    Schema.Struct({
-      live_episode: Schema.NullOr(
+    media_plane: Schema.optional(
+      Schema.NullOr(
         Schema.Struct({
-          episode_id: EpisodeIdSchema,
-          participant_count: Schema.Number,
-          participants: Schema.Array(
-            Schema.Struct({
-              display_name: Schema.String,
-              participant_id: ParticipantIdSchema,
-            }),
-          ),
+          client_payload: Schema.Record(Schema.String, Schema.Unknown),
+          provider: Schema.String,
         }),
       ),
+    ),
+    participant: Schema.Struct({
+      capabilities: Schema.Array(Schema.String),
+      episode_id: EpisodeIdSchema,
+      generation: Schema.Number,
+      id: ParticipantIdSchema,
+      identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+      role: Schema.String,
       space_id: SpaceIdSchema,
+      status: Schema.String,
+      tenant_id: TenantIdSchema,
     }),
-  ),
-});
-export type SpaceLiveEpisodeList = typeof SpaceLiveEpisodeListSchema.Type;
+    sync_token: Schema.optional(Schema.String),
+  }))();
+export type ParticipantLifecycle = typeof ParticipantLifecycleSchema.Type;
 
-export const SpacePublicInviteSchema = Schema.Struct({
-  admission_mode: Schema.String,
-  canonical_url: URLStringSchema,
-  created_at: DateTimeStringSchema,
-  disabled_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  enabled: Schema.Boolean,
-  generation: Schema.Number,
-  public_role: Schema.String,
-  rotated_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  schema_version: Schema.String,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type SpacePublicInvite = typeof SpacePublicInviteSchema.Type;
+export const ParticipantRemovalSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    external_operation: Schema.Struct({
+      created_at: DateTimeStringSchema,
+      deadline_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+      id: UUIDSchema,
+      operation_name: Schema.String,
+      request_key: Schema.String,
+      status: Schema.String,
+      target_participant_generation: Schema.optional(Schema.NullOr(Schema.Number)),
+      target_participant_id: Schema.optional(Schema.NullOr(ParticipantIdSchema)),
+    }),
+    participant: Schema.Struct({
+      capabilities: Schema.Array(Schema.String),
+      episode_id: EpisodeIdSchema,
+      generation: Schema.Number,
+      id: UUIDSchema,
+      identity_id: Schema.optional(Schema.NullOr(UUIDSchema)),
+      role: Schema.String,
+      space_id: SpaceIdSchema,
+      status: Schema.String,
+      tenant_id: TenantIdSchema,
+    }),
+  }))();
+export type ParticipantRemoval = typeof ParticipantRemovalSchema.Type;
 
-export const SpacePublicInviteArrivalRequestSchema = Schema.Struct({
-  display_name: Schema.String.check(Schema.isMinLength(1)),
-  space_invite_token: Schema.String.check(Schema.isMinLength(1)),
-});
-export type SpacePublicInviteArrivalRequest = typeof SpacePublicInviteArrivalRequestSchema.Type;
+export const PrepareRecordingRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expected_revision: Schema.Number,
+    starts_at: DateTimeStringSchema,
+  }))();
+export type PrepareRecordingRequest = typeof PrepareRecordingRequestSchema.Type;
 
-export const SyncTokenSchema = Schema.Struct({
-  expires_at: DateTimeStringSchema,
-  sync_token: Schema.String,
-});
-export type SyncToken = typeof SyncTokenSchema.Type;
+export const ProblemReportAvailabilitySchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    available: Schema.Boolean,
+  }))();
+export type ProblemReportAvailability = typeof ProblemReportAvailabilitySchema.Type;
 
-export const TenantSchema = Schema.Struct({
-  cors_allowed_origins: Schema.Array(
-    Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
-  ).check(Schema.isMaxLength(32)),
-  created_at: DateTimeStringSchema,
-  default_media_plane: Schema.NullOr(Schema.String),
-  external_id: Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512))),
-  id: TenantIdSchema,
-  logo_key: Schema.NullOr(Schema.String),
-  media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
-  name: Schema.String,
-  provider_policy_version: Schema.String,
-  recording_render_mode: Schema.Literals(["on_demand", "automatic"]),
-  recording_retention_seconds: Schema.Number,
-  storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
-  transcript_retention_seconds: Schema.Number,
-  transcription_ceiling: Schema.String,
-  transcription_default_mode: Schema.String,
-  transcription_source_window_seconds: Schema.Number,
-  updated_at: DateTimeStringSchema,
-  website: Schema.NullOr(URLStringSchema),
-});
-export type Tenant = typeof TenantSchema.Type;
+export const ProblemReportRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    description: Schema.String.check(isCodePointLengthBetween(1, 1000), Schema.isPattern(new RegExp("[^\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"))),
+    diagnostics: Schema.optional(Schema.String.check(isCodePointLengthBetween(0, 2000))),
+  }))();
+export type ProblemReportRequest = typeof ProblemReportRequestSchema.Type;
 
-export const TenantListSchema = Schema.Struct({
-  pagination: PaginationSchema,
-  tenants: Schema.Array(TenantSchema),
-});
-export type TenantList = typeof TenantListSchema.Type;
+export const ProblemReportSentSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    sent: Schema.Boolean,
+  }))();
+export type ProblemReportSent = typeof ProblemReportSentSchema.Type;
 
-export const TenantMediaLimitCodeSchema = Schema.Literals(["tenant.recording_limit_reached", "tenant.live_episode_limit_reached"]);
-export type TenantMediaLimitCode = typeof TenantMediaLimitCodeSchema.Type;
+export const PublicAdmissionRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    decision_action: Schema.optional(Schema.String),
+    decision_state: Schema.String,
+    display_name: Schema.String,
+    expires_at: DateTimeStringSchema,
+    request_handle: Schema.String,
+    requested_at: DateTimeStringSchema,
+    state: Schema.String,
+  }))();
+export type PublicAdmissionRequest = typeof PublicAdmissionRequestSchema.Type;
 
-export const TranscriptIdSchema = Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId"));
-export type TranscriptId = typeof TranscriptIdSchema.Type;
+export const PublicAdmissionRequestPageSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    requests: Schema.Array(PublicAdmissionRequestSchema),
+  }))();
+export type PublicAdmissionRequestPage = typeof PublicAdmissionRequestPageSchema.Type;
 
-export const TranscriptSchema = Schema.Struct({
-  artifact_content_type: Schema.optional(Schema.NullOr(Schema.String)),
-  artifact_size: Schema.optional(Schema.NullOr(Schema.Number)),
-  completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  created_at: DateTimeStringSchema,
-  deleted_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  episode_id: EpisodeIdSchema,
-  generation: Schema.Number,
-  id: TranscriptIdSchema,
-  languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))),
-  model: Schema.optional(Schema.String),
-  provider: Schema.optional(Schema.String),
-  recording_id: RecordingIdSchema,
-  source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
-  space_id: SpaceIdSchema,
-  status: Schema.Literals(["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "pending", "processing", "completed", "failed"]),
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-});
-export type Transcript = typeof TranscriptSchema.Type;
+export const PublicSpaceArrivalSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    access: Schema.optional(Schema.NullOr(AccessGrantSchema)),
+    arrival_handle: Schema.optional(Schema.String),
+    guest_credential: Schema.optional(Schema.String),
+    identity: Schema.optional(Schema.String),
+    retry_after: Schema.optional(Schema.Number),
+    space: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          admission_mode: Schema.String,
+          maximum_episode_duration_seconds: Schema.optional(Schema.Number),
+          name: Schema.String,
+          slug: Schema.String,
+        }),
+      ),
+    ),
+    state: Schema.String,
+  }))();
+export type PublicSpaceArrival = typeof PublicSpaceArrivalSchema.Type;
 
-export const TranscriptDocumentSchema = Schema.Struct({
-  cues: Schema.Array(
-    Schema.Struct({
-      end_ms: Schema.Number,
-      identity: Schema.optional(
-        Schema.NullOr(
+export const PublicSpaceCreatedSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    arrival: PublicSpaceArrivalSchema,
+    guest_credential: Schema.optional(Schema.String),
+    invite_link: Schema.String,
+    lifecycle_until: DateTimeStringSchema,
+    space: Schema.Struct({
+      admission_mode: Schema.String,
+      maximum_episode_duration_seconds: Schema.optional(Schema.Number),
+      name: Schema.String,
+      slug: Schema.String,
+    }),
+  }))();
+export type PublicSpaceCreated = typeof PublicSpaceCreatedSchema.Type;
+
+export const RecordingExportSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    failure_code: Schema.optional(Schema.NullOr(Schema.String)),
+    failure_message: Schema.optional(Schema.NullOr(Schema.String)),
+    job_id: Schema.optional(Schema.String.check(Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i))),
+    retryable: Schema.Boolean,
+    source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    status: Schema.Literals(["none", "pending", "ready", "failed", "unavailable"]),
+  }))();
+export type RecordingExport = typeof RecordingExportSchema.Type;
+
+export const RecordingIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("RecordingId")))();
+export type RecordingId = typeof RecordingIdSchema.Type;
+
+export const RecordingSourceSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    status: Schema.Literals(["pending", "available", "failed", "expired"]),
+    stop_reason: Schema.optional(Schema.Literal("duration_limit")),
+  }))();
+export type RecordingSource = typeof RecordingSourceSchema.Type;
+
+export const RecordingTranscriptionPreparationSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    failure_code: Schema.optional(Schema.String),
+    status: Schema.Literals(["none", "pending", "ready", "failed", "expired"]),
+  }))();
+export type RecordingTranscriptionPreparation = typeof RecordingTranscriptionPreparationSchema.Type;
+
+export const RecordingSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    created_at: DateTimeStringSchema,
+    episode_id: EpisodeIdSchema,
+    export: RecordingExportSchema,
+    id: RecordingIdSchema,
+    metadata: Schema.Unknown,
+    source: RecordingSourceSchema,
+    space_id: SpaceIdSchema,
+    status: Schema.Literals(["pending", "processing", "completed", "failed"]),
+    storage_key: Schema.NullOr(Schema.String),
+    storage_provider: Schema.Literal("r2"),
+    tenant_id: TenantIdSchema,
+    transcription_policy: Schema.String,
+    transcription_preparation: RecordingTranscriptionPreparationSchema,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type Recording = typeof RecordingSchema.Type;
+
+export const RecordingDownloadURLSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    method: Schema.String,
+    signed_at: DateTimeStringSchema,
+    signed_headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+    url: Schema.String,
+  }))();
+export type RecordingDownloadURL = typeof RecordingDownloadURLSchema.Type;
+
+export const RecordingExportRequestAcceptedResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    export: RecordingExportSchema,
+    recording: RecordingSchema,
+  }))();
+export type RecordingExportRequestAcceptedResponse = typeof RecordingExportRequestAcceptedResponseSchema.Type;
+
+export const RecordingListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    pagination: PaginationSchema,
+    recordings: Schema.Array(RecordingSchema),
+  }))();
+export type RecordingList = typeof RecordingListSchema.Type;
+
+export const RecordingPreparationSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    capacity_available: Schema.Boolean,
+    expires_at: DateTimeStringSchema,
+    prepares_at: DateTimeStringSchema,
+    ready: Schema.Boolean,
+    revision: Schema.Number,
+    space_id: SpaceIdSchema,
+    starts_at: DateTimeStringSchema,
+    state: Schema.String,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type RecordingPreparation = typeof RecordingPreparationSchema.Type;
+
+export const RefreshSpacePublicInviteAccessRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    media_proof: Schema.String.check(Schema.isMinLength(1)),
+    replace_media_connection: Schema.Boolean,
+  }))();
+export type RefreshSpacePublicInviteAccessRequest = typeof RefreshSpacePublicInviteAccessRequestSchema.Type;
+
+export const RemoveEpisodeParticipantRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    participant_generation: Schema.Number,
+  }))();
+export type RemoveEpisodeParticipantRequest = typeof RemoveEpisodeParticipantRequestSchema.Type;
+
+export const RequestRecordingExportRequestSchema = /* @__PURE__ */ (() => Schema.Struct({}))();
+export type RequestRecordingExportRequest = typeof RequestRecordingExportRequestSchema.Type;
+
+export const RequestTranscriptRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    idempotency_key: Schema.String.check(Schema.isMinLength(1)),
+    language: Schema.optional(Schema.String),
+    languages: Schema.optional(Schema.Array(Schema.String.check(Schema.isMinLength(1)))),
+  }))();
+export type RequestTranscriptRequest = typeof RequestTranscriptRequestSchema.Type;
+
+export const RotateAPIKeyRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+  }))();
+export type RotateAPIKeyRequest = typeof RotateAPIKeyRequestSchema.Type;
+
+export const RotateWebhookSecretRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    revoke_previous_immediately: Schema.Boolean,
+  }))();
+export type RotateWebhookSecretRequest = typeof RotateWebhookSecretRequestSchema.Type;
+
+export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    previous_secret_expires_at: Schema.NullOr(DateTimeStringSchema),
+    revision: Schema.Number,
+    secret: Schema.String,
+  }))();
+export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
+
+export const SetEpisodeDeadlineRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    deadline_at: DateTimeStringSchema,
+  }))();
+export type SetEpisodeDeadlineRequest = typeof SetEpisodeDeadlineRequestSchema.Type;
+
+export const SpaceSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    admission_policy: Schema.Unknown,
+    archived: Schema.Boolean,
+    archived_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    created_at: DateTimeStringSchema,
+    created_by_user_id: Schema.NullOr(UserIdSchema),
+    default_episode_duration_seconds: Schema.Number,
+    id: SpaceIdSchema,
+    linger_window_seconds: Schema.Number,
+    maximum_episode_duration_seconds: Schema.Number,
+    media_plane: Schema.String,
+    metadata: Schema.Unknown,
+    name: Schema.String,
+    recording_policy: Schema.String,
+    recurring_policy: Schema.Unknown,
+    roles: Schema.Array(
+      Schema.Struct({
+        capabilities: Schema.Array(Schema.String),
+        id: SpaceIdSchema,
+        name: Schema.String,
+      }),
+    ),
+    slug: Schema.String,
+    tenant_id: TenantIdSchema,
+    transcript_language: Schema.NullOr(
+      Schema.Literals([
+        "auto",
+        "af",
+        "am",
+        "ar",
+        "as",
+        "az",
+        "ba",
+        "be",
+        "bg",
+        "bn",
+        "bo",
+        "br",
+        "bs",
+        "ca",
+        "cs",
+        "cy",
+        "da",
+        "de",
+        "el",
+        "en",
+        "es",
+        "et",
+        "eu",
+        "fa",
+        "fi",
+        "fo",
+        "fr",
+        "gl",
+        "gu",
+        "ha",
+        "haw",
+        "he",
+        "hi",
+        "hr",
+        "ht",
+        "hu",
+        "hy",
+        "id",
+        "is",
+        "it",
+        "ja",
+        "jw",
+        "ka",
+        "kk",
+        "km",
+        "kn",
+        "ko",
+        "la",
+        "lb",
+        "ln",
+        "lo",
+        "lt",
+        "lv",
+        "mg",
+        "mi",
+        "mk",
+        "ml",
+        "mn",
+        "mr",
+        "ms",
+        "mt",
+        "my",
+        "ne",
+        "nl",
+        "nn",
+        "no",
+        "oc",
+        "pa",
+        "pl",
+        "ps",
+        "pt",
+        "ro",
+        "ru",
+        "sa",
+        "sd",
+        "si",
+        "sk",
+        "sl",
+        "sn",
+        "so",
+        "sq",
+        "sr",
+        "su",
+        "sv",
+        "sw",
+        "ta",
+        "te",
+        "tg",
+        "th",
+        "tk",
+        "tl",
+        "tr",
+        "tt",
+        "uk",
+        "ur",
+        "uz",
+        "vi",
+        "yi",
+        "yo",
+        "yue",
+        "zh",
+      ]),
+    ),
+    transcription_policy: Schema.String,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type Space = typeof SpaceSchema.Type;
+
+export const SpaceActivityListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    spaces: Schema.Array(
+      Schema.Struct({
+        archived: Schema.Boolean,
+        latest_episode: Schema.NullOr(
           Schema.Struct({
-            display_name: Schema.optional(Schema.NullOr(Schema.String)),
-            participant_generation: Schema.Number,
-            participant_ref: Schema.String,
-            track_epoch: Schema.String,
-            track_id: Schema.String,
+            ended_at: Schema.NullOr(DateTimeStringSchema),
+            episode_id: EpisodeIdSchema,
+            started_at: DateTimeStringSchema,
+            status: Schema.String,
           }),
         ),
-      ),
-      overlap: Schema.Boolean,
-      start_ms: Schema.Number,
-      text: Schema.String,
-    }),
-  ),
-  episode_id: EpisodeIdSchema,
-  recording_id: RecordingIdSchema,
-  schema_version: Schema.String,
-  transcript_id: TranscriptIdSchema,
-});
-export type TranscriptDocument = typeof TranscriptDocumentSchema.Type;
+        live_episode: Schema.NullOr(
+          Schema.Struct({
+            episode_id: EpisodeIdSchema,
+            participant_count: Schema.Number,
+            participants: Schema.Array(
+              Schema.Struct({
+                display_name: Schema.String,
+                participant_id: ParticipantIdSchema,
+              }),
+            ),
+          }),
+        ),
+        recent_participants: Schema.Array(
+          Schema.Struct({
+            display_name: Schema.String,
+            participant_id: ParticipantIdSchema,
+          }),
+        ),
+        space_id: SpaceIdSchema,
+      }),
+    ),
+  }))();
+export type SpaceActivityList = typeof SpaceActivityListSchema.Type;
 
-export const TranscriptDownloadURLSchema = Schema.Struct({
-  expires_at: DateTimeStringSchema,
-  method: Schema.String,
-  signed_at: DateTimeStringSchema,
-  signed_headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
-  url: Schema.String,
-});
-export type TranscriptDownloadURL = typeof TranscriptDownloadURLSchema.Type;
+export const SpaceListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    pagination: PaginationSchema,
+    spaces: Schema.Array(SpaceSchema),
+  }))();
+export type SpaceList = typeof SpaceListSchema.Type;
 
-export const TranscriptListSchema = Schema.Struct({
-  pagination: PaginationSchema,
-  transcripts: Schema.Array(TranscriptSchema),
-});
-export type TranscriptList = typeof TranscriptListSchema.Type;
+export const SpaceLiveEpisodeListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    spaces: Schema.Array(
+      Schema.Struct({
+        live_episode: Schema.NullOr(
+          Schema.Struct({
+            episode_id: EpisodeIdSchema,
+            participant_count: Schema.Number,
+            participants: Schema.Array(
+              Schema.Struct({
+                display_name: Schema.String,
+                participant_id: ParticipantIdSchema,
+              }),
+            ),
+          }),
+        ),
+        space_id: SpaceIdSchema,
+      }),
+    ),
+  }))();
+export type SpaceLiveEpisodeList = typeof SpaceLiveEpisodeListSchema.Type;
 
-export const TranscriptRequestAcceptedResponseSchema = Schema.Struct({
-  job_id: UUIDSchema,
-  status: Schema.String,
-  transcript: TranscriptSchema,
-});
-export type TranscriptRequestAcceptedResponse = typeof TranscriptRequestAcceptedResponseSchema.Type;
+export const SpacePublicInviteSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    admission_mode: Schema.String,
+    canonical_url: URLStringSchema,
+    created_at: DateTimeStringSchema,
+    disabled_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    enabled: Schema.Boolean,
+    generation: Schema.Number,
+    public_role: Schema.String,
+    rotated_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    schema_version: Schema.String,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+  }))();
+export type SpacePublicInvite = typeof SpacePublicInviteSchema.Type;
 
-export const UpdateMembershipRequestSchema = Schema.Struct({
-  role: Schema.Literals(["owner", "collaborator", "observer"]),
-});
-export type UpdateMembershipRequest = typeof UpdateMembershipRequestSchema.Type;
+export const SpacePublicInviteArrivalRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    display_name: Schema.String.check(Schema.isMinLength(1)),
+    space_invite_token: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type SpacePublicInviteArrivalRequest = typeof SpacePublicInviteArrivalRequestSchema.Type;
 
-export const UpdateSpacePublicInviteRequestSchema = Schema.Struct({
-  enabled: Schema.Boolean,
-});
-export type UpdateSpacePublicInviteRequest = typeof UpdateSpacePublicInviteRequestSchema.Type;
+export const SyncTokenSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    sync_token: Schema.String,
+  }))();
+export type SyncToken = typeof SyncTokenSchema.Type;
 
-export const UpdateSpaceRequestSchema = Schema.Struct({
-  admission_policy: Schema.optional(Schema.Unknown),
-  default_episode_duration_seconds: Schema.optional(Schema.Number),
-  linger_window_seconds: Schema.optional(Schema.Number),
-  maximum_episode_duration_seconds: Schema.optional(Schema.Number),
-  media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  metadata: Schema.optional(Schema.Unknown),
-  name: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
-  recording_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  recurring_policy: Schema.optional(Schema.Unknown),
-  slug: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  transcription_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-});
-export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
-
-export const UpdateTenantRequestSchema = Schema.Struct({
-  cors_allowed_origins: Schema.optional(
-    Schema.Array(
+export const TenantSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cors_allowed_origins: Schema.Array(
       Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
     ).check(Schema.isMaxLength(32)),
-  ),
-  default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
-  media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
-  name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  provider_policy_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  recording_render_mode: Schema.optional(Schema.Literals(["on_demand", "automatic"])),
-  recording_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
-  storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
-  transcript_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
-  transcription_ceiling: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  transcription_default_mode: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  transcription_source_window_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
-  website: Schema.optional(Schema.NullOr(URLStringSchema)),
-});
+    created_at: DateTimeStringSchema,
+    default_media_plane: Schema.NullOr(Schema.String),
+    external_id: Schema.NullOr(Schema.String.check(isCodePointLengthBetween(1, 512))),
+    id: TenantIdSchema,
+    logo_key: Schema.NullOr(Schema.String),
+    media_plane_provider_config: Schema.NullOr(MediaPlaneProviderConfigSchema),
+    name: Schema.String,
+    provider_policy_version: Schema.String,
+    recording_render_mode: Schema.Literals(["on_demand", "automatic"]),
+    recording_retention_seconds: Schema.Number,
+    storage_provider_config: Schema.NullOr(StorageProviderConfigSchema),
+    transcript_language: Schema.Literals([
+      "auto",
+      "af",
+      "am",
+      "ar",
+      "as",
+      "az",
+      "ba",
+      "be",
+      "bg",
+      "bn",
+      "bo",
+      "br",
+      "bs",
+      "ca",
+      "cs",
+      "cy",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "et",
+      "eu",
+      "fa",
+      "fi",
+      "fo",
+      "fr",
+      "gl",
+      "gu",
+      "ha",
+      "haw",
+      "he",
+      "hi",
+      "hr",
+      "ht",
+      "hu",
+      "hy",
+      "id",
+      "is",
+      "it",
+      "ja",
+      "jw",
+      "ka",
+      "kk",
+      "km",
+      "kn",
+      "ko",
+      "la",
+      "lb",
+      "ln",
+      "lo",
+      "lt",
+      "lv",
+      "mg",
+      "mi",
+      "mk",
+      "ml",
+      "mn",
+      "mr",
+      "ms",
+      "mt",
+      "my",
+      "ne",
+      "nl",
+      "nn",
+      "no",
+      "oc",
+      "pa",
+      "pl",
+      "ps",
+      "pt",
+      "ro",
+      "ru",
+      "sa",
+      "sd",
+      "si",
+      "sk",
+      "sl",
+      "sn",
+      "so",
+      "sq",
+      "sr",
+      "su",
+      "sv",
+      "sw",
+      "ta",
+      "te",
+      "tg",
+      "th",
+      "tk",
+      "tl",
+      "tr",
+      "tt",
+      "uk",
+      "ur",
+      "uz",
+      "vi",
+      "yi",
+      "yo",
+      "yue",
+      "zh",
+    ]),
+    transcript_retention_seconds: Schema.Number,
+    transcription_ceiling: Schema.String,
+    transcription_default_mode: Schema.String,
+    transcription_source_window_seconds: Schema.Number,
+    updated_at: DateTimeStringSchema,
+    website: Schema.NullOr(URLStringSchema),
+  }))();
+export type Tenant = typeof TenantSchema.Type;
+
+export const TenantListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    pagination: PaginationSchema,
+    tenants: Schema.Array(TenantSchema),
+  }))();
+export type TenantList = typeof TenantListSchema.Type;
+
+export const TenantMediaLimitCodeSchema = /* @__PURE__ */ (() => Schema.Literals(["tenant.recording_limit_reached", "tenant.live_episode_limit_reached"]))();
+export type TenantMediaLimitCode = typeof TenantMediaLimitCodeSchema.Type;
+
+export const TranscriptIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("TranscriptId")))();
+export type TranscriptId = typeof TranscriptIdSchema.Type;
+
+export const TranscriptSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    artifact_content_type: Schema.optional(Schema.NullOr(Schema.String)),
+    artifact_size: Schema.optional(Schema.NullOr(Schema.Number)),
+    completed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    created_at: DateTimeStringSchema,
+    deleted_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    episode_id: EpisodeIdSchema,
+    generation: Schema.Number,
+    id: TranscriptIdSchema,
+    languages: Schema.Array(Schema.String.check(Schema.isMinLength(1))),
+    model: Schema.optional(Schema.String),
+    provider: Schema.optional(Schema.String),
+    recording_id: RecordingIdSchema,
+    source_expires_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    space_id: SpaceIdSchema,
+    status: Schema.Literals(["not_requested", "preparing", "transcribing", "verifying", "complete", "retryable_failure", "terminal_failure", "deleted", "pending", "processing", "completed", "failed"]),
+    tenant_id: TenantIdSchema,
+    transcript_language: Schema.Literals([
+      "auto",
+      "af",
+      "am",
+      "ar",
+      "as",
+      "az",
+      "ba",
+      "be",
+      "bg",
+      "bn",
+      "bo",
+      "br",
+      "bs",
+      "ca",
+      "cs",
+      "cy",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "et",
+      "eu",
+      "fa",
+      "fi",
+      "fo",
+      "fr",
+      "gl",
+      "gu",
+      "ha",
+      "haw",
+      "he",
+      "hi",
+      "hr",
+      "ht",
+      "hu",
+      "hy",
+      "id",
+      "is",
+      "it",
+      "ja",
+      "jw",
+      "ka",
+      "kk",
+      "km",
+      "kn",
+      "ko",
+      "la",
+      "lb",
+      "ln",
+      "lo",
+      "lt",
+      "lv",
+      "mg",
+      "mi",
+      "mk",
+      "ml",
+      "mn",
+      "mr",
+      "ms",
+      "mt",
+      "my",
+      "ne",
+      "nl",
+      "nn",
+      "no",
+      "oc",
+      "pa",
+      "pl",
+      "ps",
+      "pt",
+      "ro",
+      "ru",
+      "sa",
+      "sd",
+      "si",
+      "sk",
+      "sl",
+      "sn",
+      "so",
+      "sq",
+      "sr",
+      "su",
+      "sv",
+      "sw",
+      "ta",
+      "te",
+      "tg",
+      "th",
+      "tk",
+      "tl",
+      "tr",
+      "tt",
+      "uk",
+      "ur",
+      "uz",
+      "vi",
+      "yi",
+      "yo",
+      "yue",
+      "zh",
+    ]),
+    updated_at: DateTimeStringSchema,
+  }))();
+export type Transcript = typeof TranscriptSchema.Type;
+
+export const TranscriptDocumentSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cues: Schema.Array(
+      Schema.Struct({
+        end_ms: Schema.Number,
+        identity: Schema.optional(
+          Schema.NullOr(
+            Schema.Struct({
+              display_name: Schema.optional(Schema.NullOr(Schema.String)),
+              participant_generation: Schema.Number,
+              participant_ref: Schema.String,
+              track_epoch: Schema.String,
+              track_id: Schema.String,
+            }),
+          ),
+        ),
+        overlap: Schema.Boolean,
+        start_ms: Schema.Number,
+        text: Schema.String,
+      }),
+    ),
+    episode_id: EpisodeIdSchema,
+    recording_id: RecordingIdSchema,
+    schema_version: Schema.String,
+    transcript_id: TranscriptIdSchema,
+  }))();
+export type TranscriptDocument = typeof TranscriptDocumentSchema.Type;
+
+export const TranscriptDownloadURLSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    expires_at: DateTimeStringSchema,
+    method: Schema.String,
+    signed_at: DateTimeStringSchema,
+    signed_headers: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+    url: Schema.String,
+  }))();
+export type TranscriptDownloadURL = typeof TranscriptDownloadURLSchema.Type;
+
+export const TranscriptListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    pagination: PaginationSchema,
+    transcripts: Schema.Array(TranscriptSchema),
+  }))();
+export type TranscriptList = typeof TranscriptListSchema.Type;
+
+export const TranscriptRequestAcceptedResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    job_id: UUIDSchema,
+    status: Schema.String,
+    transcript: TranscriptSchema,
+  }))();
+export type TranscriptRequestAcceptedResponse = typeof TranscriptRequestAcceptedResponseSchema.Type;
+
+export const UpdateMembershipRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    role: Schema.Literals(["owner", "collaborator", "observer"]),
+  }))();
+export type UpdateMembershipRequest = typeof UpdateMembershipRequestSchema.Type;
+
+export const UpdateSpacePublicInviteRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    enabled: Schema.Boolean,
+  }))();
+export type UpdateSpacePublicInviteRequest = typeof UpdateSpacePublicInviteRequestSchema.Type;
+
+export const UpdateSpaceRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    admission_policy: Schema.optional(Schema.Unknown),
+    default_episode_duration_seconds: Schema.optional(Schema.Number),
+    linger_window_seconds: Schema.optional(Schema.Number),
+    maximum_episode_duration_seconds: Schema.optional(Schema.Number),
+    media_plane: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    metadata: Schema.optional(Schema.Unknown),
+    name: Schema.optional(Schema.String.check(isCodePointLengthBetween(1, 120))),
+    recording_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    recurring_policy: Schema.optional(Schema.Unknown),
+    slug: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    transcript_language: Schema.optional(
+      Schema.NullOr(
+        Schema.Literals([
+          "auto",
+          "af",
+          "am",
+          "ar",
+          "as",
+          "az",
+          "ba",
+          "be",
+          "bg",
+          "bn",
+          "bo",
+          "br",
+          "bs",
+          "ca",
+          "cs",
+          "cy",
+          "da",
+          "de",
+          "el",
+          "en",
+          "es",
+          "et",
+          "eu",
+          "fa",
+          "fi",
+          "fo",
+          "fr",
+          "gl",
+          "gu",
+          "ha",
+          "haw",
+          "he",
+          "hi",
+          "hr",
+          "ht",
+          "hu",
+          "hy",
+          "id",
+          "is",
+          "it",
+          "ja",
+          "jw",
+          "ka",
+          "kk",
+          "km",
+          "kn",
+          "ko",
+          "la",
+          "lb",
+          "ln",
+          "lo",
+          "lt",
+          "lv",
+          "mg",
+          "mi",
+          "mk",
+          "ml",
+          "mn",
+          "mr",
+          "ms",
+          "mt",
+          "my",
+          "ne",
+          "nl",
+          "nn",
+          "no",
+          "oc",
+          "pa",
+          "pl",
+          "ps",
+          "pt",
+          "ro",
+          "ru",
+          "sa",
+          "sd",
+          "si",
+          "sk",
+          "sl",
+          "sn",
+          "so",
+          "sq",
+          "sr",
+          "su",
+          "sv",
+          "sw",
+          "ta",
+          "te",
+          "tg",
+          "th",
+          "tk",
+          "tl",
+          "tr",
+          "tt",
+          "uk",
+          "ur",
+          "uz",
+          "vi",
+          "yi",
+          "yo",
+          "yue",
+          "zh",
+        ]),
+      ),
+    ),
+    transcription_policy: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  }))();
+export type UpdateSpaceRequest = typeof UpdateSpaceRequestSchema.Type;
+
+export const UpdateTenantRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cors_allowed_origins: Schema.optional(
+      Schema.Array(
+        Schema.String.check(Schema.isMaxLength(2048), Schema.isPattern(new RegExp("^(?:[Hh][Tt][Tt][Pp][Ss]://[^/?#@\\s]+|[Hh][Tt][Tt][Pp]://(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|127(?:\\.[0-9]+){0,3}|\\[[0-9A-Fa-f:.]+\\])(?::[0-9]+)?)$")), Schema.isPattern(/^[a-z][a-z0-9+.-]*:/i)),
+      ).check(Schema.isMaxLength(32)),
+    ),
+    default_media_plane: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    logo_key: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
+    media_plane_provider_config: Schema.optional(Schema.NullOr(MediaPlaneProviderConfigSchema)),
+    name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    provider_policy_version: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    recording_render_mode: Schema.optional(Schema.Literals(["on_demand", "automatic"])),
+    recording_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+    storage_provider_config: Schema.optional(Schema.NullOr(StorageProviderConfigSchema)),
+    transcript_language: Schema.optional(
+      Schema.Literals([
+        "auto",
+        "af",
+        "am",
+        "ar",
+        "as",
+        "az",
+        "ba",
+        "be",
+        "bg",
+        "bn",
+        "bo",
+        "br",
+        "bs",
+        "ca",
+        "cs",
+        "cy",
+        "da",
+        "de",
+        "el",
+        "en",
+        "es",
+        "et",
+        "eu",
+        "fa",
+        "fi",
+        "fo",
+        "fr",
+        "gl",
+        "gu",
+        "ha",
+        "haw",
+        "he",
+        "hi",
+        "hr",
+        "ht",
+        "hu",
+        "hy",
+        "id",
+        "is",
+        "it",
+        "ja",
+        "jw",
+        "ka",
+        "kk",
+        "km",
+        "kn",
+        "ko",
+        "la",
+        "lb",
+        "ln",
+        "lo",
+        "lt",
+        "lv",
+        "mg",
+        "mi",
+        "mk",
+        "ml",
+        "mn",
+        "mr",
+        "ms",
+        "mt",
+        "my",
+        "ne",
+        "nl",
+        "nn",
+        "no",
+        "oc",
+        "pa",
+        "pl",
+        "ps",
+        "pt",
+        "ro",
+        "ru",
+        "sa",
+        "sd",
+        "si",
+        "sk",
+        "sl",
+        "sn",
+        "so",
+        "sq",
+        "sr",
+        "su",
+        "sv",
+        "sw",
+        "ta",
+        "te",
+        "tg",
+        "th",
+        "tk",
+        "tl",
+        "tr",
+        "tt",
+        "uk",
+        "ur",
+        "uz",
+        "vi",
+        "yi",
+        "yo",
+        "yue",
+        "zh",
+      ]),
+    ),
+    transcript_retention_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+    transcription_ceiling: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    transcription_default_mode: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    transcription_source_window_seconds: Schema.optional(Schema.NullOr(Schema.Number)),
+    website: Schema.optional(Schema.NullOr(URLStringSchema)),
+  }))();
 export type UpdateTenantRequest = typeof UpdateTenantRequestSchema.Type;
 
-export const UpdateWebhookEndpointRequestSchema = Schema.Struct({
-  api_version: Schema.optional(Schema.Number),
-  enabled: Schema.optional(Schema.Boolean),
-  event_types: Schema.optional(
-    Schema.Array(
-      Schema.Literals([
-        "episode.ended",
-        "episode.started",
-        "participant.joined",
-        "participant.left",
-        "recording.started",
-        "recording.completed",
-        "recording.failed",
-        "transcript.started",
-        "transcript.completed",
-        "transcript.failed",
-        "space.archived",
-        "space.created",
-        "space.restored",
-        "space.updated",
-      ]),
+export const UpdateWebhookEndpointRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_version: Schema.optional(Schema.Number),
+    enabled: Schema.optional(Schema.Boolean),
+    event_types: Schema.optional(
+      Schema.Array(
+        Schema.Literals([
+          "episode.ended",
+          "episode.started",
+          "participant.joined",
+          "participant.left",
+          "recording.started",
+          "recording.completed",
+          "recording.failed",
+          "transcript.started",
+          "transcript.completed",
+          "transcript.failed",
+          "space.archived",
+          "space.created",
+          "space.restored",
+          "space.updated",
+        ]),
+      ),
     ),
-  ),
-  name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  url: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-});
+    name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    url: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  }))();
 export type UpdateWebhookEndpointRequest = typeof UpdateWebhookEndpointRequestSchema.Type;
 
-export const WebhookDeliveryCreatedSchema = Schema.Struct({
-  delivery_id: UUIDSchema,
-  endpoint_id: UUIDSchema,
-  endpoint_revision: Schema.Number,
-  event_id: UUIDSchema,
-  state: Schema.String,
-});
+export const WebhookDeliveryCreatedSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    delivery_id: UUIDSchema,
+    endpoint_id: UUIDSchema,
+    endpoint_revision: Schema.Number,
+    event_id: UUIDSchema,
+    state: Schema.String,
+  }))();
 export type WebhookDeliveryCreated = typeof WebhookDeliveryCreatedSchema.Type;
 
-export const WebhookDeliveryDetailSchema = Schema.Struct({
-  attempt_count: Schema.Number,
-  attempts: Schema.Array(
-    Schema.Struct({
-      error_code: Schema.NullOr(Schema.String),
-      finished_at: Schema.NullOr(DateTimeStringSchema),
-      http_status: Schema.NullOr(Schema.Number),
-      id: UUIDSchema,
-      latency_milliseconds: Schema.NullOr(Schema.Number),
-      number: Schema.Number,
-      outcome: Schema.String,
-      started_at: DateTimeStringSchema,
-    }),
-  ),
-  created_at: DateTimeStringSchema,
-  endpoint_id: UUIDSchema,
-  endpoint_revision: Schema.Number,
-  event: Schema.Unknown,
-  event_id: UUIDSchema,
-  event_type: Schema.String,
-  id: UUIDSchema,
-  next_attempt_at: Schema.NullOr(DateTimeStringSchema),
-  state: Schema.String,
-  terminal_at: Schema.NullOr(DateTimeStringSchema),
-  updated_at: DateTimeStringSchema,
-});
+export const WebhookDeliveryDetailSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attempt_count: Schema.Number,
+    attempts: Schema.Array(
+      Schema.Struct({
+        error_code: Schema.NullOr(Schema.String),
+        finished_at: Schema.NullOr(DateTimeStringSchema),
+        http_status: Schema.NullOr(Schema.Number),
+        id: UUIDSchema,
+        latency_milliseconds: Schema.NullOr(Schema.Number),
+        number: Schema.Number,
+        outcome: Schema.String,
+        started_at: DateTimeStringSchema,
+      }),
+    ),
+    created_at: DateTimeStringSchema,
+    endpoint_id: UUIDSchema,
+    endpoint_revision: Schema.Number,
+    event: Schema.Unknown,
+    event_id: UUIDSchema,
+    event_type: Schema.String,
+    id: UUIDSchema,
+    next_attempt_at: Schema.NullOr(DateTimeStringSchema),
+    state: Schema.String,
+    terminal_at: Schema.NullOr(DateTimeStringSchema),
+    updated_at: DateTimeStringSchema,
+  }))();
 export type WebhookDeliveryDetail = typeof WebhookDeliveryDetailSchema.Type;
 
-export const WebhookDeliveryListSchema = Schema.Struct({
-  deliveries: Schema.Array(
-    Schema.Struct({
-      attempt_count: Schema.Number,
-      created_at: DateTimeStringSchema,
-      endpoint_id: UUIDSchema,
-      endpoint_revision: Schema.Number,
-      event_id: UUIDSchema,
-      event_type: Schema.String,
-      id: UUIDSchema,
-      next_attempt_at: Schema.NullOr(DateTimeStringSchema),
-      state: Schema.String,
-      terminal_at: Schema.NullOr(DateTimeStringSchema),
-      updated_at: DateTimeStringSchema,
+export const WebhookDeliveryListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    deliveries: Schema.Array(
+      Schema.Struct({
+        attempt_count: Schema.Number,
+        created_at: DateTimeStringSchema,
+        endpoint_id: UUIDSchema,
+        endpoint_revision: Schema.Number,
+        event_id: UUIDSchema,
+        event_type: Schema.String,
+        id: UUIDSchema,
+        next_attempt_at: Schema.NullOr(DateTimeStringSchema),
+        state: Schema.String,
+        terminal_at: Schema.NullOr(DateTimeStringSchema),
+        updated_at: DateTimeStringSchema,
+      }),
+    ),
+    page: Schema.Struct({
+      next_cursor: Schema.NullOr(Schema.String),
     }),
-  ),
-  page: Schema.Struct({
-    next_cursor: Schema.NullOr(Schema.String),
-  }),
-});
+  }))();
 export type WebhookDeliveryList = typeof WebhookDeliveryListSchema.Type;
 
-export const WebhookEndpointSchema = Schema.Struct({
-  api_version: Schema.Number,
-  created_at: DateTimeStringSchema,
-  enabled: Schema.Boolean,
-  event_types: Schema.Array(
-    Schema.Literals([
-      "episode.ended",
-      "episode.started",
-      "participant.joined",
-      "participant.left",
-      "recording.started",
-      "recording.completed",
-      "recording.failed",
-      "transcript.started",
-      "transcript.completed",
-      "transcript.failed",
-      "space.archived",
-      "space.created",
-      "space.restored",
-      "space.updated",
-    ]),
-  ),
-  id: UUIDSchema,
-  name: Schema.String,
-  revision: Schema.Number,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-  url_redacted: Schema.String,
-});
-export type WebhookEndpoint = typeof WebhookEndpointSchema.Type;
-
-export const WebhookEndpointListSchema = Schema.Struct({
-  page: Schema.Struct({
-    next_cursor: Schema.NullOr(Schema.String),
-  }),
-  webhook_endpoints: Schema.Array(WebhookEndpointSchema),
-});
-export type WebhookEndpointList = typeof WebhookEndpointListSchema.Type;
-
-export const WebhookEndpointWithSecretSchema = Schema.Struct({
-  api_version: Schema.Number,
-  created_at: DateTimeStringSchema,
-  enabled: Schema.Boolean,
-  event_types: Schema.Array(
-    Schema.Literals([
-      "episode.ended",
-      "episode.started",
-      "participant.joined",
-      "participant.left",
-      "recording.started",
-      "recording.completed",
-      "recording.failed",
-      "transcript.started",
-      "transcript.completed",
-      "transcript.failed",
-      "space.archived",
-      "space.created",
-      "space.restored",
-      "space.updated",
-    ]),
-  ),
-  id: UUIDSchema,
-  name: Schema.String,
-  revision: Schema.Number,
-  secret: Schema.String,
-  tenant_id: TenantIdSchema,
-  updated_at: DateTimeStringSchema,
-  url_redacted: Schema.String,
-});
-export type WebhookEndpointWithSecret = typeof WebhookEndpointWithSecretSchema.Type;
-
-export const WhiteboardFileDownloadSchema = Schema.Struct({
-  downloadUrl: Schema.String,
-  expiresAt: Schema.String,
-});
-export type WhiteboardFileDownload = typeof WhiteboardFileDownloadSchema.Type;
-
-export const RateLimitLimitHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
-export type RateLimitLimitHeader = typeof RateLimitLimitHeaderSchema.Type;
-
-export const RateLimitRemainingHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
-export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Type;
-
-export const RetryAfterHeaderSchema = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1));
-export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
-
-export const AddCloudflareSFUTracksPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
-
-export const AddCloudflareSFUTracksQueryParamsSchema = Schema.Struct({
-  allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
-  replacement_cause: Schema.optional(
-    Schema.Literals([
-      "user_pause",
-      "moderation_pause",
-      "sync_recovery_loss",
-      "discovery_absent",
-      "capture_cleanup",
-      "consent_revoked",
-      "publish_failure",
-      "enable_failure",
-      "projection_mismatch",
-      "forced_pause",
-      "local_signaling_failure",
-      "remote_signaling_failure",
-      "dormant_connection",
-      "access_refresh",
-      "receive_stalled",
-    ]),
-  ),
-});
-export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
-
-export const AddCloudflareSFUTracksRequestBodySchema = CloudflareSFUTracksRequestSchema;
-export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
-
-export const AddCloudflareSFUTracksResponseSchema = CloudflareSFUTracksAPIResponseSchema;
-export type AddCloudflareSFUTracksResponse = typeof AddCloudflareSFUTracksResponseSchema.Type;
-
-export const AddCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type AddCloudflareSFUTracks429ResponseHeaders = typeof AddCloudflareSFUTracks429ResponseHeadersSchema.Type;
-
-export const AdmitEpisodeParticipantPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type AdmitEpisodeParticipantPathParams = typeof AdmitEpisodeParticipantPathParamsSchema.Type;
-
-export const AdmitEpisodeParticipantRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type AdmitEpisodeParticipantRequestHeaders = typeof AdmitEpisodeParticipantRequestHeadersSchema.Type;
-
-export const AdmitEpisodeParticipantRequestBodySchema = AdmitEpisodeParticipantRequestSchema;
-export type AdmitEpisodeParticipantRequestBody = typeof AdmitEpisodeParticipantRequestBodySchema.Type;
-
-export const AdmitEpisodeParticipantResponseSchema = ParticipantLifecycleSchema;
-export type AdmitEpisodeParticipantResponse = typeof AdmitEpisodeParticipantResponseSchema.Type;
-
-export const AdmitEpisodeParticipant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type AdmitEpisodeParticipant429ResponseHeaders = typeof AdmitEpisodeParticipant429ResponseHeadersSchema.Type;
-
-export const ApproveSpacePublicAdmissionRequestPathParamsSchema = Schema.Struct({
-  request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ApproveSpacePublicAdmissionRequestPathParams = typeof ApproveSpacePublicAdmissionRequestPathParamsSchema.Type;
-
-export const ApproveSpacePublicAdmissionRequestRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type ApproveSpacePublicAdmissionRequestRequestHeaders = typeof ApproveSpacePublicAdmissionRequestRequestHeadersSchema.Type;
-
-export const ApproveSpacePublicAdmissionRequestResponseSchema = PublicAdmissionRequestSchema;
-export type ApproveSpacePublicAdmissionRequestResponse = typeof ApproveSpacePublicAdmissionRequestResponseSchema.Type;
-
-export const ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ApproveSpacePublicAdmissionRequest429ResponseHeaders = typeof ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
-
-export const ArchiveSpacePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ArchiveSpacePathParams = typeof ArchiveSpacePathParamsSchema.Type;
-
-export const ArchiveSpaceResponseSchema = SpaceSchema;
-export type ArchiveSpaceResponse = typeof ArchiveSpaceResponseSchema.Type;
-
-export const ArchiveSpace429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ArchiveSpace429ResponseHeaders = typeof ArchiveSpace429ResponseHeadersSchema.Type;
-
-export const ArriveBySpacePublicInviteRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-  "X-Chalk-Arrival-Handle": Schema.optional(Schema.String),
-});
-export type ArriveBySpacePublicInviteRequestHeaders = typeof ArriveBySpacePublicInviteRequestHeadersSchema.Type;
-
-export const ArriveBySpacePublicInviteRequestBodySchema = SpacePublicInviteArrivalRequestSchema;
-export type ArriveBySpacePublicInviteRequestBody = typeof ArriveBySpacePublicInviteRequestBodySchema.Type;
-
-export const ArriveBySpacePublicInviteResponseSchema = PublicSpaceArrivalSchema;
-export type ArriveBySpacePublicInviteResponse = typeof ArriveBySpacePublicInviteResponseSchema.Type;
-
-export const ArriveBySpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ArriveBySpacePublicInvite429ResponseHeaders = typeof ArriveBySpacePublicInvite429ResponseHeadersSchema.Type;
-
-export const CancelEpisodeParticipantJoinPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CancelEpisodeParticipantJoinPathParams = typeof CancelEpisodeParticipantJoinPathParamsSchema.Type;
-
-export const CancelEpisodeParticipantJoinResponseSchema = ParticipantJoinCancellationSchema;
-export type CancelEpisodeParticipantJoinResponse = typeof CancelEpisodeParticipantJoinResponseSchema.Type;
-
-export const CancelEpisodeParticipantJoin429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CancelEpisodeParticipantJoin429ResponseHeaders = typeof CancelEpisodeParticipantJoin429ResponseHeadersSchema.Type;
-
-export const CancelSpaceRecordingPreparationPathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CancelSpaceRecordingPreparationPathParams = typeof CancelSpaceRecordingPreparationPathParamsSchema.Type;
-
-export const CancelSpaceRecordingPreparationRequestBodySchema = CancelRecordingPreparationRequestSchema;
-export type CancelSpaceRecordingPreparationRequestBody = typeof CancelSpaceRecordingPreparationRequestBodySchema.Type;
-
-export const CancelSpaceRecordingPreparationResponseSchema = RecordingPreparationSchema;
-export type CancelSpaceRecordingPreparationResponse = typeof CancelSpaceRecordingPreparationResponseSchema.Type;
-
-export const CancelSpaceRecordingPreparation429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CancelSpaceRecordingPreparation429ResponseHeaders = typeof CancelSpaceRecordingPreparation429ResponseHeadersSchema.Type;
-
-export const CloseCloudflareSFUTracksPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CloseCloudflareSFUTracksPathParams = typeof CloseCloudflareSFUTracksPathParamsSchema.Type;
-
-export const CloseCloudflareSFUTracksRequestBodySchema = CloudflareSFUCloseTracksRequestSchema;
-export type CloseCloudflareSFUTracksRequestBody = typeof CloseCloudflareSFUTracksRequestBodySchema.Type;
-
-export const CloseCloudflareSFUTracksResponseSchema = CloudflareSFUCloseTracksAPIResponseSchema;
-export type CloseCloudflareSFUTracksResponse = typeof CloseCloudflareSFUTracksResponseSchema.Type;
-
-export const CloseCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CloseCloudflareSFUTracks429ResponseHeaders = typeof CloseCloudflareSFUTracks429ResponseHeadersSchema.Type;
-
-export const CreateAPIKeyPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type CreateAPIKeyPathParams = typeof CreateAPIKeyPathParamsSchema.Type;
-
-export const CreateAPIKeyRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreateAPIKeyRequestHeaders = typeof CreateAPIKeyRequestHeadersSchema.Type;
-
-export const CreateAPIKeyRequestBodySchema = CreateAPIKeyRequestSchema;
-export type CreateAPIKeyRequestBody = typeof CreateAPIKeyRequestBodySchema.Type;
-
-export const CreateAPIKeyResponseSchema = APIKeyWithSecretSchema;
-export type CreateAPIKeyResponse = typeof CreateAPIKeyResponseSchema.Type;
-
-export const CreateAPIKey429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateAPIKey429ResponseHeaders = typeof CreateAPIKey429ResponseHeadersSchema.Type;
-
-export const CreateEpisodePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CreateEpisodePathParams = typeof CreateEpisodePathParamsSchema.Type;
-
-export const CreateEpisodeRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreateEpisodeRequestHeaders = typeof CreateEpisodeRequestHeadersSchema.Type;
-
-export const CreateEpisodeRequestBodySchema = CreateEpisodeRequestSchema;
-export type CreateEpisodeRequestBody = typeof CreateEpisodeRequestBodySchema.Type;
-
-export const CreateEpisodeResponseSchema = EpisodeSchema;
-export type CreateEpisodeResponse = typeof CreateEpisodeResponseSchema.Type;
-
-export const CreateEpisode429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateEpisode429ResponseHeaders = typeof CreateEpisode429ResponseHeadersSchema.Type;
-
-export const CreateMembershipPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type CreateMembershipPathParams = typeof CreateMembershipPathParamsSchema.Type;
-
-export const CreateMembershipRequestBodySchema = CreateMembershipRequestSchema;
-export type CreateMembershipRequestBody = typeof CreateMembershipRequestBodySchema.Type;
-
-export const CreateMembershipResponseSchema = MembershipSchema;
-export type CreateMembershipResponse = typeof CreateMembershipResponseSchema.Type;
-
-export const CreateMembership429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateMembership429ResponseHeaders = typeof CreateMembership429ResponseHeadersSchema.Type;
-
-export const CreatePublicSpaceRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreatePublicSpaceRequestHeaders = typeof CreatePublicSpaceRequestHeadersSchema.Type;
-
-export const CreatePublicSpaceRequestBodySchema = CreatePublicSpaceRequestSchema;
-export type CreatePublicSpaceRequestBody = typeof CreatePublicSpaceRequestBodySchema.Type;
-
-export const CreatePublicSpaceResponseSchema = PublicSpaceCreatedSchema;
-export type CreatePublicSpaceResponse = typeof CreatePublicSpaceResponseSchema.Type;
-
-export const CreatePublicSpace429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreatePublicSpace429ResponseHeaders = typeof CreatePublicSpace429ResponseHeadersSchema.Type;
-
-export const CreateRecordingDownloadURLPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type CreateRecordingDownloadURLPathParams = typeof CreateRecordingDownloadURLPathParamsSchema.Type;
-
-export const CreateRecordingDownloadURLRequestBodySchema = CreateRecordingDownloadURLRequestSchema;
-export type CreateRecordingDownloadURLRequestBody = typeof CreateRecordingDownloadURLRequestBodySchema.Type;
-
-export const CreateRecordingDownloadURLResponseSchema = RecordingDownloadURLSchema;
-export type CreateRecordingDownloadURLResponse = typeof CreateRecordingDownloadURLResponseSchema.Type;
-
-export const CreateRecordingDownloadURL429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateRecordingDownloadURL429ResponseHeaders = typeof CreateRecordingDownloadURL429ResponseHeadersSchema.Type;
-
-export const CreateSpacePathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type CreateSpacePathParams = typeof CreateSpacePathParamsSchema.Type;
-
-export const CreateSpaceRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreateSpaceRequestHeaders = typeof CreateSpaceRequestHeadersSchema.Type;
-
-export const CreateSpaceRequestBodySchema = CreateSpaceRequestSchema;
-export type CreateSpaceRequestBody = typeof CreateSpaceRequestBodySchema.Type;
-
-export const CreateSpaceResponseSchema = SpaceSchema;
-export type CreateSpaceResponse = typeof CreateSpaceResponseSchema.Type;
-
-export const CreateSpace429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateSpace429ResponseHeaders = typeof CreateSpace429ResponseHeadersSchema.Type;
-
-export const CreateTenantRequestBodySchema = CreateTenantRequestSchema;
-export type CreateTenantRequestBody = typeof CreateTenantRequestBodySchema.Type;
-
-export const CreateTenantResponseSchema = TenantSchema;
-export type CreateTenantResponse = typeof CreateTenantResponseSchema.Type;
-
-export const CreateTenant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateTenant429ResponseHeaders = typeof CreateTenant429ResponseHeadersSchema.Type;
-
-export const CreateTranscriptDownloadURLPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-  transcript_id: TranscriptIdSchema,
-});
-export type CreateTranscriptDownloadURLPathParams = typeof CreateTranscriptDownloadURLPathParamsSchema.Type;
-
-export const CreateTranscriptDownloadURLRequestBodySchema = CreateTranscriptDownloadURLRequestSchema;
-export type CreateTranscriptDownloadURLRequestBody = typeof CreateTranscriptDownloadURLRequestBodySchema.Type;
-
-export const CreateTranscriptDownloadURLResponseSchema = TranscriptDownloadURLSchema;
-export type CreateTranscriptDownloadURLResponse = typeof CreateTranscriptDownloadURLResponseSchema.Type;
-
-export const CreateWebhookEndpointPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type CreateWebhookEndpointPathParams = typeof CreateWebhookEndpointPathParamsSchema.Type;
-
-export const CreateWebhookEndpointRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type CreateWebhookEndpointRequestHeaders = typeof CreateWebhookEndpointRequestHeadersSchema.Type;
-
-export const CreateWebhookEndpointRequestBodySchema = CreateWebhookEndpointRequestSchema;
-export type CreateWebhookEndpointRequestBody = typeof CreateWebhookEndpointRequestBodySchema.Type;
-
-export const CreateWebhookEndpointResponseSchema = WebhookEndpointWithSecretSchema;
-export type CreateWebhookEndpointResponse = typeof CreateWebhookEndpointResponseSchema.Type;
-
-export const CreateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type CreateWebhookEndpoint429ResponseHeaders = typeof CreateWebhookEndpoint429ResponseHeadersSchema.Type;
-
-export const DeleteTranscriptPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-  transcript_id: TranscriptIdSchema,
-});
-export type DeleteTranscriptPathParams = typeof DeleteTranscriptPathParamsSchema.Type;
-
-export const DeleteTranscript429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type DeleteTranscript429ResponseHeaders = typeof DeleteTranscript429ResponseHeadersSchema.Type;
-
-export const DeleteWebhookEndpointPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type DeleteWebhookEndpointPathParams = typeof DeleteWebhookEndpointPathParamsSchema.Type;
-
-export const DeleteWebhookEndpointRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-  "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
-});
-export type DeleteWebhookEndpointRequestHeaders = typeof DeleteWebhookEndpointRequestHeadersSchema.Type;
-
-export const DeleteWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type DeleteWebhookEndpoint429ResponseHeaders = typeof DeleteWebhookEndpoint429ResponseHeadersSchema.Type;
-
-export const DenySpacePublicAdmissionRequestPathParamsSchema = Schema.Struct({
-  request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type DenySpacePublicAdmissionRequestPathParams = typeof DenySpacePublicAdmissionRequestPathParamsSchema.Type;
-
-export const DenySpacePublicAdmissionRequestRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type DenySpacePublicAdmissionRequestRequestHeaders = typeof DenySpacePublicAdmissionRequestRequestHeadersSchema.Type;
-
-export const DenySpacePublicAdmissionRequestResponseSchema = PublicAdmissionRequestSchema;
-export type DenySpacePublicAdmissionRequestResponse = typeof DenySpacePublicAdmissionRequestResponseSchema.Type;
-
-export const DenySpacePublicAdmissionRequest429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type DenySpacePublicAdmissionRequest429ResponseHeaders = typeof DenySpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
-
-export const EndEpisodePathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type EndEpisodePathParams = typeof EndEpisodePathParamsSchema.Type;
-
-export const EndEpisodeRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
-export type EndEpisodeRequestHeaders = typeof EndEpisodeRequestHeadersSchema.Type;
-
-export const EndEpisodeResponseSchema = EpisodeEndSchema;
-export type EndEpisodeResponse = typeof EndEpisodeResponseSchema.Type;
-
-export const EndEpisode429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type EndEpisode429ResponseHeaders = typeof EndEpisode429ResponseHeadersSchema.Type;
-
-export const FinalizeChatAttachmentUploadPathParamsSchema = Schema.Struct({
-  uploadId: Schema.String,
-});
-export type FinalizeChatAttachmentUploadPathParams = typeof FinalizeChatAttachmentUploadPathParamsSchema.Type;
-
-export const FinalizeChatAttachmentUploadResponseSchema = ChatAttachmentSchema;
-export type FinalizeChatAttachmentUploadResponse = typeof FinalizeChatAttachmentUploadResponseSchema.Type;
-
-export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
-
-export const FindTenantByExternalIDQueryParamsSchema = Schema.Struct({
-  external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
-});
-export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQueryParamsSchema.Type;
-
-export const FindTenantByExternalIDResponseSchema = TenantSchema;
-export type FindTenantByExternalIDResponse = typeof FindTenantByExternalIDResponseSchema.Type;
-
-export const FindTenantByExternalID429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type FindTenantByExternalID429ResponseHeaders = typeof FindTenantByExternalID429ResponseHeadersSchema.Type;
-
-export const GetChatAttachmentDownloadPathParamsSchema = Schema.Struct({
-  attachmentId: Schema.String,
-});
-export type GetChatAttachmentDownloadPathParams = typeof GetChatAttachmentDownloadPathParamsSchema.Type;
-
-export const GetChatAttachmentDownloadResponseSchema = ChatAttachmentDownloadSchema;
-export type GetChatAttachmentDownloadResponse = typeof GetChatAttachmentDownloadResponseSchema.Type;
-
-export const GetChatAttachmentDownload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetChatAttachmentDownload429ResponseHeaders = typeof GetChatAttachmentDownload429ResponseHeadersSchema.Type;
-
-export const GetEpisodePathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetEpisodePathParams = typeof GetEpisodePathParamsSchema.Type;
-
-export const GetEpisodeResponseSchema = EpisodeSchema;
-export type GetEpisodeResponse = typeof GetEpisodeResponseSchema.Type;
-
-export const GetEpisodeAttendancePathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetEpisodeAttendancePathParams = typeof GetEpisodeAttendancePathParamsSchema.Type;
-
-export const GetEpisodeAttendanceResponseSchema = EpisodeAttendanceSchema;
-export type GetEpisodeAttendanceResponse = typeof GetEpisodeAttendanceResponseSchema.Type;
-
-export const GetEpisodeAttendance429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
-
-export const GetParticipantEpisodeStatusPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetParticipantEpisodeStatusPathParams = typeof GetParticipantEpisodeStatusPathParamsSchema.Type;
-
-export const GetParticipantEpisodeStatusResponseSchema = ParticipantEpisodeStatusSchema;
-export type GetParticipantEpisodeStatusResponse = typeof GetParticipantEpisodeStatusResponseSchema.Type;
-
-export const GetParticipantEpisodeStatus429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
-
-export const GetProblemReportAvailabilityPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type GetProblemReportAvailabilityPathParams = typeof GetProblemReportAvailabilityPathParamsSchema.Type;
-
-export const GetProblemReportAvailabilityResponseSchema = ProblemReportAvailabilitySchema;
-export type GetProblemReportAvailabilityResponse = typeof GetProblemReportAvailabilityResponseSchema.Type;
-
-export const GetRecordingPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
-
-export const GetRecordingResponseSchema = RecordingSchema;
-export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
-
-export const GetSpacePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetSpacePathParams = typeof GetSpacePathParamsSchema.Type;
-
-export const GetSpaceResponseSchema = SpaceSchema;
-export type GetSpaceResponse = typeof GetSpaceResponseSchema.Type;
-
-export const GetSpacePublicInvitePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetSpacePublicInvitePathParams = typeof GetSpacePublicInvitePathParamsSchema.Type;
-
-export const GetSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
-export type GetSpacePublicInviteResponse = typeof GetSpacePublicInviteResponseSchema.Type;
-
-export const GetSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetSpacePublicInvite429ResponseHeaders = typeof GetSpacePublicInvite429ResponseHeadersSchema.Type;
-
-export const GetSpacePublicInviteArrivalRequestHeadersSchema = Schema.Struct({
-  "X-Chalk-Arrival-Handle": Schema.String,
-});
-export type GetSpacePublicInviteArrivalRequestHeaders = typeof GetSpacePublicInviteArrivalRequestHeadersSchema.Type;
-
-export const GetSpacePublicInviteArrivalResponseSchema = PublicSpaceArrivalSchema;
-export type GetSpacePublicInviteArrivalResponse = typeof GetSpacePublicInviteArrivalResponseSchema.Type;
-
-export const GetSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetSpacePublicInviteArrival429ResponseHeaders = typeof GetSpacePublicInviteArrival429ResponseHeadersSchema.Type;
-
-export const GetSpaceRecordingPreparationPathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetSpaceRecordingPreparationPathParams = typeof GetSpaceRecordingPreparationPathParamsSchema.Type;
-
-export const GetSpaceRecordingPreparationResponseSchema = RecordingPreparationSchema;
-export type GetSpaceRecordingPreparationResponse = typeof GetSpaceRecordingPreparationResponseSchema.Type;
-
-export const GetTenantPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type GetTenantPathParams = typeof GetTenantPathParamsSchema.Type;
-
-export const GetTenantResponseSchema = TenantSchema;
-export type GetTenantResponse = typeof GetTenantResponseSchema.Type;
-
-export const GetTenant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetTenant429ResponseHeaders = typeof GetTenant429ResponseHeadersSchema.Type;
-
-export const GetTranscriptPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-  transcript_id: TranscriptIdSchema,
-});
-export type GetTranscriptPathParams = typeof GetTranscriptPathParamsSchema.Type;
-
-export const GetTranscriptResponseSchema = TranscriptSchema;
-export type GetTranscriptResponse = typeof GetTranscriptResponseSchema.Type;
-
-export const GetTranscriptDocumentPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-  transcript_id: TranscriptIdSchema,
-});
-export type GetTranscriptDocumentPathParams = typeof GetTranscriptDocumentPathParamsSchema.Type;
-
-export const GetTranscriptDocumentResponseSchema = TranscriptDocumentSchema;
-export type GetTranscriptDocumentResponse = typeof GetTranscriptDocumentResponseSchema.Type;
-
-export const GetWebhookDeliveryPathParamsSchema = Schema.Struct({
-  delivery_id: UUIDSchema,
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetWebhookDeliveryPathParams = typeof GetWebhookDeliveryPathParamsSchema.Type;
-
-export const GetWebhookDeliveryResponseSchema = WebhookDeliveryDetailSchema;
-export type GetWebhookDeliveryResponse = typeof GetWebhookDeliveryResponseSchema.Type;
-
-export const GetWebhookDelivery429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetWebhookDelivery429ResponseHeaders = typeof GetWebhookDelivery429ResponseHeadersSchema.Type;
-
-export const GetWebhookEndpointPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type GetWebhookEndpointPathParams = typeof GetWebhookEndpointPathParamsSchema.Type;
-
-export const GetWebhookEndpointResponseSchema = WebhookEndpointSchema;
-export type GetWebhookEndpointResponse = typeof GetWebhookEndpointResponseSchema.Type;
-
-export const GetWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetWebhookEndpoint429ResponseHeaders = typeof GetWebhookEndpoint429ResponseHeadersSchema.Type;
-
-export const GetWhiteboardFileDownloadPathParamsSchema = Schema.Struct({
-  fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
-});
-export type GetWhiteboardFileDownloadPathParams = typeof GetWhiteboardFileDownloadPathParamsSchema.Type;
-
-export const GetWhiteboardFileDownloadResponseSchema = WhiteboardFileDownloadSchema;
-export type GetWhiteboardFileDownloadResponse = typeof GetWhiteboardFileDownloadResponseSchema.Type;
-
-export const GetWhiteboardFileDownload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type GetWhiteboardFileDownload429ResponseHeaders = typeof GetWhiteboardFileDownload429ResponseHeadersSchema.Type;
-
-export const InitiateChatAttachmentUploadRequestBodySchema = InitiateChatAttachmentUploadRequestSchema;
-export type InitiateChatAttachmentUploadRequestBody = typeof InitiateChatAttachmentUploadRequestBodySchema.Type;
-
-export const InitiateChatAttachmentUploadResponseSchema = ChatAttachmentUploadSchema;
-export type InitiateChatAttachmentUploadResponse = typeof InitiateChatAttachmentUploadResponseSchema.Type;
-
-export const InitiateChatAttachmentUpload429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
-
-export const IssueAccessGrantPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type IssueAccessGrantPathParams = typeof IssueAccessGrantPathParamsSchema.Type;
-
-export const IssueAccessGrantRequestBodySchema = IssueAccessGrantRequestSchema;
-export type IssueAccessGrantRequestBody = typeof IssueAccessGrantRequestBodySchema.Type;
-
-export const IssueAccessGrantResponseSchema = AccessGrantSchema;
-export type IssueAccessGrantResponse = typeof IssueAccessGrantResponseSchema.Type;
-
-export const IssueAccessGrant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type IssueAccessGrant429ResponseHeaders = typeof IssueAccessGrant429ResponseHeadersSchema.Type;
-
-export const IssueEpisodeParticipantSyncTokenPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type IssueEpisodeParticipantSyncTokenPathParams = typeof IssueEpisodeParticipantSyncTokenPathParamsSchema.Type;
-
-export const IssueEpisodeParticipantSyncTokenResponseSchema = SyncTokenSchema;
-export type IssueEpisodeParticipantSyncTokenResponse = typeof IssueEpisodeParticipantSyncTokenResponseSchema.Type;
-
-export const IssueEpisodeParticipantSyncToken429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type IssueEpisodeParticipantSyncToken429ResponseHeaders = typeof IssueEpisodeParticipantSyncToken429ResponseHeadersSchema.Type;
-
-export const LeaveSpacePublicInviteArrivalRequestHeadersSchema = Schema.Struct({
-  "X-Chalk-Arrival-Handle": Schema.String,
-});
-export type LeaveSpacePublicInviteArrivalRequestHeaders = typeof LeaveSpacePublicInviteArrivalRequestHeadersSchema.Type;
-
-export const LeaveSpacePublicInviteArrival429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type LeaveSpacePublicInviteArrival429ResponseHeaders = typeof LeaveSpacePublicInviteArrival429ResponseHeadersSchema.Type;
-
-export const ListAPIKeysPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListAPIKeysPathParams = typeof ListAPIKeysPathParamsSchema.Type;
-
-export const ListAPIKeysQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListAPIKeysQueryParams = typeof ListAPIKeysQueryParamsSchema.Type;
-
-export const ListAPIKeysResponseSchema = APIKeyListSchema;
-export type ListAPIKeysResponse = typeof ListAPIKeysResponseSchema.Type;
-
-export const ListCloudflareSFUPublicationsPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ListCloudflareSFUPublicationsPathParams = typeof ListCloudflareSFUPublicationsPathParamsSchema.Type;
-
-export const ListCloudflareSFUPublicationsResponseSchema = CloudflareSFUPublicationsResponseSchema;
-export type ListCloudflareSFUPublicationsResponse = typeof ListCloudflareSFUPublicationsResponseSchema.Type;
-
-export const ListCloudflareSFUPublications429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListCloudflareSFUPublications429ResponseHeaders = typeof ListCloudflareSFUPublications429ResponseHeadersSchema.Type;
-
-export const ListEpisodesPathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ListEpisodesPathParams = typeof ListEpisodesPathParamsSchema.Type;
-
-export const ListEpisodesQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListEpisodesQueryParams = typeof ListEpisodesQueryParamsSchema.Type;
-
-export const ListEpisodesResponseSchema = EpisodeListSchema;
-export type ListEpisodesResponse = typeof ListEpisodesResponseSchema.Type;
-
-export const ListMembershipsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListMembershipsPathParams = typeof ListMembershipsPathParamsSchema.Type;
-
-export const ListMembershipsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListMembershipsQueryParams = typeof ListMembershipsQueryParamsSchema.Type;
-
-export const ListMembershipsResponseSchema = MembershipListSchema;
-export type ListMembershipsResponse = typeof ListMembershipsResponseSchema.Type;
-
-export const ListRecordingsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListRecordingsPathParams = typeof ListRecordingsPathParamsSchema.Type;
-
-export const ListRecordingsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  episode_id: Schema.optional(EpisodeIdSchema),
-  page_size: Schema.optional(Schema.NumberFromString),
-  space_id: Schema.optional(SpaceIdSchema),
-});
-export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.Type;
-
-export const ListRecordingsResponseSchema = RecordingListSchema;
-export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
-
-export const ListSpaceActivityPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListSpaceActivityPathParams = typeof ListSpaceActivityPathParamsSchema.Type;
-
-export const ListSpaceActivityQueryParamsSchema = Schema.Struct({
-  space_ids: Schema.String,
-});
-export type ListSpaceActivityQueryParams = typeof ListSpaceActivityQueryParamsSchema.Type;
-
-export const ListSpaceActivityResponseSchema = SpaceActivityListSchema;
-export type ListSpaceActivityResponse = typeof ListSpaceActivityResponseSchema.Type;
-
-export const ListSpaceActivity429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListSpaceActivity429ResponseHeaders = typeof ListSpaceActivity429ResponseHeadersSchema.Type;
-
-export const ListSpaceLiveEpisodesPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListSpaceLiveEpisodesPathParams = typeof ListSpaceLiveEpisodesPathParamsSchema.Type;
-
-export const ListSpaceLiveEpisodesQueryParamsSchema = Schema.Struct({
-  space_ids: Schema.String,
-});
-export type ListSpaceLiveEpisodesQueryParams = typeof ListSpaceLiveEpisodesQueryParamsSchema.Type;
-
-export const ListSpaceLiveEpisodesResponseSchema = SpaceLiveEpisodeListSchema;
-export type ListSpaceLiveEpisodesResponse = typeof ListSpaceLiveEpisodesResponseSchema.Type;
-
-export const ListSpaceLiveEpisodes429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListSpaceLiveEpisodes429ResponseHeaders = typeof ListSpaceLiveEpisodes429ResponseHeadersSchema.Type;
-
-export const ListSpacePublicAdmissionRequestsPathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ListSpacePublicAdmissionRequestsPathParams = typeof ListSpacePublicAdmissionRequestsPathParamsSchema.Type;
-
-export const ListSpacePublicAdmissionRequestsQueryParamsSchema = Schema.Struct({
-  state: Schema.optional(Schema.Literal("pending")),
-});
-export type ListSpacePublicAdmissionRequestsQueryParams = typeof ListSpacePublicAdmissionRequestsQueryParamsSchema.Type;
-
-export const ListSpacePublicAdmissionRequestsResponseSchema = PublicAdmissionRequestPageSchema;
-export type ListSpacePublicAdmissionRequestsResponse = typeof ListSpacePublicAdmissionRequestsResponseSchema.Type;
-
-export const ListSpacePublicAdmissionRequests429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListSpacePublicAdmissionRequests429ResponseHeaders = typeof ListSpacePublicAdmissionRequests429ResponseHeadersSchema.Type;
-
-export const ListSpacesPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListSpacesPathParams = typeof ListSpacesPathParamsSchema.Type;
-
-export const ListSpacesQueryParamsSchema = Schema.Struct({
-  archived: Schema.optional(Schema.Boolean),
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListSpacesQueryParams = typeof ListSpacesQueryParamsSchema.Type;
-
-export const ListSpacesResponseSchema = SpaceListSchema;
-export type ListSpacesResponse = typeof ListSpacesResponseSchema.Type;
-
-export const ListTenantsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
-export type ListTenantsQueryParams = typeof ListTenantsQueryParamsSchema.Type;
-
-export const ListTenantsResponseSchema = TenantListSchema;
-export type ListTenantsResponse = typeof ListTenantsResponseSchema.Type;
-
-export const ListTenants429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
-export type ListTenants429ResponseHeaders = typeof ListTenants429ResponseHeadersSchema.Type;
-
-export const ListTranscriptsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
-export type ListTranscriptsPathParams = typeof ListTranscriptsPathParamsSchema.Type;
-
-export const ListTranscriptsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-  recording_id: Schema.optional(RecordingIdSchema),
-});
-export type ListTranscriptsQueryParams = typeof ListTranscriptsQueryParamsSchema.Type;
-
-export const ListTranscriptsResponseSchema = TranscriptListSchema;
-export type ListTranscriptsResponse = typeof ListTranscriptsResponseSchema.Type;
-
-export const ListWebhookDeliveriesPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
-export type ListWebhookDeliveriesPathParams = typeof ListWebhookDeliveriesPathParamsSchema.Type;
-
-export const ListWebhookDeliveriesQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  event_type: Schema.optional(
-    Schema.Array(
+export const WebhookEndpointSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_version: Schema.Number,
+    created_at: DateTimeStringSchema,
+    enabled: Schema.Boolean,
+    event_types: Schema.Array(
       Schema.Literals([
-        "endpoint.test",
         "episode.ended",
         "episode.started",
         "participant.joined",
         "participant.left",
+        "recording.started",
         "recording.completed",
         "recording.failed",
-        "recording.started",
+        "transcript.started",
+        "transcript.completed",
+        "transcript.failed",
         "space.archived",
         "space.created",
         "space.restored",
         "space.updated",
-        "transcript.completed",
-        "transcript.failed",
-        "transcript.started",
       ]),
     ),
-  ),
-  page_size: Schema.optional(Schema.NumberFromString),
-  state: Schema.optional(Schema.Array(Schema.Literals(["pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"]))),
-});
+    id: UUIDSchema,
+    name: Schema.String,
+    revision: Schema.Number,
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+    url_redacted: Schema.String,
+  }))();
+export type WebhookEndpoint = typeof WebhookEndpointSchema.Type;
+
+export const WebhookEndpointListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    page: Schema.Struct({
+      next_cursor: Schema.NullOr(Schema.String),
+    }),
+    webhook_endpoints: Schema.Array(WebhookEndpointSchema),
+  }))();
+export type WebhookEndpointList = typeof WebhookEndpointListSchema.Type;
+
+export const WebhookEndpointWithSecretSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_version: Schema.Number,
+    created_at: DateTimeStringSchema,
+    enabled: Schema.Boolean,
+    event_types: Schema.Array(
+      Schema.Literals([
+        "episode.ended",
+        "episode.started",
+        "participant.joined",
+        "participant.left",
+        "recording.started",
+        "recording.completed",
+        "recording.failed",
+        "transcript.started",
+        "transcript.completed",
+        "transcript.failed",
+        "space.archived",
+        "space.created",
+        "space.restored",
+        "space.updated",
+      ]),
+    ),
+    id: UUIDSchema,
+    name: Schema.String,
+    revision: Schema.Number,
+    secret: Schema.String,
+    tenant_id: TenantIdSchema,
+    updated_at: DateTimeStringSchema,
+    url_redacted: Schema.String,
+  }))();
+export type WebhookEndpointWithSecret = typeof WebhookEndpointWithSecretSchema.Type;
+
+export const WhiteboardFileDownloadSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    downloadUrl: Schema.String,
+    expiresAt: Schema.String,
+  }))();
+export type WhiteboardFileDownload = typeof WhiteboardFileDownloadSchema.Type;
+
+export const RateLimitLimitHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)))();
+export type RateLimitLimitHeader = typeof RateLimitLimitHeaderSchema.Type;
+
+export const RateLimitRemainingHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)))();
+export type RateLimitRemainingHeader = typeof RateLimitRemainingHeaderSchema.Type;
+
+export const RetryAfterHeaderSchema = /* @__PURE__ */ (() => Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)))();
+export type RetryAfterHeader = typeof RetryAfterHeaderSchema.Type;
+
+export const AddCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type AddCloudflareSFUTracksPathParams = typeof AddCloudflareSFUTracksPathParamsSchema.Type;
+
+export const AddCloudflareSFUTracksQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+    replacement_cause: Schema.optional(
+      Schema.Literals([
+        "user_pause",
+        "moderation_pause",
+        "sync_recovery_loss",
+        "discovery_absent",
+        "capture_cleanup",
+        "consent_revoked",
+        "publish_failure",
+        "enable_failure",
+        "projection_mismatch",
+        "forced_pause",
+        "local_signaling_failure",
+        "remote_signaling_failure",
+        "dormant_connection",
+        "access_refresh",
+        "receive_stalled",
+      ]),
+    ),
+  }))();
+export type AddCloudflareSFUTracksQueryParams = typeof AddCloudflareSFUTracksQueryParamsSchema.Type;
+
+export const AddCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUTracksRequestSchema)();
+export type AddCloudflareSFUTracksRequestBody = typeof AddCloudflareSFUTracksRequestBodySchema.Type;
+
+export const AddCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUTracksAPIResponseSchema)();
+export type AddCloudflareSFUTracksResponse = typeof AddCloudflareSFUTracksResponseSchema.Type;
+
+export const AddCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type AddCloudflareSFUTracks429ResponseHeaders = typeof AddCloudflareSFUTracks429ResponseHeadersSchema.Type;
+
+export const AdmitEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type AdmitEpisodeParticipantPathParams = typeof AdmitEpisodeParticipantPathParamsSchema.Type;
+
+export const AdmitEpisodeParticipantRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type AdmitEpisodeParticipantRequestHeaders = typeof AdmitEpisodeParticipantRequestHeadersSchema.Type;
+
+export const AdmitEpisodeParticipantRequestBodySchema = /* @__PURE__ */ (() => AdmitEpisodeParticipantRequestSchema)();
+export type AdmitEpisodeParticipantRequestBody = typeof AdmitEpisodeParticipantRequestBodySchema.Type;
+
+export const AdmitEpisodeParticipantResponseSchema = /* @__PURE__ */ (() => ParticipantLifecycleSchema)();
+export type AdmitEpisodeParticipantResponse = typeof AdmitEpisodeParticipantResponseSchema.Type;
+
+export const AdmitEpisodeParticipant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type AdmitEpisodeParticipant429ResponseHeaders = typeof AdmitEpisodeParticipant429ResponseHeadersSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequestPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ApproveSpacePublicAdmissionRequestPathParams = typeof ApproveSpacePublicAdmissionRequestPathParamsSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequestRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type ApproveSpacePublicAdmissionRequestRequestHeaders = typeof ApproveSpacePublicAdmissionRequestRequestHeadersSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequestResponseSchema = /* @__PURE__ */ (() => PublicAdmissionRequestSchema)();
+export type ApproveSpacePublicAdmissionRequestResponse = typeof ApproveSpacePublicAdmissionRequestResponseSchema.Type;
+
+export const ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ApproveSpacePublicAdmissionRequest429ResponseHeaders = typeof ApproveSpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
+
+export const ArchiveSpacePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ArchiveSpacePathParams = typeof ArchiveSpacePathParamsSchema.Type;
+
+export const ArchiveSpaceResponseSchema = /* @__PURE__ */ (() => SpaceSchema)();
+export type ArchiveSpaceResponse = typeof ArchiveSpaceResponseSchema.Type;
+
+export const ArchiveSpace429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ArchiveSpace429ResponseHeaders = typeof ArchiveSpace429ResponseHeadersSchema.Type;
+
+export const ArriveBySpacePublicInviteRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Arrival-Handle": Schema.optional(Schema.String),
+  }))();
+export type ArriveBySpacePublicInviteRequestHeaders = typeof ArriveBySpacePublicInviteRequestHeadersSchema.Type;
+
+export const ArriveBySpacePublicInviteRequestBodySchema = /* @__PURE__ */ (() => SpacePublicInviteArrivalRequestSchema)();
+export type ArriveBySpacePublicInviteRequestBody = typeof ArriveBySpacePublicInviteRequestBodySchema.Type;
+
+export const ArriveBySpacePublicInviteResponseSchema = /* @__PURE__ */ (() => PublicSpaceArrivalSchema)();
+export type ArriveBySpacePublicInviteResponse = typeof ArriveBySpacePublicInviteResponseSchema.Type;
+
+export const ArriveBySpacePublicInvite429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ArriveBySpacePublicInvite429ResponseHeaders = typeof ArriveBySpacePublicInvite429ResponseHeadersSchema.Type;
+
+export const CancelEpisodeParticipantJoinPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CancelEpisodeParticipantJoinPathParams = typeof CancelEpisodeParticipantJoinPathParamsSchema.Type;
+
+export const CancelEpisodeParticipantJoinResponseSchema = /* @__PURE__ */ (() => ParticipantJoinCancellationSchema)();
+export type CancelEpisodeParticipantJoinResponse = typeof CancelEpisodeParticipantJoinResponseSchema.Type;
+
+export const CancelEpisodeParticipantJoin429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CancelEpisodeParticipantJoin429ResponseHeaders = typeof CancelEpisodeParticipantJoin429ResponseHeadersSchema.Type;
+
+export const CancelSpaceRecordingPreparationPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CancelSpaceRecordingPreparationPathParams = typeof CancelSpaceRecordingPreparationPathParamsSchema.Type;
+
+export const CancelSpaceRecordingPreparationRequestBodySchema = /* @__PURE__ */ (() => CancelRecordingPreparationRequestSchema)();
+export type CancelSpaceRecordingPreparationRequestBody = typeof CancelSpaceRecordingPreparationRequestBodySchema.Type;
+
+export const CancelSpaceRecordingPreparationResponseSchema = /* @__PURE__ */ (() => RecordingPreparationSchema)();
+export type CancelSpaceRecordingPreparationResponse = typeof CancelSpaceRecordingPreparationResponseSchema.Type;
+
+export const CancelSpaceRecordingPreparation429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CancelSpaceRecordingPreparation429ResponseHeaders = typeof CancelSpaceRecordingPreparation429ResponseHeadersSchema.Type;
+
+export const CloseCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CloseCloudflareSFUTracksPathParams = typeof CloseCloudflareSFUTracksPathParamsSchema.Type;
+
+export const CloseCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUCloseTracksRequestSchema)();
+export type CloseCloudflareSFUTracksRequestBody = typeof CloseCloudflareSFUTracksRequestBodySchema.Type;
+
+export const CloseCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUCloseTracksAPIResponseSchema)();
+export type CloseCloudflareSFUTracksResponse = typeof CloseCloudflareSFUTracksResponseSchema.Type;
+
+export const CloseCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CloseCloudflareSFUTracks429ResponseHeaders = typeof CloseCloudflareSFUTracks429ResponseHeadersSchema.Type;
+
+export const CreateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateAPIKeyPathParams = typeof CreateAPIKeyPathParamsSchema.Type;
+
+export const CreateAPIKeyRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreateAPIKeyRequestHeaders = typeof CreateAPIKeyRequestHeadersSchema.Type;
+
+export const CreateAPIKeyRequestBodySchema = /* @__PURE__ */ (() => CreateAPIKeyRequestSchema)();
+export type CreateAPIKeyRequestBody = typeof CreateAPIKeyRequestBodySchema.Type;
+
+export const CreateAPIKeyResponseSchema = /* @__PURE__ */ (() => APIKeyWithSecretSchema)();
+export type CreateAPIKeyResponse = typeof CreateAPIKeyResponseSchema.Type;
+
+export const CreateAPIKey429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateAPIKey429ResponseHeaders = typeof CreateAPIKey429ResponseHeadersSchema.Type;
+
+export const CreateEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateEpisodePathParams = typeof CreateEpisodePathParamsSchema.Type;
+
+export const CreateEpisodeRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreateEpisodeRequestHeaders = typeof CreateEpisodeRequestHeadersSchema.Type;
+
+export const CreateEpisodeRequestBodySchema = /* @__PURE__ */ (() => CreateEpisodeRequestSchema)();
+export type CreateEpisodeRequestBody = typeof CreateEpisodeRequestBodySchema.Type;
+
+export const CreateEpisodeResponseSchema = /* @__PURE__ */ (() => EpisodeSchema)();
+export type CreateEpisodeResponse = typeof CreateEpisodeResponseSchema.Type;
+
+export const CreateEpisode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateEpisode429ResponseHeaders = typeof CreateEpisode429ResponseHeadersSchema.Type;
+
+export const CreateMembershipPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateMembershipPathParams = typeof CreateMembershipPathParamsSchema.Type;
+
+export const CreateMembershipRequestBodySchema = /* @__PURE__ */ (() => CreateMembershipRequestSchema)();
+export type CreateMembershipRequestBody = typeof CreateMembershipRequestBodySchema.Type;
+
+export const CreateMembershipResponseSchema = /* @__PURE__ */ (() => MembershipSchema)();
+export type CreateMembershipResponse = typeof CreateMembershipResponseSchema.Type;
+
+export const CreateMembership429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateMembership429ResponseHeaders = typeof CreateMembership429ResponseHeadersSchema.Type;
+
+export const CreatePublicSpaceRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreatePublicSpaceRequestHeaders = typeof CreatePublicSpaceRequestHeadersSchema.Type;
+
+export const CreatePublicSpaceRequestBodySchema = /* @__PURE__ */ (() => CreatePublicSpaceRequestSchema)();
+export type CreatePublicSpaceRequestBody = typeof CreatePublicSpaceRequestBodySchema.Type;
+
+export const CreatePublicSpaceResponseSchema = /* @__PURE__ */ (() => PublicSpaceCreatedSchema)();
+export type CreatePublicSpaceResponse = typeof CreatePublicSpaceResponseSchema.Type;
+
+export const CreatePublicSpace429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreatePublicSpace429ResponseHeaders = typeof CreatePublicSpace429ResponseHeadersSchema.Type;
+
+export const CreateRecordingDownloadURLPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recording_id: RecordingIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateRecordingDownloadURLPathParams = typeof CreateRecordingDownloadURLPathParamsSchema.Type;
+
+export const CreateRecordingDownloadURLRequestBodySchema = /* @__PURE__ */ (() => CreateRecordingDownloadURLRequestSchema)();
+export type CreateRecordingDownloadURLRequestBody = typeof CreateRecordingDownloadURLRequestBodySchema.Type;
+
+export const CreateRecordingDownloadURLResponseSchema = /* @__PURE__ */ (() => RecordingDownloadURLSchema)();
+export type CreateRecordingDownloadURLResponse = typeof CreateRecordingDownloadURLResponseSchema.Type;
+
+export const CreateRecordingDownloadURL429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateRecordingDownloadURL429ResponseHeaders = typeof CreateRecordingDownloadURL429ResponseHeadersSchema.Type;
+
+export const CreateSpacePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateSpacePathParams = typeof CreateSpacePathParamsSchema.Type;
+
+export const CreateSpaceRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreateSpaceRequestHeaders = typeof CreateSpaceRequestHeadersSchema.Type;
+
+export const CreateSpaceRequestBodySchema = /* @__PURE__ */ (() => CreateSpaceRequestSchema)();
+export type CreateSpaceRequestBody = typeof CreateSpaceRequestBodySchema.Type;
+
+export const CreateSpaceResponseSchema = /* @__PURE__ */ (() => SpaceSchema)();
+export type CreateSpaceResponse = typeof CreateSpaceResponseSchema.Type;
+
+export const CreateSpace429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateSpace429ResponseHeaders = typeof CreateSpace429ResponseHeadersSchema.Type;
+
+export const CreateTenantRequestBodySchema = /* @__PURE__ */ (() => CreateTenantRequestSchema)();
+export type CreateTenantRequestBody = typeof CreateTenantRequestBodySchema.Type;
+
+export const CreateTenantResponseSchema = /* @__PURE__ */ (() => TenantSchema)();
+export type CreateTenantResponse = typeof CreateTenantResponseSchema.Type;
+
+export const CreateTenant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateTenant429ResponseHeaders = typeof CreateTenant429ResponseHeadersSchema.Type;
+
+export const CreateTranscriptDownloadURLPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+    transcript_id: TranscriptIdSchema,
+  }))();
+export type CreateTranscriptDownloadURLPathParams = typeof CreateTranscriptDownloadURLPathParamsSchema.Type;
+
+export const CreateTranscriptDownloadURLRequestBodySchema = /* @__PURE__ */ (() => CreateTranscriptDownloadURLRequestSchema)();
+export type CreateTranscriptDownloadURLRequestBody = typeof CreateTranscriptDownloadURLRequestBodySchema.Type;
+
+export const CreateTranscriptDownloadURLResponseSchema = /* @__PURE__ */ (() => TranscriptDownloadURLSchema)();
+export type CreateTranscriptDownloadURLResponse = typeof CreateTranscriptDownloadURLResponseSchema.Type;
+
+export const CreateWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type CreateWebhookEndpointPathParams = typeof CreateWebhookEndpointPathParamsSchema.Type;
+
+export const CreateWebhookEndpointRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type CreateWebhookEndpointRequestHeaders = typeof CreateWebhookEndpointRequestHeadersSchema.Type;
+
+export const CreateWebhookEndpointRequestBodySchema = /* @__PURE__ */ (() => CreateWebhookEndpointRequestSchema)();
+export type CreateWebhookEndpointRequestBody = typeof CreateWebhookEndpointRequestBodySchema.Type;
+
+export const CreateWebhookEndpointResponseSchema = /* @__PURE__ */ (() => WebhookEndpointWithSecretSchema)();
+export type CreateWebhookEndpointResponse = typeof CreateWebhookEndpointResponseSchema.Type;
+
+export const CreateWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type CreateWebhookEndpoint429ResponseHeaders = typeof CreateWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const DeleteTranscriptPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+    transcript_id: TranscriptIdSchema,
+  }))();
+export type DeleteTranscriptPathParams = typeof DeleteTranscriptPathParamsSchema.Type;
+
+export const DeleteTranscript429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type DeleteTranscript429ResponseHeaders = typeof DeleteTranscript429ResponseHeadersSchema.Type;
+
+export const DeleteWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type DeleteWebhookEndpointPathParams = typeof DeleteWebhookEndpointPathParamsSchema.Type;
+
+export const DeleteWebhookEndpointRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
+  }))();
+export type DeleteWebhookEndpointRequestHeaders = typeof DeleteWebhookEndpointRequestHeadersSchema.Type;
+
+export const DeleteWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type DeleteWebhookEndpoint429ResponseHeaders = typeof DeleteWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const DenySpacePublicAdmissionRequestPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type DenySpacePublicAdmissionRequestPathParams = typeof DenySpacePublicAdmissionRequestPathParamsSchema.Type;
+
+export const DenySpacePublicAdmissionRequestRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type DenySpacePublicAdmissionRequestRequestHeaders = typeof DenySpacePublicAdmissionRequestRequestHeadersSchema.Type;
+
+export const DenySpacePublicAdmissionRequestResponseSchema = /* @__PURE__ */ (() => PublicAdmissionRequestSchema)();
+export type DenySpacePublicAdmissionRequestResponse = typeof DenySpacePublicAdmissionRequestResponseSchema.Type;
+
+export const DenySpacePublicAdmissionRequest429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type DenySpacePublicAdmissionRequest429ResponseHeaders = typeof DenySpacePublicAdmissionRequest429ResponseHeadersSchema.Type;
+
+export const EndEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type EndEpisodePathParams = typeof EndEpisodePathParamsSchema.Type;
+
+export const EndEpisodeRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
+export type EndEpisodeRequestHeaders = typeof EndEpisodeRequestHeadersSchema.Type;
+
+export const EndEpisodeResponseSchema = /* @__PURE__ */ (() => EpisodeEndSchema)();
+export type EndEpisodeResponse = typeof EndEpisodeResponseSchema.Type;
+
+export const EndEpisode429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type EndEpisode429ResponseHeaders = typeof EndEpisode429ResponseHeadersSchema.Type;
+
+export const FinalizeChatAttachmentUploadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    uploadId: Schema.String,
+  }))();
+export type FinalizeChatAttachmentUploadPathParams = typeof FinalizeChatAttachmentUploadPathParamsSchema.Type;
+
+export const FinalizeChatAttachmentUploadResponseSchema = /* @__PURE__ */ (() => ChatAttachmentSchema)();
+export type FinalizeChatAttachmentUploadResponse = typeof FinalizeChatAttachmentUploadResponseSchema.Type;
+
+export const FinalizeChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type FinalizeChatAttachmentUpload429ResponseHeaders = typeof FinalizeChatAttachmentUpload429ResponseHeadersSchema.Type;
+
+export const FindTenantByExternalIDQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    external_id: Schema.String.check(isCodePointLengthBetween(1, 512)),
+  }))();
+export type FindTenantByExternalIDQueryParams = typeof FindTenantByExternalIDQueryParamsSchema.Type;
+
+export const FindTenantByExternalIDResponseSchema = /* @__PURE__ */ (() => TenantSchema)();
+export type FindTenantByExternalIDResponse = typeof FindTenantByExternalIDResponseSchema.Type;
+
+export const FindTenantByExternalID429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type FindTenantByExternalID429ResponseHeaders = typeof FindTenantByExternalID429ResponseHeadersSchema.Type;
+
+export const GetChatAttachmentDownloadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    attachmentId: Schema.String,
+  }))();
+export type GetChatAttachmentDownloadPathParams = typeof GetChatAttachmentDownloadPathParamsSchema.Type;
+
+export const GetChatAttachmentDownloadResponseSchema = /* @__PURE__ */ (() => ChatAttachmentDownloadSchema)();
+export type GetChatAttachmentDownloadResponse = typeof GetChatAttachmentDownloadResponseSchema.Type;
+
+export const GetChatAttachmentDownload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetChatAttachmentDownload429ResponseHeaders = typeof GetChatAttachmentDownload429ResponseHeadersSchema.Type;
+
+export const GetEpisodePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetEpisodePathParams = typeof GetEpisodePathParamsSchema.Type;
+
+export const GetEpisodeResponseSchema = /* @__PURE__ */ (() => EpisodeSchema)();
+export type GetEpisodeResponse = typeof GetEpisodeResponseSchema.Type;
+
+export const GetEpisodeAttendancePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetEpisodeAttendancePathParams = typeof GetEpisodeAttendancePathParamsSchema.Type;
+
+export const GetEpisodeAttendanceResponseSchema = /* @__PURE__ */ (() => EpisodeAttendanceSchema)();
+export type GetEpisodeAttendanceResponse = typeof GetEpisodeAttendanceResponseSchema.Type;
+
+export const GetEpisodeAttendance429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetEpisodeAttendance429ResponseHeaders = typeof GetEpisodeAttendance429ResponseHeadersSchema.Type;
+
+export const GetParticipantEpisodeStatusPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetParticipantEpisodeStatusPathParams = typeof GetParticipantEpisodeStatusPathParamsSchema.Type;
+
+export const GetParticipantEpisodeStatusResponseSchema = /* @__PURE__ */ (() => ParticipantEpisodeStatusSchema)();
+export type GetParticipantEpisodeStatusResponse = typeof GetParticipantEpisodeStatusResponseSchema.Type;
+
+export const GetParticipantEpisodeStatus429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetParticipantEpisodeStatus429ResponseHeaders = typeof GetParticipantEpisodeStatus429ResponseHeadersSchema.Type;
+
+export const GetProblemReportAvailabilityPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetProblemReportAvailabilityPathParams = typeof GetProblemReportAvailabilityPathParamsSchema.Type;
+
+export const GetProblemReportAvailabilityResponseSchema = /* @__PURE__ */ (() => ProblemReportAvailabilitySchema)();
+export type GetProblemReportAvailabilityResponse = typeof GetProblemReportAvailabilityResponseSchema.Type;
+
+export const GetRecordingPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recording_id: RecordingIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
+
+export const GetRecordingResponseSchema = /* @__PURE__ */ (() => RecordingSchema)();
+export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
+
+export const GetSpacePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetSpacePathParams = typeof GetSpacePathParamsSchema.Type;
+
+export const GetSpaceResponseSchema = /* @__PURE__ */ (() => SpaceSchema)();
+export type GetSpaceResponse = typeof GetSpaceResponseSchema.Type;
+
+export const GetSpacePublicInvitePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetSpacePublicInvitePathParams = typeof GetSpacePublicInvitePathParamsSchema.Type;
+
+export const GetSpacePublicInviteResponseSchema = /* @__PURE__ */ (() => SpacePublicInviteSchema)();
+export type GetSpacePublicInviteResponse = typeof GetSpacePublicInviteResponseSchema.Type;
+
+export const GetSpacePublicInvite429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetSpacePublicInvite429ResponseHeaders = typeof GetSpacePublicInvite429ResponseHeadersSchema.Type;
+
+export const GetSpacePublicInviteArrivalRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "X-Chalk-Arrival-Handle": Schema.String,
+  }))();
+export type GetSpacePublicInviteArrivalRequestHeaders = typeof GetSpacePublicInviteArrivalRequestHeadersSchema.Type;
+
+export const GetSpacePublicInviteArrivalResponseSchema = /* @__PURE__ */ (() => PublicSpaceArrivalSchema)();
+export type GetSpacePublicInviteArrivalResponse = typeof GetSpacePublicInviteArrivalResponseSchema.Type;
+
+export const GetSpacePublicInviteArrival429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetSpacePublicInviteArrival429ResponseHeaders = typeof GetSpacePublicInviteArrival429ResponseHeadersSchema.Type;
+
+export const GetSpaceRecordingPreparationPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetSpaceRecordingPreparationPathParams = typeof GetSpaceRecordingPreparationPathParamsSchema.Type;
+
+export const GetSpaceRecordingPreparationResponseSchema = /* @__PURE__ */ (() => RecordingPreparationSchema)();
+export type GetSpaceRecordingPreparationResponse = typeof GetSpaceRecordingPreparationResponseSchema.Type;
+
+export const GetTenantPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetTenantPathParams = typeof GetTenantPathParamsSchema.Type;
+
+export const GetTenantResponseSchema = /* @__PURE__ */ (() => TenantSchema)();
+export type GetTenantResponse = typeof GetTenantResponseSchema.Type;
+
+export const GetTenant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetTenant429ResponseHeaders = typeof GetTenant429ResponseHeadersSchema.Type;
+
+export const GetTranscriptPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+    transcript_id: TranscriptIdSchema,
+  }))();
+export type GetTranscriptPathParams = typeof GetTranscriptPathParamsSchema.Type;
+
+export const GetTranscriptResponseSchema = /* @__PURE__ */ (() => TranscriptSchema)();
+export type GetTranscriptResponse = typeof GetTranscriptResponseSchema.Type;
+
+export const GetTranscriptDocumentPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+    transcript_id: TranscriptIdSchema,
+  }))();
+export type GetTranscriptDocumentPathParams = typeof GetTranscriptDocumentPathParamsSchema.Type;
+
+export const GetTranscriptDocumentResponseSchema = /* @__PURE__ */ (() => TranscriptDocumentSchema)();
+export type GetTranscriptDocumentResponse = typeof GetTranscriptDocumentResponseSchema.Type;
+
+export const GetWebhookDeliveryPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    delivery_id: UUIDSchema,
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetWebhookDeliveryPathParams = typeof GetWebhookDeliveryPathParamsSchema.Type;
+
+export const GetWebhookDeliveryResponseSchema = /* @__PURE__ */ (() => WebhookDeliveryDetailSchema)();
+export type GetWebhookDeliveryResponse = typeof GetWebhookDeliveryResponseSchema.Type;
+
+export const GetWebhookDelivery429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetWebhookDelivery429ResponseHeaders = typeof GetWebhookDelivery429ResponseHeadersSchema.Type;
+
+export const GetWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetWebhookEndpointPathParams = typeof GetWebhookEndpointPathParamsSchema.Type;
+
+export const GetWebhookEndpointResponseSchema = /* @__PURE__ */ (() => WebhookEndpointSchema)();
+export type GetWebhookEndpointResponse = typeof GetWebhookEndpointResponseSchema.Type;
+
+export const GetWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetWebhookEndpoint429ResponseHeaders = typeof GetWebhookEndpoint429ResponseHeadersSchema.Type;
+
+export const GetWhiteboardFileDownloadPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    fileId: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128)),
+  }))();
+export type GetWhiteboardFileDownloadPathParams = typeof GetWhiteboardFileDownloadPathParamsSchema.Type;
+
+export const GetWhiteboardFileDownloadResponseSchema = /* @__PURE__ */ (() => WhiteboardFileDownloadSchema)();
+export type GetWhiteboardFileDownloadResponse = typeof GetWhiteboardFileDownloadResponseSchema.Type;
+
+export const GetWhiteboardFileDownload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type GetWhiteboardFileDownload429ResponseHeaders = typeof GetWhiteboardFileDownload429ResponseHeadersSchema.Type;
+
+export const InitiateChatAttachmentUploadRequestBodySchema = /* @__PURE__ */ (() => InitiateChatAttachmentUploadRequestSchema)();
+export type InitiateChatAttachmentUploadRequestBody = typeof InitiateChatAttachmentUploadRequestBodySchema.Type;
+
+export const InitiateChatAttachmentUploadResponseSchema = /* @__PURE__ */ (() => ChatAttachmentUploadSchema)();
+export type InitiateChatAttachmentUploadResponse = typeof InitiateChatAttachmentUploadResponseSchema.Type;
+
+export const InitiateChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
+
+export const IssueAccessGrantPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type IssueAccessGrantPathParams = typeof IssueAccessGrantPathParamsSchema.Type;
+
+export const IssueAccessGrantRequestBodySchema = /* @__PURE__ */ (() => IssueAccessGrantRequestSchema)();
+export type IssueAccessGrantRequestBody = typeof IssueAccessGrantRequestBodySchema.Type;
+
+export const IssueAccessGrantResponseSchema = /* @__PURE__ */ (() => AccessGrantSchema)();
+export type IssueAccessGrantResponse = typeof IssueAccessGrantResponseSchema.Type;
+
+export const IssueAccessGrant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type IssueAccessGrant429ResponseHeaders = typeof IssueAccessGrant429ResponseHeadersSchema.Type;
+
+export const IssueEpisodeParticipantSyncTokenPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type IssueEpisodeParticipantSyncTokenPathParams = typeof IssueEpisodeParticipantSyncTokenPathParamsSchema.Type;
+
+export const IssueEpisodeParticipantSyncTokenResponseSchema = /* @__PURE__ */ (() => SyncTokenSchema)();
+export type IssueEpisodeParticipantSyncTokenResponse = typeof IssueEpisodeParticipantSyncTokenResponseSchema.Type;
+
+export const IssueEpisodeParticipantSyncToken429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type IssueEpisodeParticipantSyncToken429ResponseHeaders = typeof IssueEpisodeParticipantSyncToken429ResponseHeadersSchema.Type;
+
+export const LeaveSpacePublicInviteArrivalRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "X-Chalk-Arrival-Handle": Schema.String,
+  }))();
+export type LeaveSpacePublicInviteArrivalRequestHeaders = typeof LeaveSpacePublicInviteArrivalRequestHeadersSchema.Type;
+
+export const LeaveSpacePublicInviteArrival429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type LeaveSpacePublicInviteArrival429ResponseHeaders = typeof LeaveSpacePublicInviteArrival429ResponseHeadersSchema.Type;
+
+export const ListAPIKeysPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListAPIKeysPathParams = typeof ListAPIKeysPathParamsSchema.Type;
+
+export const ListAPIKeysQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListAPIKeysQueryParams = typeof ListAPIKeysQueryParamsSchema.Type;
+
+export const ListAPIKeysResponseSchema = /* @__PURE__ */ (() => APIKeyListSchema)();
+export type ListAPIKeysResponse = typeof ListAPIKeysResponseSchema.Type;
+
+export const ListCloudflareSFUPublicationsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListCloudflareSFUPublicationsPathParams = typeof ListCloudflareSFUPublicationsPathParamsSchema.Type;
+
+export const ListCloudflareSFUPublicationsResponseSchema = /* @__PURE__ */ (() => CloudflareSFUPublicationsResponseSchema)();
+export type ListCloudflareSFUPublicationsResponse = typeof ListCloudflareSFUPublicationsResponseSchema.Type;
+
+export const ListCloudflareSFUPublications429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListCloudflareSFUPublications429ResponseHeaders = typeof ListCloudflareSFUPublications429ResponseHeadersSchema.Type;
+
+export const ListEpisodesPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListEpisodesPathParams = typeof ListEpisodesPathParamsSchema.Type;
+
+export const ListEpisodesQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListEpisodesQueryParams = typeof ListEpisodesQueryParamsSchema.Type;
+
+export const ListEpisodesResponseSchema = /* @__PURE__ */ (() => EpisodeListSchema)();
+export type ListEpisodesResponse = typeof ListEpisodesResponseSchema.Type;
+
+export const ListMembershipsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListMembershipsPathParams = typeof ListMembershipsPathParamsSchema.Type;
+
+export const ListMembershipsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListMembershipsQueryParams = typeof ListMembershipsQueryParamsSchema.Type;
+
+export const ListMembershipsResponseSchema = /* @__PURE__ */ (() => MembershipListSchema)();
+export type ListMembershipsResponse = typeof ListMembershipsResponseSchema.Type;
+
+export const ListRecordingsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListRecordingsPathParams = typeof ListRecordingsPathParamsSchema.Type;
+
+export const ListRecordingsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    episode_id: Schema.optional(EpisodeIdSchema),
+    page_size: Schema.optional(Schema.NumberFromString),
+    space_id: Schema.optional(SpaceIdSchema),
+  }))();
+export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.Type;
+
+export const ListRecordingsResponseSchema = /* @__PURE__ */ (() => RecordingListSchema)();
+export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
+
+export const ListSpaceActivityPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListSpaceActivityPathParams = typeof ListSpaceActivityPathParamsSchema.Type;
+
+export const ListSpaceActivityQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_ids: Schema.String,
+  }))();
+export type ListSpaceActivityQueryParams = typeof ListSpaceActivityQueryParamsSchema.Type;
+
+export const ListSpaceActivityResponseSchema = /* @__PURE__ */ (() => SpaceActivityListSchema)();
+export type ListSpaceActivityResponse = typeof ListSpaceActivityResponseSchema.Type;
+
+export const ListSpaceActivity429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListSpaceActivity429ResponseHeaders = typeof ListSpaceActivity429ResponseHeadersSchema.Type;
+
+export const ListSpaceLiveEpisodesPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListSpaceLiveEpisodesPathParams = typeof ListSpaceLiveEpisodesPathParamsSchema.Type;
+
+export const ListSpaceLiveEpisodesQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_ids: Schema.String,
+  }))();
+export type ListSpaceLiveEpisodesQueryParams = typeof ListSpaceLiveEpisodesQueryParamsSchema.Type;
+
+export const ListSpaceLiveEpisodesResponseSchema = /* @__PURE__ */ (() => SpaceLiveEpisodeListSchema)();
+export type ListSpaceLiveEpisodesResponse = typeof ListSpaceLiveEpisodesResponseSchema.Type;
+
+export const ListSpaceLiveEpisodes429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListSpaceLiveEpisodes429ResponseHeaders = typeof ListSpaceLiveEpisodes429ResponseHeadersSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListSpacePublicAdmissionRequestsPathParams = typeof ListSpacePublicAdmissionRequestsPathParamsSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    state: Schema.optional(Schema.Literal("pending")),
+  }))();
+export type ListSpacePublicAdmissionRequestsQueryParams = typeof ListSpacePublicAdmissionRequestsQueryParamsSchema.Type;
+
+export const ListSpacePublicAdmissionRequestsResponseSchema = /* @__PURE__ */ (() => PublicAdmissionRequestPageSchema)();
+export type ListSpacePublicAdmissionRequestsResponse = typeof ListSpacePublicAdmissionRequestsResponseSchema.Type;
+
+export const ListSpacePublicAdmissionRequests429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListSpacePublicAdmissionRequests429ResponseHeaders = typeof ListSpacePublicAdmissionRequests429ResponseHeadersSchema.Type;
+
+export const ListSpacesPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListSpacesPathParams = typeof ListSpacesPathParamsSchema.Type;
+
+export const ListSpacesQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    archived: Schema.optional(Schema.Boolean),
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListSpacesQueryParams = typeof ListSpacesQueryParamsSchema.Type;
+
+export const ListSpacesResponseSchema = /* @__PURE__ */ (() => SpaceListSchema)();
+export type ListSpacesResponse = typeof ListSpacesResponseSchema.Type;
+
+export const ListTenantsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListTenantsQueryParams = typeof ListTenantsQueryParamsSchema.Type;
+
+export const ListTenantsResponseSchema = /* @__PURE__ */ (() => TenantListSchema)();
+export type ListTenantsResponse = typeof ListTenantsResponseSchema.Type;
+
+export const ListTenants429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListTenants429ResponseHeaders = typeof ListTenants429ResponseHeadersSchema.Type;
+
+export const ListTranscriptsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListTranscriptsPathParams = typeof ListTranscriptsPathParamsSchema.Type;
+
+export const ListTranscriptsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+    recording_id: Schema.optional(RecordingIdSchema),
+  }))();
+export type ListTranscriptsQueryParams = typeof ListTranscriptsQueryParamsSchema.Type;
+
+export const ListTranscriptsResponseSchema = /* @__PURE__ */ (() => TranscriptListSchema)();
+export type ListTranscriptsResponse = typeof ListTranscriptsResponseSchema.Type;
+
+export const ListWebhookDeliveriesPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListWebhookDeliveriesPathParams = typeof ListWebhookDeliveriesPathParamsSchema.Type;
+
+export const ListWebhookDeliveriesQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    event_type: Schema.optional(
+      Schema.Array(
+        Schema.Literals([
+          "endpoint.test",
+          "episode.ended",
+          "episode.started",
+          "participant.joined",
+          "participant.left",
+          "recording.completed",
+          "recording.failed",
+          "recording.started",
+          "space.archived",
+          "space.created",
+          "space.restored",
+          "space.updated",
+          "transcript.completed",
+          "transcript.failed",
+          "transcript.started",
+        ]),
+      ),
+    ),
+    page_size: Schema.optional(Schema.NumberFromString),
+    state: Schema.optional(Schema.Array(Schema.Literals(["pending", "retry_wait", "delivering", "succeeded", "exhausted", "canceled", "erased"]))),
+  }))();
 export type ListWebhookDeliveriesQueryParams = typeof ListWebhookDeliveriesQueryParamsSchema.Type;
 
-export const ListWebhookDeliveriesResponseSchema = WebhookDeliveryListSchema;
+export const ListWebhookDeliveriesResponseSchema = /* @__PURE__ */ (() => WebhookDeliveryListSchema)();
 export type ListWebhookDeliveriesResponse = typeof ListWebhookDeliveriesResponseSchema.Type;
 
-export const ListWebhookDeliveries429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const ListWebhookDeliveries429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type ListWebhookDeliveries429ResponseHeaders = typeof ListWebhookDeliveries429ResponseHeadersSchema.Type;
 
-export const ListWebhookEndpointsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
+export const ListWebhookEndpointsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
 export type ListWebhookEndpointsPathParams = typeof ListWebhookEndpointsPathParamsSchema.Type;
 
-export const ListWebhookEndpointsQueryParamsSchema = Schema.Struct({
-  cursor: Schema.optional(Schema.String),
-  page_size: Schema.optional(Schema.NumberFromString),
-});
+export const ListWebhookEndpointsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
 export type ListWebhookEndpointsQueryParams = typeof ListWebhookEndpointsQueryParamsSchema.Type;
 
-export const ListWebhookEndpointsResponseSchema = WebhookEndpointListSchema;
+export const ListWebhookEndpointsResponseSchema = /* @__PURE__ */ (() => WebhookEndpointListSchema)();
 export type ListWebhookEndpointsResponse = typeof ListWebhookEndpointsResponseSchema.Type;
 
-export const ListWebhookEndpoints429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const ListWebhookEndpoints429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type ListWebhookEndpoints429ResponseHeaders = typeof ListWebhookEndpoints429ResponseHeadersSchema.Type;
 
-export const PreparePublicSpaceEntranceRequestBodySchema = EntranceInviteSchema;
+export const PreparePublicSpaceEntranceRequestBodySchema = /* @__PURE__ */ (() => EntranceInviteSchema)();
 export type PreparePublicSpaceEntranceRequestBody = typeof PreparePublicSpaceEntranceRequestBodySchema.Type;
 
-export const PreparePublicSpaceEntranceResponseSchema = EntrancePreparationSchema;
+export const PreparePublicSpaceEntranceResponseSchema = /* @__PURE__ */ (() => EntrancePreparationSchema)();
 export type PreparePublicSpaceEntranceResponse = typeof PreparePublicSpaceEntranceResponseSchema.Type;
 
-export const PreparePublicSpaceEntrance429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const PreparePublicSpaceEntrance429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type PreparePublicSpaceEntrance429ResponseHeaders = typeof PreparePublicSpaceEntrance429ResponseHeadersSchema.Type;
 
-export const PrepareSpaceEntrancePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const PrepareSpaceEntrancePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type PrepareSpaceEntrancePathParams = typeof PrepareSpaceEntrancePathParamsSchema.Type;
 
-export const PrepareSpaceEntranceResponseSchema = EntrancePreparationSchema;
+export const PrepareSpaceEntranceResponseSchema = /* @__PURE__ */ (() => EntrancePreparationSchema)();
 export type PrepareSpaceEntranceResponse = typeof PrepareSpaceEntranceResponseSchema.Type;
 
-export const PrepareSpaceEntrance429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const PrepareSpaceEntrance429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type PrepareSpaceEntrance429ResponseHeaders = typeof PrepareSpaceEntrance429ResponseHeadersSchema.Type;
 
-export const PrepareSpaceRecordingPathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const PrepareSpaceRecordingPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type PrepareSpaceRecordingPathParams = typeof PrepareSpaceRecordingPathParamsSchema.Type;
 
-export const PrepareSpaceRecordingRequestBodySchema = PrepareRecordingRequestSchema;
+export const PrepareSpaceRecordingRequestBodySchema = /* @__PURE__ */ (() => PrepareRecordingRequestSchema)();
 export type PrepareSpaceRecordingRequestBody = typeof PrepareSpaceRecordingRequestBodySchema.Type;
 
-export const PrepareSpaceRecordingResponseSchema = RecordingPreparationSchema;
+export const PrepareSpaceRecordingResponseSchema = /* @__PURE__ */ (() => RecordingPreparationSchema)();
 export type PrepareSpaceRecordingResponse = typeof PrepareSpaceRecordingResponseSchema.Type;
 
-export const PrepareSpaceRecording429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const PrepareSpaceRecording429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type PrepareSpaceRecording429ResponseHeaders = typeof PrepareSpaceRecording429ResponseHeadersSchema.Type;
 
-export const RedeliverWebhookDeliveryPathParamsSchema = Schema.Struct({
-  delivery_id: UUIDSchema,
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RedeliverWebhookDeliveryPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    delivery_id: UUIDSchema,
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RedeliverWebhookDeliveryPathParams = typeof RedeliverWebhookDeliveryPathParamsSchema.Type;
 
-export const RedeliverWebhookDeliveryRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const RedeliverWebhookDeliveryRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type RedeliverWebhookDeliveryRequestHeaders = typeof RedeliverWebhookDeliveryRequestHeadersSchema.Type;
 
-export const RedeliverWebhookDeliveryResponseSchema = WebhookDeliveryCreatedSchema;
+export const RedeliverWebhookDeliveryResponseSchema = /* @__PURE__ */ (() => WebhookDeliveryCreatedSchema)();
 export type RedeliverWebhookDeliveryResponse = typeof RedeliverWebhookDeliveryResponseSchema.Type;
 
-export const RedeliverWebhookDelivery429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RedeliverWebhookDelivery429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RedeliverWebhookDelivery429ResponseHeaders = typeof RedeliverWebhookDelivery429ResponseHeadersSchema.Type;
 
-export const RefreshSpacePublicInviteAccessRequestHeadersSchema = Schema.Struct({
-  "X-Chalk-Arrival-Handle": Schema.String,
-});
+export const RefreshSpacePublicInviteAccessRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "X-Chalk-Arrival-Handle": Schema.String,
+  }))();
 export type RefreshSpacePublicInviteAccessRequestHeaders = typeof RefreshSpacePublicInviteAccessRequestHeadersSchema.Type;
 
-export const RefreshSpacePublicInviteAccessRequestBodySchema = RefreshSpacePublicInviteAccessRequestSchema;
+export const RefreshSpacePublicInviteAccessRequestBodySchema = /* @__PURE__ */ (() => RefreshSpacePublicInviteAccessRequestSchema)();
 export type RefreshSpacePublicInviteAccessRequestBody = typeof RefreshSpacePublicInviteAccessRequestBodySchema.Type;
 
-export const RefreshSpacePublicInviteAccessResponseSchema = AccessGrantSchema;
+export const RefreshSpacePublicInviteAccessResponseSchema = /* @__PURE__ */ (() => AccessGrantSchema)();
 export type RefreshSpacePublicInviteAccessResponse = typeof RefreshSpacePublicInviteAccessResponseSchema.Type;
 
-export const RefreshSpacePublicInviteAccess429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RefreshSpacePublicInviteAccess429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RefreshSpacePublicInviteAccess429ResponseHeaders = typeof RefreshSpacePublicInviteAccess429ResponseHeadersSchema.Type;
 
-export const RemoveEpisodeParticipantPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RemoveEpisodeParticipantPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RemoveEpisodeParticipantPathParams = typeof RemoveEpisodeParticipantPathParamsSchema.Type;
 
-export const RemoveEpisodeParticipantRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const RemoveEpisodeParticipantRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type RemoveEpisodeParticipantRequestHeaders = typeof RemoveEpisodeParticipantRequestHeadersSchema.Type;
 
-export const RemoveEpisodeParticipantRequestBodySchema = RemoveEpisodeParticipantRequestSchema;
+export const RemoveEpisodeParticipantRequestBodySchema = /* @__PURE__ */ (() => RemoveEpisodeParticipantRequestSchema)();
 export type RemoveEpisodeParticipantRequestBody = typeof RemoveEpisodeParticipantRequestBodySchema.Type;
 
-export const RemoveEpisodeParticipantResponseSchema = ParticipantRemovalSchema;
+export const RemoveEpisodeParticipantResponseSchema = /* @__PURE__ */ (() => ParticipantRemovalSchema)();
 export type RemoveEpisodeParticipantResponse = typeof RemoveEpisodeParticipantResponseSchema.Type;
 
-export const RemoveEpisodeParticipant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RemoveEpisodeParticipant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RemoveEpisodeParticipant429ResponseHeaders = typeof RemoveEpisodeParticipant429ResponseHeadersSchema.Type;
 
-export const RenegotiateCloudflareSFUPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RenegotiateCloudflareSFUPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RenegotiateCloudflareSFUPathParams = typeof RenegotiateCloudflareSFUPathParamsSchema.Type;
 
-export const RenegotiateCloudflareSFURequestBodySchema = CloudflareSFURenegotiateRequestSchema;
+export const RenegotiateCloudflareSFURequestBodySchema = /* @__PURE__ */ (() => CloudflareSFURenegotiateRequestSchema)();
 export type RenegotiateCloudflareSFURequestBody = typeof RenegotiateCloudflareSFURequestBodySchema.Type;
 
-export const RenegotiateCloudflareSFUResponseSchema = CloudflareSFURenegotiateResponseSchema;
+export const RenegotiateCloudflareSFUResponseSchema = /* @__PURE__ */ (() => CloudflareSFURenegotiateResponseSchema)();
 export type RenegotiateCloudflareSFUResponse = typeof RenegotiateCloudflareSFUResponseSchema.Type;
 
-export const RenegotiateCloudflareSFU429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RenegotiateCloudflareSFU429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RenegotiateCloudflareSFU429ResponseHeaders = typeof RenegotiateCloudflareSFU429ResponseHeadersSchema.Type;
 
-export const ReportConnectionFailurePathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
+export const ReportConnectionFailurePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
 export type ReportConnectionFailurePathParams = typeof ReportConnectionFailurePathParamsSchema.Type;
 
-export const ReportConnectionFailureRequestBodySchema = ConnectionReportRequestSchema;
+export const ReportConnectionFailureRequestBodySchema = /* @__PURE__ */ (() => ConnectionReportRequestSchema)();
 export type ReportConnectionFailureRequestBody = typeof ReportConnectionFailureRequestBodySchema.Type;
 
-export const ReportConnectionFailure429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const ReportConnectionFailure429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type ReportConnectionFailure429ResponseHeaders = typeof ReportConnectionFailure429ResponseHeadersSchema.Type;
 
-export const RequestRecordingExportPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RequestRecordingExportPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recording_id: RecordingIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RequestRecordingExportPathParams = typeof RequestRecordingExportPathParamsSchema.Type;
 
-export const RequestRecordingExportRequestBodySchema = RequestRecordingExportRequestSchema;
+export const RequestRecordingExportRequestBodySchema = /* @__PURE__ */ (() => RequestRecordingExportRequestSchema)();
 export type RequestRecordingExportRequestBody = typeof RequestRecordingExportRequestBodySchema.Type;
 
-export const RequestRecordingExportResponseSchema = RecordingExportRequestAcceptedResponseSchema;
+export const RequestRecordingExportResponseSchema = /* @__PURE__ */ (() => RecordingExportRequestAcceptedResponseSchema)();
 export type RequestRecordingExportResponse = typeof RequestRecordingExportResponseSchema.Type;
 
-export const RequestRecordingExport429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RequestRecordingExport429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RequestRecordingExport429ResponseHeaders = typeof RequestRecordingExport429ResponseHeadersSchema.Type;
 
-export const RequestTranscriptPathParamsSchema = Schema.Struct({
-  recording_id: RecordingIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RequestTranscriptPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    recording_id: RecordingIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RequestTranscriptPathParams = typeof RequestTranscriptPathParamsSchema.Type;
 
-export const RequestTranscriptRequestBodySchema = RequestTranscriptRequestSchema;
+export const RequestTranscriptRequestBodySchema = /* @__PURE__ */ (() => RequestTranscriptRequestSchema)();
 export type RequestTranscriptRequestBody = typeof RequestTranscriptRequestBodySchema.Type;
 
-export const RequestTranscriptResponseSchema = TranscriptRequestAcceptedResponseSchema;
+export const RequestTranscriptResponseSchema = /* @__PURE__ */ (() => TranscriptRequestAcceptedResponseSchema)();
 export type RequestTranscriptResponse = typeof RequestTranscriptResponseSchema.Type;
 
-export const RequestTranscript429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RequestTranscript429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RequestTranscript429ResponseHeaders = typeof RequestTranscript429ResponseHeadersSchema.Type;
 
-export const RestoreSpacePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RestoreSpacePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RestoreSpacePathParams = typeof RestoreSpacePathParamsSchema.Type;
 
-export const RestoreSpaceResponseSchema = SpaceSchema;
+export const RestoreSpaceResponseSchema = /* @__PURE__ */ (() => SpaceSchema)();
 export type RestoreSpaceResponse = typeof RestoreSpaceResponseSchema.Type;
 
-export const RestoreSpace429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RestoreSpace429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RestoreSpace429ResponseHeaders = typeof RestoreSpace429ResponseHeadersSchema.Type;
 
-export const RevokeAPIKeyPathParamsSchema = Schema.Struct({
-  api_key_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RevokeAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_key_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RevokeAPIKeyPathParams = typeof RevokeAPIKeyPathParamsSchema.Type;
 
-export const RevokeAPIKey429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RevokeAPIKey429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RevokeAPIKey429ResponseHeaders = typeof RevokeAPIKey429ResponseHeadersSchema.Type;
 
-export const RotateAPIKeyPathParamsSchema = Schema.Struct({
-  api_key_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RotateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    api_key_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RotateAPIKeyPathParams = typeof RotateAPIKeyPathParamsSchema.Type;
 
-export const RotateAPIKeyRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const RotateAPIKeyRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type RotateAPIKeyRequestHeaders = typeof RotateAPIKeyRequestHeadersSchema.Type;
 
-export const RotateAPIKeyRequestBodySchema = RotateAPIKeyRequestSchema;
+export const RotateAPIKeyRequestBodySchema = /* @__PURE__ */ (() => RotateAPIKeyRequestSchema)();
 export type RotateAPIKeyRequestBody = typeof RotateAPIKeyRequestBodySchema.Type;
 
-export const RotateAPIKeyResponseSchema = APIKeyWithSecretSchema;
+export const RotateAPIKeyResponseSchema = /* @__PURE__ */ (() => APIKeyWithSecretSchema)();
 export type RotateAPIKeyResponse = typeof RotateAPIKeyResponseSchema.Type;
 
-export const RotateAPIKey429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RotateAPIKey429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RotateAPIKey429ResponseHeaders = typeof RotateAPIKey429ResponseHeadersSchema.Type;
 
-export const RotateSpacePublicInvitePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RotateSpacePublicInvitePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RotateSpacePublicInvitePathParams = typeof RotateSpacePublicInvitePathParamsSchema.Type;
 
-export const RotateSpacePublicInviteRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const RotateSpacePublicInviteRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type RotateSpacePublicInviteRequestHeaders = typeof RotateSpacePublicInviteRequestHeadersSchema.Type;
 
-export const RotateSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
+export const RotateSpacePublicInviteResponseSchema = /* @__PURE__ */ (() => SpacePublicInviteSchema)();
 export type RotateSpacePublicInviteResponse = typeof RotateSpacePublicInviteResponseSchema.Type;
 
-export const RotateSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RotateSpacePublicInvite429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RotateSpacePublicInvite429ResponseHeaders = typeof RotateSpacePublicInvite429ResponseHeadersSchema.Type;
 
-export const RotateWebhookEndpointSecretPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const RotateWebhookEndpointSecretPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type RotateWebhookEndpointSecretPathParams = typeof RotateWebhookEndpointSecretPathParamsSchema.Type;
 
-export const RotateWebhookEndpointSecretRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const RotateWebhookEndpointSecretRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type RotateWebhookEndpointSecretRequestHeaders = typeof RotateWebhookEndpointSecretRequestHeadersSchema.Type;
 
-export const RotateWebhookEndpointSecretRequestBodySchema = RotateWebhookSecretRequestSchema;
+export const RotateWebhookEndpointSecretRequestBodySchema = /* @__PURE__ */ (() => RotateWebhookSecretRequestSchema)();
 export type RotateWebhookEndpointSecretRequestBody = typeof RotateWebhookEndpointSecretRequestBodySchema.Type;
 
-export const RotateWebhookEndpointSecretResponseSchema = RotateWebhookSecretResponseSchema;
+export const RotateWebhookEndpointSecretResponseSchema = /* @__PURE__ */ (() => RotateWebhookSecretResponseSchema)();
 export type RotateWebhookEndpointSecretResponse = typeof RotateWebhookEndpointSecretResponseSchema.Type;
 
-export const RotateWebhookEndpointSecret429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const RotateWebhookEndpointSecret429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type RotateWebhookEndpointSecret429ResponseHeaders = typeof RotateWebhookEndpointSecret429ResponseHeadersSchema.Type;
 
-export const SendProblemReportPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
+export const SendProblemReportPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
 export type SendProblemReportPathParams = typeof SendProblemReportPathParamsSchema.Type;
 
-export const SendProblemReportRequestBodySchema = ProblemReportRequestSchema;
+export const SendProblemReportRequestBodySchema = /* @__PURE__ */ (() => ProblemReportRequestSchema)();
 export type SendProblemReportRequestBody = typeof SendProblemReportRequestBodySchema.Type;
 
-export const SendProblemReportResponseSchema = ProblemReportSentSchema;
+export const SendProblemReportResponseSchema = /* @__PURE__ */ (() => ProblemReportSentSchema)();
 export type SendProblemReportResponse = typeof SendProblemReportResponseSchema.Type;
 
-export const SendProblemReport429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const SendProblemReport429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type SendProblemReport429ResponseHeaders = typeof SendProblemReport429ResponseHeadersSchema.Type;
 
-export const SetEpisodeDeadlinePathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const SetEpisodeDeadlinePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type SetEpisodeDeadlinePathParams = typeof SetEpisodeDeadlinePathParamsSchema.Type;
 
-export const SetEpisodeDeadlineRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const SetEpisodeDeadlineRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type SetEpisodeDeadlineRequestHeaders = typeof SetEpisodeDeadlineRequestHeadersSchema.Type;
 
-export const SetEpisodeDeadlineRequestBodySchema = SetEpisodeDeadlineRequestSchema;
+export const SetEpisodeDeadlineRequestBodySchema = /* @__PURE__ */ (() => SetEpisodeDeadlineRequestSchema)();
 export type SetEpisodeDeadlineRequestBody = typeof SetEpisodeDeadlineRequestBodySchema.Type;
 
-export const SetEpisodeDeadlineResponseSchema = EpisodeDeadlineSchema;
+export const SetEpisodeDeadlineResponseSchema = /* @__PURE__ */ (() => EpisodeDeadlineSchema)();
 export type SetEpisodeDeadlineResponse = typeof SetEpisodeDeadlineResponseSchema.Type;
 
-export const SetEpisodeDeadline429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const SetEpisodeDeadline429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type SetEpisodeDeadline429ResponseHeaders = typeof SetEpisodeDeadline429ResponseHeadersSchema.Type;
 
-export const TestWebhookEndpointPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const TestWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type TestWebhookEndpointPathParams = typeof TestWebhookEndpointPathParamsSchema.Type;
 
-export const TestWebhookEndpointRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-});
+export const TestWebhookEndpointRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+  }))();
 export type TestWebhookEndpointRequestHeaders = typeof TestWebhookEndpointRequestHeadersSchema.Type;
 
-export const TestWebhookEndpointResponseSchema = WebhookDeliveryCreatedSchema;
+export const TestWebhookEndpointResponseSchema = /* @__PURE__ */ (() => WebhookDeliveryCreatedSchema)();
 export type TestWebhookEndpointResponse = typeof TestWebhookEndpointResponseSchema.Type;
 
-export const TestWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const TestWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type TestWebhookEndpoint429ResponseHeaders = typeof TestWebhookEndpoint429ResponseHeadersSchema.Type;
 
-export const UpdateCloudflareSFUTracksPathParamsSchema = Schema.Struct({
-  episode_id: EpisodeIdSchema,
-  participant_id: ParticipantIdSchema,
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const UpdateCloudflareSFUTracksPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateCloudflareSFUTracksPathParams = typeof UpdateCloudflareSFUTracksPathParamsSchema.Type;
 
-export const UpdateCloudflareSFUTracksRequestBodySchema = CloudflareSFUUpdateTracksRequestSchema;
+export const UpdateCloudflareSFUTracksRequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksRequestSchema)();
 export type UpdateCloudflareSFUTracksRequestBody = typeof UpdateCloudflareSFUTracksRequestBodySchema.Type;
 
-export const UpdateCloudflareSFUTracksResponseSchema = CloudflareSFUUpdateTracksAPIResponseSchema;
+export const UpdateCloudflareSFUTracksResponseSchema = /* @__PURE__ */ (() => CloudflareSFUUpdateTracksAPIResponseSchema)();
 export type UpdateCloudflareSFUTracksResponse = typeof UpdateCloudflareSFUTracksResponseSchema.Type;
 
-export const UpdateCloudflareSFUTracks429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateCloudflareSFUTracks429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateCloudflareSFUTracks429ResponseHeaders = typeof UpdateCloudflareSFUTracks429ResponseHeadersSchema.Type;
 
-export const UpdateMembershipPathParamsSchema = Schema.Struct({
-  membership_id: MembershipIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const UpdateMembershipPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    membership_id: MembershipIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateMembershipPathParams = typeof UpdateMembershipPathParamsSchema.Type;
 
-export const UpdateMembershipRequestBodySchema = UpdateMembershipRequestSchema;
+export const UpdateMembershipRequestBodySchema = /* @__PURE__ */ (() => UpdateMembershipRequestSchema)();
 export type UpdateMembershipRequestBody = typeof UpdateMembershipRequestBodySchema.Type;
 
-export const UpdateMembershipResponseSchema = MembershipSchema;
+export const UpdateMembershipResponseSchema = /* @__PURE__ */ (() => MembershipSchema)();
 export type UpdateMembershipResponse = typeof UpdateMembershipResponseSchema.Type;
 
-export const UpdateMembership429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateMembership429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateMembership429ResponseHeaders = typeof UpdateMembership429ResponseHeadersSchema.Type;
 
-export const UpdateSpacePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const UpdateSpacePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateSpacePathParams = typeof UpdateSpacePathParamsSchema.Type;
 
-export const UpdateSpaceRequestBodySchema = UpdateSpaceRequestSchema;
+export const UpdateSpaceRequestBodySchema = /* @__PURE__ */ (() => UpdateSpaceRequestSchema)();
 export type UpdateSpaceRequestBody = typeof UpdateSpaceRequestBodySchema.Type;
 
-export const UpdateSpaceResponseSchema = SpaceSchema;
+export const UpdateSpaceResponseSchema = /* @__PURE__ */ (() => SpaceSchema)();
 export type UpdateSpaceResponse = typeof UpdateSpaceResponseSchema.Type;
 
-export const UpdateSpace429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateSpace429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateSpace429ResponseHeaders = typeof UpdateSpace429ResponseHeadersSchema.Type;
 
-export const UpdateSpacePublicInvitePathParamsSchema = Schema.Struct({
-  space_id: SpaceIdSchema,
-  tenant_id: TenantIdSchema,
-});
+export const UpdateSpacePublicInvitePathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateSpacePublicInvitePathParams = typeof UpdateSpacePublicInvitePathParamsSchema.Type;
 
-export const UpdateSpacePublicInviteRequestBodySchema = UpdateSpacePublicInviteRequestSchema;
+export const UpdateSpacePublicInviteRequestBodySchema = /* @__PURE__ */ (() => UpdateSpacePublicInviteRequestSchema)();
 export type UpdateSpacePublicInviteRequestBody = typeof UpdateSpacePublicInviteRequestBodySchema.Type;
 
-export const UpdateSpacePublicInviteResponseSchema = SpacePublicInviteSchema;
+export const UpdateSpacePublicInviteResponseSchema = /* @__PURE__ */ (() => SpacePublicInviteSchema)();
 export type UpdateSpacePublicInviteResponse = typeof UpdateSpacePublicInviteResponseSchema.Type;
 
-export const UpdateSpacePublicInvite429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateSpacePublicInvite429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateSpacePublicInvite429ResponseHeaders = typeof UpdateSpacePublicInvite429ResponseHeadersSchema.Type;
 
-export const UpdateTenantPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
+export const UpdateTenantPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateTenantPathParams = typeof UpdateTenantPathParamsSchema.Type;
 
-export const UpdateTenantRequestBodySchema = UpdateTenantRequestSchema;
+export const UpdateTenantRequestBodySchema = /* @__PURE__ */ (() => UpdateTenantRequestSchema)();
 export type UpdateTenantRequestBody = typeof UpdateTenantRequestBodySchema.Type;
 
-export const UpdateTenantResponseSchema = TenantSchema;
+export const UpdateTenantResponseSchema = /* @__PURE__ */ (() => TenantSchema)();
 export type UpdateTenantResponse = typeof UpdateTenantResponseSchema.Type;
 
-export const UpdateTenant429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateTenant429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateTenant429ResponseHeaders = typeof UpdateTenant429ResponseHeadersSchema.Type;
 
-export const UpdateWebhookEndpointPathParamsSchema = Schema.Struct({
-  endpoint_id: UUIDSchema,
-  tenant_id: TenantIdSchema,
-});
+export const UpdateWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    endpoint_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
 export type UpdateWebhookEndpointPathParams = typeof UpdateWebhookEndpointPathParamsSchema.Type;
 
-export const UpdateWebhookEndpointRequestHeadersSchema = Schema.Struct({
-  "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
-  "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
-});
+export const UpdateWebhookEndpointRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "If-Match": Schema.String.check(Schema.isPattern(new RegExp('^"[1-9][0-9]*"$'))),
+  }))();
 export type UpdateWebhookEndpointRequestHeaders = typeof UpdateWebhookEndpointRequestHeadersSchema.Type;
 
-export const UpdateWebhookEndpointRequestBodySchema = UpdateWebhookEndpointRequestSchema;
+export const UpdateWebhookEndpointRequestBodySchema = /* @__PURE__ */ (() => UpdateWebhookEndpointRequestSchema)();
 export type UpdateWebhookEndpointRequestBody = typeof UpdateWebhookEndpointRequestBodySchema.Type;
 
-export const UpdateWebhookEndpointResponseSchema = WebhookEndpointSchema;
+export const UpdateWebhookEndpointResponseSchema = /* @__PURE__ */ (() => WebhookEndpointSchema)();
 export type UpdateWebhookEndpointResponse = typeof UpdateWebhookEndpointResponseSchema.Type;
 
-export const UpdateWebhookEndpoint429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UpdateWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UpdateWebhookEndpoint429ResponseHeaders = typeof UpdateWebhookEndpoint429ResponseHeadersSchema.Type;
 
-export const UploadCallStatsPathParamsSchema = Schema.Struct({
-  tenant_id: TenantIdSchema,
-});
+export const UploadCallStatsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
 export type UploadCallStatsPathParams = typeof UploadCallStatsPathParamsSchema.Type;
 
-export const UploadCallStatsRequestBodySchema = CallStatsRequestSchema;
+export const UploadCallStatsRequestBodySchema = /* @__PURE__ */ (() => CallStatsRequestSchema)();
 export type UploadCallStatsRequestBody = typeof UploadCallStatsRequestBodySchema.Type;
 
-export const UploadCallStats429ResponseHeadersSchema = Schema.Struct({
-  "Retry-After": RetryAfterHeaderSchema,
-  "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
-  "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
-});
+export const UploadCallStats429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
 export type UploadCallStats429ResponseHeaders = typeof UploadCallStats429ResponseHeadersSchema.Type;
 
 export class AccessForbiddenError extends Schema.TaggedErrorClass<AccessForbiddenError>()("AccessForbiddenError", {

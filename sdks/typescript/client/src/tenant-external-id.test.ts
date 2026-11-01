@@ -17,6 +17,7 @@ async function createAndFindTenantFixture(externalID: string) {
     website: null,
     transcription_ceiling: "on_demand",
     transcription_default_mode: "on_demand",
+    transcript_language: "auto",
     provider_policy_version: "test-policy",
     recording_retention_seconds: 3600,
     transcript_retention_seconds: 3600,

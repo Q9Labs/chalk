@@ -252,7 +252,7 @@ function Session({
   async function createTranscript(target: RecordingDTO) {
     const recordingId = target.id;
     try {
-      const created = await act("past-session", { action: "create-transcript", ...ids, recordingId, languages: [TRANSCRIPT_LANGUAGE], idempotencyKey: intents.key(`transcript:${recordingId}`) });
+      const created = await act("past-session", { action: "create-transcript", ...ids, recordingId, idempotencyKey: intents.key(`transcript:${recordingId}`) });
       intents.done(`transcript:${recordingId}`);
       onTranscript(recordingId, created.transcript);
       toast("Making the transcript. It shows here when it’s ready.", { icon: "clock" });
@@ -296,16 +296,6 @@ function Session({
     </div>
   );
 }
-
-/** The engine needs a language to transcribe in. The viewer's own is the best single guess. */
-const TRANSCRIPT_LANGUAGE = (typeof navigator === "undefined" ? "en" : navigator.language).split("-")[0]?.toLowerCase() || "en";
-const languageName = (code: string) => {
-  try {
-    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-};
 
 function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly video: boolean; readonly transcript: TranscriptDTO | null }) {
   const toast = useToast();
@@ -510,7 +500,7 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
           }}
         >
           <Icon name="file" />
-          Make a transcript in {languageName(TRANSCRIPT_LANGUAGE)}
+          Make a transcript
         </button>
       </div>
     );
