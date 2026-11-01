@@ -239,6 +239,7 @@ type sfuLivenessTransport struct {
 	addTracksStatus int
 	addTracksBody   string
 	addTracksErr    error
+	trackPulls      int
 }
 
 func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -248,6 +249,7 @@ func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.R
 	var body string
 	switch {
 	case request.Method == http.MethodPost && strings.HasSuffix(request.URL.Path, "/sessions/listener-connection/tracks/new"):
+		transport.trackPulls++
 		if transport.addTracksErr != nil {
 			return nil, transport.addTracksErr
 		}
@@ -284,6 +286,12 @@ func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.R
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    request,
 	}, nil
+}
+
+func (transport *sfuLivenessTransport) trackPullCount() int {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	return transport.trackPulls
 }
 
 func (transport *sfuLivenessTransport) sessionReadCount() int {

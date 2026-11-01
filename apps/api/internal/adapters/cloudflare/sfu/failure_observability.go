@@ -101,6 +101,7 @@ func classifyTransportCause(ctx context.Context, err error) transportCause {
 
 type providerFailureDetails struct {
 	rawCode            string
+	trackErrorCode     string
 	message            string
 	messageFingerprint string
 	responseBytes      int
@@ -123,6 +124,8 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 	}
 	if operation == "close_tracks" && stage == failureStageTrack {
 		failure.details.rawCode = observableProviderMessage(rawCode)
+	} else if stage == failureStageTrack {
+		failure.details.trackErrorCode = observableTrackErrorCode(rawCode)
 	}
 	return failure
 }
@@ -202,6 +205,40 @@ func observableProviderCode(rawCode string, normalizedCode string) string {
 	rawCode = strings.TrimSpace(rawCode)
 	if normalizedCode != "unknown" || !providerCodePattern.MatchString(rawCode) {
 		return ""
+	}
+	return rawCode
+}
+
+// knownTrackErrorCodes lists the per-track errorCode values Cloudflare documents
+// or that this adapter already handles. Provider text can't be trusted, so any
+// other value is exported only as "other".
+var knownTrackErrorCodes = map[string]struct{}{
+	"not_found_track_error":       {},
+	"empty_track_error":           {},
+	"repeated_local_track_error":  {},
+	"update_track_error":          {},
+	"invalid_track":               {},
+	"invalid_session_description": {},
+	"session_error":               {},
+	"session_not_found":           {},
+	"session_not_connected":       {},
+	"session_not_ready":           {},
+	"connection_not_found":        {},
+	"track_not_found":             {},
+	"track_already_closed":        {},
+	"internal_error":              {},
+	"transport_unavailable_error": {},
+	"decoding_error":              {},
+	"upstream_error":              {},
+}
+
+func observableTrackErrorCode(rawCode string) string {
+	rawCode = strings.TrimSpace(rawCode)
+	if rawCode == "" {
+		return ""
+	}
+	if _, known := knownTrackErrorCodes[rawCode]; !known {
+		return "other"
 	}
 	return rawCode
 }
