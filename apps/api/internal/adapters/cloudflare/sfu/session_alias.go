@@ -188,6 +188,22 @@ func (r *sessionRegistry) registerLocked(entry *sessionEntry, swapped bool) (str
 	}, nil
 }
 
+// sessionContext describes the session behind a connection for the add-tracks log: its age in
+// milliseconds and whether the connection has negotiated. A connection with no entry either negotiated
+// without ever being swapped or predates this process, so its age is unknown (-1) and it reads as negotiated.
+func (r *sessionRegistry) sessionContext(connectionID string) (ageMs int64, negotiated bool) {
+	if r == nil {
+		return -1, true
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry, ok := r.entries[connectionID]
+	if !ok {
+		return -1, true
+	}
+	return r.now().Sub(entry.created).Milliseconds(), entry.negotiated
+}
+
 // clientID returns the connection ID a client knows for a Cloudflare session.
 func (r *sessionRegistry) clientID(providerID string) string {
 	if r == nil {

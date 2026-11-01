@@ -29,6 +29,7 @@ var addTracksRecordFields = []string{
 	"space_id", "episode_id", "provider_session_id",
 	"track_count", "track_kinds", "track_error_kinds", "sdp_type", "sdp_rid_count", "simulcast_track_count",
 	"upstream_latency_ms", "outcome", "http_status", "provider_code", "retry",
+	"session_age_ms", "session_negotiated",
 }
 
 func TestAddTracksLogsBoundedPerTrackErrorKinds(t *testing.T) {
@@ -215,6 +216,9 @@ func assertAddTracksRequestFields(t *testing.T, record map[string]any) {
 		"sdp_rid_count":         float64(2),
 		"simulcast_track_count": float64(1),
 		"retry":                 "none",
+		// This process never issued the connection, so its session age is unknown.
+		"session_age_ms":     float64(-1),
+		"session_negotiated": true,
 	}
 	for field, value := range want {
 		if record[field] != value {
