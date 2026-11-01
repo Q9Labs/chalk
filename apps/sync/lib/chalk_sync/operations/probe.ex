@@ -515,7 +515,8 @@ defmodule ChalkSync.Operations.Probe do
     end
   end
 
-  defp external_operation_check(_lane), do: :external_operation_consumer
+  defp external_operation_check(:local), do: :external_operation_consumer_local
+  defp external_operation_check(:provider), do: :external_operation_consumer_provider
 
   defp safe_external_operation_health(name) do
     {:ok, ExternalOperationConsumer.health(name)}
