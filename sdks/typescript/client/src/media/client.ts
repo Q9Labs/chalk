@@ -1856,6 +1856,9 @@ function isGonePublicationFailure(error: unknown): boolean {
 function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;
 }
+function unwrapAggregateErrors(error: unknown): unknown[] {
+  return error instanceof AggregateError ? error.errors.flatMap(unwrapAggregateErrors) : [error];
+}
 function retryableRemotePull(error: unknown): boolean {
   if (!(error instanceof CloudflareSFUError)) return false;
   if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
@@ -1873,7 +1876,7 @@ function simulcastUnsupported(error: unknown): boolean {
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
   const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
   const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
-  const failures = error instanceof AggregateError ? error.errors : [error];
-  const retryable = failures.length > 0 && failures.every((failure) => failure instanceof CloudflareSFUError && failure.code === "signaling_failed" && (failure.options.retryableConnection === true || failure.options.status === 429));
-  return { outcome: ambiguous ? "ambiguous" : retryable ? "retryable_failure" : "terminal_failure", errorCode: code };
+  const failures = unwrapAggregateErrors(error);
+  const terminal = failures.length > 0 && failures.every((failure) => failure instanceof CloudflareSFUError && failure.code === "signaling_failed" && typeof failure.options.status === "number" && failure.options.retryableConnection !== true && !isRateLimited(failure));
+  return { outcome: ambiguous ? "ambiguous" : terminal ? "terminal_failure" : "retryable_failure", errorCode: code };
 }

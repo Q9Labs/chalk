@@ -1171,7 +1171,7 @@ it.each(["microphone", "camera"] as const)("off retires a cached %s publication 
 
 it("an already-off local target waits for retirement and exposes close failure before retry", async () => {
   const harness = createHarness();
-  const failure = new CloudflareSFUError("close failed", "signaling_failed", { status: 503, retryableConnection: true });
+  const failure = new CloudflareSFUError("close failed", "signaling_failed");
   try {
     await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
     const close = vi.spyOn(harness.transport, "closeTracks").mockRejectedValue(failure);
@@ -1187,9 +1187,7 @@ it("an already-off local target waits for retirement and exposes close failure b
   }
 });
 
-it("keeps a failed space-client microphone enable off without retrying a non-retryable publish", async () => {
-  const onError = vi.fn();
-  const harness = createHarness({ onError });
+function createSpaceClientMicrophoneHarness(harness: ReturnType<typeof createHarness>, microphone: FakeTrack) {
   const basePlatform = createCoreTestPlatform();
   const clock = new ManualClock();
   const platformClock = {
@@ -1198,7 +1196,6 @@ it("keeps a failed space-client microphone enable off without retrying a non-ret
     clearTimeout: (handle: unknown) => clock.clearTimeout(handle),
   };
   const platform = { ...basePlatform, dependencies: { ...basePlatform.dependencies, clock: platformClock } };
-  const microphone = new FakeTrack("failed-space-microphone", "audio");
   const coordinator = new V1LiveTargetCoordinator({
     mediaPlane: harness.client,
     requestIds: { next: () => crypto.randomUUID() },
@@ -1213,7 +1210,19 @@ it("keeps a failed space-client microphone enable off without retrying a non-ret
       if (frame.type === "live_target") coordinator.receive({ ...frame, type: "live_target_result", outcome: "confirmed", error_code: null });
     },
   });
-  const command = vi.fn((enabled: boolean) => coordinator.send("set_microphone_enabled", "microphone", enabled));
+  const command = vi.fn(async (enabled: boolean) => {
+    const receipt = await coordinator.send("set_microphone_enabled", "microphone", enabled);
+    const publication = harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    platform.emitSync({
+      ...platform.sync.getSnapshot(),
+      media: {
+        projectionId: "failed-enable",
+        sequence: command.mock.calls.length,
+        items: [{ participantId: "participant-1", source: "microphone", enabled, publicationId: publication?.publicationId ?? null }],
+      },
+    });
+    return receipt;
+  });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("failed-enable") },
     {
@@ -1226,6 +1235,19 @@ it("keeps a failed space-client microphone enable off without retrying a non-ret
       },
     },
   );
+  const dispose = () => {
+    coordinator.disconnect("test_cleanup");
+    client.dispose();
+    harness.client.stop();
+  };
+  return { client, coordinator, clock, dispose };
+}
+
+it("keeps a failed space-client microphone enable off without retrying a non-retryable publish", async () => {
+  const onError = vi.fn();
+  const harness = createHarness({ onError });
+  const microphone = new FakeTrack("failed-space-microphone", "audio");
+  const { client, clock, dispose } = createSpaceClientMicrophoneHarness(harness, microphone);
   const failure = new CloudflareSFUError("invalid_request", "signaling_failed", { status: 400, providerCode: "invalid_request" });
   try {
     await client.join({ microphone: false, camera: false });
@@ -1254,9 +1276,71 @@ it("keeps a failed space-client microphone enable off without retrying a non-ret
     expect(setTarget.mock.calls.filter(([target]) => target.source === "microphone" && target.enabled)).toHaveLength(1);
     expect(localAddCount(harness, "microphone")).toBe(1);
   } finally {
-    coordinator.disconnect("test_cleanup");
-    client.dispose();
-    harness.client.stop();
+    dispose();
+  }
+});
+
+it("retries a fetch failure through the space-client until the microphone is published", async () => {
+  const onError = vi.fn();
+  const harness = createHarness({ onError });
+  const microphone = new FakeTrack("retry-space-microphone", "audio");
+  const { client, clock, dispose } = createSpaceClientMicrophoneHarness(harness, microphone);
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.nextLocalPublishFailure = new TypeError("Failed to fetch");
+    const enabling = client.media.setMicrophoneEnabled(true);
+
+    await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(1));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+    expect(microphone.enabled).toBe(false);
+
+    clock.advance(100);
+    await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(2));
+    await enabling;
+
+    expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
+      enabled: true,
+      publicationId: expect.any(String),
+    });
+    expect(localAddCount(harness, "microphone")).toBe(2);
+  } finally {
+    dispose();
+  }
+});
+
+it("leaves a failed space-client microphone off after fetch retries are exhausted", async () => {
+  const onError = vi.fn();
+  const harness = createHarness({ onError });
+  const microphone = new FakeTrack("exhausted-space-microphone", "audio");
+  const { client, clock, dispose } = createSpaceClientMicrophoneHarness(harness, microphone);
+  try {
+    await client.join({ microphone: false, camera: false });
+    harness.transport.localPublishFailure = new TypeError("Failed to fetch");
+    const enabling = client.media.setMicrophoneEnabled(true).then(
+      () => null,
+      (cause: unknown) => cause,
+    );
+
+    await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(1));
+    for (const expectedAttempts of [2, 3, 4]) {
+      clock.advance(100);
+      await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(expectedAttempts));
+    }
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(4));
+    const enableError = await enabling;
+
+    expect(enableError).toBeInstanceOf(Error);
+    expect(client.getSnapshot().media.local.microphone.state).toBe("disabled");
+    expect(microphone.enabled).toBe(false);
+    expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toBeUndefined();
+    expect(localAddCount(harness, "microphone")).toBe(4);
+
+    clock.advance(30_000);
+    expect(localAddCount(harness, "microphone")).toBe(4);
+  } finally {
+    dispose();
   }
 });
 
@@ -1278,6 +1362,40 @@ it("leaves a failed microphone enable off after a non-retryable publish error", 
       });
 
       expect(result).toEqual({ outcome: "terminal_failure", errorCode: "signaling_failed" });
+      expect(onError).toHaveBeenCalled();
+      expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
+        enabled: false,
+        publicationId: null,
+      });
+      expect(track.enabled).toBe(false);
+      expect(localAddCount(harness, "microphone")).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(localAddCount(harness, "microphone")).toBe(1);
+      expect(publish).toHaveBeenCalledTimes(1);
+    },
+    { onError },
+  );
+});
+
+it("keeps a fetch-failed microphone enable retryable but off without a media-client retry", async () => {
+  const onError = vi.fn();
+  await withTimedHarness(
+    async (harness) => {
+      await harness.client.start(fakeStream());
+      const track = new FakeTrack("fetch-failed-microphone", "audio");
+      harness.client.prepareLocalTrack("microphone", track as unknown as MediaStreamTrack);
+      harness.transport.nextLocalPublishFailure = new TypeError("Failed to fetch");
+      const publish = vi.spyOn(harness.transport, "addTracks");
+
+      const result = await harness.client.setLocalPublicationTarget({
+        operationId: "fetch-failed-microphone-enable",
+        participantId: "participant-1",
+        source: "microphone",
+        enabled: true,
+      });
+
+      expect(result.outcome).toBe("retryable_failure");
       expect(onError).toHaveBeenCalled();
       expect(harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({
         enabled: false,
@@ -3975,7 +4093,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
-  nextLocalPublishFailure: CloudflareSFUError | null = null;
+  nextLocalPublishFailure: Error | null = null;
+  localPublishFailure: Error | null = null;
   failNextStaleLocalPublish = false;
   failNextRemotePull = false;
   readonly omittedRemoteTrackNames = new Set<string>();
@@ -4031,6 +4150,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
       this.failNextLocalPublish = false;
       throw new CloudflareSFUError("local publish failed", "signaling_failed");
     }
+    if (this.localPublishFailure) throw this.localPublishFailure;
     if (this.nextLocalPublishFailure) {
       const failure = this.nextLocalPublishFailure;
       this.nextLocalPublishFailure = null;
