@@ -485,6 +485,12 @@ defmodule ChalkSync.Operations.Probe do
     :exit, _reason -> {:error, :lifecycle_consumer_unavailable}
   end
 
+  defp safe_health(RetentionScheduler) do
+    {:ok, RetentionScheduler.health()}
+  catch
+    :exit, _reason -> {:error, :retention_cleanup_unavailable}
+  end
+
   defp observe_external_operation_lanes(boot?) do
     Enum.reduce_while(ExternalOperationConsumer.lane_names(), {:ok, 0}, fn lane,
                                                                            {:ok, failures} ->
@@ -507,12 +513,6 @@ defmodule ChalkSync.Operations.Probe do
     {:ok, ExternalOperationConsumer.health(lane)}
   catch
     :exit, _reason -> {:error, :external_operation_consumer_unavailable}
-  end
-
-  defp safe_health(RetentionScheduler) do
-    {:ok, RetentionScheduler.health()}
-  catch
-    :exit, _reason -> {:error, :retention_cleanup_unavailable}
   end
 
   defp observe_process(name) do
