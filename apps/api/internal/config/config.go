@@ -116,7 +116,9 @@ const (
 	DefaultEnvironment                        = "local"
 	DefaultLogFormat                          = "json"
 	DefaultLogLevel                           = "info"
-	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
+	// The SDK aborts a signaling request after 8 s and then drops its media connection, so the API must answer
+	// first. 7 s leaves 1 s for the network and the work around the Cloudflare call.
+	DefaultCloudflareRealtimeRequestTimeoutMS = int64(7000)
 
 	DefaultRequestLogs                  = "off"
 	DefaultRequestSampleRate            = 0.01
