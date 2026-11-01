@@ -2,6 +2,7 @@ package mediapublications
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -12,6 +13,8 @@ import (
 const publisherConnectFallbackAge = 3 * time.Second
 
 const (
+	// pullGateMaxConnections caps the connections still waiting to connect. Connections that are
+	// confirmed or old enough stay known for pullGateRetention but do not count against it.
 	pullGateMaxConnections = 4096
 	// pullGateRetention keeps a connection known after it is pullable, so a later track on it is not held again.
 	pullGateRetention = 10 * time.Minute
@@ -31,6 +34,8 @@ type pullGate struct {
 	now     func() time.Time
 	wait    func(ctx context.Context, duration time.Duration, released <-chan struct{}) error
 	pending map[string]*pendingConnection
+	// capLogged limits the "gate is full" warning to once per time the gate fills up.
+	capLogged bool
 }
 
 type pendingConnection struct {
@@ -61,10 +66,18 @@ func (g *pullGate) publish(connectionID string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := g.now()
-	g.sweepLocked(now)
-	if _, known := g.pending[connectionID]; known || len(g.pending) >= pullGateMaxConnections {
+	waiting := g.sweepLocked(now)
+	if _, known := g.pending[connectionID]; known {
 		return
 	}
+	if waiting >= pullGateMaxConnections {
+		if !g.capLogged {
+			g.capLogged = true
+			slog.Warn("pull gate is full, so new publishers are not held back", "event", "media.pull_gate_full", "limit", pullGateMaxConnections)
+		}
+		return
+	}
+	g.capLogged = false
 	g.pending[connectionID] = &pendingConnection{readyAt: now.Add(publisherConnectFallbackAge), released: make(chan struct{})}
 }
 
@@ -110,12 +123,17 @@ func (g *pullGate) latestPending(tracks []RemoteTrackIdentity) (*pendingConnecti
 	return latest, latest.readyAt.Sub(now)
 }
 
-func (g *pullGate) sweepLocked(now time.Time) {
+// sweepLocked forgets connections past the retention time and returns how many are still waiting.
+func (g *pullGate) sweepLocked(now time.Time) int {
+	waiting := 0
 	for connectionID, entry := range g.pending {
 		if !entry.readyAt.Add(pullGateRetention).After(now) {
 			delete(g.pending, connectionID)
+		} else if entry.readyAt.After(now) {
+			waiting++
 		}
 	}
+	return waiting
 }
 
 func (g *pullGate) pendingCount() int {

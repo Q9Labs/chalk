@@ -245,6 +245,9 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		return nil, err
 	}
 	references = publishedReferences(input)
+	// The publisher is pending before the publication can be read, so a listener that sees the new
+	// publication cannot get past the gate. If the append fails, the entry expires on its own.
+	s.pullGate.publish(input.ConnectionID)
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
 		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
@@ -253,7 +256,6 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		next := merge(latest, input, references)
 		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
 			s.receiveHealth.recordCommittedPublications(next)
-			s.pullGate.publish(input.ConnectionID)
 			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return nil, fmt.Errorf("append media publication observation: %w", err)

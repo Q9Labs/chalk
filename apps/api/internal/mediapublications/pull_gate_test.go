@@ -3,8 +3,11 @@ package mediapublications
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
 // Cloudflare keeps a track unpullable for 79 s or more when a pull lands before its publisher's
@@ -135,5 +138,50 @@ func TestAwaitPullableDoesNotHoldATrackAddedAfterTheConnectionWasConfirmed(t *te
 
 	if err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{camera}); err != nil || len(fixture.waited) != 0 {
 		t.Fatalf("a confirmed connection stays pullable: waited=%v error=%v", fixture.waited, err)
+	}
+}
+
+// pullDuringAppendRepository pulls the track from inside the database write, the way a listener
+// request does when it arrives between the commit and the end of RecordPublishedTracks.
+type pullDuringAppendRepository struct {
+	*reconciliationRepositoryStub
+	pull func()
+}
+
+func (r *pullDuringAppendRepository) AppendPublicationObservation(ctx context.Context, input provideroperations.ObservationInput, publisher PublicationParticipant) (provideroperations.Observation, error) {
+	observation, err := r.reconciliationRepositoryStub.AppendPublicationObservation(ctx, input, publisher)
+	if err == nil && r.pull != nil {
+		r.pull()
+	}
+	return observation, err
+}
+
+func TestAwaitPullableHoldsAPullThatArrivesWhilePublicationIsBeingRecorded(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	repository := &pullDuringAppendRepository{reconciliationRepositoryStub: &reconciliationRepositoryStub{}}
+	fixture.service.repository = repository
+	var pullErr error
+	repository.pull = func() {
+		pullErr = fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{{ConnectionID: "publisher-1", TrackName: "microphone-a"}})
+	}
+
+	fixture.publish(t, "publisher-1", "microphone-a")
+
+	if pullErr != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
+		t.Fatalf("a pull during the append must wait for the fallback age: waited=%v error=%v", fixture.waited, pullErr)
+	}
+}
+
+func TestPullGateKeepsGatingWhenManyConnectionsAreAlreadyConfirmed(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	for index := 0; index < pullGateMaxConnections; index++ {
+		connectionID := fmt.Sprintf("confirmed-%d", index)
+		fixture.service.pullGate.publish(connectionID)
+		fixture.service.ConfirmPublisherConnected(connectionID)
+	}
+	fresh := fixture.publish(t, "publisher-new", "microphone-a")
+
+	if err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{fresh}); err != nil || len(fixture.waited) != 1 {
+		t.Fatalf("confirmed connections must not use up the pending capacity: waited=%v error=%v", fixture.waited, err)
 	}
 }
