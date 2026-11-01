@@ -61,6 +61,14 @@ frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
 later reconnects. The whiteboard socket does not carry the ID yet.
 
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
+
 ### Compare call quality by connection type
 
 The SDK summarises WebRTC stats on the device every 10 seconds and uploads them
