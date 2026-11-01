@@ -314,7 +314,7 @@ func decodeUpdateTenantRequest(r *http.Request) (updateTenantEndpointRequest, er
 	return updateTenantEndpointRequest{TenantID: tenantID, Body: body}, nil
 }
 
-// Service credentials can manage Allowed websites, not other Tenant settings.
+// Service credentials can manage dashboard preferences, not other Tenant settings.
 // Check field presence before decoding, including nulls and future fields.
 func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	principal, _ := authentication.PrincipalFromContext(r.Context())
@@ -327,7 +327,7 @@ func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	}
 	var body updateTenantRequest
 	for field := range fields {
-		if field != "cors_allowed_origins" && field != "recording_render_mode" {
+		if field != "cors_allowed_origins" && field != "recording_render_mode" && field != "transcript_language" {
 			return updateTenantRequest{}, apiErrorForbidden
 		}
 	}
@@ -338,6 +338,11 @@ func decodeUpdateTenantBody(r *http.Request) (updateTenantRequest, error) {
 	}
 	if value, ok := fields["recording_render_mode"]; ok {
 		if err := json.Unmarshal(value, &body.RecordingRenderMode); err != nil {
+			return updateTenantRequest{}, apiErrorInvalidRequest
+		}
+	}
+	if value, ok := fields["transcript_language"]; ok {
+		if err := json.Unmarshal(value, &body.TranscriptLanguage); err != nil {
 			return updateTenantRequest{}, apiErrorInvalidRequest
 		}
 	}

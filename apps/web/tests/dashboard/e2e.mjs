@@ -677,10 +677,17 @@ try {
     assert.deepEqual(unsupportedBodies.at(-1), { method: "PATCH", path: `/v1/tenants/${secondTenant}`, body: JSON.stringify({ recording_render_mode: "automatic" }) });
     assert.equal((await tenantFor("malik")).recording_render_mode, "automatic");
     assert.equal((await tenantFor("ada")).recording_render_mode, "on_demand", "Saving one account must not change another account");
+    assert.equal((await tenantFor("malik")).transcript_language, "auto");
+    const languageSetting = await post(malik, "/dashboard-api/developer", { action: "set-default-transcript-language", transcriptLanguage: "ur" }, other.csrfToken);
+    assert.equal(languageSetting.status, 200, await languageSetting.clone().text());
+    assert.deepEqual(await languageSetting.json(), { transcriptLanguage: "ur" });
+    assert.equal((await tenantFor("malik")).transcript_language, "ur");
+    assert.equal((await tenantFor("ada")).transcript_language, "auto", "Language changes stay in the signed-in account");
     const developerSettings = await malik.request("/dashboard-api/developer");
     assert.equal(developerSettings.status, 200);
     const otherDeveloperDTO = await developerSettings.json();
     assert.equal(otherDeveloperDTO.recordingRenderMode, "automatic");
+    assert.equal(otherDeveloperDTO.transcriptLanguage, "ur");
     assert.equal(otherDeveloperDTO.tenantId, secondTenant);
     for (const action of [
       { action: "set-recording-render-mode", mode: "always" },
