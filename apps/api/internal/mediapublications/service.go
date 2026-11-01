@@ -160,7 +160,6 @@ type Service struct {
 	absenceEvidence *remoteTrackAbsenceEvidence
 	receiveHealth   *receiveHealth
 	liveness        *publicationLivenessChecks
-	pullGate        *pullGate
 }
 
 func NewService(repository Repository) Service {
@@ -168,7 +167,7 @@ func NewService(repository Repository) Service {
 }
 
 func newService(repository Repository, now func() time.Time) Service {
-	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now), liveness: newPublicationLivenessChecks(now), pullGate: newPullGate(now)}
+	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now), liveness: newPublicationLivenessChecks(now)}
 }
 
 func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {
@@ -245,33 +244,20 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		return nil, err
 	}
 	references = publishedReferences(input)
-	// The publisher is pending before the publication can be read, so a listener that sees the new
-	// publication cannot get past the gate.
-	if s.pullGate.publish(input.ConnectionID) {
-		defer func() { s.pullGate.settle(input.ConnectionID, err == nil) }()
-	}
-	next, err := s.appendPublication(ctx, input, references)
-	if err != nil {
-		return nil, err
-	}
-	s.receiveHealth.recordCommittedPublications(next)
-	return references, nil
-}
-
-func (s Service) appendPublication(ctx context.Context, input RecordInput, references []PublishedReference) (provideroperations.ObservationInput, error) {
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
 		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
-			return provideroperations.ObservationInput{}, err
+			return nil, err
 		}
 		next := merge(latest, input, references)
 		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
-			return next, nil
+			s.receiveHealth.recordCommittedPublications(next)
+			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
-			return provideroperations.ObservationInput{}, fmt.Errorf("append media publication observation: %w", err)
+			return nil, fmt.Errorf("append media publication observation: %w", err)
 		}
 	}
-	return provideroperations.ObservationInput{}, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
+	return nil, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
 }
 
 func (s Service) PrepareClose(ctx context.Context, input CloseInput) (CloseDecision, error) {
