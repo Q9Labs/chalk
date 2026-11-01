@@ -21,6 +21,11 @@ const (
 // A publisher's connection is pending from its first published track until the client confirms the
 // connection or the fallback age passes. State is per API instance, and a connection this instance
 // never saw is treated as pullable.
+//
+// Production runs one chalk-api container per host (quadlet ContainerName=chalk-api, fixed published
+// port) and one host, so per-instance state is enough. The one hole is the first seconds after an API
+// restart: a publisher that connected just before the restart is unknown afterwards, so listeners may
+// pull it too early once. Shared state would close that hole and is deliberately not built.
 type pullGate struct {
 	mu      sync.Mutex
 	now     func() time.Time
