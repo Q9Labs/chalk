@@ -324,7 +324,14 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 
 func (a Adapter) InspectSession(ctx context.Context, connectionID string) (mediaplane.SessionState, error) {
 	var response inspectSessionResponse
+	diagStart := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(connectionID)), nil, &response, "get_session")
+	diagErr := ""
+	if err != nil {
+		diagErr = err.Error()
+	}
+	slog.WarnContext(ctx, "diag inspect session", "event", "diag.inspect_session", "connection", connectionID,
+		"status", statusCode, "ms", time.Since(diagStart).Milliseconds(), "tracks", len(response.Tracks), "error", diagErr, "ctx_err", fmt.Sprint(ctx.Err()))
 	if err != nil {
 		var failure providerFailure
 		if errors.As(err, &failure) && (failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone) {

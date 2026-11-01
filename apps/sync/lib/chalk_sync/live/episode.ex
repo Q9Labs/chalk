@@ -224,12 +224,29 @@ defmodule ChalkSync.Live.Episode do
   defp reconcile_observed_media(state, {pauses, media_items}) do
     case reconcile_projection(:media, state.media_projection, media_items) do
       {:ok, projection, frames} ->
+        diag_media_announce(state.media_items, media_items, frames)
+
         {:ok,
          %{state | media_pauses: pauses, media_items: media_items, media_projection: projection},
          frames}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  # Proof-branch diagnostics: one line per media item that changed in a projection pass.
+  defp diag_media_announce(previous, current, frames) do
+    changed = Enum.reject(current, &(&1 in previous))
+
+    if changed != [] or frames != [] do
+      summary =
+        Enum.map(changed, fn item ->
+          "#{item["participant_id"]} #{item["source"]} enabled=#{item["enabled"]} pub=#{item["publication_id"]} off=#{item["off_reason"]}"
+        end)
+
+      require Logger
+      Logger.warning("diag.sync_announce frames=#{length(frames)} changed=#{inspect(summary, limit: :infinity, printable_limit: :infinity)}")
     end
   end
 

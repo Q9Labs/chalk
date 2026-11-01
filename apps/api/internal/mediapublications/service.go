@@ -250,11 +250,13 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 			return nil, err
 		}
 		next := merge(latest, input, references)
-		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
+		_, appendErr := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID})
+		diagRegistryWrite(ctx, input, next, attempt, appendErr)
+		if appendErr == nil {
 			s.receiveHealth.recordCommittedPublications(next)
 			return references, nil
-		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
-			return nil, fmt.Errorf("append media publication observation: %w", err)
+		} else if !errors.Is(appendErr, provideroperations.ErrObservationConflict) && !errors.Is(appendErr, provideroperations.ErrObservationStale) {
+			return nil, fmt.Errorf("append media publication observation: %w", appendErr)
 		}
 	}
 	return nil, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
@@ -311,14 +313,17 @@ func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) 
 		next, state := disable(latest, input)
 		if state == closeStateSatisfied {
 			outcome = "satisfied"
+			diagRegistryClose(ctx, input, "satisfied", nil)
 			return nil
 		}
 		if state == closeStateStale {
+			diagRegistryClose(ctx, input, "stale", nil)
 			return ErrInvalidPublication
 		}
 		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
 			s.receiveHealth.recordCommittedPublications(next)
 			outcome = "confirmed"
+			diagRegistryClose(ctx, input, "confirmed", nil)
 			return nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return fmt.Errorf("append media publication close observation: %w", err)

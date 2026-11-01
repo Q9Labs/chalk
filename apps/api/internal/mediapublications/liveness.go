@@ -3,6 +3,7 @@ package mediapublications
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -132,8 +133,14 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 		grouped[candidate.closeInput.ConnectionID] = append(grouped[candidate.closeInput.ConnectionID], candidate)
 	}
 	result.Checked = len(claimed)
+	for identity := range failed {
+		slog.WarnContext(ctx, "diag confirm candidate", "event", "diag.confirm_candidate", "connection", identity.ConnectionID,
+			"track", identity.TrackName, "matches", len(byIdentity[identity]), "claimed_total", len(claimed), "deduped_total", result.Deduped)
+	}
 	for connectionID, publications := range grouped {
 		session, readErr := reader(ctx, connectionID)
+		slog.WarnContext(ctx, "diag confirm read", "event", "diag.confirm_read", "connection", connectionID, "found", session.Found,
+			"tracks", len(session.Tracks), "read_error", fmt.Sprint(readErr), "ctx_err", fmt.Sprint(ctx.Err()))
 		if readErr != nil {
 			result.Failed += len(publications)
 			slog.WarnContext(ctx, "failed to inspect publisher session after remote track failure",

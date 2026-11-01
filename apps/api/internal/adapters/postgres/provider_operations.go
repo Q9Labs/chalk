@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -174,6 +175,9 @@ func (r ProviderOperationRepository) appendObservation(ctx context.Context, inpu
 				return fmt.Errorf("lock publishing participant: %w", err)
 			}
 			if participant.Generation != publisher.Generation || (participant.ConnectionID != "" && participant.ConnectionID != publisher.ConnectionID) {
+				slog.WarnContext(ctx, "diag registry rejected publisher", "event", "diag.registry_rejected",
+					"participant", publisher.ID.String(), "participant_generation", participant.Generation, "publisher_generation", publisher.Generation,
+					"participant_connection", participant.ConnectionID, "publisher_connection", publisher.ConnectionID)
 				return mediapublications.ErrInvalidPublication
 			}
 		}

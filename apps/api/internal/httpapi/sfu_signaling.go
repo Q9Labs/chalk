@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -300,11 +301,16 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 	}
 	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
-	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
+	diagStart := time.Now()
+	confirmResult, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
 		TenantID:  request.TenantID,
 		EpisodeID: request.EpisodeID,
 		Failed:    failedTracks,
-	}, reader); err != nil {
+	}, reader)
+	slog.WarnContext(confirmCtx, "diag confirm done", "event", "diag.confirm_done", "ms", time.Since(diagStart).Milliseconds(),
+		"error", fmt.Sprint(err), "ctx_err", fmt.Sprint(confirmCtx.Err()), "checked", confirmResult.Checked, "closed", confirmResult.Closed,
+		"present", confirmResult.Present, "deduped", confirmResult.Deduped, "failed", confirmResult.Failed)
+	if err != nil {
 		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
 			"event", "media_publication.failure_confirmation_failed",
 			"error", err,
