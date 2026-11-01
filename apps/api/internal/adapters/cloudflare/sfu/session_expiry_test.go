@@ -27,6 +27,8 @@ type fakeIdleExpiryCloudflare struct {
 	used     map[string]bool
 	sessions []string
 	requests []string
+	// expireAll answers 410 on the first use of every session, however young.
+	expireAll bool
 }
 
 func newFakeIdleExpiryCloudflare(appID string) *fakeIdleExpiryCloudflare {
@@ -37,6 +39,12 @@ func (f *fakeIdleExpiryCloudflare) advance(d time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.clock += d
+}
+
+func (f *fakeIdleExpiryCloudflare) setExpireAll() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.expireAll = true
 }
 
 func (f *fakeIdleExpiryCloudflare) sessionCount() int {
@@ -72,7 +80,7 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		fmt.Fprint(w, `{"errorCode":"session_not_found"}`)
 		return
 	}
-	if !f.used[id] && f.clock-createdAt >= 15*time.Second {
+	if !f.used[id] && (f.expireAll || f.clock-createdAt >= 15*time.Second) {
 		w.WriteHeader(http.StatusGone)
 		fmt.Fprint(w, `{"errorCode":"session_error","errorDescription":"Session appears to be disconnected. Please check if the PeerConnection is connected."}`)
 		return
@@ -272,6 +280,29 @@ func TestConcurrentFirstCallsOnAnExpiredConnectionShareOneReplacement(t *testing
 	}
 	if got := fake.sessionCount() - sessionsBefore; got != 1 {
 		t.Fatalf("replacement sessions created = %d, want 1", got)
+	}
+}
+
+func TestExpiredReplacementSessionIsNotSwappedASecondTime(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatal(err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.setExpireAll()
+	sessionsBefore, requestsBefore := fake.sessionCount(), len(fake.requestLog())
+
+	_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+
+	if !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("a replacement that is also gone must report not found, got %v", err)
+	}
+	if got := fake.sessionCount() - sessionsBefore; got != 1 {
+		t.Fatalf("replacement sessions created = %d, want 1", got)
+	}
+	if got := len(fake.requestLog()) - requestsBefore; got != 2 {
+		t.Fatalf("tracks/new requests = %d, want 2 (the first call and one retry)", got)
 	}
 }
 
