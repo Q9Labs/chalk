@@ -602,7 +602,7 @@ func TestWriteDecodesSeekableH264OnRecordingClock(t *testing.T) {
 	}
 	durationSeconds, err := strconv.ParseFloat(strings.TrimSpace(string(probeOutput)), 64)
 	if err != nil || durationSeconds < 0.09 || durationSeconds > 0.11 {
-		t.Fatalf("H264 duration = %q, want 0.1 seconds", probeOutput)
+		t.Errorf("H264 duration = %q, want 0.1 seconds", probeOutput)
 	}
 	assertPassthroughFrameTimes(t, request, filepath.Join(root, "decoded-passthrough"), "h264")
 	t.Run("more than 512 variable frame intervals", func(t *testing.T) {
@@ -713,12 +713,11 @@ func TestH264RejectsUnterminatedAccessUnit(t *testing.T) {
 			}
 			payload := make([]byte, recordingbundle.MaxPacketPayloadBytes)
 			copy(payload, []byte{0x67, 0x42, 0, 0x0c})
-			if fragmented {
-				copy(payload, []byte{0x7c, 0x87})
-			}
 			for sequence := uint16(1); sequence <= 129; sequence++ {
 				if fragmented && sequence == 2 {
-					payload[1] = 0x07
+					copy(payload, []byte{0x7c, 0x85})
+				} else if fragmented && sequence > 2 {
+					payload[1] = 0x05
 				}
 				if err := writeSpoolPacket(file, recordingbundle.RTPPacket{
 					SequenceNumber: sequence, ExtendedSequenceNumber: uint64(sequence),
