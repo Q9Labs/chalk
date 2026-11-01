@@ -60,8 +60,12 @@ const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
 const output = resolve(root, process.env.SR_OUTPUT || "artifacts/silence-repro");
 await mkdir(output, { recursive: true });
-// "sdk:<git ref>" tests that ref's SDK and React source on the master server tree.
-const buildSpec = (name) => (name.startsWith("sdk:") ? { serverRev: "origin/master", sdkRev: name.slice(4) } : builds[name]);
+// "sdk:<git ref>" tests that ref's SDK and React source on the master server tree; "ref:<git ref>" takes both from the ref.
+const buildSpec = (name) => {
+  if (name.startsWith("sdk:")) return { serverRev: "origin/master", sdkRev: name.slice(4) };
+  if (name.startsWith("ref:")) return { serverRev: name.slice(4), sdkRev: name.slice(4) };
+  return builds[name];
+};
 assert.ok(want.every((name) => buildSpec(name)));
 wantConditions.forEach(conditionOf);
 

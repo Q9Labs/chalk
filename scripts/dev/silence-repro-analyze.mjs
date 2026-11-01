@@ -104,6 +104,21 @@ function clusterInterval(clusters, field) {
 
 const quantile = (list, q) => (list.length ? [...list].sort((a, b) => a - b)[Math.min(list.length - 1, Math.ceil(list.length * q) - 1)] : NaN);
 
+// Times (ms since run start) at which a participant's SFU session changed after its first one.
+function sessionChanges(run, participant) {
+  const times = [];
+  let highest = 0;
+  for (const entry of run.network) {
+    if (entry.participant !== participant || !entry.connectionNumber) continue;
+    if (entry.connectionNumber > highest) {
+      if (highest > 0) times.push(entry.at);
+      highest = entry.connectionNumber;
+    }
+  }
+  return times;
+}
+const REAL_SILENCE = 2; // seconds; the 1 s sampling makes anything shorter a normal join or heal
+
 const cells = new Map();
 const failures = [];
 const slowExamples = [];
@@ -129,6 +144,7 @@ files.forEach((file, fileIndex) => {
       unmutes: 0,
       speakerDeaf: 0,
       stagesSilent: new Map(),
+      reconnect: { pairs: 0, silent: 0, slow: 0, openAtEnd: 0, worst: [] },
       pulls: 0,
       trackErrors: 0,
       s503: 0,
@@ -189,6 +205,16 @@ files.forEach((file, fileIndex) => {
           const silent = heard === null || heard > deadline;
           const episodes = silentEpisodes(run, series, enabled.t, end);
           const worst = episodes.reduce((max, episode) => Math.max(max, episode.end - episode.start), 0);
+          const changes = [...sessionChanges(run, listener), ...sessionChanges(run, speaker)];
+          const atMs = (seconds) => run.samples.find((sample) => sample.t >= seconds)?.atMs ?? Infinity;
+          const reconnected = episodes.filter((episode) => episode.end - episode.start > REAL_SILENCE && changes.some((time) => time >= atMs(episode.start) - 3000 && time <= atMs(episode.end) + 1000));
+          if (reconnected.length) {
+            cell.reconnect.pairs++;
+            cell.reconnect.worst.push(worst);
+            if (worst > SLOW) cell.reconnect.slow++;
+            if (heard === null || heard > deadline) cell.reconnect.silent++;
+            if (reconnected.some((episode) => episode.open)) cell.reconnect.openAtEnd++;
+          }
           const bucket = action.first ? cell.first : cell.again;
           cell.pairs++;
           bucket.pairs++;
@@ -259,6 +285,15 @@ const summaries = rows.map((cell) => ({
   publisherKills: cell.kills,
   builds: [...cell.shas].join(" "),
   stagesSilent: Object.fromEntries(cell.stagesSilent),
+  reconnect: {
+    pairs: cell.reconnect.pairs,
+    silent: cell.reconnect.silent,
+    slow: cell.reconnect.slow,
+    openAtEnd: cell.reconnect.openAtEnd,
+    healP50: quantile(cell.reconnect.worst, 0.5),
+    healP99: quantile(cell.reconnect.worst, 0.99),
+    healMax: cell.reconnect.worst.length ? Math.max(...cell.reconnect.worst) : NaN,
+  },
 }));
 if (asJson) {
   console.log(JSON.stringify(summaries, null, 1));
@@ -269,6 +304,10 @@ if (asJson) {
     console.log(
       `| ${s.build} | ${s.condition} | ${s.rooms} | ${s.pairs} | ${s.silent} | ${pct(s.silentRate)} (${interval(s.silentCluster)}) | ${interval(s.silentWilson)} | ${s.slow} | ${pct(s.slowRate)} (${interval(s.slowCluster)}) | ${seconds(s.timeToAudioP50)} s | ${seconds(s.healP50)} / ${seconds(s.healP99)} / ${seconds(s.healMax)} s | ${s.publisherNeverEnabled} of ${s.unmutesAnalysed} | ${s.speakersHeardByNobody} |`,
     );
+  console.log("\nPairs that went through a reconnect (a silent episode over 2 s that overlaps an SFU session change of the listener or the speaker):\n");
+  console.log("| build | condition | reconnected pairs | silent (15 s) | silent >5 s | still silent at run end | heal p50 / p99 / max |");
+  console.log("|---|---|---|---|---|---|---|");
+  for (const s of summaries) console.log(`| ${s.build} | ${s.condition} | ${s.reconnect.pairs} | ${s.reconnect.silent} | ${s.reconnect.slow} | ${s.reconnect.openAtEnd} | ${seconds(s.reconnect.healP50)} / ${seconds(s.reconnect.healP99)} / ${seconds(s.reconnect.healMax)} s |`);
   for (const s of summaries) {
     console.log(
       `\n${s.build} | ${s.condition}: rooms dropped for a stall ${s.stalledRooms}, errored ${s.erroredRooms}, first-unmute silent ${s.firstUnmuteSilent}, re-unmute silent ${s.reUnmuteSilent}, pulls ${s.pulls} (track errors ${s.pullsWithTrackErrors}, injected 503 ${s.injected503}), listener kills closed ${s.listenerKills}, publisher kills ${s.publisherKills}, shas ${s.builds}`,
