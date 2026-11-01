@@ -20,6 +20,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -411,7 +412,7 @@ func TestControlPlaneClientClassifiesErrorsWithoutResponseBody(t *testing.T) {
 
 func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 	oldPropagator := otel.GetTextMapPropagator()
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
 	defer otel.SetTextMapPropagator(oldPropagator)
 	journeyID := testID(t, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	traceID, err := trace.TraceIDFromHex("0af7651916cd43dd8448eb211c80319c")
@@ -423,12 +424,24 @@ func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 		t.Fatalf("span id: %v", err)
 	}
 	ctx := trace.ContextWithSpanContext(observability.ContextWithJourneyID(context.Background(), journeyID), trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled}))
+	member, err := baggage.NewMember("session.id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bag, err := baggage.New(member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = baggage.ContextWithBaggage(ctx, bag)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Chalk-Journey-ID") != journeyID.String() {
 			t.Errorf("journey header = %q", r.Header.Get("X-Chalk-Journey-ID"))
 		}
 		if r.Header.Get("traceparent") != "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" {
 			t.Errorf("traceparent header = %q", r.Header.Get("traceparent"))
+		}
+		if r.Header.Get("baggage") != bag.String() {
+			t.Errorf("baggage header = %q", r.Header.Get("baggage"))
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))

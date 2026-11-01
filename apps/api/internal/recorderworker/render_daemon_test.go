@@ -1,13 +1,17 @@
 package recorderworker
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestRenderDaemonTreatsCommittedAttemptAsComplete(t *testing.T) {
@@ -93,9 +97,15 @@ func TestRenderLeaseInputAcceptsAndFencesTranscriptionJobs(t *testing.T) {
 }
 
 func TestRenderDaemonReportsAttemptFailureWithFence(t *testing.T) {
+	previous := slog.Default()
+	defer slog.SetDefault(previous)
+	var logs bytes.Buffer
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 	claim := renderClaimForTest(t)
 	control := &renderControlPlaneStub{}
-	attempt := &renderAttemptStub{run: func(context.Context) error { return errors.New("renderer exited") }}
+	attempt := &renderAttemptStub{run: func(context.Context) error {
+		return errors.New("decode authenticated recording media: recording media decode failed: H264 variable frame timing exceeds bound")
+	}}
 	daemon := renderDaemonForTest(t, control, attempt, nil)
 
 	if err := daemon.runClaim(context.Background(), claim); err != nil {
@@ -107,6 +117,26 @@ func TestRenderDaemonReportsAttemptFailureWithFence(t *testing.T) {
 	if control.failed.JobID.String() != claim.Envelope.JobID || control.failed.AttemptCount != claim.Envelope.AttemptCount || control.failed.FencingGeneration != claim.Envelope.FencingGeneration {
 		t.Fatalf("failure lost render fence: %#v", control.failed)
 	}
+	var signal struct {
+		Event, JobID, Detail, TraceID string
+	}
+	var entry map[string]json.RawMessage
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatal(err)
+	}
+	for key, target := range map[string]*string{"event": &signal.Event, "job_id": &signal.JobID, "error_detail": &signal.Detail, "trace_id": &signal.TraceID} {
+		if err := json.Unmarshal(entry[key], target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, err := renderAttemptContext(context.Background(), claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if signal.Event != "recording.render_attempt_failed" || signal.JobID != claim.Envelope.JobID || signal.Detail != control.failed.ErrorDetail || signal.TraceID != trace.SpanContextFromContext(ctx).TraceID().String() {
+		t.Fatalf("failure signal lost detail or correlation: %s", logs.String())
+	}
+
 }
 
 func TestRenderDaemonDoesNotHeartbeatAfterAtomicCommit(t *testing.T) {
