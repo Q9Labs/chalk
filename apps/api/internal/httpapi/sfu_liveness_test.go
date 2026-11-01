@@ -69,7 +69,7 @@ func TestConfirmFailedRemoteTracksInspectsCloudflareAndPreservesListenerResult(t
 				Location: "remote", TrackName: "camera-track", SessionID: "publisher-connection",
 			}}
 			request := sfuTracksEndpointRequest{
-				TenantID: tenantID, EpisodeID: episodeID,
+				TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID,
 				Body: sfuTracksRequest{ConnectionID: "listener-connection", Tracks: tracks},
 			}
 

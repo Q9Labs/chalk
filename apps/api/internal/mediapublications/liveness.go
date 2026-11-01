@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	publicationLivenessDedupeWindow = 2 * time.Second
-	publicationStillFailingWindow   = 30 * time.Second
+	publicationLivenessDedupeWindow    = 2 * time.Second
+	publicationStillFailingWindow      = 30 * time.Second
+	publicationLivenessEvidenceMaxKeys = 4096
 )
 
 type PublisherTrack struct {
@@ -32,9 +33,10 @@ type PublisherSession struct {
 type PublisherSessionReader func(context.Context, string) (PublisherSession, error)
 
 type RemoteTrackFailureInput struct {
-	TenantID  utilities.ID
-	EpisodeID utilities.ID
-	Failed    []RemoteTrackIdentity
+	TenantID              utilities.ID
+	EpisodeID             utilities.ID
+	ListenerParticipantID utilities.ID
+	Failed                []RemoteTrackIdentity
 }
 
 type RemoteTrackFailureResult struct {
@@ -53,32 +55,99 @@ type publicationLivenessChecks struct {
 	mu      sync.Mutex
 	now     func() time.Time
 	claimed map[publicationCandidateKey]time.Time
-	// present records when the publisher session last listed a failing track as active.
-	present map[publicationCandidateKey]time.Time
+	present map[publicationCandidateKey]stillFailingEvidence
+	served  map[publicationCandidateKey]map[utilities.ID]struct{}
+}
+
+type stillFailingEvidence struct {
+	firstSeen time.Time
+	listeners map[utilities.ID]struct{}
 }
 
 func newPublicationLivenessChecks(now func() time.Time) *publicationLivenessChecks {
-	return &publicationLivenessChecks{now: now, claimed: make(map[publicationCandidateKey]time.Time), present: make(map[publicationCandidateKey]time.Time)}
+	return &publicationLivenessChecks{
+		now:     now,
+		claimed: make(map[publicationCandidateKey]time.Time),
+		present: make(map[publicationCandidateKey]stillFailingEvidence),
+		served:  make(map[publicationCandidateKey]map[utilities.ID]struct{}),
+	}
 }
 
-// stillFailing reports whether listeners kept failing a track the publisher session lists as active.
-// The first sighting is normal start-up, because the publication is announced before its media flows.
-// Failures that outlast one dedupe window mean the provider will not serve the track, and only a new publication helps.
-func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey) bool {
+func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey, listenerID utilities.ID) bool {
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
 	now := checks.now()
-	for candidate, seenAt := range checks.present {
-		if now.Sub(seenAt) >= publicationStillFailingWindow {
+	for candidate, evidence := range checks.present {
+		if now.Sub(evidence.firstSeen) >= publicationStillFailingWindow {
 			delete(checks.present, candidate)
 		}
 	}
-	if _, ok := checks.present[key]; ok {
-		delete(checks.present, key)
+	evidence, exists := checks.present[key]
+	if !exists || now.Sub(evidence.firstSeen) >= publicationStillFailingWindow {
+		if !exists && len(checks.present) >= publicationLivenessEvidenceMaxKeys {
+			for candidate := range checks.present {
+				delete(checks.present, candidate)
+				break
+			}
+		}
+		evidence = stillFailingEvidence{firstSeen: now, listeners: make(map[utilities.ID]struct{}, 2)}
+		if !listenerID.IsZero() {
+			evidence.listeners[listenerID] = struct{}{}
+		}
+		checks.present[key] = evidence
+		return false
+	}
+	if now.Sub(evidence.firstSeen) < publicationLivenessDedupeWindow {
+		return false
+	}
+	if !listenerID.IsZero() && len(evidence.listeners) < 2 {
+		evidence.listeners[listenerID] = struct{}{}
+	}
+	checks.present[key] = evidence
+	if len(evidence.listeners) >= 2 {
 		return true
 	}
-	checks.present[key] = now
-	return false
+	if len(evidence.listeners) == 0 {
+		return false
+	}
+	for servedBy := range checks.served[key] {
+		if _, reported := evidence.listeners[servedBy]; !reported {
+			return false
+		}
+	}
+	return true
+}
+
+func (checks *publicationLivenessChecks) recordServed(key publicationCandidateKey, listenerID utilities.ID) {
+	if checks == nil || listenerID.IsZero() {
+		return
+	}
+	checks.mu.Lock()
+	defer checks.mu.Unlock()
+	listeners, exists := checks.served[key]
+	if !exists {
+		if len(checks.served) >= publicationLivenessEvidenceMaxKeys {
+			for candidate := range checks.served {
+				delete(checks.served, candidate)
+				break
+			}
+		}
+		listeners = make(map[utilities.ID]struct{}, 2)
+		checks.served[key] = listeners
+	}
+	if _, recorded := listeners[listenerID]; !recorded && len(listeners) < 2 {
+		listeners[listenerID] = struct{}{}
+	}
+}
+
+func (checks *publicationLivenessChecks) forget(key publicationCandidateKey) {
+	if checks == nil {
+		return
+	}
+	checks.mu.Lock()
+	defer checks.mu.Unlock()
+	delete(checks.present, key)
+	delete(checks.served, key)
 }
 
 func (checks *publicationLivenessChecks) claim(key publicationCandidateKey) bool {
@@ -176,18 +245,21 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					}
 				}
 			}
-			if present && !s.liveness.stillFailing(candidate.key) {
+			if present && !s.liveness.stillFailing(candidate.key, input.ListenerParticipantID) {
 				result.Present++
 				continue
 			}
 			closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
 			if errors.Is(closeErr, ErrInvalidPublication) {
+				s.absenceEvidence.forget(candidate.key)
+				s.liveness.forget(candidate.key)
 				continue
 			}
 			if closeErr != nil {
 				return result, closeErr
 			}
 			s.absenceEvidence.forget(candidate.key)
+			s.liveness.forget(candidate.key)
 			result.Closed++
 		}
 	}

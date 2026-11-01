@@ -3,8 +3,11 @@ package mediapublications
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestConfirmRemoteTrackFailuresClosesOnlyGoneOrInactiveTracks(t *testing.T) {
@@ -86,10 +89,14 @@ func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *tes
 	repository := &reconciliationRepositoryStub{}
 	service := newService(repository, func() time.Time { return now })
 	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
+	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
 	reader := func(context.Context, string) (PublisherSession, error) {
 		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
 	}
-	input := RemoteTrackFailureInput{TenantID: tenantID, EpisodeID: episodeID, Failed: []RemoteTrackIdentity{identity}}
+	input := RemoteTrackFailureInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
+		Failed: []RemoteTrackIdentity{identity},
+	}
 
 	first, err := service.ConfirmRemoteTrackFailures(context.Background(), input, reader)
 	if err != nil || first.Present != 1 || first.Closed != 0 {
@@ -103,6 +110,187 @@ func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *tes
 		t.Fatalf("second confirmation result=%+v err=%v, want the track still failing for listeners withdrawn", second, err)
 	}
 	assertPublicationEnabled(t, repository.appended.Publications, participantID, "camera", false)
+}
+
+func TestConfirmRemoteTrackFailuresRequiresAnotherListenerWhenOthersWereServed(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, func() time.Time { return now })
+	tenantID, episodeID, publisherID, identity := publishRemoteObservationFixture(t, service, repository)
+	listenerA := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	listenerB := reconciliationTestID(t, "55555555-5555-4555-8555-555555555555")
+	listenerC := reconciliationTestID(t, "66666666-6666-4666-8666-666666666666")
+
+	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
+		Requested: []RemoteTrackIdentity{identity},
+	}); err != nil {
+		t.Fatalf("record listener B's successful pull: %v", err)
+	}
+	first := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerA, identity)
+	if first.Present != 1 || first.Closed != 0 {
+		t.Fatalf("first listener A failure result=%+v, want Present", first)
+	}
+	now = now.Add(publicationLivenessDedupeWindow)
+	second := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerA, identity)
+	if second.Present != 1 || second.Closed != 0 {
+		t.Fatalf("repeat listener A failure result=%+v, want Present while listener B has succeeded", second)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", true)
+
+	now = now.Add(publicationLivenessDedupeWindow)
+	third := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerC, identity)
+	if third.Closed != 1 || third.Present != 0 {
+		t.Fatalf("listener C failure result=%+v, want withdrawal after a second listener reports failure", third)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", false)
+}
+
+func TestConfirmRemoteTrackFailuresIgnoresReporterOwnSuccessfulPull(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, func() time.Time { return now })
+	tenantID, episodeID, publisherID, identity := publishRemoteObservationFixture(t, service, repository)
+	listenerA := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+
+	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerA,
+		Requested: []RemoteTrackIdentity{identity},
+	}); err != nil {
+		t.Fatalf("record listener A's successful pull: %v", err)
+	}
+	first := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerA, identity)
+	if first.Present != 1 || first.Closed != 0 {
+		t.Fatalf("first listener A failure result=%+v, want Present", first)
+	}
+	now = now.Add(publicationLivenessDedupeWindow)
+	second := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerA, identity)
+	if second.Closed != 1 || second.Present != 0 {
+		t.Fatalf("repeat listener A failure result=%+v, want withdrawal in the 1:1 case", second)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", false)
+}
+
+func TestConfirmRemoteTrackFailuresDoesNotCountUnknownListener(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, func() time.Time { return now })
+	tenantID, episodeID, publisherID, identity := publishRemoteObservationFixture(t, service, repository)
+	listenerA := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	listenerB := reconciliationTestID(t, "55555555-5555-4555-8555-555555555555")
+	listenerC := reconciliationTestID(t, "66666666-6666-4666-8666-666666666666")
+
+	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
+		Requested: []RemoteTrackIdentity{identity},
+	}); err != nil {
+		t.Fatalf("record listener B's successful pull: %v", err)
+	}
+	first := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerA, identity)
+	if first.Present != 1 || first.Closed != 0 {
+		t.Fatalf("first listener A failure result=%+v, want Present", first)
+	}
+	now = now.Add(publicationLivenessDedupeWindow)
+	unknown := confirmActiveTrackFailure(t, service, tenantID, episodeID, utilities.ID{}, identity)
+	if unknown.Present != 1 || unknown.Closed != 0 {
+		t.Fatalf("unknown listener failure result=%+v, want Present", unknown)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", true)
+
+	now = now.Add(publicationLivenessDedupeWindow)
+	third := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerC, identity)
+	if third.Closed != 1 || third.Present != 0 {
+		t.Fatalf("listener C failure result=%+v, want withdrawal after two known listeners report failure", third)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", false)
+}
+
+func TestConfirmRemoteTrackFailuresExpiresSightingWindow(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, func() time.Time { return now })
+	tenantID, episodeID, publisherID, identity := publishRemoteObservationFixture(t, service, repository)
+	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+
+	first := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerID, identity)
+	if first.Present != 1 || first.Closed != 0 {
+		t.Fatalf("first failure result=%+v, want Present", first)
+	}
+	now = now.Add(publicationStillFailingWindow)
+	second := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerID, identity)
+	if second.Present != 1 || second.Closed != 0 {
+		t.Fatalf("failure after the sighting window result=%+v, want a fresh Present sighting", second)
+	}
+	assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", true)
+}
+
+func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
+	t.Run("failure confirmation", func(t *testing.T) {
+		now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+		repository := &reconciliationRepositoryStub{}
+		service := newService(repository, func() time.Time { return now })
+		tenantID, episodeID, _, identity := publishRemoteObservationFixture(t, service, repository)
+		listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+
+		if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
+			Requested: []RemoteTrackIdentity{identity},
+		}); err != nil {
+			t.Fatalf("record successful pull: %v", err)
+		}
+		confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerID, identity)
+		now = now.Add(publicationLivenessDedupeWindow)
+		result := confirmActiveTrackFailure(t, service, tenantID, episodeID, listenerID, identity)
+		if result.Closed != 1 {
+			t.Fatalf("repeat failure result=%+v, want publication closed", result)
+		}
+		assertLivenessEvidenceEmpty(t, service)
+	})
+
+	t.Run("remote track reconciliation", func(t *testing.T) {
+		now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+		repository := &reconciliationRepositoryStub{}
+		service := newService(repository, func() time.Time { return now })
+		tenantID, episodeID, _, identity := publishRemoteObservationFixture(t, service, repository)
+		listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+		latest, err := service.latest(context.Background(), tenantID, episodeID)
+		if err != nil {
+			t.Fatalf("read publication: %v", err)
+		}
+		candidates := remotePublicationCandidates(tenantID, episodeID, latest)
+		if len(candidates) != 1 {
+			t.Fatalf("publication candidates=%d, want 1", len(candidates))
+		}
+		service.liveness.recordServed(candidates[0].key, listenerID)
+		service.liveness.stillFailing(candidates[0].key, listenerID)
+
+		input := RemoteTrackObservationInput{
+			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
+			Requested: []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity},
+		}
+		for _, advance := range []time.Duration{0, 8 * time.Second, 7 * time.Second} {
+			now = now.Add(advance)
+			if err := service.ObserveRemoteTracks(context.Background(), input); err != nil {
+				t.Fatalf("observe missing track: %v", err)
+			}
+		}
+		assertLivenessEvidenceEmpty(t, service)
+	})
+}
+
+func TestPublicationLivenessEvidenceMapsAreBounded(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	checks := newPublicationLivenessChecks(func() time.Time { return now })
+	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
+		key := publicationCandidateKey{publicationID: fmt.Sprintf("publication-%d", index)}
+		checks.recordServed(key, listenerID)
+		checks.stillFailing(key, listenerID)
+	}
+	if len(checks.served) > publicationLivenessEvidenceMaxKeys || len(checks.present) > publicationLivenessEvidenceMaxKeys {
+		t.Fatalf("liveness evidence sizes served=%d present=%d, want at most %d each",
+			len(checks.served), len(checks.present), publicationLivenessEvidenceMaxKeys)
+	}
 }
 
 func TestConfirmRemoteTrackFailuresInspectsPublisherOnceForMultipleTracks(t *testing.T) {
@@ -137,5 +325,28 @@ func TestConfirmRemoteTrackFailuresInspectsPublisherOnceForMultipleTracks(t *tes
 	})
 	if err != nil || calls != 1 || result.Checked != 2 || result.Present != 2 {
 		t.Fatalf("calls=%d result=%+v err=%v", calls, result, err)
+	}
+}
+
+func confirmActiveTrackFailure(t *testing.T, service Service, tenantID, episodeID, listenerID utilities.ID, identity RemoteTrackIdentity) RemoteTrackFailureResult {
+	t.Helper()
+	result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
+		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
+		Failed: []RemoteTrackIdentity{identity},
+	}, func(context.Context, string) (PublisherSession, error) {
+		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
+	})
+	if err != nil {
+		t.Fatalf("confirm listener failure: %v", err)
+	}
+	return result
+}
+
+func assertLivenessEvidenceEmpty(t *testing.T, service Service) {
+	t.Helper()
+	service.liveness.mu.Lock()
+	defer service.liveness.mu.Unlock()
+	if len(service.liveness.served) != 0 || len(service.liveness.present) != 0 {
+		t.Fatalf("liveness evidence served=%d present=%d, want both empty", len(service.liveness.served), len(service.liveness.present))
 	}
 }
