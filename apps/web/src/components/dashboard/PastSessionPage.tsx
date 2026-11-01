@@ -482,7 +482,13 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
   const mark = useMemo(() => (search ? new RegExp(`(${search.replace(ESCAPE, "\\$&")})`, "ig") : null), [search]);
 
   let body;
-  if (transcript.kind === "loading") body = <div className="tempty">Loading the transcript…</div>;
+  if (transcript.kind === "loading")
+    body = (
+      <div className="tempty" role="status">
+        <span className="spin" aria-hidden="true" />
+        Loading the transcript…
+      </div>
+    );
   else if (transcript.kind === "failed")
     body = (
       <div style={{ padding: 14 }}>
