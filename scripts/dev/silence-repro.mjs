@@ -477,6 +477,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           if (message.type() === "error") run.faults.push({ at: Date.now() - origin, participant: index, kind: "console-error", message: message.text().slice(0, 400) });
         });
         page.on("pageerror", (error) => run.faults.push({ at: Date.now() - origin, participant: index, kind: "pageerror", message: error.message }));
+        const requestStarts = new WeakMap();
+        page.on("request", (request) => requestStarts.set(request, Date.now() - origin));
         page.on("response", async (response) => {
           const path = new URL(response.url()).pathname;
           if (!/media\//u.test(path)) return;
@@ -490,6 +492,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
           if (connectionId && input?.tracks?.[0]?.location === "remote" && response.status() < 300) pullSessions[index] = connectionId;
           const entry = {
             at: Date.now() - origin,
+            startedAt: requestStarts.get(response.request()) ?? null,
             participant: index,
             method: response.request().method(),
             path: path.replace(/\/[0-9a-f-]{20,}/gu, "/:id"),

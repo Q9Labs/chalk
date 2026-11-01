@@ -32,7 +32,11 @@ for (const file of process.argv.slice(2)) {
             .map((error) => `${error.code}`),
         ),
       ];
+      const inFlight = network
+        .filter((entry) => entry.participant === action.participant && entry.startedAt != null && entry.path.endsWith("/media/sfu/tracks") && entry.startedAt <= tap && entry.at >= tap)
+        .map((entry) => ({ kind: String(entry.locations), startOffsetMs: entry.startedAt - tap, durationMs: entry.at - entry.startedAt, status: entry.status }));
       rows.push({
+        inFlightTracks: inFlight,
         build: run.build,
         condition: run.condition,
         invocation: run.invocation,
