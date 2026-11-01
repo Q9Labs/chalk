@@ -449,6 +449,7 @@ it.each(["microphone", "camera"] as const)("a %s enable during remote connection
       await pulling;
       await vi.advanceTimersByTimeAsync(0);
 
+      expect(enableResult).toEqual({ outcome: "confirmed", errorCode: null });
       expect(localPostsWhileReplacing).toHaveLength(0);
       const localPosts = h.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local" && item.source === source));
       expect(localPosts).toHaveLength(1);

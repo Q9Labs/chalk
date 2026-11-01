@@ -94,6 +94,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #retiredLocalCause: LocalPublicationRetirementCause = "forced_pause";
   #replacementCause: MediaConnectionReplacementCause | undefined;
+  #replacement: { readonly generation: number; readonly promise: Promise<void> } | null = null;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
@@ -283,9 +284,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // A publisher that still believes it is sending must publish again, so
   // listeners get a new publication ID instead of retrying a dead one.
   #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot): void {
-    const unlisted = [...this.#localTracks.values()].filter(
-      (state) => (state.source === "microphone" || state.source === "camera") && state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId),
-    );
+    const unlisted = [...this.#localTracks.values()].filter((state) => state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId));
     for (const state of unlisted) this.#beginLocalRecovery(state, state.providerPublicationId, true);
   }
   #beginLocalRecovery(state: LocalTrackState, deadPublicationId: string | null, relist: boolean): void {
@@ -477,6 +476,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const state = resolved.value;
     if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     try {
+      const replacement = this.#replacement;
+      if (replacement?.generation === generation) {
+        state.desiredEnabled = true;
+        state.track.enabled = true;
+        await replacement.promise.catch(() => {});
+        state.desiredEnabled = true;
+        state.track.enabled = true;
+      }
       await this.#retireUnavailableLocalPublication(state);
       if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       if (state.enabled) return { outcome: "satisfied", errorCode: null };
@@ -1484,35 +1491,49 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementCause = undefined;
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }
-  async #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
+  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
     this.#requireGeneration(generation);
+    if (this.#replacement?.generation === generation) return this.#replacement.promise;
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
-      throw new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed");
+      return Promise.reject(new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed"));
     }
     this.#replacementAttemptedGeneration = generation;
     const replaceMediaConnection = this.#replaceMediaConnection;
-    const bootstrap = await replaceMediaConnection();
-    this.#requireGeneration(generation);
-    validateBootstrap(bootstrap);
-    if (bootstrap.connectionId === this.#bootstrap.connectionId) {
-      throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
-    }
-    this.#fenceLocalPublications();
-    const connectionEpoch = ++this.#connectionEpoch;
-    this.#disposeConnection(false);
-    this.#clearRemoteTracks();
-    this.#cursor = null;
-    this.#bootstrap = bootstrap;
-    this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
-    this.#replacementCause = cause;
-    this.#retiredLocalConnection = null;
-    this.#negotiatedGeneration = null;
-    for (const state of this.#localTracks.values()) {
-      state.transceiver = null;
-      state.enabled = false;
-      state.providerPublicationId = null;
-    }
-    this.remotePublicationsChanged();
+    const promise = Promise.resolve().then(async () => {
+      const bootstrap = await replaceMediaConnection();
+      this.#requireGeneration(generation);
+      validateBootstrap(bootstrap);
+      if (bootstrap.connectionId === this.#bootstrap.connectionId) {
+        throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
+      }
+      this.#fenceLocalPublications();
+      const connectionEpoch = ++this.#connectionEpoch;
+      this.#disposeConnection(false);
+      this.#clearRemoteTracks();
+      this.#cursor = null;
+      this.#bootstrap = bootstrap;
+      this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
+      this.#replacementCause = cause;
+      this.#retiredLocalConnection = null;
+      this.#negotiatedGeneration = null;
+      for (const state of this.#localTracks.values()) {
+        state.transceiver = null;
+        state.enabled = false;
+        state.providerPublicationId = null;
+      }
+      this.remotePublicationsChanged();
+    });
+    const replacement = { generation, promise };
+    this.#replacement = replacement;
+    void promise.then(
+      () => {
+        if (this.#replacement === replacement) this.#replacement = null;
+      },
+      () => {
+        if (this.#replacement === replacement) this.#replacement = null;
+      },
+    );
+    return promise;
   }
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
