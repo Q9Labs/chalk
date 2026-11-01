@@ -20,6 +20,7 @@ const maxProviderMessageRunes = 240
 
 var (
 	providerCodePattern    = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
+	trackErrorCodePattern  = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 	providerURLPattern     = regexp.MustCompile(`https?://\S+`)
 	providerUUIDPattern    = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b`)
 	providerTokenPattern   = regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`)
@@ -101,6 +102,7 @@ func classifyTransportCause(ctx context.Context, err error) transportCause {
 
 type providerFailureDetails struct {
 	rawCode            string
+	trackErrorCode     string
 	message            string
 	messageFingerprint string
 	responseBytes      int
@@ -123,6 +125,8 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 	}
 	if operation == "close_tracks" && stage == failureStageTrack {
 		failure.details.rawCode = observableProviderMessage(rawCode)
+	} else if stage == failureStageTrack {
+		failure.details.trackErrorCode = observableTrackErrorCode(rawCode)
 	}
 	return failure
 }
@@ -202,6 +206,19 @@ func observableProviderCode(rawCode string, normalizedCode string) string {
 	rawCode = strings.TrimSpace(rawCode)
 	if normalizedCode != "unknown" || !providerCodePattern.MatchString(rawCode) {
 		return ""
+	}
+	return rawCode
+}
+
+// observableTrackErrorCode keeps Cloudflare's per-track errorCode countable
+// without trusting provider text: only short snake_case codes pass.
+func observableTrackErrorCode(rawCode string) string {
+	rawCode = strings.TrimSpace(rawCode)
+	if rawCode == "" {
+		return ""
+	}
+	if !trackErrorCodePattern.MatchString(rawCode) {
+		return "other"
 	}
 	return rawCode
 }
