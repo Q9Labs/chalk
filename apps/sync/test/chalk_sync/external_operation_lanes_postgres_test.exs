@@ -6,6 +6,7 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
+  alias ChalkSync.UUID
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
@@ -68,6 +69,71 @@ defmodule ChalkSync.ExternalOperationLanesPostgresTest do
 
     for _other <- 1..3, do: assert_receive({:cleanup_started, _id, _provider}, 1_000)
     release_cleanups()
+  end
+
+  @local_names ~w(admit_participant deny_admission admission_request_expired)
+  @provider_names ~w(mute_participant stop_participant_camera stop_participant_screen_share)
+
+  test "the provider claim leaves local operations alone", %{connection: connection} do
+    set = seed_operation_set(connection)
+    claimed = claim_names(&Postgres.claim_provider_operations/1, set.episode)
+    assert Enum.sort(claimed) == Enum.sort(@provider_names)
+  end
+
+  test "the local claim leaves provider operations alone", %{connection: connection} do
+    set = seed_operation_set(connection)
+    claimed = claim_names(&Postgres.claim_local_operations/1, set.episode)
+    assert Enum.sort(claimed) == Enum.sort(@local_names)
+  end
+
+  test "local and provider claims split every operation but role cleanup", %{
+    connection: connection
+  } do
+    set = seed_operation_set(connection)
+    local = claim_names(&Postgres.claim_local_operations/1, set.episode)
+    provider = claim_names(&Postgres.claim_provider_operations/1, set.episode)
+
+    assert local -- @local_names == []
+    assert provider -- @provider_names == []
+    assert Enum.sort(local ++ provider) == Enum.sort(@local_names ++ @provider_names)
+    refute "role_transition_cleanup" in (local ++ provider)
+  end
+
+  defp claim_names(claim, episode) do
+    {:ok, operations} = claim.(64)
+
+    for {^episode, operation} <- operations, do: Atom.to_string(operation.name)
+  end
+
+  # Claims lease an operation for a minute, so each test needs its own set.
+  defp seed_operation_set(connection) do
+    fixture = seed(connection)
+    names = @local_names ++ @provider_names ++ ["role_transition_cleanup"]
+    Enum.each(names, &insert_pending_operation(connection, fixture.episode, &1))
+    fixture
+  end
+
+  defp insert_pending_operation(connection, episode, name) do
+    request_key = unique_key("external_lane_claim")
+
+    Postgrex.query!(
+      connection,
+      """
+      insert into sync_external_operations (
+        tenant_id, space_id, episode_id, external_operation_id, request_key,
+        request_fingerprint, operation_name, payload, fence_active
+      ) values ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, false)
+      """,
+      [
+        UUID.dump!(episode.tenant_id),
+        UUID.dump!(episode.space_id),
+        UUID.dump!(episode.episode_id),
+        UUID.dump!(UUID.generate()),
+        request_key,
+        :crypto.hash(:sha256, request_key),
+        name
+      ]
+    )
   end
 
   defp start_consumers do

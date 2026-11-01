@@ -29,16 +29,33 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   require ExternalOperation
 
-  @default_page_size 32
+  @local_page_size 32
   @default_max_backoff_ms 5_000
   @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
   @worker_completion_grace_ms 5_000
   @max_attempts 100
+  # A page of provider calls must finish inside the claim lease, so those lanes
+  # claim one wave at a time. Local operations make no provider call.
   @lanes %{
-    all: %{claim: :claim_operations, concurrency: 1},
-    local: %{claim: :claim_local_operations, concurrency: 4},
-    provider: %{claim: :claim_provider_operations, concurrency: 8}
+    all: %{
+      claim: :claim_operations,
+      concurrency: 1,
+      page_size: 1,
+      provider_calls: true
+    },
+    local: %{
+      claim: :claim_local_operations,
+      concurrency: 4,
+      page_size: @local_page_size,
+      provider_calls: false
+    },
+    provider: %{
+      claim: :claim_provider_operations,
+      concurrency: 8,
+      page_size: 8,
+      provider_calls: true
+    }
   }
   @end_episode_operations [
     :end_episode,
@@ -51,9 +68,12 @@ defmodule ChalkSync.ExternalOperationConsumer do
     GenServer.start_link(__MODULE__, options, name: name)
   end
 
-  @doc "Names of the two production lanes, for health checks."
-  @spec lane_names() :: [atom()]
-  def lane_names, do: [lane_name(:local), lane_name(:provider)]
+  @doc "The two production lanes and their process names, for health checks."
+  @spec lane_names() :: [local: atom(), provider: atom()]
+  def lane_names, do: [local: lane_name(:local), provider: lane_name(:provider)]
+
+  @doc false
+  def lane_specs, do: @lanes
 
   @doc "Child specs for the local and provider lanes. `options` apply to both."
   @spec child_specs(keyword()) :: [Supervisor.child_spec()]
@@ -78,7 +98,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
     lane = Map.fetch!(@lanes, Keyword.get(options, :lane, :all))
 
     state = %{
-      page_size: Keyword.get(options, :page_size, @default_page_size),
+      page_size: Keyword.get(options, :page_size, lane.page_size),
       concurrency: lane.concurrency,
       adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
       poll_interval_ms: poll_interval_ms,
