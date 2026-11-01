@@ -249,6 +249,8 @@ function browserInstrumentation({ frequency }) {
     return {
       status: snapshot.connection.status,
       mic: snapshot.media.local.microphone.state,
+      micDetail: JSON.parse(JSON.stringify(snapshot.media.local.microphone, (_key, value) => (value instanceof MediaStreamTrack ? undefined : value))),
+      commandError: window.matrixCommandError ? { code: window.matrixCommandError.code ?? null, message: String(window.matrixCommandError.message ?? "").slice(0, 160) } : null,
       self: snapshot.self.participantId,
       roster: snapshot.participants.roster.map((participant) => participant.participantId),
       remote,
@@ -646,7 +648,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         participants.map(async ({ page }, listener) => {
           try {
             const sample = await page.evaluate(() => window.srSample());
-            return { listener, status: sample.status, mic: sample.mic, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
+            return { listener, status: sample.status, mic: sample.mic, micDetail: sample.micDetail, commandError: sample.commandError, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
           } catch (error) {
             return { listener, error: error.message, remote: [] };
           }
