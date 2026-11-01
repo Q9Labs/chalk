@@ -724,7 +724,10 @@ func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 	for _, track := range providerTracks {
 		if addTrackResultFailed(track) {
 			code := normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription))
-			trackErrors = append(trackErrors, mediaplane.TrackError{ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code})
+			publicationMissing := strings.EqualFold(strings.TrimSpace(track.ErrorCode), "not_found_track_error") || code == "track_not_found"
+			trackErrors = append(trackErrors, mediaplane.TrackError{
+				ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code, PublicationMissing: publicationMissing,
+			})
 			continue
 		}
 		tracks = append(tracks, mediaplane.Track{

@@ -244,7 +244,7 @@ func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.R
 		if transport.addTracksBody != "" {
 			body = transport.addTracksBody
 		} else {
-			body = fmt.Sprintf(`{"tracks":[{"location":"remote","trackName":%q,"sessionId":%q,"errorCode":"unknown","errorDescription":"track not found"}]}`,
+			body = fmt.Sprintf(`{"tracks":[{"location":"remote","trackName":%q,"sessionId":%q,"errorCode":"not_found_track_error"}]}`,
 				transport.trackName, transport.sessionID)
 		}
 		statusCode := transport.addTracksStatus

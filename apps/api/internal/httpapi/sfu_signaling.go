@@ -255,6 +255,9 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 	}
 	failed := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(response.TrackErrors))
 	for _, trackErr := range response.TrackErrors {
+		if !trackErr.PublicationMissing {
+			continue
+		}
 		identity := mediapublications.RemoteTrackIdentity{
 			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
 			TrackName:    strings.TrimSpace(trackErr.TrackName),

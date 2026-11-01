@@ -47,9 +47,10 @@ type TracksResponse struct {
 }
 
 type TrackError struct {
-	ConnectionID string `json:"connectionId"`
-	TrackName    string `json:"trackName"`
-	Code         string `json:"code"`
+	ConnectionID       string `json:"connectionId"`
+	TrackName          string `json:"trackName"`
+	Code               string `json:"code"`
+	PublicationMissing bool   `json:"-"`
 }
 
 type UpdateTracksRequest struct {
