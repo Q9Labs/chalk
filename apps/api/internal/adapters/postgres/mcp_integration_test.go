@@ -100,7 +100,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	tenantID, foreignTenant, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID := ids(), ids(), ids(), ids(), ids(), ids(), ids(), ids(), ids()
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'MCP own'),($2,'MCP foreign private')`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantID), uuid(foreignTenant))
-	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','off')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','disabled')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
 	mustExec(t, pool, `insert into episodes(id,tenant_id,space_id,status,deadline_at,config_snapshot,artifact_policy,media_plane_binding) values($1,$2,$3,'active',now()+interval '1 hour','{}','{}','{}')`, uuid(episodeID), uuid(tenantID), uuid(spaceID))
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,name,generation,status,role,capabilities) values($1,$2,$3,$4,'MCP participant',1,'active','collaborator',array['sendChat'])`, uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values($1,$2,$3,$4,'completed','r2')`, uuid(recordingID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
@@ -109,7 +109,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		for _, table := range []string{"webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_render_jobs", "transcriptions", "recordings", "space_recording_preparations", "space_public_invites", "participants", "episodes", "spaces", "tenant_artifact_policies"} {
+		for _, table := range []string{"webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "participants", "episodes", "spaces", "tenant_artifact_policies"} {
 			_, _ = pool.Exec(cleanup, "delete from "+table+" where tenant_id=$1", uuid(tenantID))
 		}
 		_, _ = pool.Exec(cleanup, `delete from tenants where id=$1 or id=$2`, uuid(tenantID), uuid(foreignTenant))
@@ -170,6 +170,14 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	t.Cleanup(server.Close)
 	fullSession := connectMCP(t, server, full.RawKey, "2026-07-28")
 	deniedSession := connectMCP(t, server, denied.RawKey, "2025-11-25")
+	foreignSpace := ids()
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane) values($1,$2,'Foreign private Space',$3,'cf_sfu')`, uuid(foreignSpace), uuid(foreignTenant), foreignSpace.String())
+	t.Cleanup(func() {
+		_, err := pool.Exec(context.Background(), `delete from spaces where id=$1`, uuid(foreignSpace))
+		if err != nil {
+			t.Error(err)
+		}
+	})
 	cases := mcpCases(t, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, disposable.Key.ID, hook.Endpoint.ID)
 	listed, err := fullSession.ListTools(ctx, nil)
 	if err != nil {
@@ -205,11 +213,49 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 			if result.IsError || !strings.Contains(string(mcpData(t, result)), tenantID.String()) {
 				t.Fatal("connection lost its tenant binding")
 			}
-			result = callMCP(t, session, "inspect_space", fmt.Sprintf(`{"space_id":%q}`, foreignTenant))
+			result = callMCP(t, session, "inspect_space", fmt.Sprintf(`{"space_id":%q}`, foreignSpace))
 			if !result.IsError || strings.Contains(mcpText(result), "MCP foreign private") {
 				t.Fatal("foreign identifier escaped tenant isolation")
 			}
 		})
+	}
+	guarded := makeKey([]authentication.Scope{authentication.ScopeSpacesRead, authentication.ScopeAPIKeysWrite, authentication.ScopeAPIKeysDelete, authentication.ScopeWebhooksWrite})
+	guardedSession := connectMCP(t, server, guarded.RawKey, "2026-07-28")
+	for _, attempt := range []mcpToolCase{
+		{name: "issue_api_key", args: fmt.Sprintf(`{"action":"create","request_key":"mcp-escalation-create","create":{"name":"must fail","scopes":["tenants:write"],"expires_at":%q}}`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))},
+		{name: "issue_api_key", args: fmt.Sprintf(`{"action":"rotate","api_key_id":%q,"request_key":"mcp-escalation-rotate"}`, full.Key.ID)},
+		{name: "revoke_api_key", args: fmt.Sprintf(`{"api_key_id":%q}`, full.Key.ID)},
+		{name: "configure_webhook", args: fmt.Sprintf(`{"action":"delete","endpoint_id":%q,"revision":2,"request_key":"mcp-forbidden-delete"}`, hook.Endpoint.ID)},
+		{name: "prepare_recording", args: fmt.Sprintf(`{"action":"cancel","space_id":%q,"expected_revision":1}`, spaceID)},
+	} {
+		result := callMCP(t, guardedSession, attempt.name, attempt.args)
+		if !result.IsError || !strings.Contains(mcpText(result), "forbidden") {
+			t.Fatalf("scope escalation or wrong action scope accepted for %s", attempt.name)
+		}
+	}
+	// Schema validation must reject tenant selection and missing destructive
+	// action fields before any operation can execute.
+	for _, attempt := range []mcpToolCase{
+		{name: "list_spaces", args: fmt.Sprintf(`{"tenant_id":%q}`, foreignTenant)},
+		{name: "configure_space", args: fmt.Sprintf(`{"action":"invite","space_id":%q}`, spaceID)},
+		{name: "configure_webhook", args: fmt.Sprintf(`{"action":"delete","endpoint_id":%q}`, hook.Endpoint.ID)},
+	} {
+		result, err := fullSession.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_" + attempt.name, Arguments: json.RawMessage(attempt.args)})
+		if err == nil && !result.IsError {
+			t.Fatalf("invalid action input accepted for %s", attempt.name)
+		}
+	}
+	for _, test := range cases {
+		if test.name == "create_episode" {
+			result := callMCP(t, fullSession, test.name, test.args)
+			if result.IsError {
+				t.Fatalf("idempotent replay failed: %s", mcpText(result))
+			}
+		}
+	}
+	var episodeCount int
+	if err := pool.QueryRow(ctx, `select count(*) from episodes where space_id=$1`, uuid(emptySpace)).Scan(&episodeCount); err != nil || episodeCount != 1 {
+		t.Fatalf("Episode retry duplicated durable work: count=%d err=%v", episodeCount, err)
 	}
 	// Reauthentication is required on every call, not only initialize.
 	if err := keys.Revoke(ctx, tenantID, denied.Key.ID); err != nil {
