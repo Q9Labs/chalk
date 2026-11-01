@@ -117,17 +117,27 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,name,generation,status,role,capabilities) values($1,$2,$3,$4,'MCP participant',1,'active','collaborator',array['sendChat'])`, uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
-	mustExec(t, pool, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values($1,$2,$3,$4,'completed','r2')`, uuid(recordingID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
+	objectKey := recordings.TenantStorageKeyPrefix(tenantID) + recordingID.String() + ".mp4"
+	mustExec(t, pool, `insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider,storage_key) values($1,$2,$3,$4,'completed','r2',$5)`, uuid(recordingID), uuid(tenantID), uuid(spaceID), uuid(episodeID), objectKey)
+	renderJob := ids()
+	mustExec(t, pool, `insert into recording_jobs(id,tenant_id,episode_id,recording_id,kind,idempotency_key,payload_schema_version,state,attempt_limit,terminal_at,available_at) values($1,$2,$3,$4,'render',$5,1,'succeeded',3,now(),now())`, uuid(renderJob), uuid(tenantID), uuid(episodeID), uuid(recordingID), "render:"+recordingID.String())
+	mustExec(t, pool, `insert into recording_artifacts(recording_id,tenant_id,render_job_id,object_key,content_type,byte_size,checksum,duration_millis,committed_at,expires_at) values($1,$2,$3,$4,'video/mp4',1,$5,1000,now(),now()+interval '1 day')`, uuid(recordingID), uuid(tenantID), uuid(renderJob), objectKey, make([]byte, 32))
 	mustExec(t, pool, `insert into transcriptions(id,tenant_id,recording_id,space_id,episode_id,status,languages) values($1,$2,$3,$4,$5,'not_requested','{}')`, uuid(transcriptID), uuid(tenantID), uuid(recordingID), uuid(spaceID), uuid(episodeID))
 	mustExec(t, pool, `insert into users(id,email,name) values($1,$2,'MCP member')`, uuid(userID), userID.String()+"@example.invalid")
 	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		for _, table := range []string{"webhook_deliveries", "webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "sync_admission_requests", "sync_lifecycle_intents", "sync_episode_control", "participants", "episodes", "space_roles", "spaces", "tenant_artifact_policies"} {
-			_, _ = pool.Exec(cleanup, "delete from "+table+" where tenant_id=$1", uuid(tenantID))
+		for _, table := range []string{"webhook_deliveries", "webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "sync_admission_requests", "sync_lifecycle_intents", "sync_external_operations", "sync_episode_control", "participants", "episode_create_requests", "episodes", "space_roles", "space_create_requests", "spaces", "tenant_artifact_policies"} {
+			if _, err := pool.Exec(cleanup, "delete from "+table+" where tenant_id=$1", uuid(tenantID)); err != nil {
+				t.Errorf("cleanup %s: %v", table, err)
+			}
 		}
-		_, _ = pool.Exec(cleanup, `delete from tenants where id=$1 or id=$2`, uuid(tenantID), uuid(foreignTenant))
-		_, _ = pool.Exec(cleanup, `delete from users where id=$1`, uuid(userID))
+		if _, err := pool.Exec(cleanup, `delete from tenants where id=$1 or id=$2`, uuid(tenantID), uuid(foreignTenant)); err != nil {
+			t.Error(err)
+		}
+		if _, err := pool.Exec(cleanup, `delete from users where id=$1`, uuid(userID)); err != nil {
+			t.Error(err)
+		}
 	})
 	keys := apikeys.NewService(NewAPIKeyRepository(q, pool), apikeys.Config{})
 	makeKey := func(scopes []authentication.Scope) apikeys.CreateResult {
@@ -175,7 +185,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	transcriptRepo := NewTranscriptRepositoryWithPool(q, pool)
-	storage := objectstorage.NewService(matrixObjectStore{})
+	storage := objectstorage.NewService(mcpDownloadStore{key: objectKey})
 	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
 	options.RateLimit.DisableAuthenticated = true
 	options.LocalSystemToken = "mcp-system-fixture"

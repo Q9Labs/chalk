@@ -2,9 +2,10 @@ package postgres
 
 import (
 	"fmt"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, keyID, endpointID utilities.ID) []mcpToolCase {
@@ -31,14 +32,14 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 		{"inspect_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q}`, spaceID, episodeID), ""},
 		{"create_episode", fmt.Sprintf(`{"space_id":%q,"request_key":"mcp-episode-create-01","body":{}}`, emptySpace), ""},
 		{"list_live_episodes", fmt.Sprintf(`{"space_ids":[%q]}`, spaceID), ""},
-		{"end_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-end-0001"}`, spaceID, episodeID), ""},
 		{"set_episode_deadline", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-deadline-01","deadline_at":%q}`, spaceID, episodeID, time.Now().Add(2*time.Hour).UTC().Format(time.RFC3339)), ""},
 		{"list_admission_requests", fmt.Sprintf(`{"space_id":%q}`, spaceID), ""},
 		{"decide_admission_request", fmt.Sprintf(`{"space_id":%q,"request_handle":"missing-request-handle","decision":"deny","request_key":"mcp-admission-deny-01"}`, spaceID), "admission_request.not_found"},
 		{"remove_participant", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"participant_id":%q,"participant_generation":1,"request_key":"mcp-participant-remove-01"}`, spaceID, episodeID, participantID), ""},
+		{"end_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-end-0001"}`, spaceID, episodeID), ""},
 		{"list_recordings", `{}`, ""},
 		{"get_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
-		{"get_recording_download", fmt.Sprintf(`{"recording_id":%q,"expires_in_seconds":60}`, recordingID), "recording.not_ready"},
+		{"get_recording_download", fmt.Sprintf(`{"recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},
 		{"export_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
 		{"list_transcripts", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
 		{"delete_transcript", fmt.Sprintf(`{"transcript_id":%q}`, transcriptID), ""},
