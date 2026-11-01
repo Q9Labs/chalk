@@ -19,6 +19,10 @@ const (
 	publicationLivenessEvidenceMaxKeys = 4096
 )
 
+// Cloudflare lists a new track as active several seconds before listeners can pull it
+// (rig runs saw 4.5 s of "track not found"). Only failures older than this count as a stuck track.
+const publicationActiveTrackGrace = 10 * time.Second
+
 type PublisherTrack struct {
 	MID       string
 	TrackName string
@@ -157,9 +161,11 @@ func (checks *publicationLivenessChecks) recordServed(key listenerEvidenceKey, l
 	reports[listenerID] = listenerReport{connectionID: connectionID, updatedAt: now}
 }
 
-func (checks *publicationLivenessChecks) withdrawDue(key listenerEvidenceKey, present map[utilities.ID]string) bool {
+// withdrawDue reports whether listeners have failed to pull an active track for longer than
+// the grace period. It also returns how long the oldest counted failure has lasted.
+func (checks *publicationLivenessChecks) withdrawDue(key listenerEvidenceKey, present map[utilities.ID]string) (bool, time.Duration) {
 	if checks == nil {
-		return false
+		return false, 0
 	}
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
@@ -167,7 +173,7 @@ func (checks *publicationLivenessChecks) withdrawDue(key listenerEvidenceKey, pr
 	checks.pruneEvidenceKeyLocked(key, now)
 	reports := checks.evidence[key]
 	failing, served := 0, 0
-	repeat := false
+	var failingFor time.Duration
 	for listenerID, report := range reports {
 		connectionID, isPresent := present[listenerID]
 		if !isPresent || connectionID == "" || report.connectionID == "" || connectionID != report.connectionID {
@@ -175,14 +181,12 @@ func (checks *publicationLivenessChecks) withdrawDue(key listenerEvidenceKey, pr
 		}
 		if report.failing {
 			failing++
-			if now.Sub(report.firstFailed) >= publicationLivenessDedupeWindow {
-				repeat = true
-			}
+			failingFor = max(failingFor, now.Sub(report.firstFailed))
 		} else {
 			served++
 		}
 	}
-	return repeat && (failing >= 2 || served == 0)
+	return failingFor >= publicationActiveTrackGrace && (failing >= 2 || served == 0), failingFor
 }
 
 func (checks *publicationLivenessChecks) forget(candidate publicationCandidate) {
@@ -313,8 +317,17 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					}
 					presenceLoaded = true
 				}
-				if presenceUnavailable || !s.liveness.withdrawDue(servedKey{tenantID: input.TenantID.String(), episodeID: input.EpisodeID.String(), identity: candidate.identity}, currentListeners) {
+				due, failingFor := false, time.Duration(0)
+				if !presenceUnavailable {
+					due, failingFor = s.liveness.withdrawDue(servedKey{tenantID: input.TenantID.String(), episodeID: input.EpisodeID.String(), identity: candidate.identity}, currentListeners)
+				}
+				if !due {
 					result.Present++
+					publicationClosuresSkipped.Add(ctx, 1)
+					slog.InfoContext(ctx, "kept media publication that Cloudflare lists as active",
+						"event", "media_publication.publisher_track_close_skipped",
+						"listener_failing_ms", failingFor.Milliseconds(),
+					)
 					continue
 				}
 			}
