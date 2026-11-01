@@ -412,13 +412,42 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const phase = publication.lifecycle;
     if (phase.kind === "pending" || phase.kind === "confirmed") publication.lifecycle = { kind: "retiring", handle: phase.kind === "confirmed" ? phase.handle : null, detached: false, cause };
   }
+  #carriesBundleTransport(publication: OwnedLocalPublication): boolean {
+    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
+    return !bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag);
+  }
+  #shouldKeepBundleTransportOnUserPause(publication: OwnedLocalPublication, closed: boolean): boolean {
+    const { lifecycle, state } = publication;
+    return !closed && lifecycle.kind === "retiring" && lifecycle.cause === "user_pause" && (state.source === "microphone" || state.source === "camera") && this.#carriesBundleTransport(publication);
+  }
+  async #closeOwnedPublicationKeepingBundleTransport(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<void> {
+    if (!phase.detached && !connectionIsClosed(publication.connection)) {
+      await this.#boundPeerOperation(publication.transceiver.sender.replaceTrack(null));
+      if (!connectionIsClosed(publication.connection)) {
+        // Keep the BUNDLE transport on forced close; renegotiation without its tag MID expires this SFU session (2026-10-30 probe).
+        publication.transceiver.direction = "inactive";
+      }
+    }
+    phase.detached = true;
+    await this.#signal(
+      () =>
+        this.#requireTransport().closeTracks({
+          connectionId: publication.connectionId,
+          sessionDescription: undefined,
+          tracks: [{ ...handle, source: publication.state.source }],
+          force: true,
+        }),
+      { generation: this.#generation, connectionId: publication.connectionId },
+    );
+    publication.lifecycle = { kind: "retired" };
+    this.#ownedPublications.delete(publication);
+  }
   #markBundledTransportRetiring(publication: OwnedLocalPublication): void {
     // Real SFU probe (2026-10-30): closing BUNDLE MID 0 caused 410
     // session_error; closing MID 1 kept MID 0 and the session working.
     // Follow the negotiated BUNDLE tag, since the first sender can be video.
     // Missing bundle information retains the conservative rebuild behavior.
-    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
-    if (!bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag)) {
+    if (this.#carriesBundleTransport(publication)) {
       if (this.#retiredLocalConnection === publication.connection) return;
       this.#retiredLocalConnection = publication.connection;
       if (publication.lifecycle.kind === "retiring") this.#retiredLocalCause = publication.lifecycle.cause;
@@ -429,9 +458,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
-    this.#markBundledTransportRetiring(publication);
-    let closed = connection.connectionState === "closed";
+    const keepBundleTransport = this.#shouldKeepBundleTransportOnUserPause(publication, connectionIsClosed(connection));
     try {
+      if (keepBundleTransport) {
+        await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
+        return;
+      }
+      this.#markBundledTransportRetiring(publication);
+      let closed = connection.connectionState === "closed";
       if (!phase.detached && !closed) {
         await this.#boundPeerOperation(transceiver.sender.replaceTrack(null));
         closed = connection.connectionState === "closed";
@@ -443,7 +477,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      if (connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
+      await this.#applyProviderDescriptionIfOpen(response, connection);
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
@@ -1130,6 +1164,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     await this.#signal(() => this.#requireTransport().renegotiate({ connectionId, sessionDescription: requireDescription(answer) }), { generation, connectionId });
     this.#requireGeneration(generation);
   }
+  async #applyProviderDescriptionIfOpen(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection): Promise<void> {
+    if (!connectionIsClosed(connection)) await this.#applyProviderDescription(response, connection);
+  }
   async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
     await (() => connection.setRemoteDescription(requireSFUDescription(response.sessionDescription)))();
   }
@@ -1556,6 +1593,9 @@ function observeConnectionState(
 }
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
+}
+function connectionIsClosed(connection: RTCPeerConnection): boolean {
+  return connection.connectionState === "closed";
 }
 function requireTransceiverMid(transceiver: RTCRtpTransceiver): string {
   if (transceiver.mid === null) throw new CloudflareSFUError("Browser did not assign a media section", "media_failed");

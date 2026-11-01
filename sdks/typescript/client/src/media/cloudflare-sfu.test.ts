@@ -1115,12 +1115,14 @@ async function expectExplicitMuteToKeepBundleTransport(source: "microphone" | "c
       expect(harness.client.getSnapshot().localTracks.find((track) => track.source === otherSource)?.publicationId).toBe(otherPublicationId);
       expect(mutedTransceiver.sender.track).toBeNull();
       expect(mutedTrack.enabled).toBe(false);
-      expect(harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
-        participantId,
-        publicationId,
-        source: remoteSource,
-        trackId: track.id,
-      }))).toEqual(remoteTracks);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
       expect(remotePullCount(harness)).toBe(remotePulls);
       expect(replaceMediaConnection).not.toHaveBeenCalled();
       expect(harness.peers).toHaveLength(1);
@@ -1135,12 +1137,14 @@ async function expectExplicitMuteToKeepBundleTransport(source: "microphone" | "c
       expect(harness.peers).toHaveLength(1);
       expect(harness.peers[0]?.connectionState).toBe("connected");
       expect(harness.peers[0]?.closed).toBe(false);
-      expect(harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
-        participantId,
-        publicationId,
-        source: remoteSource,
-        trackId: track.id,
-      }))).toEqual(remoteTracks);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
       expect(remotePullCount(harness)).toBe(remotePulls);
       expect(harness.transport.closeInputs).toHaveLength(1);
       expect(harness.transport.closeInputs[0]).toMatchObject({ sessionDescription: undefined, force: true });
@@ -1185,8 +1189,14 @@ it.each(["user_pause", "moderation_pause", "sync_recovery_loss"] as const)("repo
     await harness.client.closeForcedLocalPublication("microphone", cause);
     harness.client.setLocalSourceIntent("microphone", true);
     await harness.client.setLocalPublicationTarget({ operationId: "resume", participantId: "participant-1", source: "microphone", enabled: true });
-    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual([cause]);
-    expect(harness.peers).toHaveLength(2);
+    const replacementCauses = add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []));
+    if (cause === "user_pause") {
+      expect(replacementCauses).toEqual([]);
+      expect(harness.peers).toHaveLength(1);
+    } else {
+      expect(replacementCauses).toEqual([cause]);
+      expect(harness.peers).toHaveLength(2);
+    }
   } finally {
     harness.client.stop();
   }
