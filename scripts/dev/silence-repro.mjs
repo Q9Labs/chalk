@@ -31,6 +31,8 @@ const builds = {
   masterd: { serverRev: "origin/diag/cf-session-log", sdkRev: "origin/master" },
   // 5.2.6 clients against the server with the idle-session swap (fix/lazy-cloudflare-session).
   "5.2.6fix": { serverRev: "origin/fix/lazy-cloudflare-session", sdkRev: "2ec22c54b", npm: "5.2.6" },
+  // + the swap before the first call when the connection has been idle past the probe limit.
+  "5.2.6fix2": { serverRev: "origin/fix/swap-idle-session-before-first-call", sdkRev: "2ec22c54b", npm: "5.2.6" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
 // Per-direction impairment (RTT = egress + ingress delay). Only the default interface is shaped, so browser-to-local
