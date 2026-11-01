@@ -123,6 +123,7 @@ func TestForcedCloseStaleConnectionConverges(t *testing.T) {
 		satisfied bool
 	}{
 		{"gone", 410, `{}`, true},
+		{"gone session error", 410, `{"errorCode":"session_error","errorDescription":"Session is gone"}`, true},
 		{"not found", 404, `{}`, true},
 		{"stale disconnected connection", 425, `{"errorCode":"session_error","errorDescription":"Session is not ready yet. Please ensure the PeerConnection is connected before making this request"}`, true},
 		{"top level absent", 200, `{"errorCode":"session_not_found"}`, true},
