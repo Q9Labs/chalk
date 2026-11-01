@@ -20,6 +20,7 @@ import (
 // first use comes 15 s or more after creation answers 410 session_error. A session used in time
 // keeps working.
 type fakeIdleExpiryCloudflare struct {
+	appID    string
 	mu       sync.Mutex
 	clock    time.Duration
 	created  map[string]time.Duration
@@ -28,8 +29,8 @@ type fakeIdleExpiryCloudflare struct {
 	requests []string
 }
 
-func newFakeIdleExpiryCloudflare() *fakeIdleExpiryCloudflare {
-	return &fakeIdleExpiryCloudflare{created: map[string]time.Duration{}, used: map[string]bool{}}
+func newFakeIdleExpiryCloudflare(appID string) *fakeIdleExpiryCloudflare {
+	return &fakeIdleExpiryCloudflare{appID: appID, created: map[string]time.Duration{}, used: map[string]bool{}}
 }
 
 func (f *fakeIdleExpiryCloudflare) advance(d time.Duration) {
@@ -54,7 +55,7 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	path := strings.TrimPrefix(r.URL.Path, "/apps/app")
+	path := strings.TrimPrefix(r.URL.Path, "/apps/"+f.appID)
 	if path == "/sessions/new" {
 		id := fmt.Sprintf("cf-%d", len(f.sessions)+1)
 		f.sessions = append(f.sessions, id)
@@ -101,18 +102,26 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// newExpiryAdapter returns a new adapter for the test's own Cloudflare app. Adapters for one app share
+// their session registry, as the provider registry builds a new adapter on every request.
 func newExpiryAdapter(t *testing.T) (Adapter, *fakeIdleExpiryCloudflare) {
 	t.Helper()
-	fake := newFakeIdleExpiryCloudflare()
+	appID := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+	fake := newFakeIdleExpiryCloudflare(appID)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
+	return newAdapterForFake(t, appID, server), fake
+}
+
+func newAdapterForFake(t *testing.T, appID string, server *httptest.Server) Adapter {
+	t.Helper()
 	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{
-		RealtimeAppID: "app", RealtimeAppSecret: "test-secret", RequestTimeout: time.Second,
+		RealtimeAppID: appID, RealtimeAppSecret: "test-secret", RequestTimeout: time.Second,
 	}, server.Client(), server.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return adapter, fake
+	return adapter
 }
 
 func joinParticipant(t *testing.T, adapter Adapter, name string) string {
@@ -263,5 +272,25 @@ func TestConcurrentFirstCallsOnAnExpiredConnectionShareOneReplacement(t *testing
 	}
 	if got := fake.sessionCount() - sessionsBefore; got != 1 {
 		t.Fatalf("replacement sessions created = %d, want 1", got)
+	}
+}
+
+func TestAdaptersForTheSameAppShareTheirIdleSessionRegistry(t *testing.T) {
+	appID := "shared-app-" + t.Name()
+	fake := newFakeIdleExpiryCloudflare(appID)
+	server := httptest.NewServer(fake)
+	t.Cleanup(server.Close)
+	joining := newAdapterForFake(t, appID, server)
+	publisher := joinParticipant(t, joining, "speaker")
+	if _, err := joining.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatal(err)
+	}
+	listener := joinParticipant(t, joining, "listener")
+	fake.advance(20 * time.Second)
+
+	// The provider registry builds a new adapter for every request, so the first pull comes from another one.
+	pulling := newAdapterForFake(t, appID, server)
+	if _, err := pulling.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("first pull through a different adapter for the same app: %v", err)
 	}
 }

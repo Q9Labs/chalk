@@ -46,6 +46,24 @@ func newSessionRegistry() *sessionRegistry {
 	return &sessionRegistry{now: time.Now, entries: map[string]*sessionEntry{}, byProvider: map[string]string{}}
 }
 
+// The provider registry builds a new Adapter for every request, so the registry lives per Cloudflare
+// app, outside any one Adapter.
+var (
+	appSessionRegistriesMu sync.Mutex
+	appSessionRegistries   = map[string]*sessionRegistry{}
+)
+
+func sessionRegistryForApp(appID string) *sessionRegistry {
+	appSessionRegistriesMu.Lock()
+	defer appSessionRegistriesMu.Unlock()
+	registry, ok := appSessionRegistries[appID]
+	if !ok {
+		registry = newSessionRegistry()
+		appSessionRegistries[appID] = registry
+	}
+	return registry
+}
+
 // issue records a connection that has not negotiated yet.
 func (r *sessionRegistry) issue(connectionID string) {
 	if r == nil {

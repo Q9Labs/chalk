@@ -254,7 +254,7 @@ func newAdapter(cfg config.CloudflareRealtimeConfig, transport *http.Transport) 
 		client:            &http.Client{Transport: transport, Timeout: cfg.RequestTimeout},
 		forcedCloseClient: &http.Client{Transport: transport, Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
 		captureReplay:     newCaptureReplayRegistry(),
-		sessions:          newSessionRegistry(),
+		sessions:          sessionRegistryForApp(appID),
 	}, nil
 }
 
