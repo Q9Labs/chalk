@@ -112,6 +112,7 @@ type sfuLivenessTransport struct {
 	sessionID    string
 	sessionTrack string
 	sessionReads int
+	trackPulls   int
 }
 
 func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -121,6 +122,7 @@ func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.R
 	var body string
 	switch {
 	case request.Method == http.MethodPost && strings.HasSuffix(request.URL.Path, "/sessions/listener-connection/tracks/new"):
+		transport.trackPulls++
 		body = fmt.Sprintf(`{"tracks":[{"location":"remote","trackName":%q,"sessionId":%q,"errorCode":"unknown","errorDescription":"track not found"}]}`,
 			transport.trackName, transport.sessionID)
 	case request.Method == http.MethodGet && strings.HasSuffix(request.URL.Path, "/sessions/publisher-connection"):
@@ -140,6 +142,12 @@ func (transport *sfuLivenessTransport) RoundTrip(request *http.Request) (*http.R
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Request:    request,
 	}, nil
+}
+
+func (transport *sfuLivenessTransport) trackPullCount() int {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	return transport.trackPulls
 }
 
 func (transport *sfuLivenessTransport) sessionReadCount() int {
