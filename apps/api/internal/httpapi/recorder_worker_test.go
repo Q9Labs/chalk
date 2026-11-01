@@ -398,7 +398,12 @@ func TestRecorderWorkerRenderFailureLogsOnlyAcceptedReport(t *testing.T) {
 				if !test.accepted {
 					return recordingpipeline.Job{}, recordingpipeline.ErrInvalidLease
 				}
-				return recorderWorkerJobFixture(t, test.kind), nil
+				job := recorderWorkerJobFixture(t, recordingpipeline.JobKindRender)
+				job.Kind = test.kind
+				job.State = recordingpipeline.JobStateTerminalFailure
+				job.Authority = nil
+				job.LeaseExpiresAt = nil
+				return job, nil
 			}}
 			verifier := recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: mustRecorderWorkerID(t, workerTestID), Role: workeridentity.RoleRender}}
 			router := NewRecorderWorkerRouterWithControls(service, verifier, RecorderWorkerControlServices{Logger: slog.New(slog.NewJSONHandler(&logs, nil))})
