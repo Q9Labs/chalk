@@ -60,25 +60,48 @@ func waitForRelease(ctx context.Context, duration time.Duration, released <-chan
 	}
 }
 
-// publish marks a connection pending the first time it publishes a track. Later tracks on the same
-// connection ride its existing peer connection, so they stay pullable.
-func (g *pullGate) publish(connectionID string) {
+// publish marks a connection pending the first time it publishes a track and reports whether it did.
+// Later tracks on the same connection ride its existing peer connection, so they stay pullable.
+func (g *pullGate) publish(connectionID string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := g.now()
 	waiting := g.sweepLocked(now)
 	if _, known := g.pending[connectionID]; known {
-		return
+		return false
 	}
 	if waiting >= pullGateMaxConnections {
 		if !g.capLogged {
 			g.capLogged = true
 			slog.Warn("pull gate is full, so new publishers are not held back", "event", "media.pull_gate_full", "limit", pullGateMaxConnections)
 		}
-		return
+		return false
 	}
 	g.capLogged = false
 	g.pending[connectionID] = &pendingConnection{readyAt: now.Add(publisherConnectFallbackAge), released: make(chan struct{})}
+	return true
+}
+
+// settle ends a publish that marked the connection pending. The publisher starts connecting only after
+// the publish request answers, so a committed publication restarts the fallback age from now, and a
+// failed write forgets the connection so that a retry is held like a new publisher.
+func (g *pullGate) settle(connectionID string, committed bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	entry, ok := g.pending[connectionID]
+	if !ok {
+		return
+	}
+	select {
+	case <-entry.released:
+		return
+	default:
+	}
+	if !committed {
+		delete(g.pending, connectionID)
+		return
+	}
+	entry.readyAt = g.now().Add(publisherConnectFallbackAge)
 }
 
 func (g *pullGate) confirm(connectionID string) {

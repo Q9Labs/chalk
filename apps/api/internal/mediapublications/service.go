@@ -246,22 +246,33 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 	}
 	references = publishedReferences(input)
 	// The publisher is pending before the publication can be read, so a listener that sees the new
-	// publication cannot get past the gate. If the append fails, the entry expires on its own.
-	s.pullGate.publish(input.ConnectionID)
+	// publication cannot get past the gate.
+	pending := s.pullGate.publish(input.ConnectionID)
+	next, err := s.appendPublication(ctx, input, references)
+	if pending {
+		s.pullGate.settle(input.ConnectionID, err == nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	s.receiveHealth.recordCommittedPublications(next)
+	return references, nil
+}
+
+func (s Service) appendPublication(ctx context.Context, input RecordInput, references []PublishedReference) (provideroperations.ObservationInput, error) {
 	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
 		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
-			return nil, err
+			return provideroperations.ObservationInput{}, err
 		}
 		next := merge(latest, input, references)
 		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
-			s.receiveHealth.recordCommittedPublications(next)
-			return references, nil
+			return next, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
-			return nil, fmt.Errorf("append media publication observation: %w", err)
+			return provideroperations.ObservationInput{}, fmt.Errorf("append media publication observation: %w", err)
 		}
 	}
-	return nil, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
+	return provideroperations.ObservationInput{}, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
 }
 
 func (s Service) PrepareClose(ctx context.Context, input CloseInput) (CloseDecision, error) {

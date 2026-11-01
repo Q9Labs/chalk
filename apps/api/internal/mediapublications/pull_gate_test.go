@@ -185,3 +185,59 @@ func TestPullGateKeepsGatingWhenManyConnectionsAreAlreadyConfirmed(t *testing.T)
 		t.Fatalf("confirmed connections must not use up the pending capacity: waited=%v error=%v", fixture.waited, err)
 	}
 }
+
+// beforeAppendRepository runs a step before the database write, such as a slow write or a failed one.
+type beforeAppendRepository struct {
+	*reconciliationRepositoryStub
+	before func() error
+}
+
+func (r *beforeAppendRepository) AppendPublicationObservation(ctx context.Context, input provideroperations.ObservationInput, publisher PublicationParticipant) (provideroperations.Observation, error) {
+	if r.before != nil {
+		if err := r.before(); err != nil {
+			return provideroperations.Observation{}, err
+		}
+	}
+	return r.reconciliationRepositoryStub.AppendPublicationObservation(ctx, input, publisher)
+}
+
+// The publisher only starts connecting after the publish request answers, so a slow write must not
+// use up the fallback age before any listener can see the publication.
+func TestFallbackAgeStartsWhenThePublicationIsCommitted(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	fixture.service.repository = &beforeAppendRepository{reconciliationRepositoryStub: &reconciliationRepositoryStub{}, before: func() error {
+		fixture.now = fixture.now.Add(publisherConnectFallbackAge + time.Second)
+		return nil
+	}}
+	identity := fixture.publish(t, "publisher-1", "microphone-a")
+
+	if err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{identity}); err != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
+		t.Fatalf("a pull after a slow write must wait the full fallback age: waited=%v error=%v", fixture.waited, err)
+	}
+}
+
+func TestFailedWriteDoesNotLeaveTheRetriedPublicationUngated(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	failures := 1
+	fixture.service.repository = &beforeAppendRepository{reconciliationRepositoryStub: &reconciliationRepositoryStub{}, before: func() error {
+		if failures > 0 {
+			failures--
+			return errors.New("database unavailable")
+		}
+		return nil
+	}}
+	input := RecordInput{
+		TenantID:  reconciliationTestID(t, "11111111-1111-4111-8111-111111111111"),
+		EpisodeID: reconciliationTestID(t, "22222222-2222-4222-8222-222222222222"), ParticipantID: reconciliationTestID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantGeneration: 1, ConnectionID: "publisher-1", Tracks: []PublishedTrack{{Source: "microphone", MID: "0", TrackName: "microphone-a"}},
+	}
+	if _, err := fixture.service.RecordPublishedTracks(context.Background(), input); err == nil {
+		t.Fatal("the first write must fail")
+	}
+	fixture.now = fixture.now.Add(publisherConnectFallbackAge + time.Second)
+	identity := fixture.publish(t, "publisher-1", "microphone-a")
+
+	if err := fixture.service.AwaitPullable(context.Background(), []RemoteTrackIdentity{identity}); err != nil || len(fixture.waited) != 1 || fixture.waited[0] != publisherConnectFallbackAge {
+		t.Fatalf("a retried publication must be held like a new one: waited=%v error=%v", fixture.waited, err)
+	}
+}
