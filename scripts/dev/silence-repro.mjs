@@ -408,7 +408,8 @@ async function runBuild(name) {
 async function runRoom(run, { chalk, config, getAccessRefreshState, name, conditionName, episodeStatus }) {
   const space = await chalk.spaces.create({
     name: `Silence ${name}`,
-    slug: `sr-${name.replaceAll(/\W/gu, "-")}-${conditionName.replaceAll(/\W/gu, "-").toLowerCase()}-${Date.now()}`.slice(0, 60),
+    // The timestamp goes first: a long build name pushed it past the 60-character cut, and rooms of one build and condition then collided on the slug (409).
+    slug: `sr-${Date.now().toString(36)}-${conditionName.replaceAll(/\W/gu, "-").toLowerCase()}-${name.replaceAll(/\W/gu, "-")}`.slice(0, 60),
     mediaPlane: "cf_sfu",
     defaultEpisodeDurationSeconds: 3600,
     maximumEpisodeDurationSeconds: 7200,
