@@ -22,6 +22,7 @@ const (
 	MaxWorkerSlots = 100
 	// DiagnosticTag marks separately owned boot probes, never live capacity.
 	DiagnosticTag                    = "chalk-recorder-diagnostic"
+	bootstrapEvidenceWindow          = 30 * time.Minute
 	JournalSchemaVersion             = "recorder_fleet_journal.v2"
 	LegacyJournalSchemaVersion       = "recorder_fleet_journal.v1"
 	DemandSchemaVersion              = "recorder_fleet_demand.v1"
@@ -84,6 +85,7 @@ var (
 	ErrInvalidJournal      = errors.New("invalid recorder fleet journal")
 	ErrProviderUnavailable = errors.New("recorder fleet provider unavailable")
 	ErrNodeNotFound        = errors.New("recorder fleet node not found")
+	ErrNodeEvidencePending = errors.New("recorder fleet node evidence pending")
 	ErrAdmissionClosed     = errors.New("recorder fleet admission closed")
 )
 
@@ -315,9 +317,10 @@ func (request EnsureNodeRequest) validate(allowHistoricalSnapshot bool) error {
 }
 
 type DeleteNodeRequest struct {
-	ProviderID   string   `json:"provider_id"`
-	Name         string   `json:"name"`
-	RequiredTags []string `json:"required_tags"`
+	ProviderID    string    `json:"provider_id"`
+	Name          string    `json:"name"`
+	RequiredTags  []string  `json:"required_tags"`
+	EvidenceUntil time.Time `json:"evidence_until,omitempty"`
 }
 
 type BootstrapRequest struct {
