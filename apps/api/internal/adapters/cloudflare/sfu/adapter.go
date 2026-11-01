@@ -567,11 +567,15 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	providerResponse, err := a.client.Do(request)
+	timing := &callTrace{}
+	var responseHeader http.Header
+	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader) }()
+	providerResponse, err := a.client.Do(request.WithContext(timing.attach(ctx)))
 	if err != nil {
 		return 0, newTransportFailure(ctx, operation, 0, err)
 	}
 	defer providerResponse.Body.Close()
+	responseHeader = providerResponse.Header
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
 	if err != nil {
