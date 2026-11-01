@@ -94,6 +94,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retiredLocalConnection: RTCPeerConnection | null = null;
   #retiredLocalCause: LocalPublicationRetirementCause = "forced_pause";
   #replacementCause: MediaConnectionReplacementCause | undefined;
+  #replacement: { readonly generation: number; readonly promise: Promise<void> } | null = null;
   #cursor: PublicationCursor | null = null;
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
@@ -283,9 +284,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // A publisher that still believes it is sending must publish again, so
   // listeners get a new publication ID instead of retrying a dead one.
   #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot): void {
-    const unlisted = [...this.#localTracks.values()].filter(
-      (state) => (state.source === "microphone" || state.source === "camera") && state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId),
-    );
+    const unlisted = [...this.#localTracks.values()].filter((state) => state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId));
     for (const state of unlisted) this.#beginLocalRecovery(state, state.providerPublicationId, true);
   }
   #beginLocalRecovery(state: LocalTrackState, deadPublicationId: string | null, relist: boolean): void {
@@ -361,7 +360,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retireDeadLocalPublication(recovery: LocalRecovery): void {
     if (recovery.retiring || recovery.deadPublicationId === null || recovery.state.providerPublicationId !== recovery.deadPublicationId) return;
     recovery.retiring = true;
-    this.#pauseLocalSource(recovery.state.source, "discovery_absent");
+    this.#pauseLocalSource(recovery.state.source, "discovery_absent", { group: false });
   }
   async #retireLocalRecoveryIfNeeded(recovery: LocalRecovery): Promise<boolean> {
     if (!this.#hasRetiringLocalPublications(recovery.state.source)) return false;
@@ -402,7 +401,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #replaceConnectionForLocalRecovery(error: unknown): Promise<void> {
     const failures: readonly unknown[] = error instanceof AggregateError ? error.errors : [error];
     if (!this.#replaceMediaConnection || failures.length === 0 || !failures.every((failure) => this.#isRetryableConnectionFailure(failure))) return;
-    await this.#replaceMediaConnectionForRecovery(this.#generation, "local_signaling_failure").catch(() => {});
+    const generation = this.#generation;
+    try {
+      await this.#replaceMediaConnectionForRecovery(generation, "local_signaling_failure");
+    } catch {
+      return;
+    }
+    try {
+      await this.#republishPreparedTracksAfterRecovery(generation);
+    } catch (republishError) {
+      this.#reportLocalRecoveryError(republishError);
+    }
   }
   #scheduleLocalRecoveryRetry(recovery: LocalRecovery): void {
     if (!this.#canRecover(recovery)) {
@@ -412,11 +421,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#scheduleLocalRecovery(recovery, recoveryBackoffMs(recovery.attempt++));
   }
   #hasRetiringLocalPublications(source: MediaPublicationSource): boolean {
-    const sources = localSourceGroup(source);
-    return [...this.#ownedPublications].some((publication) => sources.includes(publication.state.source) && publication.lifecycle.kind === "retiring" && publication.lifecycle.handle !== null);
+    return [...this.#ownedPublications].some((publication) => publication.state.source === source && publication.lifecycle.kind === "retiring" && publication.lifecycle.handle !== null);
   }
   #retireLocalRecoveryPublications(source: MediaPublicationSource): Promise<void> {
-    return this.#retireOwnedPublications(() => {}, { sources: localSourceGroup(source), goneIsComplete: true });
+    return this.#retireOwnedPublications(() => {}, { sources: [source], goneIsComplete: true });
   }
   #dropLocalRecovery(source: MediaPublicationSource, expected?: LocalRecovery): void {
     for (const item of localSourceGroup(source)) {
@@ -460,6 +468,24 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return mediaTargetFailure(error);
     }
   }
+  async #waitForReplacementBeforeEnable(state: LocalTrackState, generation: number, replacement: { readonly generation: number; readonly promise: Promise<void> } | null): Promise<MediaPlaneResult | null> {
+    if (replacement?.generation !== generation) return null;
+    state.desiredEnabled = true;
+    await replacement.promise.catch(() => {});
+    if (this.#locallyPausedSources.has(state.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+    if (!state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
+    state.track.enabled = true;
+    return null;
+  }
+  #postReplacementEnableOutcome(state: LocalTrackState, generation: number, replacement: { readonly generation: number; readonly promise: Promise<void> } | null): MediaPlaneResult | null {
+    if (this.#locallyPausedSources.has(state.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
+    if (replacement?.generation === generation && !state.desiredEnabled) return { outcome: "satisfied", errorCode: null };
+    if (state.enabled) {
+      state.track.enabled = true;
+      return { outcome: "satisfied", errorCode: null };
+    }
+    return null;
+  }
   async #enablePublicationTarget(target: Omit<MediaPlaneTarget, "source"> & { readonly source: MediaPublicationSource }): Promise<MediaPlaneResult> {
     const generation = this.#generation;
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
@@ -467,9 +493,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const state = resolved.value;
     if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
     try {
+      const replacement = this.#replacement;
+      const replacementOutcome = await this.#waitForReplacementBeforeEnable(state, generation, replacement);
+      if (replacementOutcome) return replacementOutcome;
       await this.#retireUnavailableLocalPublication(state);
-      if (this.#locallyPausedSources.has(target.source)) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
-      if (state.enabled) return { outcome: "satisfied", errorCode: null };
+      const postReplacementOutcome = this.#postReplacementEnableOutcome(state, generation, replacement);
+      if (postReplacementOutcome) return postReplacementOutcome;
       if (!(await this.#enablePreparedTrack(state))) return { outcome: "terminal_failure", errorCode: "local_source_paused" };
       return { outcome: "confirmed", errorCode: null };
     } catch (error) {
@@ -542,11 +571,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!publicationId) return;
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
-    if (state.providerPublicationId !== publicationId || !state.desiredEnabled || this.#localRecoveries.has(state.source)) return;
-    this.#beginLocalRecovery(state, publicationId, true);
+    if (state.providerPublicationId !== publicationId || this.#localRecoveries.has(state.source)) return;
+    if (state.enabled && state.desiredEnabled) {
+      this.#beginLocalRecovery(state, publicationId, true);
+      return;
+    }
+    this.#pauseLocalSource(state.source, "discovery_absent");
+    await this.#retireOwnedPublications(undefined, { goneIsComplete: true });
   }
-  #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause"): void {
-    const sources = localSourceGroup(source);
+  #pauseLocalSource(source: MediaPublicationSource, cause: LocalPublicationRetirementCause = "forced_pause", options: { readonly group?: boolean } = {}): void {
+    const sources = options.group === false ? [source] : localSourceGroup(source);
     for (const publication of this.#ownedPublications) {
       if (!sources.includes(publication.state.source)) continue;
       this.#markPublicationRetiring(publication, cause);
@@ -1469,35 +1503,49 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementCause = undefined;
     return this.#requireTransport().addTracks({ ...input, replacementCause });
   }
-  async #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
+  #replaceMediaConnectionForRecovery(generation: number, cause: MediaConnectionReplacementCause): Promise<void> {
     this.#requireGeneration(generation);
+    if (this.#replacement?.generation === generation) return this.#replacement.promise;
     if (!this.#replaceMediaConnection || this.#replacementAttemptedGeneration === generation) {
-      throw new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed");
+      return Promise.reject(new CloudflareSFUError("A fresh Cloudflare SFU connection is unavailable", "signaling_failed"));
     }
     this.#replacementAttemptedGeneration = generation;
     const replaceMediaConnection = this.#replaceMediaConnection;
-    const bootstrap = await replaceMediaConnection();
-    this.#requireGeneration(generation);
-    validateBootstrap(bootstrap);
-    if (bootstrap.connectionId === this.#bootstrap.connectionId) {
-      throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
-    }
-    this.#fenceLocalPublications();
-    const connectionEpoch = ++this.#connectionEpoch;
-    this.#disposeConnection(false);
-    this.#clearRemoteTracks();
-    this.#cursor = null;
-    this.#bootstrap = bootstrap;
-    this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
-    this.#replacementCause = cause;
-    this.#retiredLocalConnection = null;
-    this.#negotiatedGeneration = null;
-    for (const state of this.#localTracks.values()) {
-      state.transceiver = null;
-      state.enabled = false;
-      state.providerPublicationId = null;
-    }
-    this.remotePublicationsChanged();
+    const promise = Promise.resolve().then(async () => {
+      const bootstrap = await replaceMediaConnection();
+      this.#requireGeneration(generation);
+      validateBootstrap(bootstrap);
+      if (bootstrap.connectionId === this.#bootstrap.connectionId) {
+        throw new CloudflareSFUError("Participant access did not replace the Cloudflare SFU connection", "signaling_failed");
+      }
+      this.#fenceLocalPublications();
+      const connectionEpoch = ++this.#connectionEpoch;
+      this.#disposeConnection(false);
+      this.#clearRemoteTracks();
+      this.#cursor = null;
+      this.#bootstrap = bootstrap;
+      this.#rebuildPeerConnection(bootstrap, generation, connectionEpoch);
+      this.#replacementCause = cause;
+      this.#retiredLocalConnection = null;
+      this.#negotiatedGeneration = null;
+      for (const state of this.#localTracks.values()) {
+        state.transceiver = null;
+        state.enabled = false;
+        state.providerPublicationId = null;
+      }
+      this.remotePublicationsChanged();
+    });
+    const replacement = { generation, promise };
+    this.#replacement = replacement;
+    void promise.then(
+      () => {
+        if (this.#replacement === replacement) this.#replacement = null;
+      },
+      () => {
+        if (this.#replacement === replacement) this.#replacement = null;
+      },
+    );
+    return promise;
   }
   async #republishPreparedTracksAfterRecovery(generation: number): Promise<void> {
     const enabled = [...this.#localTracks.values()].filter((state) => state.desiredEnabled && state.track.readyState !== "ended");
@@ -1808,6 +1856,9 @@ function isGonePublicationFailure(error: unknown): boolean {
 function isRateLimited(error: unknown): boolean {
   return error instanceof CloudflareSFUError && error.options.status === 429;
 }
+function unwrapAggregateErrors(error: unknown): unknown[] {
+  return error instanceof AggregateError ? error.errors.flatMap(unwrapAggregateErrors) : [error];
+}
 function retryableRemotePull(error: unknown): boolean {
   if (!(error instanceof CloudflareSFUError)) return false;
   if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
@@ -1825,5 +1876,7 @@ function simulcastUnsupported(error: unknown): boolean {
 function mediaTargetFailure(error: unknown): MediaPlaneResult {
   const code = error instanceof CloudflareSFUError ? error.code : "media_failed";
   const ambiguous = code === "signaling_timeout" || code === "negotiation_timeout";
-  return { outcome: ambiguous ? "ambiguous" : "retryable_failure", errorCode: code };
+  const failures = unwrapAggregateErrors(error);
+  const terminal = failures.length > 0 && failures.every((failure) => failure instanceof CloudflareSFUError && failure.code === "signaling_failed" && typeof failure.options.status === "number" && failure.options.retryableConnection !== true && !isRateLimited(failure));
+  return { outcome: ambiguous ? "ambiguous" : terminal ? "terminal_failure" : "retryable_failure", errorCode: code };
 }

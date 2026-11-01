@@ -90,12 +90,14 @@ func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *tes
 	service := newService(repository, func() time.Time { return now })
 	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
 	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	ensureLivenessListenerPresence(repository)
 	reader := func(context.Context, string) (PublisherSession, error) {
 		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
 	}
 	input := RemoteTrackFailureInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Failed: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerID),
+		Failed:               []RemoteTrackIdentity{identity},
 	}
 
 	first, err := service.ConfirmRemoteTrackFailures(context.Background(), input, reader)
@@ -123,7 +125,8 @@ func TestConfirmRemoteTrackFailuresRequiresAnotherListenerWhenOthersWereServed(t
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerB),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener B's successful pull: %v", err)
 	}
@@ -155,7 +158,8 @@ func TestConfirmRemoteTrackFailuresIgnoresReporterOwnSuccessfulPull(t *testing.T
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerA,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerA),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener A's successful pull: %v", err)
 	}
@@ -182,7 +186,8 @@ func TestConfirmRemoteTrackFailuresDoesNotCountUnknownListener(t *testing.T) {
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerB,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerB),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("record listener B's successful pull: %v", err)
 	}
@@ -234,7 +239,8 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 
 		if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-			Requested: []RemoteTrackIdentity{identity},
+			ListenerConnectionID: livenessListenerConnectionID(listenerID),
+			Requested:            []RemoteTrackIdentity{identity},
 		}); err != nil {
 			t.Fatalf("record successful pull: %v", err)
 		}
@@ -264,12 +270,15 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 		candidate := candidates[0]
 		service.liveness.recordServed(servedKey{
 			tenantID: tenantID.String(), episodeID: episodeID.String(), identity: candidate.identity,
-		}, listenerID)
-		service.liveness.stillFailing(candidate.key, candidate.identity, listenerID)
+		}, listenerID, livenessListenerConnectionID(listenerID))
+		service.liveness.recordFailure(servedKey{
+			tenantID: tenantID.String(), episodeID: episodeID.String(), identity: candidate.identity,
+		}, listenerID, livenessListenerConnectionID(listenerID))
 
 		input := RemoteTrackObservationInput{
 			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-			Requested: []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity},
+			ListenerConnectionID: livenessListenerConnectionID(listenerID),
+			Requested:            []RemoteTrackIdentity{identity}, Missing: []RemoteTrackIdentity{identity},
 		}
 		for _, advance := range []time.Duration{0, 8 * time.Second, 7 * time.Second} {
 			now = now.Add(advance)
@@ -284,16 +293,23 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 func TestPublicationLivenessEvidenceMapsAreBounded(t *testing.T) {
 	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	checks := newPublicationLivenessChecks(func() time.Time { return now })
-	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
-	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
-		key := publicationCandidateKey{publicationID: fmt.Sprintf("publication-%d", index)}
-		identity := RemoteTrackIdentity{ConnectionID: fmt.Sprintf("connection-%d", index), TrackName: "track"}
-		checks.recordServed(servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}, listenerID)
-		checks.stillFailing(key, identity, listenerID)
+	identity := RemoteTrackIdentity{ConnectionID: "connection-0", TrackName: "track"}
+	key := servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}
+	for index := 1; index <= 65; index++ {
+		listenerID := reconciliationTestID(t, fmt.Sprintf("00000000-0000-4000-8000-%012x", index))
+		checks.recordServed(key, listenerID, fmt.Sprintf("listener-%d", index))
+		now = now.Add(time.Nanosecond)
 	}
-	if len(checks.served) > publicationLivenessEvidenceMaxKeys || len(checks.present) > publicationLivenessEvidenceMaxKeys {
-		t.Fatalf("liveness evidence sizes served=%d present=%d, want at most %d each",
-			len(checks.served), len(checks.present), publicationLivenessEvidenceMaxKeys)
+	if got := len(checks.evidence[key]); got != 64 {
+		t.Fatalf("listeners for one key=%d, want 64", got)
+	}
+	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
+		identity := RemoteTrackIdentity{ConnectionID: fmt.Sprintf("connection-%d", index), TrackName: "track"}
+		listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+		checks.recordServed(servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}, listenerID, "listener")
+	}
+	if len(checks.evidence) > publicationLivenessEvidenceMaxKeys {
+		t.Fatalf("liveness evidence keys=%d, want at most %d", len(checks.evidence), publicationLivenessEvidenceMaxKeys)
 	}
 }
 
@@ -334,9 +350,13 @@ func TestConfirmRemoteTrackFailuresInspectsPublisherOnceForMultipleTracks(t *tes
 
 func confirmActiveTrackFailure(t *testing.T, service Service, tenantID, episodeID, listenerID utilities.ID, identity RemoteTrackIdentity) RemoteTrackFailureResult {
 	t.Helper()
+	if repository, ok := service.repository.(*reconciliationRepositoryStub); ok {
+		ensureLivenessListenerPresence(repository)
+	}
 	result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Failed: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: livenessListenerConnectionID(listenerID),
+		Failed:               []RemoteTrackIdentity{identity},
 	}, func(context.Context, string) (PublisherSession, error) {
 		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
 	})
@@ -350,7 +370,206 @@ func assertLivenessEvidenceEmpty(t *testing.T, service Service) {
 	t.Helper()
 	service.liveness.mu.Lock()
 	defer service.liveness.mu.Unlock()
-	if len(service.liveness.served) != 0 || len(service.liveness.present) != 0 {
-		t.Fatalf("liveness evidence served=%d present=%d, want both empty", len(service.liveness.served), len(service.liveness.present))
+	if len(service.liveness.evidence) != 0 {
+		t.Fatalf("liveness evidence keys=%d, want empty", len(service.liveness.evidence))
+	}
+}
+
+func livenessListenerConnectionID(listenerID utilities.ID) string {
+	return "listener-" + listenerID.String()
+}
+
+func ensureLivenessListenerPresence(repository *reconciliationRepositoryStub) {
+	if repository.participants != nil {
+		return
+	}
+	publisherID, _ := utilities.ParseID("33333333-3333-4333-8333-333333333333")
+	participants := []PublicationParticipant{{ID: publisherID, Generation: 1, ConnectionID: "publisher-connection"}}
+	for _, rawID := range []string{
+		"44444444-4444-4444-8444-444444444444",
+		"55555555-5555-4555-8555-555555555555",
+		"66666666-6666-4666-8666-666666666666",
+	} {
+		listenerID, _ := utilities.ParseID(rawID)
+		participants = append(participants, PublicationParticipant{ID: listenerID, Generation: 1, ConnectionID: livenessListenerConnectionID(listenerID)})
+	}
+	repository.participants = participants
+}
+
+func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
+	now := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+	publisherID := reconciliationTestID(t, "33333333-3333-4333-8333-333333333333")
+	listenerA := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	listenerB := reconciliationTestID(t, "55555555-5555-4555-8555-555555555555")
+
+	type step struct {
+		name            string
+		advance         time.Duration
+		listenerID      utilities.ID
+		connectionID    string
+		kind            string
+		presence        []PublicationParticipant
+		wantWithdrawn   bool
+		wantReaderCalls int
+		wantDeduped     int
+	}
+	presence := func(listeners ...PublicationParticipant) []PublicationParticipant {
+		participants := []PublicationParticipant{{ID: publisherID, Generation: 1, ConnectionID: "publisher-connection"}}
+		return append(participants, listeners...)
+	}
+	listener := func(id utilities.ID, connectionID string) PublicationParticipant {
+		return PublicationParticipant{ID: id, Generation: 1, ConnectionID: connectionID}
+	}
+	tests := []struct {
+		name  string
+		steps []step
+	}{
+		{
+			name: "one to one",
+			steps: []step{
+				{name: "first failure", listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantReaderCalls: 1},
+				{name: "repeat failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "not_found_track_error for a single present listener",
+			steps: []step{
+				{name: "first missing-publication report", listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantReaderCalls: 1},
+				{name: "repeated missing-publication report", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "failing listener left before the threshold",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "B fails for the first time after A leaves", advance: 2500 * time.Millisecond, listenerID: listenerB, connectionID: "b1", kind: "fail", presence: presence(listener(listenerB, "b1")), wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "failing listener reconnected before the threshold",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "B fails while A is present on a2", advance: 2500 * time.Millisecond, listenerID: listenerB, connectionID: "b1", kind: "fail", presence: presence(listener(listenerA, "a2"), listener(listenerB, "b1")), wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "reconnected listener's new failure restarts its window",
+			steps: []step{
+				{name: "A fails on a1", listenerID: listenerA, connectionID: "a1", kind: "fail", presence: presence(listener(listenerA, "a1")), wantReaderCalls: 1},
+				{name: "A fails on a2 after reconnecting", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a2", kind: "fail", presence: presence(listener(listenerA, "a2")), wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "listener who left",
+			steps: []step{
+				{name: "listener B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerB, "b"))},
+				{name: "A first failure", advance: time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantReaderCalls: 1},
+				{name: "A repeat failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "listener whose media connection changed",
+			steps: []step{
+				{name: "B served on b1", listenerID: listenerB, connectionID: "b1", kind: "served", presence: presence(listener(listenerB, "b1"))},
+				{name: "A first failure", advance: time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a"), listener(listenerB, "b2")), wantReaderCalls: 1},
+				{name: "A repeat failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a"), listener(listenerB, "b2")), wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "two listeners failing within 2 s",
+			steps: []step{
+				{name: "B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerA, "a"), listener(listenerB, "b"))},
+				{name: "A fails", advance: time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 1},
+				{name: "B fails while the reader is deduped", advance: 500 * time.Millisecond, listenerID: listenerB, connectionID: "b", kind: "fail", wantReaderCalls: 1, wantDeduped: 1},
+				{name: "A repeats after 2.5 s", advance: 2 * time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+		{
+			name: "fail then succeed then fail",
+			steps: []step{
+				{name: "first failure", listenerID: listenerA, connectionID: "a", kind: "fail", presence: presence(listener(listenerA, "a")), wantReaderCalls: 1},
+				{name: "successful pull", advance: time.Second, listenerID: listenerA, connectionID: "a", kind: "served", wantReaderCalls: 1},
+				{name: "failure after success", advance: 1500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 2},
+				{name: "repeat after the new failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", wantWithdrawn: true, wantReaderCalls: 3},
+			},
+		},
+		{
+			name: "one broken listener while others are served",
+			steps: []step{
+				{name: "B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerA, "a"), listener(listenerB, "b"))},
+				{name: "A first failure", advance: time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 1},
+				{name: "A repeat failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 2},
+				{name: "A keeps failing", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 3},
+			},
+		},
+		{
+			name: "served evidence expires",
+			steps: []step{
+				{name: "B served", listenerID: listenerB, connectionID: "b", kind: "served", presence: presence(listener(listenerA, "a"), listener(listenerB, "b"))},
+				{name: "A first failure after expiry", advance: 31 * time.Second, listenerID: listenerA, connectionID: "a", kind: "fail", wantReaderCalls: 1},
+				{name: "A repeat failure", advance: 2500 * time.Millisecond, listenerID: listenerA, connectionID: "a", kind: "fail", wantWithdrawn: true, wantReaderCalls: 2},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			now = time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
+			repository := &reconciliationRepositoryStub{
+				participants: presence(),
+			}
+			service := newService(repository, func() time.Time { return now })
+			tenantID, episodeID, publisherID, identity := publishRemoteObservationFixture(t, service, repository)
+			if publisherID != reconciliationTestID(t, "33333333-3333-4333-8333-333333333333") {
+				t.Fatal("fixture publisher ID changed")
+			}
+			readerCalls := 0
+			reader := func(context.Context, string) (PublisherSession, error) {
+				readerCalls++
+				return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
+			}
+			for _, current := range test.steps {
+				t.Run(current.name, func(t *testing.T) {
+					now = now.Add(current.advance)
+					if current.presence != nil {
+						repository.participants = current.presence
+					}
+					switch current.kind {
+					case "fail":
+						result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
+							TenantID: tenantID, EpisodeID: episodeID,
+							ListenerParticipantID: current.listenerID, ListenerConnectionID: current.connectionID,
+							Failed: []RemoteTrackIdentity{identity},
+						}, reader)
+						if err != nil {
+							t.Fatalf("confirm listener failure: %v", err)
+						}
+						if current.wantWithdrawn && result.Closed != 1 {
+							t.Fatalf("confirmation result=%+v, want withdrawal", result)
+						}
+						if !current.wantWithdrawn && result.Closed != 0 {
+							t.Fatalf("confirmation result=%+v, want publication retained", result)
+						}
+						if result.Deduped != current.wantDeduped {
+							t.Fatalf("deduped count=%d, want %d", result.Deduped, current.wantDeduped)
+						}
+					case "served":
+						if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
+							TenantID: tenantID, EpisodeID: episodeID,
+							ListenerParticipantID: current.listenerID, ListenerConnectionID: current.connectionID,
+							Requested: []RemoteTrackIdentity{identity},
+						}); err != nil {
+							t.Fatalf("record successful pull: %v", err)
+						}
+					default:
+						t.Fatalf("unknown step kind %q", current.kind)
+					}
+					if readerCalls != current.wantReaderCalls {
+						t.Fatalf("reader calls=%d, want %d", readerCalls, current.wantReaderCalls)
+					}
+					assertPublicationEnabled(t, repository.appended.Publications, publisherID, "camera", !current.wantWithdrawn)
+				})
+			}
+		})
 	}
 }

@@ -32,6 +32,7 @@ type RemoteTrackObservationInput struct {
 	TenantID              utilities.ID
 	EpisodeID             utilities.ID
 	ListenerParticipantID utilities.ID
+	ListenerConnectionID  string
 	Requested             []RemoteTrackIdentity
 	Missing               []RemoteTrackIdentity
 }
@@ -120,7 +121,7 @@ func (s Service) ObserveRemoteTracks(ctx context.Context, input RemoteTrackObser
 			tenantID:  input.TenantID.String(),
 			episodeID: input.EpisodeID.String(),
 			identity:  identity,
-		}, input.ListenerParticipantID)
+		}, input.ListenerParticipantID, input.ListenerConnectionID)
 	}
 	if len(missing) == 0 {
 		return nil

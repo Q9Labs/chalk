@@ -43,15 +43,16 @@ func TestObserveRemoteTracksRecordsServedWithoutReadingRegistryOnSuccess(t *test
 
 	if err := service.ObserveRemoteTracks(context.Background(), RemoteTrackObservationInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
-		Requested: []RemoteTrackIdentity{identity},
+		ListenerConnectionID: "listener-" + listenerID.String(),
+		Requested:            []RemoteTrackIdentity{identity},
 	}); err != nil {
 		t.Fatalf("observe successful pull: %v", err)
 	}
 	key := servedKey{tenantID: tenantID.String(), episodeID: episodeID.String(), identity: identity}
 	service.liveness.mu.Lock()
-	_, recorded := service.liveness.served[key][listenerID]
+	report, recorded := service.liveness.evidence[key][listenerID]
 	service.liveness.mu.Unlock()
-	if !recorded {
+	if !recorded || report.failing || report.connectionID != "listener-"+listenerID.String() {
 		t.Fatal("successful pull did not record the listener as served")
 	}
 }
