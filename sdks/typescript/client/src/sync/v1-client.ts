@@ -525,7 +525,6 @@ export class V1SyncClient implements V1CollaborationClient {
     try {
       if (typeof data !== "string" || encoder.encode(data).byteLength > SyncProtocolLimits.snapshotEncodedBytes) throw new V1ReplicaError("invalid inbound frame size");
       const frame = decodeV1ServerFrame(data);
-      if (frame.type === "pong") this.#watch.ponged();
       await this.#handleFrame(frame);
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
@@ -643,6 +642,11 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "pong": {
         this.#requireLive();
+        this.#watch.ponged();
+        if (this.#watch.stalled) {
+          this.#recover("ping stalled");
+          return;
+        }
         this.#missedHeartbeats = 0;
         this.#lastHeartbeatReplyAt = this.#now();
         const previous = this.#health.health;
@@ -1063,7 +1067,7 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
       }
-      this.#sendPing();
+      if (!this.#sendPing()) return;
       this.#startHeartbeat();
     }, 20000);
   }
@@ -1083,7 +1087,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const previous = this.#health.health;
       this.#health.check(this.#now());
       if (previous !== this.#health.health) this.#emit();
-      this.#sendPing();
+      if (!this.#sendPing()) return;
       this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     };
     this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
@@ -1093,10 +1097,16 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#emit();
     }, SYNC_HEALTH_BUDGET.degradedAfterMs);
   }
-  // The link watch times each ping, so every ping goes through here.
-  #sendPing(): void {
+  // The link watch times each ping, so every ping goes through here. A ping that stalls the socket is not sent: the socket is
+  // replaced through the normal reconnect, which also bounds a stall loop by the reconnect delay.
+  #sendPing(): boolean {
     this.#watch.pinged();
+    if (this.#watch.stalled) {
+      this.#recover("ping stalled");
+      return false;
+    }
     this.#send({ type: "ping" });
+    return true;
   }
   #clearNoticeProbe(): void {
     if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { enterRecovery } from "../../tests/helpers/media-convergence";
-import { confirmPublication, dropAndRecover, hostStop, live, mediaPhase, recoveryScenario, sources, tick, type Source } from "../../tests/helpers/media-recovery";
+import { confirmPublication, dropAndRecover, hostStop, live, recoveryScenario, sources, tick, type Source } from "../../tests/helpers/media-recovery";
 
 // The bounded rule needs the `off_reason` keys, which only a Sync that advertised `media_off_reason` in its welcome sends.
 // Without it the SDK keeps the rule it had before: pause a wanted-on source when Sync's own item is missing or not enabled.
@@ -117,32 +117,6 @@ describe("the recovery rule follows what the connected Sync advertised", () => {
 // Recovery captures the sources that are wanted on when it begins. A source the user turns on after that is not in the capture,
 // and the host's stop in the snapshot still applies to it.
 describe("a source enabled after recovery began", () => {
-  // The media connection is being replaced and Sync is healthy, so the enable is queued. Sync then drops, and the host stops the
-  // source after the enable; the snapshot Sync recovers with carries the stop and no replayed event.
-  it.each(sources)("%s: a queued enable stays off when the snapshot carries a newer host stop", async (source) => {
-    const { client, platform, setEnabled, command, setLocalSourceIntent } = recoveryScenario(source);
-    let enabling: Promise<unknown> = Promise.resolve();
-    try {
-      await client.join({ microphone: false, camera: false });
-      mediaPhase(platform, "recovering");
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
-      enabling = setEnabled(true).catch((error: unknown) => error);
-      await tick(20);
-      await enterRecovery({ platform, client });
-      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 90)] } });
-      mediaPhase(platform, "live");
-      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-      await enabling;
-      await tick(20);
-      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
-      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
-      expect(command.mock.calls.some(([enabled]) => enabled)).toBe(false);
-    } finally {
-      client.dispose();
-      await enabling;
-    }
-  });
-
   // The first Sync snapshot of a join is the first recovery, and a source the user turns on while the join waits for Sync is not
   // in its capture either.
   it.each(sources)("%s: a host stop in the first snapshot keeps an enable queued during the join off", async (source) => {

@@ -188,6 +188,76 @@ describe("recovery resumes without a tap only after a drop proven short", () => 
     });
   });
 
+  // A pong is paired with the oldest ping in flight, so one lost, late or evicted ping would pair every later pong with a ping that is
+  // too young. A ping that stays unanswered past 5 s therefore stalls the socket: it proves nothing from then on, and the client
+  // replaces it (`V1SyncClient`), which calls `restart()` on the new socket.
+  describe("a socket that stalled", () => {
+    // The judge's trace: probes every 500 ms for 30 s with no answer, then ten buffered replies to the earliest pings.
+    it.each(sources)("%s: ten buffered replies after 60 unanswered probes do not make a 45 s drop look short", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          for (let probe = 0; probe < 60; probe += 1) {
+            rig.elapse(500);
+            rig.ping();
+          }
+          for (let reply = 0; reply < 10; reply += 1) rig.pong();
+        },
+        drop: (rig) => rig.elapse(45_000),
+      });
+    });
+
+    it.each(sources)("%s: a late pong stalls the socket, and healthy pings after it prove nothing", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(6_000);
+          rig.pong();
+          rig.heartbeats(80_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    it.each(sources)("%s: a ping that never got a pong stalls the socket, and healthy pings after it prove nothing", async (source) => {
+      await expectOutcome(source, "off", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(6_000);
+          rig.heartbeats(80_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    it.each(sources)("%s: a ping answered after exactly 5 s does not stall the socket", async (source) => {
+      await expectOutcome(source, "resumes", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(5_000);
+          rig.pong();
+          rig.heartbeats(80_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+
+    // A 6 s stall, then the client replaces the socket; the new socket proves contact again and a 3 s drop resumes without a tap.
+    it.each(sources)("%s: after the socket is replaced, proof resumes and a 3 s drop resumes without a tap", async (source) => {
+      await expectOutcome(source, "resumes", {
+        beforeLoss: (rig) => {
+          rig.ping();
+          rig.elapse(6_000);
+          rig.pong();
+          expect(rig.watch.stalled).toBe(true);
+          rig.watch.restart();
+          expect(rig.watch.stalled).toBe(false);
+          rig.heartbeats(80_000);
+        },
+        drop: (rig) => rig.elapse(3_000),
+      });
+    });
+  });
+
   describe("page lifecycle", () => {
     it.each(sources)("%s: a freeze before the loss, with the pong buffered across it, stays off", async (source) => {
       await expectOutcome(source, "off", {
