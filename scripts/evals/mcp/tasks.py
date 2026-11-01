@@ -58,7 +58,7 @@ def suite(f):
              f"select (select revoked_at is not null from api_keys where id={key}) and (select count(*)=1 from api_keys where tenant_id={tenant} and name='Automation key' and id<>{key} and revoked_at is null and scopes=ARRAY['spaces:read'])", "t"),
         Task("create-test-webhook", 'Create an ENABLED webhook named Eval events with URL https://example.invalid/eval and event type episode.ended. Send one test event, then inspect deliveries to verify the test was queued (actual network delivery is not required). Return {"created":boolean,"test_queued":boolean}. Never print signing secrets.',
              {"created": True, "test_queued": True},
-             f"select count(*)=1 from webhook_endpoints e join webhook_deliveries d on e.id=d.endpoint_id join webhook_events v on v.id=d.event_id where e.tenant_id={tenant} and e.name='Eval events' and e.enabled and v.event_name='endpoint.test'", "t"),
+             f"select count(*)=1 from webhook_endpoints e join webhook_endpoint_revisions r on r.endpoint_id=e.id and r.revision=e.current_target_revision join webhook_deliveries d on e.id=d.endpoint_id join webhook_events v on v.id=d.event_id where e.tenant_id={tenant} and e.name='Eval events' and e.enabled and r.url_redacted='https://example.invalid/eval' and r.event_types=ARRAY['episode.ended'] and v.event_name='endpoint.test'", "t"),
         Task("change-membership", 'Change Chen from observer to collaborator. Read memberships back to verify. Return {"name":"Chen","role":string}.',
              {"name": "Chen", "role": "collaborator"},
              f"select m.role from memberships m join users u on m.user_id=u.id where m.tenant_id={tenant} and u.name='Chen'", "collaborator"),

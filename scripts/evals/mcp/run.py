@@ -14,7 +14,6 @@ import subprocess
 import tempfile
 import time
 from urllib.parse import urlparse
-import uuid
 import urllib.request
 
 from fixture import Database, seed
@@ -28,6 +27,16 @@ HERE = Path(__file__).resolve().parent
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def server_revision(args):
+    command = ["cat", str(Path(args.server_log).with_name("server-revision"))]
+    if args.ssh_host:
+        command = ["ssh", "-F", args.ssh_config, args.ssh_host, shlex.join(command)]
+    revision = subprocess.check_output(command, text=True, timeout=30).strip()
+    if len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+        raise ValueError("Missing or invalid API source revision stamp")
+    return revision
 
 
 def parse_stream(stdout):
@@ -59,7 +68,8 @@ def parse_stream(stdout):
                    tool_calls=len(calls), tool_errors=len(errors),
                    used_tools=[c["name"] for c in calls], offered_tools=offered,
                    models=sorted(m for m in models if m), model_usage=usage,
-                   wrong_tools=wrong_tools, wrong_model=wrong_model)
+                   wrong_tools=wrong_tools, wrong_model=wrong_model,
+                   session_initialized=bool(init), cli_subtype=result.get("subtype"))
     return result, metrics
 
 
@@ -67,20 +77,28 @@ def server_evidence(args, tenant):
     # Execute on the API machine; only counters/names leave it, never tool content.
     script = """
 import collections,json,sys
-calls=[]
+calls=[]; code=[]
 with open(sys.argv[1]) as log:
  for line in log:
   try: e=json.loads(line)
   except ValueError: continue
   if e.get('event')=='mcp.tool.completed' and e.get('tenant_id')==sys.argv[2]:
    calls.append({'tool':e.get('tool'),'outcome':e.get('outcome')})
-print(json.dumps({'server_calls':len(calls),'server_errors':sum(e['outcome']!='ok' for e in calls),'server_tools':dict(collections.Counter(e['tool'] for e in calls))}))
+  if e.get('event')=='mcp.code.completed' and e.get('tenant_id')==sys.argv[2]:
+   code.append(e)
+print(json.dumps({'server_calls':len(calls),'server_errors':sum(e['outcome']!='ok' for e in calls),'server_tools':dict(collections.Counter(e['tool'] for e in calls)), 'server_code_calls':len(code), 'server_code_errors':sum(e.get('outcome')!='ok' for e in code), 'server_code_api_calls':sum(e.get('api_calls',0) for e in code)}))
 """
     command = ["python3", "-c", script, args.server_log, tenant]
     if args.ssh_host:
         command = ["ssh", "-F", args.ssh_config, args.ssh_host, shlex.join(command)]
     result = subprocess.run(command, capture_output=True, text=True, timeout=45, check=True)
     return json.loads(result.stdout)
+
+
+def evidence_delta(after, before):
+    return {key: ({name: count - before[key].get(name, 0) for name, count in value.items()
+                   if count != before[key].get(name, 0)} if isinstance(value, dict) else value - before[key])
+            for key, value in after.items()}
 
 
 def rpc(endpoint, key, method, params):
@@ -96,28 +114,40 @@ def rpc(endpoint, key, method, params):
     return result["result"]
 
 
-def preflight(args, db, run_id):
-    f = seed(db, run_id + ":preflight")
+def preflight(args, db):
+    f = seed(db, "preflight")
+    before = server_evidence(args, f["tenant"])
     base = args.base_url.rstrip("/") + "/mcp"
     endpoint = base if args.arm == "tools" else base + "/code"
     catalog = rpc(endpoint, f["key"], "tools/list", {})["tools"]
     if not catalog or args.arm == "tools" and len(catalog) != 33:
         raise RuntimeError("Unexpected MCP tool catalog; update the suite deliberately")
+    if args.arm == "code":
+        if {t["name"] for t in catalog} != {"chalk_search_api", "chalk_execute"}:
+            raise RuntimeError("Unexpected code-mode catalog")
+        rpc(endpoint, f["key"], "tools/call", {"name": "chalk_search_api", "arguments": {"names": ["get_connection"]}})
+        rpc(endpoint, f["key"], "tools/call", {"name": "chalk_execute", "arguments": {"code": "return await chalk.get_connection({});"}})
     for name, arguments in [
         ("get_connection", {}), ("list_spaces", {}), ("list_recordings", {}),
         ("list_transcripts", {}), ("list_admission_requests", {"space_id": f["spaces"]["Atlas"]}),
         ("inspect_webhooks", {}),
     ]:
-        rpc(base, f["key"], "tools/call", {"name": "chalk_" + name, "arguments": arguments})
-    evidence = server_evidence(args, f["tenant"])
-    if evidence["server_calls"] != 6 or evidence["server_errors"]:
+        reply = rpc(base, f["key"], "tools/call", {"name": "chalk_" + name, "arguments": arguments})
+        data = reply.get("structuredContent", {}).get("data", {})
+        if name == "list_recordings" and sorted(r["export"]["status"] for r in data["recordings"]) != ["failed", "ready", "ready", "ready"]:
+            raise RuntimeError("Fixture does not expose the expected export states")
+        if name == "list_admission_requests" and [r["display_name"] for r in data["requests"]] != ["Esha"]:
+            raise RuntimeError("Fixture does not expose canonical pending admissions")
+    evidence = evidence_delta(server_evidence(args, f["tenant"]), before)
+    if evidence["server_calls"] != (7 if args.arm == "code" else 6) or evidence["server_errors"] or evidence["server_code_errors"]:
         raise RuntimeError("API-side preflight evidence missing or contains errors")
     return {"catalog": [t["name"] for t in catalog], **evidence}
 
 
-def trial(args, task_id, repetition, run_id):
+def trial(args, task_id, repetition):
     db = Database(args.database_url)
-    f = seed(db, f"{run_id}:{task_id}:{repetition}")
+    f = seed(db, f"trial:{task_id}:{repetition}")
+    before = server_evidence(args, f["tenant"])
     task = next(t for t in suite(f) if t.id == task_id)
     endpoint = args.base_url.rstrip("/") + ("/mcp" if args.arm == "tools" else "/mcp/code")
     config = {"mcpServers": {"chalk": {"type": "http", "url": endpoint,
@@ -126,6 +156,7 @@ def trial(args, task_id, repetition, run_id):
                "--output-format", "stream-json", "--verbose", "--tools", "", "--strict-mcp-config",
                "--mcp-config", json.dumps(config), "--system-prompt", SYSTEM,
                "--setting-sources", "", "--settings", '{"disableAllHooks":true,"autoMemoryEnabled":false}',
+               "--disable-slash-commands", "--debug-file", os.devnull,
                "--permission-mode", "dontAsk", "--allowedTools", "mcp__chalk__*",
                "--no-session-persistence", "--max-budget-usd", str(args.budget)]
     env = {**os.environ, "CHALK_EVAL_API_KEY": f["key"], "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
@@ -151,10 +182,11 @@ def trial(args, task_id, repetition, run_id):
         pass
     evidence_error = False
     try:
-        evidence = server_evidence(args, f["tenant"])
+        evidence = evidence_delta(server_evidence(args, f["tenant"]), before)
     except (OSError, ValueError, subprocess.SubprocessError):
         evidence_error = True
-        evidence = {"server_calls": 0, "server_errors": 0, "server_tools": {}}
+        evidence = {"server_calls": 0, "server_errors": 0, "server_tools": {},
+                    "server_code_calls": 0, "server_code_errors": 0, "server_code_api_calls": 0}
     good, checks = grade(task, answer, db)
     if task.id == "missing-scope":
         checks["scope_rejection_observed"] = evidence["server_errors"] > 0
@@ -164,7 +196,7 @@ def trial(args, task_id, repetition, run_id):
         category = "timeout"
     elif process.returncode != 0 or result.get("is_error") or result.get("subtype") != "success":
         category = "cli_error"
-    elif metrics["wrong_model"] or metrics["wrong_tools"] or not metrics["cost_accounting_complete"]:
+    elif metrics["wrong_model"] or metrics["wrong_tools"] or not metrics["cost_accounting_complete"] or not metrics["session_initialized"]:
         category = "invalid_session"
     elif evidence_error or evidence["server_calls"] == 0:
         category = "no_server_evidence"
@@ -172,6 +204,8 @@ def trial(args, task_id, repetition, run_id):
         category = "invalid_answer_json"
     elif isinstance(answer, dict) and answer.get("error") == "unsupported":
         category = "unsupported_capability"
+    elif isinstance(answer, dict) and answer.get("error") == "operation_failed":
+        category = "tool_failure"
     elif not checks["state"]:
         category = "wrong_state"
     elif checks.get("scope_rejection_observed") is False:
@@ -197,9 +231,9 @@ def main():
     run.add_argument("--budget", type=float, default=1.5)
     run.add_argument("--base-url", default="http://127.0.0.1:18080")
     run.add_argument("--database-url", default=os.environ.get("CHALK_EVAL_DATABASE_URL", "postgres://postgres:postgres@127.0.0.1:25432/chalk_mcp_eval?sslmode=disable"))
-    run.add_argument("--server-log", default=".private/mcp-eval-stack/api.jsonl")
-    run.add_argument("--ssh-host")
-    run.add_argument("--ssh-config", default=str(Path.home() / ".ssh/config"))
+    run.add_argument("--server-log", default=os.environ.get("CHALK_EVAL_SERVER_LOG", ".private/mcp-eval-stack/api.jsonl"))
+    run.add_argument("--ssh-host", default=os.environ.get("CHALK_EVAL_SSH_HOST"))
+    run.add_argument("--ssh-config", default=os.environ.get("CHALK_EVAL_SSH_CONFIG", str(Path.home() / ".ssh/config")))
     run.add_argument("--claude", default="claude")
     run.add_argument("--task", action="append", help="Diagnostic subset only; omit for full suite")
     run.add_argument("--output", required=True)
@@ -237,15 +271,14 @@ def main():
               "concurrency": args.concurrency, "timeout": args.timeout, "budget": args.budget,
               "suite_sha256": digest(HERE / "tasks.py"), "fixture_sha256": digest(HERE / "fixture.py"),
               "system_sha256": hashlib.sha256(SYSTEM.encode()).hexdigest(),
-              "revision": revision, "cli_version": version, "tasks": tasks}
+              "revision": revision, "server_revision": server_revision(args), "cli_version": version, "tasks": tasks}
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     records = []
-    run_id = str(uuid.uuid4())
-    proof = preflight(args, db, run_id)
-    print("Preflight passed: catalog and six API-side calls verified", flush=True)
+    proof = preflight(args, db)
+    print("Preflight passed: catalog and API-side calls verified", flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-        futures = [executor.submit(trial, args, task_id, repetition, run_id)
+        futures = [executor.submit(trial, args, task_id, repetition)
                    for repetition in range(1, args.k + 1) for task_id in tasks]
         for future in concurrent.futures.as_completed(futures):
             records.append(future.result())

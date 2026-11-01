@@ -30,6 +30,7 @@ def summarize(trials):
         **{key: sum(t.get(key, 0) for t in trials) for key in (
             "input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens",
             "cost_usd", "wall_seconds", "turns", "tool_calls", "tool_errors", "server_calls", "server_errors",
+            "server_code_calls", "server_code_errors", "server_code_api_calls",
         )},
         "median_wall_seconds": statistics.median(t["wall_seconds"] for t in trials) if trials else 0,
         "failures": dict(collections.Counter(t["category"] for t in trials if not t["passed"])),
@@ -56,13 +57,17 @@ def markdown(runs):
     for label, key in [("Uncached input tokens", "input_tokens"), ("Output tokens", "output_tokens"),
                        ("Cache read tokens", "cache_read_input_tokens"), ("Cache creation tokens", "cache_creation_input_tokens"),
                        ("Assistant turns", "turns"), ("Client tool calls", "tool_calls"), ("Client tool errors", "tool_errors"),
-                       ("Server completed calls", "server_calls"), ("Server error calls", "server_errors")]:
+                       ("Server shared-operation calls", "server_calls"), ("Server shared-operation errors", "server_errors"),
+                       ("Server code tool calls", "server_code_calls"), ("Server code tool errors", "server_code_errors")]:
         row(label, lambda r, k=key: str(r["summary"][k]))
     row("Cost (CLI list-price accounting, USD)", lambda r: f'${r["summary"]["cost_usd"]:.4f}')
     row("Trials with incomplete cost accounting", lambda r: str(r["summary"]["incomplete_cost_accounting"]))
     row("Sum of trial wall times (seconds)", lambda r: f'{r["summary"]["wall_seconds"]:.1f}')
     row("Run elapsed (seconds, including fixtures)", lambda r: f'{r["elapsed_seconds"]:.1f}')
     row("Median trial (seconds)", lambda r: f'{r["summary"]["median_wall_seconds"]:.1f}')
+    row("Model / effort", lambda r: r["config"]["model"] + " / " + r["config"]["effort"])
+    row("k / concurrency", lambda r: f'{r["config"]["k"]} / {r["config"]["concurrency"]}')
+    row("API source", lambda r: '`' + r["config"]["server_revision"][:12] + '`')
     lines += ["", "## Tasks", "", "★ marks different pass counts between arms; † marks a transcript text capability gap.", "",
               "| Task | " + " | ".join(arms) + " |", "|---|" + "---|" * len(arms)]
     task_ids = list(dict.fromkeys(t["task"] for r in runs for t in r["trials"]))
@@ -85,11 +90,14 @@ def markdown(runs):
               "- CLI accounting includes auxiliary-model overhead (if any), caching, startup and MCP discovery; wall time includes retries. Server counts include rejected calls. Expected scope rejection is not itself a failed task.",
               "- A webhook test proves enqueueing, not external delivery. No live media/provider, production service or real customer data participates.",
               "- Do not choose an arm until both complete on the same revision, fixture, settings and task set; alternate arms across repeated runs to reduce cache/load/order bias."]
-    if "tools" in by_arm and "code" not in by_arm:
+    if "tools" in by_arm:
         run = by_arm["tools"]
-        scale = 6 / run["config"]["k"]
+        scale = (3 if "code" in by_arm else 6) / run["config"]["k"]
+        measured_cost = sum(r["summary"]["cost_usd"] for r in by_arm.values())
+        measured_time = sum(r["elapsed_seconds"] for r in by_arm.values())
+        assumption = "Scaling the measured arms linearly; caching and model variance can change this." if "code" in by_arm else "Assuming code mode costs/takes the same as tools; code mode has not been measured."
         lines += ["", "## Full-run estimate", "",
-                  f'Both arms at k=3: approximately ${run["summary"]["cost_usd"] * scale:.2f} and {run["elapsed_seconds"] * scale / 60:.1f} minutes at the same concurrency, assuming code mode costs/takes the same as tools. This is an extrapolation, not a measured code-mode result.']
+                  f'Both arms at k=3: approximately ${measured_cost * scale:.2f} and {measured_time * scale / 60:.1f} minutes at the same concurrency. {assumption} This is an extrapolation, not a measured k=3 result.']
     return "\n".join(lines) + "\n"
 
 
@@ -99,7 +107,7 @@ def write_report(paths, output):
         raise ValueError("Compare at most one result per arm")
     if any(not r.get("complete") for r in runs):
         raise ValueError("Cannot compare incomplete runs")
-    fields = ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "cli_version", "tasks")
+    fields = ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "server_revision", "cli_version", "tasks")
     if any(any(r["config"][field] != runs[0]["config"][field] for field in fields) for r in runs[1:]):
         raise ValueError("Cannot compare runs with different revisions, tasks, prompts, CLI or settings")
     Path(output).write_text(markdown(runs))

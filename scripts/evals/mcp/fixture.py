@@ -19,6 +19,11 @@ SNAPSHOT = {
     "roles": {"collaborator": ["sendChat"]}, "admission_policy": {"mode": "open"},
     "default_episode_duration_seconds": 86400, "maximum_episode_duration_seconds": 86400,
     "linger_window_seconds": 0,
+    "artifact_policy": {
+        "schema_version": "episode_config.v2",
+        "recording": {"mode": "manual", "profile": "composite_720p_v1", "retention_seconds": 2592000},
+        "transcription": {"mode": "on_demand", "provider_policy_version": "eval-v1", "retention_seconds": 2592000, "source_window_seconds": 2592000},
+    },
 }
 
 
@@ -135,6 +140,15 @@ def seed(db, label):
            admission_request_id=identifier("admission"), request_key="eval-admission-000001",
            request_fingerprint="\\x" + "00" * 32, participant_id=identifier("waiting"),
            display_name="Esha", role="collaborator", expires_at="2099-01-01T00:00:00Z")
+    handle = "\\x" + hashlib.sha256((tenant + ":invite").encode()).hexdigest()
+    insert("space_public_invites", tenant_id=tenant, space_id=spaces["Atlas"], handle=handle,
+           admission_mode="knock")
+    insert("space_public_arrivals", arrival_handle=identifier("arrival"), tenant_id=tenant, space_id=spaces["Atlas"],
+           invite_handle=handle, invite_generation=1, invite_state_epoch=1, identity_mode="guest", display_name="Esha",
+           guest_credential_hash="\\x" + "00" * 32, idempotency_key="eval-arrival-000001",
+           idempotency_fingerprint="\\x" + "00" * 32, state="pending", expires_at="2099-01-01T00:00:00Z")
+    insert("space_public_admission_requests", request_handle=identifier("admission"), arrival_handle=identifier("arrival"),
+           tenant_id=tenant, space_id=spaces["Atlas"], display_name="Esha", state="pending", expires_at="2099-01-01T00:00:00Z")
     languages = [["en"], ["ur"], ["ar"], ["en", "ur", "ar"]]
     text = ["Please review invoicing on Tuesday.", "انوائسنگ کی رپورٹ منگل کو بھیجیں۔",
             "يرجى إرسال الفاتورة يوم الثلاثاء.", "Invoice ready. رسید بھیجیں۔ أرسل الفاتورة."]
@@ -145,7 +159,14 @@ def seed(db, label):
         recordings.append(recording)
         key = f"tenants/{tenant}/recordings/{recording}.mp4"
         insert("recordings", id=recording, tenant_id=tenant, space_id=spaces["Atlas"], episode_id=episodes[number],
-               status="completed", storage_provider="r2", storage_key=key, duration_millis=3600000)
+               status="completed", storage_provider="r2", storage_key=key if number != 1 else None, duration_millis=3600000)
+        insert("recording_reservations", id=identifier(f"reservation-{number}"), tenant_id=tenant,
+               space_id=spaces["Atlas"], episode_id=episodes[number], recording_id=recording,
+               idempotency_key="reservation:" + recording, request_fingerprint="\\x" + "00" * 32,
+               policy_snapshot_version="episode_config.v2", participant_count=1, max_duration_seconds=3600,
+               input_bitrate_bps=100000, state="released", ends_at="2026-10-26T00:00:00Z")
+        insert("recording_pipelines", recording_id=recording, tenant_id=tenant,
+               reservation_id=identifier(f"reservation-{number}"), state="capture_complete", capture_completed_at="now")
         job = identifier(f"render-{number}")
         insert("recording_jobs", id=job, tenant_id=tenant, episode_id=episodes[number], recording_id=recording,
                kind="render", idempotency_key="render:" + recording, payload_schema_version=1,
@@ -162,11 +183,13 @@ def seed(db, label):
             segments = [{"speaker": "Bilal", "start_ms": i * 1000, "text": "Routine update."} for i in range(4500)]
             segments[0] = {"speaker": "Amina", "start_ms": 0, "text": text[number]}
             segments[4100] = {"speaker": "Amina", "start_ms": 4100000, "text": "The invoice approval code is ORCHID-73."}
-        insert("mcp_eval_objects", tenant_id=tenant, object_key=artifact, body={"segments": segments})
+        body = {"segments": segments}
+        encoded = json.dumps(body, ensure_ascii=False).encode()
+        insert("mcp_eval_objects", tenant_id=tenant, object_key=artifact, body=body)
         insert("transcriptions", id=transcript, tenant_id=tenant, recording_id=recording, space_id=spaces["Atlas"],
                episode_id=episodes[number], status="complete", languages=languages[number], artifact_key=artifact,
-               artifact_content_type="application/json", artifact_size=len(json.dumps(segments).encode()),
-               artifact_sha256="\\x" + "00" * 32, completed_at="2026-10-26T00:00:00Z")
+               artifact_content_type="application/json", artifact_size=len(encoded),
+               artifact_sha256="\\x" + hashlib.sha256(encoded).hexdigest(), completed_at="2026-10-26T00:00:00Z")
     # Listing/history never decrypt these inert fixture secrets or send network traffic.
     endpoint, revision, event = identifier("webhook"), identifier("webhook-revision"), identifier("event")
     insert("webhook_endpoints", id=endpoint, tenant_id=tenant, name="Fixture archive", enabled=False,

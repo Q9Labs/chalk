@@ -52,7 +52,7 @@ class HarnessTests(unittest.TestCase):
             first.write_text(json.dumps({"config": {"arm": "tools"}, "complete": False}))
             with self.assertRaisesRegex(ValueError, "incomplete"):
                 write_report([first], Path(directory) / "report.md")
-            config = {key: "same" for key in ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "cli_version")}
+            config = {key: "same" for key in ("model", "effort", "k", "concurrency", "timeout", "budget", "suite_sha256", "fixture_sha256", "system_sha256", "revision", "server_revision", "cli_version")}
             first.write_text(json.dumps({"config": {**config, "arm": "tools", "tasks": ["a"]}, "complete": True}))
             second.write_text(json.dumps({"config": {**config, "arm": "code", "tasks": ["b"]}, "complete": True}))
             with self.assertRaisesRegex(ValueError, "different"):
