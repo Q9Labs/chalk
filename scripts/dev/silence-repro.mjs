@@ -64,6 +64,7 @@ const firstUnmuteSeconds = Number(process.env.SR_FIRST_UNMUTE_S || 3);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
 const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
+// HTTPS_PROXY/NO_PROXY in the harness environment reach the API (Go honors them for its Cloudflare calls); the browsers are launched without them and stay on the shaped link.
 const output = resolve(root, process.env.SR_OUTPUT || "artifacts/silence-repro");
 await mkdir(output, { recursive: true });
 // "sdk:<git ref>" tests that ref's SDK and React source on the master server tree; "ref:<git ref>" takes both from the ref.
@@ -412,7 +413,12 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     lingerWindowSeconds: 600,
   });
   const episode = await chalk.episodes.create(space.id, {});
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.SR_CHROMIUM || undefined, args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"] });
+  const browser = await chromium.launch({
+    headless: true,
+    env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(https?|all|no)_proxy$/iu.test(key))),
+    executablePath: process.env.SR_CHROMIUM || undefined,
+    args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
+  });
   allBrowsers.push(browser);
   const origin = Date.now();
   const ids = new Map();
