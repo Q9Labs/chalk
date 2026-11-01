@@ -556,7 +556,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         participants.map(async ({ page }, listener) => {
           try {
             const sample = await page.evaluate(() => window.srSample());
-            return { listener, status: sample.status, mic: sample.mic, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
+            return { listener, send: sample.send, localMic: sample.localMic, status: sample.status, mic: sample.mic, roster: sample.roster.map((id) => ids.get(id)), errors: sample.errors, remote: sample.remote.map((entry) => ({ ...entry, speaker: ids.get(entry.speaker) })) };
           } catch (error) {
             return { listener, error: error.message, remote: [] };
           }
