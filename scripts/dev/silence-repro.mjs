@@ -162,8 +162,8 @@ function browserInstrumentation({ frequency }) {
       super(...args);
       window.matrixPeers.push(this);
       const born = performance.now();
-      const line = (this.srTimeline = [["created", 0]]);
-      const mark = (name) => line.push([name, Math.round(performance.now() - born)]);
+      const line = (this.srTimeline = [["created", 0, Date.now()]]);
+      const mark = (name) => line.push([name, Math.round(performance.now() - born), Date.now()]);
       this.srMark = mark;
       this.addEventListener("icegatheringstatechange", () => mark(`gathering:${this.iceGatheringState}`));
       this.addEventListener("iceconnectionstatechange", () => mark(`ice:${this.iceConnectionState}`));
@@ -479,8 +479,18 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         page.on("pageerror", (error) => run.faults.push({ at: Date.now() - origin, participant: index, kind: "pageerror", message: error.message }));
         const requestStarts = new WeakMap();
         page.on("request", (request) => requestStarts.set(request, Date.now() - origin));
+        page.on("websocket", (socket) => {
+          const socketPath = new URL(socket.url()).pathname.replace(/\/[0-9a-f-]{20,}/gu, "/:id");
+          const frame = (direction) => (event) => (run.socketFrames ??= []).push({ at: Date.now() - origin, participant: index, direction, path: socketPath, bytes: typeof event.payload === "string" ? event.payload.length : event.payload.byteLength });
+          (run.socketFrames ??= []).push({ at: Date.now() - origin, participant: index, direction: "open", path: socketPath, bytes: 0 });
+          socket.on("framesent", frame("sent"));
+          socket.on("framereceived", frame("received"));
+          socket.on("close", () => (run.socketFrames ??= []).push({ at: Date.now() - origin, participant: index, direction: "close", path: socketPath, bytes: 0 }));
+        });
         page.on("response", async (response) => {
           const path = new URL(response.url()).pathname;
+          if (new URL(response.url()).origin === new URL(config.urls.api).origin)
+            (run.apiRequests ??= []).push({ at: Date.now() - origin, startedAt: requestStarts.get(response.request()) ?? null, participant: index, method: response.request().method(), path: path.replace(/\/[0-9a-f-]{20,}/gu, "/:id"), status: response.status() });
           if (!/media\//u.test(path)) return;
           let body = {};
           try {
