@@ -48,13 +48,14 @@ export const callAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("approve-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
   z.strictObject({ action: z.literal("deny-knock"), spaceId: id, requestHandle: z.string().regex(/^[A-Za-z0-9_-]{16,128}$/), idempotencyKey }),
 ]);
+export const transcriptTextQuery = z.strictObject({ spaceId: id, episodeId: id, transcriptId: id });
+export type TranscriptTextQuery = z.infer<typeof transcriptTextQuery>;
 export const pastAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-transcript"), spaceId: id, episodeId: id, recordingId: id, languages: z.array(z.string().trim().min(1).max(32)).min(1).max(16), idempotencyKey }),
   z.strictObject({ action: z.literal("recording-url"), spaceId: id, episodeId: id, recordingId: id, download: z.boolean() }),
   z.strictObject({ action: z.literal("export-recording"), spaceId: id, episodeId: id, recordingId: id, idempotencyKey }),
   z.strictObject({ action: z.literal("transcripts"), spaceId: id, episodeId: id, recordingId: id, view: z.enum(["call", "past-session"]).optional() }),
   z.strictObject({ action: z.literal("transcript-document"), spaceId: id, episodeId: id, transcriptId: id }),
-  z.strictObject({ action: z.literal("transcript-url"), spaceId: id, episodeId: id, transcriptId: id }),
   z.strictObject({ action: z.literal("delete-transcript"), spaceId: id, episodeId: id, transcriptId: id }),
 ]);
 const scope = z.enum(["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"]);

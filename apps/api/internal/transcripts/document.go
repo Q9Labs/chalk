@@ -15,6 +15,7 @@ var (
 )
 
 type Document struct {
+	Language      *string       `json:"-"`
 	SchemaVersion string        `json:"schema_version"`
 	Cues          []DocumentCue `json:"cues"`
 }
@@ -63,7 +64,7 @@ func ReadDocument(reader io.Reader, maximumBytes int64) (Document, error) {
 		return Document{}, ErrInvalidDocument
 	}
 
-	result := Document{SchemaVersion: persisted.SchemaVersion, Cues: make([]DocumentCue, 0, len(persisted.Cues))}
+	result := Document{Language: persisted.Language, SchemaVersion: persisted.SchemaVersion, Cues: make([]DocumentCue, 0, len(persisted.Cues))}
 	for _, cue := range persisted.Cues {
 		result.Cues = append(result.Cues, DocumentCue{
 			StartMS: cue.StartMS,

@@ -229,8 +229,12 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 			body["headers"] = headers(response.Headers)
 		}
 		if response.Schema != nil {
+			contentType := response.ContentType
+			if contentType == "" {
+				contentType = "application/json"
+			}
 			body["content"] = map[string]any{
-				"application/json": map[string]any{
+				contentType: map[string]any{
 					"schema": g.schemaRef(*response.Schema, false),
 				},
 			}

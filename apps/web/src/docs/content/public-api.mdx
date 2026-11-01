@@ -19,6 +19,14 @@ For Home activity across up to 300 Spaces, use `listSpaceActivity` (`GET /v1/ten
 
 Use `getEpisodeAttendance` (`GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance`) with `episodes:read` for live or ended Episode attendance. Each admitted Participant seat appears once, ordered by `first_joined_at`, with its display name, identity kind (`user`, `agent`, or `guest`), nullable external ID, first join, and latest leave. Rejoins keep the first join; this is not a list of presence intervals. `last_left_at` and `left_reason` are null while the seat is present. An ended Episode closes seats that never explicitly left at its end time with `left_reason: "episode_ended"`; explicit departures use `"left"`. Attendance remains available after the Episode event journal is cleaned up.
 
+### Download transcript text
+
+Use `getTranscriptText` (`GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text`) with `transcriptions:read` to download a completed transcript as `text/plain; charset=utf-8`. The attachment filename contains the sanitized Space title and UTC recording date; non-ASCII titles also have an RFC 5987 `filename*`. The dashboard's **Transcript (text)** download uses this route through its authenticated backend. It does not offer a JSON download.
+
+The first line contains the Space title, UTC recording start date, and recording duration (seconds below one minute, otherwise rounded to the nearest minute). A `Languages:` line names the detected document language when known; requested transcription languages are not treated as detected languages. Speech lines use `[HH:MM:SS] Speaker: text`, with timestamps relative to the recording start. Cues are ordered by start time, preserving artifact order for ties. Consecutive cues from the same Participant identity and generation merge when the gap is at most five seconds, even if their media track changes. The first cue's display-name snapshot labels the merged line; unnamed identities get stable `Speaker 1`, `Speaker 2`, and so on in first-appearance order. Text, including Urdu and Arabic, remains UTF-8 without a BOM. An empty transcript says `No speech was transcribed.`
+
+The existing `/document` and `/download-url` routes remain JSON APIs with unchanged behavior. The text export exposes the same validated reader fields as `/document`, not provider metadata or raw storage objects. Incomplete transcripts return `409`.
+
 ### Use generated clients carefully
 
 The TypeScript client has generated HTTP and schema modules for server-side use. Keep Tenant credentials and webhook management on the server. For a live Space, use `SpaceClient` and its AccessGrant boundary instead of issuing Participant media or Sync requests directly.
