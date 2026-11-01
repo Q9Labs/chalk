@@ -29,6 +29,8 @@ const builds = {
   "5.2.6d": { serverRev: "origin/diag/cf-session-log", sdkRev: "2ec22c54b", npm: "5.2.6" },
   "5.3.1d": { serverRev: "origin/diag/cf-session-log", sdkRev: "3f9fe4385e", npm: "5.3.1" },
   masterd: { serverRev: "origin/diag/cf-session-log", sdkRev: "origin/master" },
+  // 5.2.6 clients against the server with the idle-session swap (fix/lazy-cloudflare-session).
+  "5.2.6fix": { serverRev: "origin/fix/lazy-cloudflare-session", sdkRev: "2ec22c54b", npm: "5.2.6" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
 };
 // Per-direction impairment (RTT = egress + ingress delay). Only the default interface is shaped, so browser-to-local
@@ -61,6 +63,8 @@ const runsPerCell = Number(process.env.SR_RUNS || 2);
 const participantsCount = Number(process.env.SR_N || 8);
 const speakerCount = Number(process.env.SR_SPEAKERS || 4);
 const runSeconds = Number(process.env.SR_SECONDS || 105);
+// Seconds between the last join and the first unmute. Cloudflare drops a session idle for 15 s, so 20 mimics a quiet class start.
+const firstUnmuteSeconds = Number(process.env.SR_FIRST_UNMUTE_S || 3);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
 const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
@@ -251,7 +255,10 @@ function browserInstrumentation({ frequency }) {
           if (stat.type === "candidate-pair" && stat.nominated && stat.state === "succeeded") pair = { sent: stat.bytesSent, recv: stat.bytesReceived, resp: stat.responsesReceived };
         });
       } catch {} // closed between checks
-      const senders = pc.getTransceivers().filter((t) => t.sender.track?.kind === "audio").map((t) => `${t.mid}:${t.direction}/${t.currentDirection}:${t.sender.track.readyState}:m${t.sender.track.muted ? 1 : 0}:e${t.sender.track.enabled ? 1 : 0}`);
+      const senders = pc
+        .getTransceivers()
+        .filter((t) => t.sender.track?.kind === "audio")
+        .map((t) => `${t.mid}:${t.direction}/${t.currentDirection}:${t.sender.track.readyState}:m${t.sender.track.muted ? 1 : 0}:e${t.sender.track.enabled ? 1 : 0}`);
       send.push({ pc: pcIndex, conn: pc.connectionState, ice: pc.iceConnectionState, outbound, rr, pair, senders });
     }
     let localMic = null;
@@ -375,6 +382,7 @@ async function runBuild(name) {
           runIndex,
           started: new Date().toISOString(),
           network: [],
+          joinPhases: [],
           actions: [],
           samples: [],
           faults: [],
@@ -514,9 +522,12 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
             setTimeout(() => killSession(run, origin, index, connectionId), killDelayMs);
           }
         });
+        const phases = (run.joinPhases[index] = {});
         await page.goto(config.urls.web);
+        phases.pageLoaded = (Date.now() - origin) / 1000;
         await page.evaluate((cfg) => window.matrixJoin(cfg), { space: space.slug, baseUrl: config.urls.api, syncUrl: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, name: `Synthetic ${index}`, microphone: false });
         await page.waitForFunction(() => window.matrixClient?.getSnapshot().connection.status === "live", null, { timeout: 120000 });
+        phases.live = (Date.now() - origin) / 1000;
         participantIds[index] = await page.evaluate(() => window.matrixClient.getSnapshot().self.participantId);
         ids.set(participantIds[index], index);
         participants[index] = { context, page };
@@ -527,7 +538,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     const startWall = Date.now();
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {
-      schedule.push({ at: 3 + speaker * 7, participant: speaker, kind: "unmute", first: true });
+      schedule.push({ at: firstUnmuteSeconds + speaker * 7, participant: speaker, kind: "unmute", first: true });
       if (run.toggle) {
         for (let mute = 30 + speaker * 3; mute + 12 <= runSeconds; mute += 12) schedule.push({ at: mute, participant: speaker, kind: "mute" }, { at: mute + 4, participant: speaker, kind: "unmute", first: false });
       } else {
