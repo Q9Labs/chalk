@@ -9,6 +9,8 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
   alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
+  @bridge_profile :chalk_sync_bridge
+
   @tag timeout: 90_000
   test "slow vendor cleanup cannot starve readiness, but a down bridge does fail readiness" do
     database_url =
@@ -73,10 +75,8 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
 
     Application.put_env(:chalk_sync, :provider_bridge, options)
     client = Config.client!(options, 30_000)
-    # Warm a real keep-alive connection before cleanup takes it over.
     assert :ok = Client.ready(client)
     await_status(200)
-    assert {:ok, [{:max_sessions, 2}]} = :httpc.get_options([:max_sessions])
 
     tasks =
       Enum.with_index(fixtures, fn f, index ->
@@ -91,6 +91,10 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
 
     assert 204 = control(info["control_url"] <> "/wait")
     await_queued_requests(2)
+
+    assert {:ok, [{:max_keep_alive_length, 0}]} =
+             :httpc.get_options([:max_keep_alive_length], @bridge_profile)
+
     for _ <- 1..3, do: Readiness.probe_now()
     {status, body} = ready_response()
     IO.puts("cleanup readiness: #{status} #{body}")
@@ -120,20 +124,17 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
   end
 
   defp await_queued_requests(count, attempts \\ 100)
-  defp await_queued_requests(_count, 0), do: flunk("cleanup did not enter the shared HTTP pool")
+
+  defp await_queued_requests(_count, 0),
+    do: flunk("cleanup did not reach the bridge HTTP profile")
 
   defp await_queued_requests(count, attempts) do
-    handlers = Keyword.fetch!(:httpc.info(), :handlers)
+    handlers = Keyword.fetch!(:httpc.info(@bridge_profile), :handlers)
+    in_flight = Enum.map(handlers, fn {_pid, requests, _info} -> length(requests) end)
 
-    requests = Enum.sum(Enum.map(handlers, fn {_pid, requests, _info} -> length(requests) end))
-
-    if requests >= count do
-      IO.inspect(
-        Enum.map(handlers, fn {_pid, requests, info} ->
-          %{requests: length(requests), queued: get_in(info, [:session, :queue_length])}
-        end),
-        label: "shared HTTP handlers during cleanup"
-      )
+    if Enum.sum(in_flight) >= count do
+      assert Enum.all?(in_flight, &(&1 <= 1)),
+             "a cleanup call queued behind another: #{inspect(in_flight)}"
 
       :ok
     else
