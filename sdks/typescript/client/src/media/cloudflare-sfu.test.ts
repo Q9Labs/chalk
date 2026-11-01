@@ -292,6 +292,563 @@ it.each(["microphone", "camera", "screen"] as const)("retires a paused %s add wh
   }
 });
 
+it("publishes again when the registry no longer lists an enabled microphone publication", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const localAdds = () => harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const addsBefore = localAdds();
+
+    harness.transport.withdrawPublication(oldId!);
+    await harness.client.refreshRemotePublications();
+
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    expect([...harness.transport.localPublications.keys()]).not.toContain(oldId);
+    expect(localAdds()).toBe(addsBefore + 1);
+    expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+  } finally {
+    harness.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("registry recovery republishes a withdrawn enabled %s within one second", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    const addsBefore = localAddCount(h, source);
+    h.transport.withdrawPublication(oldId);
+
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(oldId);
+    expect(localAddCount(h, source)).toBe(addsBefore + 1);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: true });
+  });
+});
+
+it("drops a stale registry recovery after its re-list still contains the publication", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    const addsBefore = localAddCount(h, "microphone");
+    const listed = [...h.transport.localPublications.values()];
+    const stale = { incarnation: 1, sequence: 100, publications: [] };
+    h.transport.publicationListSnapshots.push(stale, { incarnation: 1, sequence: 101, publications: listed });
+
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.transport.closeInputs).toHaveLength(0);
+    expect(localAddCount(h, "microphone")).toBe(addsBefore);
+    expect(h.transport.localPublications.has(oldId)).toBe(true);
+
+    const callsBefore = h.transport.listPublicationCalls;
+    h.transport.publicationListSnapshots.push({ incarnation: 1, sequence: 102, publications: [] }, { incarnation: 1, sequence: 103, publications: listed });
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.transport.listPublicationCalls).toBe(callsBefore + 1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.transport.listPublicationCalls).toBe(callsBefore + 2);
+    expect(h.transport.closeInputs).toHaveLength(0);
+    expect(localAddCount(h, "microphone")).toBe(addsBefore);
+  });
+});
+
+it.each(["microphone", "camera"] as const)("a Sync withdrawal notification republishes an enabled %s within one second", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    const addsBefore = localAddCount(h, source);
+    h.transport.withdrawPublication(oldId);
+
+    notifyLocalPublicationWithdrawn(h.client, oldId);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(oldId);
+    expect(localAddCount(h, source)).toBe(addsBefore + 1);
+  });
+});
+
+it("makes listener pulls and closes fail for a withdrawn publication", async () => {
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const publicationId = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    const { connectionId, trackName } = parseCloudflareSFUPublicationID(publicationId);
+    h.transport.withdrawPublication(publicationId);
+
+    await expect(h.transport.listPublications()).resolves.toMatchObject({ publications: [] });
+    await expect(h.transport.addTracks({ connectionId: "listener", tracks: [{ location: "remote", sessionId: connectionId, trackName }] })).resolves.toMatchObject({
+      tracks: [],
+      trackErrors: [{ connectionId, trackName, code: "publication_unavailable" }],
+    });
+    await expect(h.transport.closeTracks({ connectionId, tracks: [{ mid: "0", source: "microphone", publicationId }], force: true })).rejects.toMatchObject({
+      options: { status: 410 },
+    });
+  } finally {
+    h.client.stop();
+  }
+});
+
+it.each(["microphone", "camera"] as const)("a withdrawal notification after a normal %s mute stays silent", async (source) => {
+  await withTimedHarness(async (h) => {
+    const microphone = new FakeTrack("mic", "audio");
+    const camera = new FakeTrack("camera", "video");
+    await h.client.start(source === "microphone" ? fakeStream(microphone) : fakeStream(microphone, camera));
+    await vi.advanceTimersByTimeAsync(0);
+    const track = source === "microphone" ? microphone : camera;
+    const oldId = h.client.getSnapshot().localTracks.find((item) => item.source === source)!.publicationId!;
+    const addsBefore = localAddCount(h, source);
+    await h.client.setLocalSourceIntent(source, false, "user_pause");
+
+    notifyLocalPublicationWithdrawn(h.client, oldId);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect([...h.transport.localPublications.values()].filter((publication) => publication.source === source)).toHaveLength(0);
+    expect(localAddCount(h, source)).toBe(addsBefore);
+    expect(track.enabled).toBe(false);
+    expect(h.client.getSnapshot().localTracks.find((item) => item.source === source)).toMatchObject({ enabled: false });
+    expect(h.peers[0]!.getSenders().some((sender) => sender.track === track)).toBe(false);
+  });
+});
+
+it("stays muted when a withdrawal arrives while the mute close is in flight", async () => {
+  await withTimedHarness(async (h) => {
+    const microphone = new FakeTrack("mic", "audio");
+    await h.client.start(fakeStream(microphone));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    const addsBefore = localAddCount(h, "microphone");
+    const closeStarted = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    const close = h.transport.closeTracks.bind(h.transport);
+    vi.spyOn(h.transport, "closeTracks").mockImplementation(async (input) => {
+      closeStarted.resolve();
+      await gate.promise;
+      return close(input);
+    });
+
+    const muting = h.client.setLocalSourceIntent("microphone", false, "user_pause").catch(() => {});
+    await closeStarted.promise;
+    h.transport.withdrawPublication(oldId);
+    notifyLocalPublicationWithdrawn(h.client, oldId);
+    gate.resolve();
+    await muting;
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect([...h.transport.localPublications.values()].filter((publication) => publication.source === "microphone")).toHaveLength(0);
+    expect(localAddCount(h, "microphone")).toBe(addsBefore);
+    expect(h.client.getSnapshot().localTracks[0]).toMatchObject({ enabled: false });
+    expect(h.peers[0]!.getSenders().some((sender) => sender.track === microphone)).toBe(false);
+  });
+});
+
+it("does not retire the new publication when the old ID withdraws during unmute", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    const addsBefore = localAddCount(h, "microphone");
+    await h.client.setLocalSourceIntent("microphone", false, "user_pause");
+    await h.client.setLocalSourceIntent("microphone", true);
+
+    h.transport.blockConnection("connection-1");
+    const enabling = h.client.setLocalPublicationTarget({ operationId: "unmute-after-withdraw", participantId: "participant-1", source: "microphone", enabled: true });
+    await vi.waitFor(() => expect(localAddCount(h, "microphone")).toBe(addsBefore + 1));
+    notifyLocalPublicationWithdrawn(h.client, oldId);
+    h.transport.releaseConnection("connection-1");
+    await enabling;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === "microphone");
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(oldId);
+    expect(localAddCount(h, "microphone")).toBe(addsBefore + 1);
+  });
+});
+
+it.each(["microphone", "camera"] as const)("recovers a real %s withdrawal reported by registry and Sync as unmute resolves", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const p1 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    expect(h.transport.localPublications.has(p1)).toBe(true);
+
+    await h.client.setLocalSourceIntent(source, false, "user_pause");
+    expect(h.transport.localPublications.has(p1)).toBe(false);
+
+    await h.client.setLocalSourceIntent(source, true);
+    await expect(h.client.setLocalPublicationTarget({ operationId: `quick-toggle-${source}`, participantId: "participant-1", source, enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    const p2 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    expect(p2).not.toBe(p1);
+
+    const withdraw = (h.transport as typeof h.transport & { withdrawPublication?: (id: string) => void }).withdrawPublication;
+    if (withdraw) withdraw.call(h.transport, p2);
+    else h.transport.localPublications.delete(p2);
+    h.transport.snapshot = { ...h.transport.snapshot, sequence: h.transport.snapshot.sequence + 1 };
+    const registryPoll = h.client.refreshRemotePublications();
+    const notify = (h.client as CloudflareSFUClient & { localPublicationWithdrawn?: (id: string) => void }).localPublicationWithdrawn;
+    notify?.call(h.client, p2);
+    await registryPoll;
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(p1);
+    expect(live[0]!.publicationId).not.toBe(p2);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: true, publicationId: live[0]!.publicationId });
+  });
+});
+
+it("recovers a withdrawal onto the replacement connection while reconnect is in flight", async () => {
+  const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
+  const replacementStarted = Promise.withResolvers<void>();
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await vi.advanceTimersByTimeAsync(0);
+      const oldId = h.client.getSnapshot().localTracks[0]!.publicationId!;
+      h.transport.withdrawPublication(oldId);
+      vi.spyOn(h.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close failed", "signaling_failed", { status: 503, retryableConnection: true }));
+
+      notifyLocalPublicationWithdrawn(h.client, oldId);
+      await vi.advanceTimersByTimeAsync(0);
+      await replacementStarted.promise;
+      replacement.resolve(bootstrap("connection-2"));
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === "microphone");
+      expect(live).toHaveLength(1);
+      expect(parseCloudflareSFUPublicationID(live[0]!.publicationId).connectionId).toBe("connection-2");
+      expect(parseCloudflareSFUPublicationID(live[0]!.publicationId).connectionId).not.toBe(parseCloudflareSFUPublicationID(oldId).connectionId);
+    },
+    {
+      replaceMediaConnection: () => {
+        replacementStarted.resolve();
+        return replacement.promise;
+      },
+    },
+  );
+});
+
+it.each(["microphone", "camera"] as const)("repeated %s withdrawals follow 1/2/4/5-second backoff without duplicate publishes", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    let adds = localAddCount(h, source);
+    for (const delay of [0, 1000, 2000, 4000, 5000]) {
+      const deadId = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+      h.transport.withdrawPublication(deadId);
+      notifyLocalPublicationWithdrawn(h.client, deadId);
+      notifyLocalPublicationWithdrawn(h.client, deadId);
+      notifyLocalPublicationWithdrawn(h.client, deadId);
+      if (delay > 0) {
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        expect([...h.transport.localPublications.values()].filter((publication) => publication.source === source)).toHaveLength(0);
+      }
+      await vi.advanceTimersByTimeAsync(delay === 0 ? 0 : 1);
+      const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+      expect(live).toHaveLength(1);
+      expect(live[0]!.publicationId).not.toBe(deadId);
+      adds += 1;
+      expect(localAddCount(h, source)).toBe(adds);
+    }
+  });
+});
+
+it.each(["microphone", "camera"] as const)("resets %s withdrawal backoff after 10 seconds of healthy publication", async (source) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const live = () => [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
+    const withdraw = (publicationId: string) => {
+      h.transport.withdrawPublication(publicationId);
+      notifyLocalPublicationWithdrawn(h.client, publicationId);
+    };
+    const onlyLivePublicationId = () => {
+      expect(live()).toHaveLength(1);
+      return live()[0]!.publicationId;
+    };
+
+    const p1 = h.client.getSnapshot().localTracks.find((track) => track.source === source)!.publicationId!;
+    withdraw(p1);
+    await vi.advanceTimersByTimeAsync(100);
+    const p2 = onlyLivePublicationId();
+    expect(p2).not.toBe(p1);
+
+    withdraw(p2);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p3 = onlyLivePublicationId();
+    expect(p3).not.toBe(p2);
+
+    withdraw(p3);
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p4 = onlyLivePublicationId();
+    expect(p4).not.toBe(p3);
+
+    await vi.advanceTimersByTimeAsync(9000);
+    withdraw(p4);
+    await vi.advanceTimersByTimeAsync(3999);
+    expect(live()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const p5 = onlyLivePublicationId();
+    expect(p5).not.toBe(p4);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    withdraw(p5);
+    await vi.advanceTimersByTimeAsync(100);
+    const p6 = onlyLivePublicationId();
+    expect(p6).not.toBe(p5);
+    expect(new Set([p1, p2, p3, p4, p5, p6]).size).toBe(6);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: true, publicationId: p6 });
+  });
+});
+
+it("judge736: a reconnect cannot strand the next dead publication behind stale recovery intent", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("judge-mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const first = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    h.transport.withdrawPublication(first);
+    h.client.localPublicationWithdrawn(first);
+    await h.client.restart(bootstrap("judge-reconnect"));
+    const second = h.client.getSnapshot().localTracks[0]!.publicationId!;
+    expect(second).not.toBe(first);
+    await vi.advanceTimersByTimeAsync(0);
+    h.transport.withdrawPublication(second);
+    h.client.localPublicationWithdrawn(second);
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect([...h.transport.localPublications.keys()]).toHaveLength(1);
+    expect(h.client.getSnapshot().localTracks[0]!.publicationId).not.toBe(second);
+  });
+});
+
+it("judge736: a reconnect cannot strand the next dead camera publication behind stale recovery intent", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("judge-cam", "video")));
+    await vi.advanceTimersByTimeAsync(0);
+    const first = h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId!;
+    h.transport.withdrawPublication(first);
+    h.client.localPublicationWithdrawn(first);
+    await h.client.restart(bootstrap("judge-reconnect-camera"));
+    const second = h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId!;
+    expect(second).not.toBe(first);
+    await vi.advanceTimersByTimeAsync(0);
+    h.transport.withdrawPublication(second);
+    h.client.localPublicationWithdrawn(second);
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect([...h.transport.localPublications.keys()]).toHaveLength(1);
+    expect(h.client.getSnapshot().localTracks.find((track) => track.source === "camera")!.publicationId).not.toBe(second);
+  });
+});
+
+it("review736: recovers repeated replacement deaths through the short backoff", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await vi.advanceTimersByTimeAsync(0);
+      const ids = new Set(h.transport.localPublications.keys());
+      for (const delay of [0, 1000, 2000]) {
+        const oldId = [...h.transport.localPublications.keys()][0]!;
+        h.transport.withdrawPublication(oldId);
+        h.client.localPublicationWithdrawn(oldId);
+        await vi.advanceTimersByTimeAsync(delay);
+        const replacement = [...h.transport.localPublications.keys()][0]!;
+        expect(replacement).toBeDefined();
+        expect(ids.has(replacement)).toBe(false);
+        ids.add(replacement);
+        expect(h.client.getSnapshot().localTracks.some((track) => track.source === "microphone" && track.enabled)).toBe(true);
+      }
+    },
+    { pollIntervalMs: 15_000, replaceMediaConnection: async () => bootstrap(`review-replacement-${Date.now()}`) },
+  );
+});
+
+it.each(["retirement", "replacement"] as const)("review736: retries a withdrawn publication after one %s failure", async (failure) => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await vi.advanceTimersByTimeAsync(0);
+      const oldId = [...h.transport.localPublications.keys()][0]!;
+      h.transport.withdrawPublication(oldId);
+      if (failure === "retirement") vi.spyOn(h.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("publisher session gone", "signaling_failed", { status: 410, retryableConnection: true }));
+      else vi.spyOn(h.transport, "addTracks").mockRejectedValueOnce(new CloudflareSFUError("SFU temporarily unavailable", "signaling_failed", { status: 503, retryableConnection: true }));
+      h.client.localPublicationWithdrawn(oldId);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect([...h.transport.localPublications.keys()].filter((id) => id !== oldId)).toHaveLength(1);
+      expect(h.client.getSnapshot().localTracks.some((track) => track.source === "microphone" && track.enabled)).toBe(true);
+    },
+    { pollIntervalMs: 15_000, replaceMediaConnection: async () => bootstrap(`review-replacement-${Date.now()}`) },
+  );
+});
+
+it("review736: recovers a second death within the short backoff, not the source cooldown", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await vi.advanceTimersByTimeAsync(0);
+      const first = [...h.transport.localPublications.keys()][0]!;
+      h.transport.withdrawPublication(first);
+      h.client.localPublicationWithdrawn(first);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      const replacement = [...h.transport.localPublications.keys()][0]!;
+      h.transport.withdrawPublication(replacement);
+      h.client.localPublicationWithdrawn(replacement);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.transport.localPublications.size).toBe(0);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.transport.localPublications.size).toBe(1);
+    },
+    { pollIntervalMs: 15_000, replaceMediaConnection: async () => bootstrap(`review-replacement-${Date.now()}`) },
+  );
+});
+
+it("review736: backs off repeated withdrawals at 1, 2, 4 then 5 s", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      await vi.advanceTimersByTimeAsync(0);
+      for (const delay of [0, 1000, 2000, 4000, 5000, 5000]) {
+        const dead = [...h.transport.localPublications.keys()][0]!;
+        h.transport.withdrawPublication(dead);
+        h.client.localPublicationWithdrawn(dead);
+        if (delay > 0) {
+          await vi.advanceTimersByTimeAsync(delay - 50);
+          expect(h.transport.localPublications.size, `republish before ${delay} ms`).toBe(0);
+        }
+        await vi.advanceTimersByTimeAsync(delay > 0 ? 100 : 50);
+        expect(
+          [...h.transport.localPublications.keys()].filter((id) => id !== dead),
+          `republish by ${delay} ms`,
+        ).toHaveLength(1);
+      }
+    },
+    { pollIntervalMs: 15_000, replaceMediaConnection: async () => bootstrap(`review-replacement-${Date.now()}`) },
+  );
+});
+
+it("review736: keeps retrying a withdrawn publication through repeated publish failures", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const dead = [...h.transport.localPublications.keys()][0]!;
+    h.transport.withdrawPublication(dead);
+    const add = h.transport.addTracks.bind(h.transport);
+    let failures = 0;
+    vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+      if (input.tracks.some((track) => track.location === "local") && failures < 3) {
+        failures++;
+        throw new CloudflareSFUError("SFU temporarily unavailable", "signaling_failed", { status: 503, retryableConnection: true });
+      }
+      return add(input);
+    });
+    h.client.localPublicationWithdrawn(dead);
+    await vi.advanceTimersByTimeAsync(12_050);
+    expect(failures).toBe(3);
+    expect([...h.transport.localPublications.keys()].filter((id) => id !== dead)).toHaveLength(1);
+    expect(h.client.getSnapshot().localTracks.some((track) => track.source === "microphone" && track.enabled)).toBe(true);
+  });
+});
+
+it.each(["mute", "leave"] as const)("review736: preserves %s during withdrawn-publication retirement", async (action) => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = [...h.transport.localPublications.keys()][0]!;
+    h.transport.withdrawPublication(oldId);
+    const gate = Promise.withResolvers<void>();
+    const close = h.transport.closeTracks.bind(h.transport);
+    vi.spyOn(h.transport, "closeTracks").mockImplementationOnce(async (input) => {
+      await gate.promise;
+      return close(input);
+    });
+    h.client.localPublicationWithdrawn(oldId);
+    await vi.advanceTimersByTimeAsync(0);
+    const muting = action === "mute" ? h.client.setLocalSourceIntent("microphone", false, "user_pause") : undefined;
+    if (action === "leave") h.client.stop();
+    gate.resolve();
+    await muting;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.transport.localPublications.size).toBe(0);
+    expect(h.client.getSnapshot().localTracks.some((track) => track.enabled)).toBe(false);
+    expect(h.peers[0]!.getSenders().some((sender) => sender.track?.kind === "audio")).toBe(false);
+  });
+});
+
+it("review736: forwards withdrawal through the production media binding", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const bound = bindConnectionMediaClient(h.client, (grant) => h.client.restart("provider" in grant ? grant.clientPayload : grant));
+    const oldId = [...h.transport.localPublications.keys()][0]!;
+    h.transport.withdrawPublication(oldId);
+    bound.localPublicationWithdrawn?.(oldId);
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...h.transport.localPublications.keys()].filter((id) => id !== oldId)).toHaveLength(1);
+  });
+});
+
+it("republishes once when Sync reports an owned publication withdrawn", async () => {
+  await withTimedHarness(async (harness) => {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.transport.localPublications.size).toBe(1);
+    const oldId = [...harness.transport.localPublications.keys()][0]!;
+    const localAdds = () => harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local")).length;
+    const addsBefore = localAdds();
+    harness.transport.withdrawPublication(oldId);
+
+    harness.client.localPublicationWithdrawn(oldId);
+    harness.client.localPublicationWithdrawn(oldId);
+    harness.client.localPublicationWithdrawn(oldId);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect([...harness.transport.localPublications.keys()]).toHaveLength(1);
+    expect([...harness.transport.localPublications.keys()]).not.toContain(oldId);
+    expect(localAdds()).toBe(addsBefore + 1);
+    expect(harness.client.getSnapshot().localTracks.filter((track) => track.source === "microphone" && track.enabled)).toHaveLength(1);
+
+    const listCalls = harness.transport.listPublicationCalls;
+    harness.client.localPublicationWithdrawn("not-an-owned-publication");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.transport.listPublicationCalls).toBe(listCalls);
+  });
+});
+
+it("keeps a listed microphone publication when the registry lists it", async () => {
+  const harness = createHarness();
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.waitFor(() => expect(harness.transport.localPublications.size).toBe(1));
+    const oldId = [...harness.transport.localPublications.keys()][0];
+    const addsBefore = harness.transport.addInputs.length;
+
+    await harness.client.refreshRemotePublications();
+
+    expect([...harness.transport.localPublications.keys()]).toEqual([oldId]);
+    expect(harness.transport.addInputs).toHaveLength(addsBefore);
+  } finally {
+    harness.client.stop();
+  }
+});
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
@@ -1105,16 +1662,18 @@ it.each(["user_pause", "moderation_pause", "sync_recovery_loss"] as const)("repo
   }
 });
 
-it("reports absent discovery as the caller when re-enable retires a bundled publication", async () => {
-  const harness = createHarness({ replaceMediaConnection: async () => bootstrap("connection-2") });
-  const add = vi.spyOn(harness.transport, "addTracks");
+it("recovers an absent bundled publication through the shared retry path", async () => {
+  const harness = createHarness();
   try {
     await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
-    harness.transport.localPublications.delete(harness.client.getSnapshot().localTracks[0]!.publicationId!);
-    await expect(harness.client.setLocalPublicationTarget({ operationId: "resume-absent", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
-    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual(["discovery_absent"]);
-    expect(harness.transport.closeInputs).toHaveLength(1);
-    expect(harness.peers).toHaveLength(2);
+    const oldId = harness.client.getSnapshot().localTracks.find((track) => track.source === "microphone")!.publicationId!;
+    const addsBefore = localAddCount(harness, "microphone");
+    harness.transport.withdrawPublication(oldId);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "resume-absent", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "satisfied" });
+    await vi.waitFor(() => expect(localAddCount(harness, "microphone")).toBe(addsBefore + 1));
+    expect(harness.transport.localPublications.has(oldId)).toBe(false);
+    expect([...harness.transport.localPublications.values()].filter((publication) => publication.source === "microphone")).toHaveLength(1);
+    expect(harness.peers).toHaveLength(1);
   } finally {
     harness.client.stop();
   }
@@ -1958,6 +2517,35 @@ describe("remote publication recovery", () => {
       expect(harness.peers).toHaveLength(1);
     });
   });
+  it("stops retrying a withdrawn publication and promptly receives its replacement", async () => {
+    await withTimedHarness(async (harness) => {
+      await harness.client.start(fakeStream());
+      const oldPublication = versionedPublicationID("remote-connection", "old-mid", "microphone-old");
+      const replacement = versionedPublicationID("remote-connection", "new-mid", "microphone-new");
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: oldPublication }] };
+      const oldTrackName = parseCloudflareSFUPublicationID(oldPublication).trackName;
+      harness.transport.failedRemoteTrackNames.set(oldTrackName, "unknown");
+      const addTracks = vi.spyOn(harness.transport, "addTracks");
+
+      harness.client.remotePublicationsChanged();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(addTracks.mock.calls.flatMap(([input]) => input.tracks.map((track) => track.trackName))).toContain(oldTrackName);
+      const attemptsAfterFailure = addTracks.mock.calls.filter(([input]) => input.tracks.some((track) => track.trackName === oldTrackName)).length;
+
+      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+      harness.client.remotePublicationsChanged();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(addTracks.mock.calls.filter(([input]) => input.tracks.some((track) => track.trackName === oldTrackName))).toHaveLength(attemptsAfterFailure);
+
+      harness.transport.failedRemoteTrackNames.clear();
+      harness.transport.snapshot = { incarnation: 1, sequence: 3, publications: [{ participantId: "participant-2", source: "microphone", publicationId: replacement }] };
+      harness.client.remotePublicationsChanged();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual([replacement]);
+      expect(harness.client.getSnapshot().remoteTracks[0]?.track.readyState).toBe("live");
+    });
+  });
   it("receives a newly present participant when presence changes during a media pull", async () => {
     await withTimedHarness(async (harness) => {
       await harness.client.start(fakeStream());
@@ -2174,15 +2762,15 @@ describe("remote publication recovery", () => {
 
         harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
         await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-        // The server drops the replaced connection's publications and advances its sequence.
-        harness.transport.localPublications.clear();
+        // The server withdraws publications from the replaced connection before retrying pulls.
+        for (const publicationId of [...harness.transport.localPublications.keys()]) harness.transport.withdrawPublication(publicationId);
         harness.transport.snapshot = publicationSnapshot(1, 2, "remote|missing");
         const remoteAttempts = () => vi.mocked(harness.transport.addTracks).mock.calls.filter(([input]) => input.tracks.some((track) => track.location === "remote")).length;
         const attemptsBeforeRetry = remoteAttempts();
         await vi.advanceTimersByTimeAsync(120_000);
         expect(remoteAttempts()).toBeGreaterThan(attemptsBeforeRetry);
-        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
-        expect(harness.peers).toHaveLength(2);
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(harness.peers).toHaveLength(3);
       },
       { replaceMediaConnection },
     );
@@ -2859,6 +3447,13 @@ function versionedPublicationID(connectionId: string, mid: string, trackName: st
 function fakeStream(...tracks: readonly FakeTrack[]): MediaStream {
   return { getTracks: () => tracks as unknown as MediaStreamTrack[] } as MediaStream;
 }
+function localAddCount(harness: ReturnType<typeof createHarness>, source: "microphone" | "camera"): number {
+  return harness.transport.addInputs.filter((input) => input.tracks.some((track) => track.location === "local" && track.source === source)).length;
+}
+function notifyLocalPublicationWithdrawn(client: CloudflareSFUClient, publicationId: string): void {
+  const notify = (client as CloudflareSFUClient & { localPublicationWithdrawn?: (id: string) => void }).localPublicationWithdrawn;
+  notify?.call(client, publicationId);
+}
 function setScreenTarget(client: CloudflareSFUClient, operationId: string, enabled: boolean) {
   return client.setLocalPublicationTarget({ operationId, participantId: "participant-1", source: "screen", enabled });
 }
@@ -3054,6 +3649,7 @@ function createHarness(
 class FakeTransport implements CloudflareSFUSignalingTransport {
   uniqueRemoteMids = false;
   #nextRemoteMid = 0;
+  #localPublicationRevision = 0;
   readonly addInputs: {
     readonly connectionId: string;
     readonly sessionDescription?: CloudflareSFUSessionDescription;
@@ -3073,11 +3669,14 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   failNextRemotePull = false;
   readonly omittedRemoteTrackNames = new Set<string>();
   readonly failedRemoteTrackNames = new Map<string, string>();
+  readonly #withdrawnRemoteTrackKeys = new Set<string>();
+  readonly #withdrawnLocalPublications = new Set<string>();
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
+  readonly publicationListSnapshots: CloudflareSFUPublicationSnapshot[] = [];
   maxLocalMids: number | null = null;
   snapshot: CloudflareSFUPublicationSnapshot = { incarnation: 1, sequence: 0, publications: [] };
   readonly #blockedConnections = new Map<string, () => void>();
@@ -3100,9 +3699,11 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.failNextRemotePull = false;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
       }
-      const tracks = input.tracks.filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName)).map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
+      const tracks = input.tracks
+        .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`))
+        .map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
       const trackErrors = input.tracks.flatMap((track) => {
-        const code = this.failedRemoteTrackNames.get(track.trackName);
+        const code = this.failedRemoteTrackNames.get(track.trackName) ?? (this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`) ? "publication_unavailable" : undefined);
         return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
       });
       if (this.reverseRemoteTracks) tracks.reverse();
@@ -3129,7 +3730,11 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     for (const mid of localMids) this.#localMids.add(mid);
     const tracks = input.tracks.map((track) => ({ ...track, publicationId: versionedPublicationID(input.connectionId, track.mid ?? "", track.trackName) }));
     for (const track of tracks) {
-      if (track.source) this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
+      if (track.source) {
+        this.localPublications.set(track.publicationId, { participantId: "participant-1", source: track.source, publicationId: track.publicationId });
+        this.#withdrawnLocalPublications.delete(track.publicationId);
+        this.#localPublicationRevision++;
+      }
     }
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
@@ -3138,8 +3743,22 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
-    for (const track of input.tracks) this.localPublications.delete(track.publicationId);
+    if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
+      throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
+    }
+    for (const track of input.tracks) {
+      if (this.localPublications.delete(track.publicationId)) this.#localPublicationRevision++;
+    }
     return input.sessionDescription ? { sessionDescription: { type: "answer", sdp: "close-answer" } } : {};
+  }
+  withdrawPublication(publicationId: string): void {
+    const publication = this.localPublications.get(publicationId);
+    if (!publication) return;
+    const { connectionId, trackName } = parseCloudflareSFUPublicationID(publicationId);
+    this.localPublications.delete(publicationId);
+    this.#localPublicationRevision++;
+    this.#withdrawnLocalPublications.add(publicationId);
+    this.#withdrawnRemoteTrackKeys.add(`${connectionId}|${trackName}`);
   }
   readonly updateInputs: Parameters<NonNullable<CloudflareSFUSignalingTransport["updateTracks"]>>[0][] = [];
   failTrackUpdates = false;
@@ -3153,8 +3772,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
     this.listPublicationCalls++;
+    const next = this.publicationListSnapshots.shift();
     if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
-    return { ...this.snapshot, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
+    return next ?? { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
   }
   blockConnection(connectionId: string): void {
     this.#blockedConnections.set(connectionId, () => undefined);

@@ -774,6 +774,9 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
+      if (!this.#mediaEnded() && item.participantId === this.#participantId && previous?.publicationId && previous.publicationId !== item.publicationId) {
+        this.#options.mediaPlane?.localPublicationWithdrawn?.(previous.publicationId);
+      }
       if (!this.#mediaEnded() && item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
         this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
       }

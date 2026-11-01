@@ -1514,6 +1514,33 @@ describe("V1SyncClient", () => {
     expect(mediaPlane.changed).toBe(before + 2);
     client.stop();
   });
+  it("signals only an own publication withdrawal to the local media plane", async () => {
+    const { client, socket, mediaPlane } = await liveClient();
+    const withdrawn = vi.spyOn(mediaPlane, "localPublicationWithdrawn");
+    try {
+      const ownItem = { participant_id: ownerId, source: "microphone", enabled: true, publication_id: "P" } as const;
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 1, item: ownItem });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 1);
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 2, item: { ...ownItem, enabled: false, publication_id: null } });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 2);
+      expect(withdrawn).toHaveBeenCalledExactlyOnceWith("P");
+
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 3, item: ownItem });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 3);
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 4, item: ownItem });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 4);
+      expect(withdrawn).toHaveBeenCalledExactlyOnceWith("P");
+
+      const remoteItem = { ...ownItem, participant_id: peerId, publication_id: "remote-P" } as const;
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 5, item: remoteItem });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 5);
+      socket.receive({ type: "projection_event", stream: "media", projection_id: projectionId, sequence: 6, item: { ...remoteItem, enabled: false, publication_id: null } });
+      await snapshotWhen(client, (snapshot) => snapshot.media?.sequence === 6);
+      expect(withdrawn).toHaveBeenCalledExactlyOnceWith("P");
+    } finally {
+      client.stop();
+    }
+  });
   it.each(["open", "knock"] as const)("keeps remote media notifications when the self row is absent (%s admission)", async (admissionPolicy) => {
     const initial = { ...baseState(), admissionPolicy, participants: [] };
     const { client, socket, mediaPlane } = await liveClient({}, initial);
@@ -3131,6 +3158,7 @@ class TestMediaPlane implements V1ClientMediaPlane {
   readonly targets: V1MediaPlaneTarget[] = [];
   readonly results: V1MediaPlaneResult[] = [];
   readonly resumed: string[] = [];
+  readonly withdrawn: string[] = [];
   changed = 0;
   #localListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
   #remoteListener: ((publications: readonly V1MediaPublication[]) => void) | undefined;
@@ -3140,6 +3168,9 @@ class TestMediaPlane implements V1ClientMediaPlane {
   }
   remotePublicationResumed(publicationId: string): void {
     this.resumed.push(publicationId);
+  }
+  localPublicationWithdrawn(publicationId: string): void {
+    this.withdrawn.push(publicationId);
   }
   remotePublicationsChanged(): void {
     this.changed++;
