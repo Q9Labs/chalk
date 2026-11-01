@@ -251,6 +251,15 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	// The create took a network round trip. Another call may have negotiated on the old session, or the
+	// entry may be gone because it did. Later signaling must keep reaching that session, so the new one
+	// is dropped unused and Cloudflare expires it.
+	if r.entries[connectionID] != entry || entry.negotiated {
+		return "", false, nil
+	}
+	if entry.provider != failed {
+		return entry.provider, true, nil
+	}
 	delete(r.byProvider, failed)
 	entry.provider = fresh
 	entry.created = r.now()

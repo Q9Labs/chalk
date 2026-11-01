@@ -186,3 +186,55 @@ func TestClaimsDuringACreationShareItsSession(t *testing.T) {
 		t.Fatalf("the creating call swaps and the waiting call reuses it: %+v %+v", one, two)
 	}
 }
+
+func TestClaimFollowsASwappedConnectionThatNegotiatesWhileItWaits(t *testing.T) {
+	registry, endFirst := inFlightThenIdle(t)
+	if _, replaced, err := registry.replace(context.Background(), "conn", "conn", newSessionFrom("moved")); err != nil || !replaced {
+		t.Fatalf("setup: replace failed: replaced=%v err=%v", replaced, err)
+	}
+	clock := registry.now()
+	registry.now = func() time.Time { return clock.Add(sessionProbeLimit + time.Second) } // the moved session is idle too
+	second := claimAsync(context.Background(), registry, neverCreate(t))
+	expectPending(t, second)
+
+	registry.negotiated("conn") // a swapped entry stays and is marked negotiated
+	endFirst()
+
+	got := expectClaim(t, second)
+	if got.err != nil || got.session != "moved" || got.swapped {
+		t.Fatalf("want the negotiated session without a swap, got %+v", got)
+	}
+}
+
+func TestFailedCreationInAClaimReleasesTheGate(t *testing.T) {
+	registry, endFirst := inFlightThenIdle(t)
+	endFirst()
+	failed := expectClaim(t, claimAsync(context.Background(), registry, func(context.Context) (string, error) { return "", errors.New("rate limited") }))
+	failed.release()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	next := expectClaim(t, claimAsync(ctx, registry, newSessionFrom("fresh")))
+
+	if next.err != nil || next.session != "fresh" || !next.swapped {
+		t.Fatalf("a failed create must not block later calls, got %+v", next)
+	}
+}
+
+func TestReplaceDiscardsTheCreatedSessionWhenTheConnectionNegotiatesDuringTheCreate(t *testing.T) {
+	registry, endFirst := inFlightThenIdle(t)
+	endFirst()
+	fresh, replaced, err := registry.replace(context.Background(), "conn", "conn", func(context.Context) (string, error) {
+		registry.negotiated("conn")
+		return "fresh", nil
+	})
+	if err != nil || replaced || fresh != "" {
+		t.Fatalf("want no replacement, got fresh=%q replaced=%v err=%v", fresh, replaced, err)
+	}
+	if got := registry.providerID("conn"); got != "conn" {
+		t.Fatalf("the connection must keep the session it negotiated on, now %q", got)
+	}
+	if got := registry.clientID("fresh"); got != "fresh" {
+		t.Fatalf("the discarded session must not be aliased, got %q", got)
+	}
+}

@@ -41,6 +41,10 @@ type fakeIdleExpiryCloudflare struct {
 	holdSession string
 	holdArrived chan struct{}
 	holdRelease chan struct{}
+	// holdNew stops the next /sessions/new call the same way.
+	holdNew        bool
+	holdNewArrived chan struct{}
+	holdNewRelease chan struct{}
 }
 
 func newFakeIdleExpiryCloudflare(appID string) *fakeIdleExpiryCloudflare {
@@ -83,6 +87,24 @@ func (f *fakeIdleExpiryCloudflare) holdNextCallOn(session string) (arrived <-cha
 	return arrivedCh, func() { once.Do(func() { close(releaseCh) }) }
 }
 
+// holdNextNewSession stops the next session create until release runs.
+func (f *fakeIdleExpiryCloudflare) holdNextNewSession() (arrived <-chan struct{}, release func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	arrivedCh, releaseCh := make(chan struct{}), make(chan struct{})
+	f.holdNew, f.holdNewArrived, f.holdNewRelease = true, arrivedCh, releaseCh
+	var once sync.Once
+	return arrivedCh, func() { once.Do(func() { close(releaseCh) }) }
+}
+
+// markConnected makes a session's peer connected, as when the browser's peer connection comes up late:
+// the session then answers every call, however old it is.
+func (f *fakeIdleExpiryCloudflare) markConnected(session string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.used[session] = true
+}
+
 func (f *fakeIdleExpiryCloudflare) sessionCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -101,6 +123,14 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.Path, "/apps/"+f.appID)
 	if path == "/sessions/new" {
+		if f.holdNew {
+			arrived, release := f.holdNewArrived, f.holdNewRelease
+			f.holdNew = false
+			f.mu.Unlock()
+			close(arrived)
+			<-release
+			f.mu.Lock()
+		}
 		if f.failCreates > 0 {
 			f.failCreates--
 			w.WriteHeader(f.failCreatesStatus)
@@ -825,5 +855,88 @@ func TestFailedProactiveCreationFallsThroughToTheNormalPathAndItsRecovery(t *tes
 	}
 	if len(outcomes) != 1 || outcomes["recovered"] != 1 {
 		t.Fatalf("the 410 path must recover the call and nothing else is counted, got %v", outcomes)
+	}
+}
+
+// A 410 sends a call to replace the connection's session. While Cloudflare creates the new one, the
+// connection's peer can come up and another call can negotiate on the old session. The connection must
+// then keep the session it negotiated on, because later signaling has to reach it.
+func TestReplacementIsDiscardedWhenTheConnectionNegotiatesWhileItIsCreated(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.advance(20 * time.Second)
+	arrived, release := fake.holdNextNewSession()
+	t.Cleanup(release)
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		firstDone <- err
+	}()
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the replacement create never started")
+	}
+
+	fake.markConnected(listener) // the peer connects and another call negotiates on the old session
+	answer := mediaplane.SessionDescription{Type: "answer", SDP: "v=0"}
+	if err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{ConnectionID: listener, SessionDescription: answer}); err != nil {
+		t.Fatalf("renegotiate on the connected session: %v", err)
+	}
+	release()
+
+	if err := <-firstDone; !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("the call that found the session gone must report not found once the connection negotiated, got %v", err)
+	}
+	if got := adapter.sessions.providerID(listener); got != listener {
+		t.Fatalf("the connection must keep the session it negotiated on, now on %q", got)
+	}
+	before := requestsOnSession(fake, listener)
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("a later call on the negotiated connection: %v", err)
+	}
+	if got := requestsOnSession(fake, listener); got != before+1 {
+		t.Fatalf("a later call must reach the negotiated session: requests %d -> %d", before, got)
+	}
+}
+
+// While one call runs on a healthy connection, another call on it must not wait for it.
+func TestCallOnAHealthyConnectionDoesNotWaitForACallInFlight(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	arrived, release := fake.holdNextCallOn(listener)
+	t.Cleanup(release)
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		firstDone <- err
+	}()
+	<-arrived
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		secondDone <- err
+	}()
+
+	select {
+	case err := <-secondDone:
+		if err != nil {
+			t.Fatalf("second pull: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a call on a healthy connection waited for the call in flight")
+	}
+	release()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first pull: %v", err)
 	}
 }
