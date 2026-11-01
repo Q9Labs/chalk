@@ -22,7 +22,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   flex-shrink: 0;
 }
 .chalk-shell-split {
-  display: flex;
+  display: inline-flex;
+  width: max-content;
   height: 44px;
   border-radius: 999px;
   background: var(--chalk-raised);
@@ -49,6 +50,15 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-caret svg {
   width: 16px;
   height: 16px;
+}
+.chalk-shell-muted-hint.chalk-shell-background-hint {inset-inline-start:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);white-space:normal;}
+[data-chalk] .chalk-shell-split button:focus {
+  outline: 0;
+  box-shadow: none;
+}
+.chalk-shell-split:has(button:focus-visible) {
+  outline: 2px solid var(--chalk-focus);
+  outline-offset: 3px;
 }
 .chalk-shell-split button:hover,
 .chalk-shell-caret[aria-expanded="true"] {
@@ -428,6 +438,12 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   }
   .chalk-shell-split .chalk-shell-caret {
     display: none;
+  }
+  .chalk-shell-split[data-camera-menu] .chalk-shell-main {border-radius:999px 0 0 999px;}
+  .chalk-shell-split[data-camera-menu] .chalk-shell-caret {
+    display: grid;
+    width: 44px;
+    height: 52px;
   }
   .chalk-shell-dock .chalk-icon-button {
     width: 52px;

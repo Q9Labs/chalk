@@ -13,3 +13,5 @@ export type { WhiteboardViewProps } from "../components/whiteboard-view/Whiteboa
 export type { PreviewClientCommand } from "./preview-client";
 export type { PreviewMediaDevices } from "./preview-devices";
 export type { SpaceLayout, SpacePanel } from "./preview-fixtures";
+
+export { DevicePopover as PreviewDevicePopover } from "../components/device-popover/DevicePopover";

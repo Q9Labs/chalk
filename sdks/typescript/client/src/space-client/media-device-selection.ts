@@ -12,8 +12,8 @@ export class MediaDeviceSelection implements ConnectionMediaDevices {
     this.#devices = devices;
   }
 
-  getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream> {
-    return this.#devices.getUserMedia(applyDeviceSelection(constraints, this.#microphoneId, this.#cameraId));
+  getUserMedia(constraints: MediaStreamConstraints, signal?: AbortSignal): Promise<MediaStream> {
+    return this.#devices.getUserMedia(applyDeviceSelection(constraints, this.#microphoneId, this.#cameraId), signal);
   }
 
   getDisplayMedia(constraints: DisplayMediaStreamOptions): Promise<MediaStream> {

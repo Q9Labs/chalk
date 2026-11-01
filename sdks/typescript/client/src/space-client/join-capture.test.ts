@@ -125,7 +125,7 @@ describe("join with unavailable capture devices", () => {
     client.on("error", error);
     try {
       await client.join();
-      expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ audio: true, video: true });
+      expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ audio: true, video: true }, expect.any(AbortSignal));
       expect(error).not.toHaveBeenCalled();
     } finally {
       client.dispose();

@@ -1,6 +1,7 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
+import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -8,6 +9,9 @@ import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+
+const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
+const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
 
 export interface DevicePopoverProps {
   type: "mic" | "video";
@@ -68,7 +72,21 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   );
 }
 
-function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraPreview }: { readonly track?: MediaStreamTrack | null; readonly mirrored: boolean; readonly open: boolean; readonly selectedDeviceId?: string; readonly captureCameraPreview?: () => Promise<CameraPreviewHandle> }) {
+function CameraPreview({
+  track,
+  mirrored,
+  open,
+  selectedDeviceId,
+  captureCameraPreview,
+  onDeviceId,
+}: {
+  readonly onDeviceId: (deviceId: string | null) => void;
+  readonly track?: MediaStreamTrack | null;
+  readonly mirrored: boolean;
+  readonly open: boolean;
+  readonly selectedDeviceId?: string;
+  readonly captureCameraPreview?: () => Promise<CameraPreviewHandle>;
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const [unavailable, setUnavailable] = useState(false);
   const trackEnabled = track?.enabled;
@@ -79,6 +97,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
     let cancelled = false;
     let preview: CameraPreviewHandle | undefined;
     setUnavailable(false);
+    onDeviceId(null);
     if (captureCameraPreview) {
       void captureCameraPreview().then(
         (captured) => {
@@ -87,6 +106,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
             return;
           }
           preview = captured;
+          onDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
           element.srcObject = new MediaStream([captured.track]);
         },
         () => {
@@ -94,6 +114,7 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
         },
       );
     } else if (track?.enabled && track.readyState === "live") {
+      onDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
       element.srcObject = new MediaStream([track]);
     } else {
       setUnavailable(true);
@@ -103,12 +124,14 @@ function CameraPreview({ track, mirrored, open, selectedDeviceId, captureCameraP
       element.srcObject = null;
       preview?.release();
     };
-  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview]);
+  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId]);
   return (
-    <div className="chalk-shell-preview">
-      <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
-      <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
-    </div>
+    <>
+      <div className="chalk-shell-preview">
+        <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
+        <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
+      </div>
+    </>
   );
 }
 
@@ -152,10 +175,17 @@ export function DevicePopover({
   onCancelPending,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
+  const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
+  const backgroundFallback = useSyncExternalStore(
+    subscribeCameraBackground,
+    () => type === "video" && getCameraBackgroundFallback(deviceId) !== undefined,
+    () => false,
+  );
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive}>
+    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
@@ -184,7 +214,7 @@ export function DevicePopover({
           </button>
         }
       >
-        {!mic ? <CameraPreview track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
+        {!mic ? <CameraPreview onDeviceId={setPreviewDeviceId} track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} /> : null}
         <ChalkMenuLabel>{mic ? "Microphone" : "Camera"}</ChalkMenuLabel>
         {devices.length ? (
           devices.map((device) => (
@@ -216,6 +246,11 @@ export function DevicePopover({
         ) : (
           <>
             <Menu.Separator className="chalk-shell-menu-separator" />
+            {open && previewDeviceId ? (
+              <Suspense fallback={null}>
+                <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} menu={backgroundMenu} />
+              </Suspense>
+            ) : null}
             <DeviceSwitch label="Mirror my video" checked={mirrored} onChange={onMirrorChange} />
           </>
         )}
@@ -234,6 +269,11 @@ export function DevicePopover({
       {mic && speakingWhileMuted ? (
         <span className="chalk-shell-muted-hint" role="status">
           You’re muted
+        </span>
+      ) : null}
+      {backgroundFallback ? (
+        <span className="chalk-shell-muted-hint chalk-shell-background-hint" role="status">
+          Background off to keep video smooth.
         </span>
       ) : null}
     </div>

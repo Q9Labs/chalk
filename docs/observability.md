@@ -560,6 +560,12 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+A browser camera-effects processing failure records `media_state` with
+`source=camera`, `phase=failed`, `outcome=failed`, `code=media_capture_failed`,
+`media_error_kind=OperationError`, and `media_error_step=local_capture` before
+the generated track ends. These are existing allowlisted labels. No error text,
+device identifiers, image data, or camera frames enter the diagnostic buffer.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync
