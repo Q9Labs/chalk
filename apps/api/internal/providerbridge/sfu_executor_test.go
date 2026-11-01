@@ -175,6 +175,7 @@ func TestEndEpisodeReturnsWithinCloseBudget(t *testing.T) {
 	}
 	closer := newMultiExecutorTrackCloser(plans)
 	executor := NewSFUExecutor(registry, closer)
+	executor.closeBudget = testProviderCloseBudget
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -204,6 +205,7 @@ func TestEndEpisodeRetryAfterPartialCloseConverges(t *testing.T) {
 	}
 	closer := newMultiExecutorTrackCloser(plans)
 	executor := NewSFUExecutor(registry, closer)
+	executor.closeBudget = testProviderCloseBudget
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
