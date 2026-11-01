@@ -982,6 +982,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		event,
 		trace.WithAttributes(
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
+			attribute.String("chalk.provider.track_error_code", failure.details.trackErrorCode),
 			attribute.String("chalk.provider.message", failure.details.message),
 			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
 			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
@@ -1003,6 +1004,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		"provider_code", failure.providerCode,
 		"transport_cause", failure.transportCause,
 		"provider_raw_code", failure.details.rawCode,
+		"provider_track_error_code", failure.details.trackErrorCode,
 		"provider_message", failure.details.message,
 		"provider_message_fingerprint", failure.details.messageFingerprint,
 		"provider_response_bytes", failure.details.responseBytes,
