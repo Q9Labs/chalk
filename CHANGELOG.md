@@ -4,12 +4,14 @@
 
 - Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md).
 - Download clean UTF-8 transcript text from the dashboard and the public `GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text` route. Existing JSON transcript API routes remain available.
+- Add an account transcript language default and an inheritable Space override. Fixed languages pin Whisper; Auto keeps unpinned Whisper until a code-switching provider is qualified. Record the resolved mode on jobs and transcript documents.
 
 ## 5.4.1
 
 - Add Cloudflare call timing logs for production diagnostics.
 - Answer every SFU offer and retry transient failed pulls within seconds.
 - Advance the seven synchronized Chalk SDK packages to 5.4.1.
+
 
 ## 5.4.0
 

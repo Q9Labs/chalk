@@ -52,6 +52,7 @@ type spaceRoleResponse struct {
 }
 
 type spaceResponse struct {
+	TranscriptLanguage            *string                          `json:"transcript_language"`
 	ID                            string                           `json:"id"`
 	Name                          string                           `json:"name"`
 	TenantID                      string                           `json:"tenant_id"`
@@ -79,31 +80,33 @@ type spaceListResponse struct {
 }
 
 type createSpaceRequest struct {
-	Name                          string                   `json:"name"`
-	Slug                          string                   `json:"slug"`
-	MediaPlane                    utilities.OptionalString `json:"media_plane"`
-	Metadata                      utilities.OptionalJSON   `json:"metadata"`
-	RecurringPolicy               utilities.OptionalJSON   `json:"recurring_policy"`
-	AdmissionPolicy               utilities.OptionalJSON   `json:"admission_policy"`
-	DefaultEpisodeDurationSeconds int32                    `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32                    `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32                    `json:"linger_window_seconds"`
-	RecordingPolicy               utilities.OptionalString `json:"recording_policy"`
-	TranscriptionPolicy           utilities.OptionalString `json:"transcription_policy"`
+	TranscriptLanguage            artifactpolicy.OptionalTranscriptLanguage `json:"transcript_language"`
+	Name                          string                                    `json:"name"`
+	Slug                          string                                    `json:"slug"`
+	MediaPlane                    utilities.OptionalString                  `json:"media_plane"`
+	Metadata                      utilities.OptionalJSON                    `json:"metadata"`
+	RecurringPolicy               utilities.OptionalJSON                    `json:"recurring_policy"`
+	AdmissionPolicy               utilities.OptionalJSON                    `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds int32                                     `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                                     `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                                     `json:"linger_window_seconds"`
+	RecordingPolicy               utilities.OptionalString                  `json:"recording_policy"`
+	TranscriptionPolicy           utilities.OptionalString                  `json:"transcription_policy"`
 }
 
 type updateSpaceRequest struct {
-	Name                          utilities.OptionalString `json:"name"`
-	Slug                          utilities.OptionalString `json:"slug"`
-	MediaPlane                    utilities.OptionalString `json:"media_plane"`
-	Metadata                      utilities.OptionalJSON   `json:"metadata"`
-	RecurringPolicy               utilities.OptionalJSON   `json:"recurring_policy"`
-	AdmissionPolicy               utilities.OptionalJSON   `json:"admission_policy"`
-	DefaultEpisodeDurationSeconds spaces.OptionalInt32     `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds spaces.OptionalInt32     `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           spaces.OptionalInt32     `json:"linger_window_seconds"`
-	RecordingPolicy               utilities.OptionalString `json:"recording_policy"`
-	TranscriptionPolicy           utilities.OptionalString `json:"transcription_policy"`
+	TranscriptLanguage            artifactpolicy.OptionalTranscriptLanguage `json:"transcript_language"`
+	Name                          utilities.OptionalString                  `json:"name"`
+	Slug                          utilities.OptionalString                  `json:"slug"`
+	MediaPlane                    utilities.OptionalString                  `json:"media_plane"`
+	Metadata                      utilities.OptionalJSON                    `json:"metadata"`
+	RecurringPolicy               utilities.OptionalJSON                    `json:"recurring_policy"`
+	AdmissionPolicy               utilities.OptionalJSON                    `json:"admission_policy"`
+	DefaultEpisodeDurationSeconds spaces.OptionalInt32                      `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds spaces.OptionalInt32                      `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           spaces.OptionalInt32                      `json:"linger_window_seconds"`
+	RecordingPolicy               utilities.OptionalString                  `json:"recording_policy"`
+	TranscriptionPolicy           utilities.OptionalString                  `json:"transcription_policy"`
 }
 
 type createSpaceEndpointRequest struct {
@@ -459,6 +462,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		MediaPlane:                    space.MediaPlane,
 		RecordingPolicy:               space.RecordingPolicy,
 		TranscriptionPolicy:           space.TranscriptionPolicy,
+		TranscriptLanguage:            transcriptLanguageString(space.TranscriptLanguage),
 		Metadata:                      rawJSONValue(space.Metadata),
 		RecurringPolicy:               rawJSONValue(space.RecurringPolicy),
 		AdmissionPolicy:               rawJSONValue(space.AdmissionPolicy),
@@ -510,6 +514,7 @@ func (request createSpaceRequest) toCreateInput(tenantID utilities.ID, userID ut
 		RecordingPolicy:               recordingPolicyValue,
 		RecordingPolicySet:            recordingPolicySet,
 		TranscriptionPolicy:           transcriptionPolicyValue,
+		TranscriptLanguage:            request.TranscriptLanguage.Value,
 		TranscriptionPolicySet:        transcriptionPolicySet,
 		CreatedByUserID:               userID,
 		RequestKey:                    requestKey,
@@ -537,6 +542,7 @@ func (request updateSpaceRequest) toUpdateInput() (spaces.UpdateSpaceInput, erro
 		LingerWindowSeconds:           request.LingerWindowSeconds,
 		RecordingPolicy:               spaces.OptionalRecordingPolicy{Set: recordingPolicySet, Value: recordingPolicy},
 		TranscriptionPolicy:           spaces.OptionalTranscriptionPolicy{Set: transcriptionPolicySet, Value: transcriptionPolicy},
+		TranscriptLanguage:            request.TranscriptLanguage,
 	}, nil
 }
 
@@ -574,4 +580,12 @@ func createdByUserID(ctx context.Context) utilities.ID {
 		return utilities.ID{}
 	}
 	return principal.UserID
+}
+
+func transcriptLanguageString(mode *artifactpolicy.TranscriptLanguage) *string {
+	if mode == nil {
+		return nil
+	}
+	value := mode.String()
+	return &value
 }

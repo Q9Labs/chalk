@@ -94,6 +94,7 @@ type UpdateTenantInput struct {
 }
 
 type ArtifactPolicyUpdate struct {
+	TranscriptLanguage               artifactpolicy.OptionalTranscriptLanguage
 	TranscriptionCeiling             utilities.OptionalString
 	TranscriptionDefaultMode         utilities.OptionalString
 	ProviderPolicyVersion            utilities.OptionalString
@@ -289,6 +290,9 @@ func prepareUpdateTenantInput(input *UpdateTenantInput) error {
 }
 
 func prepareArtifactPolicyUpdate(input *ArtifactPolicyUpdate) error {
+	if input.TranscriptLanguage.Set && input.TranscriptLanguage.Value == nil {
+		return ErrInvalidArtifactPolicy
+	}
 	if input.TranscriptionCeiling.Set {
 		if input.TranscriptionCeiling.Value == nil {
 			return ErrInvalidArtifactPolicy

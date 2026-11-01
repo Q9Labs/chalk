@@ -1,3 +1,5 @@
+import type { TranscriptLanguageMode } from "@chalk/transcript-language";
+
 export type FetchLike = typeof fetch;
 
 export interface JourneyContext {
@@ -54,6 +56,7 @@ export interface ProviderTimingRepair {
 }
 
 export interface ProviderRequest {
+  transcriptLanguage?: TranscriptLanguageMode;
   audio: Uint8Array;
   contentType: string;
   chunkId: string;
@@ -129,6 +132,7 @@ export interface ManifestAssignment {
 }
 
 export interface TranscriptionAssignment {
+  transcriptLanguage?: TranscriptLanguageMode;
   jobId: string;
   tenantId: string;
   episodeId: string;
@@ -206,6 +210,7 @@ export interface NormalizedCue {
 }
 
 export interface NormalizedTranscriptDocument {
+  transcriptLanguage?: TranscriptLanguageMode;
   schemaVersion: "transcript.v1";
   jobId: string;
   episodeId: string;
@@ -240,6 +245,8 @@ export interface ProviderPolicy {
 }
 
 export interface ReleaseConfig {
+  // No adapter is qualified yet. Runtime validation also rejects injected values.
+  codeswitchProvider?: never;
   environment: string;
   releaseId: string;
   controlApiAudience: string;

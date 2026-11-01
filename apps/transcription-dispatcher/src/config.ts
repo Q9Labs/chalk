@@ -54,6 +54,7 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
 }
 
 export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
+  if (config.codeswitchProvider !== undefined) throw new ConfigError("code-switching provider is not release-qualified");
   if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
     throw new ConfigError("nightly requires its own control API URL and audience");
   }
@@ -80,6 +81,7 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
 }
 
 export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?: DispatcherSecrets): ReleaseConfig {
+  if (env.CODESWITCH_PROVIDER?.trim()) throw new ConfigError("CODESWITCH_PROVIDER is not release-qualified; leave it unset");
   const deepInfraEnabled = boolean(env, "DEEPINFRA_ENABLED");
   const cloudflareEnabled = boolean(env, "CLOUDFLARE_AI_ENABLED");
   if (!secrets) throw new ConfigError("provider secrets must be resolved from SSM");
