@@ -174,6 +174,9 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 			break
 		}
 	}
+	if err := awaitPublishersConnected(ctx, publications, request.Body.Tracks); err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		SessionDescription: request.Body.SessionDescription,
@@ -238,6 +241,27 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		}
 	}
 	return response, nil
+}
+
+// awaitPublishersConnected holds a pull until Cloudflare can serve it. A pull that lands before the
+// publisher's peer connection is up leaves the track unpullable for a minute or more.
+func awaitPublishersConnected(ctx context.Context, publications mediapublications.Registry, tracks []mediaplane.Track) error {
+	gate, ok := publications.(interface {
+		AwaitPullable(context.Context, []mediapublications.RemoteTrackIdentity) error
+	})
+	if !ok {
+		return nil
+	}
+	remote := make([]mediapublications.RemoteTrackIdentity, 0, len(tracks))
+	for _, track := range tracks {
+		if track.Location == "remote" {
+			remote = append(remote, mediapublications.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)})
+		}
+	}
+	if len(remote) == 0 {
+		return nil
+	}
+	return gate.AwaitPullable(ctx, remote)
 }
 
 func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse, providerErr error) {
