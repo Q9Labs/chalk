@@ -81,43 +81,12 @@ const styles = `.call-card-tabs {
   color: var(--chalk-muted-text);
 }
 .call-host-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 2px 8px;
-}
-.call-host-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px 0 10px;
-  border-radius: 999px;
-  background: var(--chalk-raised);
-  font-size: 13px;
-  font-weight: 600;
-  transition: transform 0.15s ease-out;
-}
-.call-host-button:hover,
-.call-host-button[aria-expanded="true"] {
-  background: var(--chalk-hover);
-}
-.call-host-button:active {
-  transform: scale(0.97);
-}
-.call-host-button:disabled {
-  opacity: 0.45;
-  cursor: default;
-  transform: none;
-}
-.call-host-button svg {
-  width: 16px;
-  height: 16px;
-  color: var(--chalk-muted-text);
-}
-.call-host-button .chev {
-  width: 14px;
-  height: 14px;
+  position: sticky;
+  bottom: -8px;
+  margin: auto -8px -8px;
+  padding: 8px;
+  border-top: 1px solid var(--chalk-line);
+  background: var(--chalk-surface);
 }
 .call-mute-confirm {
   width: 280px;
@@ -532,6 +501,8 @@ const styles = `.call-card-tabs {
   background: var(--chalk-hover);
 }
 .call-people {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -539,6 +510,9 @@ const styles = `.call-card-tabs {
   font-size: 14px;
   scrollbar-width: thin;
   scrollbar-color: var(--chalk-hover) transparent;
+}
+.call-people > * {
+  flex-shrink: 0;
 }
 .call-people-search input {
   min-width: 0;
@@ -791,6 +765,9 @@ const styles = `.call-card-tabs {
 .call-photo-previous { left: 16px; }
 .call-photo-next { right: 16px; }
 @media (max-width: 767px) {
+ /* The phone sheet sits 32px below the screen edge, so the pinned footer clears it. */
+ .call-people { padding-bottom: 40px; }
+ .call-host-controls { bottom: 24px; margin-bottom: -40px; }
  .call-photo-viewer-bar { padding: 52px 8px 8px 16px; }
  .call-photo-viewer-control { width: 44px; height: 44px; }
  .call-photo-viewer-stage img { inset: 0 0 108px; max-width: 100%; max-height: calc(100% - 108px); border-radius: 0; }
@@ -800,7 +777,6 @@ const styles = `.call-card-tabs {
 }
 @media (pointer: coarse) {
   .call-card-close,
-  .call-host-button,
   .call-person-row button,
   .call-staged-file button,
   .call-reaction,
@@ -822,7 +798,6 @@ const styles = `.call-card-tabs {
 }
 @media (prefers-reduced-motion: reduce) {
   .call-photo-viewer[open], .call-photo-viewer[open][data-closing] { transition: none; }
-  .call-host-button,
   .call-reaction,
   .call-reaction-bar,
   .call-reaction-bar button,
