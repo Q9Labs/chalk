@@ -130,6 +130,8 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
+    onDiagnostic: (event) => console.warn("chalk.media.local_offer_pending", event),
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
