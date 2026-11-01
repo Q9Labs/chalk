@@ -53,6 +53,7 @@ const conditionOf = (name) => {
 const want = (process.env.SR_BUILDS || "5.2.6,pr716").split(",");
 const wantConditions = (process.env.SR_CONDITIONS || "open,home,mobile").split(",");
 const runsPerCell = Number(process.env.SR_RUNS || 2);
+const runStart = Number(process.env.SR_RUN_START || 0);
 const participantsCount = Number(process.env.SR_N || 8);
 const speakerCount = Number(process.env.SR_SPEAKERS || 4);
 const runSeconds = Number(process.env.SR_SECONDS || 105);
@@ -339,7 +340,7 @@ async function runBuild(name) {
 
   try {
     // Conditions rotate inside each run index, so slow drift at the SFU spreads over all conditions.
-    for (let runIndex = 0; runIndex < runsPerCell; runIndex++)
+    for (let runIndex = runStart; runIndex < runStart + runsPerCell; runIndex++)
       for (const conditionName of wantConditions) {
         const condition = conditionOf(conditionName);
         const run = {
