@@ -1694,6 +1694,14 @@
   border-radius: 12px;
 }
 
+.site .dash .knock .ract {
+  gap: 8px;
+}
+
+.site .dash .rt > span.err {
+  color: var(--chalk-danger-text);
+}
+
 .site .dash .orow > .mono {
   flex: 1;
   min-width: 0;
@@ -2026,5 +2034,14 @@
   .site .dash .orow {
     min-height: 56px;
     padding-left: 10px;
+  }
+
+  .site .dash .knock {
+    flex-wrap: wrap;
+  }
+
+  .site .dash .knock .ract {
+    flex-basis: 100%;
+    padding-left: 50px;
   }
 }
