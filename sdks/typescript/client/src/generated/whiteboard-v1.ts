@@ -98,6 +98,15 @@ export const WhiteboardV1ProtocolMetadata = {
     hello: {
       exactFields: ["type", "protocol", "token", "cursor"],
       extendedExactFields: ["type", "protocol", "token", "cursor", "extensions"],
+      optionalFields: {
+        baggage: {
+          kind: "string",
+          minBytes: 47,
+          maxBytes: 47,
+          format: "w3c-baggage-session-id",
+          pattern: "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        },
+      },
     },
     submitUpdate: {
       exactFields: ["type", "operation_id", "scene_id", "sync_all", "elements"],
@@ -241,8 +250,8 @@ export type WhiteboardV1ViewOrigin = { readonly origin_participant_id: string; r
 export type WhiteboardV1ViewInput = { readonly input_id: string; readonly move: boolean } | { readonly input_id?: never; readonly move?: never };
 export type WhiteboardV1ViewOrder = { readonly owner_id: string; readonly owner_sequence: number } | { readonly owner_id?: never; readonly owner_sequence?: never };
 export type WhiteboardV1ClientFrame =
-  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null }
-  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: WhiteboardV1Extensions }
+  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly baggage?: string }
+  | { readonly type: "hello"; readonly protocol: "whiteboard-v1"; readonly token: string; readonly cursor: WhiteboardV1Cursor | null; readonly extensions: WhiteboardV1Extensions; readonly baggage?: string }
   | { readonly type: "submit_update"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "submit_update_part"; readonly operation_id: string; readonly scene_id: string; readonly sync_all: boolean; readonly part: number; readonly part_count: number; readonly element_count: number; readonly elements: readonly WhiteboardV1Element[] }
   | { readonly type: "request_snapshot"; readonly request_id: string }
@@ -304,6 +313,7 @@ export type WhiteboardV1ServerFrame =
 const textEncoder = new TextEncoder();
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const unsignedDecimalPattern = /^(?:0|[1-9][0-9]*)$/u;
+const sessionBaggagePattern = new RegExp("^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "u");
 
 export function encodedWhiteboardV1FrameBytes(frame: unknown): number {
   return textEncoder.encode(JSON.stringify(frame)).byteLength;
@@ -335,6 +345,10 @@ function isUuid(value: unknown): value is string {
 
 function isUnsignedDecimal(value: unknown): value is string {
   return typeof value === "string" && unsignedDecimalPattern.test(value);
+}
+
+function isSessionBaggage(value: unknown): value is string {
+  return typeof value === "string" && utf8Bytes(value) === 47 && sessionBaggagePattern.test(value);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -404,14 +418,7 @@ function isClientFrame(value: unknown): value is WhiteboardV1ClientFrame {
   if (!isRecord(value)) return false;
   switch (value.type) {
     case "hello":
-      return (
-        (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.exactFields) || (hasExactRecordKeys(value, WhiteboardV1ProtocolMetadata.frames.hello.extendedExactFields) && isExtensions(value.extensions))) &&
-        value.protocol === "whiteboard-v1" &&
-        typeof value.token === "string" &&
-        utf8Bytes(value.token) > 0 &&
-        utf8Bytes(value.token) <= WhiteboardV1ProtocolLimits.tokenBytes &&
-        (value.cursor === null || isCursor(value.cursor))
-      );
+      return isHelloFrame(value);
     case "submit_update":
       return (
         hasExactKeys(value, WhiteboardV1ProtocolMetadata.frames.submitUpdate.exactFields) &&
@@ -520,6 +527,22 @@ function isExtensions(value: unknown): value is WhiteboardV1Extensions {
     (base.length === 1 || base.length === 2) &&
     (isExtension(base[0], presentation) || (hasExactKeys(base[0], presentation.presenterExactFields) && base[0].name === presentation.name && base[0].presenter === true)) &&
     (base.length === 1 || isExtension(base[1], view) || (hasExactKeys(base[1], view.ownerExactFields) && base[1].name === view.name && base[1].origins === true && base[1].owner === true) || (hasExactKeys(base[1], view.extendedExactFields) && base[1].name === view.name && base[1].origins === true))
+  );
+}
+
+function isHelloFrame(value: Record<string, unknown>): boolean {
+  const baggage = Object.hasOwn(value, "baggage");
+  const baggageField = baggage ? ["baggage"] : [];
+  const exactFields = [...WhiteboardV1ProtocolMetadata.frames.hello.exactFields, ...baggageField];
+  const extendedFields = [...WhiteboardV1ProtocolMetadata.frames.hello.extendedExactFields, ...baggageField];
+  return (
+    (hasExactRecordKeys(value, exactFields) || (hasExactRecordKeys(value, extendedFields) && isExtensions(value.extensions))) &&
+    (!baggage || isSessionBaggage(value.baggage)) &&
+    value.protocol === "whiteboard-v1" &&
+    typeof value.token === "string" &&
+    utf8Bytes(value.token) > 0 &&
+    utf8Bytes(value.token) <= WhiteboardV1ProtocolLimits.tokenBytes &&
+    (value.cursor === null || isCursor(value.cursor))
   );
 }
 
