@@ -56,7 +56,13 @@ type publicationLivenessChecks struct {
 	now     func() time.Time
 	claimed map[publicationCandidateKey]time.Time
 	present map[publicationCandidateKey]stillFailingEvidence
-	served  map[publicationCandidateKey]map[utilities.ID]struct{}
+	served  map[servedKey]map[utilities.ID]struct{}
+}
+
+type servedKey struct {
+	tenantID  string
+	episodeID string
+	identity  RemoteTrackIdentity
 }
 
 type stillFailingEvidence struct {
@@ -69,11 +75,11 @@ func newPublicationLivenessChecks(now func() time.Time) *publicationLivenessChec
 		now:     now,
 		claimed: make(map[publicationCandidateKey]time.Time),
 		present: make(map[publicationCandidateKey]stillFailingEvidence),
-		served:  make(map[publicationCandidateKey]map[utilities.ID]struct{}),
+		served:  make(map[servedKey]map[utilities.ID]struct{}),
 	}
 }
 
-func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey, listenerID utilities.ID) bool {
+func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKey, identity RemoteTrackIdentity, listenerID utilities.ID) bool {
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
 	now := checks.now()
@@ -110,7 +116,8 @@ func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKe
 	if len(evidence.listeners) == 0 {
 		return false
 	}
-	for servedBy := range checks.served[key] {
+	servedKey := servedKey{tenantID: key.tenantID, episodeID: key.episodeID, identity: identity}
+	for servedBy := range checks.served[servedKey] {
 		if _, reported := evidence.listeners[servedBy]; !reported {
 			return false
 		}
@@ -118,7 +125,7 @@ func (checks *publicationLivenessChecks) stillFailing(key publicationCandidateKe
 	return true
 }
 
-func (checks *publicationLivenessChecks) recordServed(key publicationCandidateKey, listenerID utilities.ID) {
+func (checks *publicationLivenessChecks) recordServed(key servedKey, listenerID utilities.ID) {
 	if checks == nil || listenerID.IsZero() {
 		return
 	}
@@ -140,14 +147,18 @@ func (checks *publicationLivenessChecks) recordServed(key publicationCandidateKe
 	}
 }
 
-func (checks *publicationLivenessChecks) forget(key publicationCandidateKey) {
+func (checks *publicationLivenessChecks) forget(candidate publicationCandidate) {
 	if checks == nil {
 		return
 	}
 	checks.mu.Lock()
 	defer checks.mu.Unlock()
-	delete(checks.present, key)
-	delete(checks.served, key)
+	delete(checks.present, candidate.key)
+	delete(checks.served, servedKey{
+		tenantID:  candidate.key.tenantID,
+		episodeID: candidate.key.episodeID,
+		identity:  candidate.identity,
+	})
 }
 
 func (checks *publicationLivenessChecks) claim(key publicationCandidateKey) bool {
@@ -245,21 +256,21 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					}
 				}
 			}
-			if present && !s.liveness.stillFailing(candidate.key, input.ListenerParticipantID) {
+			if present && !s.liveness.stillFailing(candidate.key, candidate.identity, input.ListenerParticipantID) {
 				result.Present++
 				continue
 			}
 			closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
 			if errors.Is(closeErr, ErrInvalidPublication) {
 				s.absenceEvidence.forget(candidate.key)
-				s.liveness.forget(candidate.key)
+				s.liveness.forget(candidate)
 				continue
 			}
 			if closeErr != nil {
 				return result, closeErr
 			}
 			s.absenceEvidence.forget(candidate.key)
-			s.liveness.forget(candidate.key)
+			s.liveness.forget(candidate)
 			result.Closed++
 		}
 	}

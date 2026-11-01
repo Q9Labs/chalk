@@ -112,29 +112,30 @@ func (s Service) ObserveRemoteTracks(ctx context.Context, input RemoteTrackObser
 		return err
 	}
 	s.absenceEvidence.resetPresent(input.TenantID, input.EpisodeID, requested, missing)
+	for identity := range requested {
+		if _, isMissing := missing[identity]; isMissing {
+			continue
+		}
+		s.liveness.recordServed(servedKey{
+			tenantID:  input.TenantID.String(),
+			episodeID: input.EpisodeID.String(),
+			identity:  identity,
+		}, input.ListenerParticipantID)
+	}
+	if len(missing) == 0 {
+		return nil
+	}
 	latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
 	if err != nil {
 		return err
 	}
 	candidates := remotePublicationCandidates(input.TenantID, input.EpisodeID, latest)
-	for _, candidate := range candidates {
-		if _, wasRequested := requested[candidate.identity]; !wasRequested {
-			continue
-		}
-		if _, isMissing := missing[candidate.identity]; isMissing {
-			continue
-		}
-		s.liveness.recordServed(candidate.key, input.ListenerParticipantID)
-	}
-	if len(missing) == 0 {
-		return nil
-	}
 	due := s.absenceEvidence.observe(input.TenantID, input.EpisodeID, candidates, requested, missing)
 	for _, candidate := range due {
 		closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
 		if closeErr == nil || errors.Is(closeErr, ErrInvalidPublication) {
 			s.absenceEvidence.forget(candidate.key)
-			s.liveness.forget(candidate.key)
+			s.liveness.forget(candidate)
 			if closeErr == nil {
 				confirmed++
 				outcome = "confirmed"

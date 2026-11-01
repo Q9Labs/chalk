@@ -261,8 +261,11 @@ func TestPublicationLivenessEvidenceClearsWhenPublicationCloses(t *testing.T) {
 		if len(candidates) != 1 {
 			t.Fatalf("publication candidates=%d, want 1", len(candidates))
 		}
-		service.liveness.recordServed(candidates[0].key, listenerID)
-		service.liveness.stillFailing(candidates[0].key, listenerID)
+		candidate := candidates[0]
+		service.liveness.recordServed(servedKey{
+			tenantID: tenantID.String(), episodeID: episodeID.String(), identity: candidate.identity,
+		}, listenerID)
+		service.liveness.stillFailing(candidate.key, candidate.identity, listenerID)
 
 		input := RemoteTrackObservationInput{
 			TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
@@ -284,8 +287,9 @@ func TestPublicationLivenessEvidenceMapsAreBounded(t *testing.T) {
 	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
 	for index := 0; index <= publicationLivenessEvidenceMaxKeys; index++ {
 		key := publicationCandidateKey{publicationID: fmt.Sprintf("publication-%d", index)}
-		checks.recordServed(key, listenerID)
-		checks.stillFailing(key, listenerID)
+		identity := RemoteTrackIdentity{ConnectionID: fmt.Sprintf("connection-%d", index), TrackName: "track"}
+		checks.recordServed(servedKey{tenantID: "tenant", episodeID: "episode", identity: identity}, listenerID)
+		checks.stillFailing(key, identity, listenerID)
 	}
 	if len(checks.served) > publicationLivenessEvidenceMaxKeys || len(checks.present) > publicationLivenessEvidenceMaxKeys {
 		t.Fatalf("liveness evidence sizes served=%d present=%d, want at most %d each",
