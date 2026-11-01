@@ -6,7 +6,7 @@
 // A browser entry is matched to its API http.request by status and response time (within 150 ms); the API trace_id is shared by a participant's whole session, so Cloudflare events are matched by trace_id and the request window.
 import { readFileSync } from "node:fs";
 
-const callTimeoutMs = 5000;
+const callTimeoutMs = 6000; // the API's Cloudflare call timeout: failed calls log add_tracks with upstream_latency_ms about 6000
 const sessionAgeLimitMs = 15_000;
 const quantile = (values, q) => (values.length === 0 ? null : [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * q))]);
 const fmt = (value) => (value === null ? "-" : (value / 1000).toFixed(1));
@@ -28,6 +28,7 @@ for (const dir of process.argv.slice(2)) {
   const result = JSON.parse(readFileSync(`${dir}/silence-repro.json`, "utf8"));
   const gate = [];
   const timeouts = new Map();
+  const splits = new Map();
   const usage = { prior: new Map(), toFinal: [], cases: 0 };
   const noPost = { taps: 0, cases: 0, inFlight: [], rows: [], mic: new Map() };
   let pulls = 0;
@@ -54,10 +55,36 @@ for (const dir of process.argv.slice(2)) {
       if (!request) continue;
       matched++;
       const start = request.ms - request.duration_ms;
-      const inside = (cloudflare.get(request.trace_id) ?? []).filter((event) => event.ms >= start - 5 && event.ms <= request.ms + 5);
+      // The trace is shared by a participant's whole session, so drop the publish calls that overlap this pull.
+      const inside = (cloudflare.get(request.trace_id) ?? []).filter((event) => event.ms >= start - 5 && event.ms <= request.ms + 5 && !(event.event === "cloudflare_sfu.add_tracks" && event.sdp_type === "offer") && !(event.request_local_track_count > 0));
       const swaps = (replacements.get(request.trace_id) ?? []).filter((event) => event.ms >= start - 5 && event.ms <= request.ms + 5);
-      const callStarts = inside.flatMap((event) => (event.event === "cloudflare_sfu.add_tracks" && event.upstream_latency_ms !== undefined ? [event.ms - event.upstream_latency_ms] : event.failure_stage === "transport" && event.transport_cause === "timeout" ? [event.ms - callTimeoutMs] : []));
+      const callStarts = inside.flatMap((event) => (event.event === "cloudflare_sfu.add_tracks" && event.upstream_latency_ms !== undefined ? [event.ms - event.upstream_latency_ms] : []));
       if (callStarts.length > 0) gate.push(Math.min(...callStarts) - start);
+      if (callStarts.length > 0) {
+        const callStartRel = Math.min(...callStarts) - run.originMs;
+        const startRel = start - run.originMs;
+        const publications = (run.network ?? []).filter((other) => other.participant !== entry.participant && other.method === "POST" && String(other.locations).includes("local") && other.status < 300 && other.at <= callStartRel).map((other) => other.at);
+        const age = publications.length === 0 ? null : (callStartRel - Math.max(...publications)) / 1000;
+        const ageBucket = age === null ? "no publication yet" : age < 1 ? "<1 s" : age < 3 ? "1-3 s" : age < 6 ? "3-6 s" : age < 15 ? "6-15 s" : ">15 s";
+        const wait = Math.min(...callStarts) - start;
+        const gateRelease = wait < 100 ? "not gated" : wait < 2000 ? "released early" : "3 s fallback";
+        const earlierPulls = (run.network ?? []).filter(
+          (other) => other.participant === entry.participant && other.connectionNumber === entry.connectionNumber && other.method === "POST" && other.path.endsWith("/media/sfu/tracks") && String(other.locations).includes("remote") && other.status < 300 && other.at < startRel,
+        );
+        const lastPull = earlierPulls.length === 0 ? null : Math.max(...earlierPulls.map((other) => other.at));
+        const renegotiated = lastPull !== null && (run.network ?? []).some((other) => other.participant === entry.participant && other.path.endsWith("/media/sfu/renegotiate") && other.at > lastPull && other.at < startRel);
+        const renegotiation = lastPull === null ? "no earlier answered pull" : renegotiated ? "renegotiation done" : "renegotiation outstanding";
+        const timedOut = inside.some((event) => event.event === "cloudflare_sfu.request_failed" && event.transport_cause === "timeout");
+        for (const [dimension, value] of [
+          ["newest publication age", ageBucket],
+          ["gate release", gateRelease],
+          ["earlier pull's renegotiation", renegotiation],
+        ]) {
+          const cell = splits.get(`${dimension} | ${value}`) ?? splits.set(`${dimension} | ${value}`, { pulls: 0, timeouts: 0 }).get(`${dimension} | ${value}`);
+          cell.pulls++;
+          if (timedOut) cell.timeouts++;
+        }
+      }
       const timeout = inside.filter((event) => event.event === "cloudflare_sfu.request_failed" && event.transport_cause === "timeout").at(-1);
       if (!timeout) continue;
       const firstEntryOfConnection = Math.min(...(run.network ?? []).filter((other) => other.participant === entry.participant && other.connectionNumber === entry.connectionNumber).map((other) => other.at));
@@ -105,6 +132,8 @@ for (const dir of process.argv.slice(2)) {
   console.log(`   (b) gate wait to first Cloudflare call, s: n ${gate.length} p50 ${fmt(quantile(gate, 0.5))} p95 ${fmt(quantile(gate, 0.95))} max ${fmt(Math.max(...gate, 0))}; over 1 s: ${gate.filter((value) => value > 1000).length}`);
   console.log(`   (c) pull transport timeouts by class:`);
   for (const [key, count] of [...timeouts].sort((a, b) => b[1] - a[1])) console.log(`       ${count}\t${key}`);
+  console.log(`   (c) pulls that reached Cloudflare and how many of them hit a Cloudflare transport timeout, by dimension (publication age is inferred: the newest publication by another participant before the first Cloudflare call):`);
+  for (const [key, cell] of [...splits].sort()) console.log(`       ${key}: pulls ${cell.pulls}, timeouts ${cell.timeouts} (${((100 * cell.timeouts) / cell.pulls).toFixed(0)}%)`);
   console.log(`   (c) ~8 s timeouts: ${usage.cases}; request start to final Cloudflare call start, s: p50 ${fmt(quantile(usage.toFinal, 0.5))} p95 ${fmt(quantile(usage.toFinal, 0.95))}; what ran before the final call:`);
   for (const [key, count] of [...usage.prior].sort((a, b) => b[1] - a[1])) console.log(`       ${count}\t${key}`);
   console.log(

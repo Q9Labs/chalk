@@ -507,7 +507,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
             trackErrorDetail: body.tracks?.filter((track) => track.errorCode || track.errorDescription).map((track) => ({ code: track.errorCode ?? null, description: String(track.errorDescription ?? "").slice(0, 200) })),
           };
           run.network.push(entry);
-          if (entry.targets?.length) appendFileSync(process.env.SR_TARGETS_FILE ?? "/tmp/sr-targets.jsonl", `${JSON.stringify({ at: Date.now(), participant: index, targets: entry.targets })}\n`);
+          if (entry.targets?.length) appendFileSync(process.env.SR_TARGETS_FILE ?? "/tmp/sr-targets.jsonl", `${JSON.stringify({ at: Date.now(), participant: index, status: entry.status, trackErrors: entry.trackErrors?.length ?? 0, targets: entry.targets })}\n`);
           // First local publish by this participant's first SFU session: schedule the session kill.
           if (run.kill && entry.method === "POST" && entry.locations === "local" && entry.status < 300 && connectionId && !killed.has(index)) {
             killed.add(index);
