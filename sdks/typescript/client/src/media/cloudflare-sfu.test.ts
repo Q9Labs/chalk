@@ -8,9 +8,130 @@ import { V1SyncError } from "../sync/v1-error";
 import { V1LiveTargetCoordinator } from "../sync/v1-live-target-coordinator";
 import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
+import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+
+it("stops receive health sampling when stopped", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|microphone");
+    h.transport.snapshot = { ...h.transport.snapshot, publications: h.transport.snapshot.publications.map((p) => ({ ...p, source: "microphone" })) };
+    await h.client.refreshRemotePublications();
+    const stats = vi.spyOn(h.peers[0]!, "getStats");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(stats).toHaveBeenCalled();
+    h.client.stop();
+    const before = stats.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(stats).toHaveBeenCalledTimes(before);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it("reports a remote track error as a stuck pull failure", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = publicationSnapshot(1, 1, "remote-connection|microphone");
+    h.transport.snapshot = { ...h.transport.snapshot, publications: h.transport.snapshot.publications.map((p) => ({ ...p, source: "microphone" })) };
+    h.transport.failedRemoteTrackNames.set("microphone", "not_available");
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "pull_failed", media_error_kind: "CloudflareSFUError", media_error_step: "sfu_tracks" }));
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it.each(["microphone", "screen_audio"] as const)("suppresses disabled %s projections without a pulled track and restarts their clock", async (source) => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source, publicationId: `remote-connection|${source}` };
+    const projection = { ...publication, source: source === "screen_audio" ? ("screen" as const) : source, publicationId: null, enabled: false };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    h.transport.failedRemoteTrackNames.set(source, "not_available");
+    h.client.remotePublicationsChanged([projection]);
+    await h.client.refreshRemotePublications();
+    expect(h.client.getSnapshot().remoteTracks).toEqual([]);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(events).toEqual([{ event: "audio_receive_summary", receive_counts: { projection_off: 1 } }]);
+    h.client.remotePublicationsChanged([{ ...projection, enabled: true }]);
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "pull_failed", duration_ms: 15000 }));
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it("starts receive health timing and pull state afresh after peer replacement", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const h = createHarness({ onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone" }] };
+    h.transport.failedRemoteTrackNames.set("microphone", "not_available");
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(10000);
+    h.transport.failedRemoteTrackNames.clear();
+    await h.client.restart(bootstrap("connection-2"));
+    await h.client.refreshRemotePublications();
+    expect(h.peers).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
+    await vi.advanceTimersByTimeAsync(5000);
+    const stuck = events.filter((event) => event.event === "audio_receive_stuck");
+    expect(stuck).toEqual([expect.objectContaining({ receive_state: "track_received", duration_ms: 15000 })]);
+    expect(stuck[0]?.media_error_kind).toBeUndefined();
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
+it("retains receive health after automatic pull recovery with an unchanged cursor", async () => {
+  vi.useFakeTimers();
+  const events: ConnectionReportTransportEvent[] = [];
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const h = createHarness({ replaceMediaConnection, onReceiveHealth: (event) => events.push(event) });
+  try {
+    await h.client.start(fakeStream());
+    const addTracks = h.transport.addTracks.bind(h.transport);
+    vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+      if (input.connectionId === "connection-1") throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+      return addTracks(input);
+    });
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone" }] };
+    await h.client.refreshRemotePublications();
+    expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    expect(h.client.getSnapshot().cursor).toMatchObject({ incarnation: 1, sequence: 1 });
+    const pulls = remotePullCount(h);
+    await h.client.refreshRemotePublications();
+    expect(remotePullCount(h)).toBe(pulls);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "track_received", duration_ms: 15000 }));
+    expect(events).toContainEqual({ event: "audio_receive_summary", receive_counts: { track_received: 1 } });
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
@@ -2525,7 +2646,7 @@ describe("viewer layer switching", () => {
       h.peers[0]!.availableOutgoingBitrate = 300_000;
       await vi.advanceTimersByTimeAsync(9000);
       expect(update).toHaveBeenCalledTimes(1);
-      expect(stats.mock.calls.length - samples).toBe(9);
+      expect(stats.mock.calls.length - samples).toBe(11);
       expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
       expect(
         h.peers[0]!.getSenders()
@@ -3007,6 +3128,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -3024,6 +3146,7 @@ function createHarness(
     pollIntervalMs: options.pollIntervalMs ?? 60000,
     onError: options.onError,
     onScreenEnded: options.onScreenEnded,
+    onReceiveHealth: options.onReceiveHealth,
     peerConnectionFactory,
   });
   return { client, peers, transport, peerConnectionFactory };
