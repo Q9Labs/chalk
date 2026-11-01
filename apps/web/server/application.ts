@@ -10,9 +10,9 @@ import { homeMutation, homePage, homeStatus } from "./home";
 import { ownerAccess } from "./owner-access";
 import { viewerSeat } from "./owner-seats";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
-import { pastMutation, pastSessionPage } from "./past-session";
+import { pastMutation, pastSessionPage, pastTranscriptText } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
-import { callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
+import { transcriptTextQuery, callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
@@ -118,6 +118,8 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
           const input = callQuery.parse(query(request));
           return json(await callPage(client, input.spaceId, input.cursor));
         }
+        case "/dashboard-api/transcript-text":
+          return pastTranscriptText(client, env, transcriptTextQuery.parse(query(request)));
         case "/dashboard-api/past-session": {
           const input = pastQuery.parse(query(request));
           return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));

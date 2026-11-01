@@ -64,7 +64,6 @@ type Results = {
   "export-recording": { recording: RecordingDTO };
   transcripts: { transcripts: TranscriptDTO[] };
   "transcript-document": { cues: CueDTO[] };
-  "transcript-url": ArtifactURLDTO;
   "delete-transcript": Ok;
   "allowed-websites": AllowedWebsitesDTO;
   "set-allowed-websites": AllowedWebsitesDTO;

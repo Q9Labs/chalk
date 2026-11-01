@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Download clean UTF-8 transcript text from the dashboard and the public `GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text` route. Existing JSON transcript API routes remain available.
+
 ## 5.4.0
 
 - Share Chalk board controls, notes, surfaces and Follow across web and mobile, including boards started on web and opened in a native tile.

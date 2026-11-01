@@ -316,14 +316,11 @@ function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids
       toast(errorMessage(error), { icon: "alert" });
     }
   }
-  async function downloadTranscript(transcriptId: string) {
-    try {
-      window.location.assign((await act("past-session", { action: "transcript-url", ...ids, transcriptId })).url);
-      toast("Downloading the transcript", { icon: "dl" });
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    }
+  function downloadTranscript(transcriptId: string) {
+    const query = new URLSearchParams({ ...ids, transcriptId });
+    window.location.assign(`/dashboard-api/transcript-text?${query}`);
   }
+
   return (
     <Menu
       label="Download"
@@ -353,7 +350,7 @@ function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids
               icon="file"
               onSelect={() => {
                 close();
-                void downloadTranscript(transcript.id);
+                downloadTranscript(transcript.id);
               }}
             >
               Transcript (text)

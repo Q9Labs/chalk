@@ -450,7 +450,7 @@ function successResponseSchema(responses = {}) {
     return undefined;
   }
 
-  return responses[status]?.content?.["application/json"]?.schema;
+  return responses[status]?.content?.["application/json"]?.schema ?? responses[status]?.content?.["text/plain"]?.schema;
 }
 
 function orderedSchemas(schemas) {

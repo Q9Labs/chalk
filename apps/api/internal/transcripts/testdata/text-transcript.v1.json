@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "transcript.v1",
+  "jobId": "fixture-job",
+  "episodeId": "fixture-episode",
+  "cues": [
+    {
+      "startMs": 4000,
+      "endMs": 6000,
+      "identity": {
+        "kind": "participant",
+        "participantRef": "hasan",
+        "participantGeneration": 1,
+        "trackId": "hasan-track",
+        "trackEpoch": "epoch-1"
+      },
+      "trackClass": "microphone",
+      "displayNameSnapshot": "Hasan",
+      "text": "Okay, let's start with the release.",
+      "overlap": false,
+      "provider": "deepinfra",
+      "model": "fixture",
+      "versionContract": "fixture.v1",
+      "attempt": 1
+    },
+    {
+      "startMs": 11000,
+      "endMs": 13000,
+      "identity": {
+        "kind": "participant",
+        "participantRef": "shoaib",
+        "participantGeneration": 1,
+        "trackId": "shoaib-track",
+        "trackEpoch": "epoch-1"
+      },
+      "trackClass": "microphone",
+      "displayNameSnapshot": "Shoaib",
+      "text": "Yes, I'll push it today.",
+      "overlap": false,
+      "provider": "deepinfra",
+      "model": "fixture",
+      "versionContract": "fixture.v1",
+      "attempt": 1
+    },
+    {
+      "startMs": 14000,
+      "endMs": 16000,
+      "identity": {
+        "kind": "participant",
+        "participantRef": "hasan",
+        "participantGeneration": 1,
+        "trackId": "hasan-track",
+        "trackEpoch": "epoch-1"
+      },
+      "trackClass": "microphone",
+      "displayNameSnapshot": "Hasan",
+      "text": "شکریہ۔ مرحباً بالعالم",
+      "overlap": false,
+      "provider": "deepinfra",
+      "model": "fixture",
+      "versionContract": "fixture.v1",
+      "attempt": 1
+    }
+  ],
+  "language": "en",
+  "provider": "deepinfra",
+  "model": "fixture",
+  "versionContract": "fixture.v1",
+  "attempt": 1,
+  "measuredAudioMs": 16000
+}
