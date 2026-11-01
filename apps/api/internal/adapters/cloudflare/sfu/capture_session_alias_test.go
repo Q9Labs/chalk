@@ -12,13 +12,16 @@ import (
 
 // The recorder pulls a publisher by the connection ID the publication registry holds. When that
 // connection was swapped to a fresh Cloudflare session, the pull must name the live session and the
-// result must still name the registry's connection ID.
+// result must still name the registry's connection ID. The recorder then inspects the same tracks, and
+// Cloudflare names the live session there too.
 func TestCapturePullOfASwappedPublisherNamesTheLiveSession(t *testing.T) {
 	swapped := capturePulledTracksProviderBody(t)
 	swapped = strings.ReplaceAll(swapped, `"sessionId":"owner-1"`, `"sessionId":"owner-live"`)
+	inspected := strings.ReplaceAll(captureObservedTracksProviderBody(t), `"sessionId":"owner-1"`, `"sessionId":"owner-live"`)
 	client := &captureSequenceClient{responses: []captureHTTPResponse{
 		{status: http.StatusOK, body: captureConnectionProviderBody(t, "capture-connection-1")},
 		{status: http.StatusOK, body: swapped},
+		{status: http.StatusOK, body: inspected},
 	}}
 	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{
 		RealtimeAppID: "capture-alias-app", RealtimeAppSecret: "secret", RequestTimeout: 1,
@@ -27,7 +30,7 @@ func TestCapturePullOfASwappedPublisherNamesTheLiveSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	adapter.sessions.issue("owner-1")
-	if _, swappedOK := adapter.sessions.replace(context.Background(), "owner-1", "owner-1", func(context.Context) (string, error) { return "owner-live", nil }); !swappedOK {
+	if _, swappedOK, _ := adapter.sessions.replace(context.Background(), "owner-1", "owner-1", func(context.Context) (string, error) { return "owner-live", nil }); !swappedOK {
 		t.Fatal("setup: replace did not swap the publisher's session")
 	}
 
@@ -50,5 +53,12 @@ func TestCapturePullOfASwappedPublisherNamesTheLiveSession(t *testing.T) {
 	body := string(client.requests[1].body)
 	if !strings.Contains(body, `"sessionId":"owner-live"`) || strings.Contains(body, `"sessionId":"owner-1"`) {
 		t.Fatalf("pull request must name the live session only: %s", body)
+	}
+	observed, err := adapter.InspectCaptureConnection(context.Background(), captureplane.InspectCaptureConnectionInput{Metadata: metadata, Connection: created.Connection.ConnectionReference, Tracks: pulled.Tracks})
+	if err != nil {
+		t.Fatalf("inspect of a swapped publisher: %v", err)
+	}
+	if len(observed.Tracks) != 2 || observed.Tracks[0].OwnerReference.String() != "owner-1" {
+		t.Fatalf("inspection must keep the registry's connection ID: %#v", observed.Tracks)
 	}
 }

@@ -22,8 +22,14 @@ import (
 // State is per API instance. Production runs one chalk-api per host. After a restart an aliased
 // connection loses its alias and reports connection_not_found, which clients already recover from by
 // replacing their connection.
+//
+// An entry that never swapped can only matter until its first call, so an unused one is dropped after
+// sessionEntryRetention. A swapped entry holds the only link from the client's ID to a live session,
+// which keeps carrying media without any signaling. It is dropped only after sessionAliasRetention
+// without use, which is longer than the longest Episode (7 days), so no live connection can lose it.
 const (
 	sessionEntryRetention     = 12 * time.Hour
+	sessionAliasRetention     = 8 * 24 * time.Hour
 	sessionEntrySweepInterval = 10 * time.Minute
 )
 
@@ -123,17 +129,18 @@ func (r *sessionRegistry) negotiated(connectionID string) {
 }
 
 // replace swaps in a fresh session for a connection whose first negotiation found its session gone.
-// failed is the session the caller just used. It reports false when the connection is unknown,
-// already negotiated, or the fresh session cannot be created.
-func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error)) (string, bool) {
+// failed is the session the caller just used. It reports replaced=false with no error when the
+// connection is unknown or already negotiated, and the create error when the fresh session cannot be
+// created, so the caller can tell a gone connection from a provider failure.
+func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error)) (fresh string, replaced bool, err error) {
 	if r == nil {
-		return "", false
+		return "", false, nil
 	}
 	r.mu.Lock()
 	entry, ok := r.entries[connectionID]
 	r.mu.Unlock()
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 
 	entry.swap.Lock()
@@ -142,14 +149,14 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	provider, negotiated := entry.provider, entry.negotiated
 	r.mu.Unlock()
 	if provider != failed {
-		return provider, true
+		return provider, true, nil
 	}
 	if negotiated {
-		return "", false
+		return "", false, nil
 	}
-	fresh, err := create(ctx)
+	fresh, err = create(ctx)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -157,7 +164,7 @@ func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed stri
 	entry.provider = fresh
 	entry.touched = r.now()
 	r.byProvider[fresh] = connectionID
-	return fresh, true
+	return fresh, true, nil
 }
 
 func (r *sessionRegistry) sweepLocked(now time.Time) {
@@ -166,7 +173,11 @@ func (r *sessionRegistry) sweepLocked(now time.Time) {
 	}
 	r.lastSweep = now
 	for connectionID, entry := range r.entries {
-		if now.Sub(entry.touched) < sessionEntryRetention {
+		retention := sessionEntryRetention
+		if entry.provider != connectionID {
+			retention = sessionAliasRetention
+		}
+		if now.Sub(entry.touched) < retention {
 			continue
 		}
 		delete(r.byProvider, entry.provider)

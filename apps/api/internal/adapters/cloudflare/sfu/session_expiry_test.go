@@ -29,6 +29,8 @@ type fakeIdleExpiryCloudflare struct {
 	requests []string
 	// expireAll answers 410 on the first use of every session, however young.
 	expireAll bool
+	// newSessionStatus, when set, is the HTTP status of every /sessions/new call.
+	newSessionStatus int
 }
 
 func newFakeIdleExpiryCloudflare(appID string) *fakeIdleExpiryCloudflare {
@@ -45,6 +47,12 @@ func (f *fakeIdleExpiryCloudflare) setExpireAll() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.expireAll = true
+}
+
+func (f *fakeIdleExpiryCloudflare) failNewSessions(status int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.newSessionStatus = status
 }
 
 func (f *fakeIdleExpiryCloudflare) sessionCount() int {
@@ -65,6 +73,11 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.Path, "/apps/"+f.appID)
 	if path == "/sessions/new" {
+		if f.newSessionStatus != 0 {
+			w.WriteHeader(f.newSessionStatus)
+			fmt.Fprint(w, `{"errorCode":"rate_limited"}`)
+			return
+		}
 		id := fmt.Sprintf("cf-%d", len(f.sessions)+1)
 		f.sessions = append(f.sessions, id)
 		f.created[id] = f.clock
@@ -323,5 +336,132 @@ func TestAdaptersForTheSameAppShareTheirIdleSessionRegistry(t *testing.T) {
 	pulling := newAdapterForFake(t, appID, server)
 	if _, err := pulling.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
 		t.Fatalf("first pull through a different adapter for the same app: %v", err)
+	}
+}
+
+func TestFailedReplacementCreationReportsTheProviderFailure(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatal(err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.advance(20 * time.Second)
+	fake.failNewSessions(http.StatusTooManyRequests)
+
+	_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+
+	if !errors.Is(err, mediaplane.ErrProviderRateLimited) || errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("a rate-limited replacement must surface the rate limit, got %v", err)
+	}
+	fake.failNewSessions(0)
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher)); err != nil {
+		t.Fatalf("the connection must still be replaceable after a failed replacement: %v", err)
+	}
+}
+
+func TestAliasOfASwappedConnectionSurvivesTwelveHoursWithoutSignaling(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	speaker := joinParticipant(t, adapter, "speaker")
+	fake.advance(20 * time.Second)
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(speaker)); err != nil {
+		t.Fatal(err)
+	}
+	live := adapter.sessions.providerID(speaker)
+	if live == speaker {
+		t.Fatal("setup: the first publish did not swap the session")
+	}
+
+	// Media keeps flowing for a long Episode while the connection sends no signaling.
+	adapter.sessions.now = func() time.Time { return time.Now().Add(13 * time.Hour) }
+	joinParticipant(t, adapter, "later-joiner")
+	if got := adapter.sessions.providerID(speaker); got != live {
+		t.Fatalf("a swapped connection that still carries media lost its alias: %q, want %q", got, live)
+	}
+
+	adapter.sessions.now = func() time.Time { return time.Now().Add(9 * 24 * time.Hour) }
+	joinParticipant(t, adapter, "much-later-joiner")
+	if got := adapter.sessions.providerID(speaker); got != speaker {
+		t.Fatalf("an alias idle for longer than any Episode must be dropped, got %q", got)
+	}
+}
+
+func TestPartialPullThatCarriesAnAnswerStopsFurtherReplacement(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	listener := joinParticipant(t, adapter, "listener")
+	partial := mediaplane.TracksRequest{
+		ConnectionID: listener,
+		Tracks: []mediaplane.Track{
+			{Location: "remote", SessionID: listener, TrackName: "mic"},
+			{Location: "remote", SessionID: "cf-unknown", TrackName: "mic"},
+		},
+	}
+	response, err := adapter.AddTracks(context.Background(), partial)
+	if !mediaplane.IsPartialRemoteTrackResponse(err) || response.SessionDescription == nil {
+		t.Fatalf("setup: want an accepted partial pull, got response=%+v err=%v", response, err)
+	}
+	sessions := fake.sessionCount()
+	fake.mu.Lock()
+	fake.used[listener] = false
+	fake.created[listener] = -time.Hour
+	fake.mu.Unlock()
+
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, listener)); !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("a connection that negotiated through a partial pull must report not found, got %v", err)
+	}
+	if got := fake.sessionCount(); got != sessions {
+		t.Fatalf("no replacement session for a negotiated connection: %d -> %d", sessions, got)
+	}
+}
+
+func TestRenegotiatedConnectionIsNotReplaced(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	listener := joinParticipant(t, adapter, "listener")
+	if err := adapter.Renegotiate(context.Background(), mediaplane.RenegotiateRequest{ConnectionID: listener, SessionDescription: mediaplane.SessionDescription{Type: "answer", SDP: "v=0"}}); err != nil {
+		t.Fatal(err)
+	}
+	sessions := fake.sessionCount()
+	fake.mu.Lock()
+	fake.used[listener] = false
+	fake.created[listener] = -time.Hour
+	fake.mu.Unlock()
+
+	if _, err := adapter.AddTracks(context.Background(), pullRequest(listener, listener)); !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("a connection that renegotiated must report not found, got %v", err)
+	}
+	if got := fake.sessionCount(); got != sessions {
+		t.Fatalf("no replacement session after a renegotiation: %d -> %d", sessions, got)
+	}
+}
+
+func TestRecoveredAddTracksLogsARecoveredCallWithTheProviderError(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	speaker := joinParticipant(t, adapter, "speaker")
+	fake.advance(20 * time.Second)
+	logs := captureAddTracksLogs(t)
+
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(speaker)); err != nil {
+		t.Fatalf("first publish after 20 s idle: %v", err)
+	}
+
+	var records []map[string]any
+	for line := range strings.Lines(logs.String()) {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode log line %q: %v", line, err)
+		}
+		if record["event"] == "cloudflare_sfu.add_tracks" {
+			records = append(records, record)
+		}
+	}
+	if len(records) != 2 {
+		t.Fatalf("add tracks records = %d, want 2 (the gone session and the retry):\n%s", len(records), logs.String())
+	}
+	first, retry := records[0], records[1]
+	if first["outcome"] != "recovered" || first["level"] != "INFO" || first["retry"] != "session_replaced" || first["http_status"] != float64(http.StatusGone) || first["provider_code"] == "" {
+		t.Fatalf("a recovered first attempt must read as recovered and keep the provider error: %v", first)
+	}
+	if retry["outcome"] != "ok" || retry["level"] != "INFO" || retry["retry"] != "after_session_replaced" {
+		t.Fatalf("the retry must log its own success: %v", retry)
 	}
 }

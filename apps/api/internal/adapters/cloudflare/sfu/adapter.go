@@ -49,9 +49,15 @@ const (
 var (
 	sfuTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
 
-	sfuFailureCounter, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu").Int64Counter(
+	sfuMeter = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
+
+	sfuFailureCounter, _ = sfuMeter.Int64Counter(
 		"chalk.api.cloudflare_sfu.failures",
 		metric.WithDescription("Cloudflare SFU request failures by bounded operation and failure classification"),
+	)
+	sfuSessionReplacements, _ = sfuMeter.Int64Counter(
+		"chalk.api.cloudflare_sfu.session_replacements",
+		metric.WithDescription("Never-negotiated Cloudflare sessions swapped for a fresh one, by outcome (recovered or failed)"),
 	)
 )
 
@@ -324,19 +330,35 @@ func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInpu
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	session := a.sessions.providerID(input.ConnectionID)
-	result, err := a.addTracks(ctx, input, session)
+	result, attempt, err := a.addTracks(ctx, input, session)
+	retry := addTracksRetryNone
 	if errors.Is(err, mediaplane.ErrConnectionNotFound) {
-		if fresh, ok := a.sessions.replace(ctx, input.ConnectionID, session, a.createConnection); ok {
-			result, err = a.addTracks(ctx, input, fresh)
+		fresh, replaced, replaceErr := a.sessions.replace(ctx, input.ConnectionID, session, a.createConnection)
+		switch {
+		case replaceErr != nil:
+			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "failed")))
+			err = replaceErr
+		case replaced:
+			firstResult, first, firstErr := result, attempt, err
+			result, attempt, err = a.addTracks(ctx, input, fresh)
+			outcome := "failed"
+			if err == nil {
+				outcome = "recovered"
+			}
+			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+			logAddTracksCall(ctx, input, firstResult.TrackErrors, first, firstErr, addTracksRetrySessionReplaced, err == nil)
+			retry = addTracksRetryAfterSessionReplaced
 		}
 	}
-	if err == nil {
+	// A partial pull that carries an answer is accepted by the HTTP layer and negotiates the session.
+	if err == nil || (mediaplane.IsPartialRemoteTrackResponse(err) && result.SessionDescription != nil) {
 		a.sessions.negotiated(input.ConnectionID)
 	}
+	logAddTracksCall(ctx, input, result.TrackErrors, attempt, err, retry, false)
 	return a.toClientIDs(result), a.errorWithClientIDs(err)
 }
 
-func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, session string) (mediaplane.TracksResponse, error) {
+func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, session string) (mediaplane.TracksResponse, addTracksAttempt, error) {
 	tracks := make([]providerTrack, 0, len(input.Tracks))
 	localTracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
@@ -353,9 +375,7 @@ func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, 
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(session)), request, &response, "add_tracks")
-	result := response.toMediaPlane()
-	logAddTracksCall(ctx, input, result.TrackErrors, time.Since(started), statusCode, err)
-	return result, err
+	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode}, err
 }
 
 func (a Adapter) InspectSession(ctx context.Context, connectionID string) (mediaplane.SessionState, error) {
@@ -473,9 +493,13 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 }
 
 func (a Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateRequest) error {
-	return a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/renegotiate", url.PathEscape(a.sessions.providerID(input.ConnectionID))), renegotiateRequest{
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/renegotiate", url.PathEscape(a.sessions.providerID(input.ConnectionID))), renegotiateRequest{
 		SessionDescription: input.SessionDescription,
 	}, nil, "renegotiate")
+	if err == nil {
+		a.sessions.negotiated(input.ConnectionID)
+	}
+	return err
 }
 
 func (a Adapter) createConnection(ctx context.Context) (string, error) {

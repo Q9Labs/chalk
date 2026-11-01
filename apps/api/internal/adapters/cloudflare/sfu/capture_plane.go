@@ -831,6 +831,7 @@ func (a Adapter) inspectCaptureConnection(ctx context.Context, connection captur
 	}
 	for index := range response.Tracks {
 		response.Tracks[index].Status = strings.ToLower(strings.TrimSpace(response.Tracks[index].Status))
+		response.Tracks[index].ConnectionReference = a.sessions.clientID(response.Tracks[index].ConnectionReference)
 		if response.Tracks[index].Location != "remote" || response.Tracks[index].ConnectionReference == "" || response.Tracks[index].TrackName == "" {
 			return captureInspectResponse{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract", Retryable: false}
 		}
