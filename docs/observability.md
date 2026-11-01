@@ -28,6 +28,24 @@ When a Participant joined without a knock, check the journey root named
 that asked for direct admission leaves `"admission": "direct"` in its
 attributes. Policy admissions carry no `admission` attribute.
 
+### Recording render attempts
+
+Every failed render attempt emits `recording.render_attempt_failed` with `job_id`,
+`attempt_count`, `fencing_generation`, `error_code`, `error_detail`, and W3C
+`trace_id` / `span_id`. The worker emits it before reporting failure; the API
+emits it after accepting the fenced report, so it reaches the managed API log
+exporter even when the disposable node has no log exporter. The worker sends
+W3C trace context independently of global telemetry initialization.
+
+`error_detail` retains only diagnostic vocabulary, capped at 512 bytes. Unknown
+words, paths, identifiers, numbers, URLs, credentials, and media-derived text are
+redacted. The private job row still retains the existing bounded diagnostic
+error. No new durable journey event or lifecycle transition is introduced.
+Tests in `recordingdecode/writer_test.go` cover H264 with more than 512 variable
+frame intervals in both copy and re-encode paths, checking every decoded frame's
+timestamp. Worker and API tests check accepted-failure evidence, trace correlation,
+and redaction; rejected failure reports do not emit accepted-failure evidence.
+
 ### Follow a user's session
 
 A session is one run of a Chalk app on one device: a browser tab, or an app launch
