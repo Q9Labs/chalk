@@ -10,7 +10,32 @@
 - Show full call names in desktop and phone header-button titles when names are truncated.
 - Advance the seven synchronized Chalk SDK packages to 5.4.0.
 
-**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Do not release the SDK while old and new Sync run side by side.
+### Media-recovery pause
+
+After reconnecting, the SDK no longer turns off a microphone or camera just because Sync's record is missing. It turns the source off when Sync recorded a host stop newer than the person's own on. It also turns the source off when the drop lasted at least 60 seconds or the SDK cannot prove that it was shorter. An uncertain drop includes a clock that stepped backward or jumped, or a page that froze, resumed, or was discarded. Otherwise, capture resumes without another tap. A hidden tab alone does not count as a long drop.
+
+There is one hidden-tab exception. If a tab stays hidden for more than five minutes and has no live WebRTC connection, Chrome runs timers only once a minute. A short drop can then look long, so the source turns off until the person taps again.
+
+This rule applies only to a connection whose `welcome` carries `media_off_reason`. On any other Sync version, the SDK keeps the old rule. That rule pauses a wanted-on source when Sync's record is missing or off.
+
+A lost or late pong never makes a drop look shorter. A pong pairs with the oldest ping in flight. A mismatch can pair it only with an older ping. If the oldest ping goes unanswered for 60 seconds, the SDK replaces the Sync socket through its normal reconnect. Proof of contact resumes on the new socket. This rule assumes Sync sends exactly one pong for each ping.
+
+### Short invite links
+
+Public Space invite links now use short codes, such as `https://chalkmeet.com/abc-defg-hij`. The API accepts the invite code anywhere it accepted a `cspi1` invite token. Existing long links continue to work.
+
+React Native requests receive short links only when they send `X-Chalk-Invite-Format: code`. Shipped native builds therefore keep receiving long links. The React Native SDK adds `parseChalkInviteLink` for short links, bare codes, and long links. `parseSpaceInviteLink` is unchanged. The client SDK adds `parseInviteCode`.
+
+### SDK change details
+
+- Board tools, notes, surfaces, and Follow are shared with mobile. The app subscribes to board presentation before a native tile opens, so boards started on web appear in the app. Web and native renderers preserve authoritative view owners, reconnect ordering, bounded camera animation, and the 100% opening-fit cap.
+- A microphone or camera click during a media-connection replacement is applied instead of dropped. For example, a click during a move to a fresh SFU connection waits for the call to become live again. The click fails only if the call ends or does not reconnect in time. A quick mute followed by unmute therefore ends unmuted.
+- Local media recovery keeps retrying after a publication is withdrawn until a fresh publication is available.
+- During call startup and temporary recovery, the SDK waits for camera and microphone readiness instead of reporting a connecting error after a successful toggle. The wait is bounded and preserves the original failure feedback. Native call controls show pending state. The call socket stays open through temporary iOS permission prompts.
+- When retiring a sender that does not own the bundled transport, the SDK keeps other audio and video flowing. It rebuilds conservatively when bundle information is missing. It retries republished remote tracks promptly with per-publication backoff that survives presence changes. It replaces expired receiver sessions even while old browser tracks remain live. React attaches replacement audio track objects even when their IDs are unchanged.
+- Desktop and phone header buttons show the full call name in the native title when the visible name is truncated. The Call details label and tap behavior stay unchanged.
+
+**Deploy order:** apply migration `20261031120000_sync_media_stops`, then finish the Sync rollout with `media_off_reason_v1` on every instance, then release this SDK. Do not release the SDK while old and new Sync run side by side. An old instance can commit a host stop without filling the new table. A new instance can then advertise the extension without that evidence.
 
 ## 5.3.1
 
