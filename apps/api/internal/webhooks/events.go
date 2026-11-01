@@ -162,7 +162,7 @@ func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFie
 	if !validUUIDv4(snapshot.ID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero() {
 		return nil, [32]byte{}, errors.New("invalid space snapshot")
 	}
-	allowedChanges := map[string]struct{}{"admission_policy": {}, "default_episode_duration_seconds": {}, "linger_window_seconds": {}, "maximum_episode_duration_seconds": {}, "media_plane": {}, "metadata": {}, "name": {}, "recurring_policy": {}, "slug": {}}
+	allowedChanges := map[string]struct{}{"admission_policy": {}, "default_episode_duration_seconds": {}, "linger_window_seconds": {}, "maximum_episode_duration_seconds": {}, "media_plane": {}, "metadata": {}, "name": {}, "recurring_policy": {}, "slug": {}, "transcript_language": {}}
 	seenChanges := make(map[string]struct{}, len(changedFields))
 	for _, field := range changedFields {
 		if _, ok := allowedChanges[field]; !ok {

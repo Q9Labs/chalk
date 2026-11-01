@@ -293,7 +293,7 @@ func transcriptArtifactAPIError(err error) (APIError, bool) {
 		return apiErrorTranscriptNotFound, true
 	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
 		return apiErrorInvalidURLExpiration, true
-	case errors.Is(err, transcripts.ErrInvalidIdempotencyKey), errors.Is(err, transcripts.ErrInvalidManifest), errors.Is(err, transcripts.ErrInvalidChunk), errors.Is(err, transcripts.ErrInvalidArtifact):
+	case errors.Is(err, transcripts.ErrInvalidLanguages), errors.Is(err, transcripts.ErrInvalidIdempotencyKey), errors.Is(err, transcripts.ErrInvalidManifest), errors.Is(err, transcripts.ErrInvalidChunk), errors.Is(err, transcripts.ErrInvalidArtifact):
 		return apiErrorInvalidRequest, true
 	case errors.Is(err, transcripts.ErrArtifactRepository):
 		return apiErrorServiceUnavailable, true

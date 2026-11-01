@@ -39,7 +39,7 @@ export async function pastMutation(engine: Engine, action: PastSessionAction) {
         return { recording: recordingDTO(result.recording) };
       }
       case "create-transcript": {
-        const result = await run(engine.api.transcripts.requestTranscript({ params, payload: { idempotency_key: action.idempotencyKey, languages: action.languages } }));
+        const result = await run(engine.api.transcripts.requestTranscript({ params, payload: { idempotency_key: action.idempotencyKey } }));
         return { transcript: transcriptDTO(result.transcript) };
       }
       case "transcripts": {
