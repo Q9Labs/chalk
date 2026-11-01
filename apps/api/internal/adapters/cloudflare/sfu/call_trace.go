@@ -24,6 +24,7 @@ type callTrace struct {
 	dnsStart, connectStart, tlsStart time.Time
 	dnsDone, connectDone, tlsDone    time.Time
 	wroteRequest, firstByte          time.Time
+	bodyDone                         time.Time
 	reused                           bool
 	idle                             time.Duration
 	family                           string
@@ -36,11 +37,8 @@ func (t *callTrace) attach(ctx context.Context) context.Context {
 		DNSStart:     func(httptrace.DNSStartInfo) { t.stamp(&t.dnsStart) },
 		DNSDone:      func(httptrace.DNSDoneInfo) { t.stamp(&t.dnsDone) },
 		ConnectStart: func(string, string) { t.stampFirst(&t.connectStart) },
-		ConnectDone: func(_ string, _ string, err error) {
-			if err == nil {
-				t.stamp(&t.connectDone)
-			}
-		},
+		// A failed dial is stamped too, so a connect that timed out still shows how long it took.
+		ConnectDone:       func(string, string, error) { t.stamp(&t.connectDone) },
 		TLSHandshakeStart: func() { t.stamp(&t.tlsStart) },
 		TLSHandshakeDone:  func(tls.ConnectionState, error) { t.stamp(&t.tlsDone) },
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -71,11 +69,17 @@ func (t *callTrace) stampFirst(at *time.Time) {
 }
 
 // log writes one line for the call. Phases that did not happen, such as DNS on a reused connection, log 0.
-func (t *callTrace) log(ctx context.Context, operation string, input traceInput, statusCode int, header http.Header) {
+// A failed call logs at warn, so its phases survive a production log level of warn.
+func (t *callTrace) log(ctx context.Context, operation string, input traceInput, statusCode int, header http.Header, failed bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	slog.Default().InfoContext(
+	level := slog.LevelInfo
+	if failed {
+		level = slog.LevelWarn
+	}
+	slog.Default().Log(
 		ctx,
+		level,
 		"Cloudflare SFU call trace",
 		"event", "cloudflare_sfu.call_trace",
 		"operation", operation,
@@ -87,6 +91,8 @@ func (t *callTrace) log(ctx context.Context, operation string, input traceInput,
 		"tls_ms", phaseMs(t.tlsStart, t.tlsDone),
 		// Time Cloudflare took to start answering once the request was sent.
 		"ttfb_ms", phaseMs(t.wroteRequest, t.firstByte),
+		// Time from the first response byte until the whole body was read.
+		"body_ms", phaseMs(t.firstByte, t.bodyDone),
 		"conn_reused", t.reused,
 		"conn_idle_ms", t.idle.Milliseconds(),
 		"ip_family", t.family,
@@ -101,13 +107,22 @@ type traceInput struct {
 }
 
 func traceInputFor(body any) traceInput {
-	request, ok := body.(tracksRequest)
-	if !ok {
+	var locations []string
+	switch request := body.(type) {
+	case tracksRequest:
+		for _, track := range request.Tracks {
+			locations = append(locations, track.Location)
+		}
+	case captureTracksRequest:
+		for _, track := range request.Tracks {
+			locations = append(locations, track.Location)
+		}
+	default:
 		return traceInput{}
 	}
 	var remote, local int
-	for _, track := range request.Tracks {
-		if track.Location == "remote" {
+	for _, location := range locations {
+		if location == "remote" {
 			remote++
 		} else {
 			local++
@@ -115,7 +130,7 @@ func traceInputFor(body any) traceInput {
 	}
 	switch {
 	case remote > 0 && local > 0:
-		return traceInput{kind: "mixed", trackCount: len(request.Tracks)}
+		return traceInput{kind: "mixed", trackCount: len(locations)}
 	case remote > 0:
 		return traceInput{kind: "pull", trackCount: remote}
 	case local > 0:
@@ -123,6 +138,9 @@ func traceInputFor(body any) traceInput {
 	}
 	return traceInput{}
 }
+
+// readDone marks the end of the response body read.
+func (t *callTrace) readDone() { t.stamp(&t.bodyDone) }
 
 func phaseMs(start, done time.Time) int64 {
 	if start.IsZero() || done.IsZero() || done.Before(start) {

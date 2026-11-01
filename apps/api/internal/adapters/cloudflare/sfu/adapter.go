@@ -569,7 +569,7 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	}
 	timing := &callTrace{}
 	var responseHeader http.Header
-	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader) }()
+	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader, err != nil) }()
 	providerResponse, err := a.client.Do(request.WithContext(timing.attach(ctx)))
 	if err != nil {
 		return 0, newTransportFailure(ctx, operation, 0, err)
@@ -578,6 +578,7 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	responseHeader = providerResponse.Header
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
+	timing.readDone()
 	if err != nil {
 		return providerResponse.StatusCode, newTransportFailure(ctx, operation, providerResponse.StatusCode, err)
 	}

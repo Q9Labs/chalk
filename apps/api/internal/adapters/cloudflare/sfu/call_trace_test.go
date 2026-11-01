@@ -19,7 +19,7 @@ const callTraceRay = "8f3c1a2b4d5e6f70-FRA"
 
 var callTraceFields = []string{
 	"time", "level", "msg", "event", "operation", "kind", "track_count", "http_status",
-	"dns_ms", "connect_ms", "tls_ms", "ttfb_ms", "conn_reused", "conn_idle_ms", "ip_family", "colo",
+	"dns_ms", "connect_ms", "tls_ms", "ttfb_ms", "body_ms", "conn_reused", "conn_idle_ms", "ip_family", "colo",
 }
 
 // A pull logs its phase timings, the colo and the address family, and a second call on the same
@@ -54,6 +54,9 @@ func TestCallTraceLogsPhasesColoAndConnectionReuse(t *testing.T) {
 		}
 		if record["operation"] != "add_tracks" || record["kind"] != "pull" || record["track_count"] != float64(2) {
 			t.Fatalf("operation/kind/track_count = %v/%v/%v", record["operation"], record["kind"], record["track_count"])
+		}
+		if record["level"] != "INFO" {
+			t.Fatalf("level = %v, want INFO for a successful call", record["level"])
 		}
 		if record["colo"] != "FRA" || record["ip_family"] != "v4" || record["http_status"] != float64(200) {
 			t.Fatalf("colo/ip_family/http_status = %v/%v/%v", record["colo"], record["ip_family"], record["http_status"])
@@ -94,6 +97,42 @@ func TestCallTraceLogsACallWithoutAnAnswer(t *testing.T) {
 	records := callTraceRecords(t, logs.String())
 	if len(records) != 1 || records[0]["http_status"] != float64(0) || records[0]["ttfb_ms"] != float64(0) || records[0]["kind"] != "publish" || records[0]["colo"] != "" {
 		t.Fatalf("records = %v", records)
+	}
+	// A failed call logs at warn, so it survives CHALK_API_LOG_LEVEL=warn.
+	if records[0]["level"] != "WARN" {
+		t.Fatalf("level = %v, want WARN for a failed call", records[0]["level"])
+	}
+}
+
+// Headers that arrive before a slow body leave ttfb_ms low, so body_ms carries the wait.
+func TestCallTraceTimesASlowBody(t *testing.T) {
+	const bodyDelay = 80 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(bodyDelay)
+		_, _ = w.Write([]byte(`{"tracks":[]}`))
+	}))
+	defer server.Close()
+	adapter := addTracksRecordAdapter(t, server.URL, time.Second)
+	logs := captureAddTracksLogs(t)
+
+	_, _ = adapter.AddTracks(context.Background(), mediaplane.TracksRequest{ConnectionID: "listener", Tracks: []mediaplane.Track{{Location: "remote", SessionID: "publisher", TrackName: "a"}}})
+	records := callTraceRecords(t, logs.String())
+	if len(records) != 1 {
+		t.Fatalf("call trace records = %d, want 1:\n%s", len(records), logs.String())
+	}
+	if body, _ := records[0]["body_ms"].(float64); body < float64(bodyDelay.Milliseconds()-10) {
+		t.Fatalf("body_ms = %v, want about %d", records[0]["body_ms"], bodyDelay.Milliseconds())
+	}
+}
+
+// A recording pull is classified like any other pull.
+func TestTraceInputForCapturePull(t *testing.T) {
+	got := traceInputFor(captureTracksRequest{Tracks: []captureTrackRequest{{Location: "remote", TrackName: "a"}, {Location: "remote", TrackName: "b"}}})
+	if got != (traceInput{kind: "pull", trackCount: 2}) {
+		t.Fatalf("traceInputFor(capture pull) = %+v, want pull with 2 tracks", got)
 	}
 }
 
