@@ -87,7 +87,7 @@ func NewCodeServer(catalog *Server) *Server {
 		Description: "Execute a TypeScript async function BODY against chalk. Use await and return, not imports or an exported function. 32 calls/5 seconds; completed writes are not rolled back. Return only the data needed by the model. Both console and return value are bounded and never logged.",
 		InputSchema: object(map[string]*Schema{"code": {Type: "string", MaxLength: sandbox.MaxCodeBytes}}, "code"),
 		// A program can invoke any granted mutation. Never advertise execution as read-only.
-		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(bool)},
+		Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input executeInput) (*mcp.CallToolResult, any, error) {
 		select {
 		case slots <- struct{}{}:
@@ -107,12 +107,12 @@ func NewCodeServer(catalog *Server) *Server {
 			}
 			if reply.IsError {
 				// All shared operation errors have a structured code and safe message.
-				encoded, _ := json.Marshal(reply.StructuredContent)
+				encoded, err := json.Marshal(reply.StructuredContent)
 				var failure struct {
 					Error Error `json:"error"`
 				}
-				if json.Unmarshal(encoded, &failure) != nil || failure.Error.Code == "" {
-					failure.Error = Error{Code: "mcp.invalid_offset", Message: "Result continuation rejected; restart the read at zero"}
+				if err != nil || json.Unmarshal(encoded, &failure) != nil || failure.Error.Code == "" {
+					failure.Error = Error{Code: "internal.error", Message: "Operation failed"}
 				}
 				return callFailure(failure.Error)
 			}
