@@ -182,6 +182,7 @@ files.forEach((file, fileIndex) => {
       slow: 0,
       clusters: [],
       timeToAudio: [],
+      heardWithin3: 0,
       worst: [],
       neverEnabled: 0,
       unmutes: 0,
@@ -333,6 +334,7 @@ files.forEach((file, fileIndex) => {
             failures.push({ key, file: fileIndex, runIndex: run.runIndex, speaker, listener, t: action.t, first: action.first, bestStage: label });
           } else {
             cell.timeToAudio.push(heard);
+            if (heard <= 3) cell.heardWithin3++;
             anyListener = true;
           }
         }
@@ -376,6 +378,7 @@ const summaries = rows.map((cell) => ({
   slowWilson: wilson(cell.slow, cell.pairs),
   slowCluster: clusterInterval(cell.clusters, "slow"),
   timeToAudioP50: quantile(cell.timeToAudio, 0.5),
+  heardWithin3: cell.heardWithin3,
   heal: { pairs: cell.heal.pairs, slow: cell.heal.slow, never: cell.heal.never, neverHeard: cell.heal.neverHeard, healedP50: quantile(cell.heal.healed, 0.5), healedP90: quantile(cell.heal.healed, 0.9), healedP99: quantile(cell.heal.healed, 0.99), healedMax: quantile(cell.heal.healed, 1) },
   healP50: quantile(cell.worst, 0.5),
   healP99: quantile(cell.worst, 0.99),
@@ -423,11 +426,11 @@ const summaries = rows.map((cell) => ({
 if (asJson) {
   console.log(JSON.stringify(summaries, null, 1));
 } else {
-  console.log("| build | condition | rooms | pairs | silent (15 s) | silent rate, cluster 95% | Wilson 95% | pairs silent >5 s | >5 s rate, cluster 95% | time to audio p50 | heal p50 / p99 / max | never enabled | heard by nobody |");
-  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  console.log("| build | condition | rooms | pairs | silent (15 s) | silent rate, cluster 95% | Wilson 95% | pairs silent >5 s | >5 s rate, cluster 95% | time to audio p50 | heal p50 / p99 / max | never enabled | heard by nobody | heard within 3 s |");
+  console.log("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const s of summaries)
     console.log(
-      `| ${s.build} | ${s.condition} | ${s.rooms} | ${s.pairs} | ${s.silent} | ${pct(s.silentRate)} (${interval(s.silentCluster)}) | ${interval(s.silentWilson)} | ${s.slow} | ${pct(s.slowRate)} (${interval(s.slowCluster)}) | ${seconds(s.timeToAudioP50)} s | ${seconds(s.healP50)} / ${seconds(s.healP99)} / ${seconds(s.healMax)} s | ${s.publisherNeverEnabled} of ${s.unmutesAnalysed} | ${s.speakersHeardByNobody} |`,
+      `| ${s.build} | ${s.condition} | ${s.rooms} | ${s.pairs} | ${s.silent} | ${pct(s.silentRate)} (${interval(s.silentCluster)}) | ${interval(s.silentWilson)} | ${s.slow} | ${pct(s.slowRate)} (${interval(s.slowCluster)}) | ${seconds(s.timeToAudioP50)} s | ${seconds(s.healP50)} / ${seconds(s.healP99)} / ${seconds(s.healMax)} s | ${s.publisherNeverEnabled} of ${s.unmutesAnalysed} | ${s.speakersHeardByNobody} | ${s.heardWithin3} of ${s.pairs} |`,
     );
   const noFault = rooms.filter((room) => room.load && /\| (open|home|mobile)$/u.test(room.key) && room.pairs);
   if (noFault.length) {
