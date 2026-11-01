@@ -8,7 +8,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, keyID, endpointID utilities.ID) []mcpToolCase {
+func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, keyID, endpointID, endSpace, endEpisode utilities.ID) []mcpToolCase {
 	return []mcpToolCase{
 		{"get_connection", `{}`, ""},
 		{"update_tenant", `{"body":{"name":"MCP changed"}}`, ""},
@@ -36,7 +36,7 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 		{"list_admission_requests", fmt.Sprintf(`{"space_id":%q}`, spaceID), ""},
 		{"decide_admission_request", fmt.Sprintf(`{"space_id":%q,"request_handle":"missing-request-handle","decision":"deny","request_key":"mcp-admission-deny-01"}`, spaceID), "admission_request.not_found"},
 		{"remove_participant", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"participant_id":%q,"participant_generation":1,"request_key":"mcp-participant-remove-01"}`, spaceID, episodeID, participantID), ""},
-		{"end_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-end-0001"}`, spaceID, episodeID), ""},
+		{"end_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-end-0001"}`, endSpace, endEpisode), ""},
 		{"list_recordings", `{}`, ""},
 		{"get_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
 		{"get_recording_download", fmt.Sprintf(`{"recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},

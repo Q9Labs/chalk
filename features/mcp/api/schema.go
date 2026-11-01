@@ -14,6 +14,7 @@ type Schema struct {
 	Maximum              *int               `json:"maximum,omitempty"`
 	MaxLength            int                `json:"maxLength,omitempty"`
 	MinLength            int                `json:"minLength,omitempty"`
+	Pattern              string             `json:"pattern,omitempty"`
 	MaxItems             int                `json:"maxItems,omitempty"`
 	MinItems             int                `json:"minItems,omitempty"`
 	AnyOf                []*Schema          `json:"anyOf,omitempty"`
@@ -48,7 +49,7 @@ func page(p map[string]*Schema) map[string]*Schema {
 }
 func read(p map[string]*Schema) map[string]*Schema { p["result_offset"] = integer(0, 1<<30); return p }
 func requestKey(p map[string]*Schema) map[string]*Schema {
-	p["request_key"] = text("Caller-supplied idempotency key, preserved unchanged on retries.")
+	p["request_key"] = &Schema{Type: "string", Description: "Caller-supplied idempotency key, preserved unchanged on retries.", MinLength: 16, MaxLength: 128, Pattern: `^[A-Za-z0-9_-]+$`}
 	return p
 }
 func bodySchema(p map[string]*Schema, required ...string) *Schema { return object(p, required...) }

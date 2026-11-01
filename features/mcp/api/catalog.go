@@ -1,9 +1,10 @@
 package mcpapi
 
 import (
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"maps"
 	"slices"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Definition struct {
@@ -58,19 +59,19 @@ var SendWebhook = define("send_webhook", "Send a test webhook or redeliver a spe
 var ListSpaceActivity = define("list_space_activity", "Inspect recent activity across up to 300 explicitly selected Spaces.", "episodes:read", 'R', map[string]*Schema{"space_ids": {Type: "array", Items: id(), MaxItems: 300, MinItems: 1}}, "space_ids")
 var ListSpaces = define("list_spaces", "List Spaces with pagination; optionally filter archived or active Spaces.", "spaces:read", 'R', page(map[string]*Schema{"archived": boolean()}))
 var InspectSpace = define("inspect_space", "Inspect Space configuration (default view=settings), or its public invite (view=invite). Invite tokens are sensitive.", "spaces:read", 'R', map[string]*Schema{"space_id": id(), "view": choice("settings", "invite")}, "space_id")
-var CreateSpace = define("create_space", "Create a configured Space without joining it.", "spaces:write", 'A', requestKey(map[string]*Schema{"body": spaceSettings(true)}), "body")
+var CreateSpace = define("create_space", "Create a configured Space without joining it.", "spaces:write", 'A', requestKey(map[string]*Schema{"body": spaceSettings(true)}), "body", "request_key")
 var ConfigureSpace = define("configure_space", "Edit Space settings, enable/disable invite access, or rotate the invite. Choose an explicit action.", "spaces:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "action": choice("settings", "invite", "rotate_invite"), "settings": spaceSettings(false), "enabled": boolean()}), "space_id", "action")
 var SetSpaceArchived = define("set_space_archived", "Archive or restore a Space. Set archived to the desired state.", "spaces:write", 'M', map[string]*Schema{"space_id": id(), "archived": boolean()}, "space_id", "archived")
 var PrepareRecording = define("prepare_recording", "Inspect, prepare, or cancel recording preparation. Inspect requires spaces:read; prepare/cancel require spaces:write and expected_revision. Preparation starts_at is RFC3339.", "", 'M', read(map[string]*Schema{"space_id": id(), "action": choice("inspect", "prepare", "cancel"), "starts_at": text("RFC3339 timestamp"), "expected_revision": integer(0, 2147483647)}), "space_id", "action")
 var ListEpisodes = define("list_episodes", "List a Space's Episodes with cursor pagination.", "episodes:read", 'R', page(map[string]*Schema{"space_id": id()}), "space_id")
 var InspectEpisode = define("inspect_episode", "Inspect an Episode (default view=episode), or its attendance (view=attendance).", "episodes:read", 'R', map[string]*Schema{"space_id": id(), "episode_id": id(), "view": choice("episode", "attendance")}, "space_id", "episode_id")
-var CreateEpisode = define("create_episode", "Start an Episode without admitting a participant or joining a seat.", "episodes:write", 'A', requestKey(map[string]*Schema{"space_id": id(), "body": object(map[string]*Schema{"metadata": {}, "started_at": nullable(text("RFC3339 timestamp"))})}), "space_id", "body")
+var CreateEpisode = define("create_episode", "Start an Episode without admitting a participant or joining a seat.", "episodes:write", 'A', requestKey(map[string]*Schema{"space_id": id(), "body": object(map[string]*Schema{"metadata": {}, "started_at": nullable(text("RFC3339 timestamp"))})}), "space_id", "body", "request_key")
 var ListLiveEpisodes = define("list_live_episodes", "Inspect active Episodes and rosters for up to 30 explicitly selected Spaces.", "episodes:read", 'R', map[string]*Schema{"space_ids": {Type: "array", Items: id(), MaxItems: 30, MinItems: 1}}, "space_ids")
-var EndEpisode = define("end_episode", "End an active Episode.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id()}), "space_id", "episode_id")
-var SetEpisodeDeadline = define("set_episode_deadline", "Set an Episode's deadline to an RFC3339 timestamp.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id(), "deadline_at": text("RFC3339 timestamp")}), "space_id", "episode_id", "deadline_at")
+var EndEpisode = define("end_episode", "End an active Episode.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id()}), "space_id", "episode_id", "request_key")
+var SetEpisodeDeadline = define("set_episode_deadline", "Set an Episode's deadline to an RFC3339 timestamp.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id(), "deadline_at": text("RFC3339 timestamp")}), "space_id", "episode_id", "deadline_at", "request_key")
 var ListAdmissionRequests = define("list_admission_requests", "Inspect waiting public admission requests for a Space.", "episodes:read", 'R', map[string]*Schema{"space_id": id(), "state": text("")}, "space_id")
-var DecideAdmissionRequest = define("decide_admission_request", "Approve or deny a public admission request by its opaque handle.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "request_handle": text("Opaque request handle"), "decision": choice("approve", "deny")}), "space_id", "request_handle", "decision")
-var RemoveParticipant = define("remove_participant", "Remove a participant using its current generation as a fence; never guess the generation.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id(), "participant_id": id(), "participant_generation": integer(1, 2147483647)}), "space_id", "episode_id", "participant_id", "participant_generation")
+var DecideAdmissionRequest = define("decide_admission_request", "Approve or deny a public admission request by its opaque handle.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "request_handle": text("Opaque request handle"), "decision": choice("approve", "deny")}), "space_id", "request_handle", "decision", "request_key")
+var RemoveParticipant = define("remove_participant", "Remove a participant using its current generation as a fence; never guess the generation.", "episodes:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "episode_id": id(), "participant_id": id(), "participant_generation": integer(1, 2147483647)}), "space_id", "episode_id", "participant_id", "participant_generation", "request_key")
 var ListRecordings = define("list_recordings", "List recordings with optional Space/Episode filters and cursor pagination.", "recordings:read", 'R', page(map[string]*Schema{"space_id": id(), "episode_id": id()}))
 var GetRecording = define("get_recording", "Inspect recording details and current export status.", "recordings:read", 'R', map[string]*Schema{"recording_id": id()}, "recording_id")
 var GetRecordingDownload = define("get_recording_download", "Obtain an authorized expiring recording download. The signed URL is sensitive; expires_in_seconds must be 1–300.", "recordings:read", 'R', map[string]*Schema{"recording_id": id(), "expires_in_seconds": integer(1, 300), "download": boolean()}, "recording_id", "expires_in_seconds")

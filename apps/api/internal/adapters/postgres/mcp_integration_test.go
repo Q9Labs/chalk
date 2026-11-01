@@ -102,10 +102,12 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	q := sqlc.New(pool)
 	ids := func() utilities.ID { return accountTenantIntegrationID(t) }
 	tenantID, foreignTenant, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID := ids(), ids(), ids(), ids(), ids(), ids(), ids(), ids(), ids()
+	endSpace, endEpisode := ids(), ids()
 	mustExec(t, pool, `insert into tenants(id,name) values($1,'MCP own'),($2,'MCP foreign private')`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values($1),($2)`, uuid(tenantID), uuid(foreignTenant))
 	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'MCP Space',$3,'cf_sfu','manual'),($4,$2,'Empty MCP Space',$5,'cf_sfu','disabled')`, uuid(spaceID), uuid(tenantID), spaceID.String(), uuid(emptySpace), emptySpace.String())
-	for _, id := range []utilities.ID{spaceID, emptySpace} {
+	mustExec(t, pool, `insert into spaces(id,tenant_id,name,slug,media_plane,recording_policy) values($1,$2,'End MCP Space',$3,'cf_sfu','disabled')`, uuid(endSpace), uuid(tenantID), endSpace.String())
+	for _, id := range []utilities.ID{spaceID, emptySpace, endSpace} {
 		mustExec(t, pool, `insert into space_roles(id,tenant_id,space_id,name,capabilities) values($1,$2,$3,'collaborator',array['sendChat'])`, uuid(ids()), uuid(tenantID), uuid(id))
 	}
 	binding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "fixture-app")
@@ -114,6 +116,9 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	}
 	episodeRepo := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, directAdmissionMedia{binding: binding})
 	if _, err := episodes.NewService(episodeRepo).CreateEpisode(ctx, episodes.CreateEpisodeInput{ID: episodeID, TenantID: tenantID, SpaceID: spaceID, Request: episodes.Request{Key: "mcp-fixture-episode-0001"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := episodes.NewService(episodeRepo).CreateEpisode(ctx, episodes.CreateEpisodeInput{ID: endEpisode, TenantID: tenantID, SpaceID: endSpace, Request: episodes.Request{Key: "mcp-fixture-episode-0002"}}); err != nil {
 		t.Fatal(err)
 	}
 	mustExec(t, pool, `insert into participants(id,tenant_id,space_id,episode_id,name,generation,status,role,capabilities) values($1,$2,$3,$4,'MCP participant',1,'active','collaborator',array['sendChat'])`, uuid(participantID), uuid(tenantID), uuid(spaceID), uuid(episodeID))
@@ -127,7 +132,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		for _, table := range []string{"webhook_deliveries", "webhook_events", "webhook_endpoints", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "sync_admission_requests", "sync_lifecycle_intents", "sync_external_operations", "sync_episode_control", "participants", "episode_create_requests", "episodes", "space_roles", "space_create_requests", "spaces", "tenant_artifact_policies"} {
+		for _, table := range []string{"webhook_deliveries", "webhook_events", "webhook_endpoints", "api_key_mutation_requests", "api_keys", "memberships", "recording_artifacts", "recording_jobs", "transcriptions", "recordings", "recording_preparations", "space_public_invites", "sync_admission_requests", "sync_lifecycle_intents", "sync_publication_fences", "sync_external_operations", "sync_episode_control", "participants", "episode_create_requests", "episodes", "space_roles", "space_create_requests", "spaces", "tenant_artifact_policies"} {
 			if _, err := pool.Exec(cleanup, "delete from "+table+" where tenant_id=$1", uuid(tenantID)); err != nil {
 				t.Errorf("cleanup %s: %v", table, err)
 			}
@@ -213,7 +218,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	cases := mcpCases(t, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, disposable.Key.ID, hook.Endpoint.ID)
+	cases := mcpCases(t, spaceID, emptySpace, episodeID, participantID, recordingID, transcriptID, userID, disposable.Key.ID, hook.Endpoint.ID, endSpace, endEpisode)
 	listed, err := fullSession.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
