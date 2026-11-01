@@ -647,15 +647,25 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!closed) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await createLocalOffer(connection);
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const sessionDescription = closed ? undefined : await this.#offerWithoutRetiredSender(connection);
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: sessionDescription === undefined }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      if (connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
+      if (sessionDescription && connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
+    }
+  }
+  // Stopping the only sender leaves an offer with no BUNDLE group, which the browser rejects.
+  // That connection is already marked for replacement, so the provider closes the track by force without an offer.
+  async #offerWithoutRetiredSender(connection: RTCPeerConnection): Promise<Awaited<ReturnType<typeof createLocalOffer>> | undefined> {
+    try {
+      return await createLocalOffer(connection);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "OperationError") || this.#retiredLocalConnection !== connection) throw error;
+      return undefined;
     }
   }
   #fenceLocalPublications(): void {

@@ -1623,6 +1623,27 @@ it("replaces the connection when the peer is not live after the answer instead o
   );
 });
 
+// Stopping the only sender leaves an offer with no BUNDLE group, which the browser rejects with an OperationError.
+// Retirement must still finish, or the speaker never republishes.
+it("retires the only sender by force when the browser cannot offer without it, then republishes on a new connection", async () => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  const harness = createHarness({ replaceMediaConnection });
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    harness.peers[0]!.localDescription = { type: "offer", sdp: "v=0\r\n" };
+    vi.spyOn(harness.peers[0]!, "createOffer").mockRejectedValue(new DOMException("max-bundle configured but session description has no BUNDLE group", "OperationError"));
+    await harness.client.closeForcedLocalPublication("microphone");
+    expect(harness.transport.closeInputs).toHaveLength(1);
+    expect(harness.transport.closeInputs[0]?.force).toBe(true);
+    harness.client.setLocalSourceIntent("microphone", true);
+    await expect(harness.client.setLocalPublicationTarget({ operationId: "republish", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+    expect(harness.client.getSnapshot().localTracks.find((track) => track.source === "microphone")?.enabled).toBe(true);
+  } finally {
+    harness.client.stop();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("only retiring the negotiated BUNDLE sender replaces the connection (%s first)", async (firstSource) => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });
