@@ -10,6 +10,7 @@ import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { provenShort } from "../../tests/helpers/media-convergence";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
 import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
 
@@ -2983,6 +2984,79 @@ describe("Cloudflare SFU HTTP signaling", () => {
     );
   });
 });
+describe("SFU offers during negotiation", () => {
+  it("answers an SFU offer that arrives while the publish offer is pending, then publishes again", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        harness.transport.offerRepliesToPublish = 1;
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const [first, second] = harness.peers;
+        expect(harness.transport.renegotiateInputs).toEqual([expect.objectContaining({ connectionId: "connection-1", sessionDescription: expect.objectContaining({ type: "answer" }) })]);
+        expect(first!.signalingState).not.toBe("have-remote-offer");
+        expect(second).toBeDefined();
+        expect(harness.client.getSnapshot().localTracks.every((track) => track.enabled)).toBe(true);
+      },
+      { replaceMediaConnection: async () => bootstrap("replacement") },
+    );
+  });
+});
+describe("remote pull retries after a transient failure", () => {
+  const gateway = new CloudflareSFUError("Chalk SFU signaling failed with HTTP 503", "signaling_failed", { status: 503, retryableConnection: true });
+  const network = Object.assign(new TypeError("Failed to fetch"), {});
+  markMediaFetchFailure(network);
+  it.each([
+    ["503", gateway],
+    ["network error", network],
+  ] as const)("retries a pull within seconds after a %s", async (_name, failure) => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(failure);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(attempts).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(attempts).toHaveBeenCalledTimes(2);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it("falls back to the long deferral after three quick retries", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(gateway, gateway, gateway, gateway);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(8_000);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(attempts).toHaveBeenCalledTimes(5);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it.each([["rate limit", new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 })]] as const)("keeps the long deferral after a %s", async (_name, failure) => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(failure);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(14_000);
+        expect(attempts).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(attempts).toHaveBeenCalledTimes(2);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+});
 describe("remote publication recovery", () => {
   it.each(["resumed", "removed"] as const)("resets a publication's partial-error backoff after it is %s", async (transition) => {
     await withTimedHarness(
@@ -4247,6 +4321,9 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   readonly #withdrawnLocalPublications = new Set<string>();
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
+  readonly remotePullFailures: unknown[] = [];
+  offerRepliesToPublish = 0;
+  readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
@@ -4265,6 +4342,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     if (input.tracks.some((track) => track.location === "remote")) {
+      if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
       if (this.failRemotePullCount > 0) {
         this.failRemotePullCount--;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
@@ -4316,6 +4394,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         this.#localPublicationRevision++;
       }
     }
+    if (this.offerRepliesToPublish > 0) {
+      this.offerRepliesToPublish--;
+      return { requiresImmediateRenegotiation: true, sessionDescription: { type: "offer", sdp: "remote-offer" }, tracks };
+    }
     return {
       sessionDescription: { type: "answer", sdp: `answer:${input.connectionId}` },
       tracks,
@@ -4347,7 +4429,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (this.failTrackUpdates) throw new CloudflareSFUError("layer switch rejected", "signaling_failed");
     return { tracks: input.tracks };
   }
-  async renegotiate(): Promise<void> {
+  async renegotiate(input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }): Promise<void> {
+    this.renegotiateInputs.push(input);
     if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
   }
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
@@ -4478,7 +4561,9 @@ class FakePeerConnection extends EventTarget {
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
     return Promise.resolve(stats);
   }
+  readonly signalingLog: RTCSignalingState[] = [];
   async setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void> {
+    this.signalingLog.push(this.signalingState);
     this.localDescription = description ?? null;
     if (description?.type === "rollback") {
       this.rollbackCalls++;
