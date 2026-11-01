@@ -204,17 +204,7 @@ func (r *reconciliationRepositoryStub) ListPublicationParticipants(_ context.Con
 		return r.participants, nil
 	}
 	id, _ := utilities.ParseID("33333333-3333-4333-8333-333333333333")
-	listeners := []string{
-		"44444444-4444-4444-8444-444444444444",
-		"55555555-5555-4555-8555-555555555555",
-		"66666666-6666-4666-8666-666666666666",
-	}
-	participants := []PublicationParticipant{{ID: id, Generation: 1, ConnectionID: "publisher-connection"}}
-	for _, rawID := range listeners {
-		listenerID, _ := utilities.ParseID(rawID)
-		participants = append(participants, PublicationParticipant{ID: listenerID, Generation: 1, ConnectionID: "listener-" + listenerID.String()})
-	}
-	return participants, nil
+	return []PublicationParticipant{{ID: id, Generation: 1}}, nil
 }
 
 func (r *reconciliationRepositoryStub) AppendObservation(_ context.Context, input provideroperations.ObservationInput) (provideroperations.Observation, error) {

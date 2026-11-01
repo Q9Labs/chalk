@@ -90,6 +90,7 @@ func TestConfirmRemoteTrackFailuresWithdrawsActiveTrackListenersStillFail(t *tes
 	service := newService(repository, func() time.Time { return now })
 	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
 	listenerID := reconciliationTestID(t, "44444444-4444-4444-8444-444444444444")
+	ensureLivenessListenerPresence(repository)
 	reader := func(context.Context, string) (PublisherSession, error) {
 		return PublisherSession{Found: true, Tracks: []PublisherTrack{{MID: "camera-mid", TrackName: "camera-track", Active: true}}}, nil
 	}
@@ -349,6 +350,9 @@ func TestConfirmRemoteTrackFailuresInspectsPublisherOnceForMultipleTracks(t *tes
 
 func confirmActiveTrackFailure(t *testing.T, service Service, tenantID, episodeID, listenerID utilities.ID, identity RemoteTrackIdentity) RemoteTrackFailureResult {
 	t.Helper()
+	if repository, ok := service.repository.(*reconciliationRepositoryStub); ok {
+		ensureLivenessListenerPresence(repository)
+	}
 	result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
 		TenantID: tenantID, EpisodeID: episodeID, ListenerParticipantID: listenerID,
 		ListenerConnectionID: livenessListenerConnectionID(listenerID),
@@ -373,6 +377,23 @@ func assertLivenessEvidenceEmpty(t *testing.T, service Service) {
 
 func livenessListenerConnectionID(listenerID utilities.ID) string {
 	return "listener-" + listenerID.String()
+}
+
+func ensureLivenessListenerPresence(repository *reconciliationRepositoryStub) {
+	if repository.participants != nil {
+		return
+	}
+	publisherID, _ := utilities.ParseID("33333333-3333-4333-8333-333333333333")
+	participants := []PublicationParticipant{{ID: publisherID, Generation: 1, ConnectionID: "publisher-connection"}}
+	for _, rawID := range []string{
+		"44444444-4444-4444-8444-444444444444",
+		"55555555-5555-4555-8555-555555555555",
+		"66666666-6666-4666-8666-666666666666",
+	} {
+		listenerID, _ := utilities.ParseID(rawID)
+		participants = append(participants, PublicationParticipant{ID: listenerID, Generation: 1, ConnectionID: livenessListenerConnectionID(listenerID)})
+	}
+	repository.participants = participants
 }
 
 func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
