@@ -20,6 +20,7 @@ pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
 pnpm prod:proof leave
+pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
 ```
 
@@ -213,6 +214,20 @@ retention policy. The provisioned Tenant and bootstrap API key are retained.
 
 ## What counts as proof
 
+- **offreason:** Sync's off-reason extension (`media_off_reason`) over the WebSocket
+  protocol, with no browser or media. It admits a host and two guests, then for each
+  guest has the host stop the camera while no publication exists. The first guest
+  uses the candidate SDK (the checkout, or the built entry named by
+  CHALK_PROOF_CANDIDATE_SDK_ENTRY, for example an installed package's built entry). The second uses the integrity-verified published 5.2.6 client.
+  The candidate's welcome must carry `media_off_reason: true`, and the stopped item
+  must be `enabled: false`, `publication_id: null`, `off_reason: "host"` with an
+  `off_revision`, and still be so in a snapshot after the socket closes and
+  reopens. The 5.2.6 welcome must not carry the field, no socket may close
+  unexpectedly, and its item must be off with neither `off_reason` nor
+  `off_revision`, before and after the reopen. A Sync without the extension fails
+  the candidate checks, and the baseline item checks need an item for an
+  unpublished stop, which only a Sync with the extension projects. The criteria
+  live in `off-reason-criteria.mjs`; the evidence is saved in the run directory.
 - **smoke:** API key, Space, Episode, two live guests, Recording, signed lifecycle
   webhooks correlated to this run's objects, successful Export and MP4 download.
   A temporary Webhook.site URL captures raw signed bodies and headers. They are
