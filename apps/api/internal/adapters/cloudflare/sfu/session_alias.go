@@ -40,12 +40,14 @@ const (
 )
 
 type sessionEntry struct {
-	swap       sync.Mutex // serializes replacement so concurrent first calls share one fresh session
+	swap       sync.Mutex    // serializes replacement after a 410 so concurrent calls share one fresh session
+	gate       chan struct{} // one call at a time picks the session it uses, see claim
 	provider   string
 	negotiated bool
 	created    time.Time // when the current provider session was created
 	touched    time.Time
-	inflight   int // calls running on the current session while the connection has not negotiated
+	inflight   int           // calls running on the current session while the connection has not negotiated
+	drained    chan struct{} // closed when inflight reaches 0, and replaced by the next call
 }
 
 type sessionRegistry struct {
@@ -87,7 +89,7 @@ func (r *sessionRegistry) issue(connectionID string) {
 	defer r.mu.Unlock()
 	now := r.now()
 	r.sweepLocked(now)
-	r.entries[connectionID] = &sessionEntry{provider: connectionID, created: now, touched: now}
+	r.entries[connectionID] = &sessionEntry{gate: make(chan struct{}, 1), drained: make(chan struct{}), provider: connectionID, created: now, touched: now}
 }
 
 // providerID returns the live Cloudflare session behind a client connection ID.
@@ -105,36 +107,85 @@ func (r *sessionRegistry) providerID(connectionID string) string {
 	return entry.provider
 }
 
-// begin marks a call in flight on a connection that has not negotiated, so a proactive swap cannot move
-// the connection to another session underneath it. The returned function ends the call.
-func (r *sessionRegistry) begin(connectionID string) func() {
+// claim picks the session a call on the connection uses and registers the call on it until release.
+// A call on a connection that has not negotiated never goes to a session that is likely expired,
+// because Cloudflare answers such a call only after about 5 s. While calls that started earlier still
+// run on that session it waits for them, then follows their result: the connection negotiated, or its
+// session moved after a 410. With none left it swaps to a fresh session itself, and reports swapped.
+// A failed creation lets the call use the old session, so the call reports its own outcome and the
+// caller's 410 retry applies. Only the context ends the wait, with its error.
+func (r *sessionRegistry) claim(ctx context.Context, connectionID string, create func(context.Context) (string, error)) (session string, swapped bool, release func(), err error) {
 	if r == nil {
-		return func() {}
+		return connectionID, false, func() {}, nil
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	entry, ok := r.entries[connectionID]
 	if !ok || entry.negotiated {
-		return func() {}
-	}
-	entry.inflight++
-	return func() {
-		r.mu.Lock()
 		defer r.mu.Unlock()
-		entry.inflight--
+		if !ok {
+			return connectionID, false, func() {}, nil
+		}
+		entry.touched = r.now()
+		return entry.provider, false, func() {}, nil
+	}
+	r.mu.Unlock()
+
+	// The gate is held while the call waits, so only calls that are past this point run on the session
+	// and a waiting call never waits for another waiting call.
+	select {
+	case entry.gate <- struct{}{}:
+	case <-ctx.Done():
+		return "", false, nil, ctx.Err()
+	}
+	defer func() { <-entry.gate }()
+
+	for {
+		r.mu.Lock()
+		tracked := r.entries[connectionID] == entry
+		if !tracked || entry.negotiated || r.now().Sub(entry.created) < sessionProbeLimit {
+			return r.registerLocked(entry, false)
+		}
+		if entry.inflight > 0 {
+			drained := entry.drained
+			r.mu.Unlock()
+			select {
+			case <-drained:
+				continue
+			case <-ctx.Done():
+				return "", false, nil, ctx.Err()
+			}
+		}
+		r.mu.Unlock()
+
+		fresh, createErr := create(ctx)
+		r.mu.Lock()
+		if createErr != nil || r.entries[connectionID] != entry || entry.negotiated {
+			// A session created for a connection that negotiated meanwhile is left to expire unused.
+			return r.registerLocked(entry, false)
+		}
+		delete(r.byProvider, entry.provider)
+		entry.provider = fresh
+		entry.created = r.now()
+		r.byProvider[fresh] = connectionID
+		return r.registerLocked(entry, true)
 	}
 }
 
-// likelyExpired reports whether a connection that has not negotiated has been idle long enough for
-// Cloudflare to have dropped its session.
-func (r *sessionRegistry) likelyExpired(connectionID string) bool {
-	if r == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.entries[connectionID]
-	return ok && !entry.negotiated && r.now().Sub(entry.created) >= sessionProbeLimit
+// registerLocked ends claim with r.mu held and releases it.
+func (r *sessionRegistry) registerLocked(entry *sessionEntry, swapped bool) (string, bool, func(), error) {
+	entry.touched = r.now()
+	entry.inflight++
+	provider := entry.provider
+	r.mu.Unlock()
+	return provider, swapped, func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		entry.inflight--
+		if entry.inflight == 0 {
+			close(entry.drained)
+			entry.drained = make(chan struct{})
+		}
+	}, nil
 }
 
 // clientID returns the connection ID a client knows for a Cloudflare session.
@@ -173,16 +224,6 @@ func (r *sessionRegistry) negotiated(connectionID string) {
 // connection is unknown or already negotiated, and the create error when the fresh session cannot be
 // created, so the caller can tell a gone connection from a provider failure.
 func (r *sessionRegistry) replace(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error)) (fresh string, replaced bool, err error) {
-	fresh, _, err = r.swap(ctx, connectionID, failed, create, false)
-	return fresh, fresh != "", err
-}
-
-// swap is replace with two more outputs. created is true only for the caller that made the fresh
-// session, so a caller that reuses another caller's session is not counted twice. With idleOnly the
-// connection is swapped before its first call without a 410 as evidence, so the swap is skipped, or
-// the created session discarded, when another call is in flight or has negotiated: that call used the
-// old session, and later signaling must keep reaching it.
-func (r *sessionRegistry) swap(ctx context.Context, connectionID, failed string, create func(context.Context) (string, error), idleOnly bool) (fresh string, created bool, err error) {
 	if r == nil {
 		return "", false, nil
 	}
@@ -196,12 +237,12 @@ func (r *sessionRegistry) swap(ctx context.Context, connectionID, failed string,
 	entry.swap.Lock()
 	defer entry.swap.Unlock()
 	r.mu.Lock()
-	provider, negotiated, inflight := entry.provider, entry.negotiated, entry.inflight
+	provider, negotiated := entry.provider, entry.negotiated
 	r.mu.Unlock()
 	if provider != failed {
-		return provider, false, nil
+		return provider, true, nil
 	}
-	if negotiated || (idleOnly && inflight > 1) {
+	if negotiated {
 		return "", false, nil
 	}
 	fresh, err = create(ctx)
@@ -210,9 +251,6 @@ func (r *sessionRegistry) swap(ctx context.Context, connectionID, failed string,
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if idleOnly && (r.entries[connectionID] != entry || entry.negotiated || entry.inflight > 1) {
-		return "", false, nil
-	}
 	delete(r.byProvider, failed)
 	entry.provider = fresh
 	entry.created = r.now()

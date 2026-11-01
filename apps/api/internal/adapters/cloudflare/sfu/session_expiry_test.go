@@ -34,6 +34,13 @@ type fakeIdleExpiryCloudflare struct {
 	expireAll bool
 	// newSessionStatus, when set, is the HTTP status of every /sessions/new call.
 	newSessionStatus int
+	// failCreates is how many more /sessions/new calls answer failCreatesStatus.
+	failCreates       int
+	failCreatesStatus int
+	// hold stops the next call on holdSession after it arrives and before Cloudflare decides its answer.
+	holdSession string
+	holdArrived chan struct{}
+	holdRelease chan struct{}
 }
 
 func newFakeIdleExpiryCloudflare(appID string) *fakeIdleExpiryCloudflare {
@@ -58,6 +65,24 @@ func (f *fakeIdleExpiryCloudflare) failNewSessions(status int) {
 	f.newSessionStatus = status
 }
 
+func (f *fakeIdleExpiryCloudflare) failNextNewSessions(status, count int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.failCreates, f.failCreatesStatus = count, status
+}
+
+// holdNextCallOn stops the next call on a session as it arrives. Cloudflare decides the answer only when
+// the returned release function runs, so a call that arrives young can be answered after the session
+// expired, as Cloudflare does when it answers a dropped session about 5 s late.
+func (f *fakeIdleExpiryCloudflare) holdNextCallOn(session string) (arrived <-chan struct{}, release func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	arrivedCh, releaseCh := make(chan struct{}), make(chan struct{})
+	f.holdSession, f.holdArrived, f.holdRelease = session, arrivedCh, releaseCh
+	var once sync.Once
+	return arrivedCh, func() { once.Do(func() { close(releaseCh) }) }
+}
+
 func (f *fakeIdleExpiryCloudflare) sessionCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -76,6 +101,12 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	path := strings.TrimPrefix(r.URL.Path, "/apps/"+f.appID)
 	if path == "/sessions/new" {
+		if f.failCreates > 0 {
+			f.failCreates--
+			w.WriteHeader(f.failCreatesStatus)
+			fmt.Fprint(w, `{"errorCode":"rate_limited"}`)
+			return
+		}
 		if f.newSessionStatus != 0 {
 			w.WriteHeader(f.newSessionStatus)
 			fmt.Fprint(w, `{"errorCode":"rate_limited"}`)
@@ -90,6 +121,14 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	parts := strings.Split(strings.TrimPrefix(path, "/sessions/"), "/")
 	id := parts[0]
 	f.requests = append(f.requests, r.Method+" "+path)
+	if f.holdSession == id {
+		arrived, release := f.holdArrived, f.holdRelease
+		f.holdSession = ""
+		f.mu.Unlock()
+		close(arrived)
+		<-release
+		f.mu.Lock()
+	}
 	createdAt, known := f.created[id]
 	if !known {
 		w.WriteHeader(http.StatusNotFound)
@@ -678,4 +717,113 @@ func TestSessionReplacementsAreCountedByOutcome(t *testing.T) {
 			t.Fatalf("want one recovered replacement, got %v", got)
 		}
 	})
+}
+
+// A call on a connection that is likely expired must never go to its dead session, even while another
+// call that started earlier is still running on it. It waits for that call and then follows its result.
+// Setup: the first pull reaches the listener's session while it is young and Cloudflare answers it only
+// after the session expired (410), which makes the first call swap the connection to a fresh session.
+func holdFirstPullAndLetSessionExpire(t *testing.T) (adapter Adapter, fake *fakeIdleExpiryCloudflare, listener, publisher string, firstDone chan error, release func()) {
+	t.Helper()
+	adapter, fake = newExpiryAdapter(t)
+	followFakeClock(adapter, fake)
+	publisher = joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener = joinParticipant(t, adapter, "listener")
+	arrived, release := fake.holdNextCallOn(listener)
+	t.Cleanup(release) // a failed test must not leave the held call blocking the server's shutdown
+	firstDone = make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		firstDone <- err
+	}()
+	select {
+	case <-arrived:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first pull never reached Cloudflare")
+	}
+	fake.advance(20 * time.Second)
+	return adapter, fake, listener, publisher, firstDone, release
+}
+
+func TestSecondCallNeverReachesTheDeadSessionWhileTheFirstIsStillInFlight(t *testing.T) {
+	adapter, fake, listener, publisher, firstDone, release := holdFirstPullAndLetSessionExpire(t)
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+		secondDone <- err
+	}()
+	time.Sleep(100 * time.Millisecond) // long enough for a call that does not wait to reach Cloudflare
+	release()
+
+	for name, done := range map[string]chan error{"first": firstDone, "second": secondDone} {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s pull: %v", name, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s pull never finished", name)
+		}
+	}
+	if got := requestsOnSession(fake, listener); got != 1 {
+		t.Fatalf("only the first call may reach the connection's own dead session, got %d requests", got)
+	}
+}
+
+func TestWaitForAnInFlightCallEndsWhenTheContextIsCanceled(t *testing.T) {
+	adapter, fake, listener, publisher, firstDone, release := holdFirstPullAndLetSessionExpire(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := adapter.AddTracks(ctx, pullRequest(listener, publisher))
+		secondDone <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-secondDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("a canceled wait must report the cancellation, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting call did not end when its context was canceled")
+	}
+	if got := requestsOnSession(fake, listener); got != 1 {
+		t.Fatalf("the canceled call must not reach the dead session, got %d requests", got)
+	}
+	release()
+	if err := <-firstDone; err != nil {
+		t.Fatalf("the first call must still finish: %v", err)
+	}
+}
+
+func TestFailedProactiveCreationFallsThroughToTheNormalPathAndItsRecovery(t *testing.T) {
+	adapter, fake := newExpiryAdapter(t)
+	followFakeClock(adapter, fake)
+	publisher := joinParticipant(t, adapter, "speaker")
+	if _, err := adapter.AddTracks(context.Background(), publishRequest(publisher)); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	listener := joinParticipant(t, adapter, "listener")
+	fake.advance(20 * time.Second)
+	fake.failNextNewSessions(http.StatusTooManyRequests, 1) // the proactive create fails, the recovery's works
+
+	var err error
+	outcomes := replacementOutcomes(t, func() {
+		_, err = adapter.AddTracks(context.Background(), pullRequest(listener, publisher))
+	})
+
+	if err != nil {
+		t.Fatalf("a failed proactive create must not fail the call: %v", err)
+	}
+	if got := requestsOnSession(fake, listener); got != 1 {
+		t.Fatalf("the call must go on to its own session once, got %d requests", got)
+	}
+	if len(outcomes) != 1 || outcomes["recovered"] != 1 {
+		t.Fatalf("the 410 path must recover the call and nothing else is counted, got %v", outcomes)
+	}
 }
