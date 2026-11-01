@@ -439,17 +439,20 @@ it.each(["microphone", "camera"] as const)("a %s enable during remote connection
       await replacementStarted.promise;
       const enabling = h.client.setLocalPublicationTarget({ operationId: `tap-${source}`, participantId: "participant-1", source, enabled: true });
       await vi.advanceTimersByTimeAsync(0);
+      const localPostsWhileReplacing = h.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local" && item.source === source));
       replacement.resolve(bootstrap("replacement"));
-      await expect(enabling).resolves.toEqual({ outcome: "confirmed", errorCode: null });
-      await expect(pulling).resolves.toBeUndefined();
+      const enableResult = await enabling;
+      await pulling;
       await vi.advanceTimersByTimeAsync(0);
 
+      expect(localPostsWhileReplacing).toHaveLength(0);
       const localPosts = h.transport.addInputs.filter((input) => input.tracks.some((item) => item.location === "local" && item.source === source));
       expect(localPosts).toHaveLength(1);
       expect(localPosts[0]!.connectionId).toBe("replacement");
       const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === source);
       expect(live).toHaveLength(1);
       expect(h.client.getSnapshot().localTracks.find((item) => item.source === source)).toMatchObject({ enabled: true, publicationId: live[0]!.publicationId });
+      expect(enableResult).toMatchObject({ outcome: "confirmed", errorCode: null });
     },
     { replaceMediaConnection },
   );
