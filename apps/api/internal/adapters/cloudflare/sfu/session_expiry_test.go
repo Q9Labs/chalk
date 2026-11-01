@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -195,11 +196,20 @@ func (f *fakeIdleExpiryCloudflare) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+var expiryAppSequence atomic.Int64
+
+// uniqueExpiryAppID names a Cloudflare app that no other test or earlier run of the same test uses.
+// Session registries live per app for the whole process, so a name that repeats under -count would carry
+// a moved clock and sweep time into the next run.
+func uniqueExpiryAppID(t *testing.T) string {
+	return fmt.Sprintf("%s-%d", strings.NewReplacer("/", "-", " ", "-").Replace(t.Name()), expiryAppSequence.Add(1))
+}
+
 // newExpiryAdapter returns a new adapter for the test's own Cloudflare app. Adapters for one app share
 // their session registry, as the provider registry builds a new adapter on every request.
 func newExpiryAdapter(t *testing.T) (Adapter, *fakeIdleExpiryCloudflare) {
 	t.Helper()
-	appID := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+	appID := uniqueExpiryAppID(t)
 	fake := newFakeIdleExpiryCloudflare(appID)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
@@ -392,7 +402,7 @@ func TestExpiredReplacementSessionIsNotSwappedASecondTime(t *testing.T) {
 }
 
 func TestAdaptersForTheSameAppShareTheirIdleSessionRegistry(t *testing.T) {
-	appID := "shared-app-" + t.Name()
+	appID := uniqueExpiryAppID(t)
 	fake := newFakeIdleExpiryCloudflare(appID)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
