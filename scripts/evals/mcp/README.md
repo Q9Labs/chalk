@@ -59,6 +59,12 @@ python3 scripts/evals/mcp/run.py report .private/mcp-evals/tools.json .private/m
 
 Results and per-arm Markdown reports checkpoint after each trial. Comparison refuses incomplete runs or mismatched model, settings, prompts, fixture, task list, CLI, harness revision or API source revision. Alternate arm order across repeated full runs to reduce cache/order bias. A k=1 proof cannot decide which arm to keep.
 
+## Recorded proof
+
+The [November 1, 2026 comparison](proof/comparison-k1.md) contains full-suite k=1 runs for both arms, with sanitized [tools JSON](proof/tools-k1.json) and [code JSON](proof/code-k1.json). Both used harness `47cffbf3f`, API source `529a9e7e9db6` and Claude Code 2.1.316. Tools passed 20/20 operational tasks; code passed 19/20, reporting attendance as unsupported. Both failed the four known transcript-text gaps. Every trial had API-side evidence and complete CLI accounting.
+
+The observed CLI costs were $0.4658 (tools) and $0.8971 (code). Elapsed times including fixtures and SSH were 10.0 and 12.1 minutes. A linear extrapolation gives approximately **$4.09 and 66 minutes** for both arms at k=3, concurrency two. This is not a measured k=3 result or a winner selection.
+
 ## Grading and accounting
 
 - `tasks.py` specifies requested JSON facts. Graders require exact types/values, including names, counts and timestamps. Write tasks additionally query resulting DB state. Rotation must change the existing row's credential hash and prefix while preserving its ID, name and scopes. The scope task requires the specific `chalk_update_tenant:auth.forbidden` server event, not just a plausible refusal or an unrelated error. No LLM graders are used.
@@ -66,6 +72,7 @@ Results and per-arm Markdown reports checkpoint after each trial. Comparison ref
 - Resource IDs are deterministically derived with UUIDv4 version bits because webhook event contracts reject other UUID versions. Historical Episode dates are fixed task facts; capture completion uses PostgreSQL's current transaction time so export retention does not expire the fixture on future runs.
 - API JSON logs supply per-tenant completion counts and errors. The runner takes before/after counters, so old logs cannot validate a new trial. Code-mode audit counters and inner shared-operation counts remain separate, exposing batching. Missing server evidence invalidates a trial even if its answer happens to match.
 - Reports include Wilson 95% pass-rate intervals, uncached input/output/cache tokens, CLI-reported USD cost, wall time, turns, client tool calls/errors, server calls/errors and failure categories. CLI accounting includes auxiliary-model overhead when Claude reports it. Incomplete accounting is explicit; do not treat its cost as a complete bill. Repetitions of a task are correlated, so the intervals are descriptive, not a population guarantee.
+- `unsupported_capability` records the model's reported unsupported response; it does not prove the API lacks that operation. Only the four `capability_gap` tasks identify known catalog limitations. Invalid JSON is a failure even when its task is a known gap.
 - Prompts require reading writes back. The grader checks facts and DB state identically for both arms; it does not infer read-back execution from generated code. Webhook testing proves a queued `endpoint.test` delivery, not an external HTTP success.
 - Raw Claude streams, tool inputs/results, final answers, issued keys and transcript bodies are never written to result logs. Only aggregate/token/model metadata, fixture IDs and check booleans persist. Do not commit private runtime artifacts.
 
