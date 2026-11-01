@@ -23,10 +23,13 @@ import (
 )
 
 const (
-	forcedCloseTimeout = 25 * time.Second
-	defaultEndpoint    = "https://rtc.live.cloudflare.com/v1"
-	stunServer         = "stun:stun.cloudflare.com:3478"
-	syncOwner          = "elixir"
+	forcedCloseTimeout      = 25 * time.Second
+	sfuHTTP2SendPingTimeout = 10 * time.Second
+	sfuHTTP2PingTimeout     = 5 * time.Second
+	sfuIdleConnTimeout      = 90 * time.Second
+	defaultEndpoint         = "https://rtc.live.cloudflare.com/v1"
+	stunServer              = "stun:stun.cloudflare.com:3478"
+	syncOwner               = "elixir"
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
@@ -224,14 +227,25 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		endpoint = strings.TrimRight(strings.TrimSpace(cfg.RealtimeBaseURL), "/")
 	}
 
+	transport := newSFUTransport()
 	return Adapter{
 		appID:             appID,
 		appSecret:         appSecret,
 		endpoint:          endpoint,
-		client:            &http.Client{Timeout: cfg.RequestTimeout},
-		forcedCloseClient: &http.Client{Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
+		client:            &http.Client{Transport: transport, Timeout: cfg.RequestTimeout},
+		forcedCloseClient: &http.Client{Transport: transport, Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
 		captureReplay:     newCaptureReplayRegistry(),
 	}, nil
+}
+
+func newSFUTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.IdleConnTimeout = sfuIdleConnTimeout
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: sfuHTTP2SendPingTimeout,
+		PingTimeout:     sfuHTTP2PingTimeout,
+	}
+	return transport
 }
 
 func NewAdapterWithClient(cfg config.CloudflareRealtimeConfig, client httpClient, endpoint string) (Adapter, error) {
