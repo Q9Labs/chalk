@@ -402,7 +402,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #replaceConnectionForLocalRecovery(error: unknown): Promise<void> {
     const failures: readonly unknown[] = error instanceof AggregateError ? error.errors : [error];
     if (!this.#replaceMediaConnection || failures.length === 0 || !failures.every((failure) => this.#isRetryableConnectionFailure(failure))) return;
-    await this.#replaceMediaConnectionForRecovery(this.#generation, "local_signaling_failure").catch(() => {});
+    const generation = this.#generation;
+    try {
+      await this.#replaceMediaConnectionForRecovery(generation, "local_signaling_failure");
+    } catch {
+      return;
+    }
+    try {
+      await this.#republishPreparedTracksAfterRecovery(generation);
+    } catch (republishError) {
+      this.#reportLocalRecoveryError(republishError);
+    }
   }
   #scheduleLocalRecoveryRetry(recovery: LocalRecovery): void {
     if (!this.#canRecover(recovery)) {

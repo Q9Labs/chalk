@@ -370,6 +370,10 @@ it.each(["microphone", "camera"] as const)("recovery after a %s retirement failu
       const otherSource = recoveringSource === "microphone" ? "camera" : "microphone";
       const oldId = h.client.getSnapshot().localTracks.find((track) => track.source === recoveringSource)!.publicationId!;
       const oldOtherId = h.client.getSnapshot().localTracks.find((track) => track.source === otherSource)!.publicationId!;
+      replacement.mockImplementation(async () => {
+        for (const publication of [...h.transport.localPublications.values()]) h.transport.withdrawPublication(publication.publicationId);
+        return bootstrap("replacement");
+      });
       h.transport.withdrawPublication(oldId);
       vi.spyOn(h.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close failed", "signaling_failed", { status: 503, retryableConnection: true }));
       notifyLocalPublicationWithdrawn(h.client, oldId);
