@@ -694,7 +694,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireGeneration(generation);
     const pendingStates = states.filter((state) => !state.enabled);
     if (pendingStates.length === 0) return;
-    const wasLive = connectionIsLive(connection);
     const publications: OwnedLocalPublication[] = [];
     try {
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
