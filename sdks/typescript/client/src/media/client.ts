@@ -456,15 +456,25 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!closed) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await createLocalOffer(connection);
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const sessionDescription = closed ? undefined : await this.#offerWithoutRetiredSender(connection);
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: sessionDescription === undefined }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      if (connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
+      if (sessionDescription && connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
+    }
+  }
+  // Stopping the only sender leaves an offer with no BUNDLE group, which the browser rejects.
+  // That connection is already marked for replacement, so the provider closes the track by force without an offer.
+  async #offerWithoutRetiredSender(connection: RTCPeerConnection): Promise<Awaited<ReturnType<typeof createLocalOffer>> | undefined> {
+    try {
+      return await createLocalOffer(connection);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "OperationError") || this.#retiredLocalConnection !== connection) throw error;
+      return undefined;
     }
   }
   #fenceLocalPublications(): void {
@@ -684,12 +694,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireGeneration(generation);
     const pendingStates = states.filter((state) => !state.enabled);
     if (pendingStates.length === 0) return;
-    const wasLive = connectionIsLive(connection);
     const publications: OwnedLocalPublication[] = [];
     try {
       for (const state of pendingStates) publications.push(await this.#prepareLocalPublication(connection, state, generation));
       await this.#negotiateLocalPublications(connection, connectionId, publications, generation);
-      if (!wasLive) await this.#waitForConnection(connection, generation);
+      // The peer can lose its transport while it negotiates, so check again instead of trusting the state from before.
+      if (!connectionIsLive(connection)) await this.#waitForConnection(connection, generation);
       this.#requireGeneration(generation);
       this.#negotiatedGeneration = generation;
       this.#settleLocalPublications(publications);
@@ -1271,16 +1281,21 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
   }
-  #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
-    return (() =>
-      waitFor(
+  async #waitForConnection(connection: RTCPeerConnection, generation: number): Promise<void> {
+    try {
+      await waitFor(
         () => {
           this.#requireGeneration(generation);
           return connectionIsLive(connection);
         },
         CONNECTION_TIMEOUT_MS,
         "Timed out waiting for the Cloudflare SFU peer connection",
-      ))();
+      );
+    } catch (error) {
+      // A peer that never connects is replaced like any other failed connection.
+      if (error instanceof CloudflareSFUError && error.code === "media_failed") throw new CloudflareSFUError(error.message, "signaling_failed", { retryableConnection: true });
+      throw error;
+    }
   }
   #cameraSimulcastSender(state: LocalTrackState | undefined): RTCRtpSender | undefined {
     if (!state?.enabled) return undefined;
