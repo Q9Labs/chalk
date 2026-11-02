@@ -295,6 +295,7 @@ async function runBuild(name) {
     root: serverRoot,
     env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "600000", CHALK_DEV_WEB_PORT: "4870" },
     requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"],
+    allowBusyPorts: process.env.SR_ALLOW_BUSY_PORTS ? process.env.SR_ALLOW_BUSY_PORTS.split(",") : [], // the sfu-spike namespace forwards Postgres on this port
     secretResolver: async () => credentials,
   });
   config.webJoinPath = "/synthetic";
