@@ -349,6 +349,7 @@ export const ConnectionReportRequestSchema = Schema.Struct({
         "sync_heartbeat_gap",
         "media_state",
         "media_http_error",
+        "media_projection_mismatch",
       ]),
       granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
       granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
@@ -358,11 +359,14 @@ export const ConnectionReportRequestSchema = Schema.Struct({
       media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"])),
       outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
       phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
+      projection_state: Schema.optional(Schema.Literals(["on", "off"])),
+      publication_state: Schema.optional(Schema.Literals(["on", "off"])),
+      source: Schema.optional(Schema.Literals(["microphone", "camera"])),
       state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
       step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
     }),
   ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted"]),
+  trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch"]),
   version: Schema.Literal(1),
 });
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;
@@ -582,6 +586,7 @@ export type IntegrationServiceId = typeof IntegrationServiceIdSchema.Type;
 
 export const IssueAccessGrantRequestSchema = Schema.Struct({
   current_media_token: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+  expected_media_connection_id: Schema.optional(Schema.NullOr(Schema.String.check(Schema.isMinLength(1)))),
   participant_generation: Schema.Number,
   replace_media_connection: Schema.Boolean,
 });

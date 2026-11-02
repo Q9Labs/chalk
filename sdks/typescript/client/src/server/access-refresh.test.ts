@@ -32,12 +32,18 @@ describe("server-only Access refresh state", () => {
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: false, current_media_token: state.currentMediaToken });
   });
 
-  it("replaces media for a forwarded recovery request without sending the old credential", async () => {
+  it("forwards the browser's expected binding for conditional recovery without sending the old credential", async () => {
     const { initial, fetch, client, state } = forwardedRequestFixture();
-    const request = { space: "space-1", reason: "retry", replaceMediaConnection: true };
+    const request = { space: "space-1", reason: "retry", replaceMediaConnection: true, expectedMediaConnectionId: "browser-binding" };
     await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, request);
-    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true, expected_media_connection_id: "browser-binding" });
     expect(getAccessRefreshState(initial)).toEqual(state);
+  });
+
+  it("preserves unconditional explicit takeover when no expected binding is supplied", async () => {
+    const { fetch, client, state } = forwardedRequestFixture();
+    await client.participants.issueAccess("space-1", "episode-1", "participant-1", state, { replaceMediaConnection: true });
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ participant_generation: 1, replace_media_connection: true });
   });
 
   it("does not retry a replacement requested through the forwarded context", async () => {

@@ -303,6 +303,7 @@ function accessGrantRequest(input: IssueAccessGrantInput): Record<string, unknow
     participant_generation: input.participantGeneration,
     replace_media_connection: input.replaceMediaConnection ?? false,
     ...(input.currentMediaToken ? { current_media_token: input.currentMediaToken } : {}),
+    ...(input.replaceMediaConnection && input.expectedMediaConnectionId !== undefined ? { expected_media_connection_id: input.expectedMediaConnectionId } : {}),
   };
 }
 function participantRemovalRequest(input: RemoveParticipantInput): Record<string, unknown> {
