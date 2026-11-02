@@ -1121,6 +1121,9 @@ func isUUIDField(fieldName string) bool {
 }
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
+	if schemaName == "IssueAccessGrantRequest" && fieldName == "expected_media_connection_id" {
+		return true
+	}
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" {
 		return true
 	}

@@ -373,7 +373,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each([false, true])("ignores untagged off projections (fresh publication: %s)", async (fresh) => {
+  it.each([false, true])("keeps healthy tracks but waits for an off projection to converge (fresh publication: %s)", async (fresh) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();
     const close = vi.fn(async () => {
@@ -387,7 +387,7 @@ describe("SpaceClient media convergence", () => {
       platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 2, items: [{ ...active, enabled: false, publicationId: null }] } });
       expect(close).not.toHaveBeenCalled();
       expect(track.enabled).toBe(true);
-      expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+      expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
     } finally {
       client.dispose();
     }
@@ -484,6 +484,8 @@ describe("SpaceClient media convergence", () => {
       if (decision === "accept") {
         await client.media.acceptRequest("request-1");
         expect(capture).toHaveBeenCalledOnce();
+        expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
+        observeMicrophonePublication(platform, track);
         expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
       } else if (decision === "decline") {
         await client.media.declineRequest("request-1");
@@ -803,7 +805,7 @@ describe("SpaceClient media convergence", () => {
     try {
       await client.join({ microphone: true, camera: false });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: true, publicationId: "publication-1", track }] });
-      expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+      expect(client.getSnapshot().media.local.microphone.state).toBe("requesting");
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "microphone", enabled: false, publicationId: null, track }] });
       expect(client.getSnapshot().media.local.microphone.state).toBe("disabled");
     } finally {

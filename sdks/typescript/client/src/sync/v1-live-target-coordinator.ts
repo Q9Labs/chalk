@@ -28,7 +28,7 @@ type LiveDeferred = V1Deferred<V1SelfMediaTargetResult> & {
   serverResultSignature?: string;
 };
 
-type V1LiveTargetOptions = { readonly requestId?: string };
+export type V1LiveTargetOptions = { readonly requestId?: string; readonly signal?: AbortSignal };
 
 type V1LiveTargetCoordinatorOptions = {
   readonly mediaPlane: V1SyncClientOptions["mediaPlane"];
@@ -79,12 +79,13 @@ export class V1LiveTargetCoordinator {
     for (const source of ["microphone", "camera", "screen"] as const) this.#localMedia[source] = "unknown";
   }
 
-  send(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options?: V1LiveTargetOptions): Promise<V1SelfMediaTargetResult> {
+  send(name: "set_microphone_enabled" | "set_camera_enabled" | "set_screen_share_enabled", source: V1MediaSource, enabled: boolean, options: V1LiveTargetOptions = {}): Promise<V1SelfMediaTargetResult> {
+    if (options.signal?.aborted) return Promise.reject(new V1SyncError("Media target cancelled", "cancelled"));
     this.#options.assertCapacity();
     const participantId = this.#options.participantId();
     if (!this.#options.isLive() || !participantId) return Promise.reject(new V1SyncError("self-media targets require a live participant", "not_live"));
     if (!this.#options.mediaPlane) return Promise.reject(new V1SyncError("a client MediaPlane adapter is required for self-media targets", "media_plane_unavailable"));
-    const operationId = options?.requestId ?? this.#nextRequestId();
+    const operationId = options.requestId ?? this.#nextRequestId();
     if (this.#targets.has(operationId) || this.#options.requestIdInUse(operationId)) throw new V1SyncError("request ID is already pending", "request_id_conflict");
     const frame: LiveTargetClientFrame = { type: "live_target", operation_id: operationId, name, enabled };
     encodeV1ClientFrame(frame);
@@ -96,9 +97,22 @@ export class V1LiveTargetCoordinator {
     }, LIVE_TARGET_RETRY_BUDGET_MS);
     this.#deadlineTimers.set(operationId, deadlineTimer);
     this.#localMedia[source] = "requesting";
+    const pending = this.#abortable(operationId, deferred, promise, options.signal);
     this.#options.sendIfLive(frame);
     this.#options.stateChanged();
-    return promise;
+    return pending;
+  }
+
+  #abortable(operationId: string, deferred: LiveDeferred, promise: Promise<V1SelfMediaTargetResult>, signal?: AbortSignal): Promise<V1SelfMediaTargetResult> {
+    if (!signal) return promise;
+    const abort = () => {
+      if (this.#targets.get(operationId) !== deferred) return;
+      this.#removeTarget(operationId);
+      this.#localMedia[deferred.source] = "unknown";
+      rejectV1Deferred(deferred, new V1SyncError("Media target cancelled", "cancelled"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    return promise.finally(() => signal.removeEventListener("abort", abort));
   }
 
   receive(frame: V1LiveTargetResult): void {
@@ -212,9 +226,7 @@ export class V1LiveTargetCoordinator {
     }
     const serverResult = deferred.serverResult;
     if (!serverResult) throw new V1ReplicaError("local MediaPlane completed before server authorization");
-    this.#targets.delete(operationId);
-    this.#clearRetryTimer(operationId);
-    this.#clearDeadlineTimer(operationId);
+    this.#removeTarget(operationId);
     this.#localMedia[deferred.source] = deferred.enabled ? "enabled" : "disabled";
     resolveV1Deferred(deferred, { operationId, name: deferred.frame.name, serverOutcome: serverResult.outcome, mediaPlaneOutcome: result.outcome });
     this.#options.stateChanged();
@@ -229,12 +241,16 @@ export class V1LiveTargetCoordinator {
   }
 
   #fail(operationId: string, deferred: LiveDeferred, error: V1SyncError): void {
-    this.#targets.delete(operationId);
-    this.#clearRetryTimer(operationId);
-    this.#clearDeadlineTimer(operationId);
+    this.#removeTarget(operationId);
     this.#localMedia[deferred.source] = "failed";
     rejectV1Deferred(deferred, error);
     this.#options.stateChanged();
+  }
+
+  #removeTarget(operationId: string): void {
+    this.#targets.delete(operationId);
+    this.#clearRetryTimer(operationId);
+    this.#clearDeadlineTimer(operationId);
   }
 
   #nextRequestId(): string {

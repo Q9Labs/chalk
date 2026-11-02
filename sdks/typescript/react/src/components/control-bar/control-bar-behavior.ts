@@ -42,9 +42,11 @@ export interface ControlBarSurfaceProps {
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
+  onCancelMicrophonePending?: () => void;
   mediaEnableDisabled?: boolean;
   reactionsDisabled?: boolean;
   cameraPending?: boolean;
+  onCancelCameraPending?: () => void;
   isVideoEnabled?: boolean;
   isScreenSharing?: boolean;
   isRecording?: boolean;
@@ -330,9 +332,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
+    onCancelMicrophonePending: () => void run(() => client.media.setMicrophoneEnabled(false), "microphone", "stop"),
     mediaEnableDisabled: !live,
     reactionsDisabled: !live,
     cameraPending: media.local.camera.state === "requesting",
+    onCancelCameraPending: () => void run(() => client.media.setCameraEnabled(false), "camera", "stop"),
     isVideoEnabled: cameraEnabled,
     isScreenSharing: screenSharing,
     isRecording,

@@ -62,6 +62,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="mic"
           isActive={!props.isMuted}
           busy={props.microphonePending}
+          onCancelPending={props.onCancelMicrophonePending}
           toggleDisabled={props.mediaEnableDisabled && props.isMuted}
           onToggle={props.onToggleMute ?? (() => {})}
           devices={effectiveAudioInputDevices}
@@ -83,6 +84,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           type="video"
           isActive={props.isVideoEnabled ?? true}
           busy={props.cameraPending}
+          onCancelPending={props.onCancelCameraPending}
           toggleDisabled={props.mediaEnableDisabled && !props.isVideoEnabled}
           onToggle={props.onToggleVideo ?? (() => {})}
           devices={effectiveVideoInputDevices}
