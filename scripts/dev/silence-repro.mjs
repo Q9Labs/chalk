@@ -22,6 +22,7 @@ const { chromium } = requireConsumer("playwright");
 // name -> where the server and the SDK/React source come from. "npm" uses the published client bundle.
 const builds = {
   "5.2.6": { serverRev: "origin/master", sdkRev: "2ec22c54b", npm: "5.2.6" },
+  "5.4.1": { serverRev: "origin/master", sdkRev: "82c5fc8d1", npm: "5.4.1" },
   master: { serverRev: "origin/master", sdkRev: "origin/master" },
   pr716: { serverRev: "origin/master", sdkRev: "origin/fix/mic-mute-keeps-publication" },
   pr708: { serverRev: "origin/devin/mic-mute-keeps-publication", sdkRev: "origin/devin/mic-mute-keeps-publication" },
