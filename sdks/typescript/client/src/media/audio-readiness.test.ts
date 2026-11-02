@@ -34,6 +34,18 @@ describe("AudioReadinessTracker", () => {
     expect(tracker.state).toBe("ready");
   });
 
+  it("needs the replacement publication heard when a heard speaker republishes before ready", () => {
+    const tracker = new AudioReadinessTracker();
+    tracker.connection(true);
+    tracker.expect([mic("alice", "alice-old"), mic("bob", "bob-pub")], "self");
+    tracker.advanced(["alice-old"]);
+    tracker.expect([mic("alice", "alice-new"), mic("bob", "bob-pub")], "self");
+    tracker.advanced(["bob-pub"]);
+    expect(tracker.state).toBe("connecting");
+    tracker.advanced(["alice-new"]);
+    expect(tracker.state).toBe("ready");
+  });
+
   it("does not use the listener's own microphone or wait before the first publication list", () => {
     const tracker = new AudioReadinessTracker();
     tracker.connection(true);
