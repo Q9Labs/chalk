@@ -27,7 +27,8 @@ export class AudioReadinessTracker {
 
   /** Records the live microphones. Returns true when the state changed. */
   expect(publications: readonly MediaPublication[], selfParticipantId: string): boolean {
-    const microphones = publications.filter((publication) => publication.source === "microphone" && publication.enabled && publication.publicationId !== null && publication.participantId !== selfParticipantId);
+    // An enabled microphone without a publication id is still a speaker to wait for: it cannot count as heard until an id arrives.
+    const microphones = publications.filter((publication) => publication.source === "microphone" && publication.enabled && publication.participantId !== selfParticipantId);
     this.#publicationOwners = new Map(microphones.flatMap((publication) => (publication.publicationId === null ? [] : [[publication.publicationId, publication.participantId] as const])));
     const present = new Set(microphones.map((publication) => publication.participantId));
     if (this.#cohort === null) this.#cohort = new Map([...present].map((participantId) => [participantId, false]));
