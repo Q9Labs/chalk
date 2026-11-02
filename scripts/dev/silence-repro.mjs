@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -114,7 +114,10 @@ const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" })
 // Only UDP is shaped, which is Chromium's WebRTC media path to the SFU (DNS and NTP excluded). TCP stays clean: the local
 // API's own calls to Cloudflare are a datacenter link in production, and the box's control channel must keep working.
 // Egress: prio qdisc, UDP through netem in band 3, the rest in band 1. Ingress: UDP is redirected to ifb0 and shaped there.
+// SR_SHAPER_CONTROL: the kernel has no netem (Instabox), so a userspace shaper (sfu-spike/shaper) reads the profile from this file.
+const shaperControl = process.env.SR_SHAPER_CONTROL;
 const setNetem = (profile) => {
+  if (shaperControl) return writeFileSync(shaperControl, JSON.stringify(profile ? { aToB: profile.egress, bToA: profile.ingress } : {}));
   clearNetem();
   if (!profile) return;
   const dev = defaultInterface();
@@ -134,6 +137,7 @@ const setNetem = (profile) => {
 };
 // Packets and drops the two netem qdiscs handled, as proof the shaping saw the room's media.
 const shapedPackets = () => {
+  if (shaperControl) return JSON.parse(readFileSync(process.env.SR_SHAPER_STATS, "utf8"));
   const stats = (dev) => {
     const text = execFileSync("sudo", ["tc", "-s", "qdisc", "show", "dev", dev], { encoding: "utf8" });
     const netem = text.slice(text.indexOf("qdisc netem"));
@@ -143,6 +147,7 @@ const shapedPackets = () => {
   return { egress: stats(defaultInterface()), ingress: stats("ifb0") };
 };
 const clearNetem = () => {
+  if (shaperControl) return writeFileSync(shaperControl, "{}");
   const dev = defaultInterface();
   for (const args of [
     ["qdisc", "del", "dev", dev, "root"],
@@ -345,6 +350,7 @@ async function runBuild(name) {
     root: serverRoot,
     env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "600000", CHALK_DEV_WEB_PORT: "4870" },
     requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"],
+    allowBusyPorts: process.env.SR_ALLOW_BUSY_PORTS ? process.env.SR_ALLOW_BUSY_PORTS.split(",") : [], // the sfu-spike namespace forwards Postgres on this port
     secretResolver: async () => credentials,
   });
   config.webJoinPath = "/synthetic";
