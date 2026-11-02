@@ -20,10 +20,16 @@ import (
 )
 
 const (
+	PullGateModeHold  = "hold"
+	PullGateModeDefer = "defer"
+)
+
+const (
 	APIAddress            = "CHALK_API_ADDR"
 	APICORSAllowedOrigins = "CHALK_API_CORS_ALLOWED_ORIGINS"
 	APIEnvironment        = "CHALK_API_ENV"
 	APIRateLimits         = "CHALK_API_RATE_LIMITS"
+	PullGateMode          = "CHALK_PULL_GATE_MODE"
 	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
@@ -140,6 +146,9 @@ type APIConfig struct {
 	ServicePrincipal               authentication.ServiceCredential
 
 	TrustedProxyCIDRs []string
+
+	// PullGateMode is PullGateModeHold or PullGateModeDefer. The README says what each does.
+	PullGateMode string
 }
 
 type CapabilityConfig struct {
@@ -342,6 +351,10 @@ func Load() (Config, error) {
 	if rateLimits == "off" && environment != DefaultEnvironment {
 		return Config{}, fmt.Errorf("%s=off is only allowed when %s=local", APIRateLimits, APIEnvironment)
 	}
+	pullGateMode, err := envEnum(PullGateMode, PullGateModeHold, PullGateModeHold, PullGateModeDefer)
+	if err != nil {
+		return Config{}, err
+	}
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
 		return Config{}, err
@@ -511,6 +524,7 @@ func Load() (Config, error) {
 		TenantLimits: limits,
 		API: APIConfig{
 			DisableAuthenticatedRateLimits: rateLimits == "off",
+			PullGateMode:                   pullGateMode,
 			Address:                        envOrDefault(APIAddress, DefaultAPIAddress),
 			CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
 			LocalSystemToken:               localSystemToken,

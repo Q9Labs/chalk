@@ -162,6 +162,10 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	request, answeredEmpty := deferHeldRemoteTracks(ctx, publications, request)
+	if answeredEmpty {
+		return mediaplane.TracksResponse{}, nil
+	}
 	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
 	var capture mediapublications.ListenerPullCapture
 	for _, track := range request.Body.Tracks {
@@ -243,6 +247,52 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	return response, nil
 }
 
+// deferHeldRemoteTracks drops the remote tracks whose publisher the pull gate still holds, so that
+// Cloudflare never sees them and the response has no entry or error for them. A client that runs pulls
+// and publishes through one SDP queue (SDK 5.2.6) then gets its queue back at once, finds the pull
+// incomplete and retries it later. It reports true when nothing is left to send, which a response
+// with no fields answers. A request that still carries an offer needs a real answer, so that request
+// keeps its tracks and waits in awaitPublishersConnected as hold mode does.
+func deferHeldRemoteTracks(ctx context.Context, publications mediapublications.Registry, request sfuTracksEndpointRequest) (sfuTracksEndpointRequest, bool) {
+	gate, ok := publications.(interface {
+		DeferHeldPulls([]mediapublications.RemoteTrackIdentity) []mediapublications.RemoteTrackIdentity
+	})
+	if !ok {
+		return request, false
+	}
+	remote := make([]mediapublications.RemoteTrackIdentity, 0, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			remote = append(remote, remoteTrackIdentity(track))
+		}
+	}
+	deferred := gate.DeferHeldPulls(remote)
+	if len(deferred) == 0 {
+		return request, false
+	}
+	deferredSet := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(deferred))
+	for _, identity := range deferred {
+		deferredSet[identity] = struct{}{}
+	}
+	kept := make([]mediaplane.Track, 0, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if _, held := deferredSet[remoteTrackIdentity(track)]; track.Location != "remote" || !held {
+			kept = append(kept, track)
+		}
+	}
+	if len(kept) == 0 && request.Body.SessionDescription != nil {
+		return request, false
+	}
+	slog.InfoContext(ctx, "deferred remote pulls until the publisher is pullable",
+		"event", "media.pull_deferred", "deferred_track_count", len(request.Body.Tracks)-len(kept), "sent_track_count", len(kept))
+	request.Body.Tracks = kept
+	return request, len(kept) == 0
+}
+
+func remoteTrackIdentity(track mediaplane.Track) mediapublications.RemoteTrackIdentity {
+	return mediapublications.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)}
+}
+
 // awaitPublishersConnected holds a pull until Cloudflare can serve it. A pull that lands before the
 // publisher's peer connection is up leaves the track unpullable for a minute or more.
 func awaitPublishersConnected(ctx context.Context, publications mediapublications.Registry, tracks []mediaplane.Track) error {
@@ -255,7 +305,7 @@ func awaitPublishersConnected(ctx context.Context, publications mediapublication
 	remote := make([]mediapublications.RemoteTrackIdentity, 0, len(tracks))
 	for _, track := range tracks {
 		if track.Location == "remote" {
-			remote = append(remote, mediapublications.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(track.SessionID), TrackName: strings.TrimSpace(track.TrackName)})
+			remote = append(remote, remoteTrackIdentity(track))
 		}
 	}
 	if len(remote) == 0 {

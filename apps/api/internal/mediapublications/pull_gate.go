@@ -187,6 +187,21 @@ func (g *pullGate) latestPending(tracks []RemoteTrackIdentity) (*pendingConnecti
 	return latest, latestHeldUntil.Sub(now)
 }
 
+// held returns the listed tracks whose connection is not yet pullable, by the same test as await.
+func (g *pullGate) held(tracks []RemoteTrackIdentity) []RemoteTrackIdentity {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := g.now()
+	g.sweepLocked(now)
+	var held []RemoteTrackIdentity
+	for _, track := range tracks {
+		if entry, ok := g.pending[track.ConnectionID]; ok && entry.heldUntil(now).After(now) {
+			held = append(held, track)
+		}
+	}
+	return held
+}
+
 // sweepLocked forgets connections past the retention time and returns how many are still waiting.
 func (g *pullGate) sweepLocked(now time.Time) int {
 	waiting := 0
@@ -222,4 +237,31 @@ func (s Service) AwaitPullable(ctx context.Context, tracks []RemoteTrackIdentity
 // ConfirmPublisherConnected releases the pulls held for a publisher whose peer connection is up.
 func (s Service) ConfirmPublisherConnected(connectionID string) {
 	s.pullGate.confirm(connectionID)
+}
+
+// PullGateMode is what the API does with a remote pull whose publisher the gate still holds.
+type PullGateMode string
+
+const (
+	// PullGateHold keeps the pull request open until the publisher is pullable.
+	PullGateHold PullGateMode = "hold"
+	// PullGateDefer answers at once and leaves the track out of the response, so the client
+	// retries it. For clients that run pulls and publishes through one SDP queue, which a held
+	// pull would block.
+	PullGateDefer PullGateMode = "defer"
+)
+
+// WithPullGateMode returns the service with the given mode. The zero mode is PullGateHold.
+func (s Service) WithPullGateMode(mode PullGateMode) Service {
+	s.pullGateMode = mode
+	return s
+}
+
+// DeferHeldPulls returns the listed tracks the caller must leave out of a pull because their
+// publisher is still held. It returns nothing in PullGateHold mode and never waits.
+func (s Service) DeferHeldPulls(tracks []RemoteTrackIdentity) []RemoteTrackIdentity {
+	if s.pullGateMode != PullGateDefer {
+		return nil
+	}
+	return s.pullGate.held(tracks)
 }

@@ -289,3 +289,61 @@ func TestAwaitPullableHoldsAConnectionWhileItsWriteIsInFlight(t *testing.T) {
 		t.Fatalf("a pull while the write is in flight must wait: waited=%v error=%v", fixture.waited, err)
 	}
 }
+
+func TestDeferHeldPullsNamesOnlyTheTracksTheGateStillHolds(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	fixture.service = fixture.service.WithPullGateMode(PullGateDefer)
+	fresh := fixture.publish(t, "publisher-fresh", "microphone-a")
+	confirmed := fixture.publish(t, "publisher-confirmed", "microphone-b")
+	fixture.service.ConfirmPublisherConnected("publisher-confirmed")
+	unknown := RemoteTrackIdentity{ConnectionID: "publisher-unknown", TrackName: "microphone-c"}
+
+	held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{fresh, confirmed, unknown})
+
+	if len(held) != 1 || held[0] != fresh {
+		t.Fatalf("deferred tracks = %v, want only %v", held, fresh)
+	}
+	if len(fixture.waited) != 0 {
+		t.Fatalf("deferring must never wait, waited %v", fixture.waited)
+	}
+}
+
+func TestDeferHeldPullsOpensOnceThePublisherConfirmsOrTheFallbackAgePasses(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	fixture.service = fixture.service.WithPullGateMode(PullGateDefer)
+	confirmedLater := fixture.publish(t, "publisher-1", "microphone-a")
+	oldEnough := fixture.publish(t, "publisher-2", "microphone-b")
+	if held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{confirmedLater, oldEnough}); len(held) != 2 {
+		t.Fatalf("both fresh tracks must be deferred, got %v", held)
+	}
+
+	fixture.service.ConfirmPublisherConnected("publisher-1")
+	if held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{confirmedLater, oldEnough}); len(held) != 1 || held[0] != oldEnough {
+		t.Fatalf("a confirmed publisher must be pullable, still deferred: %v", held)
+	}
+	fixture.now = fixture.now.Add(publisherConnectFallbackAge)
+	if held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{confirmedLater, oldEnough}); len(held) != 0 {
+		t.Fatalf("a publisher past the fallback age must be pullable, still deferred: %v", held)
+	}
+}
+
+func TestDeferHeldPullsDefersWhileAPublicationWriteIsInFlight(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	fixture.service = fixture.service.WithPullGateMode(PullGateDefer)
+	identity := RemoteTrackIdentity{ConnectionID: "publisher-1", TrackName: "microphone-a"}
+	fixture.service.pullGate.publish("publisher-1")
+	fixture.now = fixture.now.Add(2 * publisherConnectFallbackAge)
+
+	if held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{identity}); len(held) != 1 {
+		t.Fatalf("a connection with a write in flight must stay deferred past the fallback age, got %v", held)
+	}
+}
+
+func TestDeferHeldPullsDefersNothingInHoldMode(t *testing.T) {
+	fixture := newPullGateFixture(t)
+	fresh := fixture.publish(t, "publisher-fresh", "microphone-a")
+
+	if held := fixture.service.DeferHeldPulls([]RemoteTrackIdentity{fresh}); len(held) != 0 {
+		t.Fatalf("hold mode must keep today's behavior and defer nothing, got %v", held)
+	}
+}

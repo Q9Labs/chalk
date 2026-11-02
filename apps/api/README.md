@@ -67,6 +67,18 @@ all policies enabled. Values are case-insensitive and surrounding whitespace
 is ignored. Other values are rejected. Startup rejects `off` in every
 non-local environment. Do not use this switch to test rate-limit handling.
 
+Set `CHALK_PULL_GATE_MODE` to choose what the API does with a remote pull whose
+publisher is not yet connected to Cloudflare. `hold` (the default) keeps the
+pull request open for about 3 seconds, longer while the publisher's publish
+request is still in flight. `defer` answers at once, sends nothing to
+Cloudflare for that track and leaves it out of the response, with no entry in
+`tracks` and no `trackErrors`. A request whose tracks are all deferred gets an
+empty object. The client then treats the pull as incomplete and retries it,
+which is what SDK 5.2.6 does at 750 ms and doubling up to 15 s. Use `defer`
+for clients that run pulls and publishes through one SDP queue, which a held
+pull blocks. A request that carries an offer is always held. Values are
+case-insensitive; other values are rejected at startup.
+
 ### Default MediaPlane
 
 `CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when

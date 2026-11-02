@@ -161,6 +161,7 @@ type Service struct {
 	receiveHealth   *receiveHealth
 	liveness        *publicationLivenessChecks
 	pullGate        *pullGate
+	pullGateMode    PullGateMode
 }
 
 func NewService(repository Repository) Service {
