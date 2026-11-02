@@ -13,7 +13,7 @@ import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
+import type { AudioReadiness, IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 const OFF_RETRY_INITIAL_MS = 1000;
@@ -1512,7 +1512,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
-      audioReadiness: snapshot?.audioReadiness ?? "connecting",
+      audioReadiness: audioReadinessOf(snapshot),
       local,
       remote,
       screenShare: {
@@ -1524,6 +1524,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
+}
+function audioReadinessOf(snapshot: ConnectionMediaSnapshot | undefined): AudioReadiness {
+  return snapshot?.audioReadiness ?? "connecting";
 }
 function liveTrack(track: MediaStreamTrack): boolean {
   return track.enabled && track.readyState === "live" && !track.muted;

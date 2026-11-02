@@ -1,3 +1,4 @@
+import type { AudioReadiness } from "../media/audio-readiness";
 import type { MediaSource, ScreenShareCapture } from "../media/plane";
 import type { ChalkChatAttachment, ChalkChatMessage, ChalkChatReadReceipt, ChalkIncomingMediaRequest, ChalkParticipantMediaState, ChalkReaction, ChalkReactionEvent } from "../collaboration/types";
 import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1Failure } from "../whiteboard/types";
@@ -163,8 +164,8 @@ export type RemoteMedia = {
   readonly track: MediaStreamTrack;
 };
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
+export type { AudioReadiness } from "../media/audio-readiness";
 export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
-export type AudioReadiness = import("../media/audio-readiness").AudioReadiness;
 export type MediaSlice = {
   /**
    * Whether this listener can hear everyone whose microphone was on at join. `connecting` until inbound audio
