@@ -84,6 +84,8 @@ export type CloudflareSFUFailureCode = CloudflareSFUErrorCode;
 export type CloudflareSFUConnectionPhase = "idle" | "connecting" | "live" | "recovering" | "failed" | "stopped";
 export type CloudflareSFUPhase = CloudflareSFUConnectionPhase;
 export type CloudflareSFUSnapshot = {
+  /** Omitted by media adapters without audio readiness; treat as `connecting`. */
+  readonly audioReadiness?: import("./audio-readiness").AudioReadiness;
   /** Omitted by media adapters without receive diagnostics; treat as empty. */
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   readonly connection: {
@@ -116,6 +118,8 @@ export type CloudflareSFUClientOptions = {
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
+  /** How long a join may wait for audio readiness before it reports `degraded`. Defaults to 15 seconds. */
+  readonly audioReadyCeilingMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;

@@ -1512,6 +1512,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
+      audioReadiness: snapshot?.audioReadiness ?? "connecting",
       local,
       remote,
       screenShare: {
@@ -1572,7 +1573,7 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
   return connectionState === "live" || connectionState === "reconnecting" ? "disabled" : "unavailable";
 }
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
-  if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
+  if (left.audioReadiness !== right.audioReadiness || left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
   return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
 }

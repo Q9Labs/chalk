@@ -6,6 +6,7 @@ export type {
   AccessGrantSource,
   AccessReason,
   ActiveReaction,
+  AudioReadiness,
   AdmissionRequest,
   Capability,
   CameraPreview,

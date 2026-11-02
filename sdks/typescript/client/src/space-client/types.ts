@@ -43,6 +43,8 @@ export type SpaceClientOptions = {
   readonly logger?: Logger;
   /** Defaults to browser localStorage. Native consumers can supply a synchronous storage adapter. */
   readonly offlineActionsStorage?: import("./offline-actions-storage").OfflineActionsStorage;
+  /** How long a join may wait for audio readiness before `media.audioReadiness` reports `degraded`. Defaults to 15 seconds. */
+  readonly audioReadyCeilingMs?: number;
 };
 export type JoinOptions = {
   readonly displayName?: string;
@@ -162,7 +164,14 @@ export type RemoteMedia = {
 };
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
 export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";
+export type AudioReadiness = import("../media/audio-readiness").AudioReadiness;
 export type MediaSlice = {
+  /**
+   * Whether this listener can hear everyone whose microphone was on at join. `connecting` until inbound audio
+   * flows for each of them (or the media connection is up when nobody is speaking), then `ready`. `degraded`
+   * means the ceiling passed first; it can still become `ready`. A speaker who unmutes later never moves it back.
+   */
+  readonly audioReadiness: AudioReadiness;
   readonly microphoneMutedByOtherDevice?: boolean;
   readonly devices: {
     readonly microphones: readonly MediaDevice[];

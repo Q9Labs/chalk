@@ -193,6 +193,7 @@ export function createSnapshot(capabilities: readonly Capability[] = ["sendChat"
     self: { participantId: null, displayName: null, role: null, capabilities, handRaised: false, can: (capability) => capabilities.includes(capability) },
     participants: { roster: [], admissionQueue: [] },
     media: {
+      audioReadiness: "ready",
       devices: {
         ...createPreviewMediaDevices(),
       },

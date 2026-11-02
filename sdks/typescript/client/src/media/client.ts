@@ -1,4 +1,5 @@
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
+import { AUDIO_READY_CEILING_MS, AudioReadinessTracker } from "./audio-readiness";
 import { ReceiveStallRecovery } from "./receive-stall";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
@@ -103,6 +104,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
   readonly #receiveProgress = new ReceiveStallRecovery();
+  readonly #audioReadiness = new AudioReadinessTracker();
+  readonly #audioReadyCeilingMs: number;
+  #audioReadyCeilingTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   readonly #viewerLayerPending = new Map<string, ViewerLayerChange>();
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
@@ -134,6 +138,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
+    this.#audioReadyCeilingMs = options.audioReadyCeilingMs ?? AUDIO_READY_CEILING_MS;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onDiagnostic = options.onDiagnostic;
@@ -147,6 +152,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       localTracks: EMPTY_LOCAL,
       remoteTracks: EMPTY_REMOTE,
       receiveStalls: this.#receiveProgress.observations,
+      audioReadiness: this.#audioReadiness.state,
       failure: null,
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
@@ -175,7 +181,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
     if (projectionState === "unavailable") this.#receiveProgress.suspend();
-    else if (publications) this.#receiveProgress.expect(publications, this.#participantId);
+    else if (publications) {
+      this.#receiveProgress.expect(publications, this.#participantId);
+      if (this.#audioReadiness.expect(publications, this.#participantId)) this.#publishSnapshot();
+    }
     if (this.#polling) {
       this.#pollAfterCurrent = true;
       return;
@@ -247,6 +256,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (this.#started) return;
     this.#requireActive();
     const generation = this.#generation;
+    this.#audioReadyCeilingTimer ??= globalThis.setTimeout(() => {
+      if (this.#audioReadiness.ceilingPassed()) this.#publishSnapshot();
+    }, this.#audioReadyCeilingMs);
     this.#setPhase("connecting", null);
     if (beforePublish) {
       this.#receivingInitial = true;
@@ -738,6 +750,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return;
     }
     this.#stopped = true;
+    globalThis.clearTimeout(this.#audioReadyCeilingTimer);
     // Retiring publications clears the transport before a pending upload ends, so the closing batch keeps its own reference.
     const transport = this.#transport;
     void this.#callStats.flush(async (stats) => transport?.uploadCallStats?.(stats, true));
@@ -1357,6 +1370,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     const { stalled, advanced } = this.#receiveProgress.sample(performance.now(), connection, report, this.#remoteTracks.values());
     for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
+    this.#audioReadiness.advanced(advanced);
     this.#publishSnapshot();
     if (!stalled.some((id) => this.#receiveProgress.canRepull(id) || (this.#replaceMediaConnection && this.#receiveProgress.canRebuild(id)))) return;
     for (const publicationId of stalled) {
@@ -1699,6 +1713,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return [...this.#remoteTracks.values()].map(({ participantId, source, publicationId }) => ({ participantId, source, publicationId, enabled: true }));
   }
   #publishSnapshot(phase = this.#snapshot.connection.phase, failure = this.#snapshot.failure): void {
+    this.#audioReadiness.connection(phase === "live");
     const next = freezeSnapshot({
       connection: {
         phase,
@@ -1718,6 +1733,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         : EMPTY_LOCAL,
       remoteTracks: this.#remoteTracks.size ? [...this.#remoteTracks.values()] : EMPTY_REMOTE,
       receiveStalls: this.#receiveProgress.observations,
+      audioReadiness: this.#audioReadiness.state,
       failure,
     });
     if (snapshotEqual(this.#snapshot, next)) return;
@@ -1853,6 +1869,7 @@ function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return (
     (left.receiveStalls ?? EMPTY_RECEIVE_STALLS) === (right.receiveStalls ?? EMPTY_RECEIVE_STALLS) &&
+    left.audioReadiness === right.audioReadiness &&
     connectionEqual(left.connection, right.connection) &&
     cursorEqual(left.cursor, right.cursor) &&
     failureEqual(left.failure, right.failure) &&

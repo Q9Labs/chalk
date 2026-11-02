@@ -3741,6 +3741,84 @@ it("uses the screen projection to observe its distinct screen-audio publication"
   );
 });
 
+describe("audio readiness", () => {
+  /** Remote microphones for the named participants. `flowing` names those whose inbound audio packets increase. */
+  async function listen(h: ReturnType<typeof createHarness>, participants: readonly string[], flowing: Set<string>) {
+    const publications = participants.map((participantId, i) => ({ participantId, source: "microphone" as const, publicationId: versionedPublicationID(participantId, String(i), "microphone") }));
+    h.transport.uniqueRemoteMids = true;
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+    h.client.remotePublicationsChanged(publications.map((publication) => ({ ...publication, enabled: true })));
+    await h.client.refreshRemotePublications();
+    const counts = new Map<string, number>();
+    vi.spyOn(h.peers[0]!, "getStats").mockImplementation(async () => {
+      for (const id of flowing) counts.set(id, (counts.get(id) ?? 0) + 50);
+      const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: counts.get(p.participantId) ?? 0, codecId: "readiness-codec" }));
+      const codec = { id: "readiness-codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1;usedtx=1" };
+      return new Map([...rows.map((r) => [r.id, r] as const), [codec.id, codec]]);
+    });
+    return publications;
+  }
+  const readiness = (h: ReturnType<typeof createHarness>) => h.client.getSnapshot().audioReadiness;
+
+  it("is not ready while any speaker who was live at join has no packets, and is ready once all have them", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const flowing = new Set(["alice"]);
+      await listen(h, ["alice", "bob"], flowing);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(readiness(h)).toBe("connecting");
+      flowing.add("bob");
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(readiness(h)).toBe("ready");
+    });
+  });
+
+  it("is ready when the media connection is up and no remote microphone is on", async () => {
+    await withTimedHarness(async (h) => {
+      expect(readiness(h)).toBe("connecting");
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      h.client.remotePublicationsChanged([]);
+      expect(readiness(h)).toBe("ready");
+    });
+  });
+
+  it("is degraded after the ceiling, keeps updating, and becomes ready when the audio arrives", async () => {
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const flowing = new Set<string>();
+        await listen(h, ["alice"], flowing);
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(readiness(h)).toBe("connecting");
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(readiness(h)).toBe("degraded");
+        flowing.add("alice");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(readiness(h)).toBe("ready");
+      },
+      { audioReadyCeilingMs: 5000 },
+    );
+  });
+
+  it("does not wait for a speaker who unmutes after the listener joined, and stays ready when one does", async () => {
+    await withTimedHarness(async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+      const flowing = new Set(["alice"]);
+      const [alice] = await listen(h, ["alice"], flowing);
+      const late = { participantId: "carol", source: "microphone" as const, publicationId: versionedPublicationID("carol", "9", "microphone"), enabled: true };
+      h.client.remotePublicationsChanged([{ ...alice!, enabled: true }, late]);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(readiness(h)).toBe("ready");
+      h.client.remotePublicationsChanged([
+        { ...alice!, enabled: true },
+        { ...late, publicationId: versionedPublicationID("carol", "10", "microphone") },
+      ]);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(readiness(h)).toBe("ready");
+    });
+  });
+});
+
 function reviewReplacement(h: ReturnType<typeof createHarness>, connectionId: string): CloudflareSFUBootstrap {
   h.transport.localPublications.clear();
   h.transport.snapshot = { ...h.transport.snapshot, sequence: h.transport.snapshot.sequence + 1 };
@@ -4345,6 +4423,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly audioReadyCeilingMs?: number;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -4360,6 +4439,7 @@ function createHarness(
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
+    audioReadyCeilingMs: options.audioReadyCeilingMs,
     onError: options.onError,
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,

@@ -8,7 +8,7 @@ import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type 
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 const apiFetch = withRequestContext();
-export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
+export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null; readonly audioReadyCeilingMs?: number }): ConnectionDependencies {
   return {
     clock: {
       now: () => Date.now(),
@@ -71,7 +71,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       const body: unknown = await response.json();
       return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
     },
-    createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
+    createMediaClient: (input) => createMediaClient(options.apiBaseURL, options.audioReadyCeilingMs, input),
     createSyncClient: (input) => createSyncClient(options.syncURL, input),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input),
@@ -80,7 +80,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
   };
 }
 /** Production foreign-adapter Layer. Tests replace it with makeFakeConnectionPlatformLayer. */
-export const makeProductionConnectionPlatformLayer = (options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }) => makeConnectionPlatformLayer(createDefaultConnectionDependencies(options));
+export const makeProductionConnectionPlatformLayer = (options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null; readonly audioReadyCeilingMs?: number }) => makeConnectionPlatformLayer(createDefaultConnectionDependencies(options));
 function createBrowserId(): string {
   const random = globalThis.crypto;
   if (!random?.randomUUID) throw new TypeError("A secure browser identifier source is required");
@@ -106,12 +106,13 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
     token: input.token,
   });
 }
-function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
+function createMediaClient(apiBaseURL: string, audioReadyCeilingMs: number | undefined, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
     bootstrap: input.access.media.clientPayload,
     participantId: subject.participantId,
+    audioReadyCeilingMs,
     replaceMediaConnection: replaceMediaConnection
       ? async () => {
           const replacement = await replaceMediaConnection();

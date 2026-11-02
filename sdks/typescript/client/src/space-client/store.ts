@@ -11,6 +11,7 @@ const EMPTY = empty({
   self: empty({ participantId: null, displayName: null, role: null, capabilities: empty([]), handRaised: false, can: () => false }),
   participants: empty({ roster: empty([]), admissionQueue: empty([]) }),
   media: empty({
+    audioReadiness: "connecting",
     devices: empty({ microphones: empty([]), cameras: empty([]), speakers: empty([]) }),
     selection: empty({ microphone: null, camera: null, speaker: null }),
     local: empty({ microphone: empty({ source: "microphone", state: "unavailable", track: null }), camera: empty({ source: "camera", state: "unavailable", track: null }), screen: empty({ source: "screen", state: "unavailable", track: null }) }),

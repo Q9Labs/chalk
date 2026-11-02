@@ -30,7 +30,7 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
+  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl, audioReadyCeilingMs: options.audioReadyCeilingMs }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
     access: async (request) => requireParsedAccessGrant(await fetchAccessGrant({ request, options, platform })),
