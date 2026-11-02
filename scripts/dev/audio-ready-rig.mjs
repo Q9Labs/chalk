@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createRequire } from "node:module";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
@@ -112,7 +112,26 @@ const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" })
 // Only UDP is shaped, which is Chromium's WebRTC media path to the SFU (DNS and NTP excluded). TCP stays clean: the local
 // API's own calls to Cloudflare are a datacenter link in production, and the box's control channel must keep working.
 // Egress: prio qdisc, UDP through netem in band 3, the rest in band 1. Ingress: UDP is redirected to ifb0 and shaped there.
+const userspaceShaper = process.env.AR_SHAPER === "userspace";
+// Kernels without netem or ifb (Instabox): audio-ready-shaper.py impairs UDP between the browser namespace and the host from /dev/shm/ar-shape.json.
+const shaperParams = (spec) => {
+  const words = spec.split(" ");
+  const after = (key, count) => words.slice(words.indexOf(key) + 1, words.indexOf(key) + 1 + count);
+  const params = {};
+  if (words.includes("delay")) {
+    const [delay, jitter] = after("delay", 2);
+    params.delay_ms = parseFloat(delay);
+    params.jitter_ms = jitter?.endsWith("ms") ? parseFloat(jitter) : 0;
+  }
+  if (words.includes("loss")) params.loss = parseFloat(after("loss", 1)[0]);
+  if (words.includes("rate")) params.rate = parseFloat(after("rate", 1)[0]) * 1_000_000;
+  if (words.includes("limit")) params.limit = Number(after("limit", 1)[0]);
+  return params;
+};
+const shaperControl = "/dev/shm/ar-shape.json";
+const setUserspaceShaper = (profile) => writeFileSync(shaperControl, JSON.stringify(profile ? { egress: shaperParams(profile.egress), ingress: shaperParams(profile.ingress) } : {}));
 const setNetem = (profile) => {
+  if (userspaceShaper) return setUserspaceShaper(profile);
   clearNetem();
   if (!profile) return;
   const dev = defaultInterface();
@@ -132,6 +151,10 @@ const setNetem = (profile) => {
 };
 // Packets and drops the two netem qdiscs handled, as proof the shaping saw the room's media.
 const shapedPackets = () => {
+  if (userspaceShaper) {
+    const { egress, ingress } = JSON.parse(readFileSync("/dev/shm/ar-shape-stats.json", "utf8"));
+    return { egress: { packets: egress.shaped, dropped: egress.dropped }, ingress: { packets: ingress.shaped, dropped: ingress.dropped } };
+  }
   const stats = (dev) => {
     const text = execFileSync("sudo", ["tc", "-s", "qdisc", "show", "dev", dev], { encoding: "utf8" });
     const netem = text.slice(text.indexOf("qdisc netem"));
@@ -141,6 +164,7 @@ const shapedPackets = () => {
   return { egress: stats(defaultInterface()), ingress: stats("ifb0") };
 };
 const clearNetem = () => {
+  if (userspaceShaper) return setUserspaceShaper(null);
   const dev = defaultInterface();
   for (const args of [
     ["qdisc", "del", "dev", dev, "root"],
