@@ -42,6 +42,7 @@ defmodule ChalkSync.ExternalSyncNode do
         {:env,
          [
            {~c"MIX_ENV", ~c"test"},
+           {~c"CHALK_SYNC_TEST_OWNER_STDIN", ~c"true"},
            {~c"CHALK_SYNC_TEST_DATABASE_URL", String.to_charlist(database_url)},
            {~c"CHALK_SYNC_NODE_PORT", port |> Integer.to_string() |> String.to_charlist()},
            {~c"CHALK_SYNC_NODE_ID", String.to_charlist(node_id)}

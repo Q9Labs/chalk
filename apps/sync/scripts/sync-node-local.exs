@@ -1,3 +1,12 @@
+if System.get_env("CHALK_SYNC_TEST_OWNER_STDIN") == "true" do
+  # The port's stdin closes even when its owning test VM is killed without cleanup.
+  {:ok, _owner_watch} =
+    Task.start_link(fn ->
+      Stream.run(IO.binstream(:stdio, 1))
+      System.stop(0)
+    end)
+end
+
 database_url =
   System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
     raise "CHALK_SYNC_TEST_DATABASE_URL is required"
