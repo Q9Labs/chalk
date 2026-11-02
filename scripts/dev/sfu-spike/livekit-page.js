@@ -77,13 +77,21 @@ window.srSample = async () => {
   return { status: room.state === "connected" ? "live" : room.state, mic, roster, remote, rtt, errors: [] };
 };
 
-// Every RTCPeerConnection's local UDP port, for the publisher-drop blackhole.
+// Every RTCPeerConnection the page creates (publisher and subscriber), for the publisher-drop blackhole.
+const peerConnections = [];
+const NativePeerConnection = window.RTCPeerConnection;
+window.RTCPeerConnection = class extends NativePeerConnection {
+  constructor(...args) {
+    super(...args);
+    peerConnections.push(this);
+  }
+};
+
 window.lkPorts = async () => {
   const ports = new Set();
-  const receivers = [...room.remoteParticipants.values()].map((p) => p.getTrackPublication(Track.Source.Microphone)?.track?.receiver).filter(Boolean);
-  const senders = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.sender ? [room.localParticipant.getTrackPublication(Track.Source.Microphone).track.sender] : [];
-  for (const part of [...receivers, ...senders]) {
-    const stats = await part.getStats();
+  for (const pc of peerConnections) {
+    if (pc.connectionState === "closed") continue;
+    const stats = await pc.getStats();
     const locals = new Map();
     stats.forEach((stat) => stat.type === "local-candidate" && locals.set(stat.id, stat));
     stats.forEach((stat) => {
