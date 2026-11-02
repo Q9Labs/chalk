@@ -63,6 +63,7 @@ const runSeconds = Number(process.env.SR_SECONDS || 105);
 const firstUnmuteSeconds = Number(process.env.SR_FIRST_UNMUTE_S || 3);
 const killDelayMs = Number(process.env.SR_KILL_DELAY_MS || 5000);
 const pull503Rate = Number(process.env.SR_PULL503_RATE || 0.4);
+const tapCycles = Number(process.env.SR_TAP_CYCLES || 0);
 const listenerKillFrom = Number(process.env.SR_LISTENER_KILL_FROM || 30);
 // HTTPS_PROXY/NO_PROXY in the harness environment reach the API (Go honors them for its Cloudflare calls); the browsers are launched without them and stay on the shaped link.
 const output = resolve(root, process.env.SR_OUTPUT || "artifacts/silence-repro");
@@ -154,6 +155,25 @@ const clearNetem = () => {
 };
 
 function browserInstrumentation({ frequency }) {
+  const classify = (address) => {
+    if (!address) return "hidden";
+    if (address.endsWith(".local")) return "mdns";
+    if (address.includes(":")) {
+      const lower = address.toLowerCase();
+      if (lower.startsWith("fe80")) return "v6:linklocal";
+      if (lower === "::1") return "v6:loopback";
+      if (/^f[cd]/u.test(lower)) return "v6:ula";
+      return "v6:global";
+    }
+    const [a, b] = address.split(".").map(Number);
+    if (a === 10) return "v4:10/8";
+    if (a === 172 && b >= 16 && b < 32) return `v4:172.${b}`;
+    if (a === 192 && b === 168) return "v4:192.168";
+    if (a === 169 && b === 254) return "v4:linklocal";
+    if (a === 127) return "v4:loopback";
+    if (a === 100 && b >= 64 && b < 128) return "v4:cgnat";
+    return "v4:public";
+  };
   window.matrixErrors = [];
   window.matrixPeers = [];
   const Native = window.RTCPeerConnection;
@@ -170,6 +190,41 @@ function browserInstrumentation({ frequency }) {
       this.addEventListener("connectionstatechange", () => mark(`conn:${this.connectionState}`));
       this.addEventListener("track", () => mark("track"));
       this.addEventListener("icecandidate", (event) => mark(event.candidate ? `candidate:${event.candidate.type}` : "candidate:end"));
+      const ice = (this.srIce = { cands: {}, pairs: {}, selected: [], gathered: [], config: null });
+      try {
+        ice.config = { policy: args[0]?.iceTransportPolicy ?? "all", servers: (args[0]?.iceServers ?? []).flatMap((server) => [].concat(server.urls)).map((url) => String(url).split(":")[0]) };
+      } catch {} // no configuration object
+      this.addEventListener("icecandidate", (event) => {
+        if (event.candidate) ice.gathered.push([Date.now(), event.candidate.type, event.candidate.protocol, classify(event.candidate.address)]);
+      });
+      let stopAt = Infinity;
+      const sampler = setInterval(async () => {
+        if (this.connectionState === "closed" || Date.now() > stopAt) return clearInterval(sampler);
+        if (!this.remoteDescription) return;
+        let report;
+        try {
+          report = await this.getStats();
+        } catch {
+          return; // the connection closed between ticks
+        }
+        const now = Date.now();
+        report.forEach((stat) => {
+          if (stat.type === "local-candidate" || stat.type === "remote-candidate") {
+            ice.cands[stat.id] ??= { side: stat.type === "local-candidate" ? "local" : "remote", type: stat.candidateType, protocol: stat.protocol, addr: classify(stat.address ?? stat.ip), networkType: stat.networkType ?? null, relayProtocol: stat.relayProtocol ?? null, urlScheme: stat.url ? String(stat.url).split(":")[0] : null };
+          } else if (stat.type === "candidate-pair") {
+            const pair = (ice.pairs[stat.id] ??= { local: stat.localCandidateId, remote: stat.remoteCandidateId, steps: [], nominated: null, rtt: null });
+            const key = `${stat.state}|${stat.requestsSent ?? 0}|${stat.responsesReceived ?? 0}`;
+            if (pair.steps.at(-1)?.[4] !== key) pair.steps.push([now, stat.state, stat.requestsSent ?? 0, stat.responsesReceived ?? 0, key]);
+            if (stat.nominated && pair.nominated === null) pair.nominated = now;
+            if (stat.currentRoundTripTime !== undefined) pair.rtt = stat.currentRoundTripTime;
+          } else if (stat.type === "transport" && stat.selectedCandidatePairId && ice.selected.at(-1)?.[1] !== stat.selectedCandidatePairId) {
+            ice.selected.push([now, stat.selectedCandidatePairId]);
+          }
+        });
+      }, 50);
+      this.addEventListener("connectionstatechange", () => {
+        if (this.connectionState === "connected") stopAt = Date.now() + 3000;
+      });
       let dtls = false;
       let packets = false;
       const timer = setInterval(async () => {
@@ -420,8 +475,9 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     headless: true,
     env: Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(https?|all|no)_proxy$/iu.test(key))),
     executablePath: process.env.SR_CHROMIUM || undefined,
-    args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
+    args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required", ...(process.env.SR_CHROME_ARGS ? process.env.SR_CHROME_ARGS.split(" ") : [])],
   });
+  run.chromeArgs = process.env.SR_CHROME_ARGS ?? "";
   allBrowsers.push(browser);
   const origin = Date.now();
   const ids = new Map();
@@ -546,17 +602,35 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     }
     let roomSeconds = runSeconds;
     if (run.muteCycle) {
-      const gaps = seededRandom(run.runIndex * 104729 + 17);
       schedule.length = 0;
       for (let speaker = 0; speaker < speakerCount; speaker++) schedule.push({ at: run.firstUnmuteSeconds + speaker * 7, participant: speaker, kind: "unmute", first: true });
-      let at = run.firstUnmuteSeconds;
-      for (let cycle = 0; cycle < 10; cycle++) {
-        at += 2 + gaps() * 4;
-        schedule.push({ at, participant: 0, kind: "mute" });
-        at += 2 + gaps() * 4;
-        schedule.push({ at, participant: 0, kind: "unmute", first: false });
+      if (tapCycles > 0) {
+        // Run 6: every speaker taps mute then unmute tapCycles times. Muted for 2 to 6 s, then unmuted for 17 to 21 s, so each unmute has the full 15 s deadline
+        // before the next mute. Gaps come from a per-speaker seed, identical for every build of the same run index.
+        let last = 0;
+        for (let speaker = 0; speaker < speakerCount; speaker++) {
+          const gaps = seededRandom(run.runIndex * 104729 + 17 + speaker * 977);
+          let at = run.firstUnmuteSeconds + speaker * 7 + 17 + gaps() * 4;
+          for (let cycle = 0; cycle < tapCycles; cycle++) {
+            schedule.push({ at, participant: speaker, kind: "mute" });
+            at += 2 + gaps() * 4;
+            schedule.push({ at, participant: speaker, kind: "unmute", first: false });
+            at += 17 + gaps() * 4;
+          }
+          last = Math.max(last, at);
+        }
+        roomSeconds = Math.max(runSeconds, last + 5);
+      } else {
+        const gaps = seededRandom(run.runIndex * 104729 + 17);
+        let at = run.firstUnmuteSeconds;
+        for (let cycle = 0; cycle < 10; cycle++) {
+          at += 2 + gaps() * 4;
+          schedule.push({ at, participant: 0, kind: "mute" });
+          at += 2 + gaps() * 4;
+          schedule.push({ at, participant: 0, kind: "unmute", first: false });
+        }
+        roomSeconds = Math.max(runSeconds, at + 10);
       }
-      roomSeconds = Math.max(runSeconds, at + 10);
     }
     const ghosts = [1, 2, 5, 6];
     const ghostKillAt = 35;
@@ -686,6 +760,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
     run.originMs = origin;
     run.clickTrace = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.srTrace ?? []).catch(() => [])));
     run.peerTimelines = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.matrixPeers.map((pc) => pc.srTimeline)).catch(() => [])));
+    run.peerIce = await Promise.all(participants.map(({ page }) => page.evaluate(() => window.matrixPeers.map((pc) => pc.srIce ?? null)).catch(() => [])));
     for (const { page } of participants) await page.evaluate(() => window.matrixClient.leave()).catch(() => undefined);
   } finally {
     await browser.close().catch(() => undefined);
