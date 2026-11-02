@@ -147,6 +147,22 @@ func shapedUDP(frame []byte) bool {
 	return true
 }
 
+// udpPorts returns the UDP source and destination ports of an IPv4 UDP frame.
+func udpPorts(frame []byte) (uint16, uint16, bool) {
+	if len(frame) < 14+20+8 || binary.BigEndian.Uint16(frame[12:14]) != 0x0800 {
+		return 0, 0, false
+	}
+	ihl := int(frame[14]&0x0f) * 4
+	if frame[14+9] != 17 || len(frame) < 14+ihl+8 {
+		return 0, 0, false
+	}
+	return binary.BigEndian.Uint16(frame[14+ihl:]), binary.BigEndian.Uint16(frame[14+ihl+2:]), true
+}
+
+// blackholed holds the UDP ports whose traffic is dropped in both directions (a publisher's network drop).
+var blackholed atomic.Value // map[uint16]bool
+var blackholedPackets atomic.Int64
+
 func (d *direction) send(frame []byte) {
 	_ = syscall.Sendto(d.out, frame, 0, &syscall.SockaddrLinklayer{Ifindex: d.outIf, Halen: 6})
 }
@@ -163,6 +179,12 @@ func (d *direction) reader() {
 		}
 		frame := make([]byte, n)
 		copy(frame, buf[:n])
+		if holes, _ := blackholed.Load().(map[uint16]bool); len(holes) > 0 {
+			if src, dst, ok := udpPorts(frame); ok && (holes[src] || holes[dst]) {
+				blackholedPackets.Add(1)
+				continue
+			}
+		}
 		if !d.active.Load() || !shapedUDP(frame) {
 			d.send(frame)
 			continue
@@ -228,8 +250,9 @@ func (d *direction) sender() {
 }
 
 type control struct {
-	AToB string `json:"aToB"`
-	BToA string `json:"bToA"`
+	AToB      string `json:"aToB"`
+	BToA      string `json:"bToA"`
+	DropPorts []int  `json:"dropPorts"`
 }
 
 func apply(d *direction, text string) {
@@ -271,6 +294,11 @@ func main() {
 			last = st.ModTime()
 			var c control
 			if raw, err := os.ReadFile(*ctl); err == nil && json.Unmarshal(raw, &c) == nil {
+				holes := map[uint16]bool{}
+				for _, port := range c.DropPorts {
+					holes[uint16(port)] = true
+				}
+				blackholed.Store(holes)
 				apply(ab, c.AToB)
 				apply(ba, c.BToA)
 				ab.packets.Store(0)
@@ -280,7 +308,7 @@ func main() {
 				log.Printf("profile: %+v", c)
 			}
 		}
-		out := fmt.Sprintf(`{"packets":%d,"dropped":%d,"aToB":[%d,%d],"bToA":[%d,%d]}`, ab.packets.Load()+ba.packets.Load(), ab.drops.Load()+ba.drops.Load(), ab.packets.Load(), ab.drops.Load(), ba.packets.Load(), ba.drops.Load())
+		out := fmt.Sprintf(`{"packets":%d,"dropped":%d,"aToB":[%d,%d],"bToA":[%d,%d],"blackholed":%d}`, ab.packets.Load()+ba.packets.Load(), ab.drops.Load()+ba.drops.Load(), ab.packets.Load(), ab.drops.Load(), ba.packets.Load(), ba.drops.Load(), blackholedPackets.Load())
 		_ = os.WriteFile(*stats, []byte(out), 0o644)
 		time.Sleep(200 * time.Millisecond)
 	}

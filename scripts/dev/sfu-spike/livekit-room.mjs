@@ -42,7 +42,7 @@ function token(room, identity) {
   const body = b64({ iss: apiKey, sub: identity, nbf: now - 10, exp: now + 3600, name: identity, video: { room, roomJoin: true, canPublish: true, canSubscribe: true } });
   return `${head}.${body}.${createHmac("sha256", apiSecret).update(`${head}.${body}`).digest("base64url")}`;
 }
-const setProfile = (profile) => control && writeFileSync(control, JSON.stringify(profile ? { aToB: profile.egress, bToA: profile.ingress } : {}));
+const setProfile = (profile, dropPorts = []) => control && writeFileSync(control, JSON.stringify({ ...(profile ? { aToB: profile.egress, bToA: profile.ingress } : {}), dropPorts }));
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 const bundle = (
@@ -74,6 +74,8 @@ async function runRoom(run, conditionName) {
   const condition = conditionName.split("+");
   const profile = profiles[condition.find((part) => Object.hasOwn(profiles, part)) ?? "open"];
   const firstUnmute = condition.includes("natural-idle") ? 20 : 3;
+  const pubDrop = condition.includes("pubdrop");
+  run.pubDrop = pubDrop;
   run.firstUnmuteSeconds = firstUnmute;
   const roomName = `sr-${Date.now().toString(36)}-${run.runIndex}`;
   const origin = Date.now();
@@ -95,7 +97,7 @@ async function runRoom(run, conditionName) {
     const schedule = [];
     for (let speaker = 0; speaker < speakerCount; speaker++) {
       schedule.push({ at: firstUnmute + speaker * 7, participant: speaker, kind: "unmute", first: true });
-      schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
+      if (!pubDrop) schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
     }
     schedule.sort((a, b) => a.at - b.at);
     const chains = pages.map(() => Promise.resolve());
@@ -110,8 +112,28 @@ async function runRoom(run, conditionName) {
       }
     };
     let cursor = 0;
+    let dropCursor = 0;
+    const pubDrops = [0, 1, 2].map((speaker) => ({ at: 40 + speaker * 18, speaker }));
     while ((performance.now() - start) / 1000 < runSeconds) {
       const t = (performance.now() - start) / 1000;
+      while (pubDrop && dropCursor < pubDrops.length && pubDrops[dropCursor].at <= t) {
+        const drop = pubDrops[dropCursor++];
+        void (async () => {
+          const record = { speaker: drop.speaker, scheduledT: t };
+          (run.pubDrops ??= []).push(record);
+          try {
+            record.ports = await pages[drop.speaker].evaluate(() => window.lkPorts());
+            setProfile(profile, record.ports);
+            record.startT = (performance.now() - start) / 1000;
+            await sleep(5000);
+          } catch (error) {
+            record.error = error.message;
+          } finally {
+            setProfile(profile, []);
+            record.endT = (performance.now() - start) / 1000;
+          }
+        })();
+      }
       while (cursor < schedule.length && schedule[cursor].at <= t) {
         const action = schedule[cursor++];
         const event = { ...action, scheduledT: t };

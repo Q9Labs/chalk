@@ -41,7 +41,8 @@ const profiles = {
 // mute-cycle: speaker 0 alone taps mute and unmute ten times each, 2 to 6 s apart (same gaps for every build); the other speakers stay unmuted.
 // ghost-end: 8 people, 4 speakers; at 35 s four browsers (two speakers, two listeners) are killed without leaving, 5 s later the owner ends the Episode for everyone.
 // natural-idle: everyone joins, 20 s of quiet, then the first speaker unmutes (a class start); SR_FIRST_UNMUTE_S sets the delay for any other condition. Cloudflare drops a session unused for 15 s.
-const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle", "ghost-end", "natural-idle"];
+const faults = ["kill", "listener-kill", "pull503", "toggle", "mute-cycle", "ghost-end", "natural-idle", "pubdrop"];
+// pubdrop (sfu-spike): speakers 0, 1 and 2 each lose all their UDP for 5 s at 40, 58 and 76 s; nobody mutes.
 // A condition is "+"-joined parts: at most one network profile and any faults, for example "home+pull503".
 const conditionOf = (name) => {
   const parts = name.split("+");
@@ -115,6 +116,7 @@ const tc = (...args) => execFileSync("sudo", ["tc", ...args], { stdio: "pipe" })
 // Egress: prio qdisc, UDP through netem in band 3, the rest in band 1. Ingress: UDP is redirected to ifb0 and shaped there.
 // SR_SHAPER_CONTROL: the kernel has no netem (Instabox), so a userspace shaper (sfu-spike/shaper) reads the profile from this file.
 const shaperControl = process.env.SR_SHAPER_CONTROL;
+const setShaperDrop = (profile, dropPorts) => writeFileSync(shaperControl, JSON.stringify({ ...(profile ? { aToB: profile.egress, bToA: profile.ingress } : {}), dropPorts }));
 const setNetem = (profile) => {
   if (shaperControl) return writeFileSync(shaperControl, JSON.stringify(profile ? { aToB: profile.egress, bToA: profile.ingress } : {}));
   clearNetem();
@@ -375,6 +377,7 @@ async function runBuild(name) {
           toggle: condition.faults.includes("toggle"),
           muteCycle: condition.faults.includes("mute-cycle"),
           ghostEnd: condition.faults.includes("ghost-end"),
+          pubDrop: condition.faults.includes("pubdrop"),
           firstUnmuteSeconds: condition.faults.includes("natural-idle") ? 20 : firstUnmuteSeconds,
           runIndex,
           started: new Date().toISOString(),
@@ -547,7 +550,7 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
       schedule.push({ at: run.firstUnmuteSeconds + speaker * 7, participant: speaker, kind: "unmute", first: true });
       if (run.toggle) {
         for (let mute = 30 + speaker * 3; mute + 12 <= runSeconds; mute += 12) schedule.push({ at: mute, participant: speaker, kind: "mute" }, { at: mute + 4, participant: speaker, kind: "unmute", first: false });
-      } else {
+      } else if (!run.pubDrop) {
         schedule.push({ at: 55 + speaker * 8, participant: speaker, kind: "mute" }, { at: 59 + speaker * 8, participant: speaker, kind: "unmute", first: false });
       }
     }
@@ -585,6 +588,8 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
       pairs.sort(() => random() - 0.5).forEach((pair, order) => pairKills.push({ ...pair, at: listenerKillFrom + order * 0.7 }));
     }
     let killCursor = 0;
+    let dropCursor = 0;
+    const pubDrops = [0, 1, 2].map((speaker) => ({ at: 40 + speaker * 18, speaker }));
     let cursor = 0;
     // A user taps the microphone button only when it offers that action: unmute when the call is live and the mic is off,
     // mute when the mic is on. The button is a blind toggle, so a click at any other moment does the opposite or nothing.
@@ -662,6 +667,37 @@ async function runRoom(run, { chalk, config, getAccessRefreshState, name, condit
         const event = { ...action, t, scheduledT: t, clickedAtMs: Date.now() - origin };
         run.actions.push(event);
         chains[action.participant] = chains[action.participant].then(() => tap(event));
+      }
+      while (run.pubDrop && dropCursor < pubDrops.length && pubDrops[dropCursor].at <= t) {
+        const drop = pubDrops[dropCursor++];
+        void (async () => {
+          const record = { speaker: drop.speaker, scheduledT: t };
+          (run.pubDrops ??= []).push(record);
+          try {
+            record.ports = await participants[drop.speaker].page.evaluate(async () => {
+              const ports = new Set();
+              for (const pc of window.matrixPeers) {
+                if (pc.connectionState === "closed") continue;
+                const stats = await pc.getStats();
+                const locals = new Map();
+                stats.forEach((stat) => stat.type === "local-candidate" && locals.set(stat.id, stat));
+                stats.forEach((stat) => {
+                  const local = stat.type === "candidate-pair" && stat.nominated ? locals.get(stat.localCandidateId) : undefined;
+                  if (local?.protocol === "udp") ports.add(local.port);
+                });
+              }
+              return [...ports];
+            });
+            setShaperDrop(run.netem, record.ports);
+            record.startT = (performance.now() - start) / 1000;
+            await sleep(5000);
+          } catch (error) {
+            record.error = error.message;
+          } finally {
+            setShaperDrop(run.netem, []);
+            record.endT = (performance.now() - start) / 1000;
+          }
+        })();
       }
       while (killCursor < pairKills.length && pairKills[killCursor].at <= t) {
         const { listener, speaker } = pairKills[killCursor++];
