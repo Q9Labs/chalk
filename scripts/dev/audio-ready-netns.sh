@@ -26,6 +26,9 @@ up)
   nft add table ip arnat
   nft "add chain ip arnat post { type nat hook postrouting priority 100; }"
   nft add rule ip arnat post ip saddr 10.99.0.0/24 oifname "$wan" masquerade
+  # Docker sets the FORWARD policy to DROP.
+  iptables -I FORWARD 1 -s 10.99.0.0/24 -j ACCEPT
+  iptables -I FORWARD 1 -d 10.99.0.0/24 -j ACCEPT
   mkdir -p "/etc/netns/$ns"
   nameserver=$(awk '/^nameserver/ && $2 !~ /^127\./ {print $2; exit}' /etc/resolv.conf)
   echo "nameserver ${nameserver:-1.1.1.1}" | install -m 644 /dev/stdin "/etc/netns/$ns/resolv.conf"
@@ -35,6 +38,8 @@ down)
   ip link del a1 2>/dev/null || true
   ip link del b0 2>/dev/null || true
   nft delete table ip arnat 2>/dev/null || true
+  iptables -D FORWARD -s 10.99.0.0/24 -j ACCEPT 2>/dev/null || true
+  iptables -D FORWARD -d 10.99.0.0/24 -j ACCEPT 2>/dev/null || true
   ;;
 *)
   echo "usage: $0 up|down" >&2
