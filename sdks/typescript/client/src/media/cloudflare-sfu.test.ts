@@ -383,6 +383,53 @@ it("publishes anew on unmute when the SFU stopped serving the track while the mi
   );
 });
 
+it("JUDGE recovers a stalled publication after mute and unmute reused it", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+    await h.client.pauseLocalCapture("microphone");
+    await h.client.clearPreparedLocalTrack("microphone");
+    h.client.prepareLocalTrack("microphone", new FakeTrack("mic-2", "audio") as unknown as MediaStreamTrack);
+    await h.client.setLocalSourceIntent("microphone", true);
+    await h.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true });
+    expect(h.client.getSnapshot().localTracks[0]!.enabled).toBe(true);
+    const resumedAt = Date.now();
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = Math.floor((Date.now() - resumedAt) / 1000);
+      return new Map<string, unknown>([
+        ["out", { type: "outbound-rtp", mid, remoteId: "in", packetsSent: seconds * 50 }],
+        ["in", { type: "remote-inbound-rtp", roundTripTimeMeasurements: seconds, jitter: 0.005 }],
+      ]) as unknown as RTCStatsReport;
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(h.client.getSnapshot().localTracks[0]!.enabled).toBe(true);
+    expect(h.transport.localPublications.size).toBe(1);
+  }, { createSilentAudio: async () => ({ track: new FakeTrack("silence", "audio") as unknown as MediaStreamTrack, dispose: vi.fn() }) });
+});
+
+it("JUDGE does not reuse a dead muted publication with two reports per six seconds", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    const original = h.client.getSnapshot().localTracks[0]!.publicationId;
+    const mid = h.peers[0]!.getTransceivers()[0]!.mid!;
+    await h.client.pauseLocalCapture("microphone");
+    await h.client.clearPreparedLocalTrack("microphone");
+    const mutedAt = Date.now();
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const seconds = Math.floor((Date.now() - mutedAt) / 1000);
+      return new Map<string, unknown>([
+        ["out", { type: "outbound-rtp", mid, remoteId: "in", packetsSent: seconds * 50 }],
+        ["in", { type: "remote-inbound-rtp", roundTripTimeMeasurements: Math.floor(seconds / 3), jitter: 0.005 }],
+      ]) as unknown as RTCStatsReport;
+    });
+    await vi.advanceTimersByTimeAsync(120_000);
+    h.client.prepareLocalTrack("microphone", new FakeTrack("mic-2", "audio") as unknown as MediaStreamTrack);
+    await h.client.setLocalSourceIntent("microphone", true);
+    await h.client.setLocalPublicationTarget({ operationId: "unmute", participantId: "participant-1", source: "microphone", enabled: true });
+    expect(h.client.getSnapshot().localTracks[0]!.publicationId).not.toBe(original);
+  }, { createSilentAudio: async () => ({ track: new FakeTrack("silence", "audio") as unknown as MediaStreamTrack, dispose: vi.fn() }) });
+});
+
 it("retires through a peer that closes while sender detachment is pending", async () => {
   const harness = createHarness();
   const detaching = Promise.withResolvers<void>();
