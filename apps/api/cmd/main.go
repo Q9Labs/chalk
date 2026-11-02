@@ -312,7 +312,7 @@ func run() error {
 		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
-	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
+	mediaPublicationService := mediapublications.NewService(providerOperationRepository).WithPullHold(mediapublications.PullHoldConfig{Enabled: cfg.MediaPullHold.Enabled, Budget: cfg.MediaPullHold.Budget})
 	var providerBridgeServer *providerbridgeserver.Server
 	var recordingDownloads httpapi.RecordingDownloadService
 	var recordingObjects httpapi.RecordingObjectService

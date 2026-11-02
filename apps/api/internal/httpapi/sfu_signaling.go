@@ -174,6 +174,7 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 			break
 		}
 	}
+	holdRemotePulls(ctx, service, publications, request.Body.Tracks)
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		SessionDescription: request.Body.SessionDescription,
@@ -286,21 +287,7 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 	for identity := range failed {
 		failedTracks = append(failedTracks, identity)
 	}
-	reader := func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
-		state, err := service.InspectSession(ctx, connectionID)
-		if err != nil {
-			return mediapublications.PublisherSession{}, err
-		}
-		session := mediapublications.PublisherSession{Found: state.Found}
-		for _, track := range state.Tracks {
-			if track.Location == "local" {
-				session.Tracks = append(session.Tracks, mediapublications.PublisherTrack{
-					MID: track.Mid, TrackName: track.TrackName, Active: track.Active,
-				})
-			}
-		}
-		return session, nil
-	}
+	reader := publisherSessionReader(service)
 	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
@@ -315,6 +302,43 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 			"error", err,
 		)
 	}
+}
+
+func publisherSessionReader(service *mediaplane.Service) mediapublications.PublisherSessionReader {
+	return func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
+		state, err := service.InspectSession(ctx, connectionID)
+		if err != nil {
+			return mediapublications.PublisherSession{}, err
+		}
+		session := mediapublications.PublisherSession{Found: state.Found}
+		for _, track := range state.Tracks {
+			if track.Location == "local" {
+				session.Tracks = append(session.Tracks, mediapublications.PublisherTrack{
+					MID: track.Mid, TrackName: track.TrackName, Active: track.Active,
+				})
+			}
+		}
+		return session, nil
+	}
+}
+
+// holdRemotePulls waits, within a budget, for Cloudflare to list a freshly published track as
+// active before the listener's pull reaches Cloudflare. The pull is always forwarded afterwards.
+func holdRemotePulls(ctx context.Context, service *mediaplane.Service, publications mediapublications.Registry, tracks []mediaplane.Track) {
+	holder, ok := publications.(mediapublications.RemotePullHolder)
+	if !ok {
+		return
+	}
+	var remote []mediapublications.RemoteTrackIdentity
+	for _, track := range tracks {
+		if track.Location == "remote" {
+			remote = append(remote, mediapublications.RemoteTrackIdentity{
+				ConnectionID: strings.TrimSpace(track.SessionID),
+				TrackName:    strings.TrimSpace(track.TrackName),
+			})
+		}
+	}
+	holder.HoldRemotePulls(ctx, remote, publisherSessionReader(service))
 }
 
 func remoteTrackObserver(publications mediapublications.Registry) (mediapublications.RemoteTrackObserver, bool) {

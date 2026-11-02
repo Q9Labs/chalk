@@ -262,6 +262,7 @@ type Config struct {
 	Observability            ObservabilityConfig
 	PublicInvite             PublicInviteConfig
 	ProviderBridge           ProviderBridgeConfig
+	MediaPullHold            MediaPullHoldConfig
 	R2                       R2Config
 	RecordingKMS             RecordingKMSConfig
 	RecordingBundleV2Enabled bool
@@ -426,6 +427,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	mediaPullHold, err := loadMediaPullHoldConfig()
+	if err != nil {
+		return Config{}, err
+	}
 
 	publicInvite, err := loadPublicInviteConfig(environment)
 	if err != nil {
@@ -544,6 +549,7 @@ func Load() (Config, error) {
 		},
 		PublicInvite:             publicInvite,
 		ProviderBridge:           providerBridge,
+		MediaPullHold:            mediaPullHold,
 		R2:                       r2Config,
 		RecordingKMS:             recordingKMS,
 		RecordingBundleV2Enabled: envBool(RecordingBundleV2Enabled),

@@ -160,6 +160,8 @@ type Service struct {
 	absenceEvidence *remoteTrackAbsenceEvidence
 	receiveHealth   *receiveHealth
 	liveness        *publicationLivenessChecks
+	pullHold        *pullHold
+	now             func() time.Time
 }
 
 func NewService(repository Repository) Service {
@@ -167,7 +169,7 @@ func NewService(repository Repository) Service {
 }
 
 func newService(repository Repository, now func() time.Time) Service {
-	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now), liveness: newPublicationLivenessChecks(now)}
+	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now), liveness: newPublicationLivenessChecks(now), now: now}
 }
 
 func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {
@@ -252,6 +254,9 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 		next := merge(latest, input, references)
 		if _, err := s.repository.AppendPublicationObservation(ctx, next, PublicationParticipant{ID: input.ParticipantID, Generation: input.ParticipantGeneration, ConnectionID: input.ConnectionID}); err == nil {
 			s.receiveHealth.recordCommittedPublications(next)
+			if s.pullHold != nil {
+				s.pullHold.notePublished(input.ConnectionID, publishedTrackNames(input.Tracks))
+			}
 			return references, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return nil, fmt.Errorf("append media publication observation: %w", err)
@@ -492,4 +497,12 @@ func validateCloseInput(input *CloseInput) error {
 
 func publicationKey(participantID utilities.ID, source string) string {
 	return participantID.String() + "\x00" + source
+}
+
+func publishedTrackNames(tracks []PublishedTrack) []string {
+	names := make([]string, len(tracks))
+	for index, track := range tracks {
+		names[index] = track.TrackName
+	}
+	return names
 }
