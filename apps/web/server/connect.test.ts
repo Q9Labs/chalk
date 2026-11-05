@@ -30,9 +30,11 @@ it("shows what the app asked for and lists and revokes connections for the sessi
   const inspect = vi.fn(() => Effect.succeed({ client_name: "Claude", redirect_host: "claude.ai", scope: "chalk:manage", expires_at: "2026-11-05T12:00:00Z" }));
   expect(await connectPage(engine({ inspectMCPConsentRequest: inspect }), handle)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", requestedScope: "chalk:manage" });
 
-  const list = vi.fn(() => Effect.succeed({ data: [{ id: crypto.randomUUID(), client_name: "ChatGPT", scope: "chalk:read", last_used_at: null, created_at: "2026-11-05T10:00:00Z" }] }));
-  expect((await connectionsPage(engine({ listMCPConnections: list }))).connections[0]).toMatchObject({ clientName: "ChatGPT", lastUsedAt: null });
-  expect(list).toHaveBeenCalledWith({ params: { tenant_id: tenantId } });
+  const list = vi.fn(() => Effect.succeed({ data: [{ id: crypto.randomUUID(), client_name: "ChatGPT", scope: "chalk:read", last_used_at: null, created_at: "2026-11-05T10:00:00Z" }], pagination: { page_size: 25, next_cursor: "next", has_more: true } }));
+  const page = await connectionsPage(engine({ listMCPConnections: list }), "cursor-1");
+  expect(page.connections[0]).toMatchObject({ clientName: "ChatGPT", lastUsedAt: null });
+  expect(page.nextCursor).toBe("next");
+  expect(list).toHaveBeenCalledWith({ params: { tenant_id: tenantId }, query: { page_size: 25, cursor: "cursor-1" } });
 
   const revoke = vi.fn(() => Effect.succeed(undefined));
   const connectionId = crypto.randomUUID();

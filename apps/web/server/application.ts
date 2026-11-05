@@ -130,7 +130,7 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
         case "/dashboard-api/connect":
           return json(await connectPage(client, connectQuery.parse(query(request)).request));
         case "/dashboard-api/connections":
-          return json(await connectionsPage(client));
+          return json(await connectionsPage(client, pageQuery.parse(query(request)).cursor));
         default:
           throw new DashboardError(404, "route_not_found");
       }

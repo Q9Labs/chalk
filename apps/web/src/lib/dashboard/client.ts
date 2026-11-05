@@ -45,7 +45,7 @@ type Pages = {
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
   developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
   connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
-  connections: { query: Record<string, never>; data: ConnectionsDTO; action: ConnectionsAction };
+  connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };
 };
 export type DashboardPage = keyof Pages;
 
