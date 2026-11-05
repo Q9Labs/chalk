@@ -17,6 +17,7 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
+	"github.com/q9labs/chalk/features/media/sfu/internal/media"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
@@ -57,6 +58,7 @@ func joinWith(t *testing.T, svc *service, episode, name string, keepVideo, brows
 	p.peer = newMediaPeer(t, through, browserRTX)
 	p.media = receiveMedia(p.peer, keepVideo)
 	p.conn = svc.createSession(t, op(), p.scope)
+	svc.grantSources(t, p.scope)
 	return p
 }
 
@@ -422,8 +424,9 @@ func TestOneConstrainedSubscriberAdaptsAlone(t *testing.T) {
 	t.Logf("recovery: carol on h %v after the link opened", time.Since(recovered).Round(time.Millisecond))
 
 	// Below the lowest layer: 100 kbit/s carries the microphone but not l.
+	const starvedRate, starvedQueue = 100_000, 12_000 // bits/s, bytes
 	starved := time.Now()
-	carol.link.shape(100_000, 12_000, 20*time.Millisecond, 0, 0)
+	carol.link.shape(starvedRate, starvedQueue, 20*time.Millisecond, 0, 0)
 	eventually(t, "carol paused for congestion", 10*time.Second, func() bool {
 		track, _ := carol.subscription(t, svc, alice, cameraName)
 		return track.Subscription.State == protocol.SubscriptionPaused && track.Subscription.Reason == protocol.PauseCongestion
@@ -454,11 +457,15 @@ func TestOneConstrainedSubscriberAdaptsAlone(t *testing.T) {
 		return track.Subscription.State == protocol.SubscriptionActive && track.Subscription.EffectiveRID != ""
 	})
 	resumed := time.Since(opened)
-	t.Logf("resume: carol's video back %v after the link opened", resumed.Round(time.Millisecond))
-	// The three-second hold comes first; the bound covers one probe backoff of
-	// up to eight seconds after the probes that failed while starved.
-	if resumed < 3*time.Second || resumed > 10*time.Second {
-		t.Fatalf("video resumed %v after the link opened, want between the three-second hold and 10 s", resumed)
+	// Probes fail while carol is starved, and each failure doubles the wait. At
+	// worst, a probe that starts while the starved queue still drains fails too,
+	// then the longest backoff and the probe that proves the path run before the
+	// resume hold.
+	drain := time.Duration(starvedQueue * 8 * float64(time.Second) / starvedRate)
+	bound := drain + media.ProbeSettle + media.ProbeBackoffMax + media.ProbeSettle + media.ResumeHold + time.Second
+	t.Logf("resume: carol's video back %v after the link opened, bound %v", resumed.Round(time.Millisecond), bound)
+	if resumed < media.ResumeHold || resumed > bound {
+		t.Fatalf("video resumed %v after the link opened, want between the %v resume hold and %v", resumed, media.ResumeHold, bound)
 	}
 
 	stopWatching()
