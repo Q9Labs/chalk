@@ -335,3 +335,22 @@ func TestEndEpisodeClosesOnlyThatEpisode(t *testing.T) {
 		t.Fatal("another Tenant's end must not close Tenant 1's Episode")
 	}
 }
+
+func TestPeerSessionStaysInsideTheEpisode(t *testing.T) {
+	node := newTestNode(t, nil)
+	alice := node.newTestSession(t, episodeScope("a", "alice"))
+	bob := node.newTestSession(t, episodeScope("a", "bob"))
+	carol := node.newTestSession(t, episodeScope("b", "carol"))
+
+	if found, err := node.PeerSession(alice.id, bob.scope); err != nil || found != alice {
+		t.Fatalf("a peer in the same Episode: %v, %v", found, err)
+	}
+	if _, err := node.PeerSession(carol.id, bob.scope); !errors.Is(err, ErrSessionGone) {
+		t.Fatalf("a session of another Episode: %v, want gone", err)
+	}
+	other := bob.scope
+	other.TenantID = "tenant-2"
+	if _, err := node.PeerSession(alice.id, other); !errors.Is(err, ErrSessionGone) {
+		t.Fatalf("a session of another Tenant: %v, want gone", err)
+	}
+}

@@ -151,7 +151,14 @@ func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) inspect(w http.ResponseWriter, r *http.Request) error {
 	var request protocol.InspectRequest
-	session, err := s.sessionFor(w, r, &request, func() protocol.Scope { return request.Scope })
+	if err := s.decode(w, r, &request); err != nil {
+		return err
+	}
+	find := s.node.Session
+	if request.Peer {
+		find = s.node.PeerSession
+	}
+	session, err := find(r.PathValue("connectionId"), request.Scope)
 	if err != nil {
 		return err
 	}

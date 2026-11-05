@@ -146,6 +146,10 @@ type EndEpisodeResponse struct {
 
 type InspectRequest struct {
 	Scope Scope `json:"scope"`
+	// Peer inspects a session of another Participant in the same Tenant and Episode,
+	// as the API does to confirm that a publisher's track is really gone. The scope
+	// is the caller's own; a session of another Tenant or Episode still reads as gone.
+	Peer bool `json:"peer,omitempty"`
 }
 
 type InspectedTrack struct {

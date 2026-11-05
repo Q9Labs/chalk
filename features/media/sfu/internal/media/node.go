@@ -333,6 +333,18 @@ func (n *Node) Session(id string, scope protocol.Scope) (*Session, error) {
 	return session, nil
 }
 
+// PeerSession finds a live session of any Participant in the caller's Tenant and Episode.
+func (n *Node) PeerSession(id string, scope protocol.Scope) (*Session, error) {
+	if err := ValidateScope(scope); err != nil {
+		return nil, err
+	}
+	session := n.lookup(id)
+	if session == nil || episodeOf(session.scope) != episodeOf(scope) {
+		return nil, ErrSessionGone
+	}
+	return session, nil
+}
+
 func (n *Node) lookup(id string) *Session {
 	n.mu.Lock()
 	defer n.mu.Unlock()
