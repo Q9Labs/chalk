@@ -260,7 +260,7 @@ func TestTurnCredentialsAreMintedOnceAcrossResolutions(t *testing.T) {
 }
 
 func TestResolveBindingRejectsAnUnknownSelectedProvider(t *testing.T) {
-	_, err := NewRegistry(Config{}).ResolveBinding(tenants.Tenant{}, spaces.Space{MediaPlane: "unsupported"})
+	_, err := NewRegistry(Config{}).ResolveBinding(tenants.Tenant{}, spaces.Space{MediaPlane: "unsupported"}, mediaplane.ClientProviders{})
 	if !errors.Is(err, providercontracts.ErrUnknownProvider) {
 		t.Fatalf("error = %v, want unknown provider", err)
 	}
@@ -333,7 +333,7 @@ func TestResolveEpisodeFollowsTheBindingNotTheSpaceSelector(t *testing.T) {
 		chalkManaged := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"mode":"chalk_managed"}`)}
 		cloudflareSelected := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
 		registry := NewRegistry(Config{Episodes: boundEpisodes{nil}})
-		binding, err := registry.ResolveBinding(chalkManaged, cloudflareSelected)
+		binding, err := registry.ResolveBinding(chalkManaged, cloudflareSelected, mediaplane.ClientProviders{})
 		if binding != nil || err != nil {
 			t.Fatalf("creation: binding = %#v, err = %v, want a null binding", binding, err)
 		}

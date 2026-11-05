@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +26,16 @@ func TestCORSUsesDeploymentPolicyForUnscopedRoute(t *testing.T) {
 	}
 	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "https://dashboard.example" {
 		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}
+
+// A browser SDK declares the media providers it runs, so a cross-origin
+// preflight must allow that header.
+func TestCORSAllowsTheMediaProvidersHeader(t *testing.T) {
+	response := executeCORSRequest(t, CORSOptions{AllowedOrigins: []string{"https://dashboard.example"}}, http.MethodOptions, "/v1/regions", "https://dashboard.example")
+	allowed := strings.Split(response.Header().Get("Access-Control-Allow-Headers"), ", ")
+	if !slices.Contains(allowed, mediaProvidersHeader) {
+		t.Fatalf("Access-Control-Allow-Headers = %v, want %s", allowed, mediaProvidersHeader)
 	}
 }
 

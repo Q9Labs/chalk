@@ -1,6 +1,8 @@
 package mediaplaneproviders
 
 import (
+	"fmt"
+
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -9,10 +11,29 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space) (*mediaplane.Binding, error) {
-	resolved, resolution, err := r.resolveApplication(tenant, space, "")
-	if err != nil || resolved == nil {
+// An SDK that cannot run the own SFU gets Cloudflare, so old SDK cohorts stay
+// on Cloudflare when their Space selects the own SFU.
+func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	selected, err := selectedProvider(tenant, space)
+	if err != nil {
 		return nil, err
+	}
+	var pin spaces.MediaPlaneProvider
+	if selected == spaces.MediaPlaneProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+		pin = spaces.MediaPlaneProviderCloudflareSFU
+	}
+	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
+	if err != nil {
+		return nil, err
+	}
+	if resolved == nil {
+		// A null binding means an Episode without media. That is correct for
+		// disabled media, but an SDK forced to Cloudflare with no Cloudflare
+		// application would join the own SFU Space without media.
+		if pin != "" && resolution.ConfigurationSource != providercontracts.ConfigurationSourceDisabled {
+			return nil, fmt.Errorf("%w: no Cloudflare application for an SDK that cannot run the own SFU", providercontracts.ErrAdapterUnavailable)
+		}
+		return nil, nil
 	}
 	// The own SFU runs several nodes: the Episode stays on the one placed here.
 	node := ""

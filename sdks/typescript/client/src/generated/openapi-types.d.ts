@@ -7166,6 +7166,7 @@ export interface operations {
       query?: never;
       header: {
         "Idempotency-Key": string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
@@ -7662,6 +7663,7 @@ export interface operations {
       query?: never;
       header: {
         "Idempotency-Key": string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path: {
         tenant_id: components["schemas"]["TenantId"];
@@ -7774,7 +7776,9 @@ export interface operations {
   issueAccessGrant: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        "X-Chalk-Media-Providers"?: string;
+      };
       path: {
         tenant_id: components["schemas"]["TenantId"];
         space_id: components["schemas"]["SpaceId"];

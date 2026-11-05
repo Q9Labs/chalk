@@ -179,13 +179,16 @@ func (e Episode) MediaPlaneBinding() (binding *mediaplane.Binding, legacy bool, 
 }
 
 type CreateEpisodeInput struct {
-	ID                            utilities.ID
-	TenantID                      utilities.ID
-	SpaceID                       utilities.ID
-	Metadata                      json.RawMessage
-	CreatedByUserID               utilities.ID
-	StartedAt                     *time.Time
-	ConfigSnapshot                json.RawMessage
+	ID              utilities.ID
+	TenantID        utilities.ID
+	SpaceID         utilities.ID
+	Metadata        json.RawMessage
+	CreatedByUserID utilities.ID
+	StartedAt       *time.Time
+	ConfigSnapshot  json.RawMessage
+	// MediaClients is what the creator's SDK can run. The Episode binds the
+	// own SFU only when it can.
+	MediaClients                  mediaplane.ClientProviders
 	MaximumDurationSeconds        int32
 	MaximumDurationCeilingSeconds int32
 	DeadlineAt                    time.Time

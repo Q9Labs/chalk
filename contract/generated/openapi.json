@@ -6231,6 +6231,15 @@
               "pattern": "^[A-Za-z0-9_-]+$",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Chalk-Media-Providers",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -7065,6 +7074,15 @@
               "pattern": "^[A-Za-z0-9_-]+$",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Chalk-Media-Providers",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -7141,7 +7159,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "participant.not_active", "request.idempotency_conflict"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "episode.not_active", "media.client_unsupported", "participant.not_active", "request.idempotency_conflict"]
           },
           "413": {
             "content": {
@@ -7257,6 +7275,15 @@
             "schema": {
               "$ref": "#/components/schemas/ParticipantId"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Chalk-Media-Providers",
+            "required": false,
+            "schema": {
+              "maxLength": 256,
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -7345,7 +7372,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["participant.connection_superseded", "participant.generation_mismatch", "participant.media_replacement_pending"]
+            "x-chalk-error-codes": ["media.client_unsupported", "participant.connection_superseded", "participant.generation_mismatch", "participant.media_replacement_pending"]
           },
           "413": {
             "content": {

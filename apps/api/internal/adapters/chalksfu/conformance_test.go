@@ -125,7 +125,12 @@ func TestConformanceSignaling(t *testing.T) {
 		t.Fatalf("pull: %v", err)
 	}
 	t.Run("a pull mixes a success and an error", func(t *testing.T) {
-		if len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != bobConn {
+		if len(pulled.Tracks) != 1 || pulled.Tracks[0].TrackName != "alice-mic" || pulled.Tracks[0].SessionID != aliceConn {
+			t.Fatalf("pull = %+v", pulled)
+		}
+		// The error names the publisher's connection, which is what the client asked for,
+		// and marks the publication missing so the API can retire it.
+		if len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != aliceConn || !pulled.TrackErrors[0].PublicationMissing {
 			t.Fatalf("pull = %+v", pulled)
 		}
 		if !pulled.RequiresImmediateRenegotiation || pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" {
@@ -415,7 +420,7 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 		})
 	}
 
-	started, err := registry(nil).ResolveBinding(tenants.Tenant{}, cloudflareSpace)
+	started, err := registry(nil).ResolveBinding(tenants.Tenant{}, cloudflareSpace, mediaplane.ClientProviders{})
 	if err != nil || started.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
 		t.Fatalf("Episode started under Cloudflare: %+v, %v", started, err)
 	}
@@ -424,7 +429,11 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 		t.Fatalf("live Episode after the flip: %v, %v", live, err)
 	}
 
-	next, err := registry(started).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	oldSDK, err := registry(started).ResolveBinding(tenants.Tenant{}, chalkSpace, mediaplane.ClientProviders{})
+	if err != nil || oldSDK.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("an SDK that cannot run the own SFU got %+v, %v, want Cloudflare", oldSDK, err)
+	}
+	next, err := registry(started).ResolveBinding(tenants.Tenant{}, chalkSpace, mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"))
 	if err != nil || next.Provider != string(spaces.MediaPlaneProviderChalkSFU) || next.Node != "sfu-a" {
 		t.Fatalf("next Episode binding: %+v, %v, want chalk_sfu on sfu-a", next, err)
 	}
@@ -451,7 +460,7 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: box.fleet(t),
 	})
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
-	binding, err := registry.ResolveBinding(tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)})
+	binding, err := registry.ResolveBinding(tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, ownSFUClients)
 	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
 		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
 	}

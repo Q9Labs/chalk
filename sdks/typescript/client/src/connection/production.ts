@@ -7,6 +7,7 @@ import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTrans
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
+import { mediaBootstrap } from "../access/media-bootstrap";
 const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
@@ -110,15 +111,9 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
-    bootstrap: input.access.media.clientPayload,
+    bootstrap: mediaBootstrap(input.access.media),
     participantId: subject.participantId,
-    replaceMediaConnection: replaceMediaConnection
-      ? async () => {
-          const replacement = await replaceMediaConnection();
-          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-          return replacement.clientPayload;
-        }
-      : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
@@ -138,13 +133,7 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
   return createSFUConnectionMediaClient(client);
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
-  return bindConnectionMediaClient(client, (input) => {
-    if ("provider" in input) {
-      if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-      return client.restart(input.clientPayload);
-    }
-    return client.restart(input);
-  });
+  return bindConnectionMediaClient(client, (input) => client.restart("provider" in input ? mediaBootstrap(input) : input));
 }
 type BoundMediaClient = Pick<
   ConnectionMediaClient,

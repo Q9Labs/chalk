@@ -32,7 +32,7 @@ type EpisodeLifecycleRepository struct {
 }
 
 type episodeMediaBindingResolver interface {
-	ResolveBinding(tenants.Tenant, spaces.Space) (*mediaplane.Binding, error)
+	ResolveBinding(tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error)
 }
 
 func NewEpisodeLifecycleRepository(transactor episodeLifecycleTransactor) EpisodeLifecycleRepository {

@@ -420,14 +420,21 @@ function accessGrant(value: AccessGrantWire): AccessGrant {
 }
 function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<string, unknown>> {
   switch (media.provider) {
-    case "cloudflare_sfu": {
-      const { connectionId, stunServer, iceServers } = media.client_payload;
-      if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
-      return { connectionId, stunServer, ...(iceServers === undefined ? {} : { iceServers }) };
-    }
+    case "cloudflare_sfu":
+      return cloudflareSFUClientPayload(media.client_payload);
+    case "chalk_sfu":
+      return chalkSFUClientPayload(media.client_payload);
     default:
       throw invalidResponse(201);
   }
+}
+function cloudflareSFUClientPayload({ connectionId, stunServer, iceServers }: AccessGrantWire["media"]["client_payload"]): Readonly<Record<string, unknown>> {
+  if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
+  return { connectionId, stunServer, ...(iceServers === undefined ? {} : { iceServers }) };
+}
+function chalkSFUClientPayload({ connectionId, episodeRef, iceServers, capabilities }: AccessGrantWire["media"]["client_payload"]): Readonly<Record<string, unknown>> {
+  if (typeof connectionId !== "string" || typeof episodeRef !== "string") throw invalidResponse(201);
+  return { connectionId, episodeRef, iceServers: iceServers ?? [], capabilities: capabilities ?? {} };
 }
 function requiredResponseID(value: string | undefined): string {
   if (!value) throw invalidResponse(201);

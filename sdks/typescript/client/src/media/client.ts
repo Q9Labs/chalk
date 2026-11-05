@@ -1946,7 +1946,7 @@ function validateClientOptions(options: CloudflareSFUClientOptions): void {
   }
 }
 function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
-  if (!bootstrap.connectionId.trim() || !bootstrap.stunServer.trim()) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
+  if (!bootstrap.connectionId.trim() || (bootstrap.stunServer !== undefined && !bootstrap.stunServer.trim())) throw new CloudflareSFUError("Cloudflare SFU bootstrap is incomplete", "invalid_bootstrap");
 }
 function validateTrackSource(source: MediaPublicationSource, track: MediaStreamTrack): void {
   const valid = source === "microphone" || source === "screen_audio" ? track.kind === "audio" : track.kind === "video";

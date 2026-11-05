@@ -19,7 +19,7 @@ import (
 
 type publicJoinPolicyBinding struct{ binding mediaplane.Binding }
 
-func (s publicJoinPolicyBinding) ResolveBinding(tenants.Tenant, spaces.Space) (*mediaplane.Binding, error) {
+func (s publicJoinPolicyBinding) ResolveBinding(tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	return &s.binding, nil
 }
 
