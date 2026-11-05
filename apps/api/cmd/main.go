@@ -20,6 +20,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	recordingkms "github.com/q9labs/chalk/apps/api/internal/adapters/aws/recordingkms"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/discordreports"
@@ -180,8 +181,15 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUSelector(cfg.ChalkSFU.Enabled)
+	var chalkSFU *chalksfu.Fleet
+	if cfg.ChalkSFU.Enabled {
+		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
+		if err != nil {
+			return fmt.Errorf("configure chalk sfu: %w", err)
+		}
+	}
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -311,6 +319,8 @@ func run() error {
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
 		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
+		ChalkSFU:        chalkSFU,
+		Episodes:        episodeService,
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
@@ -387,7 +397,7 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
@@ -624,6 +634,19 @@ func run() error {
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
+		// The Episode binding picks the cleanup closer. A typed nil adapter inside the
+		// interface would pass the nil check, so the nil case stays a nil interface.
+		var chalkCleanup providerbridge.ChalkNodes
+		if chalkSFU != nil {
+			chalkCleanup = func(node string) (providerbridge.ChalkCleanup, error) {
+				adapter, err := chalkSFU.Node(node)
+				if err != nil {
+					return nil, err
+				}
+				return adapter, nil
+			}
+		}
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkCleanup)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
@@ -655,6 +678,10 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if chalkSFU != nil {
+		// Placement reads node load from these probes.
+		go chalkSFU.Watch(signalCtx)
+	}
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

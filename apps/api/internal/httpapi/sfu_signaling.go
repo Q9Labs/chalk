@@ -176,6 +176,7 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
+		Scope:              sfuScope(ctx),
 		SessionDescription: request.Body.SessionDescription,
 		Tracks:             request.Body.Tracks,
 		SpaceID:            request.SpaceID.String(),
@@ -287,7 +288,7 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 		failedTracks = append(failedTracks, identity)
 	}
 	reader := func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
-		state, err := service.InspectSession(ctx, connectionID)
+		state, err := service.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: connectionID, Scope: sfuScope(ctx), Peer: true})
 		if err != nil {
 			return mediapublications.PublisherSession{}, err
 		}
@@ -430,7 +431,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			}
 			if request.Body.ReceiveOnly {
 				return service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-					Provider: service.Provider(), ConnectionID: request.Body.ConnectionID,
+					Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
 					Tracks: tracks, Force: true, ReceiveOnly: true,
 				})
 			}
@@ -457,7 +458,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 				return mediaplane.CloseTracksResponse{Tracks: tracks}, nil
 			}
 			response, err := service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-				Provider: service.Provider(), ConnectionID: request.Body.ConnectionID,
+				Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
 				SessionDescription: request.Body.SessionDescription, Tracks: requiredTracks, Force: request.Body.Force,
 			})
 			if err != nil {
@@ -563,7 +564,7 @@ func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, t
 			if err != nil {
 				return mediaplane.TracksResponse{}, err
 			}
-			return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Tracks: request.Body.Tracks})
+			return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx), Tracks: request.Body.Tracks})
 		},
 	).
 		Auth(APIAuthParticipantMedia).
@@ -591,6 +592,7 @@ func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			}
 			err = service.Renegotiate(ctx, mediaplane.RenegotiateRequest{
 				ConnectionID:       request.Body.ConnectionID,
+				Scope:              sfuScope(ctx),
 				SessionDescription: request.Body.SessionDescription,
 			})
 			return sfuRenegotiateResponse{Accepted: err == nil}, err
@@ -680,12 +682,22 @@ func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, part
 		return apiErrorUnauthenticated
 	}
 	if connectionID == "" {
-		connectionID = subject.CloudflareConnectionID
+		connectionID = subject.ConnectionID
 	}
 	return requireParticipantMediaRoute(
 		ctx, tenantID, spaceID, episodeID, participantID, subject.ParticipantGeneration,
-		accessgrants.ProviderCloudflareSFU, connectionID,
+		subject.Provider, connectionID,
 	)
+}
+
+// sfuScope names the connection the verified media credential belongs to. The route
+// check in authorizeSFURequest has already matched it to the URL.
+func sfuScope(ctx context.Context) mediaplane.Scope {
+	subject, _ := accessgrants.SubjectFromContext(ctx)
+	return mediaplane.Scope{
+		TenantID: subject.TenantID.String(), EpisodeID: subject.EpisodeID.String(),
+		ParticipantID: subject.ParticipantID.String(), Generation: subject.ParticipantGeneration,
+	}
 }
 
 func resolveSFUSignalingPlane(ctx context.Context, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID) (*mediaplane.Service, error) {
@@ -698,11 +710,12 @@ func resolveSFUSignalingPlane(ctx context.Context, spaces SpaceService, episodeL
 	if _, err := episodeLookup.GetEpisode(ctx, tenantID, spaceID, episodeID); err != nil {
 		return nil, err
 	}
-	service, err := resolveMediaPlane(ctx, media, spaces, tenants, tenantID, spaceID)
+	service, err := resolveMediaPlane(ctx, media, spaces, tenants, tenantID, spaceID, episodeID)
 	if err != nil {
 		return nil, err
 	}
-	if service == nil || service.Provider() != mediaplane.ProviderCloudflareSFU {
+	subject, _ := accessgrants.SubjectFromContext(ctx)
+	if service == nil || string(service.Provider()) != subject.Provider {
 		return nil, mediaplane.ErrInvalidProvider
 	}
 	return service, nil

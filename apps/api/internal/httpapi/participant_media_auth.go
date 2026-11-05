@@ -90,13 +90,13 @@ func requireParticipantMediaRoute(
 	}
 
 	err := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
-		TenantID:               tenantID,
-		SpaceID:                spaceID,
-		EpisodeID:              episodeID,
-		ParticipantID:          participantID,
-		ParticipantGeneration:  participantGeneration,
-		Provider:               provider,
-		CloudflareConnectionID: connectionID,
+		TenantID:              tenantID,
+		SpaceID:               spaceID,
+		EpisodeID:             episodeID,
+		ParticipantID:         participantID,
+		ParticipantGeneration: participantGeneration,
+		Provider:              provider,
+		ConnectionID:          connectionID,
 	})
 	if err != nil {
 		return apiErrorForbidden

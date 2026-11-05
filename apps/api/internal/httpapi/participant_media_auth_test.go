@@ -174,7 +174,7 @@ func TestParticipantMediaAddTracksObservesSuccessfulAndFailedPulls(t *testing.T)
 			if len(observer.captures) != 1 || observer.captures[0] != input.ReceiveHealthEpisode {
 				t.Fatal("pull identity was not captured for the observed Episode")
 			}
-			if input.ParticipantID != subject.ParticipantID || input.ParticipantGeneration != subject.ParticipantGeneration || input.EpisodeID != subject.EpisodeID || input.SpaceID != subject.SpaceID || input.TenantID != subject.TenantID || input.ConnectionID != subject.CloudflareConnectionID || (input.Err != nil) != failed || len(input.Requested) != 1 {
+			if input.ParticipantID != subject.ParticipantID || input.ParticipantGeneration != subject.ParticipantGeneration || input.EpisodeID != subject.EpisodeID || input.SpaceID != subject.SpaceID || input.TenantID != subject.TenantID || input.ConnectionID != subject.ConnectionID || (input.Err != nil) != failed || len(input.Requested) != 1 {
 				t.Fatalf("observation = %+v", input)
 			}
 			if failed && (len(input.Response.TrackErrors) != 1 || input.Response.TrackErrors[0].Code != "empty_track_error") {
@@ -203,7 +203,7 @@ func (*addTracksRouteFixture) GetTenant(context.Context, utilities.ID) (tenants.
 func (*addTracksRouteFixture) GetEpisode(context.Context, utilities.ID, utilities.ID, utilities.ID) (episodes.Episode, error) {
 	return episodes.Episode{}, nil
 }
-func (f *addTracksRouteFixture) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *addTracksRouteFixture) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }
@@ -221,13 +221,13 @@ func (*addTracksRouteFixture) Renegotiate(context.Context, mediaplane.Renegotiat
 func participantMediaSubject(t *testing.T) accessgrants.Subject {
 	t.Helper()
 	return accessgrants.Subject{
-		TenantID:               participantMediaID(t, "11111111-1111-4111-8111-111111111111"),
-		SpaceID:                participantMediaID(t, "22222222-2222-4222-8222-222222222222"),
-		EpisodeID:              participantMediaID(t, "33333333-3333-4333-8333-333333333333"),
-		ParticipantID:          participantMediaID(t, "44444444-4444-4444-8444-444444444444"),
-		ParticipantGeneration:  7,
-		Provider:               accessgrants.ProviderCloudflareSFU,
-		CloudflareConnectionID: "connection-123",
+		TenantID:              participantMediaID(t, "11111111-1111-4111-8111-111111111111"),
+		SpaceID:               participantMediaID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:             participantMediaID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantID:         participantMediaID(t, "44444444-4444-4444-8444-444444444444"),
+		ParticipantGeneration: 7,
+		Provider:              accessgrants.ProviderCloudflareSFU,
+		ConnectionID:          "connection-123",
 	}
 }
 

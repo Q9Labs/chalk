@@ -47,6 +47,7 @@ func TestPreparationChecksSpacePolicyBeforePersisting(t *testing.T) {
 		{"disabled", spaces.Space{RecordingPolicy: artifactpolicy.RecordingDisabled}, nil},
 		{"archived", spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual, ArchivedAt: &now}, nil},
 		{"missing", spaces.Space{}, spaces.ErrSpaceNotFound},
+		{"own SFU has no capture path", spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual, MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &preparationRepositoryStub{}

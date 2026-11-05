@@ -39,11 +39,30 @@ func TestBindingRejectsUntrustedOrNonCanonicalAuthority(t *testing.T) {
 		func(binding *Binding) { binding.ConfigurationSource = "caller" },
 		func(binding *Binding) { binding.AdapterFingerprint = strings.ToUpper(binding.AdapterFingerprint) },
 		func(binding *Binding) { binding.AdapterFingerprint = strings.Repeat("x", 64) },
+		func(binding *Binding) { binding.Node = "Node-A" },
+		func(binding *Binding) { binding.Node = "sfu.example.test:8443" },
 	} {
 		binding := valid
 		change(&binding)
 		if !errors.Is(binding.Validate(), ErrInvalidBinding) {
 			t.Fatalf("invalid binding accepted: %#v", binding)
 		}
+	}
+}
+
+func TestBindingNodeLocatesTheEpisodeWithoutChangingTheApplication(t *testing.T) {
+	binding, err := NewBinding("chalk_sfu", BindingSourceDeploymentDefault, "pool-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	placed, err := binding.OnNode("sfu-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if placed.Node != "sfu-b" || placed.AdapterFingerprint != binding.AdapterFingerprint || placed.Validate() != nil {
+		t.Fatalf("placed binding %#v", placed)
+	}
+	if _, err := binding.OnNode(""); !errors.Is(err, ErrInvalidBinding) {
+		t.Fatalf("empty node: %v, want invalid binding", err)
 	}
 }

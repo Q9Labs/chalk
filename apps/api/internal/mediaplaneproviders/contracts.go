@@ -8,6 +8,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 const (
@@ -39,7 +40,7 @@ var (
 )
 
 type Resolver interface {
-	Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error)
+	ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error)
 }
 
 type Resolution struct {

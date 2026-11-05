@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -19,7 +20,7 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 	for _, takeoverDuringIssue := range []bool{false, true} {
 		t.Run(map[bool]string{false: "takeover between recovery attempts", true: "takeover during credential issuance"}[takeoverDuringIssue], func(t *testing.T) {
 			subject := participantMediaSubject(t)
-			subject.CloudflareConnectionID = "tab-a"
+			subject.ConnectionID = "tab-a"
 			repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: "tab-a"}
 			public, private, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
@@ -101,7 +102,7 @@ func TestAccessGrantRecoveryCompareAndSwap(t *testing.T) {
 
 func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
 	subject := participantMediaSubject(t)
-	subject.CloudflareConnectionID = "tab-a"
+	subject.ConnectionID = "tab-a"
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -118,12 +119,12 @@ func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.ConnectionID}
 	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
 	active := accessgrants.NewActiveAuthorizer(repo)
 	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
-	expected := subject.CloudflareConnectionID
+	expected := subject.ConnectionID
 	request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
 	committed, err := endpoint.handle(ctx, request)
 	if err != nil {
@@ -155,7 +156,7 @@ func TestAccessGrantRecoveryReplaysLostResponseOnlyWhileCurrent(t *testing.T) {
 
 func TestAccessGrantRecoveryDuplicateDuringIssuanceIsRetryable(t *testing.T) {
 	subject := participantMediaSubject(t)
-	subject.CloudflareConnectionID = "tab-a"
+	subject.ConnectionID = "tab-a"
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -172,12 +173,12 @@ func TestAccessGrantRecoveryDuplicateDuringIssuanceIsRetryable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.CloudflareConnectionID}
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}, connection: subject.ConnectionID}
 	fixture := &recoveryGrantPlane{refreshGrantPlane: refreshGrantPlane{issuer: issuer}}
 	active := accessgrants.NewActiveAuthorizer(repo)
 	endpoint := issueAccessGrantEndpoint(fixture, fixture, verifier, active, active, fixture, fixture, fixture, fixture)
 	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: subject.ParticipantID})
-	expected := subject.CloudflareConnectionID
+	expected := subject.ConnectionID
 	request := issueAccessGrantRequest{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: subject.ParticipantGeneration, CurrentMediaToken: credential.Token, ReplaceMediaConnection: true, ExpectedMediaConnectionID: &expected}}
 	var duplicateErr error
 	fixture.beforeCreate = func() {
@@ -222,7 +223,7 @@ func (f *recoveryGrantPlane) CreateJoin(ctx context.Context, input mediaplane.Cr
 	return join, err
 }
 
-func (f *recoveryGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *recoveryGrantPlane) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }

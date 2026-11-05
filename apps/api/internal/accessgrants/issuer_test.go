@@ -40,7 +40,7 @@ func TestIssuerCreatesBoundMediaCredential(t *testing.T) {
 		claims["participant_id"] != fixture.subject.ParticipantID.String() ||
 		claims["participant_generation"] != float64(fixture.subject.ParticipantGeneration) ||
 		claims["media_provider"] != fixture.subject.Provider ||
-		claims["cloudflare_connection_id"] != fixture.subject.CloudflareConnectionID {
+		claims["cloudflare_connection_id"] != fixture.subject.ConnectionID {
 		t.Fatalf("bound claims = %#v", claims)
 	}
 	if claims["iat"] != claims["nbf"] || claims["exp"].(float64)-claims["iat"].(float64) != accessgrants.Lifetime.Seconds() {
@@ -66,9 +66,9 @@ func TestIssuerRejectsInvalidSubjects(t *testing.T) {
 		}},
 		{name: "invalid generation", change: func(subject *accessgrants.Subject) { subject.ParticipantGeneration = 0 }},
 		{name: "wrong provider", change: func(subject *accessgrants.Subject) { subject.Provider = "other_sfu" }},
-		{name: "missing connection", change: func(subject *accessgrants.Subject) { subject.CloudflareConnectionID = "" }},
-		{name: "padded connection", change: func(subject *accessgrants.Subject) { subject.CloudflareConnectionID = " connection_123" }},
-		{name: "control character", change: func(subject *accessgrants.Subject) { subject.CloudflareConnectionID = "connection\n123" }},
+		{name: "missing connection", change: func(subject *accessgrants.Subject) { subject.ConnectionID = "" }},
+		{name: "padded connection", change: func(subject *accessgrants.Subject) { subject.ConnectionID = " connection_123" }},
+		{name: "control character", change: func(subject *accessgrants.Subject) { subject.ConnectionID = "connection\n123" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -124,13 +124,13 @@ func newCredentialFixture(t *testing.T) credentialFixture {
 func testSubject(t *testing.T) accessgrants.Subject {
 	t.Helper()
 	return accessgrants.Subject{
-		TenantID:               mustID(t, "11111111-1111-4111-8111-111111111111"),
-		SpaceID:                mustID(t, "22222222-2222-4222-8222-222222222222"),
-		EpisodeID:              mustID(t, "33333333-3333-4333-8333-333333333333"),
-		ParticipantID:          mustID(t, "44444444-4444-4444-8444-444444444444"),
-		ParticipantGeneration:  7,
-		Provider:               accessgrants.ProviderCloudflareSFU,
-		CloudflareConnectionID: "connection_123",
+		TenantID:              mustID(t, "11111111-1111-4111-8111-111111111111"),
+		SpaceID:               mustID(t, "22222222-2222-4222-8222-222222222222"),
+		EpisodeID:             mustID(t, "33333333-3333-4333-8333-333333333333"),
+		ParticipantID:         mustID(t, "44444444-4444-4444-8444-444444444444"),
+		ParticipantGeneration: 7,
+		Provider:              accessgrants.ProviderCloudflareSFU,
+		ConnectionID:          "connection_123",
 	}
 }
 

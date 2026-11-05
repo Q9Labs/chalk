@@ -8,6 +8,16 @@ import (
 
 var ErrInvalidSignalRequest = errors.New("invalid media signal request")
 
+// Scope names the Participant connection a call acts for. Chalk SFU isolates by
+// Tenant, Episode, Participant and generation, so it needs all four. Cloudflare
+// ignores the scope.
+type Scope struct {
+	TenantID      string
+	EpisodeID     string
+	ParticipantID string
+	Generation    int64
+}
+
 type SessionDescription struct {
 	SDP  string `json:"sdp"`
 	Type string `json:"type"`
@@ -32,6 +42,7 @@ type Track struct {
 
 type TracksRequest struct {
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription *SessionDescription
 	Tracks             []Track
 	// SpaceID and EpisodeID only label provider diagnostics; they are never sent upstream.
@@ -55,11 +66,13 @@ type TrackError struct {
 
 type UpdateTracksRequest struct {
 	ConnectionID string
+	Scope        Scope
 	Tracks       []Track
 }
 
 type RenegotiateRequest struct {
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription SessionDescription
 }
 
@@ -67,6 +80,7 @@ type CloseTracksRequest struct {
 	ReceiveOnly        bool
 	Provider           Provider
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription *SessionDescription
 	Tracks             []CloseTrack
 	Force              bool
@@ -84,6 +98,14 @@ type CloseTracksResponse struct {
 	SessionDescription             *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks                         []CloseTrack        `json:"tracks,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+}
+
+type InspectSessionRequest struct {
+	ConnectionID string
+	// Scope is the caller's own scope. Peer says the session belongs to another
+	// Participant of the same Episode, such as the publisher of a failed pull.
+	Scope Scope
+	Peer  bool
 }
 
 type SessionTrack struct {
@@ -104,7 +126,7 @@ type SignalingPlane interface {
 }
 
 type SessionInspectingPlane interface {
-	InspectSession(context.Context, string) (SessionState, error)
+	InspectSession(context.Context, InspectSessionRequest) (SessionState, error)
 }
 
 // TrackUpdatingPlane changes how an existing remote subscription is delivered,
@@ -151,16 +173,16 @@ func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (Clo
 	return closing.CloseTracks(ctx, input)
 }
 
-func (s Service) InspectSession(ctx context.Context, connectionID string) (SessionState, error) {
+func (s Service) InspectSession(ctx context.Context, input InspectSessionRequest) (SessionState, error) {
 	inspecting, ok := s.plane.(SessionInspectingPlane)
 	if !ok {
 		return SessionState{}, ErrUnsupportedOperation
 	}
-	trimmed := strings.TrimSpace(connectionID)
-	if trimmed == "" || trimmed != connectionID {
+	trimmed := strings.TrimSpace(input.ConnectionID)
+	if trimmed == "" || trimmed != input.ConnectionID {
 		return SessionState{}, ErrInvalidSignalRequest
 	}
-	return inspecting.InspectSession(ctx, trimmed)
+	return inspecting.InspectSession(ctx, input)
 }
 
 func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) error {

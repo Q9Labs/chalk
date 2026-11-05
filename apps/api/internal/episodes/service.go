@@ -149,6 +149,35 @@ type EpisodeConfigSnapshot struct {
 	MediaPlaneBinding             *mediaplane.Binding      `json:"media_plane_binding,omitempty"`
 }
 
+// MediaPlaneBinding returns the provider application frozen when the Episode
+// started. legacy reports an Episode that predates the binding: its snapshot has
+// no media_plane_binding key. A stored null binding is not legacy: the Episode
+// started without media, so it has no media service.
+func (e Episode) MediaPlaneBinding() (binding *mediaplane.Binding, legacy bool, err error) {
+	var snapshot struct {
+		Binding json.RawMessage `json:"media_plane_binding"`
+	}
+	if len(e.ConfigSnapshot) == 0 {
+		return nil, true, nil
+	}
+	if err := json.Unmarshal(e.ConfigSnapshot, &snapshot); err != nil {
+		return nil, false, ErrInvalidConfigSnapshot
+	}
+	if snapshot.Binding == nil {
+		return nil, true, nil
+	}
+	if err := json.Unmarshal(snapshot.Binding, &binding); err != nil {
+		return nil, false, ErrInvalidConfigSnapshot
+	}
+	if binding == nil {
+		return nil, false, nil
+	}
+	if err := binding.Validate(); err != nil {
+		return nil, false, ErrInvalidConfigSnapshot
+	}
+	return binding, false, nil
+}
+
 type CreateEpisodeInput struct {
 	ID                            utilities.ID
 	TenantID                      utilities.ID
