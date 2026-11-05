@@ -71,6 +71,9 @@ func tenantSettings() *Schema {
 	for _, k := range []string{"media_plane_provider_config", "storage_provider_config"} {
 		p[k] = &Schema{}
 	}
+	for _, k := range []string{"default_media_plane", "logo_key", "website"} {
+		p[k] = nullable(p[k])
+	}
 	p["cors_allowed_origins"] = stringsSchema(100)
 	for _, k := range []string{"recording_retention_seconds", "transcript_retention_seconds", "transcription_source_window_seconds"} {
 		p[k] = integer(0, 2147483647)

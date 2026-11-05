@@ -153,7 +153,8 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	if b.err != nil {
 		return nil, mcpError(endpoint.apiError(b.err))
 	}
-	if quota, ok := b.ctx.Value(mcpQuotaKey{}).(mcpQuota); ok {
+	// The transport already charged the authenticated read bucket for this request.
+	if quota, ok := b.ctx.Value(mcpQuotaKey{}).(mcpQuota); ok && endpoint.contract.RateLimit.Name != ratelimit.PolicyNameAuthenticatedRead {
 		if err := quota.allow(b.ctx, endpoint.contract.RateLimit); err != nil {
 			return nil, mcpError(endpoint.apiError(err))
 		}

@@ -10,8 +10,19 @@ import { bindConnectionMediaClient } from "../connection/production";
 import type { SpaceClientOptions } from "../space-client/types";
 import { provenShort } from "../../tests/helpers/media-convergence";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
+import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
-import type { CloudflareSFUBootstrap, CloudflareSFUClientOptions, CloudflareSFUCloseTrackRequest, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
+import type {
+  CloudflareSFUBootstrap,
+  CloudflareSFUClientOptions,
+  CloudflareSFUCloseTrackRequest,
+  CloudflareSFULocalOfferDiagnostic,
+  CloudflareSFUPublicationSnapshot,
+  CloudflareSFUSessionDescription,
+  CloudflareSFUSignalingTransport,
+  CloudflareSFUTrackRequest,
+  CloudflareSFUTracksResponse,
+} from "./cloudflare-sfu";
 
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
@@ -2983,6 +2994,142 @@ describe("Cloudflare SFU HTTP signaling", () => {
     );
   });
 });
+// Sanitized from three collisions on the test rig (two on SDK 5.4.0 and one on the #786 build), which
+// all had this shape. Times are milliseconds after the connection was created. The second local offer
+// has no request and no rollback in the trace; the remote offer is the reply to a pull with
+// requiresImmediateRenegotiation set. No track event and no local answer follow it in the trace.
+const observedPullOfferCollision = [
+  { call: "setLocal:offer", at: 3 },
+  { call: "setRemote:answer", at: 210 },
+  { call: "setLocal:offer", at: 4223 },
+  { call: "setRemote:offer", at: 8257 },
+] as const;
+describe("SFU offers during negotiation", () => {
+  it("answers the pull reply offer that arrives while an unrequested local offer is pending", async () => {
+    const diagnostics: CloudflareSFULocalOfferDiagnostic[] = [];
+    await withTimedHarness(
+      async (harness) => {
+        const [first, second, third] = observedPullOfferCollision;
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const peer = harness.peers[0]!;
+        expect(peer.descriptionLog).toEqual([first.call, second.call]);
+        await vi.advanceTimersByTimeAsync(third.at - second.at);
+        await peer.setLocalDescription(await peer.createOffer());
+        await vi.advanceTimersByTimeAsync(observedPullOfferCollision[3].at - third.at);
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await vi.advanceTimersByTimeAsync(100);
+        // The SDK rolls the stray offer back before it takes the SFU offer, then answers it.
+        expect(peer.descriptionLog).toEqual(["setLocal:offer", "setRemote:answer", "setLocal:offer", "setLocal:rollback", "setRemote:offer", "setLocal:answer"]);
+        expect(harness.transport.renegotiateInputs).toEqual([expect.objectContaining({ sessionDescription: expect.objectContaining({ type: "answer" }) })]);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+        // No SDK call started the offer, so the log names no origin.
+        expect(diagnostics).toEqual([
+          { event: "local_offer_pending", where: "sdp_operation_start", origin: "outside_sdk", pendingMs: null },
+          { event: "local_offer_pending", where: "remote_offer", origin: "outside_sdk", pendingMs: null },
+        ]);
+      },
+      { pollIntervalMs: 100, onDiagnostic: (event) => diagnostics.push(event) },
+    );
+  });
+  it("still answers the pull reply offer when the diagnostic callback throws", async () => {
+    const errors: unknown[] = [];
+    await withTimedHarness(
+      async (harness) => {
+        const [, second, third] = observedPullOfferCollision;
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        const peer = harness.peers[0]!;
+        await vi.advanceTimersByTimeAsync(third.at - second.at);
+        await peer.setLocalDescription(await peer.createOffer());
+        await vi.advanceTimersByTimeAsync(observedPullOfferCollision[3].at - third.at);
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await vi.advanceTimersByTimeAsync(100);
+        expect(peer.descriptionLog.slice(-3)).toEqual(["setLocal:rollback", "setRemote:offer", "setLocal:answer"]);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+        expect(errors).toContainEqual(expect.objectContaining({ message: "diagnostic consumer failed" }));
+      },
+      {
+        pollIntervalMs: 100,
+        onDiagnostic: () => {
+          throw new Error("diagnostic consumer failed");
+        },
+        onError: (error) => errors.push(error),
+      },
+    );
+  });
+  it("logs nothing when every SDP operation leaves the connection stable", async () => {
+    const diagnostics: CloudflareSFULocalOfferDiagnostic[] = [];
+    await withTimedHarness(
+      async (harness) => {
+        harness.transport.immediateRenegotiation = true;
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        await harness.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await vi.advanceTimersByTimeAsync(100);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+        expect(diagnostics).toEqual([]);
+      },
+      { pollIntervalMs: 100, onDiagnostic: (event) => diagnostics.push(event) },
+    );
+  });
+});
+describe("remote pull retries after a transient failure", () => {
+  const gateway = new CloudflareSFUError("Chalk SFU signaling failed with HTTP 503", "signaling_failed", { status: 503, retryableConnection: true });
+  const network = Object.assign(new TypeError("Failed to fetch"), {});
+  markMediaFetchFailure(network);
+  it.each([
+    ["503", gateway],
+    ["network error", network],
+  ] as const)("retries a pull within seconds after a %s", async (_name, failure) => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(failure);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(attempts).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(attempts).toHaveBeenCalledTimes(2);
+        expect(harness.client.getSnapshot().remoteTracks.map((track) => track.publicationId)).toEqual(["remote|microphone"]);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it("falls back to the long deferral after three quick retries", async () => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(gateway, gateway, gateway, gateway);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(8_000);
+        expect(attempts).toHaveBeenCalledTimes(4);
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(attempts).toHaveBeenCalledTimes(5);
+        expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+  it.each([["rate limit", new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 })]] as const)("keeps the long deferral after a %s", async (_name, failure) => {
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        harness.transport.snapshot = publicationSnapshot(1, 1, "remote|microphone");
+        harness.transport.remotePullFailures.push(failure);
+        const attempts = vi.spyOn(harness.transport, "addTracks");
+        await vi.advanceTimersByTimeAsync(14_000);
+        expect(attempts).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(attempts).toHaveBeenCalledTimes(2);
+      },
+      { pollIntervalMs: 15000 },
+    );
+  });
+});
 describe("remote publication recovery", () => {
   it.each(["resumed", "removed"] as const)("resets a publication's partial-error backoff after it is %s", async (transition) => {
     await withTimedHarness(
@@ -4194,6 +4341,7 @@ function createHarness(
   options: {
     readonly autoConnect?: boolean;
     readonly onError?: (error: unknown, binding: string) => void;
+    readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
@@ -4213,6 +4361,7 @@ function createHarness(
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
     onError: options.onError,
+    onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
     peerConnectionFactory,
   });
@@ -4247,6 +4396,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   readonly #withdrawnLocalPublications = new Set<string>();
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
+  readonly remotePullFailures: unknown[] = [];
+  readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
   failRenegotiation = false;
   immediateRenegotiation = false;
   listPublicationCalls = 0;
@@ -4265,6 +4416,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     const unblock = this.#blockedConnections.get(input.connectionId);
     if (unblock) await new Promise<void>((resolve) => this.#blockedConnections.set(input.connectionId, resolve));
     if (input.tracks.some((track) => track.location === "remote")) {
+      if (this.remotePullFailures.length > 0) throw this.remotePullFailures.shift();
       if (this.failRemotePullCount > 0) {
         this.failRemotePullCount--;
         throw new CloudflareSFUError("remote pull failed", "signaling_failed");
@@ -4347,7 +4499,8 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     if (this.failTrackUpdates) throw new CloudflareSFUError("layer switch rejected", "signaling_failed");
     return { tracks: input.tracks };
   }
-  async renegotiate(): Promise<void> {
+  async renegotiate(input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }): Promise<void> {
+    this.renegotiateInputs.push(input);
     if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
   }
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
@@ -4478,7 +4631,9 @@ class FakePeerConnection extends EventTarget {
     const stats = new Map<string, RTCStats>([["candidate-pair", stat]]);
     return Promise.resolve(stats);
   }
+  readonly descriptionLog: string[] = [];
   async setLocalDescription(description?: RTCSessionDescriptionInit): Promise<void> {
+    this.descriptionLog.push(`setLocal:${description?.type}`);
     this.localDescription = description ?? null;
     if (description?.type === "rollback") {
       this.rollbackCalls++;
@@ -4490,6 +4645,8 @@ class FakePeerConnection extends EventTarget {
     }
   }
   async setRemoteDescription(description?: RTCSessionDescriptionInit): Promise<void> {
+    this.descriptionLog.push(`setRemote:${description?.type}`);
+    if (description?.type === "offer" && this.signalingState === "have-local-offer") throw new DOMException("Called in wrong state: have-local-offer", "InvalidStateError");
     this.signalingState = description?.type === "offer" ? "have-remote-offer" : "stable";
     if (this.#nextRemoteDescriptionStates) {
       const next = this.#nextRemoteDescriptionStates;

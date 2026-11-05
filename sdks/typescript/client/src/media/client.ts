@@ -14,6 +14,7 @@ import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
   CloudflareSFUFailureCode,
+  CloudflareSFULocalOfferDiagnostic,
   CloudflareSFULocalTrack,
   CloudflareSFUPublication,
   CloudflareSFUPublicationSnapshot,
@@ -62,6 +63,8 @@ const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
 const RECOVERY_HEALTHY_RESET_MS = 10_000;
 const NEGOTIATION_TIMEOUT_MS = 35000;
+const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
+const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 const VIEWER_LAYER_BATCH_SIZE = 16;
 // Adaptation uses at most 12 of the participant's 60 call-control writes/minute.
@@ -72,6 +75,7 @@ const CAPTURE_REUSE_WINDOW_MS = 20_000;
 export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
+  readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -115,6 +119,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #pollFailedPull = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
+  // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
+  #localOffer: { readonly connection: RTCPeerConnection; readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
   #retirement: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
   #started = false;
@@ -130,6 +136,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
+    this.#onDiagnostic = options.onDiagnostic;
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -653,12 +660,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!closed) transceiver.stop();
       }
       phase.detached = true;
-      const sessionDescription = closed ? undefined : await createLocalOffer(connection);
+      const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
       const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
-      if (connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection);
+      if (connection.connectionState !== "closed") await this.#applyProviderDescription(response, connection, { generation: this.#generation, connectionId });
     } catch (error) {
       await this.#rollbackLocalOffer(connection);
       throw error;
@@ -934,7 +941,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #negotiateLocalPublications(connection: RTCPeerConnection, connectionId: string, publications: readonly OwnedLocalPublication[], generation: number): Promise<void> {
     let sessionDescription: Awaited<ReturnType<typeof createLocalOffer>>;
     try {
-      sessionDescription = await createLocalOffer(connection);
+      sessionDescription = await this.#createLocalOffer(connection, "publish");
     } catch (error) {
       const cameras = publications.filter(({ state, transceiver }) => state.source === "camera" && transceiver.sender.getParameters().encodings.length > 1);
       if (!simulcastUnsupported(error) || cameras.length === 0) throw error;
@@ -946,7 +953,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         publication.transceiver = connection.addTransceiver(publication.state.track, { direction: "sendonly" });
         publication.state.transceiver = publication.transceiver;
       }
-      sessionDescription = await createLocalOffer(connection);
+      sessionDescription = await this.#createLocalOffer(connection, "publish_without_simulcast");
     }
     const tracks = publications.map(
       ({ state, transceiver, trackName }): CloudflareSFUTrackRequest => ({
@@ -959,7 +966,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks }), { generation, connectionId });
     this.#recordLocalPublicationHandles(publications, response.tracks);
     this.#requireGeneration(generation);
-    await this.#applyProviderDescription(response, connection);
+    await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
   #recordLocalPublicationHandles(publications: readonly OwnedLocalPublication[], tracks: readonly CloudflareSFUTrackRequest[] | undefined): void {
     for (const publication of publications) {
@@ -994,10 +1001,27 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.enabled = false;
     state.track.enabled = false;
   }
+  async #createLocalOffer(connection: RTCPeerConnection, origin: LocalOfferOrigin) {
+    const description = await createLocalOffer(connection);
+    this.#localOffer = { connection, origin, at: Date.now() };
+    return description;
+  }
+  // SDP operations are serialized, so a local offer must not outlive its operation. If one does, name its origin.
+  #reportPendingLocalOffer(connection: RTCPeerConnection, where: CloudflareSFULocalOfferDiagnostic["where"]): void {
+    if (connection.signalingState !== "have-local-offer") return;
+    const known = this.#localOffer?.connection === connection ? this.#localOffer : null;
+    try {
+      this.#onDiagnostic?.({ event: "local_offer_pending", where, origin: known?.origin ?? "outside_sdk", pendingMs: known ? Date.now() - known.at : null });
+    } catch (error) {
+      // A diagnostic callback must not abort the negotiation it describes.
+      this.#reportError(error);
+    }
+  }
   async #rollbackLocalOffer(connection: RTCPeerConnection): Promise<void> {
     if (connection.signalingState !== "have-local-offer") return;
     try {
       await connection.setLocalDescription({ type: "rollback" });
+      this.#localOffer = null;
     } catch (error) {
       this.#reportError(error);
     }
@@ -1187,10 +1211,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return pulled;
   }
   #deferRemotePulls(publications: readonly CloudflareSFUPublication[], error: unknown): void {
-    const retryAfter = retryableRemotePull(error) ? Date.now() + 15_000 : Number.POSITIVE_INFINITY;
+    const transient = transientRemotePull(error);
     for (const publication of publications) {
-      const failures = this.#remotePullRetries.get(publication.publicationId)?.failures ?? 0;
-      this.#remotePullRetries.set(publication.publicationId, { retryAfter, failures, receiveStalled: this.#remotePullRetries.get(publication.publicationId)?.receiveStalled });
+      const previous = this.#remotePullRetries.get(publication.publicationId);
+      const failures = previous?.failures ?? 0;
+      const delay = transient ? (TRANSIENT_PULL_RETRY_MS[failures] ?? LONG_PULL_DEFERRAL_MS) : retryableRemotePull(error) ? LONG_PULL_DEFERRAL_MS : Number.POSITIVE_INFINITY;
+      this.#remotePullRetries.set(publication.publicationId, { retryAfter: Date.now() + delay, failures: transient ? Math.min(failures + 1, 6) : failures, receiveStalled: previous?.receiveStalled });
     }
   }
   async #pullBatch(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
@@ -1340,15 +1366,25 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   async #completeRenegotiation(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, connectionId: string, generation: number): Promise<void> {
-    if (!response.requiresImmediateRenegotiation) return;
-    await this.#applyProviderDescription(response, connection);
-    const answer = await (() => connection.createAnswer())();
-    await (() => connection.setLocalDescription(answer))();
-    await this.#signal(() => this.#requireTransport().renegotiate({ connectionId, sessionDescription: requireDescription(answer) }), { generation, connectionId });
-    this.#requireGeneration(generation);
+    if (response.sessionDescription?.type === "offer") await this.#applyProviderDescription(response, connection, { generation, connectionId });
   }
-  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection = this.#connection): Promise<void> {
-    await (() => connection.setRemoteDescription(requireSFUDescription(response.sessionDescription)))();
+  // An answer completes our own offer. An offer comes from the SFU and must always be answered:
+  // this peer is the polite one, so it rolls back a pending local offer first. A browser that
+  // rolls back on its own would otherwise leave the SFU's offer unanswered.
+  async #applyProviderDescription(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
+    const description = requireSFUDescription(response.sessionDescription);
+    if (description.type !== "offer") {
+      await connection.setRemoteDescription(description);
+      this.#localOffer = null;
+      return;
+    }
+    this.#reportPendingLocalOffer(connection, "remote_offer");
+    await this.#rollbackLocalOffer(connection);
+    await connection.setRemoteDescription(description);
+    const answer = await connection.createAnswer();
+    await connection.setLocalDescription(answer);
+    await this.#signal(() => this.#requireTransport().renegotiate({ connectionId: owner.connectionId, sessionDescription: requireDescription(answer) }), owner);
+    this.#requireGeneration(owner.generation);
   }
   #serializeSDP<T>(operation: () => Promise<T>, retirement = false): Promise<T> {
     const generation = this.#generation;
@@ -1364,6 +1400,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     const run = () => {
       if (expired || (!retirement && generation !== this.#generation)) throw timeout;
+      this.#reportPendingLocalOffer(this.#connection, "sdp_operation_start");
       return operation();
     };
     const pending = this.#sdpTail.then(run, run);
@@ -1838,6 +1875,7 @@ function publicationEqual(left: CloudflareSFULocalTrack, right: CloudflareSFULoc
 function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: CloudflareSFURemoteTrack | undefined): boolean {
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }
+type LocalOfferOrigin = Exclude<CloudflareSFULocalOfferDiagnostic["origin"], "outside_sdk">;
 async function createLocalOffer(connection: RTCPeerConnection) {
   const offer = await connection.createOffer();
   await connection.setLocalDescription(offer);
@@ -1859,7 +1897,15 @@ function isRateLimited(error: unknown): boolean {
 function unwrapAggregateErrors(error: unknown): unknown[] {
   return error instanceof AggregateError ? error.errors.flatMap(unwrapAggregateErrors) : [error];
 }
+// A 5xx, a signaling timeout or a network failure usually clears in seconds, so the pull is retried
+// after a short backoff. Rate limits (429), a gone connection (404, 410) and track failures stay on
+// the long deferral, because an immediate retry cannot change their outcome.
+function transientRemotePull(error: unknown): boolean {
+  const { media_error_kind: kind, http_status: status } = classifyMediaFailure(error, "sfu_tracks");
+  return kind === "network" || kind === "timeout" || (typeof status === "number" && status >= 500);
+}
 function retryableRemotePull(error: unknown): boolean {
+  if (transientRemotePull(error)) return true;
   if (!(error instanceof CloudflareSFUError)) return false;
   if (error.code === "signaling_failed") return error.options.retryableConnection === true || error.options.status === 429;
   return ["signaling_timeout", "media_failed", "negotiation_timeout"].includes(error.code);

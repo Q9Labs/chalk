@@ -163,7 +163,7 @@ defmodule ChalkSync.ProviderBridge.Client do
   def observe_episode_publications(_client, _episode, _options),
     do: {:error, :invalid_contract}
 
-  defp request(%__MODULE__{} = client, method, path, body, profile \\ :default) do
+  defp request(%__MODULE__{} = client, method, path, body, profile \\ :chalk_sync_bridge) do
     headers = request_headers(client.headers, method)
 
     options = [

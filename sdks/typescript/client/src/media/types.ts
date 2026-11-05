@@ -103,6 +103,13 @@ export type CloudflareSFUSnapshot = {
     readonly diagnostic?: import("./failure-diagnostics").MediaFailureDiagnostic;
   } | null;
 };
+/** A local SDP offer was still pending when it should not be. `origin` names the SDK call that started it. */
+export type CloudflareSFULocalOfferDiagnostic = {
+  readonly event: "local_offer_pending";
+  readonly where: "sdp_operation_start" | "remote_offer";
+  readonly origin: "publish" | "publish_without_simulcast" | "close" | "outside_sdk";
+  readonly pendingMs: number | null;
+};
 export type CloudflareSFUClientOptions = {
   readonly bootstrap: CloudflareSFUBootstrap;
   readonly participantId: string;
@@ -110,6 +117,7 @@ export type CloudflareSFUClientOptions = {
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
+  readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;
   readonly onScreenEnded?: () => void;
   readonly peerConnectionFactory?: (configuration: RTCConfiguration) => RTCPeerConnection;
