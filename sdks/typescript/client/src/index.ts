@@ -9,3 +9,4 @@ export { currentSessionId, newSessionId, requestContextHeaders, SESSION_ID_KEY, 
 
 export { formatSyncConnectDiagnostic } from "./sync/connect-diagnostics";
 export { getConnectionFailureDetail } from "./space-client/failure-detail";
+export { mediaBootstrap } from "./access/media-bootstrap";

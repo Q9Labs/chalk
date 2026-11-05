@@ -5,12 +5,19 @@ export type CloudflareSFUIceServer = {
   readonly username?: string;
   readonly credential?: string;
 };
-export type CloudflareSFUBootstrap = {
-  readonly connectionId: string;
-  readonly stunServer: string;
-  /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
-  readonly iceServers?: readonly CloudflareSFUIceServer[];
-};
+export type CloudflareSFUBootstrap =
+  | {
+      readonly connectionId: string;
+      readonly stunServer: string;
+      /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
+      readonly iceServers?: readonly CloudflareSFUIceServer[];
+    }
+  | {
+      readonly connectionId: string;
+      readonly stunServer?: undefined;
+      /** The own SFU sends every ICE server it wants. Empty means host candidates only. */
+      readonly iceServers: readonly CloudflareSFUIceServer[];
+    };
 export type CloudflareSFUSessionDescription = {
   readonly type: "offer" | "answer";
   readonly sdp: string;

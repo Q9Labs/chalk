@@ -57,6 +57,20 @@ describe("access grant parsing", () => {
       expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, client_payload: { ...wire.media.client_payload, iceServers } } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
     }
   });
+  it("parses an own-SFU grant and keeps its capabilities off unless the server turns them on", () => {
+    const wire = chalkWire({ capabilities: { serverLayerAdaptation: false, iceRestart: "yes" } });
+    const parsed = parseParsedAccessGrant(wire);
+    expect(parsed.media).toMatchObject({ provider: "chalk_sfu", clientPayload: { connectionId: "c", episodeRef: "e", iceServers: [], capabilities: { serverLayerAdaptation: false, iceRestart: false } } });
+    const missing = parseParsedAccessGrant(chalkWire({ capabilities: undefined }));
+    expect(missing.media.provider === "chalk_sfu" && missing.media.clientPayload.capabilities).toEqual({ serverLayerAdaptation: false, iceRestart: false });
+    const reparsed = parseParsedAccessGrant(JSON.parse(JSON.stringify(parseAccessGrant(wire))));
+    expect(reparsed.media).toEqual(parsed.media);
+  });
+  it("rejects an own-SFU grant without its connection or Episode reference", () => {
+    for (const change of [{ connectionId: "" }, { episodeRef: undefined }, { iceServers: "stun:x" }]) {
+      expect(() => parseParsedAccessGrant(chalkWire(change))).toThrowError(expect.objectContaining({ code: "access.invalid" }));
+    }
+  });
   it("rejects unsupported media providers", () => {
     const wire = accessWire();
     expect(() => parseParsedAccessGrant({ ...wire, media: { ...wire.media, provider: "realtimekit" } })).toThrowError(expect.objectContaining({ code: "access.invalid" }));
@@ -70,4 +84,9 @@ function accessWire() {
     sync: { token: jwt("chalk-sync"), expires_at: "2026-07-21T12:05:00.000Z" },
     media: { token: jwt("chalk-media"), expires_at: "2026-07-21T12:05:00.000Z", provider: "cloudflare_sfu", client_payload: { connectionId: "c", stunServer: "stun:test" } },
   } as const;
+}
+function chalkWire(change: Record<string, unknown>) {
+  const wire = accessWire();
+  const payload = { connectionId: "c", provider: "chalk_sfu", episodeRef: "e", iceServers: [], capabilities: { serverLayerAdaptation: false, iceRestart: false }, ...change };
+  return { ...wire, media: { ...wire.media, provider: "chalk_sfu", client_payload: payload } };
 }

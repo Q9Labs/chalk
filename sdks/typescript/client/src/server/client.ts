@@ -425,6 +425,11 @@ function mediaClientPayload(media: AccessGrantWire["media"]): Readonly<Record<st
       if (typeof connectionId !== "string" || typeof stunServer !== "string") throw invalidResponse(201);
       return { connectionId, stunServer, ...(iceServers === undefined ? {} : { iceServers }) };
     }
+    case "chalk_sfu": {
+      const { connectionId, episodeRef, iceServers, capabilities } = media.client_payload;
+      if (typeof connectionId !== "string" || typeof episodeRef !== "string") throw invalidResponse(201);
+      return { connectionId, episodeRef, iceServers: iceServers ?? [], capabilities: capabilities ?? {} };
+    }
     default:
       throw invalidResponse(201);
   }
