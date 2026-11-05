@@ -77,14 +77,15 @@ async function viewerState(page, control, viewer) {
   const decoded = await page.evaluate(async (name) => {
     const connection = window[name];
     const report = await connection.getStats();
-    const video = [...report.values()].find((entry) => entry.type === "inbound-rtp" && entry.kind === "video") ?? {};
+    const video = [...report.values()].find((entry) => entry.type === "inbound-rtp" && entry.kind === "video");
     const mids = connection
       .getTransceivers()
       .map((transceiver) => transceiver.mid)
       .join(",");
-    return { frames: video.framesDecoded ?? 0, keyFrames: video.keyFramesDecoded ?? 0, height: video.frameHeight ?? 0, pli: video.pliCount ?? 0, mids, signaling: connection.signalingState, sdp: connection.currentLocalDescription?.sdp };
+    return { video, mids, signaling: connection.signalingState, sdp: connection.currentLocalDescription?.sdp };
   }, viewer.window);
-  return { rid: camera?.subscription?.effectiveRid, mid: camera?.mid, ...decoded };
+  const { framesDecoded: frames = 0, keyFramesDecoded: keyFrames = 0, frameHeight: height = 0 } = decoded.video ?? {};
+  return { rid: camera?.subscription?.effectiveRid, mid: camera?.mid, frames, keyFrames, height, mids: decoded.mids, signaling: decoded.signaling, sdp: decoded.sdp };
 }
 
 // Waits until every viewer forwards its expected layer and has decoded frames
