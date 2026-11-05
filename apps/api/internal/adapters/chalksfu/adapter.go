@@ -472,7 +472,13 @@ func tracksResponseOf(connectionID string, response wireTracksResponse) mediapla
 		out.Tracks = append(out.Tracks, mediaplane.Track{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source})
 	}
 	for _, failed := range response.TrackErrors {
-		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: connectionID, TrackName: failed.TrackName, Code: failed.Code})
+		// A pull error names the publisher's connection, as Cloudflare's does, so
+		// clients match it to the publication they asked for. A push error names none.
+		owner := failed.SessionID
+		if owner == "" {
+			owner = connectionID
+		}
+		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: owner, TrackName: failed.TrackName, Code: failed.Code})
 	}
 	return out
 }

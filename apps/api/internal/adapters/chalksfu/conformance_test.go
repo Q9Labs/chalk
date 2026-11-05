@@ -125,7 +125,11 @@ func TestConformanceSignaling(t *testing.T) {
 		t.Fatalf("pull: %v", err)
 	}
 	t.Run("a pull mixes a success and an error", func(t *testing.T) {
-		if len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != bobConn {
+		if len(pulled.Tracks) != 1 || pulled.Tracks[0].TrackName != "alice-mic" || pulled.Tracks[0].SessionID != aliceConn {
+			t.Fatalf("pull = %+v", pulled)
+		}
+		// The error names the publisher's connection, which is what the client asked for.
+		if len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != aliceConn {
 			t.Fatalf("pull = %+v", pulled)
 		}
 		if !pulled.RequiresImmediateRenegotiation || pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" {
