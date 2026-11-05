@@ -145,8 +145,8 @@ async function pull(page, control, connectionId, publisherId, scope) {
 
 // A track request succeeded when it returned the expected SDP for both tracks and no per-track error.
 function isCleanTrackResponse(response, sdpType) {
-  const { sessionDescription, tracks, trackErrors } = response.body ?? {};
-  return response.status === 200 && sessionDescription?.type === sdpType && tracks?.length === 2 && !trackErrors;
+  const body = response.body ?? {};
+  return [response.status === 200, body.sessionDescription?.type === sdpType, body.tracks?.length === 2, !body.trackErrors].every(Boolean);
 }
 
 async function receivedMedia(page) {
