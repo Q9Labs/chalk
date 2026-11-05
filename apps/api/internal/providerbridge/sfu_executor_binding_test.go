@@ -13,11 +13,26 @@ import (
 
 type boundProvider struct {
 	name string
+	node string
 	err  error
 }
 
-func (b boundProvider) ProviderOf(context.Context, utilities.ID, utilities.ID) (string, error) {
-	return b.name, b.err
+func (b boundProvider) BindingOf(context.Context, utilities.ID, utilities.ID) (string, string, error) {
+	return b.name, b.node, b.err
+}
+
+// nodes serves the recorders by node name, like the fleet does.
+func nodes(byName map[string]*chalkCleanupRecorder) ChalkNodes {
+	if byName == nil {
+		return nil
+	}
+	return func(node string) (ChalkCleanup, error) {
+		recorder, ok := byName[node]
+		if !ok {
+			return nil, errors.New("node is not configured")
+		}
+		return recorder, nil
+	}
 }
 
 type chalkCleanupRecorder struct {
@@ -38,10 +53,14 @@ func TestCleanupFollowsTheEpisodeBinding(t *testing.T) {
 	participantID := testExecutorID(t, "33333333-3333-4333-8333-333333333333")
 	publicationID := "chalk_pub_v1." + base64.RawURLEncoding.EncodeToString([]byte(`{"c":"publisher-connection","m":"0","t":"microphone-track","g":1}`))
 	revoke := provideroperations.OperationInput{Effect: provideroperations.EffectRevokePublication, TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, PublicationSource: "microphone"}
-	run := func(providers EpisodeProviders, chalk ChalkCleanup, input provideroperations.OperationInput) (ExecutionResult, *executorTrackCloser) {
+	run := func(providers EpisodeProviders, chalk *chalkCleanupRecorder, input provideroperations.OperationInput) (ExecutionResult, *executorTrackCloser) {
 		registry := &executorPublicationRegistry{publication: provideroperations.Publication{ParticipantID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}}
 		cloudflare := &executorTrackCloser{}
-		return NewSFUExecutor(registry, cloudflare).WithChalkSFU(providers, chalk).Dispatch(context.Background(), input), cloudflare
+		var byNode ChalkNodes
+		if chalk != nil {
+			byNode = nodes(map[string]*chalkCleanupRecorder{"sfu-a": chalk})
+		}
+		return NewSFUExecutor(registry, cloudflare).WithChalkSFU(providers, byNode).Dispatch(context.Background(), input), cloudflare
 	}
 
 	t.Run("a legacy Episode with no binding cleans up through Cloudflare", func(t *testing.T) {
@@ -54,7 +73,7 @@ func TestCleanupFollowsTheEpisodeBinding(t *testing.T) {
 
 	t.Run("a chalk_sfu Episode cleans up through the own SFU", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, cloudflare := run(boundProvider{name: "chalk_sfu"}, chalk, revoke)
+		result, cloudflare := run(boundProvider{name: "chalk_sfu", node: "sfu-a"}, chalk, revoke)
 		if result.Outcome != provideroperations.OutcomeConfirmed || cloudflare.calls != 0 || chalk.calls != 1 || !chalk.force {
 			t.Fatalf("result=%+v cloudflare=%d chalk=%d", result, cloudflare.calls, chalk.calls)
 		}
@@ -64,16 +83,34 @@ func TestCleanupFollowsTheEpisodeBinding(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
 		end := revoke
 		end.Effect = provideroperations.EffectEndEpisode
-		_, cloudflare := run(boundProvider{name: "chalk_sfu"}, chalk, end)
+		_, cloudflare := run(boundProvider{name: "chalk_sfu", node: "sfu-a"}, chalk, end)
 		if len(chalk.ended) != 1 || chalk.ended[0].Provider != mediaplane.ProviderChalkSFU || chalk.ended[0].EpisodeRef != episodeID.String() || cloudflare.calls != 0 {
 			t.Fatalf("ended=%+v cloudflare=%d", chalk.ended, cloudflare.calls)
 		}
 	})
 
 	t.Run("a chalk_sfu Episode retries when the own SFU is off", func(t *testing.T) {
-		result, cloudflare := run(boundProvider{name: "chalk_sfu"}, nil, revoke)
+		result, cloudflare := run(boundProvider{name: "chalk_sfu", node: "sfu-a"}, nil, revoke)
 		if result.Outcome != provideroperations.OutcomeRetryableFailure || cloudflare.calls != 0 {
 			t.Fatalf("result=%+v cloudflare=%d", result, cloudflare.calls)
+		}
+	})
+
+	t.Run("a chalk_sfu Episode cleans up on its bound node only", func(t *testing.T) {
+		first, second := &chalkCleanupRecorder{}, &chalkCleanupRecorder{}
+		registry := &executorPublicationRegistry{publication: provideroperations.Publication{ParticipantID: participantID, Source: "microphone", Enabled: true, PublicationID: publicationID}}
+		executor := NewSFUExecutor(registry, &executorTrackCloser{}).WithChalkSFU(boundProvider{name: "chalk_sfu", node: "sfu-b"}, nodes(map[string]*chalkCleanupRecorder{"sfu-a": first, "sfu-b": second}))
+		result := executor.Dispatch(context.Background(), revoke)
+		if result.Outcome != provideroperations.OutcomeConfirmed || first.calls != 0 || second.calls != 1 {
+			t.Fatalf("result=%+v sfu-a=%d sfu-b=%d", result, first.calls, second.calls)
+		}
+	})
+
+	t.Run("a chalk_sfu Episode on a node this process lacks retries and touches nothing", func(t *testing.T) {
+		chalk := &chalkCleanupRecorder{}
+		result, cloudflare := run(boundProvider{name: "chalk_sfu", node: "sfu-gone"}, chalk, revoke)
+		if result.Outcome != provideroperations.OutcomeRetryableFailure || cloudflare.calls != 0 || chalk.calls != 0 {
+			t.Fatalf("result=%+v cloudflare=%d chalk=%d", result, cloudflare.calls, chalk.calls)
 		}
 	})
 

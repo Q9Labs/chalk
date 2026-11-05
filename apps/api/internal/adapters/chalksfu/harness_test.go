@@ -154,8 +154,14 @@ func freePort(t *testing.T) string {
 
 func startSFU(t *testing.T, settings map[string]string) *sfu {
 	t.Helper()
+	return startSFUUnder(t, newAuthority(t, "conformance CA"), settings)
+}
+
+// startSFUUnder starts a node whose certificates come from ca, so several nodes
+// can share one client trust, as a pool's nodes do.
+func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu {
+	t.Helper()
 	binary := sfuBinary(t)
-	ca := newAuthority(t, "conformance CA")
 	dir := t.TempDir()
 	serverCert, serverKey := ca.issue(t, "localhost", x509.ExtKeyUsageServerAuth)
 	controlPort, udpPort := freePort(t), freePort(t)
@@ -239,16 +245,34 @@ func (s *sfu) adapterAt(t *testing.T, url string) *chalksfu.Adapter {
 
 func (s *sfu) adapterTo(t *testing.T, clientCA *authority, identity, controlURL string) *chalksfu.Adapter {
 	t.Helper()
-	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
-	adapter, err := chalksfu.NewAdapter(runtimeconfig.ChalkSFUConfig{
-		Enabled: true, ApplicationID: "conformance-pool", ControlURL: controlURL, ServerName: "localhost",
-		CAFile: write(t, s.dir, "trust.pem", s.ca.pem), ClientCertFile: write(t, s.dir, fmt.Sprintf("client-%d.pem", serial.Add(1)), certPEM),
-		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second,
-	})
+	fleet := s.fleetOf(t, clientCA, identity, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: controlURL})
+	adapter, err := fleet.Node("sfu-a")
 	if err != nil {
-		t.Fatalf("new adapter: %v", err)
+		t.Fatal(err)
 	}
 	return adapter
+}
+
+// fleet is a one-node pool on this service with the right client identity.
+func (s *sfu) fleet(t *testing.T) *chalksfu.Fleet {
+	t.Helper()
+	return s.fleetOf(t, s.ca, clientIdentity, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: s.controlURL})
+}
+
+// fleetOf builds a pool trusting this service's CA with a client certificate
+// from clientCA that names identity.
+func (s *sfu) fleetOf(t *testing.T, clientCA *authority, identity string, nodes ...runtimeconfig.ChalkSFUNode) *chalksfu.Fleet {
+	t.Helper()
+	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
+	fleet, err := chalksfu.NewFleet(runtimeconfig.ChalkSFUConfig{
+		Enabled: true, ApplicationID: "conformance-pool", Nodes: nodes, ServerName: "localhost",
+		CAFile: write(t, s.dir, "trust.pem", s.ca.pem), ClientCertFile: write(t, s.dir, fmt.Sprintf("client-%d.pem", serial.Add(1)), certPEM),
+		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second,
+	}, nil)
+	if err != nil {
+		t.Fatalf("new fleet: %v", err)
+	}
+	return fleet
 }
 
 func (s *sfu) service(t *testing.T) mediaplane.Service {

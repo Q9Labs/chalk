@@ -226,11 +226,11 @@ func TestTurnCredentialsAreMintedOnceAcrossResolutions(t *testing.T) {
 	}
 	process := registry.processConfig
 
-	first, err := registry.newService(mediaplane.ProviderCloudflareSFU, process)
+	first, err := registry.newService(mediaplane.ProviderCloudflareSFU, process, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := registry.newService(mediaplane.ProviderCloudflareSFU, process)
+	second, err := registry.newService(mediaplane.ProviderCloudflareSFU, process, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestTurnCredentialsAreMintedOnceAcrossResolutions(t *testing.T) {
 
 	tenantManaged := process
 	tenantManaged.TurnKeyID, tenantManaged.TurnAPIToken = "", ""
-	tenant, err := registry.newService(mediaplane.ProviderCloudflareSFU, tenantManaged)
+	tenant, err := registry.newService(mediaplane.ProviderCloudflareSFU, tenantManaged, "")
 	if err != nil {
 		t.Fatal(err)
 	}

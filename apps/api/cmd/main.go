@@ -182,9 +182,9 @@ func run() error {
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
 	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUSelector(cfg.ChalkSFU.Enabled)
-	var chalkSFU *chalksfu.Adapter
+	var chalkSFU *chalksfu.Fleet
 	if cfg.ChalkSFU.Enabled {
-		chalkSFU, err = chalksfu.NewAdapter(cfg.ChalkSFU)
+		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
 		if err != nil {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
@@ -636,9 +636,15 @@ func run() error {
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
 		// The Episode binding picks the cleanup closer. A typed nil adapter inside the
 		// interface would pass the nil check, so the nil case stays a nil interface.
-		var chalkCleanup providerbridge.ChalkCleanup
+		var chalkCleanup providerbridge.ChalkNodes
 		if chalkSFU != nil {
-			chalkCleanup = chalkSFU
+			chalkCleanup = func(node string) (providerbridge.ChalkCleanup, error) {
+				adapter, err := chalkSFU.Node(node)
+				if err != nil {
+					return nil, err
+				}
+				return adapter, nil
+			}
 		}
 		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkCleanup)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
@@ -672,6 +678,10 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if chalkSFU != nil {
+		// Placement reads node load from these probes; a one-node pool returns at once.
+		go chalkSFU.Watch(signalCtx)
+	}
 	receiveHealthDone := make(chan struct{})
 	go func() {
 		mediaPublicationService.RunReceiveHealth(signalCtx)

@@ -31,5 +31,11 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space) (*me
 	if err != nil {
 		return nil, err
 	}
+	// The own SFU runs several nodes: the Episode stays on the one placed here.
+	if resolved.provider == mediaplane.ProviderChalkSFU {
+		if binding, err = binding.OnNode(r.chalk.Place()); err != nil {
+			return nil, err
+		}
+	}
 	return &binding, nil
 }

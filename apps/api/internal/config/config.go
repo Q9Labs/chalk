@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -81,7 +82,7 @@ const (
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
 	ChalkSFUEnabled        = "CHALK_SFU_ENABLED"
-	ChalkSFUControlURL     = "CHALK_SFU_CONTROL_URL"
+	ChalkSFUNodes          = "CHALK_SFU_NODES"
 	ChalkSFUApplicationID  = "CHALK_SFU_APPLICATION_ID"
 	ChalkSFUServerName     = "CHALK_SFU_SERVER_NAME"
 	ChalkSFUCAFile         = "CHALK_SFU_CA_FILE"
@@ -194,14 +195,25 @@ type CloudflareRealtimeConfig struct {
 	RequestTimeout time.Duration
 }
 
+// ChalkSFUNode is one SFU node. ID is the stable name Episode bindings record;
+// ControlURL may change when the node's host changes.
+type ChalkSFUNode struct {
+	ID         string
+	ControlURL string
+}
+
 // ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
 // Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
 type ChalkSFUConfig struct {
 	Enabled bool
 	// ApplicationID names the SFU pool and goes into each Episode binding, so it
 	// stays the same when hosts or certificates rotate.
-	ApplicationID  string
-	ControlURL     string
+	ApplicationID string
+	// Nodes are the SFU nodes of the pool in placement order: the primary first,
+	// then standbys. A new Episode goes to the first ready node with budget left
+	// for it, and its binding names the node, so adding a node needs no migration
+	// and never moves a live Episode.
+	Nodes          []ChalkSFUNode
 	ServerName     string
 	CAFile         string
 	ClientCertFile string
@@ -640,7 +652,6 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	config := ChalkSFUConfig{
 		Enabled:        true,
 		ApplicationID:  strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
-		ControlURL:     strings.TrimSpace(envOrDefault(ChalkSFUControlURL, "")),
 		ServerName:     strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
 		CAFile:         strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
 		ClientCertFile: strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
@@ -650,7 +661,7 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	}
 	required := []struct{ name, value string }{
 		{ChalkSFUApplicationID, config.ApplicationID},
-		{ChalkSFUControlURL, config.ControlURL},
+		{ChalkSFUNodes, strings.TrimSpace(envOrDefault(ChalkSFUNodes, ""))},
 		{ChalkSFUServerName, config.ServerName},
 		{ChalkSFUCAFile, config.CAFile},
 		{ChalkSFUClientCertFile, config.ClientCertFile},
@@ -661,11 +672,36 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 			return ChalkSFUConfig{}, fmt.Errorf("%s must be set when %s is on", field.name, ChalkSFUEnabled)
 		}
 	}
-	parsed, err := url.Parse(config.ControlURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return ChalkSFUConfig{}, fmt.Errorf("%s must be an absolute https URL without query or fragment", ChalkSFUControlURL)
+	nodes, err := parseChalkSFUNodes(envList(ChalkSFUNodes))
+	if err != nil {
+		return ChalkSFUConfig{}, err
 	}
+	config.Nodes = nodes
 	return config, nil
+}
+
+// parseChalkSFUNodes reads "id=https://host:port" entries. IDs must be unique and
+// valid binding node names, and every URL absolute https without query or fragment.
+func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
+	nodes := make([]ChalkSFUNode, 0, len(entries))
+	seen := map[string]bool{}
+	for _, entry := range entries {
+		id, controlURL, found := strings.Cut(entry, "=")
+		id, controlURL = strings.TrimSpace(id), strings.TrimSpace(controlURL)
+		if !found || !mediaplane.ValidNodeID(id) {
+			return nil, fmt.Errorf("%s entry %q must be id=https://host:port with a lowercase id", ChalkSFUNodes, entry)
+		}
+		if seen[id] {
+			return nil, fmt.Errorf("%s names node %q twice", ChalkSFUNodes, id)
+		}
+		seen[id] = true
+		parsed, err := url.Parse(controlURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return nil, fmt.Errorf("%s node %q must have an absolute https URL without query or fragment", ChalkSFUNodes, id)
+		}
+		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL})
+	}
+	return nodes, nil
 }
 
 func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {

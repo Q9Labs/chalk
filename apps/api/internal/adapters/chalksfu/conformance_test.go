@@ -253,8 +253,9 @@ func TestConformanceOneScreenSharePerEpisode(t *testing.T) {
 }
 
 func TestConformanceAdmission(t *testing.T) {
-	t.Run("the ninth Participant is refused", func(t *testing.T) {
-		service := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1000000"}).service(t)
+	t.Run("on the default 16000 budget the ninth Participant is refused", func(t *testing.T) {
+		// 150 + 50 packets/s per stream pair: 8 Participants reserve 14,400 and 9 reserve 18,000.
+		service := startSFU(t, nil).service(t)
 		for index := 0; index < 8; index++ {
 			join(t, service, scopeOf("ep-full", "p"+strconv.Itoa(index)))
 		}
@@ -265,6 +266,21 @@ func TestConformanceAdmission(t *testing.T) {
 		})
 		if !errors.Is(err, mediaplane.ErrProviderRateLimited) {
 			t.Fatalf("ninth join error = %v, want a capacity refusal", err)
+		}
+	})
+
+	t.Run("the Participant cap stays configurable", func(t *testing.T) {
+		service := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1000000", "SFU_MAX_EPISODE_PARTICIPANTS": "3"}).service(t)
+		for index := 0; index < 3; index++ {
+			join(t, service, scopeOf("ep-capped", "p"+strconv.Itoa(index)))
+		}
+		_, err := service.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
+			Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-capped", "p3"),
+			Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-capped"},
+			ParticipantName: "p3", ParticipantPreset: "contributor",
+		})
+		if !errors.Is(err, mediaplane.ErrProviderRateLimited) {
+			t.Fatalf("fourth join error = %v, want a capacity refusal", err)
 		}
 		join(t, service, scopeOf("ep-other", "p0"))
 	})
@@ -389,7 +405,7 @@ func (e episodeBindings) GetEpisode(context.Context, utilities.ID, utilities.ID,
 // provider it started with; only the next Episode takes the new selection.
 func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	box := startSFU(t, nil)
-	adapter := box.adapter(t, box.ca, clientIdentity)
+	adapter := box.fleet(t)
 	process := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	cloudflareSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
@@ -409,8 +425,16 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	}
 
 	next, err := registry(started).ResolveBinding(tenants.Tenant{}, chalkSpace)
-	if err != nil || next.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
-		t.Fatalf("next Episode binding: %+v, %v", next, err)
+	if err != nil || next.Provider != string(spaces.MediaPlaneProviderChalkSFU) || next.Node != "sfu-a" {
+		t.Fatalf("next Episode binding: %+v, %v, want chalk_sfu on sfu-a", next, err)
+	}
+	if started.Node != "" {
+		t.Fatalf("a Cloudflare binding names node %q", started.Node)
+	}
+	moved := *next
+	moved.Node = "sfu-gone"
+	if _, err := registry(&moved).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{}); err == nil {
+		t.Fatal("an Episode bound to a node this process lacks resolved to another node")
 	}
 	service, err := registry(next).ResolveEpisode(context.Background(), tenants.Tenant{}, cloudflareSpace, utilities.ID{})
 	if err != nil || service.Provider() != mediaplane.ProviderChalkSFU {

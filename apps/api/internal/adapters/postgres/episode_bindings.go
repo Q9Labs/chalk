@@ -25,24 +25,28 @@ func NewEpisodeBindings(db episodeBindingQuerier) EpisodeBindings {
 	return EpisodeBindings{db: db}
 }
 
-// ProviderOf returns the bound provider, or "" for an Episode with no binding.
-func (e EpisodeBindings) ProviderOf(ctx context.Context, tenantID, episodeID utilities.ID) (string, error) {
-	var provider *string
-	err := e.db.QueryRow(ctx, `select config_snapshot->'media_plane_binding'->>'provider' from episodes where tenant_id = $1 and id = $2`, uuid(tenantID), uuid(episodeID)).Scan(&provider)
+// BindingOf returns the bound provider and node. Both are "" for an Episode with
+// no binding, and the node is "" for a provider with one endpoint.
+func (e EpisodeBindings) BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (string, string, error) {
+	var provider, node *string
+	err := e.db.QueryRow(ctx, `select config_snapshot->'media_plane_binding'->>'provider', config_snapshot->'media_plane_binding'->>'node' from episodes where tenant_id = $1 and id = $2`, uuid(tenantID), uuid(episodeID)).Scan(&provider, &node)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", recordingpipeline.ErrPipelineNotFound
+		return "", "", recordingpipeline.ErrPipelineNotFound
 	}
 	if err != nil {
-		return "", fmt.Errorf("read Episode media plane binding: %w", err)
+		return "", "", fmt.Errorf("read Episode media plane binding: %w", err)
 	}
 	if provider == nil {
-		return "", nil
+		return "", "", nil
 	}
-	return *provider, nil
+	if node == nil {
+		return *provider, "", nil
+	}
+	return *provider, *node, nil
 }
 
 func (e EpisodeBindings) CaptureSupported(ctx context.Context, tenantID, episodeID utilities.ID) error {
-	provider, err := e.ProviderOf(ctx, tenantID, episodeID)
+	provider, _, err := e.BindingOf(ctx, tenantID, episodeID)
 	if err != nil {
 		return err
 	}

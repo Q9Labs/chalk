@@ -33,7 +33,9 @@ const (
 
 var ErrMissingConfig = errors.New("missing chalk sfu config")
 
+// Adapter is the media plane of one SFU node. Fleet builds one per configured node.
 type Adapter struct {
+	node          string
 	base          *url.URL
 	client        *http.Client
 	applicationID string
@@ -41,14 +43,11 @@ type Adapter struct {
 	backoff       time.Duration
 }
 
-// NewAdapter builds the mTLS client once. The server certificate must verify
-// against the configured CA and name ServerName, and the client presents its own
-// certificate, so a stolen network position cannot reach the control API.
-func NewAdapter(config runtimeconfig.ChalkSFUConfig) (*Adapter, error) {
-	base, err := url.Parse(strings.TrimSpace(config.ControlURL))
-	if err != nil || base.Scheme != "https" || base.Host == "" {
-		return nil, fmt.Errorf("%w: control URL must be https", ErrMissingConfig)
-	}
+// newClient builds the mTLS client once for every node. The server certificate
+// must verify against the configured CA and name ServerName, and the client
+// presents its own certificate, so a stolen network position cannot reach the
+// control API.
+func newClient(config runtimeconfig.ChalkSFUConfig) (*http.Client, error) {
 	if config.ApplicationID == "" || config.ServerName == "" || config.RequestTimeout <= 0 {
 		return nil, fmt.Errorf("%w: application ID, server name and timeout", ErrMissingConfig)
 	}
@@ -70,9 +69,21 @@ func NewAdapter(config runtimeconfig.ChalkSFUConfig) (*Adapter, error) {
 		MaxIdleConnsPerHost: 8,
 		IdleConnTimeout:     90 * time.Second,
 	}
+	return &http.Client{Transport: transport, Timeout: config.RequestTimeout}, nil
+}
+
+func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFUNode, client *http.Client) (*Adapter, error) {
+	base, err := url.Parse(strings.TrimSpace(node.ControlURL))
+	if err != nil || base.Scheme != "https" || base.Host == "" {
+		return nil, fmt.Errorf("%w: node %q control URL must be https", ErrMissingConfig, node.ID)
+	}
+	if !mediaplane.ValidNodeID(node.ID) {
+		return nil, fmt.Errorf("%w: node ID %q", ErrMissingConfig, node.ID)
+	}
 	return &Adapter{
+		node:          node.ID,
 		base:          base,
-		client:        &http.Client{Transport: transport, Timeout: config.RequestTimeout},
+		client:        client,
 		applicationID: config.ApplicationID,
 		iceServers:    iceServersOf(config.STUNURLs),
 		backoff:       retryBackoff,
@@ -91,9 +102,8 @@ func loadPool(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-// ApplicationID names the SFU pool for the Episode binding. It stays the same
-// when certificates or hosts rotate.
-func (a *Adapter) ApplicationID() string { return a.applicationID }
+// NodeID is the stable name of the node this adapter calls.
+func (a *Adapter) NodeID() string { return a.node }
 
 func newOperationID() (string, error) {
 	var raw [16]byte
@@ -143,6 +153,29 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 		}
 	}
 	return lastErr
+}
+
+// ready reads the node's readiness: its packet budget and the part live Episodes
+// reserve. Any reply but 200, a draining node's 503 included, is not ready.
+func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath("/readyz").String(), nil)
+	if err != nil {
+		return wireReady{}, err
+	}
+	request.Header.Set("Accept", "application/json")
+	reply, err := a.client.Do(request)
+	if err != nil {
+		return wireReady{}, err
+	}
+	defer reply.Body.Close()
+	if reply.StatusCode != http.StatusOK {
+		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
+	}
+	var ready wireReady
+	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&ready); err != nil {
+		return wireReady{}, fmt.Errorf("decode readiness: %w", err)
+	}
+	return ready, nil
 }
 
 func (a *Adapter) send(ctx context.Context, endpoint string, body []byte) (int, []byte, error) {

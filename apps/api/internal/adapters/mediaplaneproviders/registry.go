@@ -30,7 +30,7 @@ type Config struct {
 	DefaultProvider spaces.MediaPlaneProvider
 	Telemetry       providercontracts.Telemetry
 	// ChalkSFU is nil while the own SFU is off, so no Space can reach it.
-	ChalkSFU *chalksfu.Adapter
+	ChalkSFU *chalksfu.Fleet
 	Episodes EpisodeReader
 }
 
@@ -38,7 +38,7 @@ type Registry struct {
 	processConfig   runtimeconfig.CloudflareRealtimeConfig
 	defaultProvider spaces.MediaPlaneProvider
 	telemetry       providercontracts.Telemetry
-	chalk           *chalksfu.Adapter
+	chalk           *chalksfu.Fleet
 	episodes        EpisodeReader
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
@@ -113,13 +113,15 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 	if err != nil || resolved == nil {
 		return nil, err
 	}
+	node := ""
 	if binding != nil {
 		fingerprint, err := mediaplane.AdapterFingerprint(binding.Provider, r.applicationID(resolved))
 		if err != nil || fingerprint != binding.AdapterFingerprint {
 			return nil, fmt.Errorf("%w: the configured application is not the one the Episode was bound to", providercontracts.ErrAdapterUnavailable)
 		}
+		node = binding.Node
 	}
-	return r.newService(resolved.provider, resolved.config)
+	return r.newService(resolved.provider, resolved.config, node)
 }
 
 type resolvedProviderConfig struct {
@@ -299,7 +301,9 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, providerName)
 }
 
-func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig) (*mediaplane.Service, error) {
+// newService builds the Episode's media plane. node is the Episode's bound node for
+// a provider that runs several; it is ignored by a provider with one endpoint.
+func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, node string) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
 
@@ -318,7 +322,11 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 		if r.chalk == nil {
 			return nil, fmt.Errorf("%w: Chalk SFU is not enabled", providercontracts.ErrAdapterUnavailable)
 		}
-		plane = r.chalk
+		bound, err := r.chalk.Node(node)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
+		}
+		plane = bound
 	default:
 		return nil, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, provider)
 	}

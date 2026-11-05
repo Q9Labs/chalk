@@ -123,3 +123,12 @@ type wireError struct {
 		Code string `json:"code"`
 	} `json:"error"`
 }
+
+type wireReady struct {
+	NodeIncarnation string `json:"nodeIncarnation"`
+	Sessions        int    `json:"sessions"`
+	PacketBudget    int    `json:"packetBudget"`
+	ReservedPackets int    `json:"reservedPackets"`
+	// NewEpisodePackets is what a new Episode reserves at its first join.
+	NewEpisodePackets int `json:"newEpisodePackets"`
+}

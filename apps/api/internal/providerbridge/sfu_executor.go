@@ -27,11 +27,11 @@ type RecordingController interface {
 	Stop(context.Context, provideroperations.OperationInput) error
 }
 
-// EpisodeProviders reads the provider frozen into an Episode's binding. It
-// returns an empty name for an Episode that predates the binding, which ran on
-// Cloudflare.
+// EpisodeProviders reads the provider and node frozen into an Episode's binding.
+// It returns an empty provider for an Episode that predates the binding, which ran
+// on Cloudflare, and an empty node for a provider with one endpoint.
 type EpisodeProviders interface {
-	ProviderOf(ctx context.Context, tenantID, episodeID utilities.ID) (string, error)
+	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, err error)
 }
 
 // ChalkCleanup is the own SFU's cleanup surface: it closes tracks and ends the
@@ -41,17 +41,20 @@ type ChalkCleanup interface {
 	EndEpisode(context.Context, mediaplane.EndEpisodeInput) error
 }
 
+// ChalkNodes returns the cleanup surface of the SFU node an Episode is bound to.
+type ChalkNodes func(node string) (ChalkCleanup, error)
+
 type SFUExecutor struct {
 	publications mediapublications.Registry
 	tracks       TrackCloser
 	recording    RecordingController
 	episodes     EpisodeProviders
-	chalk        ChalkCleanup
+	chalk        ChalkNodes
 }
 
 // WithChalkSFU makes cleanup follow the Episode's binding. Without it every
 // Episode cleans up through the Cloudflare closer.
-func (e SFUExecutor) WithChalkSFU(episodes EpisodeProviders, chalk ChalkCleanup) SFUExecutor {
+func (e SFUExecutor) WithChalkSFU(episodes EpisodeProviders, chalk ChalkNodes) SFUExecutor {
 	e.episodes = episodes
 	e.chalk = chalk
 	return e
@@ -113,13 +116,13 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if e.publications == nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
-	provider, closer, result := e.bound(ctx, input)
+	provider, closer, chalk, result := e.bound(ctx, input)
 	if result != nil {
 		return *result
 	}
-	if provider == mediaplane.ProviderChalkSFU && input.Effect == provideroperations.EffectEndEpisode {
+	if chalk != nil && input.Effect == provideroperations.EffectEndEpisode {
 		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
-		if err := e.chalk.EndEpisode(ctx, ended); err != nil {
+		if err := chalk.EndEpisode(ctx, ended); err != nil {
 			return providerExecutionFailure(err)
 		}
 	}
@@ -189,36 +192,43 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
 
-// bound picks the closer from the Episode's binding. A provider this build does
-// not know ends the operation as a terminal failure; it never falls back to
-// Cloudflare, which would close another provider's tracks by the wrong rules.
-func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, *ExecutionResult) {
-	name := string(spaces.MediaPlaneProviderCloudflareSFU)
+// bound picks the closer from the Episode's binding, and for the own SFU the
+// node the binding names. A provider this build does not know ends the operation
+// as a terminal failure; it never falls back to Cloudflare, which would close
+// another provider's tracks by the wrong rules.
+func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, ChalkCleanup, *ExecutionResult) {
+	name, node := string(spaces.MediaPlaneProviderCloudflareSFU), ""
 	if e.episodes != nil {
-		found, err := e.episodes.ProviderOf(ctx, input.TenantID, input.EpisodeID)
+		found, foundNode, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
 			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
-			return "", nil, &result
+			return "", nil, nil, &result
 		}
 		if found != "" {
-			name = found
+			name, node = found, foundNode
 		}
 	}
 	switch spaces.MediaPlaneProvider(name) {
 	case spaces.MediaPlaneProviderCloudflareSFU:
 		if e.tracks == nil {
-			return mediaplane.ProviderCloudflareSFU, nil, nil
+			return mediaplane.ProviderCloudflareSFU, nil, nil, nil
 		}
-		return mediaplane.ProviderCloudflareSFU, e.tracks, nil
+		return mediaplane.ProviderCloudflareSFU, e.tracks, nil, nil
 	case spaces.MediaPlaneProviderChalkSFU:
+		unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 		if e.chalk == nil {
-			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
-			return "", nil, &result
+			return "", nil, nil, &unavailable
 		}
-		return mediaplane.ProviderChalkSFU, e.chalk, nil
+		// A node missing from this process's configuration may come back with the
+		// next deploy, so the operation retries instead of failing for good.
+		chalk, err := e.chalk(node)
+		if err != nil {
+			return "", nil, nil, &unavailable
+		}
+		return mediaplane.ProviderChalkSFU, chalk, chalk, nil
 	default:
 		result := ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_provider"}
-		return "", nil, &result
+		return "", nil, nil, &result
 	}
 }
 
