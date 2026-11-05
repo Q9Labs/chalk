@@ -449,7 +449,7 @@ service, not hidden Cloudflare calls.
 
 For primary deploys, drain without taking new Episodes, keep current calls and
 recordings running to completion, then restart only at zero allocations and
-cleanup debt. New calls use standby's bounded capacity and, if adopted, temporary
+cleanup debt. New calls use standby's bounded capacity and temporary
 overflow. This preserves existing media, not full new-call availability during
 drain. A forced deadline causes explicit replacement and must not be called
 zero-interruption. Drain standby only with a healthy primary.
@@ -477,7 +477,7 @@ double reservations or stale publication. Excess demand returns the explicit
 outcome, with Cloudflare overflow tested for new Episodes only.
 
 Run an hour-long primary drain: existing calls/recordings finish uninterrupted,
-new Episodes go only to degraded standby or approved overflow, and all refusals
+new Episodes go only to degraded standby or Cloudflare overflow, and all refusals
 are counted. Force a deadline to distinguish disruptive replacement. Show
 primary recovery restores preferred new-Episode placement without moving live
 standby/Cloudflare calls. Report actual in/out/repair, layers/quality, CPU/steal,
