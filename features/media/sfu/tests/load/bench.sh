@@ -16,7 +16,7 @@ TAG=chalk-sfu-bench
 DO_CONTEXT=${DO_CONTEXT:-collabez}
 REGION=${REGION:-sgp1}
 IMAGE=${IMAGE:-ubuntu-24-04-x64}
-GEN_SIZE=${GEN_SIZE:-c-4}
+GEN_SIZE=${GEN_SIZE:-s-4vcpu-8gb} # c-4 had no stock in sgp1 on 5 Nov 2026
 WORK=${BENCH_DIR:-$HOME/.cache/chalk-sfu-bench}
 SFU_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 STOP_CPU=${STOP_CPU:-75} # stop a ramp after the step during which host CPU stayed above this for 60 s
@@ -39,7 +39,10 @@ build() {
   (cd "$SFU_ROOT" && go build -o "$WORK/bin/benchcerts" ./tests/load/benchcerts && go build -o "$WORK/bin/report" ./tests/load/report)
 }
 
-create() { # name size
+create() { # name size; reuses a tagged Droplet of that name, so `up` can be rerun
+  local existing
+  existing=$(doc compute droplet list --tag-name "$TAG" --format Name,PublicIPv4 --no-header | awk -v n="$1" '$1 == n {print $2}')
+  if [[ -n $existing ]]; then echo "$existing"; return; fi
   doc compute droplet create "$1" --size "$2" --image "$IMAGE" --region "$REGION" --tag-name "$TAG" \
     --user-data-file "$WORK/user-data.yaml" --wait --format PublicIPv4 --no-header
 }
@@ -50,7 +53,10 @@ cmd_up() {
 #cloud-config
 ssh_authorized_keys:
   - $(cat "$WORK/id.pub")
+chpasswd:
+  expire: false
 runcmd:
+  - chage -d "\$(date +%F)" -M -1 root
   - systemctl disable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer || true
 EOF
   build
@@ -60,15 +66,19 @@ EOF
   printf 'SFU1_IP=%s\nSFU2_IP=%s\nGEN_IP=%s\n' "$sfu1" "$sfu2" "$gen" >"$WORK/hosts.env"
   load_hosts
   for host in "$SFU1_IP" "$SFU2_IP" "$GEN_IP"; do
-    until ssh_to "$host" true 2>/dev/null; do sleep 3; done
+    for attempt in $(seq 40); do
+      ssh_to "$host" true 2>/dev/null && break
+      [[ $attempt == 40 ]] && { echo "cannot ssh to a Droplet" >&2; exit 1; }
+      sleep 5
+    done
     ssh_to "$host" 'cloud-init status --wait >/dev/null 2>&1; mkdir -p /root/bench/certs'
   done
   for host in "$SFU1_IP" "$SFU2_IP"; do
-    scp_to "$WORK/bin/benchnode" "$host:/root/bench/"
-    scp_to "$WORK/certs/ca.pem" "$WORK/certs/server.pem" "$WORK/certs/server.key" "$host:/root/bench/certs/"
+    scp_to "$WORK/bin/benchnode" "root@$host:/root/bench/"
+    scp_to "$WORK/certs/ca.pem" "$WORK/certs/server.pem" "$WORK/certs/server.key" "root@$host:/root/bench/certs/"
   done
-  scp_to "$WORK/bin/loadgen" "$GEN_IP:/root/bench/"
-  scp_to "$WORK/certs/ca.pem" "$WORK/certs/client.pem" "$WORK/certs/client.key" "$GEN_IP:/root/bench/certs/"
+  scp_to "$WORK/bin/loadgen" "root@$GEN_IP:/root/bench/"
+  scp_to "$WORK/certs/ca.pem" "$WORK/certs/client.pem" "$WORK/certs/client.key" "root@$GEN_IP:/root/bench/certs/"
   for host in "$SFU1_IP" "$SFU2_IP" "$GEN_IP"; do
     ssh_to "$host" 'echo "$(hostname): $(nproc) vCPU, $(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2), $(free -m | awk "/Mem:/{print \$2}") MiB, $(uname -r)"; ip -br addr | grep -v "^lo"' | tee -a "$WORK/droplets.txt"
   done
@@ -77,10 +87,12 @@ EOF
 start_node() { # which
   local host memlimit
   host=$(node_host "$1"); memlimit=$(node_memlimit "$1")
+  # UDP_BUF sets the node's default socket receive buffer in bytes; unset keeps the kernel default (212992).
+  ssh_to "$host" "sysctl -qw net.core.rmem_default=${UDP_BUF:-212992} net.core.rmem_max=${UDP_BUF:-212992}"
   ssh_to "$host" "pkill -x benchnode || true; sleep 1; cd /root/bench && rm -f samples.jsonl node.log && ulimit -n 65536 &&
-    GOGC=200 GOMEMLIMIT=$memlimit SFU_TLS_CERT_FILE=certs/server.pem SFU_TLS_KEY_FILE=certs/server.key SFU_CLIENT_CA_FILE=certs/ca.pem \
+    { GOGC=200 GOMEMLIMIT=$memlimit SFU_TLS_CERT_FILE=certs/server.pem SFU_TLS_KEY_FILE=certs/server.key SFU_CLIENT_CA_FILE=certs/ca.pem \
     SFU_CLIENT_IDENTITY=chalk-api.test SFU_ANNOUNCE_IPS=$host SFU_MAX_SESSIONS=256 BENCH_SAMPLES_FILE=samples.jsonl BENCH_NET_IFACE=eth0 \
-    setsid nohup ./benchnode >node.log 2>&1 </dev/null &"
+    setsid nohup ./benchnode >node.log 2>&1 </dev/null & }"
   sleep 3
   ssh_to "$host" 'pgrep -x benchnode >/dev/null' || { echo "benchnode did not start" >&2; return 1; }
 }
@@ -88,8 +100,8 @@ start_node() { # which
 start_gen() { # label size steps hold sfu_ip
   local label=$1 size=$2 steps=$3 hold=$4 sfu=$5
   ssh_to "$GEN_IP" "cd /root/bench && rm -f stop steps.json gen.log && ulimit -n 65536 &&
-    setsid nohup ./loadgen -sfu https://$sfu:8443 -ca certs/ca.pem -cert certs/client.pem -key certs/client.key -iface eth0 \
-      -size $size -steps $steps -hold $hold -stop-file /root/bench/stop -out steps.json -label '$label' >gen.log 2>&1 </dev/null &"
+    { setsid nohup ./loadgen -sfu https://$sfu:8443 -ca certs/ca.pem -cert certs/client.pem -key certs/client.key -iface eth0 \
+      -size $size -steps $steps -hold $hold -stop-file /root/bench/stop -out steps.json -label '$label' >gen.log 2>&1 </dev/null & }"
 }
 
 # watch_cpu raises the stop flag once host CPU on the node stays above STOP_CPU for three checks 20 s apart.
@@ -110,8 +122,8 @@ collect() { # which label
   local host out
   host=$(node_host "$1"); out="$WORK/results/$2"
   mkdir -p "$out"
-  scp_to "$GEN_IP:/root/bench/steps.json" "$GEN_IP:/root/bench/gen.log" "$out/"
-  scp_to "$host:/root/bench/samples.jsonl" "$host:/root/bench/node.log" "$out/"
+  scp_to "root@$GEN_IP:/root/bench/steps.json" "root@$GEN_IP:/root/bench/gen.log" "$out/"
+  scp_to "root@$host:/root/bench/samples.jsonl" "root@$host:/root/bench/node.log" "$out/"
   "$WORK/bin/report" -results "$out/steps.json" -samples "$out/samples.jsonl" >"$out/report.md"
   echo "results in $out"
 }
@@ -138,7 +150,7 @@ cmd_profile() { # which label size episodes
   sleep 40 # settle, then profile inside the measured window
   ssh_to "$host" 'cd /root/bench && curl -s -o cpu.pprof "http://127.0.0.1:6060/debug/pprof/profile?seconds=30" && curl -s -o heap.pprof http://127.0.0.1:6060/debug/pprof/heap && curl -s -o allocs.pprof http://127.0.0.1:6060/debug/pprof/allocs && curl -s -o goroutine.txt "http://127.0.0.1:6060/debug/pprof/goroutine?debug=1"'
   while ssh_to "$GEN_IP" 'pgrep -x loadgen >/dev/null'; do sleep 10; done
-  scp_to "$host:/root/bench/cpu.pprof" "$host:/root/bench/heap.pprof" "$host:/root/bench/allocs.pprof" "$host:/root/bench/goroutine.txt" "$out/"
+  scp_to "root@$host:/root/bench/cpu.pprof" "root@$host:/root/bench/heap.pprof" "root@$host:/root/bench/allocs.pprof" "root@$host:/root/bench/goroutine.txt" "$out/"
   cp "$WORK/bin/benchnode" "$out/benchnode.linux"
   collect "$which" "$label"
 }
