@@ -238,6 +238,36 @@ func TestOnlyOneScreenShareRunsInAnEpisode(t *testing.T) {
 	}
 }
 
+func TestAPushThatRacesCloseNeverHoldsTheScreen(t *testing.T) {
+	node := newTestNode(t, nil)
+	alice := node.newTestSession(t, episodeScope("a", "alice"))
+	bob := node.newTestSession(t, episodeScope("a", "bob"))
+	share := func(session *Session, name string) (protocol.TracksResponse, error) {
+		t.Helper()
+		peer := newTestPeer(t)
+		peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
+		return session.push(context.Background(), protocol.TracksRequest{
+			OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks(name, peer.mids(), "screen"),
+		})
+	}
+
+	// Close marks the session closed and releases its publications while the push is past
+	// readyForNegotiation, so the push reaches registration on a closed session.
+	alice.mu.Lock()
+	alice.closed = true
+	alice.mu.Unlock()
+	if _, err := share(alice, "alice-screen"); !errors.Is(err, ErrSessionGone) {
+		t.Fatalf("push on a closed session: %v, want ErrSessionGone", err)
+	}
+	response, err := share(bob, "bob-screen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Tracks) != 1 {
+		t.Fatalf("screen share after the racing push: %+v, want it accepted", response)
+	}
+}
+
 func TestUpdateTracksRecordsTheCeilingWithoutSDP(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))

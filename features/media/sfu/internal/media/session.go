@@ -214,6 +214,12 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	var response protocol.TracksResponse
 	var refused []*webrtc.RTPTransceiver
 	s.mu.Lock()
+	// A Close that ran while the offer was applied has already released this session's
+	// publications, so a publication registered now, and its screen claim, would never be released.
+	if s.closed {
+		s.mu.Unlock()
+		return protocol.TracksResponse{}, ErrSessionGone
+	}
 	for _, track := range request.Tracks {
 		transceiver, code, message := s.registerPublication(track, sections)
 		if code != "" {
