@@ -396,7 +396,7 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
@@ -633,6 +633,13 @@ func run() error {
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
+		// The Episode binding picks the cleanup closer. A typed nil adapter inside the
+		// interface would pass the nil check, so the nil case stays a nil interface.
+		var chalkCleanup providerbridge.ChalkCleanup
+		if chalkSFU != nil {
+			chalkCleanup = chalkSFU
+		}
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkCleanup)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {

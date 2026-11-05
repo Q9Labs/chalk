@@ -8,13 +8,25 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+// CaptureEligibility says whether the Episode's media plane can be captured. It
+// runs before any capacity is reserved, so an unsupported Episode costs nothing.
+type CaptureEligibility interface {
+	CaptureSupported(ctx context.Context, tenantID, episodeID utilities.ID) error
+}
+
 type Service struct {
-	repository Repository
-	now        func() time.Time
+	repository  Repository
+	eligibility CaptureEligibility
+	now         func() time.Time
 }
 
 func NewService(repository Repository) Service {
 	return Service{repository: repository, now: time.Now}
+}
+
+func (s Service) WithCaptureEligibility(eligibility CaptureEligibility) Service {
+	s.eligibility = eligibility
+	return s
 }
 
 func (s Service) Reserve(ctx context.Context, input ReservationInput) (Reservation, error) {
@@ -29,6 +41,11 @@ func (s Service) Materialize(ctx context.Context, input ReservationInput) (Reser
 }
 
 func (s Service) reserve(ctx context.Context, input ReservationInput, requireRecordingID bool) (Reservation, error) {
+	if s.eligibility != nil {
+		if err := s.eligibility.CaptureSupported(ctx, input.TenantID, input.EpisodeID); err != nil {
+			return Reservation{}, err
+		}
+	}
 	input, _, err := BuildReservation(input, s.now().UTC())
 	if err != nil {
 		return Reservation{}, err
