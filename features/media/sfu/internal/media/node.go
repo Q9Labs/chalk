@@ -56,6 +56,8 @@ type Node struct {
 	api         *webrtc.API
 	conn        *net.UDPConn
 	mux         io.Closer
+	guard       *guard
+	done        chan struct{} // closed by Close; stops the node's control loop
 
 	wg sync.WaitGroup
 
@@ -108,13 +110,15 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	return &Node{
+	n := &Node{
 		cfg:          cfg,
 		log:          log,
 		incarnation:  randomHex(4),
 		api:          api,
 		conn:         conn,
 		mux:          mux,
+		guard:        newGuard(cfg.Guard, log),
+		done:         make(chan struct{}),
 		sessions:     map[string]*Session{},
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
@@ -125,7 +129,9 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sourceFloors: map[episodeKey]int64{},
 		fenceLimit:   defaultFenceLimit,
 		createLimit:  defaultClosedCreateLimit,
-	}, nil
+	}
+	n.wg.Go(n.run)
+	return n, nil
 }
 
 // newAPI negotiates only the codecs the node forwards: Opus and VP8. Feedback
@@ -363,18 +369,28 @@ func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
 	return protocol.CreateSessionResponse{ConnectionID: id, NodeIncarnation: n.incarnation}
 }
 
-// claimScreen reserves the Episode's one screen share for the session. It reports false when
-// another publication already holds it, including one of the same session. The caller may hold
-// the session's own mutex: nothing takes it while holding n.mu.
-func (n *Node) claimScreen(s *Session) bool {
+// claimScreen reserves the Episode's one screen share for the session. It returns a track error
+// code when another publication already holds it, including one of the same session, or when the
+// Episode's microphones and a screen share together would exceed its packet ceiling. The caller
+// may hold the session's own mutex: nothing takes it while holding n.mu.
+func (n *Node) claimScreen(s *Session) (code, message string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := episodeOf(s.scope)
 	if n.screens[key] != nil {
-		return false
+		return protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
+	}
+	participants := 0
+	for _, session := range n.sessions {
+		if episodeOf(session.scope) == key {
+			participants++
+		}
+	}
+	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
+		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s
-	return true
+	return "", ""
 }
 
 // releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
@@ -474,6 +490,9 @@ func (n *Node) Drain() {
 // Close refuses new work, closes every session and releases the UDP socket.
 func (n *Node) Close() {
 	n.mu.Lock()
+	if !n.stopped {
+		close(n.done)
+	}
 	n.stopped = true
 	sessions := make([]*Session, 0, len(n.sessions))
 	for _, session := range n.sessions {

@@ -117,8 +117,8 @@ func itoa(value int) string {
 func TestEpisodeReservationFormula(t *testing.T) {
 	cases := []struct{ participants, want int }{{0, 0}, {1, 1200}, {2, 1200}, {4, 4000}, {8, 14400}}
 	for _, test := range cases {
-		if got := episodeReservation(test.participants, 200); got != test.want {
-			t.Errorf("episodeReservation(%d, 200) = %d, want %d", test.participants, got, test.want)
+		if got := nominalReservation(max(test.participants, 1), 200) * min(test.participants, 1); got != test.want {
+			t.Errorf("nominalReservation(%d, 200) = %d, want %d", test.participants, got, test.want)
 		}
 	}
 }
@@ -161,23 +161,55 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	}
 }
 
-func TestThePacketBudgetAdmitsAnEpisodeBeforeTheParticipantCap(t *testing.T) {
-	// At 200 packets/s per stream, 8 Participants reserve 14400 and 9 reserve 18000.
-	small := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.PacketBudget = 16000 })
-	for index := range 8 {
-		small.newTestSession(t, episodeScope("a", "p"+itoa(index)))
+func TestTheEpisodeCeilingCapsTheReservationAndMandatoryAudioRefusesTheSixteenth(t *testing.T) {
+	// Nine Participants nominally reserve 18000, but the allocator holds an Episode at its
+	// 11520 ceiling, so the Episode reserves 11520 and fits a 16000 node.
+	node := newTestNode(t, func(cfg *config.Config) {
+		cfg.MaxSessions = 32
+		cfg.PacketBudget = 16000
+		cfg.EpisodePacketCeiling = 11520
+	})
+	for index := range 15 {
+		node.newTestSession(t, episodeScope("a", "p"+itoa(index)))
 	}
-	if _, err := small.CreateSession("create-ninth", episodeScope("a", "p8")); !errors.Is(err, errNodeFull) {
-		t.Fatalf("ninth Participant on a 16000 budget: %v, want the node full", err)
+	if _, reserved := node.Budget(); reserved != 11520 {
+		t.Fatalf("15 Participants reserve %d, want the 11520 ceiling", reserved)
 	}
+	// Sixteen microphones alone are 50·16² = 12800 packets/s, which no camera pause can make fit.
+	if _, err := node.CreateSession("create-sixteenth", episodeScope("a", "p15")); !errors.Is(err, errMandatoryMedia) {
+		t.Fatalf("sixteenth Participant under an 11520 ceiling: %v, want mandatory media refused", err)
+	}
+	// The ceiling is the Episode's, not the node's: room left on the node admits a new Episode.
+	node.newTestSession(t, episodeScope("b", "p0"))
 
-	// 12 Participants reserve 31200 and 13 reserve 36400.
-	large := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.PacketBudget = 32000 })
-	for index := range 12 {
-		large.newTestSession(t, episodeScope("a", "p"+itoa(index)))
+	// A higher ceiling, validated separately, admits the sixteenth.
+	higher := newTestNode(t, func(cfg *config.Config) {
+		cfg.MaxSessions = 32
+		cfg.PacketBudget = 32000
+		cfg.EpisodePacketCeiling = 16000
+	})
+	for index := range 16 {
+		higher.newTestSession(t, episodeScope("a", "p"+itoa(index)))
 	}
-	if _, err := large.CreateSession("create-thirteenth", episodeScope("a", "p12")); !errors.Is(err, errNodeFull) {
-		t.Fatalf("thirteenth Participant on a 32000 budget: %v, want the node full", err)
+}
+
+func TestAScreenShareThatMandatoryMediaCannotCarryIsRefused(t *testing.T) {
+	// Thirteen microphones are 8450 packets/s; a screen share adds (210 + 50)·13 = 3380, above 11520.
+	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.EpisodePacketCeiling = 11520 })
+	sessions := make([]*Session, 0, 13)
+	for index := range 13 {
+		sessions = append(sessions, node.newTestSession(t, episodeScope("a", "p"+itoa(index))))
+	}
+	if code, _ := node.claimScreen(sessions[0]); code != protocol.TrackCodeLimitExceeded {
+		t.Fatalf("screen share for 13: code %q, want %q", code, protocol.TrackCodeLimitExceeded)
+	}
+	sessions[12].Close()
+	if code, message := node.claimScreen(sessions[0]); code != "" {
+		t.Fatalf("screen share for 12: %s %s", code, message)
+	}
+	// With the screen share running, a thirteenth join no longer fits either.
+	if _, err := node.CreateSession("create-again", episodeScope("a", "p12")); !errors.Is(err, errMandatoryMedia) {
+		t.Fatalf("thirteenth join with a screen share: %v, want mandatory media refused", err)
 	}
 }
 
@@ -483,7 +515,7 @@ func TestANewCreateReplacesTheLiveSessionAtTheSameGeneration(t *testing.T) {
 	if replay, err := node.CreateSession("create-second", scope); err != nil || replay.ConnectionID != second.ConnectionID {
 		t.Fatalf("a replayed create returned %v, %v", replay, err)
 	}
-	if _, reserved := node.Budget(); reserved != episodeReservation(1, 200) {
+	if _, reserved := node.Budget(); reserved != node.episodeReservation(1) {
 		t.Fatalf("reserved %d, want one Participant counted once", reserved)
 	}
 }

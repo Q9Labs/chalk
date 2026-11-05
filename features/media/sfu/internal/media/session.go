@@ -355,8 +355,10 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	if err != nil {
 		return transceiver, protocol.TrackCodeLimitExceeded, "the node's source table is full"
 	}
-	if track.Source == sourceScreen && !s.node.claimScreen(s) {
-		return transceiver, protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
+	if track.Source == sourceScreen {
+		if code, message := s.node.claimScreen(s); code != "" {
+			return transceiver, code, message
+		}
 	}
 	s.published[track.Mid] = pub
 	return transceiver, "", ""

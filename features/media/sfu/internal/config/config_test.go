@@ -34,6 +34,16 @@ func TestAdmissionDefaults(t *testing.T) {
 	if cfg.MaxEpisodeParticipants != 16 {
 		t.Errorf("Participant cap %d, want 16", cfg.MaxEpisodeParticipants)
 	}
+	if cfg.EpisodePacketCeiling != 11520 {
+		t.Errorf("Episode ceiling %d, want 11520", cfg.EpisodePacketCeiling)
+	}
+	want := Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, HistoryAudioBytes: 16 << 10, PacerQueueBytes: 128 << 10}
+	if cfg.Memory != want {
+		t.Errorf("memory caps %+v, want the design's budget %+v", cfg.Memory, want)
+	}
+	if cfg.Guard.MaxStealPercent != 3 || cfg.Guard.MaxQueueDelay != 50*time.Millisecond || cfg.Guard.Window != 30*time.Second {
+		t.Errorf("guard %+v, want 3%% steal or 50 ms queue delay over 30 s", cfg.Guard)
+	}
 }
 
 func TestAdmissionSettingsAreConfigurable(t *testing.T) {
