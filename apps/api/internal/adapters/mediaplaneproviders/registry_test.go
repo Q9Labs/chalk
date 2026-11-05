@@ -329,6 +329,20 @@ func TestResolveEpisodeFollowsTheBindingNotTheSpaceSelector(t *testing.T) {
 		}
 	})
 
+	t.Run("a null binding whose selected Cloudflare has no application refuses as unavailable", func(t *testing.T) {
+		chalkManaged := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"mode":"chalk_managed"}`)}
+		cloudflareSelected := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
+		registry := NewRegistry(Config{Episodes: boundEpisodes{nil}})
+		binding, err := registry.ResolveBinding(chalkManaged, cloudflareSelected)
+		if binding != nil || err != nil {
+			t.Fatalf("creation: binding = %#v, err = %v, want a null binding", binding, err)
+		}
+		service, err := registry.ResolveEpisode(context.Background(), chalkManaged, cloudflareSelected, utilities.ID{})
+		if service != nil || !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+			t.Fatalf("admission: service = %#v, err = %v, want adapter unavailable", service, err)
+		}
+	})
+
 	t.Run("a different Cloudflare application refuses", func(t *testing.T) {
 		registry := NewRegistry(Config{ProcessConfig: processConfig, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Episodes: boundEpisodes{bindingFor(t, string(spaces.MediaPlaneProviderCloudflareSFU), "other-app")}})
 		service, err := registry.ResolveEpisode(context.Background(), tenants.Tenant{}, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}, utilities.ID{})
