@@ -224,7 +224,8 @@ type InspectedTrack struct {
 	TrackName string `json:"trackName"`
 	SessionID string `json:"sessionId,omitempty"`
 	Active    bool   `json:"active"`
-	// Layers lists a local simulcast track's layers in RID order.
+	// Layers lists a local video track's ingress layers in RID order. A single
+	// encoding is one layer with an empty RID.
 	Layers []InspectedLayer `json:"layers,omitempty"`
 	// Subscription is the delivery state of a remote track.
 	Subscription *SubscriptionState `json:"subscription,omitempty"`
@@ -233,6 +234,10 @@ type InspectedTrack struct {
 type InspectedLayer struct {
 	RID    string `json:"rid"`
 	Active bool   `json:"active"`
+	// RequestedPackets counts the lost packets the node asked the publisher to
+	// resend, and RepairedPackets the resends that arrived over RTX.
+	RequestedPackets uint64 `json:"requestedPackets"`
+	RepairedPackets  uint64 `json:"repairedPackets"`
 }
 
 // SubscriptionState is how a subscription is delivered. Revision rises on every

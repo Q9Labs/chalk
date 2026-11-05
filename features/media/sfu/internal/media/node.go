@@ -178,6 +178,11 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, fmt.Errorf("register RID header extension: %w", err)
 	}
+	// A simulcast publisher signals no SSRCs, so its RTX streams name their layer
+	// with the repaired RID. Without it the node drops every uplink repair.
+	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRepairRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, fmt.Errorf("register repaired RID header extension: %w", err)
+	}
 
 	registry := &interceptor.Registry{}
 	if err := webrtc.ConfigureRTCPReports(registry); err != nil {
