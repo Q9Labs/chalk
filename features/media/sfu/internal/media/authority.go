@@ -32,7 +32,24 @@ type sourceKey struct {
 // leaseWindow is when a source may forward: a packet that arrived at or after since,
 // while the current time is before until. A grant after a revoke or a lapsed lease
 // starts a new window, so packets held from the unauthorized time are never resent.
-type leaseWindow struct{ since, until int64 }
+// opens counts the windows the source has started, so inspection can tell each
+// window, and each gap between windows, apart.
+type leaseWindow struct {
+	since, until int64
+	opens        uint64
+}
+
+// open reports whether a packet arriving now may be sent now.
+func (w *leaseWindow) open(now int64) bool { return w.since <= now && now < w.until }
+
+// leaseRevision rises when the window opens and again when it ends by revoke or
+// lapse, and stays put while renewals extend it: 2 × opens, less one while open.
+func (w *leaseWindow) leaseRevision(now int64) uint64 {
+	if w.open(now) {
+		return 2*w.opens - 1
+	}
+	return 2 * w.opens
+}
 
 var closedWindow = &leaseWindow{}
 
@@ -183,14 +200,15 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 		case stale:
 		case control.Action == protocol.SourceRevoke:
 			authority.revision, authority.revoked = control.Revision, true
-			authority.window.Store(closedWindow)
+			authority.window.Store(&leaseWindow{opens: authority.window.Load().opens})
 			result.Applied = true
 			changed[index] = authority
 		default:
 			current := authority.window.Load()
-			window := &leaseWindow{since: current.since, until: now + int64(lease)}
+			window := &leaseWindow{since: current.since, until: now + int64(lease), opens: current.opens}
 			if authority.revoked || !authority.allows(now, now) {
 				window.since = now
+				window.opens++
 				changed[index] = authority
 			}
 			authority.revision, authority.revoked = control.Revision, false

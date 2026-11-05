@@ -330,18 +330,25 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 	s.write(w, &stored, seg.translate(&stored))
 }
 
-// state reports the subscription's delivery for inspection.
-func (s *subscription) state() (state, reason string, revision uint64, requested, effective string) {
+// state reports the subscription's delivery for inspection. The source's lease is
+// read here rather than tracked by forwarding, so a lapse costs the packet path
+// nothing: while it does not allow forwarding the subscription reads as paused,
+// unless the viewer paused it. Both parts of the revision only rise.
+func (s *subscription) state(now int64) (state, reason string, revision uint64, requested, effective string) {
+	window := s.pub.authority.window.Load()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state = protocol.SubscriptionActive
-	if s.reason != "" {
-		state = protocol.SubscriptionPaused
+	reason, revision = s.reason, s.revision+window.leaseRevision(now)
+	if reason != protocol.PauseViewer && !window.open(now) {
+		reason = protocol.PauseSourceUnauthorized
+	}
+	if reason != "" {
+		return protocol.SubscriptionPaused, reason, revision, s.request.ceiling, ""
 	}
 	if layer := s.pub.layer(s.translator.layer()); layer != nil {
 		effective = layer.rid
 	}
-	return state, s.reason, s.revision, s.request.ceiling, effective
+	return protocol.SubscriptionActive, reason, revision, s.request.ceiling, effective
 }
 
 // detach stops forwarding to the subscription. It reports false when it already had.

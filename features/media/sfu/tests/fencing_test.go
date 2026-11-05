@@ -223,6 +223,59 @@ func TestSourceFencing(t *testing.T) {
 		}
 	})
 
+	t.Run("inspection reports a lapsed lease while RTP still arrives", func(t *testing.T) {
+		episode := "episode-inspect"
+		alice := joinAndPublish(t, svc, scopeIn(episode, "alice", 1), "alice-mic")
+		bob := join(t, svc, scopeIn(episode, "bob", 1))
+		bob.pull(t, svc, alice)
+		published := func() protocol.InspectedTrack {
+			tracks := svc.inspect(t, alice.conn, alice.scope)
+			if len(tracks) != 1 || tracks[0].Location != protocol.LocationLocal {
+				t.Fatalf("alice's tracks: %+v", tracks)
+			}
+			return tracks[0]
+		}
+		delivered := func() protocol.SubscriptionState {
+			tracks := svc.inspect(t, bob.conn, bob.scope)
+			if len(tracks) != 1 || tracks[0].Subscription == nil {
+				t.Fatalf("bob's tracks: %+v", tracks)
+			}
+			return *tracks[0].Subscription
+		}
+		before := delivered()
+		if before.State != protocol.SubscriptionPaused || before.Reason != protocol.PauseSourceUnauthorized || published().Active {
+			t.Fatalf("before any grant: %+v, publication active %v", before, published().Active)
+		}
+
+		svc.control(t, episode, grant("alice", 1))
+		bob.hears(t, "audio after the grant", 20)
+		granted := delivered()
+		if granted.State != protocol.SubscriptionActive || granted.Revision <= before.Revision || !published().Active {
+			t.Fatalf("after the grant: %+v (was %+v), publication active %v", granted, before, published().Active)
+		}
+		svc.control(t, episode, grant("alice", 1))
+		if renewed := delivered(); renewed.State != protocol.SubscriptionActive || renewed.Revision != granted.Revision {
+			t.Fatalf("a renewal changed the delivery: %+v, was %+v", renewed, granted)
+		}
+
+		// The microphone keeps sending, but no renewal reaches the node.
+		var lapsed protocol.SubscriptionState
+		eventually(t, "inspection to report the lapse", 3*testLease, func() bool {
+			lapsed = delivered()
+			return lapsed.State == protocol.SubscriptionPaused
+		})
+		if lapsed.Reason != protocol.PauseSourceUnauthorized || lapsed.Revision <= granted.Revision || lapsed.EffectiveRID != "" || published().Active {
+			t.Fatalf("after the lapse: %+v (was %+v), publication active %v", lapsed, granted, published().Active)
+		}
+		bob.silent(t, "while the lease is lapsed")
+
+		svc.control(t, episode, grant("alice", 1))
+		bob.hears(t, "audio after the renewal", 10)
+		if resumed := delivered(); resumed.State != protocol.SubscriptionActive || resumed.Revision <= lapsed.Revision || !published().Active {
+			t.Fatalf("after the renewal: %+v (was %+v), publication active %v", resumed, lapsed, published().Active)
+		}
+	})
+
 	t.Run("a stale renewal or a delayed push after a revoke never resumes media", func(t *testing.T) {
 		episode := "episode-stale"
 		svc.control(t, episode, grant("alice", 2))

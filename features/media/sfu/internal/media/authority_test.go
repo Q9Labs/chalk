@@ -19,7 +19,7 @@ import (
 
 // openWindow lets every packet through. Unit tests that build a publication without
 // a node or a grant forward under it.
-var openWindow = &leaseWindow{since: math.MinInt64, until: math.MaxInt64}
+var openWindow = &leaseWindow{since: math.MinInt64, until: math.MaxInt64, opens: 1}
 
 func freeAuthority() *sourceAuthority {
 	authority := &sourceAuthority{}

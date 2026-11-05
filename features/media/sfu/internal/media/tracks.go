@@ -270,8 +270,10 @@ func (p *publication) close() {
 }
 
 // active reports whether any layer carried RTP within the activity window.
+// active reports whether the publication is delivering: it is open, its source's
+// lease allows forwarding, and RTP arrived recently.
 func (p *publication) active(now int64) bool {
-	if p.closed.Load() {
+	if p.closed.Load() || !p.authority.allows(now, now) {
 		return false
 	}
 	for index := range p.layers {
@@ -289,7 +291,7 @@ func (p *publication) inspectLayers(now int64) []protocol.InspectedLayer {
 	var layers []protocol.InspectedLayer
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil && layer.rid != "" {
-			layers = append(layers, protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && layer.active(now)})
+			layers = append(layers, protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && p.authority.allows(now, now) && layer.active(now)})
 		}
 	}
 	slices.SortFunc(layers, func(a, b protocol.InspectedLayer) int { return strings.Compare(a.RID, b.RID) })

@@ -699,7 +699,7 @@ func (s *Session) Inspect() (protocol.InspectResponse, error) {
 		})
 	}
 	for mid, subscription := range s.subscribed {
-		state, reason, revision, requested, effective := subscription.state()
+		state, reason, revision, requested, effective := subscription.state(now)
 		response.Tracks = append(response.Tracks, protocol.InspectedTrack{
 			Location: protocol.LocationRemote, Mid: mid, TrackName: subscription.pub.name, SessionID: subscription.pub.session.id,
 			Active:       subscription.pub.active(now),
