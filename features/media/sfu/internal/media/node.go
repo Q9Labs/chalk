@@ -223,10 +223,10 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 		return protocol.CreateSessionResponse{}, nil, err
 	}
 	var fenced *Session
+	// A create with a new operation ID replaces the Participant's live session, also at the
+	// same generation: the API replaces a media connection that way, and its database has
+	// already superseded the old connection ID.
 	if existing := n.participants[keyOf(scope)]; existing != nil {
-		if scope.Generation == existing.scope.Generation {
-			return protocol.CreateSessionResponse{}, nil, ErrSessionExists
-		}
 		fenced = existing
 	}
 	live := len(n.sessions)

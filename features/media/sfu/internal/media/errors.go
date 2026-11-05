@@ -13,7 +13,6 @@ var (
 	ErrNoPendingOffer       = errors.New("no pending server offer")
 	ErrNegotiationFailed    = errors.New("negotiation failed")
 	ErrOperationConflict    = errors.New("operation id reused with a different body")
-	ErrSessionExists        = errors.New("session already exists for this participant generation")
 	ErrStaleGeneration      = errors.New("a newer generation owns this participant")
 	ErrCapacityExceeded     = errors.New("capacity exceeded")
 	ErrUnsupportedOperation = errors.New("unsupported operation")

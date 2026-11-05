@@ -192,7 +192,6 @@ const (
 	CodeNoPendingOffer       = "no_pending_offer"
 	CodeNegotiationFailed    = "negotiation_failed"
 	CodeOperationConflict    = "operation_conflict"
-	CodeSessionExists        = "session_exists"
 	CodeStaleGeneration      = "stale_generation"
 	CodeCapacityExceeded     = "capacity_exceeded"
 	CodeUnsupportedOperation = "unsupported_operation"
