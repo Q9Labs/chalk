@@ -738,19 +738,19 @@ At unchanged 150/50 reservation costs, standby admits **six three-person
 Episodes** at 14,400, not seven at 16,800. Alternatively it admits a capped
 10-person Episode at 11,520 plus one three-person Episode at 2,400, total
 13,920. Six realistic classes at the conservative screen-on rate use about
-**10,380 actual packets/s** before repair/capture. One realistic rare call uses
-10,280. These are realistic admitted workloads, not a promise of the full
+**10,620 actual packets/s** before repair/capture, with subscribers held on
+`l`. One realistic rare call held on `l` uses 10,640. These are realistic admitted workloads, not a promise of the full
 twelve-class peak. Twelve realistic classes are 20,760 before repair, and their
 all-source reservations are 28,800; neither fits 16,000. Lower-layer savings do
 not release nominal reservations until a measured, enforced degraded reservation
 profile is reviewed. Capture reduces the admitted subset further. Standby does
 not carry the all-high peak.
 
-**Recommendation until M13:** if primary placement is unavailable and degraded
+**Decision until M13:** if primary placement is unavailable and degraded
 standby refuses a **new Episode**, use Cloudflare SFU as temporary capacity
 rollback. Reserve/select it before committing the Episode's provider binding,
-record a bounded overflow reason, and keep it pinned. This is a recommendation
-for migration policy, not a decision to keep Cloudflare after retirement. An
+record a bounded overflow reason, and keep it pinned. This is migration
+policy, not a decision to keep Cloudflare after retirement. An
 extra Participant refused in an already-bound Episode must not be sent alone to
 another provider. Return capacity/retry, or use an authority-controlled whole-call
 rollback that ends the old binding and creates a new Episode. No silent provider
@@ -799,7 +799,7 @@ measured dedicated-CPU replacement rather than accepting persistent freezes.
 The unexplained M1 packet ceiling still applies until diagnosed.
 
 Planned primary deploys mark it draining. New Episodes go to the healthy
-standby's degraded budget, then recommended Cloudflare overflow until M13, or
+standby's degraded budget, then Cloudflare overflow until M13, or
 receive an explicit capacity result. Existing primary calls, joins to those
 Episodes, capture, leases and cleanup stay on the primary until completion.
 This avoids interrupting live calls, but standby does not preserve full new-call

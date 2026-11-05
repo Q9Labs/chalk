@@ -432,16 +432,16 @@ prefer it; existing standby Episodes remain pinned until they end.
 
 At the initial costs, standby fits **six three-person Episodes** at 14,400,
 not seven at 16,800, or one capped ten-person Episode plus one three-person
-Episode at 13,920. Six realistic screen-on classes use about 10,380 actual
-packets/s before repair/capture. It carries realistic admitted traffic, not the
+Episode at 13,920. Six realistic screen-on classes held on `l` use about 10,620
+actual packets/s before repair/capture. It carries realistic admitted traffic, not the
 twelve-class 28,800 reservation or the all-high peak. M5 low-layer savings do
 not automatically lower M2 reservations. A wider degraded envelope needs
 measured, enforced reservation calibration; capture consumes capacity too.
 
-**Recommendation until M13:** if standby also refuses a new Episode, overflow
+**Decision until M13:** if standby also refuses a new Episode, overflow
 to Cloudflare SFU before persisting its provider binding. Record the reason and
-keep overflow Episodes pinned. This recommendation needs a migration-policy
-decision, not an indefinite Cloudflare exception. Never send a refused join in
+keep overflow Episodes pinned. This is migration policy, not an indefinite
+Cloudflare exception. Never send a refused join in
 an existing own-SFU Episode alone to Cloudflare. Return capacity/retry, or use
 an explicit whole-call rollback with an authority-approved new Episode.
 M13 removes overflow; afterwards smaller-standby refusals are explicit degraded
@@ -474,7 +474,7 @@ standby saturation, concurrent placement, control partition, old-node return,
 lease expiry, crash during replacement and cleanup debt. Admitted whole calls
 recover rendered media within M7's bound without consent/privacy failures,
 double reservations or stale publication. Excess demand returns the explicit
-outcome, with optional Cloudflare overflow tested for new Episodes only.
+outcome, with Cloudflare overflow tested for new Episodes only.
 
 Run an hour-long primary drain: existing calls/recordings finish uninterrupted,
 new Episodes go only to degraded standby or approved overflow, and all refusals
