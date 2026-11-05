@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { catcherRequest } from "./webhook-transport.mjs";
+import { catcherRequest, CatcherRateLimited } from "./webhook-transport.mjs";
 
 async function withServer(handler, run) {
   const server = createServer(handler).listen(0, "127.0.0.1");
@@ -66,6 +66,20 @@ test("a rejected catcher read still fails without retries", async () => {
     },
     async (base) => {
       await assert.rejects(catcherRequest(base, "/requests"), /HTTP 403/);
+      assert.equal(requests, 1);
+    },
+  );
+});
+
+test("a rate-limited catcher read is reported as rate limited without retries", async () => {
+  let requests = 0;
+  await withServer(
+    (request, response) => {
+      requests++;
+      response.writeHead(429).end();
+    },
+    async (base) => {
+      await assert.rejects(catcherRequest(base, "/requests"), CatcherRateLimited);
       assert.equal(requests, 1);
     },
   );

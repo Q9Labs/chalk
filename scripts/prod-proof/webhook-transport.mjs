@@ -1,6 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { check } from "./runtime.mjs";
 
+export class CatcherRateLimited extends Error {
+  constructor(method) {
+    super(`Webhook transport ${method} failed: HTTP 429`);
+    this.name = "CatcherRateLimited";
+  }
+}
+
 function isTransportFailure(error) {
   return (error instanceof TypeError && ["fetch failed", "terminated"].includes(error.message)) || error.name === "TimeoutError";
 }
@@ -13,6 +20,7 @@ function requireRetry(error, attempts, signal) {
 async function fetchCatcher(url, options, attempts, signal, responseType) {
   try {
     const response = await fetch(url, { ...options, signal: AbortSignal.any([AbortSignal.timeout(15_000), ...(signal ? [signal] : [])]) });
+    if (response.status === 429) throw new CatcherRateLimited(options.method);
     check(response.ok, `Webhook transport ${options.method} failed: HTTP ${response.status}`);
     return await response[responseType]();
   } catch (error) {

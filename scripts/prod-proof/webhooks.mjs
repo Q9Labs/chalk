@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
-import { catcherRequest } from "./webhook-transport.mjs";
+import { catcherRequest, CatcherRateLimited } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
@@ -70,8 +70,15 @@ function startCollector(run, receiver, collect) {
   const completion = (async () => {
     try {
       while (!controller.signal.aborted) {
-        await collect(controller.signal);
-        await delay(2000, undefined, { signal: controller.signal });
+        let pause = 2000;
+        try {
+          await collect(controller.signal);
+        } catch (error) {
+          // A rate-limited poll is not a failed delivery: skip it and let the proof's own timeout decide.
+          if (!(error instanceof CatcherRateLimited)) throw error;
+          pause = 15_000;
+        }
+        await delay(pause, undefined, { signal: controller.signal });
       }
     } catch (error) {
       if (!controller.signal.aborted) receiver.failure = error.message;
