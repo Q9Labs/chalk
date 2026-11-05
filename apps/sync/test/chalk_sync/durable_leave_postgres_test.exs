@@ -344,7 +344,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
     # Reserved after the old generation's cleanup was accepted, so it is ordered after it.
     assert_control_revision(grant.control_revision)
-    assert grant.control_revision >= cleanup.control_revision
+    assert grant.control_revision > cleanup.control_revision
 
     assert {:ok, %{status: :confirmed, result: :authorized}} =
              Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)
