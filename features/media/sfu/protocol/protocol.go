@@ -31,12 +31,18 @@ type SessionDescription struct {
 	Type string `json:"type"`
 }
 
-// Simulcast carries the subscriber's layer policy. The service accepts it and
-// forwards the single published layer; layer selection arrives in a later milestone.
+// Simulcast carries the subscriber's layer policy for a simulcast publication.
+// PreferredRID is the layer to forward and the ceiling of any lower choice. With
+// RIDNotAvailable "asciibetical" an inactive preferred layer falls back to the
+// first active RID in ASCII order ("h" before "l"); with "none" delivery pauses
+// until the preferred layer returns. A publication without simulcast ignores it.
 type Simulcast struct {
 	PreferredRID     string `json:"preferredRid"`
 	PriorityOrdering string `json:"priorityOrdering"`
 	RIDNotAvailable  string `json:"ridNotAvailable"`
+	// StartRID names a lower layer to forward instead of PreferredRID, so a new
+	// pull can start low and climb. A RID above PreferredRID is ignored.
+	StartRID string `json:"startRid,omitempty"`
 }
 
 // Track names one media track of a session. A local track is published by the
@@ -49,6 +55,9 @@ type Track struct {
 	SessionID string     `json:"sessionId,omitempty"`
 	Source    string     `json:"source,omitempty"`
 	Simulcast *Simulcast `json:"simulcast,omitempty"`
+	// Paused, on a remote track, asks for delivery to stop while the subscription
+	// keeps its MID and track. Clearing it resumes at the publisher's next keyframe.
+	Paused bool `json:"paused,omitempty"`
 }
 
 type CreateSessionRequest struct {
@@ -121,7 +130,37 @@ type InspectedTrack struct {
 	TrackName string `json:"trackName"`
 	SessionID string `json:"sessionId,omitempty"`
 	Active    bool   `json:"active"`
+	// Layers lists a local simulcast track's layers in RID order.
+	Layers []InspectedLayer `json:"layers,omitempty"`
+	// Subscription is the delivery state of a remote track.
+	Subscription *SubscriptionState `json:"subscription,omitempty"`
 }
+
+type InspectedLayer struct {
+	RID    string `json:"rid"`
+	Active bool   `json:"active"`
+}
+
+// SubscriptionState is how a subscription is delivered. Revision rises on every
+// change of State or Reason, so a reader keeps the highest one it has seen.
+type SubscriptionState struct {
+	State    string `json:"state"`
+	Reason   string `json:"reason,omitempty"`
+	Revision uint64 `json:"revision"`
+	// RequestedRID is the subscriber's preferred layer, the ceiling. EffectiveRID
+	// is the layer being forwarded, empty while paused or before the first keyframe.
+	RequestedRID string `json:"requestedRid,omitempty"`
+	EffectiveRID string `json:"effectiveRid,omitempty"`
+}
+
+// Subscription states and the reasons for a pause.
+const (
+	SubscriptionActive  = "active"
+	SubscriptionPaused  = "paused"
+	PauseCongestion     = "congestion"
+	PauseViewer         = "viewer"
+	PauseSourceInactive = "source_inactive"
+)
 
 type InspectResponse struct {
 	Tracks []InspectedTrack `json:"tracks"`

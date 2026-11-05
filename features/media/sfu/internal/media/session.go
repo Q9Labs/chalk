@@ -34,6 +34,7 @@ type Session struct {
 	closed       bool
 	published    map[string]*publication  // by MID
 	subscribed   map[string]*subscription // by MID
+	retired      map[string]bool          // MIDs of closed publications, never published again
 	pending      *pendingOffer
 	connectTimer *time.Timer
 }
@@ -52,6 +53,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		id: id, createOperation: operationID, scope: scope, node: n, pc: pc,
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
+		retired:    map[string]bool{},
 	}
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
@@ -74,7 +76,9 @@ func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
 	}
 }
 
-// onTrack starts forwarding once the publisher's first RTP packet arrives.
+// onTrack starts reading a stream once its first RTP packet arrives: as a layer
+// of its publication, or drained when nothing forwards it, so Pion never
+// buffers an unread stream.
 func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	var mid string
 	for _, transceiver := range s.pc.GetTransceivers() {
@@ -86,10 +90,16 @@ func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiv
 	s.mu.Lock()
 	pub := s.published[mid]
 	s.mu.Unlock()
-	if pub == nil || !pub.attach(remote) {
+	var layer *ingressLayer
+	var monitor bool
+	if pub != nil {
+		layer, monitor = pub.attach(remote)
+	}
+	if layer == nil {
+		s.node.track(func() { drain(remote) })
 		return
 	}
-	if !s.node.track(func() { pub.forward(remote) }) {
+	if (monitor && !s.node.track(pub.monitor)) || !s.node.track(func() { pub.read(layer) }) {
 		pub.close()
 	}
 }
@@ -106,6 +116,10 @@ func (s *Session) Close() {
 	for _, pub := range s.published {
 		published = append(published, pub)
 	}
+	subscribed := make([]*subscription, 0, len(s.subscribed))
+	for _, subscription := range s.subscribed {
+		subscribed = append(subscribed, subscription)
+	}
 	if s.pending != nil {
 		s.pending.timer.Stop()
 		s.pending = nil
@@ -115,6 +129,9 @@ func (s *Session) Close() {
 
 	for _, pub := range published {
 		pub.close()
+	}
+	for _, subscription := range subscribed {
+		subscription.detach()
 	}
 	s.node.remove(s)
 	if err := s.pc.Close(); err != nil {
@@ -210,8 +227,14 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	}
 	var response protocol.TracksResponse
 	var refused []*webrtc.RTPTransceiver
+	named := make(map[string]bool, len(request.Tracks))
 	s.mu.Lock()
 	for _, track := range request.Tracks {
+		if named[track.Mid] {
+			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: protocol.TrackCodeDuplicate, Message: "the request names this mid twice"})
+			continue
+		}
+		named[track.Mid] = true
 		transceiver, code, message := s.registerPublication(track, sections)
 		if code != "" {
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: code, Message: message})
@@ -279,13 +302,13 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	fresh := 0
+	fresh := make(map[string]bool, len(request.Tracks))
 	for _, track := range request.Tracks {
 		if s.published[track.Mid] == nil && s.publishedByName(track.TrackName) == nil {
-			fresh++
+			fresh[track.Mid] = true
 		}
 	}
-	if len(s.published)+fresh > s.node.cfg.MaxPublishedPerSession {
+	if len(s.published)+len(fresh) > s.node.cfg.MaxPublishedPerSession {
 		return nil, nil, fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
 	}
 	return sections, existing, nil
@@ -307,14 +330,13 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	if !section.supports(transceiver.Kind()) {
 		return transceiver, protocol.TrackCodeInvalid, "the section does not offer a supported codec: Opus for audio, VP8 for video"
 	}
+	if s.retired[track.Mid] {
+		return transceiver, protocol.TrackCodeInvalid, "mid was closed; publish on a new section"
+	}
 	if s.published[track.Mid] != nil || s.publishedByName(track.TrackName) != nil {
 		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
 	}
-	pub, err := newPublication(s, track, transceiver.Kind())
-	if err != nil {
-		return transceiver, protocol.TrackCodeInvalid, err.Error()
-	}
-	s.published[track.Mid] = pub
+	s.published[track.Mid] = newPublication(s, track, transceiver.Kind())
 	return transceiver, "", ""
 }
 
@@ -386,6 +408,7 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 	s.mu.Unlock()
 
 	for _, subscription := range added {
+		subscription.start()
 		if !s.node.track(func() { subscription.readFeedback() }) {
 			return protocol.TracksResponse{}, ErrDraining
 		}
@@ -432,11 +455,23 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
-	transceiver, err := s.pc.AddTransceiverFromTrack(pub.local, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
+	egress := newEgressTrack(pub)
+	transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
 	if err != nil {
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
 	}
-	return &subscription{pub: pub, transceiver: transceiver, sender: transceiver.Sender()}, "", ""
+	return newSubscription(pub, transceiver, egress, layerRequestFor(track)), "", ""
+}
+
+// layerRequestFor reads the layer policy of a pull or update. Without one the
+// subscriber gets the best active layer.
+func layerRequestFor(track protocol.Track) layerRequest {
+	request := layerRequest{fallback: true, paused: track.Paused}
+	if simulcast := track.Simulcast; simulcast != nil {
+		request.ceiling, request.start = simulcast.PreferredRID, simulcast.StartRID
+		request.fallback = simulcast.RIDNotAvailable != "none"
+	}
+	return request
 }
 
 // Renegotiate applies the client's answer to the pending server offer.
@@ -496,6 +531,9 @@ func (s *Session) closeMid(mid string) bool {
 	pub, subscription := s.published[mid], s.subscribed[mid]
 	delete(s.published, mid)
 	delete(s.subscribed, mid)
+	if pub != nil {
+		s.retired[mid] = true
+	}
 	s.mu.Unlock()
 	switch {
 	case pub != nil:
@@ -513,15 +551,19 @@ func (s *Session) Inspect() (protocol.InspectResponse, error) {
 	if s.closed {
 		return protocol.InspectResponse{}, ErrSessionGone
 	}
-	now := time.Now()
+	now := monotonic()
 	response := protocol.InspectResponse{Tracks: []protocol.InspectedTrack{}}
 	for mid, pub := range s.published {
-		response.Tracks = append(response.Tracks, protocol.InspectedTrack{Location: protocol.LocationLocal, Mid: mid, TrackName: pub.name, Active: pub.active(now)})
+		response.Tracks = append(response.Tracks, protocol.InspectedTrack{
+			Location: protocol.LocationLocal, Mid: mid, TrackName: pub.name, Active: pub.active(now), Layers: pub.inspectLayers(now),
+		})
 	}
 	for mid, subscription := range s.subscribed {
+		state, reason, revision, requested, effective := subscription.state()
 		response.Tracks = append(response.Tracks, protocol.InspectedTrack{
 			Location: protocol.LocationRemote, Mid: mid, TrackName: subscription.pub.name, SessionID: subscription.pub.session.id,
-			Active: subscription.pub.active(now),
+			Active:       subscription.pub.active(now),
+			Subscription: &protocol.SubscriptionState{State: state, Reason: reason, Revision: revision, RequestedRID: requested, EffectiveRID: effective},
 		})
 	}
 	slices.SortFunc(response.Tracks, func(a, b protocol.InspectedTrack) int {
