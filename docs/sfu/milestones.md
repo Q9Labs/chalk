@@ -50,7 +50,10 @@ adapter retries. Preserve partial responses and existing public
 route flow. Persist provider/application binding at Episode creation and resolve
 all subsequent operations from it, including refresh, cleanup and recorder
 exclusion. Add the default-off Tenant/Space selector, eight-Participant own-provider
-admission cap and node admission budget. Advertise capability fields but leave
+admission cap and the node admission budget: each Episode is reserved at its
+supported peak (all remote cameras on `h`, microphones, one screen share), a join
+that would exceed the node's packet budget is refused, and one active screen share
+per Episode is allowed (see [Hosting and budget](design.md#hosting-and-budget)). Advertise capability fields but leave
 server adaptation/ICE restart false until their milestones pass. Reject capture
 before reserving work. Old providers and old SDK cohorts stay on Cloudflare.
 
@@ -66,7 +69,8 @@ negotiated and forced close, receive-only isolation, inspect, remove/end and
 unavailable usage. Ordinary CI runs the self-hosted half; Cloudflare fixtures
 cover decoding but do not substitute for the opt-in provider run. Flip selection
 during a call: old Episode stays pinned, next Episode uses the new provider.
-Verify ninth admission rejection, capture exclusion, old/new SDK discrimination,
+Verify ninth admission rejection, join refusal at the packet budget, a second
+concurrent screen share refused, capture exclusion, old/new SDK discrimination,
 401/403 isolation, `pnpm run regen` and `pnpm run check:generated`.
 
 **Risk:** provider switches are currently closed vocabularies; a change only in
@@ -113,7 +117,8 @@ gating, RTP/codec identifier translation, unavailable-RID fallback, source
 inactivity and PLI throttling. Land requested-ceiling versus effective-layer
 state for M5, plus a `paused` state: a subscription that forwards nothing, keeps
 its MID and track identity, needs no SDP, and resumes on a keyframe. Let a pull
-or update name its starting layer, so M5 can start on the low layer. Keep the
+or update name its starting layer, so M5 can start on the low layer. Report each subscription's
+state (`active` or `paused`, reason, revision) in the inspect result. Keep the
 packet history once per ingress stream, shared by subscribers, with a per-subscriber
 sequence map. Decide whether a third, lower camera layer pays for itself (see
 [Adaptive quality](design.md#adaptive-quality)). Attribute any borrowed LiveKit
@@ -129,8 +134,8 @@ packet reorder; identity stays stable and output has no sequence discontinuity
 that defeats decoding. Pause `h`, then `l`, then test a publisher with no RIDs:
 the remaining valid stream flows. Test `asciibetical` ordering and per-track
 errors. Pause a subscription: it receives zero RTP, its MID and track identity
-stay, no SDP is exchanged, and resume waits for a keyframe without disturbing
-another subscriber. Retransmit from the shared history for two subscribers on
+stay, no SDP is exchanged, inspect reports it `paused` with its reason, and resume
+waits for a keyframe without disturbing another subscriber. Retransmit from the shared history for two subscribers on
 different layers and assert each gets its own sequence numbers. For the third
 layer, publish a headless Chromium camera with two and with three encodings and
 record encode CPU and decoded resolution; the PR states the decision and the
@@ -147,9 +152,14 @@ rewriting, pacing, bounded NACK/RTX history and audio-first allocation. Enable
 `serverLayerAdaptation` only for the own provider; treat SDK layer requests as
 ceilings and keep the Cloudflare behavior unchanged. Start a new own-provider pull
 on the lowest layer its ceiling allows and climb as the estimate supports it.
-Pause video and keep audio when the estimate cannot carry the lowest layer, and
-resume with hysteresis; the SDK shows a distinct "video paused for network"
-state and, where the capability is present, pauses off-screen video in place
+Hold each Episode to its packet ceiling (the lower of its supported peak and
+11,520 packets/s) by lowering non-speaker tile layers first. Pause video and keep
+audio when the estimate cannot carry the lowest layer, and resume with
+hysteresis. Expose subscription state through the API and SDK transport behind a
+`subscriptionState` capability: the SDK's receive-stall check reads it before
+declaring a stall, shows a distinct "video paused for network" state for a
+paused subscription instead of repulling, and re-reads it until RTP resumes.
+Where the capability is present the SDK also pauses off-screen video in place
 using M4's pause state. Export CPU steal, Go scheduler latency and pacer queue
 delay, and stop new Episodes when steal exceeds 3% over 30 seconds or queue delay
 p95 exceeds 50 ms, with the admission reason in telemetry. Add bounded operational
@@ -167,7 +177,9 @@ high, microphone packets/rendering continue, and quality rises after recovery.
 A new pull starts on `l` and reaches `h` on an unconstrained path inside a stated
 time, while a Cloudflare-provider session still requests `h` first. Constrain a
 subscriber below the lowest layer: it goes audio-only with the paused-video state,
-and video returns only after the estimate holds. Inject loss on each leg and
+no repull occurs through a pause lasting past the seven-second stall window, and
+video returns only after the estimate holds. An eight-person all-high call with a
+screen share stays at or below 11,520 packets/s. Inject loss on each leg and
 assert actual NACK plus RTX packets and decoder recovery, with repair memory/rate
 bounded at the configured caps. Feed a fake steal reader and a delayed pacer:
 admission refuses new Episodes at each threshold and existing calls continue.
@@ -207,11 +219,15 @@ re-pull after a missing subscription, Wi-Fi/mobile-style path change, 60-second
 offline, SFU process kill and restart, and an outbound-TCP-443-only relay call.
 Replay #761 off-reason proof against candidate and supported prior SDK sockets.
 Run at least 30 minutes on the production-size Droplet, separately, for: one
-eight-person all-high call; two eight-person adaptive calls; four four-person
-mixed calls; and an eight-person call with a screen share. Use known packet/media
+eight-person all-high call with a screen share, held to its 11,520 ceiling; that
+call plus one four-person all-high call with a screen share; and three four-person
+all-high calls with screen shares while a fourth Episode's second join is
+refused. Also run two eight-person calls and assert the second is refused as it
+grows. Use known packet/media
 input and record actual forwarded streams, packet rate, CPU, steal, GC, peak
 memory, egress, RTX and queue delay. Pass only inside the design budgets
-(20,000 packets/s, 16 Participants, memory with headroom); lower caps on failure.
+(20,000 packets/s reserved at supported peak, 16 Participants, memory with
+headroom); lower caps on failure.
 Replace the 25 µs per packet and 2 MiB per PeerConnection guesses with the
 measured values in the design. Starve the CPU (more busy workers than vCPUs):
 queue delay rises and admission refuses new Episodes while live calls continue.
@@ -258,7 +274,11 @@ adapter early strands calls and cleanup. Canary evidence does not establish
 
 **Scope:** the SDK pulls remote camera and screen video only for tiles on screen,
 closes the pull after a debounce when a tile leaves, pulls the next page early,
-and always keeps audio. It uses the existing pull and close calls, so it changes
+and always keeps audio. Add `setVideoTileVisibility(publicationId, {width, height} | null)`,
+keyed by publication so it works before a track exists; it is local and sends
+nothing to the server. A publication the UI has not reported is unknown: the SDK
+waits up to 250 ms for the first report, then pulls it as today, so a UI that
+never calls it behaves exactly as before. `null` means hidden and pulls no video. It uses the existing pull and close calls, so it changes
 Cloudflare behavior as well as the own provider's, by design. It does not depend
 on M1–M7 and can ship before or after them. Egress and packet savings apply to
 Cloudflare today.
@@ -270,7 +290,9 @@ scheduling), React and React Native consumers of tile visibility, SDK tests.
 only four tiles: exactly four video pulls plus eight audio pulls exist; scrolling
 a tile into view pulls its video and renders it inside a stated time; scrolling
 away closes it after the debounce; rapid scrolling creates no pull storm and no
-leaked PeerConnection transceivers. Existing media-client recovery tests still
+leaked PeerConnection transceivers. A UI that never reports visibility pulls
+every video exactly as before, and a tile reported before its track exists is
+pulled or skipped on that first report. Existing media-client recovery tests still
 pass, and received video bytes for the hidden tiles are zero in the call-stats.
 
 **Risk:** a scroll-back delay reads as a frozen tile. The early pull and
@@ -281,9 +303,12 @@ debounce trade that delay against egress; tune both from the test, not guesses.
 **Scope:** after M3, M4 and M5. The SFU computes per-source demand (highest
 requested camera ceiling across subscribers), returns it to the API, and the API
 relays it to the publisher over the durable source-control path. The SDK applies
-it through its existing camera uplink policy: disable an encoding nobody
-requested after a hold time, re-enable at once on a new request, and keep
-forwarding the remaining layer until the re-enabled layer has a keyframe. Gated
+it as information, not a command: a layer is enabled when it is demanded and
+`CameraUplinkPolicy` allows it, with a floor that enables the cheapest demanded
+layer (or `l` when nothing is demanded) if the rule would otherwise disable every
+layer. Disable an undemanded encoding after a hold time, re-enable at once on a
+new request, and keep forwarding the remaining layer until the re-enabled layer
+has a keyframe. Gated
 behind an own-provider capability; Cloudflare publishers are unchanged.
 
 **Files:** SFU demand tracking and `protocol/`; `apps/api/internal/{adapters/chalksfu,
@@ -293,7 +318,9 @@ authoritative contract inputs and generated output.
 **Check:** with a real two-layer publisher and two subscribers: both on `l`, the
 publisher stops encoding `h` after the hold time and ingress packets for `h` drop
 to zero; a third subscriber requests `h`, receives `l` until the `h` keyframe,
-then switches without a frozen picture; drop the relay message and the stale
+then switches without a frozen picture; with every viewer on `l` and the
+uplink measured at 1 Mbps, `l` stays enabled (the uplink policy alone would turn it
+off) and a viewer still receives video, including while demand changes; drop the relay message and the stale
 state heals on the next lease refresh; a missing capability leaves both layers
 running. Run `pnpm run regen` and `pnpm run check:generated`.
 

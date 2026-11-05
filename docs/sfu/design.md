@@ -331,9 +331,16 @@ Cloudflare. Only item 3 is provider-neutral.
    Cloudflare pulls stay `h`-first.
 3. **Subscribe to video only for visible tiles (M8).** Today the SDK pulls every
    remote publication, visible or not. The viewer policy already measures tile
-   size, so "visible" is an existing input. The SDK pulls a remote camera or
-   screen only while its tile is on screen, closes the pull after a debounce when
-   it leaves, and always keeps audio. This needs no SFU feature (it uses the
+   size, but only per received track (`setVideoRenderSize(track, size)`), so it
+   cannot decide whether to pull video not yet received. M8 adds a signal keyed by
+   publication: `setVideoTileVisibility(publicationId, {width, height} | null)`,
+   where `null` means hidden. It is local to the SDK and sends nothing to the
+   server. Until the UI reports, a publication is **unknown**: the SDK waits up to 250 ms for
+   the first report, then pulls an unknown tile as today (Cloudflare `h`-first, own provider low-first), so a UI that never calls
+   it keeps today's behavior and M8 is opt-in per UI. A hidden report pulls no
+   video. Once the track exists, `setVideoRenderSize` still feeds the layer
+   choice. The SDK pulls a remote camera or screen only while its tile is on
+   screen, closes the pull after a debounce when it leaves, and always keeps audio. This needs no SFU feature (it uses the
    existing pull and close calls), so it **ships independently, applies to
    Cloudflare today and cuts Cloudflare egress now.** A viewer who scrolls a tile
    back pays a re-pull; the debounce and an early pull of the next page bound
@@ -343,10 +350,18 @@ Cloudflare. Only item 3 is provider-neutral.
    subscriber has requested. Demand per source is the highest requested ceiling
    across its subscribers (not the congestion-reduced effective layer, which keeps
    headroom for recovery). The SFU returns demand in its lease-refresh and pull/update responses, the API relays it to the
-   publisher over the existing source-control path, and the SDK applies it through
-   its existing uplink policy, which already disables camera encodings. Disabling
-   waits a hold time after the last request; enabling is urgent, and the SFU keeps
-   forwarding the remaining layer until the new one has a keyframe. This saves
+   publisher over the existing source-control path. Demand is information, not a
+   command: the SDK owns its encodings and combines three inputs. A layer is
+   enabled when it is demanded **and** the uplink policy
+   (`CameraUplinkPolicy`) allows it, with a **floor**: if that leaves nothing
+   enabled, the SDK enables the cheapest demanded layer anyway, and when nobody
+   demands the camera it keeps `l` on, so at least one layer is always enabled
+   and a first pull never waits for an encoder start. So demand `{l}` with a
+   1 Mbps uplink keeps `l` on (the policy would otherwise disable it), demand `{h}`
+   with a low uplink leaves `h` on and `l` off, and demand `{h, l}` follows the
+   uplink policy alone. Disabling waits a hold time after the last request;
+   enabling is urgent, and the SFU keeps forwarding the remaining layer until the
+   new one has a keyframe. This saves
    publisher uplink and ingress packets, and it exists only behind an own-provider
    capability.
 5. **Audio-only fallback under congestion (M5).** If the estimate cannot carry
@@ -354,7 +369,18 @@ Cloudflare. Only item 3 is provider-neutral.
    keep audio at its reserved budget. Resume video only after the estimate has held
    above the lowest layer's rate for a hysteresis period. The SDK shows a "video
    paused for network" state, distinct from frozen video, so a viewer is not left
-   guessing.
+   guessing. The SDK learns of a server pause through a **subscription-state
+   read**, because the signaling path is request/response and has no server push.
+   The SFU's inspect result carries, per subscription, a state (`active` or
+   `paused`), a reason (`congestion`, `viewer` or `source_inactive`) and a
+   revision (M4 defines it; M5 exposes it through the API and SDK transport
+   behind a `subscriptionState` capability). When the receive-stall detector
+   (`receive-stall.ts`) would call a track stalled, an own-provider session first
+   reads that state: a `paused` track is shown as paused, not repulled, and is
+   re-read every five seconds until RTP advances or the state is `active`; a
+   higher revision wins over a late response. Without the capability the stall
+   path is unchanged. The SDK's own pauses are known locally and suppress the
+   stall check the same way.
 6. **A third, lower camera layer (decision in M4).** Today the camera has `h`
    (2.5 Mbps) and `l` (0.65 Mbps). A third layer of about 0.15 Mbps (for example
    320×180) would serve small tiles and weak links. As an upper bound, serving the
@@ -503,7 +529,7 @@ that queues behind a single core that the host can take away. `s-2vcpu-2gb` is
 the smallest two-vCPU Basic size. Memory is not what limits it (see the
 [memory budget](#memory-budget)); CPU is.
 Staging runs the service and one four-person test call or one eight-person
-adaptive call. One vCPU and 1 GiB are enough for that, and the memory budget
+call held to its packet ceiling. One vCPU and 1 GiB are enough for that, and the memory budget
 below leaves about half of the 1 GiB free.
 
 ### Packet-rate math (hypotheses, replaced by M6 measurements)
@@ -553,19 +579,42 @@ unmeasured guess for stock Pion without batching. It gives 40,000 packets/s per
 fully used vCPU. Halve it for shared-CPU steal risk, then halve again to stay at
 50% target utilization: **10,000 packets/s per vCPU**.
 
-| Budget                      | Staging (1 vCPU) | Production v1 (2 vCPU) |
-| --------------------------- | ---------------- | ---------------------- |
-| Planned packets/s, in + out | 10,000           | 20,000                 |
-| Active Participants         | 8                | 16                     |
+| Budget                           | Staging (1 vCPU) | Production v1 (2 vCPU) |
+| -------------------------------- | ---------------- | ---------------------- |
+| Planned packets/s, in + out      | 10,000           | 20,000                 |
+| Active Participants (memory cap) | 8                | 16                     |
+| Packet ceiling for one Episode   | 10,000           | 11,520                 |
 
-Admission reserves **1,180 packets/s per active Participant**, the adaptive
-eight-person average (9,440 / 8). Sixteen Participants reserve 18,880, which fits
-20,000. The reservation is a planning number; the live signals below are the real
-gate. By packet count, production fits one eight-person all-high call (19,760),
-or two eight-person adaptive calls (18,880), or four four-person mixed calls
-(14,560), or three four-person all-high calls (15,240). Staging fits one
-four-person all-high call (5,080) or one eight-person adaptive call (9,440).
-The tightest of the packet, Participant, memory and live-signal budgets wins. These are not throughput guarantees. M6 measures the real cost per packet on
+**Admission reserves each Episode at its supported peak.** The supported peak is
+every remote camera on `h`, every microphone, and **one screen share** with its
+audio. The own provider allows one active screen share per Episode, because the
+reservation counts one. For an Episode with `n` active Participants this is
+`300·n(n-1) + 630·n` packets/s (the `n(n-1)` all-high term, plus `370·n` ingress
+and `260·n` for one screen and its audio): 1,860 at two, 6,120 at four, 9,150 at
+five and 21,840 at eight.
+
+That peak is more than one node can carry at eight Participants (21,840 against
+20,000), so the allocator **enforces a packet ceiling per Episode** and the
+reservation is the lower of the peak and the ceiling. The ceiling is 11,520, the
+eight-person adaptive profile with a screen share (6,480 egress, 2,960 ingress
+and 2,080 for the screen), or the node budget if that is smaller. When viewers'
+requested layers would exceed the ceiling, the allocator lowers the layers of the
+largest set of non-speaker tiles first and keeps audio and screen. Forwarding can
+then never exceed the reservation.
+
+A Participant join is refused if it would push the sum of reservations above the
+node budget, and a new Episode needs room for two Participants. The live steal
+and queue-delay signals below are a second gate, not a substitute for this one.
+Production therefore fits one Episode of up to eight (11,520) plus one
+four-person Episode (6,120) for 17,640, or three four-person Episodes (18,360),
+or two five-person Episodes (18,300). It does **not** fit two eight-person
+Episodes (23,040): the second is refused as it grows. Staging fits one
+four-person Episode (6,120) or one eight-person Episode held to 10,000. A
+reservation above typical use is deliberate headroom against steal; once M6 has
+measured real load, a later change may reserve measured use instead.
+
+The tightest of the packet, Participant, memory and live-signal budgets wins. These are
+not throughput guarantees. M6 measures the real cost per packet on
 the production SKU and lowers the budget if it misses the target.
 The durable admission ceiling is **500** Episode Participants, not an SFU
 capacity (`apps/api/internal/episodes/service.go:75`); the eight-Participant
@@ -646,7 +695,7 @@ node built by the same module, followed by a drain of the old one.
 | Memory above 70% of RAM at the admitted peak, or any out-of-memory kill  | Resize to `s-2vcpu-4gb`                      | $24     |
 | Measured cost per packet is far above 25 µs and the profile shows no fix | Resize to `s-4vcpu-8gb` (still shared)       | $48     |
 | Steal or queue delay closes admission in over 1% of minutes in a week    | Replacement node `c-2` (2 dedicated vCPU)    | $42     |
-| The 16-Participant budget is routinely full with real demand             | A second node, per the multi-node plan below | +$18    |
+| Joins are routinely refused for the packet budget under real demand      | A second node, per the multi-node plan below | +$18    |
 | `c-2` fails the M6 harness                                               | Replacement node `c-4` (4 dedicated vCPU)    | $84     |
 
 For staging, memory pressure during the four-person proof moves it to
