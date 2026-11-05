@@ -116,7 +116,7 @@ DEEP=1 ./run.sh          # plus the multi-source runs
 node trace-diff.mjs results/cf-current-P2-1src.txt   # a counterexample, one line per step
 ```
 
-It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. Every model under `tools/formal` reads one pin, stable v1.7.4 with its checksum, from `tools/formal/tla2tools.sh`, so a re-published release fails the checksum for all of them at once. The results were produced with TLC 2.19 (rev 5a47802), which is v1.7.4. Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
+It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. Every model under `tools/formal` reads one pin, stable v1.7.4 with its checksum, from `tools/formal/tla2tools.sh`, so a re-published release fails the checksum for all of them at once. The committed results were produced with a v1.8.0 pre-release (TLC 2026.10.30, rev 090e85c). v1.7.4 (TLC 2.19) reproduces every outcome, and every pass run with the same state counts. Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
 
 Files:
 
