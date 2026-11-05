@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
@@ -235,4 +238,140 @@ func TestPushMIDRules(t *testing.T) {
 			t.Fatalf("push on the closed MID: %+v", again)
 		}
 	})
+}
+
+// TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe pauses one of two
+// subscribers of a real VP8 stream, as an update without SDP would.
+func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	camera, err := webrtc.NewTrackLocalStaticRTP(vp8Capability, "cam", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender := newTestPeer(t)
+	if _, err := sender.pc.AddTrack(camera); err != nil {
+		t.Fatal(err)
+	}
+	offer := sender.offer(t)
+	pushed, err := publisher.AddTracks(context.Background(), protocol.TracksRequest{
+		Scope: publisher.scope, SessionDescription: offer, Tracks: localTracks("cam", sender.mids(), "camera"),
+	})
+	if err != nil || len(pushed.Tracks) != 1 {
+		t.Fatalf("push: %+v %v", pushed, err)
+	}
+	if err := sender.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+	// One packet per frame and a keyframe every 15 frames; PLIs are ignored.
+	ctx, stop := context.WithCancel(context.Background())
+	sending := make(chan struct{})
+	t.Cleanup(func() { stop(); <-sending })
+	go func() {
+		defer close(sending)
+		ticker := time.NewTicker(time.Second / 30)
+		defer ticker.Stop()
+		for frame := 0; ; frame++ {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			header := byte(0x01)
+			if frame%15 == 0 {
+				header = 0x00
+			}
+			payload := []byte{0x90, 0x80, 0x80 | byte(frame>>8&0x7f), byte(frame), header, 'v'}
+			_ = camera.WriteRTP(&rtp.Packet{Header: rtp.Header{Version: 2, PayloadType: 96, SequenceNumber: uint16(frame), Timestamp: uint32(frame * 3000), Marker: true}, Payload: payload})
+		}
+	}()
+
+	type viewer struct {
+		session *Session
+		peer    *testPeer
+		mid     string
+		mu      sync.Mutex
+		packets []*rtp.Packet
+	}
+	join := func(name string) *viewer {
+		v := &viewer{session: node.newTestSession(t, testScope(name, 1)), peer: newTestPeer(t)}
+		v.peer.pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+			for {
+				packet, _, err := remote.ReadRTP()
+				if err != nil {
+					return
+				}
+				v.mu.Lock()
+				v.packets = append(v.packets, packet)
+				v.mu.Unlock()
+			}
+		})
+		pulled, err := v.session.AddTracks(context.Background(), pullRequest(v.session, publisher, "cam-0"))
+		if err != nil || len(pulled.Tracks) != 1 {
+			t.Fatalf("pull: %+v %v", pulled, err)
+		}
+		v.mid = pulled.Tracks[0].Mid
+		if err := v.session.Renegotiate(context.Background(), v.peer.answer(t, pulled.SessionDescription)); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	received := func(v *viewer) []*rtp.Packet {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		return append([]*rtp.Packet(nil), v.packets...)
+	}
+	subscription := func(v *viewer) *subscription {
+		v.session.mu.Lock()
+		defer v.session.mu.Unlock()
+		return v.session.subscribed[v.mid]
+	}
+	inspected := func(v *viewer) protocol.InspectedTrack {
+		response, err := v.session.Inspect()
+		if err != nil || len(response.Tracks) != 1 {
+			t.Fatalf("inspect: %+v %v", response, err)
+		}
+		return response.Tracks[0]
+	}
+	assertContinuous := func(label string, packets []*rtp.Packet) {
+		for i := 1; i < len(packets); i++ {
+			if packets[i].SequenceNumber != packets[i-1].SequenceNumber+1 {
+				t.Fatalf("%s: sequence went %d then %d", label, packets[i-1].SequenceNumber, packets[i].SequenceNumber)
+			}
+		}
+	}
+
+	bob, carol := join("bob"), join("carol")
+	eventually(t, "both viewers receiving", 10*time.Second, func() bool { return len(received(bob)) >= 20 && len(received(carol)) >= 20 })
+	bobSDP := bob.peer.pc.LocalDescription().SDP
+
+	subscription(bob).update(layerRequest{fallback: true, paused: true})
+	time.Sleep(100 * time.Millisecond) // packets already in flight
+	before := received(bob)
+	time.Sleep(700 * time.Millisecond)
+	if got := len(received(bob)); got != len(before) {
+		t.Fatalf("a paused subscription received %d packets", got-len(before))
+	}
+	track := inspected(bob)
+	if track.Mid != bob.mid || track.Subscription == nil || track.Subscription.State != protocol.SubscriptionPaused || track.Subscription.Reason != protocol.PauseViewer {
+		t.Fatalf("paused subscription inspects as %+v %+v", track, track.Subscription)
+	}
+
+	subscription(bob).update(layerRequest{fallback: true})
+	eventually(t, "bob to resume", 5*time.Second, func() bool { return len(received(bob)) > len(before) })
+	resumed := received(bob)[len(before)]
+	if resumed.Payload[4]&0x01 != 0 {
+		t.Fatal("the resumed stream starts on a delta frame")
+	}
+	if resumed.SequenceNumber != before[len(before)-1].SequenceNumber+1 {
+		t.Fatalf("resumed at sequence %d after %d", resumed.SequenceNumber, before[len(before)-1].SequenceNumber)
+	}
+	if track := inspected(bob); track.Mid != bob.mid || track.Subscription.State != protocol.SubscriptionActive {
+		t.Fatalf("resumed subscription inspects as %+v", track.Subscription)
+	}
+	if bob.peer.pc.LocalDescription().SDP != bobSDP || len(bob.peer.pc.GetTransceivers()) != 1 {
+		t.Fatal("pausing or resuming changed the viewer's session description")
+	}
+	assertContinuous("carol", received(carol))
+	assertContinuous("bob", received(bob))
 }
