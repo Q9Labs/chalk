@@ -145,6 +145,44 @@ func TestPauseReasonsAndRevision(t *testing.T) {
 	}
 }
 
+// TestAnInactiveForwardedLayerResumesOnlyOnAKeyframe stops forwarding "h" when
+// it goes idle, so when it resumes mid-GOP before "l" sends a keyframe, its
+// delta frames wait for an "h" keyframe instead of reaching the decoder.
+func TestAnInactiveForwardedLayerResumesOnlyOnAKeyframe(t *testing.T) {
+	s := &subscription{
+		pub: &publication{kind: webrtc.RTPCodecTypeVideo}, target: -1, revision: 1, translator: translator{clockRate: 90000},
+		request: layerRequest{ceiling: "h", fallback: true},
+	}
+	views := []layerView{{rid: "h", active: true}, {rid: "l", active: true}}
+	route := func(p rtpPacket) (outgoing, bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		out, send, _ := s.route(0, &p)
+		return out, send
+	}
+	if pending := s.reselect(views); pending != 0 {
+		t.Fatalf("first selection waits for layer %d, want 0", pending)
+	}
+	route(vp8Packet(100, 1000, 1, 1, true, true))
+	last, _ := route(vp8Packet(101, 4000, 2, 1, true, false))
+
+	views[0].active = false
+	if pending := s.reselect(views); pending != 1 {
+		t.Fatalf("h idle: waits for layer %d, want the fallback 1", pending)
+	}
+	views[0].active = true
+	if pending := s.reselect(views); pending != 0 {
+		t.Fatalf("h resumed: waits for layer %d, want a keyframe of 0", pending)
+	}
+	if _, send := route(vp8Packet(102, 7000, 3, 1, true, false)); send {
+		t.Fatal("a delta frame of the resumed layer was forwarded before its keyframe")
+	}
+	keyframe, send := route(vp8Packet(103, 10000, 4, 2, true, true))
+	if !send || keyframe.seq != last.seq+1 {
+		t.Fatalf("resumed keyframe: sent %v at sequence %d after %d", send, keyframe.seq, last.seq)
+	}
+}
+
 func TestHistoryEvictsOverwrittenAndOldPackets(t *testing.T) {
 	h := newHistory(100, 4)
 	now := monotonic()

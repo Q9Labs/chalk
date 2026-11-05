@@ -107,6 +107,12 @@ func (s *subscription) reselect(views []layerView) int {
 	}
 	s.target = target
 	current := s.translator.layer()
+	// An idle layer may resume mid-GOP, so its segment ends here and any
+	// layer, that one included, restarts on a keyframe.
+	if current >= 0 && !views[current].active {
+		s.translator.stop()
+		current = -1
+	}
 	switch {
 	case target < 0:
 		s.translator.stop()
