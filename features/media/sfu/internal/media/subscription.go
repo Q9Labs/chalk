@@ -1,10 +1,13 @@
 package media
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
@@ -17,6 +20,10 @@ const (
 	maxRetransmitsPerFeedback = 64
 	// maxFlushAfterSwitch bounds how many already-arrived packets a switch replays.
 	maxFlushAfterSwitch = 64
+	// resendSpacing is how soon one packet may be resent again, about a round
+	// trip, so repeated NACKs for a repair still in flight cost nothing.
+	resendSpacing = 100 * time.Millisecond
+	resendMemory  = 32
 )
 
 // subscription is one session's pull of a publication. It chooses which of the
@@ -24,6 +31,7 @@ const (
 // continuous stream for its own sender.
 type subscription struct {
 	pub         *publication
+	transport   *transport // the subscriber session's
 	transceiver *webrtc.RTPTransceiver
 	sender      *webrtc.RTPSender
 	track       *egressTrack
@@ -45,6 +53,14 @@ type subscription struct {
 	// until the switch's first packet is sent; switches counts the switches.
 	beforeSwitch translator
 	switches     uint64
+	// resent remembers recent resends by outgoing sequence number.
+	resent     [resendMemory]resentPacket
+	resentNext int
+}
+
+type resentPacket struct {
+	seq uint16
+	at  int64 // monotonic; 0 marks a free slot
 }
 
 func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest) *subscription {
@@ -53,7 +69,7 @@ func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track
 		clockRate = 48000
 	}
 	return &subscription{
-		pub: pub, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
 	}
 }
@@ -158,7 +174,7 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 	if !send {
 		return
 	}
-	if !s.write(w, p, out) {
+	if !s.send(p, out, s.class(), false, w) {
 		if switched {
 			s.abandonSwitch(switches)
 		}
@@ -227,15 +243,44 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 		if !send {
 			return
 		}
-		s.write(w, &stored, out)
+		s.send(&stored, out, classVideo, false, w)
 	}
 }
 
-// write sends one translated packet if the source may still forward it. It reads the
-// clock at each write, because an earlier write, to this subscriber or another, can
-// stall past the lease.
-func (s *subscription) write(w *packetWriter, p *rtpPacket, out outgoing) bool {
-	return s.pub.authority.allows(p.arrival, monotonic()) && w.write(s.track, p, out)
+func (s *subscription) class() packetClass {
+	if s.pub.video() {
+		return classVideo
+	}
+	return classAudio
+}
+
+// send hands one translated packet to the subscriber's transport if the source
+// may still forward it. A repair goes on the RTX stream when the subscriber
+// negotiated one. It reads the clock at each send, because an earlier write, to
+// this subscriber or another, can stall past the lease.
+func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repair bool, w *packetWriter) bool {
+	binding := s.track.binding.Load()
+	if binding == nil || !s.pub.authority.allows(p.arrival, monotonic()) {
+		return false
+	}
+	packet := egressPacket{
+		binding: binding, class: class, marker: p.marker, padding: p.paddingSize,
+		seq: out.seq, timestamp: out.timestamp, payload: p.payload,
+		audioLevel: p.audioLevel, hasAudioLevel: p.hasAudioLevel,
+	}
+	offset := 0
+	if repair && binding.rtxSSRC != 0 {
+		binary.BigEndian.PutUint16(w.payload[:2], out.seq)
+		packet.rtx, packet.seq, offset = true, uint16(binding.rtxSeq.Add(1)), 2
+	}
+	if offset > 0 || (p.hasVP8 && out.vp8.differs(&p.vp8)) {
+		n := copy(w.payload[offset:], p.payload)
+		if p.hasVP8 {
+			out.vp8.apply(&p.vp8, w.payload[offset:offset+n])
+		}
+		packet.payload = w.payload[:offset+n]
+	}
+	return s.transport.send(&packet, w)
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
@@ -248,17 +293,33 @@ func (s *subscription) readFeedback() {
 		if err != nil {
 			return
 		}
-		if s.closed.Load() {
-			continue
+		if !s.closed.Load() {
+			s.handleFeedback(packets, writer)
 		}
-		budget := maxRetransmitsPerFeedback
-		for _, packet := range packets {
-			switch packet := packet.(type) {
-			case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
+	}
+}
+
+// handleFeedback acts on one RTCP read. Pion hands a compound packet to every
+// sender it names, so feedback about another sender's stream is ignored.
+func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWriter) {
+	budget := maxRetransmitsPerFeedback
+	binding := s.track.binding.Load()
+	for _, packet := range packets {
+		switch packet := packet.(type) {
+		case *rtcp.PictureLossIndication:
+			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				s.requestKeyframe()
-			case *rtcp.TransportLayerNack:
+			}
+		case *rtcp.FullIntraRequest:
+			if binding != nil && slices.ContainsFunc(packet.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == binding.ssrc }) {
+				s.requestKeyframe()
+			}
+		case *rtcp.TransportLayerNack:
+			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				budget = s.retransmit(packet, budget, writer)
 			}
+		case *rtcp.TransportLayerCC:
+			s.transport.onFeedback(packet)
 		}
 	}
 }
@@ -296,7 +357,7 @@ func (s *subscription) retransmit(nack *rtcp.TransportLayerNack, budget int, w *
 // belonged to may be a reference the viewer can't decode without.
 func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 	s.mu.Lock()
-	if s.reason != "" || s.closed.Load() {
+	if s.reason != "" || s.closed.Load() || s.recentlyResent(seq, now) {
 		s.mu.Unlock()
 		return
 	}
@@ -327,7 +388,20 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 		return
 	}
 	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
-	s.write(w, &stored, seg.translate(&stored))
+	s.send(&stored, seg.translate(&stored), classRepair, true, w)
+}
+
+// recentlyResent reports whether seq went out again within resendSpacing, and
+// records it otherwise. The caller holds s.mu.
+func (s *subscription) recentlyResent(seq uint16, now int64) bool {
+	for _, entry := range s.resent {
+		if entry.at != 0 && entry.seq == seq && now-entry.at < int64(resendSpacing) {
+			return true
+		}
+	}
+	s.resent[s.resentNext] = resentPacket{seq: seq, at: now}
+	s.resentNext = (s.resentNext + 1) % resendMemory
+	return false
 }
 
 // state reports the subscription's delivery for inspection. The source's lease is

@@ -275,7 +275,7 @@ func TestAPacketFromOutsideTheWindowIsNeverSent(t *testing.T) {
 		sent := len(recorder.sequences)
 		for range count {
 			stamp(packets[next%len(packets)], next)
-			pub.forward(layers[0], packets[next%len(packets)], &header, writer)
+			pub.forward(layers[0], packets[next%len(packets)], false, &header, writer)
 			next++
 		}
 		return len(recorder.sequences) - sent
@@ -460,7 +460,7 @@ func TestAWriteThatStallsPastTheLeaseStopsTheSendsAfterIt(t *testing.T) {
 		send = func(order ...int) {
 			for _, n := range order {
 				stamp(packets[n], n)
-				pub.forward(layers[0], packets[n], &header, writer)
+				pub.forward(layers[0], packets[n], false, &header, writer)
 			}
 		}
 		return viewers, writers, lapse, send

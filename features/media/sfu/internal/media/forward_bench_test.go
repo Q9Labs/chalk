@@ -2,6 +2,7 @@ package media
 
 import (
 	"encoding/binary"
+	"math"
 	"testing"
 
 	"github.com/pion/interceptor"
@@ -108,9 +109,13 @@ func benchPublication(tb testing.TB) (*publication, [2]*ingressLayer, *discardWr
 	}
 	writer := &discardWriter{}
 	for index, rid := range []string{"h", "h", "l"} {
-		track := &egressTrack{codec: vp8Capability, kind: pub.kind}
-		track.binding.Store(&egressBinding{writer: writer, ssrc: uint32(100 + index), payloadType: 96})
-		s := &subscription{pub: pub, track: track, request: layerRequest{ceiling: rid, fallback: true}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
+		// Each viewer paces with transport-wide feedback, as a browser does. The pace
+		// is unbounded so the benchmark measures forwarding, not the pacer's wait.
+		transport := newTransport(&delayHistogram{}, testMemory.PacerQueueBytes, nil)
+		transport.pace = math.Inf(1)
+		track := &egressTrack{codec: vp8Capability, kind: pub.kind, transport: transport}
+		track.binding.Store(&egressBinding{writer: writer, ssrc: uint32(100 + index), payloadType: 96, twccID: 3})
+		s := &subscription{pub: pub, transport: transport, track: track, request: layerRequest{ceiling: rid, fallback: true}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
 		pub.addSubscriber(s)
 		views := pub.views(monotonic())
 		s.reselect(views[:])

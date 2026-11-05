@@ -41,6 +41,9 @@ type Session struct {
 	pending      *pendingOffer
 	connectTimer *time.Timer
 
+	// transport paces and estimates everything this session receives.
+	transport *transport
+
 	// lastVoiced is the monotonic time this Participant's microphone last carried
 	// speech, or 0. The allocator keeps a recent speaker's camera longest.
 	lastVoiced atomic.Int64
@@ -51,6 +54,7 @@ type pendingOffer struct {
 	timer *time.Timer
 }
 
+// newSession builds a session and starts its pacer. The caller holds n.mu.
 func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Session, error) {
 	pc, err := n.api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -61,7 +65,14 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
+		transport:  newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done),
 	}
+	if n.stopped {
+		s.transport.close()
+		_ = pc.Close()
+		return nil, ErrDraining
+	}
+	n.wg.Go(s.transport.drain)
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 			n.log.Warn("session never connected", "connectionId", id)
@@ -155,6 +166,7 @@ func (s *Session) Close() {
 		subscription.detach()
 	}
 	s.node.remove(s)
+	s.transport.close()
 	if err := s.pc.Close(); err != nil {
 		s.node.log.Warn("close peer connection", "connectionId", s.id, "error", err)
 	}
@@ -505,7 +517,7 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
-	egress := newEgressTrack(pub)
+	egress := newEgressTrack(pub, s.transport)
 	transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
 	if err != nil {
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
