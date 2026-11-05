@@ -42,7 +42,7 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		PacketBudget:               1 << 20,
 		VideoStreamCost:            150,
 		AudioStreamCost:            50,
-		MaxEpisodeParticipants:     8,
+		MaxEpisodeParticipants:     16,
 		NegotiationTimeout:         5 * time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,

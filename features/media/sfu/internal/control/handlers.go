@@ -18,7 +18,8 @@ const requestDeadline = 15 * time.Second
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	mux.HandleFunc("GET /readyz", s.ready)
+	// Readiness names the node incarnation and its load, so it needs the same identity as /v1.
+	mux.Handle("GET /readyz", s.v1(s.ready))
 
 	prefix := "/" + protocol.Version
 	mux.Handle("POST "+prefix+"/sessions", s.v1(s.createSession))
@@ -32,13 +33,13 @@ func (s *Server) routes() http.Handler {
 	return s.logged(mux)
 }
 
-func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 	if s.node.Draining() {
-		writeProblem(w, media.ErrDraining)
-		return
+		return media.ErrDraining
 	}
 	budget, reserved := s.node.Budget()
 	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved})
+	return nil
 }
 
 // v1 guards an operation: the caller must hold the expected service identity.

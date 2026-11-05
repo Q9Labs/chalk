@@ -39,7 +39,8 @@ type Config struct {
 	// video or audio stream, per hop (a publisher's uplink or one subscriber's downlink).
 	VideoStreamCost int
 	AudioStreamCost int
-	// MaxEpisodeParticipants caps live sessions in one Episode.
+	// MaxEpisodeParticipants caps live sessions in one Episode. It is a safety bound, not the
+	// admission rule: the packet budget refuses a large Episode first on today's node sizes.
 	MaxEpisodeParticipants int
 	NegotiationTimeout     time.Duration
 	ConnectTimeout         time.Duration
@@ -68,7 +69,7 @@ func Load(lookup Lookup) (Config, error) {
 		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 150, 1, 10000),
 		AudioStreamCost:            r.integer("SFU_AUDIO_STREAM_COST", 50, 1, 10000),
-		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 8, 1, 64),
+		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 16, 1, 64),
 		NegotiationTimeout:         r.duration("SFU_NEGOTIATION_TIMEOUT", 10*time.Second, time.Second, time.Minute),
 		ConnectTimeout:             r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
 		ShutdownTimeout:            r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),

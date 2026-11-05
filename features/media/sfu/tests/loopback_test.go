@@ -62,7 +62,7 @@ func startService(t *testing.T, ca *authority) *service {
 		PacketBudget:               1 << 20,
 		VideoStreamCost:            150,
 		AudioStreamCost:            50,
-		MaxEpisodeParticipants:     8,
+		MaxEpisodeParticipants:     16,
 		MaxPublishedPerSession:     4,
 		MaxSubscriptionsPerSession: 8,
 		MaxRequestBytes:            256 << 10,
@@ -344,6 +344,15 @@ func TestLoopback(t *testing.T) {
 		}
 		if svc.sessions(t) != 0 {
 			t.Fatal("a forbidden call created a session")
+		}
+		// Readiness names the node incarnation, so it needs the service identity too.
+		response, err := stranger.client.Get(svc.baseURL + "/readyz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusForbidden {
+			t.Fatalf("readiness with the wrong identity: status %d, want 403", response.StatusCode)
 		}
 	})
 

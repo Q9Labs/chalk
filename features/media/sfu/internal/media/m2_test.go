@@ -158,13 +158,33 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	}
 }
 
-func TestEpisodeCapStopsTheNinthParticipant(t *testing.T) {
-	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 16; cfg.MaxEpisodeParticipants = 8 })
+func TestThePacketBudgetAdmitsAnEpisodeBeforeTheParticipantCap(t *testing.T) {
+	// At 200 packets/s per stream, 8 Participants reserve 14400 and 9 reserve 18000.
+	small := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.PacketBudget = 16000 })
 	for index := range 8 {
+		small.newTestSession(t, episodeScope("a", "p"+itoa(index)))
+	}
+	if _, err := small.CreateSession("create-ninth", episodeScope("a", "p8")); !errors.Is(err, errNodeFull) {
+		t.Fatalf("ninth Participant on a 16000 budget: %v, want the node full", err)
+	}
+
+	// 12 Participants reserve 31200 and 13 reserve 36400.
+	large := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.PacketBudget = 32000 })
+	for index := range 12 {
+		large.newTestSession(t, episodeScope("a", "p"+itoa(index)))
+	}
+	if _, err := large.CreateSession("create-thirteenth", episodeScope("a", "p12")); !errors.Is(err, errNodeFull) {
+		t.Fatalf("thirteenth Participant on a 32000 budget: %v, want the node full", err)
+	}
+}
+
+func TestTheParticipantCapStaysConfigurable(t *testing.T) {
+	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 16; cfg.MaxEpisodeParticipants = 3 })
+	for index := range 3 {
 		node.newTestSession(t, episodeScope("a", "p"+itoa(index)))
 	}
-	if _, err := node.CreateSession("create-ninth", episodeScope("a", "p8")); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("ninth Participant: %v, want capacity exceeded", err)
+	if _, err := node.CreateSession("create-fourth", episodeScope("a", "p3")); !errors.Is(err, errEpisodeFull) {
+		t.Fatalf("fourth Participant with a cap of 3: %v, want the Episode full", err)
 	}
 	if _, err := node.CreateSession("create-other-episode", episodeScope("b", "p0")); err != nil {
 		t.Fatalf("another Episode: %v", err)
