@@ -49,15 +49,15 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 }
 
 // authorityFor returns the authority a new publication of the session's source
-// forwards under, creating it, and the control revision it is admitted at. A source
+// forwards under, creating it, and the control it is admitted under. A source
 // that no control has named forwards freely unless the node requires a grant. The
 // caller may hold the session's mutex.
-func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64) {
+func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := sourceKey{keyOf(scope), source}
 	if authority := n.sources[key]; authority != nil {
-		return authority, authority.revision
+		return authority, authority.revision, authority.revoked
 	}
 	initial := openWindow
 	if n.cfg.RequireSourceGrant {
@@ -67,7 +67,7 @@ func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthori
 	if victim := n.sourceVictim(); victim >= 0 {
 		n.evictSource(victim)
 	}
-	return n.addSource(key, initial), 0
+	return n.addSource(key, initial), 0, false
 }
 
 func (n *Node) addSource(key sourceKey, window *leaseWindow) *sourceAuthority {
@@ -236,15 +236,19 @@ func (n *Node) liveSession(key participantKey) *Session {
 }
 
 // closeSource closes the session's publications admitted under the revoked authority
-// at or before the revoke's revision, as a forced close does, and lists them. Their
-// MIDs are retired. A publication admitted after a newer grant stays open, because
-// this cleanup can run after that grant.
+// before the revoke at revision applied, as a forced close does, and lists them. Their
+// MIDs are retired. This cleanup runs after the revoke and can run after a newer grant,
+// so a publication admitted since then stays open: one admitted while revoked has no
+// lease and forwards nothing until a grant, and one admitted under a newer grant may forward.
 func (s *Session) closeSource(authority *sourceAuthority, revision int64) []protocol.ClosedSourceTrack {
 	s.mu.Lock()
 	var closed []protocol.ClosedSourceTrack
 	var pubs []*publication
 	for mid, pub := range s.published {
-		if pub.authority != authority || pub.revision > revision {
+		// The revoke applied over any grant at its own revision, so only a publication
+		// admitted at that revision while revoked came after it.
+		admittedSince := pub.revision > revision || (pub.revision == revision && pub.revoked)
+		if pub.authority != authority || admittedSince {
 			continue
 		}
 		delete(s.published, mid)
