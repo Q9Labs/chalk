@@ -40,6 +40,7 @@ var (
 	ErrInvalidInputBitrate          = errors.New("recording input bitrate must be greater than zero and at most four Mbps")
 	ErrExtensionUnavailable         = errors.New("recording reservation extension is fail-closed until render capacity is qualified")
 	ErrReservationConflict          = errors.New("recording reservation idempotency conflict")
+	ErrCaptureUnsupported           = errors.New("recording capture is not supported for this media plane")
 	ErrCapacityExceeded             = errors.New("recording capacity exceeded")
 	ErrRecordingCapacityUnavailable = ErrCapacityExceeded
 	ErrReservationExpired           = errors.New("recording reservation expired before capture")

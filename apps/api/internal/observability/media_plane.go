@@ -92,7 +92,7 @@ func (t MediaPlaneResolutionTelemetry) RecordResolution(ctx context.Context, res
 
 func boundedMediaPlaneProvider(provider spaces.MediaPlaneProvider) string {
 	switch provider {
-	case spaces.MediaPlaneProviderCloudflareSFU:
+	case spaces.MediaPlaneProviderCloudflareSFU, spaces.MediaPlaneProviderChalkSFU:
 		return string(provider)
 	default:
 		return "unknown"

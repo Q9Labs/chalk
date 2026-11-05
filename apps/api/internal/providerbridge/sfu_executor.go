@@ -10,7 +10,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type TrackCloser interface {
@@ -25,10 +27,34 @@ type RecordingController interface {
 	Stop(context.Context, provideroperations.OperationInput) error
 }
 
+// EpisodeProviders reads the provider frozen into an Episode's binding. It
+// returns an empty name for an Episode that predates the binding, which ran on
+// Cloudflare.
+type EpisodeProviders interface {
+	ProviderOf(ctx context.Context, tenantID, episodeID utilities.ID) (string, error)
+}
+
+// ChalkCleanup is the own SFU's cleanup surface: it closes tracks and ends the
+// Episode's sessions and reservations.
+type ChalkCleanup interface {
+	TrackCloser
+	EndEpisode(context.Context, mediaplane.EndEpisodeInput) error
+}
+
 type SFUExecutor struct {
 	publications mediapublications.Registry
 	tracks       TrackCloser
 	recording    RecordingController
+	episodes     EpisodeProviders
+	chalk        ChalkCleanup
+}
+
+// WithChalkSFU makes cleanup follow the Episode's binding. Without it every
+// Episode cleans up through the Cloudflare closer.
+func (e SFUExecutor) WithChalkSFU(episodes EpisodeProviders, chalk ChalkCleanup) SFUExecutor {
+	e.episodes = episodes
+	e.chalk = chalk
+	return e
 }
 
 func NewSFUExecutor(publications mediapublications.Registry, tracks TrackCloser, recording ...RecordingController) SFUExecutor {
@@ -87,6 +113,16 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if e.publications == nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
+	provider, closer, result := e.bound(ctx, input)
+	if result != nil {
+		return *result
+	}
+	if provider == mediaplane.ProviderChalkSFU && input.Effect == provideroperations.EffectEndEpisode {
+		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
+		if err := e.chalk.EndEpisode(ctx, ended); err != nil {
+			return providerExecutionFailure(err)
+		}
+	}
 
 	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.EpisodeID)
 	if err != nil {
@@ -99,7 +135,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if len(targets) == 0 {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
-	if e.tracks == nil {
+	if closer == nil {
 		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 	}
 
@@ -119,8 +155,12 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		for _, target := range connectionTargets {
 			tracks = append(tracks, mediaplane.CloseTrack{Mid: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID})
 		}
-		closed, err := e.tracks.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-			Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: connectionID, Tracks: tracks, Force: true,
+		closed, err := closer.CloseTracks(ctx, mediaplane.CloseTracksRequest{
+			Provider: provider, ConnectionID: connectionID, Tracks: tracks, Force: true,
+			Scope: mediaplane.Scope{
+				TenantID: input.TenantID.String(), EpisodeID: input.EpisodeID.String(),
+				ParticipantID: connectionTargets[0].publication.ParticipantID.String(), Generation: connectionTargets[0].reference.ParticipantGeneration,
+			},
 		})
 		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
 			closed.AlreadyClosed = true
@@ -147,6 +187,39 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
+}
+
+// bound picks the closer from the Episode's binding. A provider this build does
+// not know ends the operation as a terminal failure; it never falls back to
+// Cloudflare, which would close another provider's tracks by the wrong rules.
+func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, *ExecutionResult) {
+	name := string(spaces.MediaPlaneProviderCloudflareSFU)
+	if e.episodes != nil {
+		found, err := e.episodes.ProviderOf(ctx, input.TenantID, input.EpisodeID)
+		if err != nil {
+			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
+			return "", nil, &result
+		}
+		if found != "" {
+			name = found
+		}
+	}
+	switch spaces.MediaPlaneProvider(name) {
+	case spaces.MediaPlaneProviderCloudflareSFU:
+		if e.tracks == nil {
+			return mediaplane.ProviderCloudflareSFU, nil, nil
+		}
+		return mediaplane.ProviderCloudflareSFU, e.tracks, nil
+	case spaces.MediaPlaneProviderChalkSFU:
+		if e.chalk == nil {
+			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
+			return "", nil, &result
+		}
+		return mediaplane.ProviderChalkSFU, e.chalk, nil
+	default:
+		result := ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "unsupported_provider"}
+		return "", nil, &result
+	}
 }
 
 func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperations.OperationInput) ExecutionResult {
@@ -226,6 +299,8 @@ func recordingExecutionFailure(err error) ExecutionResult {
 	case errors.Is(err, recordingpipeline.ErrRecordingCapacityUnavailable),
 		errors.Is(err, recordingpipeline.ErrCapacityExceeded):
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_capacity_unavailable"}
+	case errors.Is(err, recordingpipeline.ErrCaptureUnsupported):
+		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "recording_capture_unsupported"}
 	case errors.Is(err, recordingpipeline.ErrReservationConflict),
 		errors.Is(err, recordingpipeline.ErrStopConflict),
 		errors.Is(err, recordingpipeline.ErrInvalidStateTransition),
