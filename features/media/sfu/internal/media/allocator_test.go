@@ -205,3 +205,19 @@ func TestTheEpisodePlanLowersQuietCamerasFirst(t *testing.T) {
 		t.Fatalf("levels quiet %d speaker %d, want the speaker raised first", quiet.level, speaker.level)
 	}
 }
+
+func TestAPausedTileWaitsOutItsDropBackoffBeforeResuming(t *testing.T) {
+	// Pauses in quick succession have doubled the hold after the latest one to 8 s.
+	state := allocation{decided: true, rid: "l", paused: true, backoff: backoffMax, holdUntil: at(8 * time.Second)}
+	tiles := []tile{camera(&state)}
+	for step := time.Duration(0); step < 8*time.Second; step += 100 * time.Millisecond {
+		allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(step))
+		if !state.paused {
+			t.Fatalf("resumed after %v of fit, inside the 8 s backoff", step)
+		}
+	}
+	allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(8*time.Second))
+	if state.paused {
+		t.Fatalf("state %+v after the backoff on a fitting estimate, want resumed", state)
+	}
+}

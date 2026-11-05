@@ -108,7 +108,7 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 			if state.fitSince == 0 {
 				state.fitSince = now
 			}
-			if now-state.fitSince < int64(resumeHold) {
+			if now-state.fitSince < int64(resumeHold) || now < state.holdUntil {
 				return 0
 			}
 			state.paused, state.rid, state.fitSince = false, floor.rid, 0
