@@ -376,7 +376,8 @@ export function createGatePlan(files, options = {}) {
       ]),
     );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  const sfu = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
+  // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
+  const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));

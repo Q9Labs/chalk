@@ -255,6 +255,7 @@ test("SFU changes run the SFU gate and nothing else that is Go", () => {
   assert.equal(plan.tasks.find((task) => task.id === "sfu")?.selected, true);
   assert.equal(plan.services.api, false);
   assert.equal(createGatePlan(["apps/api/internal/server.go"]).tasks.find((task) => task.id === "sfu")?.selected, false);
+  assert.equal(createGatePlan(["features/media/sfu/README.md"]).tasks.find((task) => task.id === "sfu")?.selected, true);
 });
 
 test("deployment tree changes run the gates that read them, not a full gate", () => {

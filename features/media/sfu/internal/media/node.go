@@ -18,6 +18,7 @@ import (
 	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor"
 	"github.com/pion/sdp/v3"
+	"github.com/pion/transport/v5/packetio"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
@@ -31,10 +32,20 @@ const (
 
 var (
 	opusCapability = webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}
-	vp8Capability  = webrtc.RTPCodecCapability{
+	// A subscriber reports lost video packets with generic NACK, and the node
+	// resends them from the publisher's shared history (see subscription.retransmit).
+	vp8Capability = webrtc.RTPCodecCapability{
 		MimeType: webrtc.MimeTypeVP8, ClockRate: 90000,
-		RTCPFeedback: []webrtc.RTCPFeedback{{Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}},
+		RTCPFeedback: []webrtc.RTCPFeedback{{Type: "nack"}, {Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}},
 	}
+)
+
+// Pion buffers each incoming stream until it is read, growing the buffer up to
+// a limit. Every stream the node receives is read promptly, so these limits only
+// bound a reader that stalls: a quarter second of the high camera layer.
+const (
+	rtpBufferLimit  = 128 << 10
+	rtcpBufferLimit = 32 << 10
 )
 
 // Node is one SFU process. All its peers share one UDP socket.
@@ -85,6 +96,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen on UDP %q: %w", cfg.UDPAddr, err)
 	}
+	sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
 	mux := webrtc.NewICEUDPMux(nil, conn)
 	api, err := newAPI(cfg, mux)
 	if err != nil {
@@ -138,6 +150,7 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	}
 
 	settings := webrtc.SettingEngine{}
+	settings.BufferFactory = boundedBuffer
 	settings.SetICEUDPMux(mux)
 	settings.SetLite(true)
 	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
@@ -150,6 +163,58 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 		return nil, fmt.Errorf("set DTLS answering role: %w", err)
 	}
 	return webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithInterceptorRegistry(registry), webrtc.WithSettingEngine(settings)), nil
+}
+
+// boundedBuffer replaces Pion's per-stream buffer, which allows 1 MB of RTP, with a smaller limit.
+func boundedBuffer(packetType packetio.BufferPacketType, _ uint32) io.ReadWriteCloser {
+	buffer := packetBuffer{packetio.NewBuffer()}
+	switch packetType {
+	case packetio.RTPBufferPacket:
+		buffer.SetLimitSize(rtpBufferLimit)
+	case packetio.RTCPBufferPacket:
+		buffer.SetLimitSize(rtcpBufferLimit)
+	}
+	return buffer
+}
+
+// packetBuffer adapts packetio.Buffer to the reader and writer shapes SRTP
+// expects, the same adapter Pion uses for its default buffer.
+type packetBuffer struct{ *packetio.Buffer }
+
+func (b packetBuffer) Read(p []byte) (int, error) {
+	n, _, err := b.Buffer.Read(p, nil)
+	return n, err
+}
+
+func (b packetBuffer) Write(p []byte) (int, error) { return b.Buffer.Write(p, nil) }
+
+func (b packetBuffer) ReadWithAttributes(p []byte, attributes packetio.Attributes) (int, packetio.Attributes, error) {
+	return b.Buffer.Read(p, attributes)
+}
+
+func (b packetBuffer) WriteWithAttributes(p []byte, attributes packetio.Attributes) (int, error) {
+	return b.Buffer.Write(p, attributes)
+}
+
+// sizeReceiveBuffer requests the socket's receive buffer and logs what the
+// kernel granted. At the kernel's usual default of about 208 KiB a busy node
+// drops packets, so the host must allow the request through net.core.rmem_max.
+// A refused or reduced request still serves, with a warning. Zero keeps the
+// kernel's default.
+func sizeReceiveBuffer(conn *net.UDPConn, requested int, log *slog.Logger) {
+	if requested <= 0 {
+		return
+	}
+	setErr := conn.SetReadBuffer(requested)
+	granted, err := receiveBufferSize(conn)
+	switch {
+	case err != nil:
+		log.Warn("cannot read the UDP receive buffer size", "requestedBytes", requested, "error", err)
+	case setErr != nil || granted < requested:
+		log.Warn("UDP receive buffer is below the request; raise net.core.rmem_max", "requestedBytes", requested, "grantedBytes", granted, "error", setErr)
+	default:
+		log.Info("UDP receive buffer", "requestedBytes", requested, "grantedBytes", granted)
+	}
 }
 
 func randomHex(bytes int) string {

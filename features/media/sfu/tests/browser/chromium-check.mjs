@@ -7,9 +7,16 @@
 // packets. This script plays the API's part: it holds the client certificate and
 // calls the control API.
 //
+// With simulcast, connection C pulls the camera's "l" layer while B wants "h".
+// The check then stops and restarts each of the publisher's encodings and
+// asserts that each subscriber falls back and returns, keeps decoding, and keeps
+// its MID with no new SDP. Last it prints each encoding's resolution and encode
+// time, the numbers behind the third-layer decision (ENCODINGS=3 adds "q").
+//
 // Usage, from features/media/sfu (needs `pnpm install` at the repository root
 // and `pnpm exec playwright install chromium`):
 //   node tests/browser/chromium-check.mjs
+//   ENCODINGS=3 node tests/browser/chromium-check.mjs
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,6 +29,12 @@ import { chromium } from "playwright";
 
 const identity = "chalk-api.test";
 const simulcast = process.env.SIMULCAST !== "0";
+const allEncodings = [
+  { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
+  { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
+  { rid: "q", scaleResolutionDownBy: 4, maxBitrate: 200_000, scalabilityMode: "L1T1" },
+];
+const encodings = simulcast ? allEncodings.slice(0, Number(process.env.ENCODINGS ?? 2)) : [];
 const work = mkdtempSync(path.join(tmpdir(), "sfu-browser-"));
 const children = [];
 let browser;
@@ -37,13 +50,127 @@ async function main() {
   const page = await openPage();
 
   await push(page, control, connectionA, scopeA);
-  await pull(page, control, connectionB, connectionA, scopeB);
+  await pull(page, control, connectionB, connectionA, scopeB, "subscriber", "h");
 
   const media = await waitFor("decoded video frames and audio packets", 30_000, () => receivedMedia(page));
   console.log(`PASS: simulcast=${simulcast} decoded ${media.video.framesDecoded} video frames (${media.video.packets} packets) and received ${media.audio.packets} audio packets`);
 
   const inspected = await control.post(`/v1/sessions/${connectionA}/inspect`, { scope: scopeA });
   expect(inspected.body.tracks?.length === 2, `inspect lists both published tracks: ${JSON.stringify(inspected.body)}`);
+  if (!simulcast) return;
+
+  const scopeC = { ...tenant, participantId: "browser-c" };
+  const connectionC = (await control.post("/v1/sessions", { operationId: "browser-create-c", scope: scopeC })).body.connectionId;
+  await pull(page, control, connectionC, connectionA, scopeC, "subscriberLow", "l");
+  const viewers = [
+    { name: "B", window: "subscriber", connection: connectionB, scope: scopeB },
+    { name: "C", window: "subscriberLow", connection: connectionC, scope: scopeC },
+  ];
+  await checkLayerSwitching(page, control, viewers);
+  await reportEncoders(page, control, viewers);
+}
+
+// The camera subscription's state and the decoder's view of one viewer.
+async function viewerState(page, control, viewer) {
+  const inspected = await control.post(`/v1/sessions/${viewer.connection}/inspect`, { scope: viewer.scope });
+  const camera = inspected.body.tracks?.find((track) => track.trackName === "camera-1");
+  const decoded = await page.evaluate(async (name) => {
+    const connection = window[name];
+    const report = await connection.getStats();
+    const video = [...report.values()].find((entry) => entry.type === "inbound-rtp" && entry.kind === "video");
+    const mids = connection
+      .getTransceivers()
+      .map((transceiver) => transceiver.mid)
+      .join(",");
+    return { video, mids, signaling: connection.signalingState, sdp: connection.currentLocalDescription?.sdp };
+  }, viewer.window);
+  const { framesDecoded: frames = 0, keyFramesDecoded: keyFrames = 0, frameHeight: height = 0 } = decoded.video ?? {};
+  return { rid: camera?.subscription?.effectiveRid, mid: camera?.mid, frames, keyFrames, height, mids: decoded.mids, signaling: decoded.signaling, sdp: decoded.sdp };
+}
+
+// Waits until every viewer forwards its expected layer and has decoded frames
+// on it, and settled(states) holds, then returns their states. On a timeout it
+// prints what each viewer and each encoding was doing.
+async function expectLayers(page, control, viewers, want, what, settled = () => true) {
+  const start = await Promise.all(viewers.map((viewer) => viewerState(page, control, viewer)));
+  let last = start;
+  const states = await waitFor(what, 60_000, async () => {
+    last = await Promise.all(viewers.map((viewer) => viewerState(page, control, viewer)));
+    const forwarding = last.every((state, index) => state.rid === want[index] && state.frames >= start[index].frames + 30);
+    return forwarding && settled(last) ? last : false;
+  }).catch(async (error) => {
+    for (const [index, state] of last.entries()) console.log(`STUCK viewer=${viewers[index].name} rid=${state.rid} height=${state.height} frames=${state.frames - start[index].frames}`);
+    for (const layer of await publisherLayers(page)) console.log(`STUCK encoder rid=${layer.rid} ${layer.width}x${layer.height} limitation=${layer.limitation}`);
+    throw error;
+  });
+  for (const [index, state] of states.entries()) {
+    expect(state.mid === viewers[index].mid && state.mids === viewers[index].mids, `${viewers[index].name} kept its MID: ${state.mid} ${state.mids}`);
+    expect(state.signaling === "stable" && state.sdp === viewers[index].sdp, `${viewers[index].name} exchanged no SDP`);
+  }
+  console.log(`PASS: ${what}: ${states.map((state, index) => `${viewers[index].name} on ${state.rid} at ${state.height}p, ${state.keyFrames} keyframes decoded`).join("; ")}`);
+  return states;
+}
+
+async function setEncoding(page, rid, active) {
+  await page.evaluate(
+    async ({ rid, active }) => {
+      const sender = window.publisher.getSenders().find((candidate) => candidate.track?.kind === "video");
+      const parameters = sender.getParameters();
+      parameters.encodings.find((encoding) => encoding.rid === rid).active = active;
+      await sender.setParameters(parameters);
+    },
+    { rid, active },
+  );
+}
+
+async function checkLayerSwitching(page, control, viewers) {
+  for (const viewer of viewers) Object.assign(viewer, await viewerState(page, control, viewer));
+  // Chrome ramps its estimate from loss reports alone until M5 adds congestion
+  // feedback, so "h" can take a while to start and to reach full size.
+  await expectLayers(page, control, viewers, ["h", "l"], "B on h and C on l, h decoding taller", ([b, c]) => b.height > c.height);
+  for (const round of [1, 2]) {
+    await setEncoding(page, "h", false);
+    const fallen = await expectLayers(page, control, viewers, ["l", "l"], `round ${round}: h stopped, B falls back to l`);
+    expect(fallen[0].height === fallen[1].height, `B decodes l's height: ${fallen[0].height} vs ${fallen[1].height}`);
+    await setEncoding(page, "h", true);
+    await expectLayers(page, control, viewers, ["h", "l"], `round ${round}: h restarted, B returns to h`);
+    await setEncoding(page, "l", false);
+    await expectLayers(page, control, viewers, ["h", "h"], `round ${round}: l stopped, C falls back to h`);
+    await setEncoding(page, "l", true);
+    await expectLayers(page, control, viewers, ["h", "l"], `round ${round}: l restarted, C returns to l`);
+  }
+}
+
+// The publisher's video encodings as Chrome reports them.
+function publisherLayers(page) {
+  return page.evaluate(async () => {
+    const report = await window.publisher.getStats();
+    return [...report.values()]
+      .filter((entry) => entry.type === "outbound-rtp" && entry.kind === "video")
+      .map((entry) => ({ rid: entry.rid, width: entry.frameWidth, height: entry.frameHeight, frames: entry.framesEncoded ?? 0, encodeSeconds: entry.totalEncodeTime ?? 0, bytes: entry.bytesSent ?? 0, limitation: entry.qualityLimitationReason }));
+  });
+}
+
+// Prints each encoding's resolution and encode time per frame, and what each
+// viewer decodes, over a 20-second window.
+async function reportEncoders(page, control, viewers) {
+  const sample = () => publisherLayers(page);
+  const before = await sample();
+  await new Promise((resolve) => setTimeout(resolve, 20_000));
+  const after = await sample();
+  let total = 0;
+  for (const layer of after) {
+    const start = before.find((entry) => entry.rid === layer.rid) ?? { frames: 0, encodeSeconds: 0, bytes: 0 };
+    const frames = layer.frames - start.frames;
+    const encodeMs = (layer.encodeSeconds - start.encodeSeconds) * 1000;
+    total += encodeMs / 20;
+    console.log(`ENCODER rid=${layer.rid} ${layer.width}x${layer.height} fps=${(frames / 20).toFixed(1)} encodeMsPerFrame=${(encodeMs / Math.max(frames, 1)).toFixed(2)} kbps=${(((layer.bytes - start.bytes) * 8) / 20 / 1000).toFixed(0)} limitation=${layer.limitation}`);
+  }
+  console.log(`ENCODER total encodeMsPerSecond=${total.toFixed(1)} encodings=${after.length}`);
+  for (const viewer of viewers) {
+    const state = await viewerState(page, control, viewer);
+    console.log(`DECODER viewer=${viewer.name} rid=${state.rid} height=${state.height}`);
+  }
 }
 
 async function startService(certs) {
@@ -86,30 +213,25 @@ async function openPage() {
 
 // Connection A: the SDK offers without waiting for ICE gathering.
 async function push(page, control, connectionId, scope) {
-  const offer = await page.evaluate(async (useSimulcast) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+  const offer = await page.evaluate(async (sendEncodings) => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { width: 1280, height: 720, frameRate: 30 } });
     const connection = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
     window.publisher = connection;
     const microphone = connection.addTransceiver(stream.getAudioTracks()[0], { direction: "sendonly" });
     const [videoTrack] = stream.getVideoTracks();
     let camera;
     try {
-      if (!useSimulcast) throw new Error("single encoding requested");
-      camera = connection.addTransceiver(videoTrack, {
-        direction: "sendonly",
-        sendEncodings: [
-          { rid: "h", scaleResolutionDownBy: 1, maxBitrate: 2_500_000, scalabilityMode: "L1T1" },
-          { rid: "l", scaleResolutionDownBy: 2, maxBitrate: 650_000, scalabilityMode: "L1T1" },
-        ],
-      });
+      if (sendEncodings.length === 0) throw new Error("single encoding requested");
+      camera = connection.addTransceiver(videoTrack, { direction: "sendonly", sendEncodings });
     } catch {
       camera = connection.addTransceiver(videoTrack, { direction: "sendonly" });
     }
     const description = await connection.createOffer();
     await connection.setLocalDescription(description);
     return { sdp: description.sdp, type: description.type, microphoneMid: microphone.mid, cameraMid: camera.mid };
-  }, simulcast);
+  }, encodings);
   const pushed = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    operationId: `push-${connectionId}`,
     scope,
     sessionDescription: { sdp: offer.sdp, type: offer.type },
     tracks: [
@@ -121,25 +243,34 @@ async function push(page, control, connectionId, scope) {
   await page.evaluate((answer) => window.publisher.setRemoteDescription(answer), pushed.body.sessionDescription);
 }
 
-// Connection B: the SFU offers, the browser answers.
-async function pull(page, control, connectionId, publisherId, scope) {
+// A subscriber: the SFU offers, the browser answers. The page keeps the
+// connection as window[name].
+async function pull(page, control, connectionId, publisherId, scope, name, preferredRid) {
   const pulled = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    operationId: `pull-${connectionId}`,
     scope,
     tracks: [
       { location: "remote", sessionId: publisherId, trackName: "microphone-1" },
-      { location: "remote", sessionId: publisherId, trackName: "camera-1", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
+      { location: "remote", sessionId: publisherId, trackName: "camera-1", simulcast: { preferredRid, priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
     ],
   });
   expect(isCleanTrackResponse(pulled, "offer"), `pull offered: ${JSON.stringify(pulled.body).slice(0, 300)}`);
-  const answer = await page.evaluate(async (serverOffer) => {
-    const connection = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
-    window.subscriber = connection;
-    await connection.setRemoteDescription(serverOffer);
-    const description = await connection.createAnswer();
-    await connection.setLocalDescription(description);
-    return { sdp: description.sdp, type: description.type };
-  }, pulled.body.sessionDescription);
-  const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, { scope, sessionDescription: answer });
+  const answer = await page.evaluate(
+    async ({ serverOffer, name }) => {
+      const connection = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
+      window[name] = connection;
+      await connection.setRemoteDescription(serverOffer);
+      const description = await connection.createAnswer();
+      await connection.setLocalDescription(description);
+      return { sdp: description.sdp, type: description.type };
+    },
+    { serverOffer: pulled.body.sessionDescription, name },
+  );
+  const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, {
+    operationId: `renegotiate-${connectionId}`,
+    scope,
+    sessionDescription: answer,
+  });
   expect(renegotiated.status === 204, `renegotiate answered with ${renegotiated.status}`);
 }
 

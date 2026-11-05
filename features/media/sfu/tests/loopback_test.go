@@ -168,7 +168,7 @@ type peer struct {
 	pc *webrtc.PeerConnection
 }
 
-func newPeer(t *testing.T) *peer {
+func newPeer(t *testing.T, configure ...func(*webrtc.SettingEngine)) *peer {
 	t.Helper()
 	engine := &webrtc.MediaEngine{}
 	if err := engine.RegisterDefaultCodecs(); err != nil {
@@ -177,6 +177,9 @@ func newPeer(t *testing.T) *peer {
 	settings := webrtc.SettingEngine{}
 	settings.SetIncludeLoopbackCandidate(true)
 	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+	for _, apply := range configure {
+		apply(&settings)
+	}
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithSettingEngine(settings))
 	pc, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {

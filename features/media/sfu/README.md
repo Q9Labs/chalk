@@ -1,10 +1,10 @@
 # Chalk SFU
 
-A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real single-layer push and pull) and M2 (retry-safe lifecycle, admission, negotiated close). The API reaches it through the `chalk_sfu` media-plane adapter.
+A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real push and pull), M2 (retry-safe lifecycle, admission, negotiated close) and the media side of M4 (simulcast layer routing). The API reaches it through the `chalk_sfu` media-plane adapter.
 
 The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `apps/api/internal`. The API adapter will translate between the public `protocol` package and its own ports.
 
-## What M1 does
+## What it does
 
 - **Control** on TCP 8443 over mutual TLS (TLS 1.3). The server certificate and the client CA come from files. The client certificate must also name the expected service (`SFU_CLIENT_IDENTITY`, a DNS or URI SAN), so a certificate from the right CA but another service gets 403. The listener binds all interfaces by default, because the service is public: mutual TLS and the cloud firewall guard it. Set `SFU_CONTROL_ADDR` to bind elsewhere.
 - **Health**: `GET /healthz` (process is up, no identifiers) and `GET /readyz` (node incarnation, session count, packet budget, reserved packets and what a new Episode would reserve; 503 while draining). Both sit on the same mutual-TLS listener, and `/readyz` also needs the service identity, like `/v1`.
@@ -19,14 +19,20 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - A delayed create from an older generation stays refused after the newer session closes. The node remembers the highest generation per Participant, for up to 16384 Participants. When the table is full it drops the oldest fence of a Participant with no live session, and it never drops a live session's fence; if every fence is live, a create for a new Participant gets 429. A refused create never drops a fence.
 - **M2 additions**:
   - Every mutation takes an `operationId`. The session remembers the digest and the stored response of its last 256 operations, so a retry returns the first result and the same ID with another body fails with 409. The API adapter generates one ID per logical call and reuses it on its HTTP retries.
-  - `POST /v1/sessions/{id}/tracks/update` records a subscriber's layer ceiling without SDP. Forwarding stays on the single forwarded layer until a later milestone.
+  - `POST /v1/sessions/{id}/tracks/update` changes a subscription's layer policy (`simulcast` and `paused`) without SDP. A layer change follows the same keyframe-gated switch as a pull.
   - `POST /v1/sessions/{id}/tracks/close` also does negotiated close (`force: false`): the client's offer is applied first, then the subscription stops and the SFU's answer returns. `receiveOnly` closes can never stop a publication.
   - `POST /v1/sessions/{id}/remove` ends one session. `POST /v1/episodes/end` closes every session of a Tenant's Episode and reports the count.
   - **Admission** reserves `c * n * (n + 1)` packets/s per Episode, where `c` is the video plus audio stream cost and `n` is the live Participants (at least 2). A create that would push the node past `SFU_PACKET_BUDGET` is refused with 429 `capacity_exceeded`. The budget is the real limit: at the default costs an Episode reaches it at 9 Participants on a 16000 budget and at 13 on 32000. `SFU_MAX_EPISODE_PARTICIPANTS` is a separate safety cap, 16 by default. A reconnect replaces its own session and is not counted twice. `/readyz` reports the budget and the reserved packets.
   - **One screen share** per Episode. A second screen publication gets the per-track error `screen_share_active`.
-- **Media**: Opus and VP8 passthrough on one Pion UDP socket (ICE-lite). Keyframe requests from a subscriber are relayed to the publisher. A camera that offers simulcast negotiates it, and the node forwards the first RID whose packets arrive.
+- **Media**: Opus and VP8 on one Pion UDP socket (ICE-lite).
+  - A simulcast camera's layers (`h`, `l`, at most three) are each read once. Every subscription forwards one layer: it is the pull's `simulcast.preferredRid`, or `startRid` when that is lower. With `ridNotAvailable` other than `none`, a wanted layer without RTP for one second falls back to the first active RID in ASCII order, which can be higher than the one asked for, and the subscription returns when the layer resumes. A track without RIDs always serves.
+  - A switch waits for a keyframe of the new layer and asks for one, at most once per 500 ms per layer. Each subscriber gets its own continuous stream: sequence numbers, timestamps, VP8 picture IDs and TL0PICIDX are rewritten so a switch, a pause, a sequence wrap or reordering never breaks decoding.
+  - A pull with `paused` forwards nothing while it keeps its MID. Inspect reports each subscription's `state` (`active` or `paused`), `reason` (`viewer` or `source_inactive`), `revision`, and requested and effective RID, and each publication's layers.
+  - Each video layer keeps one second of packets (400 KiB for `h` and for a camera without RIDs, 320 KiB for a screen, 128 KiB for other layers), shared by its subscribers. A subscriber's NACK is answered from it on the media SSRC with the sequence number that subscriber first saw. Keyframe requests go to the layer the subscriber forwards.
+  - Streams nobody forwards are still read and discarded, and Pion's per-stream buffers are capped at 128 KiB, so no buffer grows.
+  - The forwarding path allocates nothing per packet; `TestForwardingAllocatesNothing` keeps it that way.
 
-Not yet built: layer selection and adaptation, congestion control, NACK policy, ICE restart, certificate rotation and deployment.
+Not yet built: adaptation, congestion control, RTX and NACK rate policy, ICE restart, certificate rotation and deployment.
 
 ## Run it
 
@@ -58,6 +64,11 @@ go run ./cmd/sfu
 | `SFU_NEGOTIATION_TIMEOUT`               | `10s`           | How long a server offer waits for its answer.         |
 | `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
 | `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
+| `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.  |
+
+## Deploy
+
+Set `net.core.rmem_max` and `net.core.rmem_default` to 8 MiB (`8388608`) on the host, for example in `/etc/sysctl.d/90-chalk-sfu.conf`. The kernel caps a socket's receive buffer at `rmem_max`, and Linux defaults it to about 208 KiB, which a burst of video from many publishers overflows as UDP receive errors. At start the node logs the size it requested and the size the kernel granted, and warns when it got less.
 
 SIGINT or SIGTERM drains the node: `/readyz` fails, new sessions are refused, in-flight requests finish, then every session, the control listener and the UDP socket close.
 
@@ -71,13 +82,16 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
    cd features/media/sfu && go test -race -count=1 ./...
    ```
 
-   `scripts/gate.sh` runs this with format, tidy and vet checks. The repo gate runs it as the `sfu` lane when anything under `features/media/sfu` changes.
+   **Layer switching test** (`tests/layers_test.go`) publishes real libvpx VP8 from `tests/testdata` as two simulcast layers with wrapping sequence numbers and picture IDs, reordered packets and ignored keyframe requests. Three subscribers follow the layers as the publisher stops and restarts each one. Their frames are rebuilt, compared byte for byte with the fixtures, checked for decodability across every switch, and decoded with ffmpeg when it is installed. It also NACKs packets on two layers.
 
-2. **Chromium check** builds and starts the service, then drives headless Chromium with a fake camera and microphone. Connection A pushes with the SDK's shape (max-bundle, sendonly transceivers, camera simulcast `h`/`l`). Connection B pulls and answers the server offer. It passes when B decodes video frames and receives audio packets. It needs Playwright's Chromium, so it is not part of the CI gate.
+   `scripts/gate.sh` runs these with format, tidy and vet checks. The repo gate runs it as the `sfu` lane when anything under `features/media/sfu` changes.
+
+2. **Chromium check** builds and starts the service, then drives headless Chromium with a fake camera and microphone. Connection A pushes with the SDK's shape (max-bundle, sendonly transceivers, camera simulcast `h`/`l`). Connection B pulls and answers the server offer. It passes when B decodes video frames and receives audio packets. With simulcast, connection C pulls `l` while B pulls `h`; the check stops and restarts each encoding twice and asserts that both keep decoding on the expected layer with their MIDs and no new SDP. It then prints each encoding's resolution and encode time. It needs Playwright's Chromium, so it is not part of the CI gate.
 
    ```sh
    pnpm install --frozen-lockfile
    pnpm exec playwright install chromium
    cd features/media/sfu && node tests/browser/chromium-check.mjs
    SIMULCAST=0 node tests/browser/chromium-check.mjs   # single-encoding camera
+   ENCODINGS=3 node tests/browser/chromium-check.mjs   # adds a quarter-size "q" encoding
    ```

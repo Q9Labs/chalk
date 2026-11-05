@@ -21,6 +21,9 @@ type Config struct {
 	AnnounceIPs []string
 	// IncludeLoopback offers loopback ICE candidates. Only local runs and tests need it.
 	IncludeLoopback bool
+	// UDPReceiveBuffer is the SO_RCVBUF size requested for the UDP socket. The
+	// kernel grants at most net.core.rmem_max, so the host must raise it too.
+	UDPReceiveBuffer int
 
 	TLSCertFile    string
 	TLSKeyFile     string
@@ -58,6 +61,7 @@ func Load(lookup Lookup) (Config, error) {
 		UDPAddr:                    r.text("SFU_UDP_ADDR", ":50000"),
 		AnnounceIPs:                r.list("SFU_ANNOUNCE_IPS"),
 		IncludeLoopback:            r.boolean("SFU_ICE_LOOPBACK", false),
+		UDPReceiveBuffer:           r.integer("SFU_UDP_RECEIVE_BUFFER", 8<<20, 256<<10, 64<<20),
 		TLSCertFile:                r.required("SFU_TLS_CERT_FILE"),
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
