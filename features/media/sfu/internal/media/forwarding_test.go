@@ -465,6 +465,35 @@ func (r *recordingWriter) WriteRTP(header *rtp.Header, payload []byte) (int, err
 
 func (r *recordingWriter) Write(b []byte) (int, error) { return len(b), nil }
 
+func TestALayerThatResumesBetweenMonitorTicksWaitsForAKeyframe(t *testing.T) {
+	pub, layers, _ := benchPublication(t)
+	viewer := (*pub.subscribers.Load())[0] // forwards "h"
+	for _, layer := range layers {         // the bench has no peer connection to send a PLI on
+		layer.lastAsked.Store(monotonic())
+	}
+	recorder := &recordingWriter{}
+	viewer.track.binding.Store(&egressBinding{writer: recorder, ssrc: 100, payloadType: 96})
+	packets := cameraPackets("h")
+	var header rtp.Header
+	writer := &packetWriter{}
+	send := func(from, to int) {
+		for n := from; n < to; n++ {
+			stamp(packets[n], n)
+			pub.forward(layers[0], packets[n], &header, writer)
+		}
+	}
+	send(0, 2*benchPacketsPerFrame)
+	sent := len(recorder.sequences)
+	if sent == 0 {
+		t.Fatal("the keyframe was not forwarded")
+	}
+	layers[0].lastRTP.Store(monotonic() - int64(activeWindow) - int64(time.Millisecond))
+	send(2*benchPacketsPerFrame, 3*benchPacketsPerFrame)
+	if got := len(recorder.sequences) - sent; got != 0 {
+		t.Fatalf("forwarded %d delta packets after an unobserved gap", got)
+	}
+}
+
 func TestRetransmissionStopsWhilePausedAndOnceTheSourceCloses(t *testing.T) {
 	pub, layers, _ := benchPublication(t)
 	subscribers := *pub.subscribers.Load()

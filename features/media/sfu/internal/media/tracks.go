@@ -110,6 +110,11 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, header *rtp.Heade
 	packet.extSeq = layer.extend(header.SequenceNumber)
 	packet.arrival = monotonic()
 	resumed := !layer.active(packet.arrival)
+	if resumed {
+		// The monitor may have missed the gap, so end the live segments while
+		// the layer still reads idle; the next reselect waits for a keyframe.
+		p.reselect()
+	}
 	layer.lastRTP.Store(packet.arrival)
 	if history := layer.history.Load(); history != nil {
 		history.store(&packet)
