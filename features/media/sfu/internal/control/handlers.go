@@ -38,7 +38,7 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 		return media.ErrDraining
 	}
 	budget, reserved := s.node.Budget()
-	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved})
+	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets()})
 	return nil
 }
 

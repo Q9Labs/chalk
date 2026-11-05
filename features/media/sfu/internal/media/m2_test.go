@@ -143,6 +143,9 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	if budget != 3600 || reserved != 3600 {
 		t.Fatalf("budget %d reserved %d, want 3600 and 3600", budget, reserved)
 	}
+	if cost := node.NewEpisodePackets(); cost != 1200 {
+		t.Fatalf("a new Episode costs %d packets/s, want 1200", cost)
+	}
 
 	// A reconnect replaces its own session and does not count twice.
 	reconnect := episodeScope("a", "p1")

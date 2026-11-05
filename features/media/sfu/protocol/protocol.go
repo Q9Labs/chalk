@@ -171,6 +171,9 @@ type ReadyResponse struct {
 	// that live Episodes reserve. Admission refuses a join that would exceed it.
 	PacketBudget    int `json:"packetBudget"`
 	ReservedPackets int `json:"reservedPackets"`
+	// NewEpisodePackets is what a new Episode reserves at its first join. The API
+	// places a new Episode only on a node with at least this much budget left.
+	NewEpisodePackets int `json:"newEpisodePackets"`
 }
 
 type ErrorResponse struct {

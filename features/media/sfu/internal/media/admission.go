@@ -25,6 +25,9 @@ func episodeOf(scope protocol.Scope) episodeKey { return episodeKey{scope.Tenant
 
 func (n *Node) streamCost() int { return n.cfg.VideoStreamCost + n.cfg.AudioStreamCost }
 
+// NewEpisodePackets is the reservation of an Episode's first join: room for two Participants.
+func (n *Node) NewEpisodePackets() int { return episodeReservation(1, n.streamCost()) }
+
 // reservations counts live sessions per Episode, leaving out one session that is about to be
 // replaced, and sums the Episodes' reservations. The caller holds n.mu.
 func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total int) {
