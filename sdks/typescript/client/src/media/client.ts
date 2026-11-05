@@ -62,6 +62,9 @@ const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
 const RECOVERY_HEALTHY_RESET_MS = 10_000;
+// A publish rejected on a connection that is not up replaces it at most this many times, after these delays.
+const DEAD_CONNECTION_REPLACEMENT_DELAYS_MS = [0, 1000] as const;
+const DEAD_SESSION_STATUSES: ReadonlySet<number | undefined> = new Set([404, 406, 410]);
 const NEGOTIATION_TIMEOUT_MS = 35000;
 const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
 const LONG_PULL_DEFERRAL_MS = 15_000;
@@ -850,20 +853,43 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         try {
           await this.#publishPreparedTracksSerialized(pending, generation, this.#connection, this.#bootstrap.connectionId);
         } catch (error) {
-          if (!this.#replaceMediaConnection || !this.#isRetryableConnectionFailure(error) || this.#replacementAttemptedGeneration === generation) throw error;
+          if (!this.#replaceMediaConnection) throw error;
+          if (this.#isRejectedOnDeadConnection(error)) return await this.#publishOnReplacedConnections(states, generation, error);
+          if (!this.#isRetryableConnectionFailure(error) || this.#replacementAttemptedGeneration === generation) throw error;
           await this.#replaceMediaConnectionForRecovery(generation, "local_signaling_failure");
-          await this.#publishPreparedTracksSerialized(
-            [...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended"),
-            generation,
-            this.#connection,
-            this.#bootstrap.connectionId,
-          );
+          await this.#publishPreparedTracksSerialized(this.#tracksToPublish(states), generation, this.#connection, this.#bootstrap.connectionId);
         }
       });
     } finally {
       // Cleanup reports its own failures; another source cannot revoke this enable.
       await this.#retirement.catch(() => {});
     }
+  }
+  #tracksToPublish(states: readonly LocalTrackState[]): LocalTrackState[] {
+    return [...this.#localTracks.values()].filter((state) => (state.desiredEnabled || states.includes(state)) && state.track.readyState !== "ended");
+  }
+  // Cloudflare answers an offer on a session that never came up with 406, and later calls on it with 410 or 404.
+  #isRejectedOnDeadConnection(error: unknown): boolean {
+    return error instanceof CloudflareSFUError && error.code === "signaling_failed" && DEAD_SESSION_STATUSES.has(error.options.status) && !connectionIsLive(this.#connection);
+  }
+  // The once-per-generation replacement budget protects a connection that was up. A connection that never came up
+  // gets its own short budget, so a dead session cannot keep the speaker silent until someone toggles the mic.
+  async #publishOnReplacedConnections(states: readonly LocalTrackState[], generation: number, rejection: unknown): Promise<void> {
+    let failure = rejection;
+    for (const delayMs of DEAD_CONNECTION_REPLACEMENT_DELAYS_MS) {
+      if (delayMs > 0) await new Promise<void>((resolve) => globalThis.setTimeout(resolve, delayMs));
+      this.#requireGeneration(generation);
+      this.#replacementAttemptedGeneration = null;
+      await this.#replaceMediaConnectionForRecovery(generation, "local_signaling_failure");
+      try {
+        await this.#publishPreparedTracksSerialized(this.#tracksToPublish(states), generation, this.#connection, this.#bootstrap.connectionId);
+        return;
+      } catch (error) {
+        if (!this.#isRejectedOnDeadConnection(error)) throw error;
+        failure = error;
+      }
+    }
+    throw failure;
   }
   async #prepareConnectionForPublication(states: readonly LocalTrackState[], generation: number): Promise<readonly LocalTrackState[]> {
     if (this.#retiredLocalConnection !== this.#connection || !this.#replaceMediaConnection) {

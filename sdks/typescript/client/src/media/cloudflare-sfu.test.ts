@@ -4190,6 +4190,60 @@ async function restartWithRetainedPublications(harness: ReturnType<typeof create
   }
 }
 
+// Rig run 5: the speaker's third connection sat in ICE checking, its publish got 406, and later publishes got 404.
+function rejectPublishesOn(h: ReturnType<typeof createHarness>, deadConnectionIds: ReadonlySet<string>, status: 404 | 406 | 410): { rejected: number } {
+  const add = h.transport.addTracks.bind(h.transport);
+  const counter = { rejected: 0 };
+  vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+    if (input.tracks.some((track) => track.location === "local") && deadConnectionIds.has(input.connectionId)) {
+      counter.rejected++;
+      throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${status}`, "signaling_failed", { status, retryableConnection: status !== 406 });
+    }
+    return add(input);
+  });
+  return counter;
+}
+async function enableMicrophone(h: ReturnType<typeof createHarness>) {
+  await h.client.start(fakeStream());
+  h.client.prepareLocalTrack("microphone", new FakeTrack("mic", "audio") as unknown as MediaStreamTrack);
+  return h.client.setLocalPublicationTarget({ operationId: "mic-on", participantId: "participant-1", source: "microphone", enabled: true });
+}
+
+it.each([404, 406, 410] as const)("a publish rejected with HTTP %s on a connection that never connected is replaced and republished within 3 s", async (status) => {
+  let replacements = 0;
+  await withTimedHarness(
+    async (h) => {
+      const publishes = rejectPublishesOn(h, new Set(["replacement-1"]), status);
+      const enabling = enableMicrophone(h);
+      await vi.advanceTimersByTimeAsync(3000);
+      await expect(enabling).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      expect(h.client.getSnapshot().localTracks.find((item) => item.source === "microphone")).toMatchObject({ enabled: true, publicationId: expect.any(String) });
+      expect(replacements).toBe(2);
+      expect(publishes.rejected).toBe(1);
+      expect(localAddCount(h, "microphone")).toBe(1);
+    },
+    { connectsPeer: (index) => index >= 2, replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`) },
+  );
+});
+
+it("bounds the replacements when every new connection is rejected, and stays quiet afterwards", async () => {
+  let replacements = 0;
+  await withTimedHarness(
+    async (h) => {
+      const publishes = rejectPublishesOn(h, new Set(["connection-1", "replacement-1", "replacement-2", "replacement-3", "replacement-4", "replacement-5"]), 406);
+      const enabling = enableMicrophone(h);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(enabling).resolves.not.toEqual({ outcome: "confirmed", errorCode: null });
+      const spent = { replacements, rejected: publishes.rejected };
+      expect(spent.replacements).toBeLessThanOrEqual(3);
+      expect(spent.rejected).toBeLessThanOrEqual(3);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect({ replacements, rejected: publishes.rejected }).toEqual(spent);
+    },
+    { connectsPeer: () => false, replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`) },
+  );
+});
+
 it.each(["waited", "rapid"] as const)("a %s unmute during a media connection swap publishes with real media and coordinator", (scenario) => unmuteDuringSwap(scenario));
 it("a cross-grace unmute during a media connection swap publishes with real media and coordinator", () => unmuteDuringSwap("cross-grace"));
 
@@ -4337,9 +4391,45 @@ it("an unmute during a media connection swap is published when Sync is lost and 
   }
 });
 
+// Rig run 5: the server closed a healthy publication, and the speaker's microphone stayed off until a hand toggle (SDK 5.2.6).
+// Regression guard: master recovers through the registry poll and withdrawal handling added after 5.2.6, so this passes without a new fix.
+it("a publication the server drops from Sync is republished and confirmed within 3 s, without user action", async () => {
+  const { harness, platform, client, dispose } = createSwapCall();
+  try {
+    await client.join({ microphone: true, camera: false });
+    const microphone = () => harness.client.getSnapshot().localTracks.find((item) => item.source === "microphone");
+    const closedId = microphone()!.publicationId!;
+    let sequence = 100;
+    const project = (item: { enabled: boolean; publicationId: string | null }) => platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "swap", sequence: ++sequence, items: [{ participantId: "participant-1", source: "microphone", ...item }] } });
+    project({ enabled: true, publicationId: closedId });
+    await vi.waitFor(() => expect(client.getSnapshot().media.local.microphone.state).toBe("enabled"));
+    // The server confirms every publication the SFU client makes, as the registry does.
+    const unsubscribe = harness.client.subscribe(() => {
+      const publication = microphone();
+      if (publication?.enabled && publication.publicationId && publication.publicationId !== closedId) project({ enabled: true, publicationId: publication.publicationId });
+    });
+    harness.transport.withdrawPublication(closedId);
+    project({ enabled: false, publicationId: null });
+
+    await vi.waitFor(
+      () => {
+        expect(microphone()).toMatchObject({ enabled: true, publicationId: expect.not.stringMatching(closedId) });
+        expect(client.getSnapshot().media.local.microphone.state).toBe("enabled");
+      },
+      { timeout: 3000 },
+    );
+    unsubscribe();
+    expect(localAddCount(harness, "microphone")).toBe(2);
+  } finally {
+    dispose();
+  }
+});
+
 function createHarness(
   options: {
     readonly autoConnect?: boolean;
+    /** Decides per peer, by creation index, whether it ever connects. */
+    readonly connectsPeer?: (index: number) => boolean;
     readonly onError?: (error: unknown, binding: string) => void;
     readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
     readonly onScreenEnded?: () => void;
@@ -4350,7 +4440,7 @@ function createHarness(
   const peers: FakePeerConnection[] = [];
   const transport = new FakeTransport(() => peers.at(-1));
   const peerConnectionFactory = vi.fn(() => {
-    const peer = new FakePeerConnection(options.autoConnect ?? true);
+    const peer = new FakePeerConnection(options.connectsPeer?.(peers.length) ?? options.autoConnect ?? true);
     peers.push(peer);
     return peer as unknown as RTCPeerConnection;
   });

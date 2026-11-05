@@ -89,3 +89,16 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 		t.Fatalf("oversized body: %d %s", response.Code, body)
 	}
 }
+
+func TestTransportRejectsBatches(t *testing.T) {
+	handler := NewHandler(NewServer(), nil)
+	batch := `[{"jsonrpc":"2.0","id":1,"method":"tools/list"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("  \n"+batch))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("batch status = %d, want 400", response.Code)
+	}
+}

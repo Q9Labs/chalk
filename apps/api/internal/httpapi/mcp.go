@@ -153,8 +153,10 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	if b.err != nil {
 		return nil, mcpError(endpoint.apiError(b.err))
 	}
-	// The transport already charged the authenticated read bucket for this request.
-	if quota, ok := b.ctx.Value(mcpQuotaKey{}).(mcpQuota); ok && endpoint.contract.RateLimit.Name != ratelimit.PolicyNameAuthenticatedRead {
+	// The transport charged the authenticated read bucket once for this request, and
+	// it rejects JSON-RPC batches, so a read tool call needs no second charge.
+	policy := endpoint.contract.RateLimit
+	if quota, ok := b.ctx.Value(mcpQuotaKey{}).(mcpQuota); ok && policy.Name != "" && policy.Name != ratelimit.PolicyNameAuthenticatedRead {
 		if err := quota.allow(b.ctx, endpoint.contract.RateLimit); err != nil {
 			return nil, mcpError(endpoint.apiError(err))
 		}
