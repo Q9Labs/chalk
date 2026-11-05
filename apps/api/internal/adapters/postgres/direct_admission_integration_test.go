@@ -38,7 +38,7 @@ type directAdmissionMedia struct {
 	binding mediaplane.Binding
 }
 
-func (m directAdmissionMedia) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (m directAdmissionMedia) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	return &m.service, nil
 }
 func (m directAdmissionMedia) ResolveBinding(tenants.Tenant, spaces.Space) (*mediaplane.Binding, error) {

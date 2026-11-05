@@ -144,6 +144,7 @@ type FilteredRepository interface {
 type Service struct {
 	repository        Repository
 	defaultMediaPlane MediaPlaneProvider
+	chalkSFUSelector  bool
 }
 
 type CreateSpaceInput struct {
@@ -232,6 +233,17 @@ func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaP
 	return Service{repository: repository, defaultMediaPlane: defaultProvider}
 }
 
+// WithChalkSFUSelector lets Spaces choose the own SFU. It is off by default, so
+// the selector cannot name a provider the deployment has not turned on.
+func (s Service) WithChalkSFUSelector(enabled bool) Service {
+	s.chalkSFUSelector = enabled
+	return s
+}
+
+func (s Service) selectable(provider string) bool {
+	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUSelector
+}
+
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
 	id, err := utilities.NewID()
 	if err != nil {
@@ -249,6 +261,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	}
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
+	}
+	if !s.selectable(input.MediaPlane) {
+		return Space{}, ErrInvalidMediaPlane
 	}
 	if input.RequestKey != "" {
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
@@ -302,6 +317,9 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 	if err := prepareUpdateSpaceInput(&input); err != nil {
 		return Space{}, err
+	}
+	if input.MediaPlane.Set && input.MediaPlane.Value != nil && !s.selectable(*input.MediaPlane.Value) {
+		return Space{}, ErrInvalidMediaPlane
 	}
 
 	return s.repository.UpdateSpace(ctx, tenantID, spaceID, input)

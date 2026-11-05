@@ -49,7 +49,7 @@ func TestInspectSessionMapsCloudflareSessionState(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			state, err := adapter.InspectSession(context.Background(), "publisher/id")
+			state, err := adapter.InspectSession(context.Background(), mediaplane.InspectSessionRequest{ConnectionID: "publisher/id"})
 			if test.wantError {
 				if err == nil {
 					t.Fatal("expected provider error")
@@ -72,7 +72,7 @@ func TestInspectSessionMapsCloudflareSessionState(t *testing.T) {
 
 func TestInspectSessionServiceValidatesConnectionIDAndPlaneSupport(t *testing.T) {
 	service := mediaplane.NewService(nil)
-	if _, err := service.InspectSession(context.Background(), "publisher"); !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
+	if _, err := service.InspectSession(context.Background(), mediaplane.InspectSessionRequest{ConnectionID: "publisher"}); !errors.Is(err, mediaplane.ErrUnsupportedOperation) {
 		t.Fatalf("unsupported operation error=%v", err)
 	}
 	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{
@@ -83,7 +83,7 @@ func TestInspectSessionServiceValidatesConnectionIDAndPlaneSupport(t *testing.T)
 	}
 	service = mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, adapter)
 	for _, connectionID := range []string{"", " publisher", "publisher "} {
-		if _, err := service.InspectSession(context.Background(), connectionID); !errors.Is(err, mediaplane.ErrInvalidSignalRequest) {
+		if _, err := service.InspectSession(context.Background(), mediaplane.InspectSessionRequest{ConnectionID: connectionID}); !errors.Is(err, mediaplane.ErrInvalidSignalRequest) {
 			t.Errorf("connection ID %q error=%v, want invalid signal request", connectionID, err)
 		}
 	}

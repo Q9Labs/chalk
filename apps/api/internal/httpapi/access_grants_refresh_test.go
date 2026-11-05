@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -378,7 +379,7 @@ func (f *refreshGrantPlane) ResumeJoin(_ context.Context, input mediaplane.Resum
 	f.resumed++
 	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:stun.cloudflare.com:3478"}}, nil
 }
-func (f *refreshGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *refreshGrantPlane) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }

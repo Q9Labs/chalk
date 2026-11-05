@@ -390,9 +390,9 @@ func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, 
 	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode, sessionAgeMs: ageMs, sessionNegotiated: negotiated}, err
 }
 
-func (a Adapter) InspectSession(ctx context.Context, connectionID string) (mediaplane.SessionState, error) {
+func (a Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSessionRequest) (mediaplane.SessionState, error) {
 	var response inspectSessionResponse
-	statusCode, err := a.requestStatus(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(a.sessions.providerID(connectionID))), nil, &response, "get_session")
+	statusCode, err := a.requestStatus(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(a.sessions.providerID(input.ConnectionID))), nil, &response, "get_session")
 	if err != nil {
 		var failure providerFailure
 		if errors.As(err, &failure) && (failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone) {

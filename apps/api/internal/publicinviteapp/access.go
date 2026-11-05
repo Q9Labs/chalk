@@ -38,7 +38,7 @@ type TenantLookup interface {
 }
 
 type MediaResolver interface {
-	Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error)
+	ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error)
 }
 
 type SyncIssuer interface {
@@ -365,7 +365,7 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	if tenant.ID != tenantID || space.TenantID != tenantID || space.ID != spaceID {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
-	service, err := a.mediaResolver.Resolve(ctx, tenant, space)
+	service, err := a.mediaResolver.ResolveEpisode(ctx, tenant, space, episodeID)
 	if err != nil || service == nil {
 		if err != nil {
 			return nil, mediaplane.Episode{}, err
@@ -375,6 +375,8 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	if persistedProvider != "" && string(service.Provider()) != persistedProvider {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
+	// Public access is Cloudflare-only in this release. An Episode bound to another
+	// provider refuses here instead of falling back to Cloudflare.
 	if service.Provider() != mediaplane.ProviderCloudflareSFU {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}

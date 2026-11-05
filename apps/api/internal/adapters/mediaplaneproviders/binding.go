@@ -1,8 +1,6 @@
 package mediaplaneproviders
 
 import (
-	"strings"
-
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -16,19 +14,11 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space) (*me
 		ConfigurationSource: providercontracts.ConfigurationSourceNone,
 		Mode:                providercontracts.ModeUnknown,
 	}
-	resolved, err := r.resolveProviderConfig(tenant, space, &resolution)
+	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, "")
 	if err != nil || resolved == nil {
 		return nil, err
 	}
-	var applicationID string
-	switch resolved.provider {
-	case mediaplane.ProviderCloudflareSFU:
-		applicationID = resolved.config.RealtimeAppID
-
-	default:
-		return nil, providercontracts.ErrUnknownProvider
-	}
-	applicationID = strings.TrimSpace(applicationID)
+	applicationID := r.applicationID(resolved)
 	if applicationID == "" {
 		if resolution.ConfigurationSource == providercontracts.ConfigurationSourceTenantManaged {
 			return nil, providercontracts.ErrMissingProviderConfig
