@@ -178,7 +178,7 @@ def trial(args, task_id, repetition):
                "--output-format", "stream-json", "--verbose", "--tools", "", "--strict-mcp-config",
                "--mcp-config", json.dumps(config), "--system-prompt", SYSTEM,
                "--setting-sources", "", "--settings", '{"disableAllHooks":true,"autoMemoryEnabled":false}',
-               "--disable-slash-commands", "--debug-file", os.devnull,
+               "--disable-slash-commands", "--no-chrome", "--debug-file", os.devnull,
                "--permission-mode", "dontAsk", "--allowedTools", "mcp__chalk__*",
                "--no-session-persistence", "--max-budget-usd", str(args.budget)]
     env = {**os.environ, "CHALK_EVAL_API_KEY": f["key"], "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
