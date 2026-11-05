@@ -107,6 +107,11 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 			return nil, fmt.Errorf("register MID header extension: %w", err)
 		}
 	}
+	// A browser offers camera simulcast by RID. Negotiating the RID extension lets it
+	// send; the node forwards only the first RID whose packets arrive until layer routing lands.
+	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, fmt.Errorf("register RID header extension: %w", err)
+	}
 
 	registry := &interceptor.Registry{}
 	if err := webrtc.ConfigureRTCPReports(registry); err != nil {

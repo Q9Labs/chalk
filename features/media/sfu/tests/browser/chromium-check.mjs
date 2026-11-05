@@ -63,6 +63,9 @@ async function main() {
   });
   const page = await (await browser.newContext()).newPage();
   page.on("console", (message) => console.log(`[page] ${message.text()}`));
+  // getUserMedia needs a secure context, and http://localhost is one.
+  await page.route("http://localhost/", (route) => route.fulfill({ contentType: "text/html", body: "<title>sfu</title>" }));
+  await page.goto("http://localhost/");
 
   // Connection A: the SDK offers without waiting for ICE gathering.
   const offer = await page.evaluate(async (useSimulcast) => {
@@ -126,7 +129,7 @@ async function main() {
       const pick = (kind) => inbound.find((entry) => entry.kind === kind) ?? {};
       return { video: { framesDecoded: pick("video").framesDecoded ?? 0, packets: pick("video").packetsReceived ?? 0 }, audio: { packets: pick("audio").packetsReceived ?? 0 } };
     });
-    return stats.video.framesDecoded >= 10 && stats.audio.packets >= 20 ? stats : false;
+    return stats.video.framesDecoded >= 30 && stats.audio.packets >= 50 ? stats : false;
   });
   console.log(`PASS: simulcast=${simulcast} decoded ${media.video.framesDecoded} video frames (${media.video.packets} packets) and received ${media.audio.packets} audio packets`);
 

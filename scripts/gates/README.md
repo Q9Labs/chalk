@@ -112,6 +112,7 @@ shipment target from branch, release mode, or directory.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
+- `features/media/sfu` changes run its Go gate (`features/media/sfu/scripts/gate.sh`: format, tidy, vet and race tests). The Chromium check there runs on demand.
 - `infrastructure/managed-episode` and `infrastructure/nightly` run the API,
   Sync and recorder gates, whose tests read them.
   The full mode selects every rule. Separate nightly and release-candidate
