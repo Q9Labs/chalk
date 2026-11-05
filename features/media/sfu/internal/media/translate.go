@@ -11,6 +11,10 @@ type rtpPacket struct {
 	arrival     int64  // monotonic nanoseconds
 	vp8         vp8Descriptor
 	hasVP8      bool
+	// audioLevel is the publisher's RFC 6464 byte (voice flag and level), kept
+	// so subscribers learn who speaks.
+	audioLevel    byte
+	hasAudioLevel bool
 }
 
 // switchPoint reports whether a subscriber can start on this packet: any audio

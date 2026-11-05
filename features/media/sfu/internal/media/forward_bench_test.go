@@ -101,8 +101,8 @@ func benchPublication(tb testing.TB) (*publication, [2]*ingressLayer, *discardWr
 	pub := &publication{kind: webrtc.RTPCodecTypeVideo, source: "camera", done: make(chan struct{}), authority: freeAuthority()}
 	var layers [2]*ingressLayer
 	for index, rid := range []string{"h", "l"} {
-		layers[index] = &ingressLayer{index: index, rid: rid}
-		layers[index].history.Store(newHistory(historyBytes(pub.kind, pub.source, rid), historySlots))
+		layers[index] = &ingressLayer{index: index, rid: rid, nack: &nackTracker{}}
+		layers[index].history.Store(newHistory(historyBytes(testMemory, pub.kind, pub.source, rid), historySlots))
 		layers[index].lastRTP.Store(monotonic())
 		pub.layers[index].Store(layers[index])
 	}
@@ -149,7 +149,7 @@ func BenchmarkForwardLayers(b *testing.B) {
 	for n := 0; b.Loop(); n++ {
 		raw := packets[n%len(packets)]
 		stamp(raw, n)
-		pub.forward(layers[0], raw, &header, writer)
+		pub.forward(layers[0], raw, false, &header, writer)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestForwardingAllocatesNothing(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		raw := packets[n%len(packets)]
 		stamp(raw, n)
-		pub.forward(layers[0], raw, &header, writer)
+		pub.forward(layers[0], raw, false, &header, writer)
 		n++
 	})
 	if allocs != 0 {

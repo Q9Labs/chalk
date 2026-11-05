@@ -73,10 +73,7 @@ type Memory struct {
 	HistoryHighBytes   int // camera "h", or a camera without simulcast
 	HistoryLowBytes    int // camera "l" and any lower layer
 	HistoryScreenBytes int
-	// HistoryAudioBytes caps microphone and screen audio history. Opus negotiates no
-	// retransmission, so the node keeps none today; the cap bounds any future audio repair.
-	HistoryAudioBytes int
-	PacerQueueBytes   int
+	PacerQueueBytes    int
 }
 
 // Guard holds the host-health thresholds that close admission of new Episodes.
@@ -123,7 +120,6 @@ func Load(lookup Lookup) (Config, error) {
 			HistoryHighBytes:   r.integer("SFU_HISTORY_HIGH_BYTES", 400<<10, 16<<10, 4<<20),
 			HistoryLowBytes:    r.integer("SFU_HISTORY_LOW_BYTES", 128<<10, 16<<10, 4<<20),
 			HistoryScreenBytes: r.integer("SFU_HISTORY_SCREEN_BYTES", 320<<10, 16<<10, 4<<20),
-			HistoryAudioBytes:  r.integer("SFU_HISTORY_AUDIO_BYTES", 16<<10, 4<<10, 1<<20),
 			PacerQueueBytes:    r.integer("SFU_PACER_QUEUE_BYTES", 128<<10, 16<<10, 4<<20),
 		},
 		Guard: Guard{

@@ -481,7 +481,7 @@ func TestALayerThatResumesBetweenMonitorTicksWaitsForAKeyframe(t *testing.T) {
 	send := func(from, to int) {
 		for n := from; n < to; n++ {
 			stamp(packets[n], n)
-			pub.forward(layers[0], packets[n], &header, writer)
+			pub.forward(layers[0], packets[n], false, &header, writer)
 		}
 	}
 	send(0, 2*benchPacketsPerFrame)
@@ -510,7 +510,7 @@ func TestRetransmissionStopsWhilePausedAndOnceTheSourceCloses(t *testing.T) {
 	writer := &packetWriter{}
 	for n := range 2 * benchPacketsPerFrame {
 		stamp(packets[n], n)
-		pub.forward(layers[0], packets[n], &header, writer)
+		pub.forward(layers[0], packets[n], false, &header, writer)
 	}
 	// nack reports a packet s was sent as lost and returns how many s got again.
 	nack := func(s *subscription) int {

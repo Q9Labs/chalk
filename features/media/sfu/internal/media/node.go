@@ -28,6 +28,7 @@ import (
 const (
 	opusPayloadType = 111
 	vp8PayloadType  = 96
+	rtxPayloadType  = 97
 )
 
 var (
@@ -146,6 +147,20 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	if err := engine.RegisterCodec(vp8, webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, fmt.Errorf("register VP8: %w", err)
 	}
+	// Repairs travel over RTX in both directions, so a resend never looks like
+	// fresh media to loss accounting and bandwidth probes can reuse it.
+	rtx := webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90000, SDPFmtpLine: fmt.Sprintf("apt=%d", vp8PayloadType)},
+		PayloadType:        rtxPayloadType,
+	}
+	if err := engine.RegisterCodec(rtx, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, fmt.Errorf("register RTX: %w", err)
+	}
+	// The node reads a microphone's audio level to keep a speaker's camera
+	// longest under congestion, and forwards it so subscribers see who speaks.
+	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.AudioLevelURI}, webrtc.RTPCodecTypeAudio); err != nil {
+		return nil, fmt.Errorf("register audio level header extension: %w", err)
+	}
 	for _, kind := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeAudio, webrtc.RTPCodecTypeVideo} {
 		if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESMidURI}, kind); err != nil {
 			return nil, fmt.Errorf("register MID header extension: %w", err)
@@ -160,6 +175,12 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	registry := &interceptor.Registry{}
 	if err := webrtc.ConfigureRTCPReports(registry); err != nil {
 		return nil, fmt.Errorf("configure RTCP reports: %w", err)
+	}
+	// Publishers estimate their uplink from the node's transport-wide feedback.
+	// This also negotiates the transport sequence extension the node writes on
+	// egress for its own estimate of each subscriber.
+	if err := webrtc.ConfigureTWCCSender(engine, registry); err != nil {
+		return nil, fmt.Errorf("configure transport-wide feedback: %w", err)
 	}
 
 	settings := webrtc.SettingEngine{}

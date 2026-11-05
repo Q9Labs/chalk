@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v4"
+
+	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 )
 
 const (
@@ -25,27 +27,21 @@ var epoch = time.Now()
 
 func monotonic() int64 { return int64(time.Since(epoch)) }
 
-// Per-stream history budgets from the design's memory budget: one second at
-// each stream's maximum rate. Audio has no history, because Opus negotiates no
-// retransmission.
-const (
-	historyHighBytes   = 400 << 10
-	historyLowBytes    = 128 << 10
-	historyScreenBytes = 320 << 10
-	historySlots       = 1024
-)
+// historySlots bounds the packets one layer's history holds.
+const historySlots = 1024
 
-// historyBytes is the history budget of one layer, or 0 for none.
-func historyBytes(kind webrtc.RTPCodecType, source, rid string) int {
+// historyBytes is the history budget of one layer, or 0 for none. Audio keeps
+// none, because Opus negotiates no retransmission.
+func historyBytes(memory config.Memory, kind webrtc.RTPCodecType, source, rid string) int {
 	switch {
 	case kind != webrtc.RTPCodecTypeVideo:
 		return 0
-	case source == "screen":
-		return historyScreenBytes
+	case source == sourceScreen:
+		return memory.HistoryScreenBytes
 	case rid == "" || rid == "h":
-		return historyHighBytes
+		return memory.HistoryHighBytes
 	}
-	return historyLowBytes
+	return memory.HistoryLowBytes
 }
 
 // ingressLayer is one RTP stream a publisher sends: the only stream of a
@@ -60,17 +56,34 @@ type ingressLayer struct {
 	lastRTP   atomic.Int64 // monotonic; 0 before the first packet
 	lastAsked atomic.Int64 // monotonic time of the last keyframe request
 
+	meter    rateMeter     // every packet the publisher sent on the layer, repairs included
+	repaired atomic.Uint64 // packets that arrived as RTX repairs
+	nack     *nackTracker  // nil for audio
+	// audioLevelID is the negotiated RFC 6464 extension ID of a microphone, or 0.
+	audioLevelID uint8
+
 	// Owned by the layer's reader.
 	extStarted bool
 	highest    uint64
 }
 
-func newIngressLayer(index int, remote *webrtc.TrackRemote, source string) *ingressLayer {
+func newIngressLayer(index int, remote *webrtc.TrackRemote, source string, memory config.Memory) *ingressLayer {
 	layer := &ingressLayer{index: index, rid: remote.RID(), ssrc: uint32(remote.SSRC()), remote: remote}
-	if bytes := historyBytes(remote.Kind(), source, layer.rid); bytes > 0 {
+	if bytes := historyBytes(memory, remote.Kind(), source, layer.rid); bytes > 0 {
 		layer.history.Store(newHistory(bytes, historySlots))
 	}
+	if remote.Kind() == webrtc.RTPCodecTypeVideo {
+		layer.nack = &nackTracker{}
+	}
 	return layer
+}
+
+// newest is the highest extended sequence number so far, or 0 before the first packet.
+func (l *ingressLayer) newest() uint64 {
+	if !l.extStarted {
+		return 0
+	}
+	return l.highest
 }
 
 // extend turns a 16-bit sequence number into one that keeps counting across

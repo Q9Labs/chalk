@@ -8,8 +8,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -38,6 +40,10 @@ type Session struct {
 	retired      map[string]bool          // MIDs of closed publications, never published again
 	pending      *pendingOffer
 	connectTimer *time.Timer
+
+	// lastVoiced is the monotonic time this Participant's microphone last carried
+	// speech, or 0. The allocator keeps a recent speaker's camera longest.
+	lastVoiced atomic.Int64
 }
 
 // pendingOffer is a server offer waiting for the client's answer.
@@ -94,7 +100,7 @@ func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiv
 	var layer *ingressLayer
 	var monitor bool
 	if pub != nil {
-		layer, monitor = pub.attach(remote)
+		layer, monitor = pub.attach(remote, audioLevelID(receiver, pub.source))
 	}
 	if layer == nil {
 		s.node.track(func() { drain(remote) })
@@ -103,6 +109,20 @@ func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiv
 	if (monitor && !s.node.track(pub.monitor)) || !s.node.track(func() { pub.read(layer) }) {
 		pub.close()
 	}
+}
+
+// audioLevelID is the negotiated audio level extension of a microphone, or 0.
+// Screen audio never makes its publisher the speaker.
+func audioLevelID(receiver *webrtc.RTPReceiver, source string) uint8 {
+	if source != sourceMicrophone {
+		return 0
+	}
+	for _, extension := range receiver.GetParameters().HeaderExtensions {
+		if extension.URI == sdp.AudioLevelURI {
+			return uint8(extension.ID)
+		}
+	}
+	return 0
 }
 
 // Close tears the session down. It is idempotent.
