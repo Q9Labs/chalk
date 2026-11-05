@@ -1,25 +1,36 @@
 // Statechart view for EntryLeave.tla: the states and steps in the words of
 // someone in a Chalk call who has more than one tab or device.
 
-const defers = (v) => v.issued > v.leave.entry && v.issueLive;
-
 export const title = "Leave while another tab or device joins";
 
-export const state = (v) => {
-  if (v.participant === "left") {
-    return v.leftBy === v.confirmed ? "Left" : "Left, but a newer tab joined";
-  }
-  if (v.participant === "leaving") {
-    return defers(v) ? "Leave waits for the newer tab" : "Leave finishing";
-  }
-  return v.issued > v.confirmed && v.issueLive ? "In the call, newer tab joining" : "In the call";
+// Each participant state names its group and splits on one condition.
+const phases = {
+  active: {
+    group: "inCall",
+    when: (v) => v.issued > v.confirmed && v.issueLive,
+    yes: "In the call, newer tab joining",
+    no: "In the call",
+  },
+  leaving: {
+    group: "leaving",
+    when: (v) => v.issued > v.leave.entry && v.issueLive,
+    yes: "Leave waits for the newer tab",
+    no: "Leave finishing",
+  },
+  left: {
+    group: "left",
+    when: (v) => v.leftBy === v.confirmed,
+    yes: "Left",
+    no: "Left, but a newer tab joined",
+  },
 };
 
-export const group = (v) => {
-  if (v.participant === "left") return "left";
-  if (v.participant === "leaving") return "leaving";
-  return "inCall";
+export const state = (v) => {
+  const phase = phases[v.participant];
+  return phase.when(v) ? phase.yes : phase.no;
 };
+
+export const group = (v) => phases[v.participant].group;
 
 export const colors = { inCall: "teal", leaving: "yellow", left: "purple" };
 

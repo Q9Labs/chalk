@@ -2,30 +2,20 @@
 # Model-checks Sync entry admission and Leave ordering (EntryLeave.tla).
 # Usage: tools/formal/sync-entry-leave/run.sh [--deep]
 #   --deep  also checks 5 entries and 3 consumer nodes.
-# Needs Java 11 or later and curl. Downloads the pinned TLA+ tools once.
+# Needs Java 11 or later and curl. The TLA+ tools pin is in ../tla2tools.sh.
 set -euo pipefail
 
-# v1.7.4 is the latest stable release. Pre-release assets such as v1.8.0 get
-# re-published, which breaks a checksum pin.
-TLA_VERSION=1.7.4
-TLA_SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../../.." && pwd)"
 model="$here"
-jar="${TLA2TOOLS_JAR:-${XDG_CACHE_HOME:-$HOME/.cache}/chalk-tla/tla2tools-${TLA_SHA256:0:12}.jar}"
+# shellcheck source=../tla2tools.sh
+source "$here/../tla2tools.sh"
+jar="$(tla2tools_jar)"
 out="${FORMAL_OUT:-$(mktemp -d)}"
 failures=0
 
-sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 fail() { echo "FAIL $*"; failures=$((failures + 1)); }
 squash() { tr -s '[:space:]' ' '; }
-
-if [[ ! -f "$jar" ]] || [[ "$(sha256 "$jar")" != "$TLA_SHA256" ]]; then
-  mkdir -p "$(dirname "$jar")"
-  curl -fsSL -o "$jar.tmp" "https://github.com/tlaplus/tlaplus/releases/download/v$TLA_VERSION/tla2tools.jar"
-  [[ "$(sha256 "$jar.tmp")" == "$TLA_SHA256" ]] || { echo "tla2tools.jar checksum mismatch"; exit 2; }
-  mv "$jar.tmp" "$jar"
-fi
 
 echo "== Code anchors"
 while IFS=$'\t' read -r action path fragment; do
