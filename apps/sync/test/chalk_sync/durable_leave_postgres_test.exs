@@ -343,7 +343,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              Postgres.reserve_publication_grant(current, "reentry_current_camera_001", :camera)
 
     # Reserved after the old generation's cleanup was accepted, so it is ordered after it.
-    assert is_integer(grant.control_revision) and grant.control_revision >= cleanup.control_revision
+    assert is_integer(grant.control_revision) and
+             grant.control_revision >= cleanup.control_revision
 
     assert {:ok, %{status: :confirmed, result: :authorized}} =
              Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)

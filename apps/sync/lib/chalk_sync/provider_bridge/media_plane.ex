@@ -144,7 +144,11 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
 
   defp maybe_control_revision(fields, %__MODULE__{control_revision: revision}, effect)
        when is_integer(revision) and
-              effect in ["media.grant_publication", "media.revoke_publication", "media.remove_participant"],
+              effect in [
+                "media.grant_publication",
+                "media.revoke_publication",
+                "media.remove_participant"
+              ],
        do: Keyword.put(fields, :control_revision, revision)
 
   defp maybe_control_revision(fields, _adapter, _effect), do: fields

@@ -505,7 +505,8 @@ defmodule ChalkSync.Live.Episode do
         outcome =
           if screen_observed?(state.media_items, authority.participant_id),
             do: :satisfied,
-            else: grant(module, adapter, state, authority, :screen, target.operation_id, reservation)
+            else:
+              grant(module, adapter, state, authority, :screen, target.operation_id, reservation)
 
         {reported, retain?} = complete_grant(state, reservation, outcome)
         retain_or_release_screen_lease(state, authority, lease, retain?, target, reported)
