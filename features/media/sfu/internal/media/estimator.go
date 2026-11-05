@@ -36,7 +36,7 @@ const (
 	ackedHeadway = 1.5                    // the most the proven rate may exceed what was acknowledged
 	ackedSlack   = 10_000                 // bits/s, so a near-silent transport may still grow
 
-	probeHold = 3 * time.Second // how long a probe's result stands in for acknowledged traffic
+	probeHold = 5 * time.Second // how long a probe's result stands in for acknowledged traffic
 )
 
 type delaySignal uint8

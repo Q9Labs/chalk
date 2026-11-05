@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/ice/v4"
@@ -81,6 +83,7 @@ type Node struct {
 
 	// plans holds each Episode's latest plan change. Only the control loop touches it.
 	plans map[episodeKey]int64
+	stats atomic.Pointer[mediaStats]
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -280,6 +283,34 @@ func (n *Node) Budget() (budget, reserved int) {
 	defer n.mu.Unlock()
 	return n.cfg.PacketBudget, n.reservedPackets()
 }
+
+// Host reports the host-health guard and the node's measured media for readiness.
+func (n *Node) Host() protocol.HostState {
+	health := n.guard.snapshot()
+	state := protocol.HostState{
+		AdmissionReason:       health.AdmissionReason,
+		QueueDelayP95Ms:       milliseconds(health.QueueDelayP95),
+		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
+	}
+	if health.StealKnown {
+		steal := round2(health.StealPercent)
+		state.StealPercent = &steal
+	}
+	if stats := n.stats.Load(); stats != nil {
+		state.PacketsPerSecond = math.Round(stats.packets)
+	}
+	return state
+}
+
+// episodeState is the Episode's state as of the latest allocation.
+func (n *Node) episodeState(key episodeKey) protocol.EpisodeState {
+	if stats := n.stats.Load(); stats != nil {
+		return stats.episodes[key]
+	}
+	return protocol.EpisodeState{}
+}
+
+func milliseconds(d time.Duration) float64 { return round2(float64(d) / float64(time.Millisecond)) }
 
 // SessionCount is the number of live sessions.
 func (n *Node) SessionCount() int {

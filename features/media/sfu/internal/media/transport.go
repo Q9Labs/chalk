@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/pion/rtcp"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // packetClass orders a subscriber's outgoing packets. Audio is never queued
@@ -508,6 +510,27 @@ func (t *transport) estimate(now int64) transportEstimate {
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		probeReady: t.probeID == 0 && now >= t.probeNext && t.probeStream != nil,
 	}
+}
+
+// inspect reports the transport for the control API.
+func (t *transport) inspect(now int64) protocol.TransportState {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state := protocol.TransportState{
+		EstimateBps: int64(t.estimator.current()), ProvenBps: int64(t.estimator.proven(now)),
+		QueuedBytes: t.queuedBytes, Probing: t.probeID != 0,
+		Sent: protocol.PacketCounts{
+			Audio: t.counters.Sent[classAudio], Video: t.counters.Sent[classVideo],
+			Repair: t.counters.Sent[classRepair], Probe: t.counters.Sent[classProbe],
+		},
+		Dropped: t.counters.Dropped, RepairsCut: t.counters.RepairsCut,
+		Probes: t.counters.Probes, ProvedProbe: t.counters.ProvedProbe,
+	}
+	if t.feedback != 0 {
+		age := time.Duration(now - t.feedback).Milliseconds()
+		state.FeedbackAgeMs = &age
+	}
+	return state
 }
 
 // walkFeedback turns a transport-wide feedback report into acknowledgments of

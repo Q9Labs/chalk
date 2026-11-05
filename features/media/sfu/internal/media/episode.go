@@ -3,8 +3,11 @@ package media
 import (
 	"cmp"
 	"maps"
+	"math"
 	"slices"
 	"time"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // An Episode stays under its packet ceiling, the lower of its reservation, the
@@ -92,7 +95,20 @@ type episodeTick struct {
 	subscriptions []*subscription
 	base          float64 // packets/s the plan cannot lower
 	cameras       map[*publication]*plannedCamera
-	room          bool // the Episode can afford a probe
+	room          bool    // the Episode can afford a probe
+	measured      float64 // packets/s its publishers and transports sent in the last second
+	state         protocol.EpisodeState
+}
+
+// mediaStats is the control loop's latest view of the node's media, published
+// for inspection and telemetry after every tick.
+type mediaStats struct {
+	episodes map[episodeKey]protocol.EpisodeState
+	packets  float64 // every Episode's measured packets/s
+	repair   float64 // retransmitted packets/s across subscriber transports
+	probe    float64
+	// congested counts video subscriptions paused for congestion.
+	congested int
 }
 
 // allocate runs one control tick. It samples every meter, plans each Episode
@@ -105,6 +121,7 @@ func (n *Node) allocate() {
 	n.mu.Unlock()
 
 	episodes := map[episodeKey]*episodeTick{}
+	stats := &mediaStats{episodes: make(map[episodeKey]protocol.EpisodeState, len(sessions))}
 	for _, session := range sessions {
 		key := episodeOf(session.scope)
 		episode := episodes[key]
@@ -121,13 +138,23 @@ func (n *Node) allocate() {
 					layer.meter.sample(now)
 					pps, _ := layer.meter.rates()
 					episode.base += pps
+					episode.measured += pps
 				}
 			}
 		}
 		session.transport.tick(now)
-		for _, class := range []packetClass{classRepair, classProbe} {
+		for class := range packetClasses {
 			pps, _ := session.transport.meters[class].rates()
-			episode.base += pps
+			episode.measured += pps
+			switch class {
+			case classRepair:
+				stats.repair += pps
+			case classProbe:
+				stats.probe += pps
+			}
+			if class == classRepair || class == classProbe {
+				episode.base += pps
+			}
 		}
 	}
 
@@ -141,10 +168,18 @@ func (n *Node) allocate() {
 			if !subscription.pub.video() {
 				limit = serverLimit{}
 			}
-			subscription.setServerLimit(limit.capped(subscription.pub.plan))
+			limit = limit.capped(subscription.pub.plan)
+			subscription.setServerLimit(limit)
+			if limit.paused && subscription.pub.video() {
+				stats.congested++
+			}
 		}
+		episode.state.PacketsPerSecond = math.Round(episode.measured)
+		stats.episodes[key] = episode.state
+		stats.packets += episode.measured
 	}
 	maps.DeleteFunc(n.plans, func(key episodeKey, _ int64) bool { return episodes[key] == nil })
+	n.stats.Store(stats)
 }
 
 // plan predicts the Episode's packets/s from what its publishers send and
@@ -179,9 +214,16 @@ func (n *Node) plan(key episodeKey, episode *episodeTick, now int64) {
 		n.plans[key] = now
 	}
 	predicted := episode.base
+	episode.state.CeilingPackets = int(ceiling)
 	for pub, camera := range episode.cameras {
 		pub.plan = camera.level
 		predicted += camera.cost[camera.level]
+		switch camera.level {
+		case planLowest:
+			episode.state.CappedCameras++
+		case planPaused:
+			episode.state.PausedCameras++
+		}
 	}
 	episode.room = predicted <= planRaiseShare*ceiling
 }

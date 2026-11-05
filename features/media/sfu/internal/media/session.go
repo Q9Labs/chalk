@@ -727,7 +727,11 @@ func (s *Session) Inspect() (protocol.InspectResponse, error) {
 		return protocol.InspectResponse{}, ErrSessionGone
 	}
 	now := monotonic()
-	response := protocol.InspectResponse{Tracks: []protocol.InspectedTrack{}}
+	response := protocol.InspectResponse{
+		Tracks:    []protocol.InspectedTrack{},
+		Transport: s.transport.inspect(now),
+		Episode:   s.node.episodeState(episodeOf(s.scope)),
+	}
 	for mid, pub := range s.published {
 		response.Tracks = append(response.Tracks, protocol.InspectedTrack{
 			Location: protocol.LocationLocal, Mid: mid, TrackName: pub.name, Active: pub.active(now), Layers: pub.inspectLayers(now),
