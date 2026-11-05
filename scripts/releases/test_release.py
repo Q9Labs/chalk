@@ -74,6 +74,9 @@ class MemoryGitHub(GitHub):
             return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
+        if route.startswith('actions/workflows/gate.yml/runs?') and 'status=success' in route:
+            return dict(workflow_runs=[run for run in reversed(self.gates)
+                                       if run['event'] == 'push' and run['conclusion'] == 'success'])
         if route == 'deployments':
             item = dict(data, id=len(self.items) + 1, created_at=self.created_at, latest_status='pending')
             self.items.append(item)

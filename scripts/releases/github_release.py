@@ -180,6 +180,15 @@ class GitHub:
                 and run['event'] in (('push',) if push_only else ('push', 'schedule', 'workflow_dispatch'))]
         return max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
 
+    def newest_green_push_gate(self):
+        # Pushes to master supersede each other, so the newest commit may never get a Gate. The newest commit that did is
+        # the nightly candidate; waiting for the tip's Gate would hold the plan behind the queue.
+        runs = self.request('actions/workflows/gate.yml/runs?branch=master&event=push&status=success&per_page=30')['workflow_runs']
+        for run in runs:
+            if self.has_green_gate(run['head_sha'], push_only=True):
+                return run['head_sha']
+        return None
+
     def has_green_gate(self, sha, *, push_only=False):
         latest = self.latest_gate(sha, push_only=push_only)
         return bool(latest and latest['conclusion'] == 'success')

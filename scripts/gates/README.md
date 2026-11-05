@@ -33,7 +33,7 @@ selected group passed; a job that the planner skips counts as passed. When the
 planner cannot select jobs, for example because the base does not resolve, or
 `Select gate jobs` fails, every job runs and every lane runs with `--full`. Pushes to `master`, the nightly run, and manual runs select every job and
 run every lane with `--full`, so anything a pull request skips still runs once it merges, and
-every master commit keeps its own run. A full run scans staged files and commits
+master pushes share one run slot, so a newer push replaces the run still queued and some commits get no run. A full run scans staged files and commits
 for secrets: the pushed range on a push to `master`, otherwise the commits since
 the base, or the last commit.
 

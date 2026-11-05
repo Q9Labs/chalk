@@ -24,8 +24,10 @@ permissions:
   contents: read
 
 concurrency:
-  # A new push to a pull request cancels its older run; every master commit keeps its own full run.
-  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # A new push to a pull request cancels its older run. Master pushes share one group without cancelling the running
+  # Gate: one run executes, only the newest push waits, and the pending runs it replaces are cancelled. A release or
+  # nightly therefore ships the newest commit whose Gate ran and passed. Scheduled and manual runs keep their own group.
+  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && 'master' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:

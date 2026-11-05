@@ -141,19 +141,24 @@ def defer_cut(github, target, reason, *, manual):
 
 
 def plan(github, args):
-    target = github.request('git/ref/heads/master')['object']['sha']
-    if target != env('GITHUB_SHA'):
-        defer_cut(github, target, 'workflow revision is not the current master tip', manual=args.manual)
+    tip = github.request('git/ref/heads/master')['object']['sha']
+    if tip != env('GITHUB_SHA'):
+        defer_cut(github, tip, 'workflow revision is not the current master tip', manual=args.manual)
+        return
+    # The schedule ships the newest commit whose push Gate already passed and never waits: master pushes supersede each
+    # other, so the tip may have no Gate, or one still queued behind the running one. A manual cut ships the tip and
+    # refuses at once when its Gate has not passed, instead of holding a runner for a Gate that takes longer than the wait.
+    newest_green = github.newest_green_push_gate()
+    target = tip if args.manual else newest_green
+    if not target:
+        defer_cut(github, tip, 'no master commit has a successful push Gate', manual=False)
         return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
-    if cut:
-        github.wait_for_gate(target, push_only=not args.manual)
-    if cut and not github.has_green_gate(target, push_only=not args.manual):
-        require(not args.manual, f'latest master Gate for {target} is not successful')
-        cut = False
-        print('Nightly: current master tip has no successful push Gate; skipping')
+    if args.manual:
+        require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
+                f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')
     result = dict(should_cut=cut, target_sha=target)
     if cut:
         held = held_candidates(records, held=False)
@@ -171,7 +176,7 @@ def plan(github, args):
         else:
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
-        if github.request('git/ref/heads/master')['object']['sha'] != target:
+        if github.request('git/ref/heads/master')['object']['sha'] != tip:
             defer_cut(github, target, 'master moved during planning', manual=args.manual)
             return
         github.reserve_cut(target)
@@ -200,7 +205,7 @@ def require_gate(github, args):
     github.wait_for_gate(target, push_only=push_only)
     require(github.has_green_gate(target, push_only=push_only),
             f'{target} has no successful {"push " if push_only else ""}Gate run on master. Pull request Gate runs do not count: '
-            'merge the change, wait for its master Gate to pass, then release that commit.')
+            'A newer master push cancels the Gate run still queued, so a commit can have none. Release a commit whose master Gate passed.')
     print(f'Release: latest master {"push " if push_only else ""}Gate for {target} passed')
 
 
