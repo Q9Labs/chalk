@@ -268,6 +268,36 @@ func TestAPushThatRacesCloseNeverHoldsTheScreen(t *testing.T) {
 	}
 }
 
+func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publish(t, publisher, "mic", 1)
+	viewer := newTestPeer(t)
+	request := pullRequest(subscriber, publisher, "mic-0")
+	request.OperationID = op()
+	pulled, err := subscriber.AddTracks(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, paused := range []bool{true, false} {
+		track := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Paused: paused}
+		response, err := subscriber.UpdateTracks(context.Background(), protocol.UpdateTracksRequest{OperationID: op(), Scope: subscriber.scope, Tracks: []protocol.Track{track}})
+		if err != nil || len(response.Tracks) != 1 || len(response.TrackErrors) != 0 {
+			t.Fatalf("paused=%v update: %+v %v", paused, response, err)
+		}
+		subscriber.mu.Lock()
+		got := subscriber.subscribed[track.Mid].currentRequest().paused
+		subscriber.mu.Unlock()
+		if got != paused {
+			t.Fatalf("paused = %v, want %v", got, paused)
+		}
+	}
+}
+
 func TestUpdateTracksRecordsTheCeilingWithoutSDP(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))

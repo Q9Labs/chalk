@@ -610,8 +610,11 @@ func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksR
 		return protocol.TracksResponse{}, fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
 	for index, track := range request.Tracks {
-		if track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "" || track.Simulcast == nil || track.Simulcast.PreferredRID == "" {
-			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId, trackName and simulcast.preferredRid", ErrInvalidRequest, index)
+		if track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "" {
+			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
+		}
+		if track.Simulcast != nil && track.Simulcast.PreferredRID == "" {
+			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
 		}
 	}
 	s.opMu.Lock()
@@ -627,7 +630,7 @@ func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksR
 				continue
 			}
 			updated[index] = subscription
-			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast})
+			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast, Paused: track.Paused})
 		}
 		s.mu.Unlock()
 		for index, subscription := range updated {

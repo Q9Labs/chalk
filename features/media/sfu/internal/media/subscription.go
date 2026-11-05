@@ -95,6 +95,11 @@ func (s *subscription) reselect(views []layerView) int {
 	if s.closed.Load() {
 		return -1
 	}
+	// A snapshot taken before the publication closed must not revive it.
+	if s.pub.closed.Load() {
+		closed := s.pub.views(0)
+		views = closed[:]
+	}
 	target, reason := -1, ""
 	if s.request.paused {
 		reason = protocol.PauseViewer

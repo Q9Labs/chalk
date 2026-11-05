@@ -183,6 +183,18 @@ func TestAnInactiveForwardedLayerResumesOnlyOnAKeyframe(t *testing.T) {
 	}
 }
 
+func TestAStaleSnapshotNeverRevivesAClosedPublication(t *testing.T) {
+	pub := &publication{kind: webrtc.RTPCodecTypeVideo}
+	pub.closed.Store(true)
+	s := &subscription{pub: pub, target: -1, translator: translator{clockRate: 90000}, request: layerRequest{fallback: true}}
+	if pending := s.reselect([]layerView{{rid: "h", active: true}}); pending >= 0 {
+		t.Fatalf("closed publication: waits for layer %d, want none", pending)
+	}
+	if s.reason != protocol.PauseSourceInactive {
+		t.Fatalf("closed publication: reason %q, want %q", s.reason, protocol.PauseSourceInactive)
+	}
+}
+
 func TestHistoryEvictsOverwrittenAndOldPackets(t *testing.T) {
 	h := newHistory(100, 4)
 	now := monotonic()
