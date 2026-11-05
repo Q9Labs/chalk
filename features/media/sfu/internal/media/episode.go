@@ -228,10 +228,11 @@ func (n *Node) plan(key episodeKey, episode *episodeTick, now int64) {
 	episode.room = predicted <= planRaiseShare*ceiling
 }
 
-// packetRate is the packets/s this subscription would forward under limit.
+// packetRate is the packets/s this subscription would forward under limit. A
+// source whose lease is closed forwards nothing, though its ingress still counts.
 func (s *subscription) packetRate(limit serverLimit, now int64) float64 {
 	request := s.currentRequest()
-	if request.paused || limit.paused {
+	if request.paused || limit.paused || !s.pub.authority.allows(now, now) {
 		return 0
 	}
 	views := s.pub.views(now)
@@ -245,7 +246,8 @@ func (s *subscription) packetRate(limit serverLimit, now int64) float64 {
 
 // allocateSession spends one subscriber transport's estimate on its video. A
 // subscriber without transport-wide feedback gets no bandwidth limit, as
-// before the allocator, and its Episode's plan alone applies.
+// before the allocator, and its Episode's plan alone applies. A source whose
+// lease is closed gets no share until a grant opens it.
 func allocateSession(session *Session, room bool, now int64) {
 	transport := session.transport
 	estimate := transport.estimate(now)
@@ -264,7 +266,7 @@ func allocateSession(session *Session, room bool, now int64) {
 			continue
 		}
 		request := subscription.currentRequest()
-		if request.paused || pub.plan == planPaused {
+		if request.paused || pub.plan == planPaused || !pub.authority.allows(now, now) {
 			continue
 		}
 		tiles = append(tiles, tile{
