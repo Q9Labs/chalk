@@ -567,10 +567,14 @@ both camera layers and the microphone arrive from every Participant.
 | Participants | Ingress | Egress all-high / mixed / adaptive | Total in + out, all-high / mixed / adaptive |
 | ------------ | ------- | ---------------------------------- | ------------------------------------------- |
 | 4            | 1,480   | 3,600 / 2,160 / 2,160              | 5,080 / 3,640 / 3,640                       |
-| 8            | 2,960   | 16,800 / 8,160 / 6,480             | 19,760 / 11,120 / 9,440                     |
+| 8            | 2,960   | 8,560\* / 8,160 / 6,480            | 11,520\* / 11,120 / 9,440                   |
 
-Adaptive cuts eight-person egress packets by 61% against all-high. That also
-cuts the CPU bill, not only the transfer bill.
+\* An eight-person all-high call would demand 16,800 egress and 19,760 total
+packets/s, but the per-Episode ceiling of 11,520 (see below) stops that, so at most
+8,560 egress packets/s are forwarded (11,520 less 2,960 ingress). Mixed (11,120)
+and adaptive (9,440) fit under the ceiling without a screen share.
+Adaptive cuts eight-person egress packets by 24% against that capped worst case
+(6,480 against 8,560). That also cuts the CPU bill, not only the transfer bill.
 
 **CPU budget.** Assume **25 µs of CPU per packet** (one SRTP operation about
 2–3 µs with AES hardware support, one system call about 5–10 µs on a virtual
@@ -719,7 +723,14 @@ and add 20% for headers, RTCP and repair. Let `H=2.5`, `L=0.65`, `A=0.05` Mbps:
 | Participants | Ingress Mbps | Egress Mbps, all-high / mixed / adaptive | GiB per call-hour, all-high / mixed / adaptive |
 | ------------ | ------------ | ---------------------------------------- | ---------------------------------------------- |
 | 4            | 15.36        | 36.72 / 18.96 / 18.96                    | 15.39 / 7.95 / 7.95                            |
-| 8            | 30.72        | 171.36 / 64.80 / 46.08                   | 71.82 / 27.16 / 19.31                          |
+| 8            | 30.72        | 72.48\* / 64.80 / 46.08                  | 30.38\* / 27.16 / 19.31                        |
+
+\* The eight-person all-high call is held to the 11,520 packets/s ceiling, so
+its worst case is: (11,520 − 2,960 ingress − 2,800 audio) = 5,760 video packets/s
+× 10,000 bits (2.5 Mbps / 250 packets/s) + 2.8 Mbps audio = 60.4 Mbps, × 1.2 =
+72.48 Mbps. The uncapped formula would give 171.36 Mbps (71.82 GiB/hour), which
+the ceiling makes impossible. The ceiling also counts screen packets, so this
+camera-only worst case spends all of it on cameras.
 
 For decimal Mbps, `GiB/hour = Mbps · 10^6 · 3600 / (8 · 2^30)`.
 At 10 four-person staging call-hours a month, direct egress is about 154 GiB,
@@ -728,18 +739,19 @@ inside the 1,000 GiB allowance, so staging stays at $6.
 For production, 500 call-hours a month on `s-2vcpu-2gb` (3,000 GiB allowance)
 costs the following. These are call-hours, not participant-hours.
 
-| Scenario               | GiB at 500 call-hours | Over allowance | Compute + excess per month |
-| ---------------------- | --------------------- | -------------- | -------------------------- |
-| Four-person, all-high  | 7,695                 | 4,695          | **$65**                    |
-| Four-person, mixed     | 3,973                 | 973            | **$28**                    |
-| Four-person, adaptive  | 3,973                 | 973            | **$28**                    |
-| Eight-person, all-high | 35,910                | 32,910         | **$347**                   |
-| Eight-person, mixed    | 13,580                | 10,580         | **$124**                   |
-| Eight-person, adaptive | 9,656                 | 6,656          | **$85**                    |
+| Scenario                                    | GiB at 500 call-hours | Over allowance | Compute + excess per month |
+| ------------------------------------------- | --------------------- | -------------- | -------------------------- |
+| Four-person, all-high                       | 7,695                 | 4,695          | **$65**                    |
+| Four-person, mixed                          | 3,973                 | 973            | **$28**                    |
+| Four-person, adaptive                       | 3,973                 | 973            | **$28**                    |
+| Eight-person, all-high, held to the ceiling | 15,188                | 12,188         | **$140**                   |
+| Eight-person, mixed                         | 13,580                | 10,580         | **$124**                   |
+| Eight-person, adaptive                      | 9,656                 | 6,656          | **$85**                    |
 
 Egress above the allowance costs more than the machine once calls grow, so
 adaptive quality saves more money than the Droplet size does: an eight-person
-call costs about a quarter as much to serve as all-high. The allowance covers
+adaptive call costs about 60% as much to serve as the worst case the ceiling
+allows ($85 against $140). The allowance covers
 about 195 all-high or 377 mixed four-person call-hours at this size.
 
 Add relay cost separately. If 10% of the traffic is delivered via Cloudflare TURN,
@@ -788,7 +800,7 @@ its share of CPU or allocation, and the measured gain.
   only.
 
 The largest lever is fewer packets, not faster packets: the adaptive-quality
-items cut eight-person egress packets by 61%.
+items cut eight-person egress packets by 24% against the ceiling-capped worst case.
 
 ## State, scaling and operations
 
