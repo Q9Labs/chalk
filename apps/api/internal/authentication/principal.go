@@ -12,6 +12,7 @@ const (
 	PrincipalAPIKey  PrincipalKind = "api_key"
 	PrincipalSystem  PrincipalKind = "system"
 	PrincipalService PrincipalKind = "service"
+	PrincipalOAuth   PrincipalKind = "oauth"
 )
 
 // Principal is the authenticated caller accepted at the HTTP edge. It can
@@ -23,6 +24,7 @@ type Principal struct {
 	TenantID  utilities.ID
 	SessionID utilities.ID
 	APIKeyID  utilities.ID
+	GrantID   utilities.ID
 	Scopes    []Scope
 }
 
@@ -37,7 +39,7 @@ func (p Principal) HasScope(scope Scope) bool {
 }
 
 func (p Principal) IsAuthenticated() bool {
-	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalSystem || p.Kind == PrincipalService && p.ServiceID != ""
+	return p.Kind == PrincipalUser || p.Kind == PrincipalAPIKey || p.Kind == PrincipalOAuth || p.Kind == PrincipalSystem || p.Kind == PrincipalService && p.ServiceID != ""
 }
 
 var ErrUnauthenticated = errors.New("unauthenticated")

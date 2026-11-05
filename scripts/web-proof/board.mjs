@@ -43,7 +43,7 @@ export async function boardDraw() {
     simulatePressure: true,
     lastCommittedPoint: null,
   };
-  await window.proofClient.whiteboard.transport().submitUpdate({ sceneId: board.sceneId, syncAll: false, elements: [{ id: "proof-guest-stroke", type: "freedraw", version: 1, versionNonce: 7, index: "a0", isDeleted: false, payload }] });
+  await window.proofClient.whiteboard.transport().submitUpdate({ sceneId: board.sceneId, syncAll: false, elements: [{ id: crypto.randomUUID(), type: "freedraw", version: 1, versionNonce: 7, index: "a0", isDeleted: false, payload }] });
 }
 
 export function boardElements() {

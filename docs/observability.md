@@ -724,6 +724,14 @@ These events contain no tool arguments, result bodies, bearer tokens, signed
 URLs, transcript text, or signing secrets. Unexpected application errors return
 only the existing public API error code and message.
 
+OAuth sign-in for `/mcp` logs `mcp.oauth.*` events with grant, tenant and client
+IDs only: `client_registered`, `grant_created`, `grant_revoked`, `reuse_detected`
+(a replayed code or refresh token) and the `*_failed` events for server errors. They never carry tokens, codes, authorization request
+handles, PKCE values or redirect query strings. `TestMCPOAuthKeepsSecretsOutOfLogs`
+proves it. A rise in `reuse_detected` means a client is racing refreshes or
+a token leaked. The grant lifecycle (approve, use, revoke) is visible in the
+connected apps list; there is no separate journey ledger entry.
+
 The Postgres proof `TestMCPPostgresToolsAndPermissions` drives the official Go
 MCP client through Streamable HTTP. The MCP module's transport proof covers
 Origin rejection, bounded UTF-8 continuation, body limits, and disabled SSE.

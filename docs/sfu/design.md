@@ -1,7 +1,7 @@
 # Chalk SFU v1
 
-Status: implementation proposal. Scope: a second media provider, not a new call
-protocol. Singapore (`sgp1`) is the deployment region, on small shared-CPU
+Status: implementation proposal. Goal: replace the Cloudflare Realtime SFU for
+every Tenant and Space with Chalk's Go/Pion SFU, without a new call protocol. Singapore (`sgp1`) is the deployment region, on small shared-CPU
 Droplets sized from the packet and memory budgets below. This document does not
 authorize provisioning or rollout. Follow [milestones](milestones.md).
 
@@ -28,30 +28,41 @@ applicable NOTICE text, local changes and behavioral tests in
 **features/media/sfu/THIRD_PARTY_NOTICES.md** (planned). Do not import a room server to get an
 allocator, or assume code built against LiveKit's Pion fork fits stock Pion.
 
-V1 goals:
+Replacement is complete only after M12 covers every Tenant, Space and supported
+client, including recording, and M13 retires the Cloudflare SFU. M7 is an internal
+canary, not the delivery goal. Cloudflare SFU remains a tested rollback path until
+M13's explicit retirement criteria pass. Cloudflare TURN is a separate product
+and stays in use.
 
-- Audio, camera, screen and screen audio, with the existing join/publish/pull/close
-  flow and bounded recovery. Browser and React Native clients share the SDK path.
-- Two-layer camera simulcast; independent subscriber quality; TWCC-controlled
-  sending; bounded NACK/RTX recovery. No transcoding.
-- Adaptive quality: send each viewer the lowest layer that looks right at their
-  tile size and network, to lower egress cost and give a picture that follows
-  the viewer's network and latency. See [Adaptive quality](#adaptive-quality).
-- A small machine: a Basic shared-CPU Droplet in production ($18 a month) and in
-  staging ($6 a month), kept within measured packet, memory and steal budgets.
-  See [Hosting and budget](#hosting-and-budget).
-- One SFU node per environment; internal canaries before external adoption.
-- Initially at most **eight active Participants per own-SFU Episode**, enforced
-  at admission, with a separate node-wide resource budget. Cloudflare retains
-  the existing larger admission limit.
+Goals:
 
-Non-goals: recording/transcription capture, global routing, cross-node media,
-seamless node failover, a 500-person full-mesh video promise, AV1/VP9 SVC,
-end-to-end encryption beyond DTLS-SRTP, or a replacement for Sync/Postgres.
-Do not select this provider for Spaces requiring recording or transcription;
-reject attempts to start either on an own-SFU Episode before reserving work.
-Supporting the separate capture port is a later milestone, not an implicit
-consequence of implementing live signaling.
+- Audio, camera, screen and screen audio through the existing
+  join/publish/pull/close flow, with bounded recovery on browsers and React Native.
+- Recording and transcription capture through the same Episode-pinned provider,
+  retaining the recorder's authority, privacy, artifact and cleanup contracts.
+- Two-layer camera simulcast, independent subscriber quality, TWCC-controlled
+  sending and bounded NACK/RTX recovery. No transcoding in the SFU.
+- Low latency at the real peak, not just a successful forwarding demo. Compare
+  rendered-media latency, freezes, join and recovery against matched Cloudflare
+  cohorts. Bound packet queues and measure the complete M5 media path.
+- One production Basic `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` degraded
+  standby in `sgp1`, **$24/month** total. The primary carries the full admitted
+  peak; standby carries a smaller, low-layer workload when primary is unhealthy,
+  draining or full. Prove both envelopes separately. Drain keeps existing calls
+  running but does not promise full new-call capacity on standby.
+  Create staging only for test runs and destroy it afterwards.
+- A configurable maximum of **16 active Participants per own-SFU Episode by
+  default**, not a fixed eight-person cap. Packet, memory and live-health budgets
+  decide actual admission. A configured maximum is not a capacity promise.
+- A migration flag that starts default-off, then flips the default for every
+  Tenant and Space after M12's parity gates. Provider selection is frozen per
+  Episode; rollback does not silently move live media.
+
+Non-goals: global media routing, cross-node media within one Episode, seamless
+PeerConnection migration on node loss, a 500-person all-camera promise, AV1/VP9
+SVC, end-to-end encryption beyond DTLS-SRTP, or replacing Sync/Postgres. Node loss
+uses bounded coordinated replacement, not seamless failover. Recording is blocked
+on own-SFU Episodes until M10 passes, not excluded from the finished replacement.
 
 ## Pion dependency and fork policy
 
@@ -92,8 +103,10 @@ Do not adopt LiveKit's separate Pion fork to get either change.
 
 ## Verified baseline and compatibility inventory
 
-References below describe commit `570a3d32a996fd273e75363f9ccd08421a2197ff`.
-Paths and line numbers are evidence for current behavior, not proposed APIs.
+Compatibility references below describe commit
+`570a3d32a996fd273e75363f9ccd08421a2197ff`. The gap audit additionally checks
+`23633f571` on `origin/master`. Paths and line numbers describe the baseline,
+not proposed APIs.
 The SDK is now under `sdks/typescript/`, not `packages/`.
 
 | Current seam                                                                                                | Evidence (`file:line`)                                                                                       | V1 obligation                                                                                                   |
@@ -112,7 +125,8 @@ The SDK is now under `sdks/typescript/`, not `packages/`.
    replacement require `cloudflare_sfu`; bootstrap contains `connectionId`,
    `stunServer`, optional credentialed `iceServers`. Reuse the same media engine
    for additive `chalk_sfu` grants, updating these checks and native consumers.
-   Old SDKs remain on Cloudflare; an unknown provider must not fall through.
+   Old SDKs use Cloudflare only during migration. M12 sunsets those cohorts; an
+   unknown provider must not fall through.
    Evidence: `sdks/typescript/client/src/access/grant.ts:170`,
    `sdks/typescript/client/src/connection/production.ts:109`,
    `sdks/typescript/client/src/connection/lifecycle.ts:857`,
@@ -210,6 +224,36 @@ The groundwork PRs are [#670](https://github.com/Q9Labs/chalk/pull/670),
 In particular, #724 is off-debt replay, not an in-place ICE-restart implementation;
 PR #746 is model evidence, not a production fix.
 
+## Replacement gap audit
+
+Verified means the cited code contains the dependency or contract; it does not
+mean this docs PR runs the behavior. Proposed gap closures and capacity
+requirements are design conclusions. The compatibility inventory above remains
+the detailed wire checklist. Every row must close before full replacement, or
+be explicitly identified as optional rather than silently left on Cloudflare.
+
+| What the Cloudflare path supplies today, verified in code                                                                                                                                                                                                                                          | Own-SFU obligation                                                                                                                                                                                                                                                                                            | Milestone               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Lifecycle, resume and separate add/update/inspect/close/renegotiate ports in `apps/api/internal/mediaplane/service.go`, `apps/api/internal/mediaplane/signaling.go` and `apps/api/internal/adapters/cloudflare/sfu/adapter.go`                                                                     | Implement every port, normalized errors, partial success, receive-only isolation, retry idempotency and honest unavailable usage.                                                                                                                                                                             | M1, M2                  |
+| Provider selection and application fingerprint in `apps/api/internal/adapters/mediaplaneproviders/registry.go`, `apps/api/internal/adapters/mediaplaneproviders/binding.go` and `apps/api/internal/mediaplane/binding.go`; signaling authorization in `apps/api/internal/httpapi/sfu_signaling.go` | Resolve every operation from an immutable Episode binding. Add node placement, incarnation and fenced replacement without moving live sessions on a flag flip.                                                                                                                                                | M2, M11                 |
+| Closed provider decoding, SDP roles, MID matching, publication references, partial errors, glare rollback and serialized negotiation in `sdks/typescript/client/src/access/grant.ts`, `sdks/typescript/client/src/media/client.ts` and `sdks/typescript/client/src/media/transport.ts`             | Reuse the shared client and extend provider/capability decoding. Preserve the wire contract on initial join, refresh and replacement; do not add a second signaling protocol.                                                                                                                                 | M2, M4, M6              |
+| Camera RIDs and uplink/viewer policy in `sdks/typescript/client/src/media/client.ts`, `sdks/typescript/client/src/media/camera-uplink.ts` and `sdks/typescript/client/src/media/viewer-layer.ts`                                                                                                   | Correct layer translation, feedback, pacing, RTX and pause semantics, with audio protected. Visible tiles ship in M8; dynacast remains an optional M9 optimization.                                                                                                                                           | M4, M5, M8; optional M9 |
+| Publication liveness and connection replacement in `apps/api/internal/mediapublications/reconciliation.go`, `apps/api/internal/providerbridge/sfu_executor.go` and the shared media client                                                                                                         | Preserve missing versus inactive evidence, bounded repulls, stale-generation fences, off debt and consent. Add own-provider ICE restart and lease-bounded source revocation.                                                                                                                                  | M2, M3, M6              |
+| Native provider checks on replacement/restart and `@cloudflare/react-native-webrtc` in `sdks/typescript/react-native/src/space-client/create-native-space-client.ts`                                                                                                                               | Extend native dispatch and prove actual iOS/Android audio, video, supported screen sources, TURN and recovery against Pion. The WebRTC binding need not be replaced just because its name contains Cloudflare. Sunset incompatible native releases.                                                           | M2, M6, M12             |
+| Six capture operations in `apps/api/internal/captureplane/types.go`, implemented by `apps/api/internal/adapters/cloudflare/sfu/capture_plane.go`; `apps/api/cmd/main.go` registers only the Cloudflare capture adapter                                                                             | Add an own capture adapter for create, pull, renegotiate, inspect, close-tracks and close-connection. Route by the durable binding and preserve capture identity, epochs, authority, replay and per-track failure semantics.                                                                                  | M10                     |
+| `apps/api/cmd/recorder-capture/run.go` builds the Pion capture worker; `apps/api/internal/recorderworker/capture_attempt.go`, `apps/api/internal/recordingpipeline/` and `apps/api/internal/transcripts/` own downstream work                                                                      | Prove `chalk-recorder-capture` receives the own-SFU media and completes encrypted bundles, rendering, playback/export and automatic transcription. Preserve timestamp/A/V sync, codec handling, late tracks, stop/salvage, moderation privacy and orphan cleanup. Do not rebuild the pipeline inside the SFU. | M10                     |
+| Owner-attributed relay policy in `apps/api/internal/mediaplane/service.go`; cached, short-lived TURN credentials with bounded minting and STUN fallback in `apps/api/internal/adapters/cloudflare/sfu/turn.go`                                                                                     | Share the minter independently of the SFU adapter, retain `AllowRelay`, prove external-SFU relay/TLS-443 and credential rotation, and keep TURN on SFU retirement.                                                                                                                                            | M2, M6, M12, M13        |
+| Client call stats in `sdks/typescript/client/src/media/call-stats.ts`; Cloudflare-specific failure/replacement metrics in `apps/api/internal/adapters/cloudflare/sfu/adapter.go`; terminal media reports and alerts under `infrastructure/observability/production-alerts/`                        | Add bounded own-provider correlation, packet/queue/repair/admission metrics, cohort dashboards, listener-heal evidence and tested alerts with equal operational coverage. A bytes-sent counter is not rendered-media proof.                                                                                   | M5, M6, M12             |
+| Durable events and correlation in `apps/api/internal/observability/journey.go`, `apps/api/internal/observability/capture_signaling.go`, `contract/webhooks/v1/journey-events.json` and `docs/observability.md`                                                                                     | Preserve the Postgres journey ledger and executable observability proof for capture, revoke, placement/replacement and cutover failures. Carry trace and operation context through delayed cleanup; do not substitute SFU-local logs for durable evidence.                                                    | M3, M5, M10, M11, M12   |
+| Deployment/tenant-managed selection in `apps/api/internal/adapters/mediaplaneproviders/registry.go`, and Cloudflare-only SDK/native grants in the files above                                                                                                                                      | Migrate all defaults, explicit Space overrides, tenant-managed configuration and supported SDK/app cohorts. Flip default-on only after recording, capacity and monitoring parity; no permanent old-SDK Cloudflare cohort.                                                                                     | M12                     |
+
+The code verifies those seams, not Cloudflare's internal routing or redundancy.
+The need for primary/standby placement, bounded capacity, health, drain, restart
+and failure recovery is an operational inference from replacing a managed SFU
+with disposable single-node allocations. M6 proves a node; M11 proves the fleet.
+The need to remove SFU credentials, vendor-only config/fixtures and adapter code
+is a retirement requirement, owned by M13, not an inference that TURN must go.
+
 ## Placement and control contract
 
 Put the deployable in **`features/media/sfu/`**, its own Go module, rather than
@@ -305,8 +349,8 @@ and node capacity; never evict a live revoke watermark to admit more work.
 
 ## Adaptive quality
 
-Two goals drive this section. First, **lower egress**: egress above the included
-allowance is the largest variable cost (see [Cost scenarios](#cost-scenarios)), and
+Two goals drive this section. First, **lower egress**: egress can become a variable cost above the included
+allowance (see [Cost scenarios](#cost-scenarios)), and
 packets forwarded are the main CPU cost on a small node. Second, **a picture that
 follows each viewer's network**: a viewer on a weak link gets a lower layer
 before the link queues and freezes, which keeps latency low. One mechanism serves
@@ -469,14 +513,24 @@ owner `AllowRelay` policy, short-lived credential delivery, bounded mint timeout
 and STUN-only fallback (`apps/api/internal/mediaplane/service.go:60`;
 `apps/api/internal/adapters/cloudflare/sfu/turn.go:1`). Run the relay-only proof
 against our SFU: being compatible with Cloudflare SFU does not prove an arbitrary
-destination. If it fails, coturn is a rollout blocker, not a silent fallback.
+destination. A failed relay proof blocks rollout until a verified relay path
+exists; do not silently switch providers.
 
-Cloudflare TURN is no longer free of separate relay billing when the SFU is
-outside Cloudflare: it charges edge-to-client traffic at $0.05/GB after the shared
-allowance ([TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/)).
-Self-hosted coturn can follow later if cost or path quality justifies it. Use a
-separate relay listener/address for TLS 443, short-lived authenticated credentials,
-quotas and private-destination restrictions; do not open an unauthenticated relay.
+**Decision: keep Cloudflare TURN.** It is independently usable with our SFU and
+fits the free allowance at the measured traffic level. SFU and TURN share the
+first 1,000 decimal GB per month, then cost $0.05/GB. Traffic between Cloudflare
+TURN and Cloudflare SFU is exempt; relay traffic to our SFU is not. Count both
+services during rollback windows, rather than assuming TURN has another free
+1,000 GB. See [Realtime pricing](https://developers.cloudflare.com/realtime/sfu/platform/pricing/)
+and the [TURN FAQ](https://developers.cloudflare.com/realtime/turn/faq/).
+
+Revisit TURN only if relay-only interoperability fails, measured relay latency or
+availability misses the media gates, shared usage approaches the paid tier, or a
+security/compliance requirement rules it out. Compare the operating cost and
+path quality before selecting coturn or another relay. A replacement needs its
+own TLS-443 listener/address, short-lived credentials, quotas and
+private-destination restrictions. SFU retirement must retain TURN credentials,
+STUN/bootstrap support and renewal monitoring.
 
 Use a direct Droplet public media address, not an HTTP CDN/proxy. Recommended
 Pion UDP mux: **UDP 50000**, one public candidate shared across sessions. If M1
@@ -498,270 +552,308 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 
 ## Hosting and budget
 
-The goal is the smallest machine that meets measured budgets. Because the SFU
-forwards packets and never transcodes, it needs far less CPU than a general media
-server, and the design below sizes it from packet rate and memory, not from a
-vendor's "media server" tier. Moving up a size is cheap (see
-[Resizing](#resizing)), so v1 starts small and grows on evidence.
+Use one Basic Regular `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` standby in
+Singapore `sgp1`. The primary is preferred for new Episodes. The standby takes
+new Episodes only when the primary is unhealthy, draining or full, with M5
+holding camera layers low and refusing admission at the smaller packet budget.
+This is a full-capacity primary with a **degraded standby**, not two equal nodes
+or a guarantee that failover preserves every peak call at full quality.
 
-Public list prices checked **5 November 2026**, USD before tax, Regular CPUs.
-DigitalOcean's [availability matrix](https://docs.digitalocean.com/platform/regional-availability/)
-lists Basic and CPU-Optimized in Singapore `sgp1`; creation-time stock was not
-checked and still needs a check when M6 creates the Droplets.
+Public list prices checked **5 November 2026**, USD before tax. Regional SKU
+availability does not guarantee creation-time stock.
 
-| Environment   | Droplet                       | CPU / RAM / disk               | Included monthly outbound | Monthly compute |
-| ------------- | ----------------------------- | ------------------------------ | ------------------------- | --------------- |
-| Staging       | Basic Regular (`s-1vcpu-1gb`) | 1 shared vCPU / 1 GiB / 25 GiB | 1,000 GiB                 | **$6**          |
-| Production v1 | Basic Regular (`s-2vcpu-2gb`) | 2 shared vCPU / 2 GiB / 60 GiB | 3,000 GiB                 | **$18**         |
+| Use                     | Layout                                                   | Included monthly outbound     | Compute                                                     |
+| ----------------------- | -------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
+| Production primary      | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk | 3,000 GiB per full-month node | **$18/month**                                               |
+| Production standby      | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk | 1,000 GiB per full-month node | **$6/month**                                                |
+| Functional test run     | Disposable `s-1vcpu-1gb`                                 | Prorated while created        | $0.00893/hour equivalent, $6 monthly cap                    |
+| Capacity/drain test run | Disposable primary or primary/standby pair               | Prorated while created        | $0.02679/hour primary plus $0.00893/hour standby equivalent |
 
-Source: [Droplet pricing](https://www.digitalocean.com/pricing/droplets). Both
-environments together cost $24 a month. No load balancer, managed disk or media backup is needed for this
-disposable node. Existing API/Sync/Postgres and observability bills are excluded.
-Inbound transfer is free; excess outbound is $0.01/GiB, with allowances pooled
-across the team, not reserved to this SFU ([bandwidth billing](https://docs.digitalocean.com/platform/billing/bandwidth/)).
-Do not count another workload's unused allowance as guaranteed SFU capacity.
+Production compute totals **$24/month**, with no permanent staging node.
 
-### Why these sizes
+DigitalOcean bills per second with a minimum charge. Stopped Droplets still cost
+money; destroy test nodes after collecting sanitized results. No media load
+balancer, media disk backup or replicated packet store is required. Existing
+API/Sync/Postgres, recorder compute/storage and observability costs are excluded.
+Sources: [Droplet pricing](https://www.digitalocean.com/pricing/droplets),
+[bandwidth billing](https://docs.digitalocean.com/platform/billing/bandwidth/) and
+[regional availability](https://docs.digitalocean.com/platform/regional-availability/).
 
-Production has two vCPUs because forwarding runs next to the Go garbage
-collector and the kernel's UDP and encryption work. On one shared vCPU all of
-that queues behind a single core that the host can take away. `s-2vcpu-2gb` is
-the smallest two-vCPU Basic size. Memory is not what limits it (see the
-[memory budget](#memory-budget)); CPU is.
-Staging runs the service and one four-person test call or one eight-person
-call held to its packet ceiling. One vCPU and 1 GiB are enough for that, and the memory budget
-below leaves about half of the 1 GiB free.
+### Measured M1 capacity
 
-### Packet-rate math (hypotheses, replaced by M6 measurements)
+The [#809 benchmark](https://github.com/Q9Labs/chalk/issues/809#issuecomment-6658827602)
+runs real `sgp1` Droplets at M1 load-test commit `058901b05`. Every subscriber
+receives 2.5 Mbps VP8, about 281 packets/s, plus Opus at 50 packets/s. These are
+all-high synthetic streams, not the measured 0.5 Mbps workload.
 
-CPU cost follows packets per second, not bits per second, because every packet
-costs one decrypt or encrypt, one system call and some scheduling. Use
-1,200-byte RTP payloads and the camera caps from the SDK (2.5 and 0.65 Mbps;
-`sdks/typescript/client/src/media/client.ts:927`). Today's SDK subscribes to all
-other Participants' publications, not only visible video tiles
-(`sdks/typescript/client/src/media/client.ts:1792`), so subscriptions grow as
-`N(N-1)` even though each publisher uploads once.
+| Node          | Outbound packets/s near 60% host CPU, with 8 MiB receive buffer | Initial M2 budget |
+| ------------- | --------------------------------------------------------------- | ----------------- |
+| `s-1vcpu-1gb` | About 20,000                                                    | 16,000 packets/s  |
+| `s-2vcpu-2gb` | About 40,000, with some fixtures reaching 56,000                | 32,000 packets/s  |
 
-| Stream             | Rate      | Packets/s | Basis                                             |
-| ------------------ | --------- | --------- | ------------------------------------------------- |
-| Camera, high (`h`) | 2.5 Mbps  | 250       | 2.5 Mbps / 8 / 1,200 B is about 260               |
-| Camera, low (`l`)  | 0.65 Mbps | 70        | 0.65 Mbps / 8 / 1,200 B is about 68               |
-| Microphone         | 50 kbps   | 50        | Opus 20 ms frames: set by frame time, not bitrate |
-| Screen video       | 2 Mbps    | 210       | assumed rate, not an SDK cap                      |
+Both SKUs reach an unexplained ceiling around 57,000 to 65,000 **outbound**
+packets/s, about 450 to 510 Mbps, while CPU is still 62 to 75%. Loss then rises
+to 10 to 15%. The single UDP socket, virtual NIC and load generator are suspects,
+not proven causes. Do not extrapolate linearly past this ceiling or count a
+larger SKU as a fix without a new proof.
 
-For a call of `N` Participants, each with camera and microphone, three
-subscription profiles apply. In each, every viewer gets every remote microphone.
+CPU cost is 17 to 34 microseconds per datagram in plus out, about **20
+microseconds** near the operating point. `sendto` accounts for about 34% of CPU.
+RSS is **5 to 8 MiB per PeerConnection**. About 77% of the heap is
+`packetio.Buffer.grow`, including an unread camera layer. M1 lacks TWCC,
+NACK/RTX and pacing. Their expected **15 to 30% extra CPU** is an estimate, not
+measured capacity; M6 measures them together.
 
-- **All-high:** every remote camera at `h`. This is what today's `h`-first pull
-  does, and it is the worst case.
-- **Mixed:** one remote camera at `h`, the others at `l`.
-- **Adaptive:** one remote camera at `h` (speaker or pinned tile), at most three
-  others at `l`, and the remaining cameras paused because they are not visible.
-  See [Adaptive quality](#adaptive-quality). With four people every tile is
-  visible, so adaptive equals mixed; the saving starts at larger calls.
+The [#810 follow-up](https://github.com/Q9Labs/chalk/issues/810#issuecomment-6658828184)
+shows default receive buffers near 208 KiB dropping packets even at modest load.
+On `s-2vcpu-2gb`, loss is 0.41% at four four-person Episodes and 1.14% at eight;
+on `s-1vcpu-1gb`, it is 2.3% at five. An 8 MiB buffer removes those drops in
+these fixtures. Set `net.core.rmem_max`
+and `rmem_default`, request `SO_RCVBUF`, and report the effective socket size.
+Drain or cap unread layer buffers before M6. More RAM does not fix an unbounded
+unread buffer.
 
-Egress packets/s are `N(N-1)·300` all-high, `N(250 + (N-2)·70 + (N-1)·50)` mixed,
-and `N(250 + min(N-2, 3)·70 + (N-1)·50)` adaptive. Ingress is `370·N`, because
-both camera layers and the microphone arrive from every Participant.
+The benchmark reports outbound throughput; M2 reservations and M5's per-Episode
+ceiling count **ingress plus egress**. The 16,000/32,000 defaults conservatively
+reduce the outbound operating point by 20%, but are not a measurement of the
+finished feature set in those units. Report ingress, egress, repair, CPU and
+queue delay separately in M6, then keep or lower these budgets.
 
-| Participants | Ingress | Egress all-high / mixed / adaptive | Total in + out, all-high / mixed / adaptive |
-| ------------ | ------- | ---------------------------------- | ------------------------------------------- |
-| 4            | 1,480   | 3,600 / 2,160 / 2,160              | 5,080 / 3,640 / 3,640                       |
-| 8            | 2,960   | 8,560\* / 8,160 / 6,480            | 11,520\* / 11,120 / 9,440                   |
+### Workload and packet-rate math
 
-\* An eight-person all-high call would demand 16,800 egress and 19,760 total
-packets/s, but the per-Episode ceiling of 11,520 (see below) stops that, so at most
-8,560 egress packets/s are forwarded (11,520 less 2,960 ingress). Mixed (11,120)
-and adaptive (9,440) fit under the ceiling without a screen share.
-Adaptive cuts eight-person egress packets by 24% against that capped worst case
-(6,480 against 8,560). That also cuts the CPU bill, not only the transfer bill.
+Size for 10 to 12 concurrent three-person Episodes lasting about an hour, with
+two cameras and one screen share active 65% of the time. Also test a rare
+10-person Episode lasting at most an hour with some cameras on. Peak usage is
+evening to night in Pakistan and Dubai; repeat capacity tests during that window.
+These are anonymous aggregate planning inputs, not customer-specific runbooks.
+October SFU egress was **103 decimal GB**, with received camera streams averaging
+about **0.5 Mbps**, typically 360p to 720p. Monthly bytes do not reveal peak load
+or future recording demand.
 
-**CPU budget.** Assume **25 µs of CPU per packet** (one SRTP operation about
-2–3 µs with AES hardware support, one system call about 5–10 µs on a virtual
-machine, the rest Go scheduling, interceptors and garbage collection). That is an
-unmeasured guess for stock Pion without batching. It gives 40,000 packets/s per
-fully used vCPU. Halve it for shared-CPU steal risk, then halve again to stay at
-50% target utilization: **10,000 packets/s per vCPU**.
+Use the following explicit assumptions, without relying on M8 or M9 savings:
 
-| Budget                           | Staging (1 vCPU) | Production v1 (2 vCPU) |
-| -------------------------------- | ---------------- | ---------------------- |
-| Planned packets/s, in + out      | 10,000           | 20,000                 |
-| Active Participants (memory cap) | 8                | 16                     |
-| Packet ceiling for one Episode   | 10,000           | 11,520                 |
+- Realistic camera high layer: **60 packets/s**, rounded above 281 times
+  0.5/2.5. Keep the second camera layer at **70 packets/s**, its approximate
+  650 kbps cap with 1,200-byte payloads. This deliberately overstates realistic
+  ingress; the October measurement is received-stream bitrate, not both RIDs.
+- Worst camera high layer: **281 packets/s** from M1; low remains 70.
+- Every Participant sends a microphone at **50 packets/s**, even if silent.
+- One screen video at **210 packets/s**, from an assumed 2 Mbps, plus screen
+  audio at **50 packets/s**. Screen rate is not an SDK-enforced cap; M6 must
+  test high-motion screens and tune limits. Include screen audio even if unused.
+- Every Participant receives every remote source. For the rare realistic case,
+  use **four cameras and one screen share** as a conservative stated fixture,
+  not an observed camera count. The rare worst case has all ten cameras on.
 
-**Admission reserves each Episode at its supported peak.** The supported peak is
-every remote camera on `h`, every microphone, and **one screen share** with its
-audio. The own provider allows one active screen share per Episode, because the
-reservation counts one. For an Episode with `n` active Participants this is
-`300·n(n-1) + 630·n` packets/s (the `n(n-1)` all-high term, plus `370·n` ingress
-and `260·n` for one screen and its audio): 1,860 at two, 6,120 at four, 9,150 at
-five and 21,840 at eight.
+For `n` Participants, `k` cameras, high-layer rate `h`, low-layer rate `l=70`,
+and screen duty `s` from zero to one:
 
-That peak is more than one node can carry at eight Participants (21,840 against
-20,000), so the allocator **enforces a packet ceiling per Episode** and the
-reservation is the lower of the peak and the ceiling. The ceiling is 11,520, the
-eight-person adaptive profile with a screen share (6,480 egress, 2,960 ingress
-and 2,080 for the screen), or the node budget if that is smaller. When viewers'
-requested layers would exceed the ceiling, the allocator lowers the layers of the
-largest set of non-speaker tiles first and keeps audio and screen. Forwarding can
-then never exceed the reservation.
+```text
+ingress = k(h + l) + 50n + 260s
+egress  = (n - 1)(kh + 50n + 260s)
+total   = k(nh + l) + 50n² + 260ns
+```
 
-A Participant join is refused if it would push the sum of reservations above the
-node budget, and a new Episode needs room for two Participants. The live steal
-and queue-delay signals below are a second gate, not a substitute for this one.
-Production therefore fits one Episode of up to eight (11,520) plus one
-four-person Episode (6,120) for 17,640, or three four-person Episodes (18,360),
-or two five-person Episodes (18,300). It does **not** fit two eight-person
-Episodes (23,040): the second is refused as it grows. Staging fits one
-four-person Episode (6,120) or one eight-person Episode held to 10,000. A
-reservation above typical use is deliberate headroom against steal; once M6 has
-measured real load, a later change may reserve measured use instead.
+The duty-weighted column is an hourly average, not simultaneous capacity. All
+rates below are packets/s before repair/RTCP. M5's **11,520 ingress-plus-egress
+ceiling per Episode** lowers or pauses camera video when demand exceeds it;
+audio and screen have priority. Account for repair inside the enforced budget.
 
-The tightest of the packet, Participant, memory and live-signal budgets wins. These are
-not throughput guarantees. M6 measures the real cost per packet on
-the production SKU and lowers the budget if it misses the target.
-The durable admission ceiling is **500** Episode Participants, not an SFU
-capacity (`apps/api/internal/episodes/service.go:75`); the eight-Participant
-own-provider cap stays.
+| Shape                                                      | Ingress at screen-on peak | Egress at screen-on peak                     | Total at screen-on peak                   | Total at 65% screen duty |
+| ---------------------------------------------------------- | ------------------------- | -------------------------------------------- | ----------------------------------------- | ------------------------ |
+| One three-person Episode, two realistic cameras            | 670                       | 1,060                                        | 1,730                                     | 1,457                    |
+| 10 such concurrent Episodes                                | 6,700                     | 10,600                                       | **17,300**                                | 14,570                   |
+| 12 such concurrent Episodes                                | 8,040                     | 12,720                                       | **20,760**                                | 17,484                   |
+| 10 Episodes, same two cameras at worst high rate           | 11,120                    | 19,440                                       | **30,560**                                | 27,830                   |
+| 12 Episodes, same two cameras at worst high rate           | 13,344                    | 23,328                                       | **36,672**                                | 33,396                   |
+| Rare ten-person Episode, four realistic cameras, screen on | 1,280                     | 9,000                                        | **10,280**                                | Not assumed              |
+| Rare ten-person Episode, all cameras high, screen on       | 4,270                     | 32,130 uncapped; at most 7,250 after ceiling | 36,400 uncapped; **11,520 after ceiling** | Not assumed              |
+
+If all three class cameras turn on at the worst rate, the uncapped peak is
+3,969 per Episode or **47,628** across twelve. No individual class reaches the
+11,520 ceiling, so that ceiling alone does not protect the aggregate node.
+If M5 enforces the smaller 2,400 reservation per three-person Episode as well,
+twelve classes stay within 28,800 by reducing camera quality; the raw all-high
+figures are demand, not promised delivered quality.
+If the rare call overlaps twelve classes, totals are **31,040 realistic** or
+**48,192 worst case**, with the rare call capped but the two-camera classes
+uncapped. Do not use the 65% screen duty to discount these peak requirements.
+
+### Admission and the single-node envelope
+
+M2 owns configurable costs of **150 packets/s per video stream** and **50 per
+audio stream**, node budgets of **16,000** and **32,000**, a configurable Episode
+Participant limit defaulting to **16**, and an Episode binding that records the
+selected node. These are reservations, not a claim that every video physically
+sends 150 packets/s. Keep one active screen share per Episode.
+
+The nominal all-source reservation counts one camera and microphone per
+Participant plus the screen and its audio on every hop:
+`R(n) = (150 + 50) · n · (n + 1)`. Reserve at least two Participants for a new
+Episode. M5 bounds the supported reservation by the per-Episode ceiling:
+`min(R(n), 11,520, node budget)`. Before M5's enforcing allocator is enabled,
+M2 must not claim that a smaller reservation bounds actual media. A second RID,
+hotter video, retransmissions and capture still need measured headroom.
+
+| Reservation                                            | Packets/s                                       |
+| ------------------------------------------------------ | ----------------------------------------------- |
+| One three-person Episode                               | 2,400                                           |
+| 10 / 12 three-person Episodes                          | 24,000 / 28,800                                 |
+| One ten-person Episode                                 | 22,000 nominal; 11,520 only with M5 enforcement |
+| Twelve three-person Episodes plus the capped rare call | **40,320**                                      |
+
+Reject a join or new Episode if its reservation would exceed the selected
+node's budget. Replacement must not double-count the same Participant.
+The default 16 is per Episode, not a node-wide 16-person memory cap; twelve
+classes already need 36 Participants. The API's durable 500-Participant maximum
+is not an SFU throughput promise (`apps/api/internal/episodes/service.go`).
+
+A configured 16-person maximum also needs a minimum-media check. At 50 audio
+packets/s, sixteen microphones alone cost `50 · 16² = 12,800` in plus out;
+one screen and its audio raise that to **16,960**, before camera ingress. They
+cannot fit a fixed 11,520 ceiling by pausing cameras. M5 must refuse admission or
+source activation when mandatory media cannot fit, or use a separately validated
+higher configurable Episode ceiling within the node budget. Never claim sixteen
+all-audio Participants fit the default ceiling, or silently sacrifice audio.
+
+**Primary acceptance:** prove the full admitted workload on the $18 node alone,
+including capture and repair. A 32,000-budget primary admits twelve class
+reservations but not those classes plus the rare call at the initial costs.
+It also cannot promise the raw all-high class peak without lowering quality.
+M6/M10 must calibrate reservations and enforce acceptable rate/quality limits
+from the complete media path. Do not silently raise 32,000 or confuse outbound
+throughput with total capacity. If the required primary envelope fails, full
+cutover stays blocked pending a supported capacity/quality plan; this layout
+does not authorize a second $18 node or a larger SKU.
+
+**Standby acceptance:** prove degraded admission, drain and recovery on the $6
+node at **16,000**, not the primary's budget. M5 caps camera selection at `l`,
+protects audio and screen, bounds repair and queueing, and refuses work it cannot
+carry. A single-layer publisher has no lower RID to select; pause video or refuse
+the unsupported shape rather than pretend to downscale it. Screen is
+single-encoding, so a low camera RID does not lower screen bitrate. Any lower
+screen/uplink cap needs a separately proven publisher policy.
+
+At unchanged 150/50 reservation costs, standby admits **six three-person
+Episodes** at 14,400, not seven at 16,800. Alternatively it admits a capped
+10-person Episode at 11,520 plus one three-person Episode at 2,400, total
+13,920. Six realistic classes at the conservative screen-on rate use about
+**10,620 actual packets/s** before repair/capture, with subscribers held on
+`l`. One realistic rare call held on `l` uses 10,640. These are realistic admitted workloads, not a promise of the full
+twelve-class peak. Twelve realistic classes are 20,760 before repair, and their
+all-source reservations are 28,800; neither fits 16,000. Lower-layer savings do
+not release nominal reservations until a measured, enforced degraded reservation
+profile is reviewed. Capture reduces the admitted subset further. Standby does
+not carry the all-high peak.
+
+**Decision until M13:** if primary placement is unavailable and degraded
+standby refuses a **new Episode**, use Cloudflare SFU as temporary capacity
+rollback. Reserve/select it before committing the Episode's provider binding,
+record a bounded overflow reason, and keep it pinned. This is migration
+policy, not a decision to keep Cloudflare after retirement. An
+extra Participant refused in an already-bound Episode must not be sent alone to
+another provider. Return capacity/retry, or use an authority-controlled whole-call
+rollback that ends the old binding and creates a new Episode. No silent provider
+change or cross-provider media. M13 requires zero overflow during its observation
+window and removes this path; afterwards standby refusals get an explicit
+capacity/retry result.
+
+Capture is additional load, not a free Participant slot. One recorder receiving
+the two cameras, three microphones, screen and screen audio adds **530 outbound
+packets/s per realistic class**, or 6,360 across twelve. Simulcast input need not
+be duplicated, but recorder pulls, transport, retransmission and memory count.
+Twelve recorded classes plus the realistic rare call reach **37,400 total**
+before repair, above 32,000. M10 measures the actual capture subscription shape;
+M11 reserves it in primary/standby placement and degraded failure tests.
 
 ### Memory budget
 
-Memory holds sessions and bounded packet history, so it stays small. The retransmit
-history is stored **once per ingress stream** and shared by all subscribers of
-that stream. A subscriber keeps only a small map from its outgoing sequence
-numbers to the stored packets, so a retransmission copies, re-translates and
-re-encrypts the stored packet. Keeping a full copy per subscriber would multiply the 880 KiB by up to
-seven subscribers, about 6 MiB per publisher and 98 MiB across 16 Participants.
+Use measured **5 to 8 MiB RSS per PeerConnection** as M1 evidence, not a live-heap
+multiplier. For 36 class Participants plus ten in the overlapping rare call,
+46 PeerConnections imply roughly **230 to 368 MiB** at the M1 rate before the
+finished recovery/pacing/capture costs. Twelve capture connections would add
+another 60 to 96 MiB. This extrapolation is not a peak-RSS proof.
 
-Cap each history at one second of its stream's maximum rate. One second covers a
-round trip of several hundred milliseconds plus a retry; an older loss is
-recovered with a keyframe request, not a retransmit. Per publisher the caps are
-`h` 400 KiB, `l` 128 KiB, microphone 16 KiB, screen 320 KiB, screen audio 16 KiB:
-**880 KiB**. Each subscriber transport has a pacer queue of at most 128 KiB, and
-each outgoing stream an 8 KiB sequence map.
+Store retransmit history once per ingress stream and share packet bytes across
+subscribers. Retain at most one second per stream, with these byte caps per
+publisher: `h` 400 KiB, `l` 128 KiB, microphone 16 KiB, screen 320 KiB, screen
+audio 16 KiB, at most **880 KiB**. A subscriber pacer queue is at most 128 KiB;
+an outgoing stream's sequence map is at most 8 KiB. Bound replay/control state,
+source fences and unread layer buffers. Test sparse-camera and all-source cases,
+not just a fixed Participant count.
 
-| Component                                  | Production (16 Participants) | Staging (8 Participants) |
-| ------------------------------------------ | ---------------------------- | ------------------------ |
-| Go runtime and binary                      | 40 MiB                       | 40 MiB                   |
-| PeerConnections at 2 MiB each (guess)      | 32 MiB                       | 16 MiB                   |
-| Packet history, 880 KiB per publisher      | 14 MiB                       | 7 MiB                    |
-| Pacer queues, 128 KiB per subscriber       | 2 MiB                        | 1 MiB                    |
-| Sequence maps, 8 KiB per outgoing stream   | 2 MiB                        | 1 MiB                    |
-| Control state, replay, tombstones (capped) | 8 MiB                        | 4 MiB                    |
-| **Live heap**                              | **about 100 MiB**            | **about 70 MiB**         |
+Start with `GOMEMLIMIT=768 MiB` on the 2 GiB primary and 384 MiB on the
+1 GiB standby/functional node; `GOGC=200` is a tuning candidate, not a memory guarantee.
+Include kernel buffers, agents and operating-system RSS. M6 requires peak total
+memory below 70% of RAM with no unbounded growth over the hour-long workload,
+and tunes runtime settings from CPU/heap/RSS evidence. Larger tests run on the
+production size, never extrapolated from staging.
 
-With `GOGC=200` the heap can reach three times the live size, so about 300 MiB
-in production and 210 MiB in staging. Add kernel UDP buffers (8 MiB) and an
-assumed 300 MiB for the operating system, agents and the telemetry exporter. The
-total is about 610 MiB of the production 2 GiB and about 520 MiB of the staging
-1 GiB. `GOMEMLIMIT` is 768 MiB in production and 384 MiB in staging, so the
-collector works harder before the kernel's out-of-memory killer acts. M6 replaces
-the 2 MiB per PeerConnection and 300 MiB guesses with measurements.
+### Shared CPU, drain and resizing
 
-### Shared-CPU risk
+Export CPU steal from `/proc/stat`, pacer queue delay and Go scheduler latency.
+Initially stop new Episodes when steal exceeds 3% over 30 seconds or pacer queue
+p95 exceeds 50 ms. Keep existing media running and alert on the bounded reason.
+If these guards close admission in more than 1% of minutes in a week, compare a
+measured dedicated-CPU replacement rather than accepting persistent freezes.
+The unexplained M1 packet ceiling still applies until diagnosed.
 
-Basic Droplets share physical cores with other customers. When the host is busy,
-the hypervisor withholds cycles from our vCPU (CPU steal). A real-time forwarder
-feels this as jitter: a 20 ms stall delays every queued packet on the node, so all
-calls get late media together, and the subscriber's TWCC estimator reads the delay
-as congestion and cuts bitrate. DigitalOcean's documentation I checked gives no
-bound for steal on Basic sizes, so treat it as unbounded until measured.
+Planned primary deploys mark it draining. New Episodes go to the healthy
+standby's degraded budget, then Cloudflare overflow until M13, or
+receive an explicit capacity result. Existing primary calls, joins to those
+Episodes, capture, leases and cleanup stay on the primary until completion.
+This avoids interrupting live calls, but standby does not preserve full new-call
+capacity. Wait for zero live allocations and cleanup debt before stopping the
+primary; a deadline that forces replacement is disruptive recovery, not a
+zero-interruption deploy. Prove admission behavior with hour-long calls.
 
-The mitigation is to see it and stop adding load:
+On primary failure, replace whole own-SFU allocations onto standby only within
+its degraded envelope, with fresh generations and M3 consent rules. Reserve
+complete recovering Episodes from their known admitted shape, rather than let
+individual retries consume standby in half-recovered calls. Excess existing
+own-SFU Episodes need an explicit capacity outcome or whole-call rollback, not
+a silent per-Participant Cloudflare route. On primary recovery, send new Episodes
+to it; existing standby or overflow Episodes keep their bindings until completion.
+Drain standby only while primary is healthy and has capacity. API control always
+follows the binding, never a round-robin load balancer.
 
-- Export CPU steal (from `/proc/stat`), pacer queue delay and Go scheduler
-  latency (`runtime/metrics`).
-- Admission stops **new Episodes** when sustained steal exceeds 3% over 30 seconds
-  or pacer queue delay p95 exceeds 50 ms. These are initial values that M6 tunes.
-  Live calls keep running and the alarm pages an operator.
-- If admission closes for either reason in more than 1% of the minutes in a week,
-  move to dedicated CPUs (see [Resizing](#resizing)).
-
-### Resizing
-
-Moving up a size is a DigitalOcean resize. Drain the node (no new Episodes, wait for
-calls to end), power it off, resize **CPU and RAM only** (disk unchanged), power it
-on. DigitalOcean documents about one minute of downtime per GiB of used disk; this
-disk holds almost nothing. A CPU-and-RAM resize can go back down, because the
-disk is not grown. Resizing the disk is permanent, so never do it here.
-A resize ends live calls just like node loss; Participants rejoin through
-replacement, so do it outside calling hours. M6 rehearses a resize up and down on
-staging and records the downtime and whether the public address and firewall
-rules survive; DigitalOcean's resize page does not say.
-
-DigitalOcean allows a resize only to a plan whose disk is equal or larger
-([resize rules](https://docs.digitalocean.com/products/droplets/how-to/resize/)).
-So the Basic sizes below are resizes, and the dedicated-CPU step is a replacement
-node built by the same module, followed by a drain of the old one.
-
-| Trigger (production)                                                     | Next step                                    | Monthly |
-| ------------------------------------------------------------------------ | -------------------------------------------- | ------- |
-| Memory above 70% of RAM at the admitted peak, or any out-of-memory kill  | Resize to `s-2vcpu-4gb`                      | $24     |
-| Measured cost per packet is far above 25 µs and the profile shows no fix | Resize to `s-4vcpu-8gb` (still shared)       | $48     |
-| Steal or queue delay closes admission in over 1% of minutes in a week    | Replacement node `c-2` (2 dedicated vCPU)    | $42     |
-| Joins are routinely refused for the packet budget under real demand      | A second node, per the multi-node plan below | +$18    |
-| `c-2` fails the M6 harness                                               | Replacement node `c-4` (4 dedicated vCPU)    | $84     |
-
-For staging, memory pressure during the four-person proof moves it to
-`s-1vcpu-2gb` ($12), and flaky proofs that coincide with steal move it to
-`s-2vcpu-2gb` ($18). Optimize first when a profile shows a fixable hotspot
-(see [Efficiency](#efficiency-on-a-small-machine)); a bigger machine is the
-answer to a profile that has no hotspot left.
+For resizing, drain fully, then use CPU/RAM-only resize without growing disk, or
+build a replacement node and drain the old one. Do not power off active calls as
+a routine deployment step. DigitalOcean's
+[resize rules](https://docs.digitalocean.com/products/droplets/how-to/resize/)
+require an equal or larger disk tier; a dedicated-CPU move may need replacement.
+Measure a new SKU before changing budgets. More vCPUs do not prove that the
+roughly 60,000 outbound-packet ceiling has gone away.
 
 ### Cost scenarios
 
-The synthetic fixture is not observed customer traffic. Budget audio at 50 kbps
-and add 20% for headers, RTCP and repair. Let `H=2.5`, `L=0.65`, `A=0.05` Mbps:
+At the observed **103 decimal GB/month**, Cloudflare SFU costs **$0**, inside its
+shared 1,000 GB allowance; it then charges **$0.05/GB**. Replacing it is a control,
+quality and product-completeness decision, not a saving at present usage.
 
-- All-high egress: `1.2 · N(N-1)(H + A)` Mbps.
-- Mixed egress: `1.2 · N(H + (N-2)L + (N-1)A)` Mbps.
-- Adaptive egress: `1.2 · N(H + min(N-2, 3)L + (N-1)A)` Mbps.
-- Ingress with both RIDs: `1.2 · N(H + L + A)` Mbps.
-- One 2 Mbps screen plus 50 kbps screen audio adds `1.2 · (N-1) · 2.05` Mbps of
-  egress, an assumption and not an SDK-enforced cap.
+The $18 primary and $6 standby cost **$24/month** before tax, plus disposable
+test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
+to the team pool. 103 GB is about **95.9 GiB**, even all through one node below that
+node's 3,000 GiB. DigitalOcean ingress is free and excess outbound is $0.01/GiB.
+The own-SFU egress estimate stays $0 at this volume if other team workloads have
+not consumed the allowance. Formula:
+`$24 + $0.01 · max(0, SFU GiB - available pooled GiB) + test compute + TURN`.
 
-| Participants | Ingress Mbps | Egress Mbps, all-high / mixed / adaptive | GiB per call-hour, all-high / mixed / adaptive |
-| ------------ | ------------ | ---------------------------------------- | ---------------------------------------------- |
-| 4            | 15.36        | 36.72 / 18.96 / 18.96                    | 15.39 / 7.95 / 7.95                            |
-| 8            | 30.72        | 72.48\* / 64.80 / 46.08                  | 30.38\* / 27.16 / 19.31                        |
+Cloudflare TURN stays **$0** while total billable Realtime egress, including any
+rollback SFU traffic, is below 1,000 GB. For example, even relaying all 103 GB
+of received SFU media plus the workload's publisher uplink fits that allowance
+at the current call shape. Do not treat 103 GB as a measurement of both relay
+directions or of future recording traffic. SFU egress to TURN also consumes
+DigitalOcean transfer. Monitor actual invoices/usage rather than charging a
+hypothetical paid TURN percentage from the first byte.
 
-\* The eight-person all-high call is held to the 11,520 packets/s ceiling, so
-its worst case is: (11,520 − 2,960 ingress − 2,800 audio) = 5,760 video packets/s
-× 10,000 bits (2.5 Mbps / 250 packets/s) + 2.8 Mbps audio = 60.4 Mbps, × 1.2 =
-72.48 Mbps. The uncapped formula would give 171.36 Mbps (71.82 GiB/hour), which
-the ceiling makes impossible. The ceiling also counts screen packets, so this
-camera-only worst case spends all of it on cameras.
-
-For decimal Mbps, `GiB/hour = Mbps · 10^6 · 3600 / (8 · 2^30)`.
-At 10 four-person staging call-hours a month, direct egress is about 154 GiB,
-inside the 1,000 GiB allowance, so staging stays at $6.
-
-For production, 500 call-hours a month on `s-2vcpu-2gb` (3,000 GiB allowance)
-costs the following. These are call-hours, not participant-hours.
-
-| Scenario                                    | GiB at 500 call-hours | Over allowance | Compute + excess per month |
-| ------------------------------------------- | --------------------- | -------------- | -------------------------- |
-| Four-person, all-high                       | 7,695                 | 4,695          | **$65**                    |
-| Four-person, mixed                          | 3,973                 | 973            | **$28**                    |
-| Four-person, adaptive                       | 3,973                 | 973            | **$28**                    |
-| Eight-person, all-high, held to the ceiling | 15,188                | 12,188         | **$140**                   |
-| Eight-person, mixed                         | 13,580                | 10,580         | **$124**                   |
-| Eight-person, adaptive                      | 9,656                 | 6,656          | **$85**                    |
-
-Egress above the allowance costs more than the machine once calls grow, so
-adaptive quality saves more money than the Droplet size does: an eight-person
-adaptive call costs about 60% as much to serve as the worst case the ceiling
-allows ($85 against $140). The allowance covers
-about 195 all-high or 377 mixed four-person call-hours at this size.
-
-Add relay cost separately. If 10% of the traffic is delivered via Cloudflare TURN,
-that is about 826 decimal GB a month for the four-person all-high case, up to
-**$41/month**, and about 427 GB (**$21/month**) for mixed or adaptive, before any
-remaining shared Cloudflare free allowance. DigitalOcean still charges its SFU
-egress to the relay. With relay, the four-person production scenarios are about
-**$106** (all-high) and **$49** (mixed or adaptive) a month, not a flat $18.
-Real demand and shared allowance usage are unknown; replace these scenarios with
-existing call-stats/usage evidence before expansion.
+For scale context only, a realistic class uses about **2.68 GB of egress per
+hour** with 65% screen duty, using 0.5 Mbps per received camera, 50 kbps per
+microphone and a 2 Mbps screen with 50 kbps screen audio, plus 20% headers/repair.
+Twelve such class-hours in one busy hour are about **32.2 GB**. The duration and
+number of busy evenings per month are not measured, so do not multiply the peak
+into a fabricated monthly bill. Capture and its separate compute/storage add
+cost; M10/M11 refresh the budget before cutover.
 
 ## Efficiency on a small machine
 
@@ -799,31 +891,36 @@ its share of CPU or allocation, and the measured gain.
   outside Git until someone has checked that it holds function names and counts
   only.
 
-The largest lever is fewer packets, not faster packets: the adaptive-quality
-items cut eight-person egress packets by 24% against the ceiling-capped worst case.
+Avoid forwarding unused video before optimizing packet writes. M8 and M9 can
+reduce packets, but capacity and failure proofs must state whether they are on;
+M9 remains optional and cannot hide an undersized baseline.
 
 ## State, scaling and operations
 
 SFU memory contains sessions, layer activity, routing snapshots, bounded packet
 caches, source revision tombstones and leases. No Postgres client in the SFU;
 the API authorizes control and renewals. Packet caches are transient and never
-written to disk. Graceful drain rejects new Episodes, allows existing calls to
-finish within an operator deadline, then triggers ordinary replacement. Readiness
-includes certificate/config validity, media listener availability and drain state;
-health endpoints disclose no identifiers.
+written to disk. Readiness includes certificate/config validity, media listener
+availability and drain state; health endpoints disclose no identifiers.
 
-V1 runs one node, which is a single point of failure. This is accepted for the
-internal canary only: node loss ends every own-SFU call, Participants rejoin
-through replacement, and new Episodes can be pointed back at Cloudflare. General
-rollout beyond the canary needs at least two nodes with the per-Episode node
-assignment below.
+M2 records the chosen node in the Episode binding from the first own-SFU Episode.
+M11 adds primary-first placement, degraded standby, health, drain and failover. Keep one Episode on
+one node. Provider/application identity stays fixed for the Episode; node loss
+changes placement only through a durable, generation-fenced recovery transition.
+Use the node assignment and boot incarnation for every operation, including
+capture and deferred cleanup. Reject stale responses from a replaced node and
+retain cleanup targeted at the old allocation rather than sending it to the new
+one. Admission prefers primary and uses standby only when primary is unhealthy,
+draining or full. Reserve capacity atomically; never round-robin session control
+or treat both nodes as equal-capacity destinations.
 
-For multi-node, keep one Episode on one node first. Extend its durable binding
-with node assignment and boot incarnation; API routing uses that assignment for
-every operation, including cleanup. Admission can choose among healthy nodes;
-never round-robin session control. On loss, explicitly replace allocations on
-a new node rather than pretending PeerConnections migrated. Only later consider
-cascading within an Episode; this does not require Redis as correctness authority.
+Primary loss requires fresh grants, sessions and PeerConnections on standby
+within its degraded envelope, using M3's consent/off-debt rules. There is a
+bounded interruption for admitted recovery and an explicit outcome for excess
+demand, not seamless or full-capacity transport migration. A selector flip cannot perform this recovery.
+Test concurrent API placement, lost control acknowledgements, old-node return,
+failed lease renewal and standby overload. No Redis correctness authority
+or cross-node packet replication is needed.
 
 Follow [observability](../observability.md): carry `traceparent`, allowlisted
 `session.id` baggage and existing journey/operation context from API to SFU and
@@ -831,7 +928,8 @@ through deferred cleanup. A provider session ID is not the device's `session.id`
 Export structured OTLP logs/spans using private runtime configuration.
 
 - Counters/gauges: active sessions/publications/subscriptions, requested/effective
-  RID, paused video, source lease expiry/revoke, packet/byte rates, repair hit/miss,
+  RID, paused video, primary/standby role, degraded admission/overflow outcomes,
+  source lease expiry/revoke, packet/byte rates, repair hit/miss,
   PLI rate, TWCC feedback age, estimated bitrate, pacer drops/queue delay, CPU
   steal, Go scheduler latency, CPU/GC and memory, and the admission reason when
   new Episodes are refused.
@@ -869,15 +967,47 @@ capabilities are additive contract changes: run `pnpm run regen` and
 the expanded schema. Deploy accepting servers and compatible SDKs before canary
 selection. Do not expose own-provider Spaces to unsupported SDK versions.
 
-Canary only internal, accountable-owner Spaces with at most eight Participants
-and no capture dependencies. Compare matched network/codec/call-shape cohorts
-against Cloudflare, including TCP-443-only callers. Gate on successful join,
-audible/rendered media, no privacy regressions, recovery and resource budgets,
-not just successful HTTP responses. See M6/M7 for concrete acceptance checks.
+M7 selects only internal, accountable-owner Spaces without capture dependencies
+until M10 passes. Compare matched network/codec/call-shape cohorts against
+Cloudflare, including TCP-443-only callers. Gate on successful join,
+audible/rendered media, privacy, recovery and resource budgets, not just HTTP.
 
-**Rollback:** flip the selection flag back to Cloudflare for new Episodes;
-keep the own-SFU adapter and node running for pinned live Episodes. To recover
-an unhealthy active Episode, perform an explicit coordinated rejoin/replacement
-through the authority path; changing the selector alone cannot migrate media.
-Do not remove the provider or credentials until all bound Episodes and cleanup
-intents have drained. Rollback needs no destructive schema reversal.
+M12 performs full cutover only after M8, M10 and M11 pass alongside M1–M7.
+Release compatible shared and React Native SDKs and first-party apps first.
+Inventory every Tenant default, Space override, tenant-managed provider config,
+recording/transcription dependency and active SDK cohort. Migrate explicit
+Cloudflare selectors as well as defaults. Announce and enforce a minimum
+compatible SDK/app version; old clients use Cloudflare only during that bounded
+migration window, then receive an explicit upgrade requirement rather than a
+misdecoded own-provider grant or a permanent Cloudflare exception.
+
+Expand the migration flag by cohort, then set the deployment and every Tenant's
+default to `chalk_sfu`, with no forgotten Space override. New Tenants and Spaces
+inherit it. Existing Episodes retain their provider until they end or take an
+explicit authority-controlled replacement. Cover join, grant refresh, reconnect,
+capture start/stop, artifacts, diagnostics, alarms and support queries for every
+supported client. The completion proof counts bindings and traffic, not just a
+configuration default. Keep both adapters and rollback credentials through M13.
+
+**Rollback before retirement:** switch selection back to Cloudflare for new
+Episodes while preserving live own-SFU bindings. For unhealthy active Episodes,
+use an explicit coordinated rejoin/replacement through authority, preserving mute
+and consent. Keep the own adapter, node and capture cleanup until all its bound
+work drains. No destructive schema reversal is required. Rehearse the same
+behavior after default-on cutover, not just during the internal canary.
+
+**Cloudflare SFU retirement:** M13 requires 30 consecutive days after full cutover
+covering evening peaks, with all Tenants/Spaces and supported browser/native
+cohorts on the own provider; no unresolved privacy, recording, media or capacity
+regressions; and proven full single-node primary peak plus degraded-standby
+drain/recovery gates with documented refusals. Require zero Cloudflare overflow
+throughout the window, including during deploys and failure drills. Require zero
+live Cloudflare SFU Episodes, capture sessions, pending retries/cleanup and
+legacy-client demand, and zero Cloudflare SFU signaling during that window.
+Rehearse rollback before the observation window closes. Only then remove the
+Cloudflare SFU adapter, selector branches, SFU credentials/configuration,
+obsolete fixtures and vendor-only dashboards. Keep compatible historical binding
+and artifact readers until their retention/migration obligations are met. Retain
+Cloudflare TURN and any strictly required credential scope. Retirement ends flag
+rollback; later rollback requires redeploying the retained last compatible
+release, so deletion is a separate explicit release decision.

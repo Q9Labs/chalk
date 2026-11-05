@@ -66,7 +66,9 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 		}
 		return nil
 	case authentication.PrincipalAPIKey:
-		return authorizeTenantAPIKey(principal, tenantID, permission.Scope)
+		return authorizeTenantCredential(principal, principal.APIKeyID, tenantID, permission.Scope)
+	case authentication.PrincipalOAuth:
+		return authorizeTenantCredential(principal, principal.GrantID, tenantID, permission.Scope)
 	case authentication.PrincipalUser:
 		return p.authorizeTenantUser(ctx, principal, tenantID, permission.MinimumRole)
 	default:
@@ -74,8 +76,10 @@ func (p TenantPolicy) AuthorizeTenant(ctx context.Context, principal authenticat
 	}
 }
 
-func authorizeTenantAPIKey(principal authentication.Principal, tenantID utilities.ID, scope authentication.Scope) error {
-	if principal.APIKeyID.IsZero() || principal.TenantID.IsZero() {
+// authorizeTenantCredential covers tenant-bound credentials (API keys and MCP
+// OAuth grants): the Tenant must match and the credential must hold the scope.
+func authorizeTenantCredential(principal authentication.Principal, credentialID utilities.ID, tenantID utilities.ID, scope authentication.Scope) error {
+	if credentialID.IsZero() || principal.TenantID.IsZero() {
 		return ErrUnauthenticated
 	}
 	if principal.TenantID.String() != tenantID.String() {
