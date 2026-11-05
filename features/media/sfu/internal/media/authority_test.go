@@ -359,3 +359,36 @@ func TestAWriteThatStallsPastTheLeaseStopsTheSendsAfterIt(t *testing.T) {
 		}
 	})
 }
+
+// Admission never evicts a source the same batch names: that would forget its revoke
+// and let the batch's stale grant apply. With no other room, the batch is refused.
+func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
+	n := leaseNode(t, time.Minute, true)
+	n.sourceLimit = 2
+	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 10)) // no Participant here has a session
+	apply(t, n, control("dave", "camera", protocol.SourceRevoke, 1))
+	batch := func(controls ...protocol.SourceControl) protocol.SourceControlRequest {
+		return protocol.SourceControlRequest{TenantID: "tenant-1", EpisodeID: "episode-1", Controls: controls}
+	}
+	aliceGrant := protocol.SourceControl{ParticipantID: "alice", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
+	bobGrant := protocol.SourceControl{ParticipantID: "bob", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
+
+	response, err := n.ControlSources(batch(aliceGrant, bobGrant))
+	if err != nil {
+		t.Fatalf("a batch with room after evicting another entry was refused: %v", err)
+	}
+	if alice := response.Results[0]; alice.Applied || alice.Revision != 10 {
+		t.Fatalf("a stale grant applied after its source's revoke was evicted: %+v", alice)
+	}
+	if !response.Results[1].Applied || len(n.sources) != 2 {
+		t.Fatalf("bob's grant: %+v, table holds %d entries, limit 2", response.Results[1], len(n.sources))
+	}
+
+	carolGrant := protocol.SourceControl{ParticipantID: "carol", Source: "camera", Action: protocol.SourceGrant, Revision: 1}
+	if _, err := n.ControlSources(batch(aliceGrant, bobGrant, carolGrant)); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("a batch with no room besides its own sources was admitted: %v", err)
+	}
+	if len(n.sources) != 2 || n.sources[sourceKey{participantKey{"tenant-1", "episode-1", "alice"}, "camera"}] == nil {
+		t.Fatal("a refused batch changed the table")
+	}
+}

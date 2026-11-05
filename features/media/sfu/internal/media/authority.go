@@ -151,14 +151,16 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	keys := make([]sourceKey, len(request.Controls))
-	added := map[sourceKey]bool{}
+	named := map[sourceKey]bool{}
+	added := 0
 	for index, control := range request.Controls {
 		keys[index] = sourceKey{participantKey{request.TenantID, request.EpisodeID, control.ParticipantID}, control.Source}
-		if n.sources[keys[index]] == nil {
-			added[keys[index]] = true
+		if !named[keys[index]] && n.sources[keys[index]] == nil {
+			added++
 		}
+		named[keys[index]] = true
 	}
-	if err := n.makeSourceRoom(len(added)); err != nil {
+	if err := n.makeSourceRoom(added, named); err != nil {
 		return nil, err
 	}
 	now := monotonic()
@@ -201,8 +203,10 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 }
 
 // makeSourceRoom evicts entries of Participants with no live session until count new
-// entries fit, or refuses without evicting any. The caller holds n.mu.
-func (n *Node) makeSourceRoom(count int) error {
+// entries fit, or refuses without evicting any. It never evicts a source the batch
+// names, because that would forget the revision the batch's controls are fenced by.
+// The caller holds n.mu.
+func (n *Node) makeSourceRoom(count int, named map[sourceKey]bool) error {
 	excess := len(n.sources) + count - n.sourceLimit
 	if excess <= 0 {
 		return nil
@@ -212,12 +216,12 @@ func (n *Node) makeSourceRoom(count int) error {
 		if len(victims) == excess {
 			break
 		}
-		if n.participants[key.participantKey] == nil {
+		if n.participants[key.participantKey] == nil && !named[key] {
 			victims = append(victims, index)
 		}
 	}
 	if len(victims) < excess {
-		return fmt.Errorf("%w: every source control belongs to a live session", ErrCapacityExceeded)
+		return fmt.Errorf("%w: the source table has no room for this batch's new sources", ErrCapacityExceeded)
 	}
 	for position := len(victims) - 1; position >= 0; position-- {
 		n.evictSource(victims[position])
