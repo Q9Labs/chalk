@@ -73,8 +73,8 @@ export function releasePeer(peer: RTCPeerConnection): void {
   peers.delete(peer);
 }
 
-export function releaseTrack(track: MediaStreamTrack): void {
-  track.stop();
+export function releaseTrack(track: MediaStreamTrack, stopTrack = true): void {
+  if (stopTrack) track.stop();
 }
 
 export function resourceCounts() {

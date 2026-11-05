@@ -85,7 +85,7 @@ export class FixtureMediaClient {
     local.enabled = false;
     local.track.enabled = false;
     await this.#detachLocalTrack(source);
-    if (options.stopTrack !== false) releaseTrack(local.track);
+    releaseTrack(local.track, options.stopTrack);
     this.#local.delete(source);
     // Screen cleanup ends the publication; microphone/camera advertisements
     // stay reusable so clearing capture cannot silently repair a stale Sync On.
