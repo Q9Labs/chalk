@@ -294,6 +294,37 @@ The span's `reserved` attribute distinguishes a successful reservation from a
 failed attempt; only a committed transaction retains the durable journey root.
 No token, raw participant or user identity, error text, or media payload is added.
 
+### Own SFU congestion, repair and admission
+
+The own SFU (`features/media/sfu`) logs structured JSON with no Tenant, Episode,
+Participant, address, SDP, certificate or payload in its node-wide lines.
+`tests/impairment_test.go` scans the logs of impaired calls for those.
+
+- `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
+  the repair and probe parts of it, subscriptions paused for congestion, cameras
+  the Episode ceilings cap or pause, pacer queue delay p95, Go scheduler latency
+  p99, CPU steal where the host reports it, and the admission reason.
+- `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
+  the admission reason changes to or from `cpu_steal` or `pacer_queue_delay`,
+  with the steal and queue delay that decided it. Live Episodes keep admitting
+  their Participants while new ones are refused.
+- `media readers still running after close` (error) when shutdown gave up
+  waiting for a stream reader. A publisher that sent a second SSRC under a RID
+  causes it; the process still exits.
+
+To follow one subscriber, call the session's `inspect`. Each subscription shows
+its requested and effective RID, `state` and `reason` (`congestion` for a
+network pause), and its transport shows the estimate, proven rate, feedback age,
+queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
+probes. The Episode block shows its packets/s against its ceiling. `/readyz`
+shows the host signals behind admission.
+
+The SFU is not yet deployed, so no monitor reads these lines. When it ships,
+alert on admission closed for more than five minutes, on a node above 90% of
+its packet budget, and on any `media readers still running after close`.
+The paused-for-network journey (SDK `subscriptionState`) lands with the API and
+SDK change, and adds its journey ledger entry then.
+
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue

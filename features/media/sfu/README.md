@@ -1,6 +1,6 @@
 # Chalk SFU
 
-A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real push and pull), M2 (retry-safe lifecycle, admission, negotiated close), the media side of M4 (simulcast layer routing) and the SFU side of M3 (source fencing, forwarding leases and in-place ICE restart). The API reaches it through the `chalk_sfu` media-plane adapter.
+A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real push and pull), M2 (retry-safe lifecycle, admission, negotiated close), the media side of M4 (simulcast layer routing), the SFU side of M3 (source fencing, forwarding leases and in-place ICE restart) and the SFU side of M5 (congestion control, repair, Episode ceilings and host-health admission). The API reaches it through the `chalk_sfu` media-plane adapter.
 
 The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `apps/api/internal`. The API adapter will translate between the public `protocol` package and its own ports.
 
@@ -34,11 +34,20 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - A simulcast camera's layers (`h`, `l`, at most three) are each read once. Every subscription forwards one layer: it is the pull's `simulcast.preferredRid`, or `startRid` when that is lower. With `ridNotAvailable` other than `none`, a wanted layer without RTP for one second falls back to the first active RID in ASCII order, which can be higher than the one asked for, and the subscription returns when the layer resumes. A track without RIDs always serves.
   - A switch waits for a keyframe of the new layer and asks for one, at most once per 500 ms per layer. Each subscriber gets its own continuous stream: sequence numbers, timestamps, VP8 picture IDs and TL0PICIDX are rewritten so a switch, a pause, a sequence wrap or reordering never breaks decoding.
   - A pull with `paused` forwards nothing while it keeps its MID. Inspect reports each subscription's `state` (`active` or `paused`), `reason` (`viewer`, `source_inactive`, or `source_unauthorized` while the source's lease does not allow forwarding), `revision`, and requested and effective RID, and each publication's layers. A publication and its layers read inactive while the lease does not allow forwarding, even if RTP still arrives. The revision also rises when a grant opens a forwarding window and when the window ends by revoke or lapse, but not on a renewal.
-  - Each video layer keeps one second of packets (400 KiB for `h` and for a camera without RIDs, 320 KiB for a screen, 128 KiB for other layers), shared by its subscribers. A subscriber's NACK is answered from it on the media SSRC with the sequence number that subscriber first saw. Keyframe requests go to the layer the subscriber forwards.
+  - Each video layer keeps one second of packets (400 KiB for `h` and for a camera without RIDs, 320 KiB for a screen, 128 KiB for other layers), shared by its subscribers. A subscriber's NACK is answered from it with the sequence number that subscriber first saw, on the RTX stream when the subscriber negotiated one. Keyframe requests go to the layer the subscriber forwards.
   - Streams nobody forwards are still read and discarded, and Pion's per-stream buffers are capped at 128 KiB, so no buffer grows.
   - The forwarding path allocates nothing per packet; `TestForwardingAllocatesNothing` keeps it that way.
+- **Congestion and repair (M5)**:
+  - Publishers get transport-wide feedback from the node to estimate their uplink. The node asks a publisher for lost video itself: at most 64 lost packets per layer, each asked for at most three times 60 ms apart after a 5 ms reorder grace, and a keyframe request after that. Repairs arrive over RTX, named by SSRC or, for simulcast, by the repaired RID.
+  - Every subscriber has its own downlink transport. It rewrites transport-wide sequence numbers, paces at its estimate, and estimates the downlink from the subscriber's feedback with a GCC-style delay and loss controller. Audio never waits behind video and repairs leave first. A full pacer queue (`SFU_PACER_QUEUE_BYTES`) drops video, which the subscriber's NACK recovers. Retransmissions are capped at a quarter of the proven rate (at least 100 kbit/s), and one packet is resent at most once per 100 ms.
+  - Before raising a subscriber, the transport proves spare capacity with padding on the RTX stream. A failed probe backs off, doubling to at most 8 s.
+  - Every 100 ms each subscriber's estimate is spent on audio and repair first, then on video layers within 95% of the estimate (85% while congested). A raise needs the proven rate and 500 ms of headroom, and one layer changes per tick. A new pull starts on the lowest layer and climbs. SDK layer requests are ceilings.
+  - When a camera's lowest layer has not fit for a second and the path delivers less than 95% of what the pacer sends, the subscription pauses with reason `congestion` and keeps its MID and audio. Video returns after the lowest layer has fit with 15% headroom for 3 s; repeated pauses back off from 2 s to 16 s.
+  - Each Episode is held to its ceiling: the lower of its reservation, `SFU_EPISODE_PACKET_CEILING` ingress-plus-egress packets/s (repairs and probes included) and the node budget. Over it, cameras drop to their lowest layer and then pause for every subscriber, the least recent speaker first; they rise again, the most recent speaker first, after the Episode has stayed under 90% of its ceiling for 2 s. Ingress is not lowered, because publishers keep sending every layer until dynacast (M9).
+  - The node refuses new Episodes when CPU steal exceeds `SFU_GUARD_MAX_STEAL_PERCENT` or the pacer queue delay p95 exceeds `SFU_GUARD_MAX_QUEUE_DELAY` over `SFU_GUARD_WINDOW`. Live Episodes still admit their Participants. `/readyz` reports steal, scheduler latency, queue delay and the admission reason.
+  - Inspect reports each subscriber's transport (estimate, proven rate, feedback age, queued bytes, packets sent per class, pacer drops, repairs cut, probes), its Episode's packets/s, ceiling and capped or paused cameras, and how many packets each ingress layer asked for again and got back over RTX.
 
-Not yet built: the API's source-control dispatch and lease renewal, adaptation, congestion control, RTX and NACK rate policy, certificate rotation and deployment.
+Not yet built: the API's source-control dispatch and lease renewal, the API and SDK `subscriptionState` capability, certificate rotation and deployment.
 
 ## Run it
 
@@ -66,7 +75,16 @@ go run ./cmd/sfu
 | `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; set `32000` on `s-2vcpu-2gb`.       |
 | `SFU_VIDEO_STREAM_COST`                 | `150`           | Reserved packets/s of one video stream.               |
 | `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.               |
+| `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.               |
 | `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.        |
+| `SFU_EPISODE_PACKET_CEILING`            | `11520`         | Most packets/s one Episode may carry.                 |
+| `SFU_HISTORY_HIGH_BYTES`                | `409600`        | Repair history of `h` and of a camera without RIDs.   |
+| `SFU_HISTORY_LOW_BYTES`                 | `131072`        | Repair history of other camera layers.                |
+| `SFU_HISTORY_SCREEN_BYTES`              | `327680`        | Repair history of a screen share.                     |
+| `SFU_PACER_QUEUE_BYTES`                 | `131072`        | Video one subscriber's pacer may hold.                |
+| `SFU_GUARD_MAX_STEAL_PERCENT`           | `3`             | CPU steal that closes admission to new Episodes.      |
+| `SFU_GUARD_MAX_QUEUE_DELAY`             | `50ms`          | Pacer queue delay p95 that closes admission.          |
+| `SFU_GUARD_WINDOW`                      | `30s`           | Window both guard signals are measured over.          |
 | `SFU_NEGOTIATION_TIMEOUT`               | `10s`           | How long a server offer waits for its answer.         |
 | `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
 | `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
@@ -90,6 +108,8 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
    ```
 
    **Layer switching test** (`tests/layers_test.go`) publishes real libvpx VP8 from `tests/testdata` as two simulcast layers with wrapping sequence numbers and picture IDs, reordered packets and ignored keyframe requests. Three subscribers follow the layers as the publisher stops and restarts each one. Their frames are rebuilt, compared byte for byte with the fixtures, checked for decodability across every switch, and decoded with ffmpeg when it is installed. It also NACKs packets on two layers.
+
+   **Impairment harness** (`tests/impairment_test.go`, `tests/netem_test.go`) runs Pion peers with a browser's interceptors (NACK, RTX, transport-wide feedback) over emulated access links on real UDP: a drop-tail queue at a rate, delay, and loss each way. It constrains one of two subscribers and checks that only that one drops to `l`, climbs back, pauses with audio below the lowest layer without a repull, and resumes after the hold, while the other stays on `h` and decodes. It loses packets on each leg and checks that every uplink layer and the downlink repair over RTX and the stream still decodes. It runs a ten-person call with a screen share under the 11,520 ceiling with every microphone flowing, and scans the logs of an impaired call for SDP, certificates, addresses and payloads. `SFU_TRACE=1` logs a subscription's estimate and state every 100 ms in the constrained-subscriber test.
 
    `scripts/gate.sh` runs these with format, tidy and vet checks. The repo gate runs it as the `sfu` lane when anything under `features/media/sfu` changes.
 
