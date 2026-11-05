@@ -2,11 +2,13 @@ package media
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -48,7 +50,7 @@ func TestSourceControlsApplyInRevisionOrder(t *testing.T) {
 	n := leaseNode(t, time.Minute, true)
 	scope := testScope("alice", 1)
 	n.newTestSession(t, scope)
-	authority := n.authorityFor(scope, "microphone")
+	authority, _ := n.authorityFor(scope, "microphone")
 	now := func() bool { return authority.allows(monotonic(), monotonic()) }
 	if now() {
 		t.Fatal("a source forwards before any grant")
@@ -93,14 +95,14 @@ func TestARevokeWithoutAPublicationFencesALaterOne(t *testing.T) {
 	}
 	scope := testScope("dave", 1)
 	n.newTestSession(t, scope)
-	authority := n.authorityFor(scope, "camera")
+	authority, _ := n.authorityFor(scope, "camera")
 	if authority.allows(monotonic(), monotonic()) {
 		t.Fatal("a publication after the revoke forwards")
 	}
 	if result := apply(t, n, control("dave", "camera", protocol.SourceGrant, 6)); result.Applied {
 		t.Fatal("a delayed grant undid the revoke")
 	}
-	if !n.authorityFor(scope, "microphone").allows(monotonic(), monotonic()) {
+	if microphone, _ := n.authorityFor(scope, "microphone"); !microphone.allows(monotonic(), monotonic()) {
 		t.Fatal("a source no control named stopped forwarding on a node that does not require grants")
 	}
 }
@@ -110,7 +112,7 @@ func TestALeaseLapsesWithoutRenewal(t *testing.T) {
 	n := leaseNode(t, 150*time.Millisecond, true)
 	scope := testScope("alice", 1)
 	n.newTestSession(t, scope)
-	authority := n.authorityFor(scope, "microphone")
+	authority, _ := n.authorityFor(scope, "microphone")
 	result := apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
 	if !authority.allows(monotonic(), monotonic()) || result.LeaseMillis <= 0 || result.LeaseMillis > 150 {
 		t.Fatalf("grant: %+v", result)
@@ -140,7 +142,7 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 	if !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a full table of live sources admitted a control: %v", err)
 	}
-	if n.authorityFor(alice, "microphone").allows(monotonic(), monotonic()) {
+	if microphone, _ := n.authorityFor(alice, "microphone"); microphone.allows(monotonic(), monotonic()) {
 		t.Fatal("the live revoke was forgotten")
 	}
 
@@ -220,5 +222,52 @@ func TestAPacketFromOutsideTheWindowIsNeverSent(t *testing.T) {
 	}
 	if got := nack(afterGrant); got != 1 {
 		t.Fatalf("a packet of the new window was resent %d times, want 1", got)
+	}
+}
+
+// A delayed revoke closes only what was published under the revision it revokes. Here
+// revoke@2 waits for the session's mutex while grant@3 applies and a push publishes
+// the source again; the revoke's cleanup must leave that publication open.
+func TestADelayedRevokeNeverClosesAPublicationOfANewerGrant(t *testing.T) {
+	n := leaseNode(t, time.Minute, true)
+	scope := testScope("alice", 1)
+	session := n.newTestSession(t, scope)
+	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
+	key := sourceKey{keyOf(scope), "microphone"}
+	reach := func(revision int64) {
+		for {
+			n.mu.Lock()
+			reached := n.sources[key].revision == revision
+			n.mu.Unlock()
+			if reached {
+				return
+			}
+			runtime.Gosched()
+		}
+	}
+	controlInBackground := func(action string, revision int64) chan protocol.SourceControlResponse {
+		done := make(chan protocol.SourceControlResponse, 1)
+		go func() {
+			response, _ := n.ControlSources(control("alice", "microphone", action, revision))
+			done <- response
+		}()
+		return done
+	}
+
+	session.mu.Lock() // the revoke's cleanup and the grant's keyframe request wait here
+	revoked := controlInBackground(protocol.SourceRevoke, 2)
+	reach(2)
+	granted := controlInBackground(protocol.SourceGrant, 3)
+	reach(3)
+	pub := newPublication(session, protocol.Track{Mid: "0", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
+	session.published["0"] = pub
+	session.mu.Unlock()
+
+	revoke, grant := <-revoked, <-granted
+	if len(revoke.Results) != 1 || !revoke.Results[0].Applied || len(grant.Results) != 1 || !grant.Results[0].Applied {
+		t.Fatalf("controls did not apply: revoke %+v, grant %+v", revoke, grant)
+	}
+	if closed := revoke.Results[0].Closed; len(closed) != 0 || pub.closed.Load() || session.published["0"] != pub {
+		t.Fatalf("the revoke@2 cleanup closed a publication admitted under grant@3: %+v", closed)
 	}
 }

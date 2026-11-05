@@ -49,14 +49,15 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 }
 
 // authorityFor returns the authority a new publication of the session's source
-// forwards under, creating it. A source that no control has named forwards freely
-// unless the node requires a grant. The caller may hold the session's mutex.
-func (n *Node) authorityFor(scope protocol.Scope, source string) *sourceAuthority {
+// forwards under, creating it, and the control revision it is admitted at. A source
+// that no control has named forwards freely unless the node requires a grant. The
+// caller may hold the session's mutex.
+func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := sourceKey{keyOf(scope), source}
 	if authority := n.sources[key]; authority != nil {
-		return authority
+		return authority, authority.revision
 	}
 	initial := openWindow
 	if n.cfg.RequireSourceGrant {
@@ -66,7 +67,7 @@ func (n *Node) authorityFor(scope protocol.Scope, source string) *sourceAuthorit
 	if victim := n.sourceVictim(); victim >= 0 {
 		n.evictSource(victim)
 	}
-	return n.addSource(key, initial)
+	return n.addSource(key, initial), 0
 }
 
 func (n *Node) addSource(key sourceKey, window *leaseWindow) *sourceAuthority {
@@ -112,7 +113,7 @@ func (n *Node) ControlSources(request protocol.SourceControlRequest) (protocol.S
 			continue
 		}
 		if request.Controls[index].Action == protocol.SourceRevoke {
-			response.Results[index].Closed = session.closeSource(authority)
+			response.Results[index].Closed = session.closeSource(authority, request.Controls[index].Revision)
 		} else {
 			session.refreshSource(authority)
 		}
@@ -230,14 +231,16 @@ func (n *Node) liveSession(key participantKey) *Session {
 	return n.participants[key]
 }
 
-// closeSource closes the session's publications under the revoked authority, as a
-// forced close does, and lists them. Their MIDs are retired.
-func (s *Session) closeSource(authority *sourceAuthority) []protocol.ClosedSourceTrack {
+// closeSource closes the session's publications admitted under the revoked authority
+// at or before the revoke's revision, as a forced close does, and lists them. Their
+// MIDs are retired. A publication admitted after a newer grant stays open, because
+// this cleanup can run after that grant.
+func (s *Session) closeSource(authority *sourceAuthority, revision int64) []protocol.ClosedSourceTrack {
 	s.mu.Lock()
 	var closed []protocol.ClosedSourceTrack
 	var pubs []*publication
 	for mid, pub := range s.published {
-		if pub.authority != authority {
+		if pub.authority != authority || pub.revision > revision {
 			continue
 		}
 		delete(s.published, mid)
