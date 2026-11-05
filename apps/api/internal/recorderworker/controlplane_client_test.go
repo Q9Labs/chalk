@@ -428,7 +428,11 @@ func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bag, err := baggage.New(member)
+	privateMember, err := baggage.NewMember("private", "private-caller-text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bag, err := baggage.New(member, privateMember)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +444,7 @@ func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 		if r.Header.Get("traceparent") != "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" {
 			t.Errorf("traceparent header = %q", r.Header.Get("traceparent"))
 		}
-		if r.Header.Get("baggage") != bag.String() {
+		if r.Header.Get("baggage") != "session.id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" {
 			t.Errorf("baggage header = %q", r.Header.Get("baggage"))
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -451,6 +455,29 @@ func TestControlPlaneClientPropagatesJourneyAndW3CTrace(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 	if _, err := client.Claim(ctx, recordingpipeline.ClaimInput{ClaimRequestID: testID(t, "11111111-1111-4111-8111-111111111111")}); !errors.Is(err, ErrNoWork) {
+		t.Fatalf("claim error = %v", err)
+	}
+
+	invalid, err := baggage.NewMember("session.id", "private-invalid-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidBag, err := baggage.New(invalid, privateMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("baggage"); got != "" {
+			t.Errorf("invalid or unknown baggage forwarded: %q", got)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer invalidServer.Close()
+	invalidClient, err := NewControlPlaneClient(invalidServer.URL, invalidServer.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := invalidClient.Claim(baggage.ContextWithBaggage(ctx, invalidBag), recordingpipeline.ClaimInput{ClaimRequestID: testID(t, "11111111-1111-4111-8111-111111111111")}); !errors.Is(err, ErrNoWork) {
 		t.Fatalf("claim error = %v", err)
 	}
 }

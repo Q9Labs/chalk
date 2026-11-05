@@ -35,7 +35,8 @@ Every failed render attempt emits `recording.render_attempt_failed` with `job_id
 `trace_id` / `span_id`. The worker emits it before reporting failure; the API
 emits it after accepting the fenced report, so it reaches the managed API log
 exporter even when the disposable node has no log exporter. The worker sends
-W3C trace context independently of global telemetry initialization.
+W3C trace context independently of global telemetry initialization. Only validated
+`session.id` baggage is forwarded; unknown members and member properties are dropped.
 
 `error_detail` emits only fixed internal diagnostic phrases, capped at 512 bytes.
 Other text, including individual diagnostic words, paths, identifiers, numbers,
