@@ -1,11 +1,13 @@
 import type { MediaPublicationSource } from "./plane";
 import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
+import type { MediaFailureStep } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
+import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse, SFUSubscriptionState } from "./types";
 import { withRequestContext } from "../session";
 import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
+const SIGNALING_STEPS: Readonly<Partial<Record<string, MediaFailureStep>>> = { publications: "sfu_publications", subscriptions: "sfu_subscriptions", "tracks/close": "sfu_close_tracks", renegotiate: "sfu_renegotiate" };
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
@@ -48,7 +50,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         return (await response.json()) as T;
       });
     } catch (error) {
-      const step = path === "publications" ? "sfu_publications" : path === "tracks/close" ? "sfu_close_tracks" : path === "renegotiate" ? "sfu_renegotiate" : "sfu_tracks";
+      const step = SIGNALING_STEPS[path] ?? "sfu_tracks";
       markMediaFailure(error, step);
       throw error;
     }
@@ -90,6 +92,30 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         method: "PUT",
         body: JSON.stringify({ connection_id: input.connectionId, tracks: input.tracks }),
       }),
+    listSubscriptions: async (): Promise<readonly SFUSubscriptionState[]> => {
+      const response = await request<{
+        subscriptions: readonly {
+          mid: string;
+          session_id: string;
+          track_name: string;
+          state: SFUSubscriptionState["state"];
+          reason?: SFUSubscriptionState["reason"];
+          revision: number;
+          requested_rid?: string;
+          effective_rid?: string;
+        }[];
+      }>("subscriptions");
+      return response.subscriptions.map((subscription) => ({
+        mid: subscription.mid,
+        sessionId: subscription.session_id,
+        trackName: subscription.track_name,
+        state: subscription.state,
+        revision: subscription.revision,
+        ...(subscription.reason ? { reason: subscription.reason } : {}),
+        ...(subscription.requested_rid ? { requestedRid: subscription.requested_rid } : {}),
+        ...(subscription.effective_rid ? { effectiveRid: subscription.effective_rid } : {}),
+      }));
+    },
     renegotiate: async (input) => {
       await request("renegotiate", {
         method: "POST",

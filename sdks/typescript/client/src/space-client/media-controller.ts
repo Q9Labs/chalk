@@ -1510,7 +1510,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       camera: this.#confirmedLocal("camera"),
       screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
-    const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
+    const pausedForNetwork = new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
+    const remote = Object.freeze(
+      (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
+    );
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
@@ -1585,7 +1588,10 @@ function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlic
   return left.source === right.source && left.state === right.state && left.track === right.track;
 }
 function sameRemoteMedia(left: MediaSlice["remote"], right: MediaSlice["remote"]): boolean {
-  return left.length === right.length && left.every((track, index) => track.participantId === right[index]?.participantId && track.source === right[index]?.source && track.publicationId === right[index]?.publicationId && track.track === right[index]?.track);
+  return (
+    left.length === right.length &&
+    left.every((track, index) => track.participantId === right[index]?.participantId && track.source === right[index]?.source && track.publicationId === right[index]?.publicationId && track.track === right[index]?.track && track.pausedForNetwork === right[index]?.pausedForNetwork)
+  );
 }
 function sameRequests(left: MediaSlice["incomingRequests"], right: MediaSlice["incomingRequests"]): boolean {
   return left.length === right.length && left.every((request, index) => sameRequest(request, right[index]));

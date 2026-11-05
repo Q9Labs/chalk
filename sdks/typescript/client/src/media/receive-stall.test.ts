@@ -89,6 +89,19 @@ describe("per-publication receive recovery", () => {
     expect(recovery.reserveRepull("stalled")).toBe(false);
     expect(recovery.reserveRebuild()).toBe(false);
   });
+  it("leaves a held publication out of the verdict and declares it at once when the hold ends", () => {
+    const recovery = new ReceiveStallRecovery();
+    recovery.expect(publications, "listener");
+    const sample = (now: number, held: boolean) => {
+      const codec = { id: "opus", type: "codec", mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+      const rows = remote.map((publication) => ({ id: publication.track.id, type: "inbound-rtp", trackIdentifier: publication.track.id, packetsReceived: publication.publicationId === "healthy" ? now : 10, codecId: codec.id }));
+      const report = new Map([...rows.map((row) => [row.id, row] as const), [codec.id, codec]]) as unknown as RTCStatsReport;
+      return recovery.sample(now, { getReceivers: () => [] } as unknown as RTCPeerConnection, report, remote, (id) => held && id === "stalled");
+    };
+    for (let now = 0; now <= 60_000; now += 1000) expect(sample(now, true).stalled).toEqual([]);
+    expect(recovery.canRepull("stalled")).toBe(false);
+    expect(sample(61_000, false).stalled).toEqual(["stalled"]);
+  });
   it("gives a replacement the startup grace without resetting its budget", () => {
     const recovery = stalledRecovery();
     recovery.reserveRepull("stalled");

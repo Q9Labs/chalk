@@ -38,6 +38,10 @@ describe("Participant microphone projections", () => {
 
     const resumed = toVideoParticipants([{ ...remote, media: { ...remote.media, camera: "active" } }], pulled, "local", "Local", localMedia).find((participant) => participant.id === "remote");
     expect(resumed).toMatchObject({ isVideoEnabled: true, videoTrack: track });
+    expect(resumed?.isVideoPausedForNetwork).toBeUndefined();
+
+    const held = toVideoParticipants([{ ...remote, media: { ...remote.media, camera: "active" } }], [{ ...pulled[0]!, pausedForNetwork: true }], "local", "Local", localMedia).find((participant) => participant.id === "remote");
+    expect(held).toMatchObject({ isVideoEnabled: true, isVideoPausedForNetwork: true, videoTrack: track });
   });
   it("keeps the local row on the same publication state as the local controls while the roster catches up", () => {
     expect(toListParticipants([{ id: "local", displayName: "Local", isLocal: true, isMuted: true, isVideoEnabled: false }], { local: { microphone: "active", camera: "active", screenShare: "inactive" } })[0]).toMatchObject({ isMuted: true, isVideoEnabled: false });

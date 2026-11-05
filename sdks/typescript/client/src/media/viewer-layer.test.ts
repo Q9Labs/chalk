@@ -11,6 +11,15 @@ function run(policy: ViewerLayerPolicy, sample: ViewerLayerSample, count: number
 }
 
 describe("viewer layer policy", () => {
+  it("follows only the tile size when the SFU adapts layers itself", () => {
+    const policy = new ViewerLayerPolicy({ followsNetwork: false });
+    run(policy, severeFreeze, 20);
+    run(policy, lossy, 20);
+    expect(policy.layer).toBe("h");
+    expect(policy.sample({ ...good, tileHeight: 90 })).toBe("l");
+    expect(policy.sample({ ...lossy, tileHeight: 720 })).toBe("h");
+  });
+
   it("keeps h while the link is healthy", () => {
     const policy = new ViewerLayerPolicy();
     run(policy, good, 100);

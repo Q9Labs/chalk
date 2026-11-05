@@ -179,12 +179,16 @@ export class ReceiveStallRecovery {
     this.#active = [];
   }
 
-  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<CloudflareSFURemoteTrack>): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
+  /** `held` names publications whose silence is not a stall yet, such as a video the SFU paused for network. */
+  sample(now: number, connection: RTCPeerConnection, report: RTCStatsReport, tracks: Iterable<CloudflareSFURemoteTrack>, held: (publicationId: string) => boolean = () => false): { readonly stalled: readonly string[]; readonly advanced: readonly string[]; readonly newlyStalled: readonly string[] } {
     const active = [...tracks].filter((publication) => this.#isExpected(publication));
     for (const publication of active) this.#rememberIdentity(publication);
     this.#active = active.map((publication) => publication.publicationId);
     const samples = active.flatMap((publication) => receivePacketSample(connection, report, publication) ?? []);
-    const { stalled, advanced, resumed } = this.#detector.sample(now, samples);
+    const detected = this.#detector.sample(now, samples);
+    const { advanced, resumed } = detected;
+    // The detector keeps counting a held publication's silence, so a stall confirmed later is declared at once.
+    const stalled = detected.stalled.filter((id) => !held(id));
     for (const id of resumed) {
       const source = this.#sources.get(id);
       if (source !== undefined) this.#attempts.delete(source);

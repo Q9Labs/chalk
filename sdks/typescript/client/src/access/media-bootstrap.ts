@@ -10,7 +10,11 @@ export function mediaBootstrap(media: ParticipantMediaAccess): CloudflareSFUBoot
     case "cloudflare_sfu":
       return media.clientPayload;
     case "chalk_sfu":
-      return { connectionId: media.clientPayload.connectionId, iceServers: media.clientPayload.iceServers };
+      return {
+        connectionId: media.clientPayload.connectionId,
+        iceServers: media.clientPayload.iceServers,
+        capabilities: { serverLayerAdaptation: media.clientPayload.capabilities.serverLayerAdaptation, subscriptionState: media.clientPayload.capabilities.subscriptionState },
+      };
     default:
       return unsupportedProvider(media);
   }

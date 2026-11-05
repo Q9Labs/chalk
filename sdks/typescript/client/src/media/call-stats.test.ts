@@ -30,6 +30,22 @@ function run(seconds: number, options: Parameters<typeof frame>[1] = {}) {
 }
 
 describe("call stats collector", () => {
+  it("reports the videos the SFU paused for network, and nothing on planes that do not say", async () => {
+    let clock = 0;
+    const uploads: CallStatsRequest[] = [];
+    const upload = async (request: CallStatsRequest) => void uploads.push(request);
+    const collector = createCallStatsCollector({ now: () => clock, upload });
+    for (let second = 0; second <= 10; second++) {
+      clock = second * 1000;
+      collector.observe(frame(second), { pausedVideos: second < 5 ? 0 : 2 });
+    }
+    await collector.flush(upload);
+    expect(uploads.at(-1)?.samples.at(-1)).toMatchObject({ recv_paused_videos: 2 });
+    const { flush, uploads: cloudflare } = run(10);
+    await flush();
+    expect(cloudflare.at(-1)?.samples.at(-1)?.recv_paused_videos).toBeUndefined();
+  });
+
   it("summarises one window with plausible values", async () => {
     const { flush, uploads } = run(10);
     await flush();

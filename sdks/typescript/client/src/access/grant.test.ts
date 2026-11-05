@@ -58,11 +58,13 @@ describe("access grant parsing", () => {
     }
   });
   it("parses an own-SFU grant and keeps its capabilities off unless the server turns them on", () => {
-    const wire = chalkWire({ capabilities: { serverLayerAdaptation: false, iceRestart: "yes" } });
+    const wire = chalkWire({ capabilities: { serverLayerAdaptation: false, subscriptionState: "yes", iceRestart: "yes" } });
     const parsed = parseParsedAccessGrant(wire);
-    expect(parsed.media).toMatchObject({ provider: "chalk_sfu", clientPayload: { connectionId: "c", episodeRef: "e", iceServers: [], capabilities: { serverLayerAdaptation: false, iceRestart: false } } });
+    expect(parsed.media).toMatchObject({ provider: "chalk_sfu", clientPayload: { connectionId: "c", episodeRef: "e", iceServers: [], capabilities: { serverLayerAdaptation: false, subscriptionState: false, iceRestart: false } } });
+    const on = parseParsedAccessGrant(chalkWire({ capabilities: { serverLayerAdaptation: true, subscriptionState: true } }));
+    expect(on.media.provider === "chalk_sfu" && on.media.clientPayload.capabilities).toEqual({ serverLayerAdaptation: true, subscriptionState: true, iceRestart: false });
     const missing = parseParsedAccessGrant(chalkWire({ capabilities: undefined }));
-    expect(missing.media.provider === "chalk_sfu" && missing.media.clientPayload.capabilities).toEqual({ serverLayerAdaptation: false, iceRestart: false });
+    expect(missing.media.provider === "chalk_sfu" && missing.media.clientPayload.capabilities).toEqual({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false });
     const reparsed = parseParsedAccessGrant(JSON.parse(JSON.stringify(parseAccessGrant(wire))));
     expect(reparsed.media).toEqual(parsed.media);
   });

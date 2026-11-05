@@ -4,7 +4,7 @@ import { CloudflareSFUError } from "./types";
 type ReportEvent = ConnectionReport["events"][number];
 export type MediaFailureDiagnostic = Required<Pick<ReportEvent, "media_error_kind" | "media_error_step">> & Pick<ReportEvent, "http_status">;
 export type GrantedMedia = Required<Pick<ReportEvent, "granted_audio" | "granted_video">>;
-type MediaFailureStep = NonNullable<ReportEvent["media_error_step"]>;
+export type MediaFailureStep = NonNullable<ReportEvent["media_error_step"]>;
 const steps = new WeakMap<object, MediaFailureStep>();
 const fetchFailures = new WeakSet<object>();
 const domErrorKinds = new Map<string, MediaFailureDiagnostic["media_error_kind"]>([

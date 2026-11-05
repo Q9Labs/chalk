@@ -1,8 +1,11 @@
 import { videoRenderSize } from "./video-render-size";
 
-// A viewer picks which simulcast layer of a remote camera it receives. The SFU
+// A viewer picks which simulcast layer of a remote camera it receives. Cloudflare
 // never adapts by itself (priorityOrdering and ridNotAvailable default to none),
 // so this decides from the viewer's own receive stats and the size of its tile.
+// An SFU with server layer adaptation picks the layer under the request from its
+// own estimate, so there the request is only a tile-size ceiling: a second loop
+// reacting to the same congestion would fight the SFU's.
 // Chrome's availableIncomingBitrate is left out: it follows the rate the sender
 // chose to send, so it cannot say whether a link has room for h.
 export type ViewerLayer = "h" | "l";
@@ -40,6 +43,7 @@ export type ViewerLayerSample = {
 type Health = "good" | "bad" | "severe" | "unknown";
 
 export class ViewerLayerPolicy {
+  readonly #followsNetwork: boolean;
   #layer: ViewerLayer = "h";
   #tileIsSmall = false;
   #limitedByNetwork = false;
@@ -53,6 +57,11 @@ export class ViewerLayerPolicy {
   #senderFrameRate: number | undefined;
   #unimprovedSamples = 0;
 
+  /** Without `followsNetwork`, only the tile size picks the layer. */
+  constructor(options: { readonly followsNetwork?: boolean } = {}) {
+    this.#followsNetwork = options.followsNetwork ?? true;
+  }
+
   get layer(): ViewerLayer {
     return this.#layer;
   }
@@ -60,6 +69,10 @@ export class ViewerLayerPolicy {
   /** Drops fast, rises slowly: a failed attempt at h doubles the wait before the next one. */
   sample(sample: ViewerLayerSample): ViewerLayer {
     this.#tileIsSmall = tileIsSmall(this.#tileIsSmall, sample.tileHeight);
+    if (!this.#followsNetwork) {
+      const ceiling = this.#tileIsSmall ? "l" : "h";
+      return ceiling === this.#layer ? ceiling : this.#switchTo(ceiling);
+    }
     if (this.#layer === "h" && sample.framesPerSecond !== undefined && sample.framesPerSecond >= MIN_FRAMES_PER_SECOND) this.#senderFrameRate = undefined;
     const checkFrameRate = this.#layer === "h" && (this.#senderFrameRate === undefined || (sample.framesPerSecond ?? 0) < this.#senderFrameRate * 0.75);
     const health = this.#settling > 0 ? this.#settle() : classify(sample, checkFrameRate);
@@ -233,6 +246,12 @@ type CameraView = { readonly policy: ViewerLayerPolicy; track: MediaStreamTrack;
 export class ViewerLayerSelector {
   readonly #views = new Map<string, CameraView>();
   readonly #reader = new ViewerStatsReader();
+  readonly #followsNetwork: boolean;
+
+  /** Pass `followsNetwork: false` when the SFU adapts layers itself, so requests only cap the layer at the tile size. */
+  constructor(options: { readonly followsNetwork?: boolean } = {}) {
+    this.#followsNetwork = options.followsNetwork ?? true;
+  }
 
   sample(now: number, report: RTCStatsReport, cameras: readonly ViewerLayerCamera[]): readonly ViewerLayerChange[] {
     const rows = [...report.values()] as ViewerStatsRow[];
@@ -269,11 +288,11 @@ export class ViewerLayerSelector {
     view.failures++;
   }
 
-  // A re-pull of the same publication gives a new receiver, and the SFU starts it on h.
+  // A re-pull of the same publication gives a new receiver, pulled with the ceiling h.
   #view({ publicationId, track }: ViewerLayerCamera): CameraView {
     let view = this.#views.get(publicationId);
     if (!view) {
-      view = { policy: new ViewerLayerPolicy(), track, applied: "h", retryAt: 0, failures: 0 };
+      view = { policy: new ViewerLayerPolicy({ followsNetwork: this.#followsNetwork }), track, applied: "h", retryAt: 0, failures: 0 };
       this.#views.set(publicationId, view);
     } else if (view.track !== track) {
       this.#reader.forget(view.track.id);

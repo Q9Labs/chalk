@@ -23,6 +23,8 @@ export interface ParticipantTileProps {
     audioLevel?: number;
     isMuted?: boolean;
     isVideoEnabled?: boolean;
+    /** Shows a badge while the SFU holds this camera back for the viewer's network. */
+    isVideoPausedForNetwork?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
     handRaiseOrder?: number;
@@ -131,6 +133,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           {showStatus && hasPoorConnection ? (
             <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[var(--chalk-overlay)] px-[7px]">
               <SignalBars />
+            </span>
+          ) : null}
+          {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
+            <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[6px] bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
+              Video paused for network
             </span>
           ) : null}
           {onClick || onFollow ? (

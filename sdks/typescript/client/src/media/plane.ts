@@ -36,6 +36,8 @@ export type ConnectionMediaRemoteTrack = Pick<MediaPublication, "participantId" 
 
 export type ConnectionMediaSnapshot = {
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
+  /** Remote videos whose delivery the SFU reported. Omitted or empty on planes without `subscriptionState`. */
+  readonly remoteDelivery?: readonly import("./subscription-delivery").RemoteVideoDelivery[];
   readonly connection: {
     readonly phase: ConnectionMediaPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
