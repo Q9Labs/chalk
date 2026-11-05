@@ -14,8 +14,9 @@ Chalk is an open-source monorepo for low-latency real-time collaboration and com
 ## Development
 
 Install dependencies with `pnpm install`. The local stack needs OrbStack (or a
-Docker-compatible daemon), Go, Elixir/OTP, OpenSSL, and 1Password CLI access
-through the configured service account.
+Docker-compatible daemon), Go, Elixir/OTP and OpenSSL. It also needs the
+Cloudflare SFU credential, from 1Password CLI access through the configured
+service account or from the environment (see below).
 
 Run the core profile with:
 
@@ -47,6 +48,15 @@ at startup with an explicit vault on the item lookup, passes the values only
 to the API child, and never writes or logs them. Zero or multiple matching
 items stop startup.
 
+On a headless machine (CI, a cloud box) set `CHALK_CLOUDFLARE_REALTIME_APP_ID`
+and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET` instead. When both are set the
+launcher does not call `op`; when only one is set it fails startup. Set
+`PUBLIC_ORIGIN` (for example `http://localhost:3070`, or an HTTPS origin in front
+of the web port) to make it the Sync token issuer, a CORS origin, an allowed web
+host and the browser's Sync WebSocket origin. Unset, the issuer stays
+`http://chalk.local`. The ready line appears only after a seeded guest can arrive
+through the web origin and leave again; `pnpm dev:doctor` repeats that check.
+
 The ready summary uses these localhost endpoints:
 
 | Service | URL                           |
@@ -65,6 +75,8 @@ pnpm dev:logs                 # all services
 pnpm dev:logs -- api          # one service
 pnpm dev:smoke
 pnpm dev:stop
+pnpm dev:doctor               # read-only health check as JSON; exit 0 only when every check passes
+pnpm dev:down                 # stop, then reset without the prompt
 pnpm dev --fresh              # recreate this checkout's local fixture
 pnpm dev:reset                # destructive: asks before removing local state
 pnpm dev:reset -- --yes       # skip only the confirmation prompt

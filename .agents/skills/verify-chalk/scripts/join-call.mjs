@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+// Drives the "join a call" journey: two browsers arrive through the seeded Space invite, publish fake camera and
+// microphone, see each other's video advance, and leave. Evidence goes to <out>/ and the exit code is the verdict.
+//
+//   node .agents/skills/verify-chalk/scripts/join-call.mjs <run-id> [--web <origin>]
+import { chromium } from "playwright";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
+
+const runId = process.argv[2];
+if (!runId) throw new Error("usage: join-call.mjs <run-id> [--web <origin>]");
+const out = join(".verify", runId);
+const seed = JSON.parse(await readFile(".private/chalk-dev/seed.json", "utf8"));
+const flag = process.argv.indexOf("--web");
+const web = flag > 0 ? process.argv[flag + 1] : seed.urls.public;
+const people = [
+  { name: "Verify A", fixture: 1 },
+  { name: "Verify B", fixture: 2 },
+];
+
+const steps = [];
+const logs = { console: [], network: [] };
+await mkdir(join(out, "screenshots"), { recursive: true });
+await mkdir(join(out, "video"), { recursive: true });
+
+// Counts decoded video frames of one participant's tile as shown in this page.
+const tileFrames = (name) => {
+  const tile = document.querySelector(`[aria-label="Video tile for ${name}"]`)?.closest('[data-part="stage-tile"]');
+  const video = tile?.querySelector("video");
+  return video && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
+};
+
+async function step(name, run) {
+  const started = Date.now();
+  try {
+    const detail = await run();
+    steps.push({ name, pass: true, ms: Date.now() - started, detail });
+  } catch (error) {
+    steps.push({ name, pass: false, ms: Date.now() - started, detail: String(error.message ?? error).slice(0, 600) });
+    throw error;
+  }
+}
+
+async function apiGet(path) {
+  const response = await fetch(new URL(path, web), { headers: { Authorization: `Bearer ${seed.systemToken}` } });
+  if (!response.ok) throw new Error(`GET ${path} answered HTTP ${response.status}`);
+  return response.json();
+}
+
+const browser = await chromium.launch({ headless: true, args: ["--autoplay-policy=no-user-gesture-required"] });
+let failure;
+const sessions = [];
+try {
+  for (const person of people) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, recordVideo: { dir: join(out, "video"), size: { width: 1440, height: 960 } } });
+    await context.addInitScript(webMediaFixture(person.fixture));
+    const page = await context.newPage();
+    page.on("console", (message) => logs.console.push({ who: person.name, type: message.type(), text: message.text().slice(0, 300) }));
+    page.on("pageerror", (error) => logs.console.push({ who: person.name, type: "pageerror", text: String(error.message).slice(0, 300) }));
+    page.on("response", (response) => {
+      const { pathname } = new URL(response.url());
+      if (pathname.startsWith("/v1/")) logs.network.push({ who: person.name, method: response.request().method(), path: pathname, status: response.status() });
+    });
+    sessions.push({ ...person, context, page });
+  }
+
+  for (const { name, page } of sessions) {
+    await step(`${name} opens the seeded invite and joins`, async () => {
+      await page.goto(new URL(seed.invite.path, web).href);
+      await page.getByLabel("Your name", { exact: true }).fill(name);
+      await page.screenshot({ path: join(out, "screenshots", `${name.replace(" ", "-")}-entrance.png`) });
+      await page.getByRole("button", { name: "Join call", exact: true }).click();
+      await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).waitFor({ timeout: 60_000 });
+    });
+  }
+
+  for (const { name, page } of sessions) {
+    await step(`${name} sees both tiles`, async () => {
+      for (const other of people) await page.getByRole("button", { name: `Video tile for ${other.name}`, exact: true }).waitFor({ timeout: 60_000 });
+    });
+  }
+
+  for (const { name, page } of sessions) {
+    await step(`${name} turns on microphone and camera`, async () => {
+      for (const control of ["Unmute microphone", "Turn on camera"]) {
+        await page.getByRole("region", { name: "Space stage", exact: true }).hover();
+        await page.getByRole("button", { name: control, exact: true }).click();
+      }
+    });
+  }
+
+  for (const { name, page } of sessions) {
+    const other = people.find((person) => person.name !== name).name;
+    await step(`${name} receives ${other}'s video through the SFU`, async () => {
+      await page.waitForFunction(tileFrames, other, { timeout: 60_000, polling: 500 }).catch(() => undefined);
+      const first = await page.evaluate(tileFrames, other);
+      await page.waitForTimeout(3000);
+      const second = await page.evaluate(tileFrames, other);
+      if (!(first > 0 && second > first + 5)) throw new Error(`${other}'s tile decoded ${first} then ${second} frames; video is not advancing`);
+      return { frames: [first, second] };
+    });
+  }
+
+  for (const { name, page } of sessions) await page.screenshot({ path: join(out, "screenshots", `${name.replace(" ", "-")}-in-call.png`) });
+
+  await step("the API records an Episode with both participants", async () => {
+    const episodes = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes`);
+    const live = (episodes.episodes ?? []).at(0);
+    if (!live) throw new Error("the seeded Space has no Episode after both guests joined");
+    const attendance = await apiGet(`/v1/tenants/${seed.tenantId}/spaces/${seed.spaceId}/episodes/${live.id}/attendance`);
+    await writeFile(join(out, "attendance.json"), `${JSON.stringify(attendance, null, 2)}\n`);
+    const names = JSON.stringify(attendance);
+    for (const person of people) if (!names.includes(person.name)) throw new Error(`attendance does not list ${person.name}`);
+    return { episode: live.id };
+  });
+
+  for (const { name, page } of sessions) {
+    await step(`${name} leaves`, async () => {
+      await page.getByRole("region", { name: "Space stage", exact: true }).hover();
+      await page.getByRole("button", { name: "Leave call", exact: true }).click();
+      await page.getByRole("button", { name: "Rejoin", exact: true }).waitFor({ timeout: 30_000 });
+    });
+  }
+} catch (error) {
+  failure = String(error.message ?? error);
+  for (const { name, page } of sessions) await page.screenshot({ path: join(out, "screenshots", `${name.replace(" ", "-")}-failure.png`) }).catch(() => undefined);
+} finally {
+  for (const { context } of sessions) await context.close().catch(() => undefined);
+  await browser.close().catch(() => undefined);
+}
+
+// Evidence must never carry a credential: scan every file we wrote for the values this run was given.
+const secrets = [seed.systemToken, process.env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET, process.env.CHALK_CLOUDFLARE_REALTIME_APP_ID].filter(Boolean);
+await writeFile(join(out, "console.json"), `${JSON.stringify(logs.console, null, 2)}\n`);
+await writeFile(join(out, "network.json"), `${JSON.stringify(logs.network, null, 2)}\n`);
+const result = { journey: "join-call", runId, web, pass: !failure && steps.every((entry) => entry.pass), failure, steps };
+await writeFile(join(out, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
+for (const entry of await readdir(out, { recursive: true })) {
+  if (!/\.(json|log|txt)$/.test(entry)) continue;
+  const text = await readFile(join(out, entry), "utf8");
+  if (secrets.some((secret) => text.includes(secret))) {
+    console.error(`evidence file ${entry} contains a credential`);
+    process.exit(3);
+  }
+}
+console.log(JSON.stringify({ pass: result.pass, failure, steps: steps.map((entry) => `${entry.pass ? "ok  " : "FAIL"} ${entry.name}`) }, null, 2));
+process.exit(result.pass ? 0 : 1);

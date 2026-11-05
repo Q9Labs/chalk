@@ -2,12 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createSupervisor } from "./supervisor.mjs";
-import { createOpSecretResolver } from "./secrets.mjs";
+import { createSecretResolver } from "./secrets.mjs";
 import { identityEnvironment } from "./identity.mjs";
 import { waitForFileReady, waitForHTTPReady } from "./process.mjs";
 import { RuntimeState, FailureKind, failure } from "./model.mjs";
 import { createResourceManager, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
+import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./ownership.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
@@ -20,7 +21,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   let provider;
   let bindings;
   let systemToken;
-  const resolver = config.secretResolver || adapters.resolveSecrets || createOpSecretResolver({ op: adapters.op || "op" });
+  let invite;
+  const resolver = config.secretResolver || adapters.resolveSecrets || createSecretResolver({ op: adapters.op || "op" });
 
   const mergedHooks = {
     ...hooks,
@@ -52,6 +54,13 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     },
     stopResources: async () => resources.stop(),
     beforeStartService: async (spec) => {
+      if (spec.id === "sync") {
+        // A fresh checkout has no Hex packages. Fetch and compile before the readiness clock starts for Sync.
+        const cwd = `${config.root}/apps/sync`;
+        const env = { MIX_ENV: "prod" };
+        for (const args of [["local.hex", "--force", "--if-missing"], ["local.rebar", "--force", "--if-missing"], ["deps.get"], ["compile"]]) await runChecked("mix", args, { cwd, env });
+        return;
+      }
       if (spec.id !== "mobile") return;
       const bridgePath = `${config.root}/apps/mobile/scripts/prepare-local-bridge.mjs`;
       const result = await runChecked("node", [bridgePath], { cwd: config.root, env: { CHALK_DEV_WEB_PORT: String(config.ports.web) } });
@@ -69,7 +78,12 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         if (config.fresh) await retireLocalFixture({ apiOrigin: config.urls.api, systemToken, runtimeId, marker: stableMarker, fetchImpl: adapters.fetchImpl });
         const fixtureMarker = stableMarker;
         bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
+        invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
+        // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
+        await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
       }
+      // Ready means the seeded guest is admitted through the web origin, not that a port answers.
+      if (spec.id === "web") await proveSeededSignIn({ origin: config.urls.web, invite, fetchImpl: adapters.fetchImpl });
     },
     onReady: async ({ runtime }) => {
       output(runtime.state === RuntimeState.DEGRADED ? formatDegradedSummary(config, runtime.status()) : formatReadySummary(config, bindings));
@@ -97,7 +111,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_ENV: "local",
         CHALK_API_LOCAL_SYSTEM_TOKEN: systemToken,
         CHALK_API_REQUEST_LOGS: "all",
-        CHALK_API_CORS_ALLOWED_ORIGINS: config.urls.web,
+        CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.web, config.urls.public])].join(","),
         CHALK_DATABASE_URL: databaseURL(config),
         CHALK_REDIS_URL: `redis://127.0.0.1:${config.redis.port}/0`,
         CHALK_CLOUDFLARE_REALTIME_APP_ID: provider.appId,
@@ -138,7 +152,11 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_SYNC_PROVIDER_BRIDGE_CAFILE: config.identity.caCertificate,
       };
     }
-    if (serviceId === "web") return { ...base, VITE_API_URL: config.urls.api, VITE_CHALK_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_SYNC_URL: base.CHALK_SYNC_URL, VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu" };
+    if (serviceId === "web") {
+      // A browser off this box dials Sync through the public origin, where Vite proxies /v1/sync to the local Sync port.
+      const browserSync = config.publicOrigin ? `${config.publicOrigin.replace(/^http/, "ws")}/v1/sync` : base.CHALK_SYNC_URL;
+      return { ...base, ...(config.publicOrigin ? { PUBLIC_ORIGIN: config.publicOrigin } : {}), CHALK_DEV_SYNC_ORIGIN: config.urls.sync, VITE_API_URL: config.urls.api, VITE_CHALK_SYNC_URL: browserSync, VITE_CHALK_DEV_SYNC_URL: browserSync, VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu" };
+    }
     if (serviceId === "mobile") return { ...base, RCT_METRO_PORT: String(config.metro.port) };
     return {};
   }
@@ -169,7 +187,7 @@ function defaultServiceSpecs(config) {
 function formatReadySummary(config, bindings) {
   return [
     "Chalk dev ready",
-    `Web       ${config.urls.web}`,
+    `Web       ${config.urls.public}`,
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
     "Media     Cloudflare SFU, real provider path",
