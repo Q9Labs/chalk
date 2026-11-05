@@ -1817,12 +1817,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#schedulePoll();
         return;
       }
+      const tilesChanged = this.#videoTilesChanged;
       this.#videoTilesChanged = false;
       let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
         if (this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
       } catch {
+        // A hidden tab polls only after a tile change, so a failed refresh keeps that change for the retry.
+        if (tilesChanged) this.#videoTilesChanged = true;
         // Keep the first retry prompt, then return toward the idle polling cadence.
         if (this.#pollFailedPull && this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
         else {

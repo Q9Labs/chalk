@@ -6018,6 +6018,28 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
+  it("retries a failed listing at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-list-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS - 100);
+      vi.spyOn(call.harness.transport, "listPublications").mockRejectedValueOnce(new CloudflareSFUError("list 503", "signaling_failed", { status: 503 }));
+      await vi.advanceTimersByTimeAsync(10_100);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the video shown in picture-in-picture after the tab stays hidden, and closes it once picture-in-picture ends", async () => {
     vi.useFakeTimers();
     class FakeMediaStream {
