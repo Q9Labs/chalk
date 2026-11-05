@@ -315,6 +315,20 @@ func TestResolveEpisodeFollowsTheBindingNotTheSpaceSelector(t *testing.T) {
 		}
 	})
 
+	t.Run("a null binding has no media service, a missing one stays on Cloudflare", func(t *testing.T) {
+		cloudflareSelected := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
+		registry := NewRegistry(Config{ProcessConfig: processConfig, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Episodes: boundEpisodes{nil}})
+		service, err := registry.ResolveEpisode(context.Background(), tenants.Tenant{}, cloudflareSelected, utilities.ID{})
+		if service != nil || err != nil {
+			t.Fatalf("null binding: service = %#v, err = %v, want no media", service, err)
+		}
+		registry = NewRegistry(Config{ProcessConfig: processConfig, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Episodes: legacyEpisodes{}})
+		service, err = registry.ResolveEpisode(context.Background(), tenants.Tenant{}, cloudflareSelected, utilities.ID{})
+		if err != nil || service == nil || service.Provider() != mediaplane.ProviderCloudflareSFU {
+			t.Fatalf("legacy Episode: service = %#v, err = %v, want Cloudflare", service, err)
+		}
+	})
+
 	t.Run("a different Cloudflare application refuses", func(t *testing.T) {
 		registry := NewRegistry(Config{ProcessConfig: processConfig, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Episodes: boundEpisodes{bindingFor(t, string(spaces.MediaPlaneProviderCloudflareSFU), "other-app")}})
 		service, err := registry.ResolveEpisode(context.Background(), tenants.Tenant{}, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}, utilities.ID{})

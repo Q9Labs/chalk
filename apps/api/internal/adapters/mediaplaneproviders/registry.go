@@ -76,7 +76,8 @@ func NewRegistry(config Config) Registry {
 
 // ResolveEpisode returns the media plane the Episode is bound to. The Episode's
 // binding picks the provider, so a later change to the Space or Tenant selector
-// cannot move a live Episode. An Episode with no binding predates the binding and
+// cannot move a live Episode. An Episode whose binding is null started without
+// media and has none; an Episode with no binding key predates the binding and
 // stays on Cloudflare. The Tenant document still supplies the mode and the
 // credentials, and the resolved application must match the binding's fingerprint.
 func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, space spaces.Space, episodeID utilities.ID) (service *mediaplane.Service, err error) {
@@ -99,9 +100,12 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 	if err != nil {
 		return nil, fmt.Errorf("%w: episode lookup failed", mediaplane.ErrPlaneUnavailable)
 	}
-	binding, err := episode.MediaPlaneBinding()
+	binding, legacy, err := episode.MediaPlaneBinding()
 	if err != nil {
 		return nil, err
+	}
+	if binding == nil && !legacy {
+		return nil, nil
 	}
 	pin := spaces.MediaPlaneProviderCloudflareSFU
 	if binding != nil {
