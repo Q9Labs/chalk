@@ -23,8 +23,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
       payload, fence_active, control_revision
     ) values (
       $1, $2, $3, $4, $5, $6, 'role_transition_cleanup', $7, $8, $9, $10, $11, true,
-      (select control_revision + 1 from sync_episode_control
-        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+      nextval('sync_source_control_revisions')
     )
     """
   end
@@ -37,8 +36,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
       target_participant_id, target_participant_generation, source, payload, control_revision
     ) values (
       $1, $2, $3, $4, $5, $6, $7, 'role_transition_source_stop', $8, $9, $10, $11,
-      (select control_revision + 1 from sync_episode_control
-        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+      nextval('sync_source_control_revisions')
     )
     """
   end

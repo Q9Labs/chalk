@@ -849,11 +849,7 @@ insert into sync_external_operations (
     $15,
     $16,
     $17,
-    (
-        select control.control_revision + 1 from sync_episode_control control
-        where control.tenant_id = $1 and control.space_id = $2
-            and control.episode_id = $3
-    )
+    nextval('sync_source_control_revisions')
 )
 returning tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id, request_key, request_fingerprint, operation_name, actor_participant_id, actor_generation, target_participant_id, target_participant_generation, source, recording_id, deadline_generation, journey_id, parent_journey_event_id, producing_trace_id, producing_span_id, payload, status, fence_active, attempt_count, next_attempt_at, last_error_code, applied_event_id, applied_revision, created_at, completed_at, producing_traceparent, producing_tracestate, control_revision
 `

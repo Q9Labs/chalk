@@ -378,11 +378,7 @@ insert into sync_external_operations (
     sqlc.narg(producing_span_id),
     sqlc.arg(payload),
     sqlc.arg(fence_active),
-    (
-        select control.control_revision + 1 from sync_episode_control control
-        where control.tenant_id = sqlc.arg(tenant_id) and control.space_id = sqlc.arg(space_id)
-            and control.episode_id = sqlc.arg(episode_id)
-    )
+    nextval('sync_source_control_revisions')
 )
 returning *;
 

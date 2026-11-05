@@ -286,8 +286,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       target_participant_generation, jsonb_build_object('departureOperationId', $4::uuid), false,
       journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
       producing_traceparent, producing_tracestate,
-      (select control_revision + 1 from sync_episode_control
-        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+      nextval('sync_source_control_revisions')
     from sync_external_operations
     where tenant_id=$1 and space_id=$2 and episode_id=$3 and external_operation_id=$4
     """

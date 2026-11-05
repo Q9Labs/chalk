@@ -30,8 +30,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
       participant_id, participant_generation, source, expires_at, control_revision
     ) values (
       $1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds',
-      (select control_revision + 1 from sync_episode_control
-        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+      nextval('sync_source_control_revisions')
     )
     on conflict (tenant_id, episode_id, participant_id, source)
       where status in ('pending', 'ambiguous') do update

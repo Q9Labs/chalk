@@ -377,9 +377,13 @@ Apply `20261031120000_sync_media_stops` before Sync. Every live registration rea
 table in place.
 
 Apply `20261106120000_sync_source_control_revisions` before Sync too. Every source
-grant reservation and source stop records `control_revision`, one more than the
-Episode control revision its transaction read, and the provider bridge sends it so
-the own SFU orders grants and revokes for one source. The compatibility floor
+grant reservation and source stop records `control_revision`, the next value of
+the `sync_source_control_revisions` sequence, and the provider bridge sends it so
+the own SFU orders grants and revokes for one source. Each transaction takes it
+while it holds the Episode row lock, so within an Episode revisions are unique and
+rise in commit order. A grant decided after a stop is strictly newer even when the
+stop failed without a control event. The control stream revision can't serve here,
+because it counts committed events. The compatibility floor
 `minimum_compatible_sync_migration` is this version. A rollback leaves the columns
-in place. The previous Sync release still runs against them but writes null, and
+and the sequence in place. The previous Sync release still runs against them but writes null, and
 the API never renews a grant without a revision, so its own-SFU grants lapse.

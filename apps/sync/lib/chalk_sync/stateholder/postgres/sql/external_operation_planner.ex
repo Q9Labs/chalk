@@ -21,8 +21,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner do
     ) values (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
       $17, $18, $19, $20, $21, $22,
-      (select control_revision + 1 from sync_episode_control
-        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+      nextval('sync_source_control_revisions')
     )
     """
   end
