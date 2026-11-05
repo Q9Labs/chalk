@@ -394,6 +394,12 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 	}
 
 	s.mu.Lock()
+	// Close snapshots s.subscribed, so a session that closed during negotiation
+	// would never detach subscriptions committed after it.
+	if s.closed {
+		s.mu.Unlock()
+		return protocol.TracksResponse{}, ErrSessionGone
+	}
 	for _, subscription := range added {
 		subscription.mid = subscription.transceiver.Mid()
 		s.subscribed[subscription.mid] = subscription
