@@ -12,14 +12,15 @@ import { viewerSeat } from "./owner-seats";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { pastMutation, pastSessionPage, pastTranscriptText } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
-import { transcriptTextQuery, callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
+import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
+import { connectAction, connectQuery, connectionsAction, transcriptTextQuery, callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
   provider: z.enum(["google", "apple"]),
   returnTo: z
     .string()
-    .regex(/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?$/)
+    .regex(/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/)
     .default("/dashboard"),
 });
 const callbackQuery = z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024), user: z.string().max(4096).optional() });
@@ -126,6 +127,10 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
         }
         case "/dashboard-api/developer":
           return json(await developerPage(client, developerQuery.parse(query(request))));
+        case "/dashboard-api/connect":
+          return json(await connectPage(client, connectQuery.parse(query(request)).request));
+        case "/dashboard-api/connections":
+          return json(await connectionsPage(client));
         default:
           throw new DashboardError(404, "route_not_found");
       }
@@ -151,6 +156,10 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
         const action = developerAction.parse(input);
         return json(await developerMutation(client, action));
       }
+      case "/dashboard-api/connect":
+        return json(await connectMutation(client, connectAction.parse(input)));
+      case "/dashboard-api/connections":
+        return json(await connectionsMutation(client, connectionsAction.parse(input)));
       default:
         throw new DashboardError(404, "route_not_found");
     }

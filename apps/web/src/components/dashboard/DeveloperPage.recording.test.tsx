@@ -24,6 +24,7 @@ beforeEach(() => {
       if (typeof body === "object" && body !== null && "mode" in body && typeof body.mode === "string") mode = body.mode;
       return Response.json({ recordingRenderMode: mode });
     }
+    if (input === "/dashboard-api/connections") return Response.json({ connections: [] });
     return Response.json({ tenantId: "00000000-0000-4000-8000-000000000001", recordingRenderMode: mode, allowedWebsites: [], keys: [], webhooks: [], nextKeyCursor: null, nextWebhookCursor: null });
   });
 });

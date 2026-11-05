@@ -1,0 +1,41 @@
+import { Effect } from "effect";
+import { expect, it, vi } from "vitest";
+import { connectAction, connectionsAction } from "../src/lib/dashboard/contracts";
+import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
+import type { Engine } from "./engine";
+
+const handle = `chalk_oar_${"a".repeat(43)}`;
+const tenantId = "11111111-1111-4111-8111-111111111111";
+
+function engine(api: Record<string, unknown>) {
+  return { api: { default: api }, tenantId, dashboardOrigin: "https://dashboard.example.test" } as unknown as Engine;
+}
+
+it("approves for the signed-in session's tenant and never a tenant from the request", async () => {
+  const approve = vi.fn(() => Effect.succeed({ redirect_url: "https://claude.ai/api/mcp/auth_callback?code=c&state=s" }));
+  const parsed = connectAction.parse({ action: "approve-connection", request: handle, scope: "chalk:read" });
+  const result = await connectMutation(engine({ approveMCPConsentRequest: approve }), parsed);
+  expect(result.redirectUrl).toContain("claude.ai");
+  expect(approve).toHaveBeenCalledWith({ payload: { request: handle, scope: "chalk:read", tenant_id: tenantId } });
+  expect(connectAction.safeParse({ action: "approve-connection", request: handle, scope: "chalk:read", tenantId: crypto.randomUUID() }).success).toBe(false);
+});
+
+it("refuses malformed handles and scopes beyond the two bundles", () => {
+  expect(connectAction.safeParse({ action: "deny-connection", request: "chalk_sk_secret" }).success).toBe(false);
+  expect(connectAction.safeParse({ action: "approve-connection", request: handle, scope: "api_keys:write" }).success).toBe(false);
+  expect(connectionsAction.safeParse({ action: "revoke-connection", connectionId: "not-an-id" }).success).toBe(false);
+});
+
+it("shows what the app asked for and lists and revokes connections for the session's tenant", async () => {
+  const inspect = vi.fn(() => Effect.succeed({ client_name: "Claude", redirect_host: "claude.ai", scope: "chalk:manage", expires_at: "2026-11-05T12:00:00Z" }));
+  expect(await connectPage(engine({ inspectMCPConsentRequest: inspect }), handle)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", requestedScope: "chalk:manage" });
+
+  const list = vi.fn(() => Effect.succeed({ data: [{ id: crypto.randomUUID(), client_name: "ChatGPT", scope: "chalk:read", last_used_at: null, created_at: "2026-11-05T10:00:00Z" }] }));
+  expect((await connectionsPage(engine({ listMCPConnections: list }))).connections[0]).toMatchObject({ clientName: "ChatGPT", lastUsedAt: null });
+  expect(list).toHaveBeenCalledWith({ params: { tenant_id: tenantId } });
+
+  const revoke = vi.fn(() => Effect.succeed(undefined));
+  const connectionId = crypto.randomUUID();
+  await connectionsMutation(engine({ revokeMCPConnection: revoke }), { action: "revoke-connection", connectionId });
+  expect(revoke).toHaveBeenCalledWith({ params: { tenant_id: tenantId, connection_id: connectionId } });
+});

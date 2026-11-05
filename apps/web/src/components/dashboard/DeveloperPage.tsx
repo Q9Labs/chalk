@@ -1,3 +1,4 @@
+import { ConnectedApps } from "./ConnectedApps";
 import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
 import { useEffect, useState } from "react";
 
@@ -148,6 +149,8 @@ export function DeveloperPage() {
       {data.nextWebhookCursor ? (
         <MoreButton label="Show more endpoints" cursor={data.nextWebhookCursor} load={(webhookCursor) => readPage("developer", { webhookCursor })} onLoaded={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))} />
       ) : null}
+
+      <ConnectedApps />
 
       {open?.kind === "create-key" ? (
         <CreateKeyDialog
