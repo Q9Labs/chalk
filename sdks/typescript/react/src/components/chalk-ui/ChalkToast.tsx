@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChalkButton } from "./ChalkButton";
 import { noticeIdentity } from "../toast-stack/notice-announcement";
-import { Alert02Icon, CheckmarkCircle02Icon, InformationCircleIcon } from "../../utils/icons";
-
-const severityIcons = { info: InformationCircleIcon, success: CheckmarkCircle02Icon, warning: Alert02Icon, error: Alert02Icon } as const;
+// Decorative icons may be absent offline; the message and actions stay eager.
+const SeverityIcon = lazy(() => import("./ToastIcon").catch(() => ({ default: () => null })));
 export interface ChalkToastProps {
   readonly message: ReactNode;
   /** Stable semantic identity for rich message content. Change it when the message changes. */
@@ -37,11 +36,14 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
     const timer = setTimeout(() => dismissRef.current(), 160);
     return () => clearTimeout(timer);
   }, [exiting, identity]);
-  const SeverityIcon = severityIcons[type];
   return (
     <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={announce ? (type === "error" ? "alert" : "status") : undefined} aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={announce || undefined}>
       <span data-part="toast-icon" aria-hidden="true">
-        {icon ?? <SeverityIcon />}
+        {icon ?? (
+          <Suspense fallback={null}>
+            <SeverityIcon type={type} />
+          </Suspense>
+        )}
       </span>
       <span data-part="toast-message">{message}</span>
       {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
