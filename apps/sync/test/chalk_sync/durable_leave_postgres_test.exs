@@ -497,8 +497,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       System.cmd(
         "go",
         ["run", "./tests/sync-reentry", episode.tenant_id, episode.space_id, account, key],
-        cd: Path.expand("../../../api", __DIR__),
-        stderr_to_stdout: true
+        cd: Path.expand("../../../api", __DIR__)
       )
 
     assert status == 0, output
