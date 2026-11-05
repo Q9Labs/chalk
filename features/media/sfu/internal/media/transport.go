@@ -74,7 +74,16 @@ type packetQueue struct {
 
 func (q *packetQueue) empty() bool { return q.head == len(q.items) }
 
-func (q *packetQueue) push(item queuedPacket) { q.items = append(q.items, item) }
+// push appends one item. Before the slice would grow it drops the popped
+// prefix, so a queue that never empties keeps only what it holds.
+func (q *packetQueue) push(item queuedPacket) {
+	if q.head > 0 && len(q.items) == cap(q.items) {
+		n := copy(q.items, q.items[q.head:])
+		clear(q.items[n:])
+		q.items, q.head = q.items[:n], 0
+	}
+	q.items = append(q.items, item)
+}
 
 func (q *packetQueue) pop() queuedPacket {
 	item := q.items[q.head]

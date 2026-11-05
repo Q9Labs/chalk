@@ -243,3 +243,15 @@ func TestFeedbackAboutAnotherStreamIsIgnored(t *testing.T) {
 		t.Fatal("a second NACK within a round trip resent the packet again")
 	}
 }
+
+func TestAQueueThatNeverEmptiesKeepsOnlyWhatItHolds(t *testing.T) {
+	var q packetQueue
+	q.push(queuedPacket{})
+	for range 10_000 {
+		q.push(queuedPacket{})
+		q.pop()
+	}
+	if c := cap(q.items); c > 8 {
+		t.Fatalf("a queue holding one packet grew to capacity %d after 10,000 pushes", c)
+	}
+}
