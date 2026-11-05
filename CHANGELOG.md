@@ -11,7 +11,6 @@
 - Answer every SFU offer and retry transient failed pulls within seconds.
 - Advance the seven synchronized Chalk SDK packages to 5.4.1.
 
-
 ## 5.4.0
 
 - Share Chalk board controls, notes, surfaces and Follow across web and mobile, including boards started on web and opened in a native tile.
