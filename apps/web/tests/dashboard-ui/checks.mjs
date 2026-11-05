@@ -184,7 +184,7 @@ try {
   {
     const { tab, context } = await open("/dashboard");
     await dialogCheck(tab, "Join with a link", () => tab.getByRole("button", { name: "Join with a link" }).click(), "Join with a link");
-    await dialogCheck(tab, "Your call is ready", () => tab.getByRole("button", { name: "Start a call" }).click(), "Start a call");
+    await dialogCheck(tab, "Your call is ready", () => tab.getByRole("button", { name: "Start a call" }).first().click(), "Start a call");
     await dialogCheck(tab, "Rename (Home)", async () => {
       await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
       await tab.getByRole("menuitem", { name: "Rename" }).click();
@@ -325,7 +325,7 @@ try {
   }
   {
     const { tab, context } = await open("/dashboard");
-    await tab.getByRole("button", { name: "Start a call" }).click();
+    await tab.getByRole("button", { name: "Start a call" }).first().click();
     await tab.waitForTimeout(900);
     const [create] = await posted("create-call");
     check("Start a call sends no name", Boolean(create) && !("name" in create.body), JSON.stringify(create?.body ?? null));

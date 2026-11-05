@@ -32,7 +32,7 @@ export async function proveEvictionReload(context, origin) {
       } else await route.continue();
     });
     await page.goto(`${origin}/dashboard`);
-    await page.getByRole("button", { name: "Start a call", exact: true }).click();
+    await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
     await page.getByRole("button", { name: "Join call", exact: true }).click();
     await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
     assert(initial, "The original owner must join before evicting its entry");

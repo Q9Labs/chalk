@@ -676,3 +676,35 @@ it.each(qaRuns)("replays QA's B4 run $run: a call made, started and ended in ano
   // Only the page load reads a page; each later answer came in one status check.
   expect(requests().filter(([name]) => name === "home")).toHaveLength(1);
 });
+
+it("returns focus to the persistent Start a call button after the empty-state opener disappears", async () => {
+  serve({ calls: [], live: {} });
+  vi.mocked(act).mockResolvedValue({ call: planning });
+  await open();
+  const [persistent, empty] = screen.getAllByRole("button", { name: "Start a call" });
+  if (!persistent || !empty) throw new Error("Expected both empty-state and persistent call actions");
+  empty.focus();
+  await reactAct(async () => {
+    fireEvent.click(empty);
+  });
+  expect(empty.isConnected).toBe(false);
+  const ready = screen.getByRole("dialog", { name: "Your call is ready" });
+  await reactAct(async () => {
+    fireEvent.click(within(ready).getByRole("button", { name: "Close" }));
+  });
+  expect(document.activeElement).toBe(persistent);
+});
+
+it("keeps focus on the empty-state action when call creation fails", async () => {
+  serve({ calls: [], live: {} });
+  vi.mocked(act).mockRejectedValue(new Error("Call creation unavailable"));
+  await open();
+  const empty = screen.getAllByRole("button", { name: "Start a call" })[1];
+  if (!empty) throw new Error("Expected an empty-state call action");
+  empty.focus();
+  await reactAct(async () => {
+    fireEvent.click(empty);
+  });
+  expect(empty.isConnected).toBe(true);
+  expect(document.activeElement).toBe(empty);
+});

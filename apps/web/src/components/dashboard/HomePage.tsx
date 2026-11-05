@@ -107,6 +107,7 @@ export function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
   const startKey = useRef(intentKey());
+  const startButton = useRef<HTMLButtonElement>(null);
 
   async function startCall() {
     if (starting) return;
@@ -115,6 +116,8 @@ export function HomePage() {
       // No name: the server names it, and the person can rename it from the row.
       const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
+      // The empty-state opener disappears when the first row is added.
+      startButton.current?.focus();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
@@ -153,7 +156,7 @@ export function HomePage() {
   return (
     <div className="wrap">
       <div className="hact">
-        <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+        <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
           <Icon name="plus" />
           Start a call
         </button>
@@ -172,8 +175,15 @@ export function HomePage() {
       ) : shown(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
+            <span className="empty-icon" aria-hidden="true">
+              <Icon name="cam" />
+            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
+            <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+              <Icon name="plus" />
+              Start a call
+            </button>
           </div>
         </div>
       ) : (
