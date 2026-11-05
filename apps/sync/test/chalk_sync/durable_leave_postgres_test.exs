@@ -325,7 +325,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert cleanup_payload["effect"] == "media.remove_participant"
     assert cleanup_payload["participant_id"] == old.participant_id
     assert cleanup_payload["participant_generation"] == old.participant_generation
-    assert is_integer(cleanup.control_revision) and cleanup.control_revision > 0
+    assert_control_revision(cleanup.control_revision)
     assert cleanup_payload["control_revision"] == cleanup.control_revision
 
     current = account_join(episode, account, "reentry_second_join")
@@ -343,8 +343,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              Postgres.reserve_publication_grant(current, "reentry_current_camera_001", :camera)
 
     # Reserved after the old generation's cleanup was accepted, so it is ordered after it.
-    assert is_integer(grant.control_revision) and
-             grant.control_revision >= cleanup.control_revision
+    assert_control_revision(grant.control_revision)
+    assert grant.control_revision >= cleanup.control_revision
 
     assert {:ok, %{status: :confirmed, result: :authorized}} =
              Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)
@@ -417,7 +417,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert mute_payload["participant_id"] == old.participant_id
     assert mute_payload["participant_generation"] == old.participant_generation
     assert mute_payload["publication_source"] == source
-    assert is_integer(old_mute.control_revision) and old_mute.control_revision > 0
+    assert_control_revision(old_mute.control_revision)
     assert mute_payload["control_revision"] == old_mute.control_revision
 
     assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
@@ -718,4 +718,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       [id]
     ).rows
   end
+
+  defp assert_control_revision(revision),
+    do: assert(is_integer(revision) and revision > 0)
 end
