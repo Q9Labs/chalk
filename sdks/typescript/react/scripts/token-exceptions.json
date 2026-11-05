@@ -25,16 +25,6 @@
     "reason": "File-extension category color; the visible extension label carries the same meaning without color."
   },
   {
-    "file": "call-limbo/CallReady.tsx",
-    "snippet": "className=\"shrink-0 rounded-lg bg-white p-1\"",
-    "reason": "Fixed QR dark modules and light quiet zone preserve camera contrast across themes."
-  },
-  {
-    "file": "call-limbo/CallReady.tsx",
-    "snippet": "<path fill=\"#000\" d={qr.flatMap",
-    "reason": "Fixed QR dark modules and light quiet zone preserve camera contrast across themes."
-  },
-  {
     "file": "control-bar/ShellStyles.tsx",
     "snippet": ".chalk-shell-qr {\n  width: 112px;\n  height: 112px;\n  flex: none;\n  border-radius: 8px;\n  fill: #111;\n}",
     "reason": "QR modules use fixed dark ink for camera contrast."
