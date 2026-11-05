@@ -354,3 +354,28 @@ func TestPeerSessionStaysInsideTheEpisode(t *testing.T) {
 		t.Fatalf("a session of another Tenant: %v, want gone", err)
 	}
 }
+
+func TestANewCreateReplacesTheLiveSessionAtTheSameGeneration(t *testing.T) {
+	node := newTestNode(t, nil)
+	scope := episodeScope("a", "alice")
+	first, err := node.CreateSession("create-first", scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := node.CreateSession("create-second", scope)
+	if err != nil {
+		t.Fatalf("replacement at the same generation: %v", err)
+	}
+	if first.ConnectionID == second.ConnectionID {
+		t.Fatal("a new operation ID returned the old session")
+	}
+	if _, err := node.Session(first.ConnectionID, scope); !errors.Is(err, ErrSessionGone) {
+		t.Fatalf("the replaced session: %v, want gone", err)
+	}
+	if replay, err := node.CreateSession("create-second", scope); err != nil || replay.ConnectionID != second.ConnectionID {
+		t.Fatalf("a replayed create returned %v, %v", replay, err)
+	}
+	if _, reserved := node.Budget(); reserved != episodeReservation(1, 200) {
+		t.Fatalf("reserved %d, want one Participant counted once", reserved)
+	}
+}

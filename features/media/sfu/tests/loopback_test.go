@@ -358,9 +358,6 @@ func TestLoopback(t *testing.T) {
 		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "create-alice", Scope: scopeB}, nil); status != http.StatusConflict || code != protocol.CodeOperationConflict {
 			t.Fatalf("reused operation ID: status %d code %q, want 409 operation_conflict", status, code)
 		}
-		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "create-alice-2", Scope: scopeA}, nil); status != http.StatusConflict || code != protocol.CodeSessionExists {
-			t.Fatalf("second create for one generation: status %d code %q, want 409 session_exists", status, code)
-		}
 	})
 	connB := svc.createSession(t, "create-bob", scopeB)
 	connC := svc.createSession(t, "create-carol", scopeC)

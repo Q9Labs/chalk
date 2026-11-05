@@ -53,7 +53,6 @@ func classify(err error) problem {
 		{media.ErrNegotiationBusy, problem{http.StatusConflict, protocol.CodeNegotiationBusy}},
 		{media.ErrNoPendingOffer, problem{http.StatusConflict, protocol.CodeNoPendingOffer}},
 		{media.ErrOperationConflict, problem{http.StatusConflict, protocol.CodeOperationConflict}},
-		{media.ErrSessionExists, problem{http.StatusConflict, protocol.CodeSessionExists}},
 		{media.ErrStaleGeneration, problem{http.StatusConflict, protocol.CodeStaleGeneration}},
 		{media.ErrNegotiationFailed, problem{http.StatusUnprocessableEntity, protocol.CodeNegotiationFailed}},
 		{media.ErrUnsupportedOperation, problem{http.StatusNotImplemented, protocol.CodeUnsupportedOperation}},
