@@ -166,7 +166,7 @@ overrides:
   '@q9labsai/cli': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
   '@q9labsai/config-depcruise': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-  '@q9labsai/gates': 0.4.0
+  '@q9labsai/gates': 0.4.1
   '@babel/core': ^7.29.7
   '@tanstack/start-server-core': 1.169.39
   '@vitest/browser': ^4.1.12
@@ -252,8 +252,8 @@ importers:
         specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
         version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)
       '@q9labsai/gates':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.4.1
+        version: 0.4.1
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.0
@@ -3514,8 +3514,8 @@ packages:
     peerDependencies:
       dependency-cruiser: ^18.2.0
 
-  '@q9labsai/gates@0.4.0':
-    resolution: {integrity: sha512-3401/qKcP3ccbA7jLxzPkDa5mYXyoqTBBDg3Fqqr2mRohWwtnHp/TNhyhAy3iA4TdFSmBjLZyskWnRmDD72XMg==}
+  '@q9labsai/gates@0.4.1':
+    resolution: {integrity: sha512-VxecE2dlelZMDf4rIu01WMBmwlTedNmuf9rEwNeUkvbTWaPmkfxXNr1f7+0975f/SolOveccJAnHDsFv5xeTMQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -12207,7 +12207,7 @@ snapshots:
     dependencies:
       dependency-cruiser: 18.2.0
 
-  '@q9labsai/gates@0.4.0':
+  '@q9labsai/gates@0.4.1':
     dependencies:
       cac: 7.0.0
       execa: 10.0.1

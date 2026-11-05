@@ -18,7 +18,7 @@ overrides:
   "@q9labsai/cli": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
   "@q9labsai/config-depcruise": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   "@q9labsai/diagnostics": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-  "@q9labsai/gates": "0.4.0"
+  "@q9labsai/gates": "0.4.1"
   "@babel/core": ^7.29.7
   "@tanstack/start-server-core": 1.169.39
   "@vitest/browser": ^4.1.12
@@ -94,4 +94,4 @@ allowUnusedPatches: true
 
 # New package from our own q9stack release; remove once it is a day old.
 minimumReleaseAgeExclude:
-  - "@q9labsai/gates@0.4.0"
+  - "@q9labsai/gates@0.4.1"
