@@ -43,8 +43,8 @@ See the [Codex Streamable HTTP settings](https://developers.openai.com/codex/mcp
 
 ## Identify the tenant and limit access
 
-Call `chalk_get_connection` first. It returns the tenant's stable `profile_id`,
-label, tenant ID, and granted scopes. This profile call requires `tenants:read`.
+Call `chalk_get_connection` first. It returns the tenant's stable profile `id`,
+display `name`, tenant ID, and granted scopes. This profile call requires `tenants:read`.
 A key without that scope can still use tools for its other granted scopes.
 
 Every request authenticates the key again. Its tenant is the only tenant the
