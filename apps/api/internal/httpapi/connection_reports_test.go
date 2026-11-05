@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,44 @@ import (
 )
 
 const connectionReportFixture = `{"version":1,"trigger":"join_failed","events":[{"event":"space_join_span","elapsed_ms":0,"step":"join","outcome":"started"},{"event":"sync_socket_close","elapsed_ms":400,"close_code":1006,"duration_ms":400},{"event":"connection_failed","elapsed_ms":401,"state":"joining","code":"sync_start_failed"}]}`
+
+func TestAudioReceiveReports(t *testing.T) {
+	const stuck = `{"version":1,"trigger":"audio_receive_stuck","events":[{"event":"audio_receive_stuck","elapsed_ms":11000,"source":"screen_audio","receive_state":"element_bound","track_state":"live","element_state":"paused","play_result":"NotAllowedError","duration_ms":11000}]}`
+	const summary = `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"audio_receive_summary","elapsed_ms":60000,"receive_counts":{"announced":0,"pull_requested":1,"pull_failed":2,"pull_succeeded":3,"track_received":4,"bytes_flowing":5,"element_bound":6,"playing":10000,"projection_off":8}}]}`
+	for _, tc := range []struct{ name, body, level string }{
+		{"stuck", stuck, "WARN"},
+		{"summary", summary, "INFO"},
+		{"empty counts", strings.Replace(summary, `"announced":0,"pull_requested":1,"pull_failed":2,"pull_succeeded":3,"track_received":4,"bytes_flowing":5,"element_bound":6,"playing":10000,"projection_off":8`, "", 1), "INFO"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			router := chi.NewRouter()
+			router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
+			connectionReportEndpoint(&participantMediaVerifierStub{subject: participantMediaSubject(t)}).Mount(router, DefaultRateLimitOptions())
+			request := httptest.NewRequest(http.MethodPost, "/tenants/11111111-1111-4111-8111-111111111111/connection-reports", strings.NewReader(tc.body))
+			request.Header.Set("Authorization", "Bearer "+participantMediaCredential)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != http.StatusNoContent {
+				t.Fatalf("status=%d: %s", response.Code, response.Body.String())
+			}
+			var logged struct{ Event, Level, Report string }
+			if err := json.NewDecoder(&logs).Decode(&logged); err != nil {
+				t.Fatal(err)
+			}
+			var got, want any
+			if err := json.Unmarshal([]byte(logged.Report), &got); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal([]byte(tc.body), &want); err != nil {
+				t.Fatal(err)
+			}
+			if logged.Event != "sdk.connection_report" || logged.Level != tc.level || !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected report log: %s", logs.String())
+			}
+		})
+	}
+}
 
 func TestMediaProjectionMismatchReport(t *testing.T) {
 	const body = `{"version":1,"trigger":"media_projection_mismatch","events":[{"event":"media_projection_mismatch","elapsed_ms":3000,"source":"microphone","publication_state":"on","projection_state":"off","duration_ms":2750,"attempt":2,"outcome":"started"}]}`
@@ -283,6 +322,14 @@ func TestConnectionReportRejectionEvidence(t *testing.T) {
 		{"heartbeat", `{"version":1,"trigger":"join_failed","events":[{"event":"sync_socket_close","elapsed_ms":0,"heartbeat_gap_ms":2147483648}]}`, "heartbeat_gap_ms_range", 400},
 		{"close code", `{"version":1,"trigger":"join_failed","events":[{"event":"sync_socket_close","elapsed_ms":0,"close_code":5000}]}`, "close_code_range", 400},
 		{"HTTP status", `{"version":1,"trigger":"join_failed","events":[{"event":"media_http_error","elapsed_ms":0,"http_status":200}]}`, "http_status_range", 400},
+		{"receive state", strings.Replace(connectionReportFixture, `"state":"joining"`, `"receive_state":"sensitive-value"`, 1), "receive_state_label", 400},
+		{"track state", strings.Replace(connectionReportFixture, `"state":"joining"`, `"track_state":"sensitive-value"`, 1), "track_state_label", 400},
+		{"element state", strings.Replace(connectionReportFixture, `"state":"joining"`, `"element_state":"sensitive-value"`, 1), "element_state_label", 400},
+		{"private play result", strings.Replace(connectionReportFixture, `"state":"joining"`, `"play_result":"private-field@example.test"`, 1), "play_result_label", 400},
+		{"unknown receive count", `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"audio_receive_summary","elapsed_ms":0,"receive_counts":{"sensitive-value":1}}]}`, "schema", 400},
+		{"large receive count", `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"audio_receive_summary","elapsed_ms":0,"receive_counts":{"playing":10001}}]}`, "receive_counts_range", 400},
+		{"negative receive count", `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"audio_receive_summary","elapsed_ms":0,"receive_counts":{"projection_off":-1}}]}`, "receive_counts_range", 400},
+		{"non-summary counts", strings.Replace(connectionReportFixture, `"state":"joining"`, `"receive_counts":{}`, 1), "receive_counts_event", 400},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

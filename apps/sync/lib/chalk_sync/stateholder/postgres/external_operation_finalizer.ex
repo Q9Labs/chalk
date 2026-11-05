@@ -9,6 +9,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.Lifecycle
+  alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
   alias ChalkSync.Stateholder.Postgres.RoleTransitionSettlement
@@ -428,6 +429,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     case expected_external_fact(external, state, name, payload) do
       {:ok, event, next_state} ->
         event_id = persist_event(connection, episode, external, event, next_state)
+        record_media_stop(connection, episode, external, event)
 
         webhook_object =
           update_external_products(connection, episode, external, event, next_state)
@@ -460,6 +462,28 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
       {:error, _reason} ->
         Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
+    end
+  end
+
+  @stop_sources %{
+    "participant_microphone_stopped" => :microphone,
+    "participant_camera_stopped" => :camera,
+    "participant_screen_share_stopped" => :screen
+  }
+
+  defp record_media_stop(connection, episode, external, %{name: name} = event) do
+    case Map.fetch(@stop_sources, to_string(name)) do
+      {:ok, source} ->
+        MediaPauses.record_stop(
+          connection,
+          episode,
+          external.target_participant_id,
+          source,
+          event.revision
+        )
+
+      :error ->
+        :ok
     end
   end
 

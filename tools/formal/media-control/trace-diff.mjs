@@ -2,8 +2,11 @@
 // variables it changed. Usage: node trace-diff.mjs results/<run>.txt
 import { readFileSync } from "node:fs";
 
-const [traceFile, specFile = new URL("MediaControl.tla", import.meta.url).pathname] = process.argv.slice(2);
+const [traceFile, specArg] = process.argv.slice(2);
 const text = readFileSync(traceFile, "utf8");
+// The trace names its module ("of module MediaHeal"); the spec sits next to this script.
+const moduleName = text.match(/of module (\w+)/)?.[1];
+const specFile = specArg ?? new URL(`${moduleName ?? "MediaControl"}.tla`, import.meta.url).pathname;
 const specLines = readFileSync(specFile, "utf8").split("\n");
 const actionAt = (line, col, endCol) =>
   specLines[line - 1]
@@ -16,7 +19,7 @@ let current = null;
 for (const line of text.split("\n")) {
   const header = line.match(/^State (\d+): (.*)$/);
   if (header) {
-    current = { n: Number(header[1]), label: header[2].replace(/<Next line (\d+), col (\d+) to line \d+, col (\d+) of module MediaControl>/, (_, l, c, e) => actionAt(Number(l), Number(c), Number(e))).replace(/[<>]/g, ""), vars: new Map(), key: null };
+    current = { n: Number(header[1]), label: header[2].replace(/<Next line (\d+), col (\d+) to line \d+, col (\d+) of module \w+>/, (_, l, c, e) => actionAt(Number(l), Number(c), Number(e))).replace(/[<>]/g, ""), vars: new Map(), key: null };
     states.push(current);
     continue;
   }

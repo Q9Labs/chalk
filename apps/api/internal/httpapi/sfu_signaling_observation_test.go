@@ -51,8 +51,9 @@ func TestSFUTracksDecoderRequiresExplicitPartialReplyQuery(t *testing.T) {
 
 func TestRemoteTrackObservationUsesOnlyRequestedMissingIdentities(t *testing.T) {
 	request := sfuTracksEndpointRequest{
-		TenantID:  remoteObservationTestID(t, "11111111-1111-4111-8111-111111111111"),
-		EpisodeID: remoteObservationTestID(t, "22222222-2222-4222-8222-222222222222"),
+		TenantID:      remoteObservationTestID(t, "11111111-1111-4111-8111-111111111111"),
+		EpisodeID:     remoteObservationTestID(t, "22222222-2222-4222-8222-222222222222"),
+		ParticipantID: remoteObservationTestID(t, "33333333-3333-4333-8333-333333333333"),
 		Body: sfuTracksRequest{Tracks: []mediaplane.Track{
 			{Location: "local", TrackName: "local-track"},
 			remoteObservationTrack("remote-connection", "remote-track"),
@@ -64,6 +65,9 @@ func TestRemoteTrackObservationUsesOnlyRequestedMissingIdentities(t *testing.T) 
 	})
 	if !ok {
 		t.Fatal("remote observation missing")
+	}
+	if observation.ListenerParticipantID != request.ParticipantID {
+		t.Fatalf("listener participant ID = %s, want %s", observation.ListenerParticipantID, request.ParticipantID)
 	}
 	if len(observation.Requested) != 1 || observation.Requested[0].ConnectionID != "remote-connection" || observation.Requested[0].TrackName != "remote-track" {
 		t.Fatalf("requested identities = %#v", observation.Requested)

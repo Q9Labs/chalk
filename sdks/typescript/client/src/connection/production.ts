@@ -130,6 +130,9 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
+    onDiagnostic: (event) => console.warn("chalk.media.local_offer_pending", event),
+    onReceiveHealth: input.onTransportDiagnostic,
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
@@ -151,9 +154,11 @@ type BoundMediaClient = Pick<
   | "closeForcedLocalPublication"
   | "observeLocalPublications"
   | "observeRemotePublications"
+  | "observeAudioElement"
   | "remotePublicationsChanged"
   | "remoteParticipantsChanged"
   | "remotePublicationResumed"
+  | "localPublicationWithdrawn"
   | "start"
   | "stop"
   | "prepareLocalTrack"
@@ -169,9 +174,11 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     ...(client.closeForcedLocalPublication ? { closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client) } : {}),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
+    ...(client.observeAudioElement ? { observeAudioElement: client.observeAudioElement.bind(client) } : {}),
     ...(client.remoteParticipantsChanged ? { remoteParticipantsChanged: client.remoteParticipantsChanged.bind(client) } : {}),
     ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
     ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
+    ...(client.localPublicationWithdrawn ? { localPublicationWithdrawn: client.localPublicationWithdrawn.bind(client) } : {}),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
     restart,

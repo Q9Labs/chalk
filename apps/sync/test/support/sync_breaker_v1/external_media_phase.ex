@@ -455,13 +455,17 @@ defmodule ChalkSync.SyncBreakerV1.ExternalMediaPhase do
         "restarted_incarnation" => ScriptedMediaPlane.projection(restarted)["incarnation"],
         "production_publication_count" => length(items),
         "production_projection_matches_provider_truth" =>
-          length(live.media_items) == length(provider_truth["publications"])
+          length(listed_items(live.media_items)) == length(provider_truth["publications"])
       }
     after
       restore_env(:media_plane, previous)
       stop(restarted)
     end
   end
+
+  # A host stop projects without a publication, so only items the media plane lists match its truth.
+  defp listed_items(items),
+    do: Enum.reject(items, &(&1["off_reason"] == "host" and is_nil(&1["publication_id"])))
 
   defp assert_barrier!(tag, point) do
     receive do

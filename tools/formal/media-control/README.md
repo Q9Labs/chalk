@@ -142,3 +142,69 @@ Files:
 `OptimisticUi = TRUE` is the second deliberately broken variant: the UI shows on as soon as the user asks. P3 fails on it.
 
 Reachability witnesses (`W1`, `W2`) are expected to be violated: the violation shows that turning on works end to end and that a host mute reaches the device, so the properties are not vacuous.
+
+## Heal model: listener heal loop and dead-publication path
+
+`MediaHeal.tla` answers a different question from `MediaControl.tla`: if a publisher keeps its microphone on, does every listener eventually hear it, even when tracks are lost at the SFU, pulls fail, and sessions drop and rebuild? `MediaControl.tla`, `Sfu.tla` and `runs.txt` are unchanged, and `run.sh` runs both models.
+
+### What the model describes
+
+The model describes `origin/master` at `3f9fe4385` plus three things that are not on master. Nothing here ties the model to the code by an executable test, so it cannot detect drift.
+
+- On master: `#rememberRecoveryIntents` and `#pauseRecoveredIntents` in `sdks/typescript/client/src/space-client/media-controller.ts`; `apply_live_target`, `apply_media_pauses` and the `enabled` projection in `apps/sync/lib/chalk_sync/live/episode.ex`; the API's publication ledger in `apps/api/internal/mediapublications/`.
+- From the #716 branch, not merged: the listener heal tick and the publisher's own stall detection in `sdks/typescript/client/src/media/client.ts` and the receive-stall module beside it.
+- Planned, not in code: the server dead-publication path (the API counts failed pulls of a gone track, reports it dead to Sync, the publisher republishes). Master already has a different absence path in `apps/api/internal/mediapublications/reconciliation.go` (three observations at least 2 s apart plus a 15 s grace). The model describes the planned path, not that one.
+
+Actors: the publisher (the decided on/off rules, reduced to one source), Sync (owns the publication list `none | on | off | dead` and its versions, and the grant), the API with the SFU (the ledger and the track set; a lost track may linger without packets), and listeners (the heal loop). Faults, each with a budget and no fairness: publisher track lost at the SFU, listener subscription lost, a refused pull, receive-connection loss, publisher Sync-link drop, SFU session rebuild, a lost message, and a host mute. A joint cap `MaxFaults` keeps combined faults small.
+
+### Properties
+
+- **P5src (liveness).** If the publisher keeps the microphone on, stays connected and is not host-muted from some point on, then every listener eventually has some live publication pulled with packets rising, with capture on, and stays so (`<>[]`). It is stated at the level of the microphone, not of one publication, so a dead path that only marks the publication dead cannot satisfy it by making the property vacuous.
+- **P5 (liveness).** The same for each single publication that Sync keeps listed as on while its publisher stays connected.
+- **P4h (liveness).** Faults stop, delivery is fair: publisher and Sync agree again on on/off.
+- **S5c (liveness).** A pulled publication that Sync lists as off or dead is eventually dropped.
+- **P1, P1b (safety).** Capture implies the user wants it; and only the user's own on turns capture on. No heal, republish or recovery step does.
+- **P1d (liveness).** A host mute that Sync has applied stops capture, also when it arrives during a reconnect.
+- **P2 (safety), P4h.** An off is never lost across a publisher reconnect; publisher and Sync agree again.
+- **S5 (safety).** The heal loop pulls a publication only if its own roster lists it as on.
+- **S5b (expected violated).** Against Sync itself the listener's roster can be older than Sync's, so a listener may pull after Sync has revoked the grant (an off or a host mute) and before the listener sees it. The heal loop cannot rule this out; the check records it.
+- **S5d (holds).** The heal loop never pulls a publication Sync lists as dead, even from a stale roster: the API reports a publication dead only after the SFU has lost its track, and a lost track cannot be pulled again. This holds because of that ordering in the model, not because the listener checks Sync.
+- **P6 (safety).** Retry spacing stays within the cap. This is the check for the no-cap mutant, because without time eventual liveness does not depend on how long a backoff is.
+
+### Fairness
+
+Weak fairness only, on every repair step: deliveries, resends, reconnects, the heal tick (backoff, flat sample, drop, pull), the republish steps and SFU garbage collection. Faults, host mutes and user actions get none; their budgets bound them. Strong fairness is not needed: once faults stop, every repair step becomes enabled and stays enabled, so weak fairness already forces it. The model has no clock: a backoff, a flat sample count and a drop count stand for about 500 ms ticks.
+
+### Recovery rule (found bug on master)
+
+`#pauseRecoveredIntents` pauses a device after a reconnect when `snapshot.media.items[]` has no item for it with `enabled` true. In Sync, `enabled` is true only while the API observes a live publication for that participant and source; Sync also projects it to false while a pause is held (`apps/sync/lib/chalk_sync/live/episode.ex`). It is not the grant. So when the grant is on but no publication is listed yet (the first publish is in flight), or the dead path has just removed the publication, a reconnect pauses the device. The wanted state stays on, nothing turns capture back on, and listeners hear silence until the user toggles off and on. `heal-sdk-today-P5src` is that counterexample (`RecoveryPause="item"`, 12 states); `heal-witness-W5` shows the dead-path variant is reachable.
+
+`RecoveryPause="grant"` is a proposed rule, not a tested fix: pause only when Sync has seen the remembered on-revision and its grant is off, which is what a moderation pause looks like. With it, every property holds, W4 (a device that wants capture but has none) is unreachable, and a host mute during a reconnect still stops capture (`heal-hostmute-grant-P1d`). `"none"` (never pause on recovery) loses the host mute (`heal-hostmute-none-P1d` is violated). Whether the real client can read the grant from a snapshot is open: the snapshot item does not carry it.
+
+### Mutants
+
+Each removes one mechanism and runs the same property set; the results are in `tools/formal/media-control/results/heal-summary.md`.
+
+- No flat-packet drop and re-pull, no receive-session reconnect, no server dead path, give up after 2 failures: each breaks P5src.
+- No SFU expiry of silent tracks breaks P5src unless the publisher also detects its own lost track (`heal-nogc-selfdetect-P5src` passes).
+- **No retry cap does not break P5src.** Without time, a longer backoff only delays the pull; with finite faults it still happens. P6 (retry spacing at most the cap) is the check that breaks (`mutant-heal-nocap-P6`). The model does not prove anything about how long a listener waits.
+
+### Bounds and what is not proved
+
+Default bounds: one listener, four publication ids, two user actions, each fault kind at most once, at most two faults together. The `deep-heal-*` rows add three faults together (one user action for liveness, so it fits in 8 GB), and two listeners (one fault, one user action, three publication ids). Two listeners at the default bounds (two faults, four publications, two user actions) did not finish: the run was stopped after 80 minutes on an 8 GB machine at over 7 million distinct states, so no result exists for that size. Liveness runs do not use symmetry. Not proved:
+
+- Time. Backoff, the 7 s stall window, 30 s Cloudflare expiry and pending-publication timing are counters or absent. The model says nothing about how long a listener waits.
+- More than two (three on the deep rows) faults together, more than two listeners, more than one source, camera, screen and recording.
+- The planned dead path as built: the real thresholds and message formats are not known yet. Pulls in the real API do not check Sync's enabled state; the model's heal loop does (it pulls only what its roster lists as on).
+- That the SDK or Sync implement any rule above. The model is not executable against the code.
+
+### Run it
+
+```sh
+./run.sh                    # both models, default bounds
+DEEP=1 ./run.sh             # plus the deep rows of both models
+./run.sh heal-decided-P5src # one row
+node trace-diff.mjs results/heal-sdk-today-P5src.txt   # the counterexample, one line per step
+```
+
+`heal-runs.txt` has one row per run: `name | check | expect | overrides`. The defaults are in `run.sh`; each run writes `results/<run>.cfg` and `results/<run>.txt`, and a full run writes `tools/formal/media-control/results/heal-summary.md`. The last full run was on an Instabox machine (4 vCPU, 8 GB).

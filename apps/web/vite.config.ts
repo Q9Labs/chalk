@@ -62,6 +62,13 @@ const config = defineConfig({
     __WEB_APP_VERSION__: JSON.stringify(pkg.version || "0.0.0"),
     __SDK_REACT_VERSION__: JSON.stringify(sdkReactPkg.version || "0.0.0"),
   },
+  build: {
+    rolldownOptions: {
+      treeshake: {
+        manualPureFunctions: ["Schema"],
+      },
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: localWebPort,

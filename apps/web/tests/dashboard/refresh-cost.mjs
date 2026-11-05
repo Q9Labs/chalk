@@ -108,7 +108,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     });
     assert.equal(arrival.status, 201, await arrival.clone().text());
     sql(`update space_public_admission_requests set expires_at=now()+interval '5 minutes' where space_id='${call.id}' and state='pending'`);
-    await callPage.locator(".orow").waitFor({ state: "visible", timeout: 12000 });
+    await callPage.locator(".knock").waitFor({ state: "visible", timeout: 12000 });
     await delay(500);
     const pendingStart = Date.now();
     const pendingTicks = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length;

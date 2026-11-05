@@ -7,10 +7,7 @@ const finish = (platform: Platform) => platform.media.emit({ ...platform.media.g
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("media intents during a media connection swap", () => {
-  // Known gap: once the swap outlasts the 250 ms lifecycle grace, #pauseRecoveredIntents treats the still-unsent
-  // click as lost to Sync and cancels it. The recovery-rule fix (pause only when Sync's own state says off) is
-  // owned by a separate PR; drop `.fails` when it lands.
-  it.fails.each(["microphone", "camera"] as const)("preserves an early %s click across the lifecycle grace boundary", async (source) => {
+  it.each(["microphone", "camera"] as const)("preserves an early %s click across the lifecycle grace boundary", async (source) => {
     const sourceIntent = vi.fn(async () => {});
     const { client, platform, command, capture, setEnabled } = createConvergenceScenario(source, { media: { setLocalSourceIntent: sourceIntent } });
     try {
@@ -74,7 +71,7 @@ describe("media intents during a media connection swap", () => {
     }
   });
 
-  it.each(["timeout", "sync-loss", "dispose"] as const)("settles without replay after %s during a swap", async (ending) => {
+  it.each(["timeout", "dispose"] as const)("settles without replay after %s during a swap", async (ending) => {
     const { client, platform, command, capture, setEnabled } = createConvergenceScenario("microphone");
     let expire: (() => void) | undefined;
     const schedule = platform.dependencies.clock.setTimeout;
@@ -95,12 +92,6 @@ describe("media intents during a media connection swap", () => {
       );
       await vi.waitFor(() => expect(expire).toBeTypeOf("function"));
       if (ending === "timeout") expire!();
-      if (ending === "sync-loss") {
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
-        await tick();
-        finish(platform);
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-      }
       if (ending === "dispose") client.dispose();
       const outcome = await result;
       expect(outcome).not.toBe("enabled");
@@ -112,6 +103,30 @@ describe("media intents during a media connection swap", () => {
     } finally {
       client.dispose();
       timer.mockRestore();
+    }
+  });
+
+  // Sync never saw the click and nothing turned the source off, so recovery keeps it wanted-on and applies it.
+  it("applies a queued click once when Sync is lost and restored during the swap", async () => {
+    const { client, platform, command, capture, setEnabled } = createConvergenceScenario("microphone");
+    try {
+      await client.join({ microphone: false, camera: false });
+      swap(platform);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      const result = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      await tick();
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
+      await tick();
+      finish(platform);
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+      expect(await result).toBe("enabled");
+      expect(command).toHaveBeenCalledExactlyOnceWith(true);
+      expect(capture).toHaveBeenCalledOnce();
+    } finally {
+      client.dispose();
     }
   });
 });

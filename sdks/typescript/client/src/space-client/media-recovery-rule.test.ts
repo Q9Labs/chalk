@@ -1,0 +1,297 @@
+import { describe, expect, it, vi } from "vitest";
+import { enterRecovery } from "../../tests/helpers/media-convergence";
+import { confirmPublication, dropAndRecover, hostStop, live, mediaPhase, recoveryScenario, sources, tick, type Scenario } from "../../tests/helpers/media-recovery";
+
+describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
+  // Trace A: Sync holds the grant but lists no publication yet, and the session reconnects before the first publication exists.
+  it.each(sources)("A: a reconnect before the first %s publication exists does not pause it", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent, closeForcedLocalPublication } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "before", sequence: 1, items: [] } });
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(track.enabled).toBe(true);
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
+      expect(closeForcedLocalPublication).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // Trace B: the user turns the source on while Sync is healthy, only the media plane recovers, and the first Sync item is still missing at restore.
+  it.each(sources)("B: a media-only recovery during a pending %s enable does not revoke it", async (source) => {
+    const release = Promise.withResolvers<void>();
+    const held = vi.fn(async (_enabled: boolean) => {
+      await release.promise;
+      return { operationId: "target", name: "set_microphone_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const };
+    });
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source, { sync: { setMicrophoneEnabled: held, setCameraEnabled: held } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      const enabling = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      await vi.waitFor(() => expect(held).toHaveBeenCalledWith(true));
+      mediaPhase(platform, "recovering");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await tick(400);
+      mediaPhase(platform, "live");
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      release.resolve();
+      expect(await enabling).toBe("enabled");
+      expect(track.enabled).toBe(true);
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
+    } finally {
+      release.resolve();
+      client.dispose();
+    }
+  });
+
+  // Trace C: Sync marked the publisher's own publication dead on purpose (tombstone), and the publisher reconnects before the republish is admitted.
+  it.each(sources)("C: a reconnect after a dead mark and before the %s republish does not pause it", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent, closeForcedLocalPublication } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      const item = { participantId: "participant-1", source };
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "live", sequence: 1, items: [{ ...item, enabled: true, publicationId: "publication-1" }] } });
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "live", sequence: 2, items: [{ ...item, enabled: false, publicationId: null }] } });
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [{ ...item, enabled: false, publicationId: null }] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(track.enabled).toBe(true);
+      confirmPublication(platform, track, source);
+      expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, "sync_recovery_loss");
+      expect(closeForcedLocalPublication).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The host mutes while the device is gone. Sync tells the client in one of two ways, and recovery pauses on either.
+  it.each(sources)("a host stop replayed while the %s device was gone pauses it", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitMediaPause({ source, revision: 9 });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a host stop in the recovered snapshot pauses the %s source when replay was lost", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 9)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+      expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause");
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a host stop during %s recovery, after the snapshot, pauses it", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      expect(track.enabled).toBe(true);
+      platform.emitMediaPause({ source, revision: 9 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The stop is not newer than the user's own On, so the user's later intent wins.
+  it.each(sources)("a host stop the %s intent already answered does not pause it again", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      platform.emitMediaPause({ source, revision: 20 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      await setEnabled(true);
+      setLocalSourceIntent.mockClear();
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 20)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it.each(sources)("a stop newer than the %s intent pauses it", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      platform.emitMediaPause({ source, revision: 20 });
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 21)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await vi.waitFor(() => expect(track.enabled).toBe(false));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The user turns the source off and on again while the session is gone; the stop is newer than that last intent, so it still pauses it.
+  it.each(sources)("a host stop newer than a %s intent made during the reconnect pauses that intent", async (source) => {
+    const { client, platform, track, setEnabled, setLocalSourceIntent } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      await setEnabled(false);
+      const again = setEnabled(true).catch(() => undefined);
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [hostStop(source, 9)] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await again;
+      await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
+      expect(track.enabled).toBe(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // A device pause the Sync held for this device is the device's own answer, not the host's.
+  it.each(sources)("a device pause on the %s item is no evidence the host turned it off", async (source) => {
+    const { client, platform, track, setEnabled } = recoveryScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await setEnabled(true);
+      await enterRecovery({ platform, client });
+      const item = { participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "self" as const };
+      platform.emitSync({ ...live(platform), media: { projectionId: "recovered", sequence: 0, items: [item] } });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      await tick(20);
+      expect(track.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  // The bounded variant: with no stop evidence, a drop proven short (under 60 s) resumes without a tap, and any other drop is a turn-off.
+  describe("after Sync lost the publication with no stop evidence", () => {
+    const longDropMs = 60_000;
+
+    it.each(sources)("%s: a drop of 59.9 s keeps it on and resumes without a tap", async (source) => {
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs - 100) });
+      try {
+        expect(track.enabled).toBe(true);
+        confirmPublication(platform, track, source);
+        expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a drop of 60 s turns it off like a tap", async (source) => {
+      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs) });
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "user_pause");
+      } finally {
+        finish();
+      }
+    });
+
+    // Sync lists a publication, but the drop was too long to prove the same device still holds it, so the source is off and one tap turns it on.
+    it.each(sources)("%s: a long drop turns it off like a tap even when Sync still lists a publication", async (source) => {
+      const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
+      const { client, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(longDropMs * 5), items: [item] });
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "user_pause");
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a short drop keeps it on when Sync still lists the publication", async (source) => {
+      const item = { participantId: "participant-1", source, enabled: true, publicationId: "publication-1" };
+      const { client, platform, track, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(3_000), items: [item] });
+      try {
+        expect(track.enabled).toBe(true);
+        confirmPublication(platform, track, source);
+        expect(client.getSnapshot().media.local[source].state).toBe("enabled");
+        expect(setLocalSourceIntent).not.toHaveBeenCalledWith(source, false, expect.anything());
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources)("%s: a host stop newer than the intent pauses it whatever the drop length", async (source) => {
+      const { track, setLocalSourceIntent, finish } = await dropAndRecover(source, { items: [hostStop(source, 9)] });
+      try {
+        await vi.waitFor(() => expect(setLocalSourceIntent).toHaveBeenCalledWith(source, false, "moderation_pause"));
+        expect(track.enabled).toBe(false);
+      } finally {
+        finish();
+      }
+    });
+
+    // The cutoff judges the intent that existed when recovery began, so a tap during the drop is the user's new word.
+    const offThenOn = async (setEnabled: Scenario["setEnabled"]) => {
+      await setEnabled(false);
+      await setEnabled(true).catch(() => undefined);
+    };
+
+    it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs, longDropMs * 2].map((downMs) => ({ source, downMs }))))("$source: a turn-off and turn-on during a drop of $downMs ms keeps the new on and applies it once", async ({ source, downMs }) => {
+      const { command, setLocalSourceIntent, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(downMs), duringDrop: offThenOn });
+      try {
+        expect(command.mock.calls.filter(([enabled]) => enabled === true)).toHaveLength(2);
+        const intents = setLocalSourceIntent.mock.calls;
+        expect(intents.at(-1)).toEqual([source, true]);
+        expect(intents.filter(([, enabled]) => enabled === false)).toHaveLength(1);
+      } finally {
+        finish();
+      }
+    });
+
+    it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs].map((downMs) => ({ source, downMs }))))("$source: a tap off during a drop of $downMs ms stays off", async ({ source, downMs }) => {
+      const { client, track, command, finish } = await dropAndRecover(source, { drop: (rig) => rig.elapse(downMs), duringDrop: (setEnabled) => setEnabled(false) });
+      try {
+        expect(track.enabled).toBe(false);
+        expect(client.getSnapshot().media.local[source].state).toBe("disabled");
+        expect(command.mock.calls.filter(([enabled]) => enabled === true)).toHaveLength(1);
+      } finally {
+        finish();
+      }
+    });
+  });
+});

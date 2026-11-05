@@ -1,0 +1,29 @@
+TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+Implied-temporal checking--satisfiability problem has 1 branches.
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-10-31 18:54:05.
+Checking temporal properties for the current state space with 16506 total distinct states at (2026-10-31 18:54:08)
+Finished checking temporal properties in 00s at 2026-10-31 18:54:08
+Checking temporal properties for the current state space with 695979 total distinct states at (2026-10-31 18:55:08)
+Finished checking temporal properties in 02s at 2026-10-31 18:55:11
+Checking temporal properties for the current state space with 1301748 total distinct states at (2026-10-31 18:56:11)
+Finished checking temporal properties in 05s at 2026-10-31 18:56:16
+Checking temporal properties for the current state space with 1856874 total distinct states at (2026-10-31 18:57:16)
+Finished checking temporal properties in 07s at 2026-10-31 18:57:24
+Checking temporal properties for the current state space with 2432734 total distinct states at (2026-10-31 18:58:24)
+Finished checking temporal properties in 10s at 2026-10-31 18:58:34
+Checking temporal properties for the current state space with 3026575 total distinct states at (2026-10-31 18:59:34)
+Finished checking temporal properties in 13s at 2026-10-31 18:59:48
+Checking temporal properties for the current state space with 3625437 total distinct states at (2026-10-31 19:00:48)
+Finished checking temporal properties in 17s at 2026-10-31 19:01:05
+Checking temporal properties for the complete state space with 3677785 total distinct states at (2026-10-31 19:01:10)
+Finished checking temporal properties in 16s at 2026-10-31 19:01:26
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 3.6E-6
+  based on the actual fingerprints:  val = 1.2E-7
+21654511 states generated, 3677785 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 52.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 14 and the 95th percentile is 3).
+Finished in 07min 21s at (2026-10-31 19:01:26)

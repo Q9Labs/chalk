@@ -8,11 +8,20 @@ const syncSockets = [];
 const peers = [];
 /** Replica of the media projection as Sync sent it to this browser: "participant/source" -> enabled. */
 const projection = new Map();
-const faults = { dropNextMicrophoneOff: false, droppedFrames: 0, failMediaClose: false, failedMediaCloses: 0 };
+const faults = { dropNextMicrophoneOff: false, droppedFrames: 0, failMediaClose: false, failedMediaCloses: 0, holdNextPublish: false, heldPublishes: 0 };
+let releasePublish;
 const nativeFetch = window.fetch.bind(window);
 // Optional second fault: the media plane cannot close the SFU track either, so only Sync can end the publication.
 window.fetch = (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  // Holds the next publish request until released: Sync already granted the mic, but no publication exists yet.
+  if (faults.holdNextPublish && /\/tracks(\?|$)/u.test(url) && (init?.method ?? "GET") === "POST") {
+    faults.holdNextPublish = false;
+    faults.heldPublishes += 1;
+    return new Promise((resolve, reject) => {
+      releasePublish = () => nativeFetch(input, init).then(resolve, reject);
+    });
+  }
   if (faults.failMediaClose && url.includes("/tracks/close")) {
     faults.failedMediaCloses += 1;
     return Promise.reject(new TypeError("injected: media close request failed"));
@@ -141,6 +150,9 @@ window.proof = {
     } catch (error) {
       return { ok: false, settledAfterMs: Date.now() - started, error: String(error?.code ?? error?.message ?? error) };
     }
+  },
+  release() {
+    releasePublish?.();
   },
   dropConnection() {
     syncSockets.at(-1).close(4000, "proof: forced reconnect");

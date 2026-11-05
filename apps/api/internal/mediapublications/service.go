@@ -159,6 +159,7 @@ type Service struct {
 	repository      Repository
 	absenceEvidence *remoteTrackAbsenceEvidence
 	receiveHealth   *receiveHealth
+	liveness        *publicationLivenessChecks
 }
 
 func NewService(repository Repository) Service {
@@ -166,7 +167,7 @@ func NewService(repository Repository) Service {
 }
 
 func newService(repository Repository, now func() time.Time) Service {
-	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now)}
+	return Service{repository: repository, absenceEvidence: newRemoteTrackAbsenceEvidence(now), receiveHealth: newReceiveHealth(now), liveness: newPublicationLivenessChecks(now)}
 }
 
 func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (Snapshot, error) {

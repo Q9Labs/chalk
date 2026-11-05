@@ -608,8 +608,13 @@ function strictEvent(value: Record<string, unknown>): boolean {
       return false;
   }
 }
+function validMediaOffReason(item: Record<string, unknown>): boolean {
+  if (!Object.hasOwn(item, "off_reason")) return !Object.hasOwn(item, "off_revision");
+  if (item.off_reason === "host") return Number.isInteger(item.off_revision) && (item.off_revision as number) > 0;
+  return item.enabled === false && (item.off_reason === "self" || item.off_reason === "dead") && !Object.hasOwn(item, "off_revision");
+}
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
-  if (stream === "media") return exactObject(value, ["participant_id", "source", "enabled", "publication_id"]);
+  if (stream === "media") return isObject(value) && exactObject(value, [...["participant_id", "source", "enabled", "publication_id"], ...(Object.hasOwn(value, "off_reason") ? ["off_reason"] : []), ...(Object.hasOwn(value, "off_revision") ? ["off_revision"] : [])]) && validMediaOffReason(value);
   if (stream === "presence")
     return (
       isObject(value) &&
@@ -627,10 +632,12 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
+  if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
     ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
+    ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -1295,6 +1302,7 @@ const WelcomeBase = {
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
@@ -1341,9 +1349,14 @@ export const SatisfiedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack
 export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("rejected"), reason: RejectionReasonSchema, ...ServerCorrelationFields });
 export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict"), ...ServerCorrelationFields });
 
-export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
-  Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })),
-);
+export const MediaProjectionItemSchema = Schema.Struct({
+  participant_id: UuidSchema,
+  source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]),
+  enabled: Schema.Boolean,
+  publication_id: Schema.NullOr(boundedUtf8String(256, 1)),
+  off_reason: Schema.optional(Schema.Literals(["host", "self", "dead"])),
+  off_revision: Schema.optional(PositiveIntegerSchema),
+}).check(Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })));
 export const PresenceProjectionItemSchema = Schema.Struct({
   participant_id: UuidSchema,
   state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]),

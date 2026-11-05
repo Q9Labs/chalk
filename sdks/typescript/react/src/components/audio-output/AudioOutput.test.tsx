@@ -4,7 +4,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { AudioOutput } from "./AudioOutput";
 
+const observation = vi.hoisted(() => ({ played: vi.fn(), detach: vi.fn() }));
+const observeAudioElement = vi.hoisted(() => vi.fn(() => observation));
 vi.mock("../../bindings/hooks", () => ({
+  useSpaceClient: () => ({ media: { observeAudioElement } }),
   useSelf: () => ({ participantId: "self" }),
   useMedia: () => ({ remote: [], selection: {} }),
   useParticipants: () => ({
@@ -17,7 +20,22 @@ vi.mock("../../bindings/hooks", () => ({
 }));
 vi.mock("../participants-panel/participant-volume-context", () => ({ useParticipantVolumeContext: () => null }));
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
+it.each(["audioTrack", "screenShareAudioTrack"] as const)("observes %s playback rejection and detaches on unmount", async (source) => {
+  const cause = new DOMException("Gesture required", "NotAllowedError");
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(cause);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+  const track = { id: "remote-audio", kind: "audio", readyState: "live" } as MediaStreamTrack;
+  const root = createRoot(document.createElement("div"));
+  await act(async () => root.render(<AudioOutput participants={[{ id: "remote", [source]: track }]} />));
+  expect(observeAudioElement).toHaveBeenCalledWith(track, expect.any(HTMLAudioElement));
+  expect(observation.played).toHaveBeenCalledWith(cause);
+  await act(async () => root.unmount());
+  expect(observation.detach).toHaveBeenCalledOnce();
+});
 it.each(["audioTrack", "screenShareAudioTrack"] as const)("plays a replacement %s object even when its ID is unchanged", async (source) => {
   const played: MediaStreamTrack[] = [];
   vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(function (this: HTMLMediaElement) {

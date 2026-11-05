@@ -425,6 +425,12 @@
       "optional": true,
       "value": true
     },
+    "mediaOffReason": {
+      "wireName": "media_off_reason",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated media_off_reason=1: this Sync sends off_reason and off_revision on media items. A client that does not see it must not rely on them."
+    },
     "entryGeneration": {
       "wireName": "entry_generation",
       "optional": true,
@@ -1133,6 +1139,9 @@
         "kind": "array",
         "maxItems": 1500,
         "exactFields": ["participant_id", "source", "enabled", "publication_id"],
+        "optionalFields": ["off_reason", "off_revision"],
+        "offReason": ["host", "self", "dead"],
+        "negotiation": "media_off_reason=1 WebSocket query opts into off_reason and off_revision; omitted for older clients. self and dead ride only on an off item and carry no revision. host carries off_revision (the control revision of the latest host stop for the source) and also rides on an enabled item when another device of the participant has published since, so a device whose intent is older than the stop still sees it. Absence means no evidence, never off.",
         "participantId": "uuid",
         "source": ["microphone", "camera", "screen"],
         "enabled": {

@@ -509,6 +509,7 @@ defmodule ChalkSync.SyncPostgres do
 
       delete(transaction, "sync_publication_fences", tenant_id)
       delete(transaction, "sync_publication_grant_reservations", tenant_id)
+      delete(transaction, "sync_media_stops", tenant_id)
       delete(transaction, "sync_media_pauses", tenant_id)
       delete(transaction, "sync_screen_share_leases", tenant_id)
       delete(transaction, "sync_recordings", tenant_id)
