@@ -1090,9 +1090,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const desired = this.#visibleRemotePublications(advertised);
     this.#pollFailedPull = true;
     const unclosed = await this.#closeHiddenVideo(advertised, desired, generation);
+    // A hidden tab polls only after a tile change, so a failed close has to ask for the retry itself.
+    if (unclosed.length) this.#videoTilesChanged = true;
     const pulled = await this.#pullWithRecovery(desired, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
+    this.#commitRemoteTracks(desired, pulled, unclosed, cursor, inputRevision);
+    for (const publication of pulled) {
+      this.#subscribedPublicationIds.add(publication.publicationId);
+      this.#invokeListener(() => this.#onRemoteTrack?.(publication));
+    }
+    this.#publishSnapshot();
+    this.#emitRemote();
+  }
+  #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly (readonly [string, CloudflareSFURemoteTrack])[], cursor: PublicationCursor, inputRevision: number): void {
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
     for (const [key, publication] of unclosed) next.set(key, publication);
     stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
@@ -1100,16 +1111,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
     this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size !== desired.size || unclosed.length > 0;
-    // A hidden tab polls only after a tile change, so a failed close has to ask for the retry itself.
-    if (unclosed.length) this.#videoTilesChanged = true;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
-    for (const publication of pulled) {
-      this.#subscribedPublicationIds.add(publication.publicationId);
-      this.#invokeListener(() => this.#onRemoteTrack?.(publication));
-    }
-    this.#publishSnapshot();
-    this.#emitRemote();
   }
   // A hidden tile keeps its pull backoff and subscription eligibility; only a withdrawn publication loses them.
   #pruneRemotePullState(advertised: ReadonlyMap<string, CloudflareSFUPublication>): void {
