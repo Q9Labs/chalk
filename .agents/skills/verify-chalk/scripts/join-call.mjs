@@ -48,10 +48,11 @@ async function apiGet(path) {
   return response.json();
 }
 
-const browser = await chromium.launch({ headless: true, args: ["--autoplay-policy=no-user-gesture-required"] });
+let browser;
 let failure;
 const sessions = [];
 try {
+  browser = await chromium.launch({ headless: true, args: ["--autoplay-policy=no-user-gesture-required"] });
   for (const person of people) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, recordVideo: { dir: join(out, "video"), size: { width: 1440, height: 960 } } });
     await context.addInitScript(webMediaFixture(person.fixture));
@@ -127,7 +128,7 @@ try {
   for (const { name, page } of sessions) await page.screenshot({ path: join(out, "screenshots", `${name.replace(" ", "-")}-failure.png`) }).catch(() => undefined);
 } finally {
   for (const { context } of sessions) await context.close().catch(() => undefined);
-  await browser.close().catch(() => undefined);
+  await browser?.close().catch(() => undefined);
 }
 
 // Evidence must never carry a credential: scan every file we wrote for the values this run was given.
