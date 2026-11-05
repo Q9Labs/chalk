@@ -72,19 +72,27 @@ func TestQualityDropsAtOnceAndRisesOnlyAfterABackoff(t *testing.T) {
 func TestATileBelowItsLowestLayerPausesAndResumesAfterTheEstimateHolds(t *testing.T) {
 	state := allocation{decided: true, rid: "l", backoff: backoffMin}
 	tiles := []tile{camera(&state)}
+	// A brief shortfall keeps the lowest layer.
 	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(0))
+	allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(500*time.Millisecond))
+	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(time.Second))
+	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(1900*time.Millisecond))
+	if state.paused {
+		t.Fatal("paused before one shortfall lasted the pause hold")
+	}
+	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(2*time.Second))
 	if !state.paused || state.limit() != (serverLimit{rid: "l", paused: true}) {
-		t.Fatalf("state %+v on a 250 kbit/s estimate, want paused", state)
+		t.Fatalf("state %+v after a second on a 250 kbit/s estimate, want paused", state)
 	}
 	// A brief recovery does not resume it.
 	for step := range 20 {
-		allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(100*time.Millisecond+time.Duration(step)*100*time.Millisecond))
+		allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(2100*time.Millisecond+time.Duration(step)*100*time.Millisecond))
 	}
-	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(2200*time.Millisecond))
+	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(4200*time.Millisecond))
 	if !state.paused {
 		t.Fatal("resumed before the estimate held for the resume hold")
 	}
-	start := 2300 * time.Millisecond
+	start := 4300 * time.Millisecond
 	for step := time.Duration(0); step < resumeHold; step += 100 * time.Millisecond {
 		allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(start+step))
 		if !state.paused {
@@ -94,6 +102,24 @@ func TestATileBelowItsLowestLayerPausesAndResumesAfterTheEstimateHolds(t *testin
 	allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(start+resumeHold))
 	if state.paused || state.rid != "l" {
 		t.Fatalf("state %+v after the hold, want resumed on l", state)
+	}
+}
+
+func TestALowestLayerThePathStillDeliversKeepsFlowing(t *testing.T) {
+	state := allocation{decided: true, rid: "l", backoff: backoffMin}
+	tiles := []tile{camera(&state)}
+	delivering := estimateOf(250_000, 250_000)
+	delivering.delivering = true
+	for step := range 30 {
+		allocate(tiles, delivering, 0, 0, at(time.Duration(step)*100*time.Millisecond))
+	}
+	if state.paused {
+		t.Fatal("paused a layer the path delivers on an estimate below it")
+	}
+	// Once the path loses what it is sent, the shortfall has already lasted.
+	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(3*time.Second))
+	if !state.paused {
+		t.Fatal("kept a layer the path no longer delivers")
 	}
 }
 
@@ -115,6 +141,7 @@ func TestTheScreenAndTheLatestSpeakerKeepVideoLongest(t *testing.T) {
 	allocate(tiles, estimateOf(2e6, 2e6), 0, 0, at(0))
 	// 0.95 x 1.5 Mbit/s leaves 1.425: the screen's 1.0, the speaker's 0.3, and no room for a third.
 	allocate(tiles, estimateOf(1.5e6, 1.5e6), 0, 0, at(100*time.Millisecond))
+	allocate(tiles, estimateOf(1.5e6, 1.5e6), 0, 0, at(100*time.Millisecond+pauseHold))
 	if screen.paused || speaker.paused || !quiet.paused {
 		t.Fatalf("screen paused %v, speaker paused %v, quiet paused %v; want only the quiet camera paused",
 			screen.paused, speaker.paused, quiet.paused)
@@ -126,6 +153,7 @@ func TestAudioAndRepairsComeOutOfTheVideoBudget(t *testing.T) {
 	tiles := []tile{camera(&state)}
 	// 0.95 x 500 kbit/s carries the 300 kbit/s layer alone, but not with 100 of audio and 100 of repair.
 	allocate(tiles, estimateOf(500_000, 500_000), 100_000, 100_000, at(0))
+	allocate(tiles, estimateOf(500_000, 500_000), 100_000, 100_000, at(pauseHold))
 	if !state.paused {
 		t.Fatal("video kept its layer in the room audio and repairs use")
 	}

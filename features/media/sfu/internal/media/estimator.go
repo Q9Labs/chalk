@@ -31,12 +31,18 @@ const (
 	lossLow    = 0.02
 	lossWindow = 20 // packets the loss controller waits for
 
-	ackedSpan    = time.Second            // acknowledged-rate window, receiver clock
+	ackedSpan = time.Second // acknowledged-rate window, receiver clock
+	// decreaseSpan is the window a decrease reads: while a queue grows, the
+	// latest arrivals run at the bottleneck's rate, and older ones may predate it.
+	decreaseSpan = 250 * time.Millisecond
 	ackedMinSpan = 200 * time.Millisecond // shorter spans are too noisy to cap with
 	ackedHeadway = 1.5                    // the most the proven rate may exceed what was acknowledged
 	ackedSlack   = 10_000                 // bits/s, so a near-silent transport may still grow
 
 	probeHold = 5 * time.Second // how long a probe's result stands in for acknowledged traffic
+	// probeFeedbackWait is how long a probe's verdict waits for feedback that
+	// may never come.
+	probeFeedbackWait = 500 * time.Millisecond
 )
 
 type delaySignal uint8
@@ -179,6 +185,27 @@ func (t *trendline) adaptThreshold(trend float64, now int64) {
 	t.thresholdAt = now
 }
 
+// delivery is what one feedback reported sent and received, in bytes.
+type delivery struct {
+	at         int64 // node monotonic
+	sent, recv int
+}
+
+// delivered is the share of the bytes reported in the last second that
+// arrived, or 1 before any report.
+func (e *bandwidthEstimator) delivered(now int64) float64 {
+	var sent, recv int
+	for _, d := range e.deliveries {
+		if d.at != 0 && now-d.at <= int64(ackedSpan) {
+			sent, recv = sent+d.sent, recv+d.recv
+		}
+	}
+	if sent == 0 {
+		return 1
+	}
+	return float64(recv) / float64(sent)
+}
+
 // ackedReport summarizes the received packets of one feedback.
 type ackedReport struct {
 	first, last int64 // receiver clock
@@ -191,7 +218,6 @@ type probeCluster struct {
 	target                    float64
 	ended                     bool
 	endedAt                   int64 // node monotonic
-	sentBytes, recvBytes      int
 	sent, received, lost      int
 	firstSent, lastSent       int64
 	firstArrival, lastArrival int64
@@ -212,6 +238,8 @@ type bandwidthEstimator struct {
 	reports    [32]ackedReport
 	reportNext int
 	reportLen  int
+	deliveries [32]delivery
+	deliveryAt int
 
 	probe      probeCluster
 	probeFloor float64
@@ -232,10 +260,12 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 	}
 	e.feedbacks++
 	report := ackedReport{first: math.MaxInt64, last: math.MinInt64}
+	reported := delivery{at: now}
 	for index := range acks {
 		ack := &acks[index]
 		e.observeProbe(ack)
 		e.total++
+		reported.sent += ack.size
 		if !ack.received {
 			e.lost++
 			continue
@@ -244,15 +274,20 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		report.bytes += ack.size
 		report.first, report.last = min(report.first, ack.arrival), max(report.last, ack.arrival)
 	}
+	reported.recv = report.bytes
+	e.deliveries[e.deliveryAt] = reported
+	e.deliveryAt = (e.deliveryAt + 1) % len(e.deliveries)
 	if report.bytes > 0 {
 		e.reports[e.reportNext] = report
 		e.reportNext = (e.reportNext + 1) % len(e.reports)
 		e.reportLen = min(e.reportLen+1, len(e.reports))
 	}
-	acked := e.acked()
-
 	// A queue that grows means the path is full: back off below what got through.
 	if e.trend.signal == signalOveruse && now-e.decreased > int64(decreaseSpacing) {
+		acked := e.ackedOver(decreaseSpan)
+		if acked == 0 {
+			acked = e.acked()
+		}
 		e.estimate = math.Max(decreaseFactor*math.Max(acked, minEstimate), minEstimate)
 		e.decreased, e.holding = now, true
 		e.trend.signal = signalNormal
@@ -281,7 +316,11 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 }
 
 // acked is the bits/s the receiver acknowledged over the last second of its clock, or 0.
-func (e *bandwidthEstimator) acked() float64 {
+func (e *bandwidthEstimator) acked() float64 { return e.ackedOver(ackedSpan) }
+
+// ackedOver is the rate the receiver acknowledged over the latest span of
+// arrivals, or 0 while that is shorter than ackedMinSpan.
+func (e *bandwidthEstimator) ackedOver(window time.Duration) float64 {
 	if e.reportLen == 0 {
 		return 0
 	}
@@ -289,7 +328,7 @@ func (e *bandwidthEstimator) acked() float64 {
 	first, bytes := newest, 0
 	for index := range e.reportLen {
 		report := e.reports[(e.reportNext-1-index+2*len(e.reports))%len(e.reports)]
-		if newest-report.first > int64(ackedSpan) {
+		if newest-report.first > int64(window) {
 			break
 		}
 		first, bytes = min(first, report.first), bytes+report.bytes
@@ -333,37 +372,48 @@ func (e *bandwidthEstimator) observeProbe(ack *packetAck) {
 	}
 	cluster := &e.probe
 	cluster.sent++
-	cluster.sentBytes += ack.size
 	cluster.firstSent, cluster.lastSent = min(cluster.firstSent, ack.sent), max(cluster.lastSent, ack.sent)
 	if !ack.received {
 		cluster.lost++
 		return
 	}
 	cluster.received++
-	cluster.recvBytes += ack.size
 	cluster.firstArrival, cluster.lastArrival = min(cluster.firstArrival, ack.arrival), max(cluster.lastArrival, ack.arrival)
 }
 
-// probeOutcome settles an ended probe once its feedback is in, or a second
-// after it ended. It reports done and, when the path carried the target, the
-// rate it proved.
-func (e *bandwidthEstimator) probeOutcome(sentInCluster int, now int64) (done bool, proved float64) {
+// probeSend is what a transport sent while one probe ran, every packet counted.
+type probeSend struct {
+	packets, bytes int
+	first, last    int64 // node monotonic
+}
+
+// probeOutcome settles an ended probe once its feedback is in, or
+// probeFeedbackWait after it ended. It reports done and, when the path carried
+// the target, the rate it proved.
+//
+// Feedback can be lost without any media loss: a receiver names the SSRC of
+// its latest packet in each feedback, and Pion drops RTCP for the RTX SSRC that
+// carries probe padding. So the verdict needs only part of the cluster
+// reported. The reported packets must have arrived as fast as they left, which
+// a queue would have prevented, and the proved rate is what the transport sent.
+func (e *bandwidthEstimator) probeOutcome(sent probeSend, now int64) (done bool, proved float64) {
 	cluster := &e.probe
 	if cluster.id == 0 || !cluster.ended {
 		return false, 0
 	}
-	if cluster.sent < sentInCluster && now-cluster.endedAt < int64(time.Second) {
+	if cluster.sent < sent.packets && now-cluster.endedAt < int64(probeFeedbackWait) {
 		return false, 0
 	}
 	defer func() { e.probe = probeCluster{} }()
-	if cluster.received < 5 || cluster.lastSent <= cluster.firstSent || cluster.lastArrival <= cluster.firstArrival {
+	if cluster.received < 5 || 4*cluster.sent < sent.packets || sent.last <= sent.first ||
+		cluster.lastSent <= cluster.firstSent || cluster.lastArrival <= cluster.firstArrival {
 		return true, 0
 	}
-	sendRate := float64(cluster.sentBytes) * 8 / time.Duration(cluster.lastSent-cluster.firstSent).Seconds()
-	recvRate := float64(cluster.recvBytes) * 8 / time.Duration(cluster.lastArrival-cluster.firstArrival).Seconds()
-	result := math.Min(sendRate, recvRate)
+	sendSpan := float64(cluster.lastSent - cluster.firstSent)
+	recvSpan := float64(cluster.lastArrival - cluster.firstArrival)
+	result := float64(sent.bytes) * 8 / time.Duration(sent.last-sent.first).Seconds()
 	loss := float64(cluster.lost) / float64(cluster.sent)
-	if loss >= lossHigh || recvRate < 0.9*sendRate || result < 0.85*cluster.target {
+	if loss >= lossHigh || recvSpan > sendSpan/0.9 || result < 0.85*cluster.target {
 		return true, 0
 	}
 	e.probeFloor, e.probeUntil = result, now+int64(probeHold)

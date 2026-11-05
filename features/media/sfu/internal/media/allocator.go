@@ -10,7 +10,10 @@ import (
 // the audio and repairs it already carries: screens first, then cameras, the
 // most recent speaker first. It drops quality at once when the estimate falls,
 // raises one step at a time after a hold, and pauses a tile whose lowest layer
-// no longer fits, resuming only after that layer has fit for a while.
+// has not fit for a second while the path loses what it is sent, resuming only
+// after that layer has fit for a while. The estimate alone does not pause:
+// GCC backs off below what the path carries, so a layer that is still
+// delivered keeps flowing.
 const (
 	allocHeadroom = 0.95 // of the estimate, left for jitter
 	// congestedShare is how much of its budget a transport keeps for one tick
@@ -19,6 +22,12 @@ const (
 	upgradeHold    = 500 * time.Millisecond
 	backoffMin     = 2 * time.Second
 	backoffMax     = 16 * time.Second
+	// pauseHold is how long the lowest layer may not fit before the tile
+	// pauses. One estimate decrease often undershoots the path for a moment.
+	pauseHold = time.Second
+	// deliveredShare is the share of sent bytes a path must deliver to keep a
+	// tile on its lowest layer while the estimate says it does not fit.
+	deliveredShare = 0.95
 	resumeHold     = 3 * time.Second
 	resumeMargin   = 1.15
 	probeMargin    = 1.1
@@ -40,6 +49,7 @@ type allocation struct {
 	backoff   time.Duration // the hold after the next drop
 	lastDrop  int64
 	fitSince  int64 // while paused: since when the lowest layer has fit, or 0
+	short     int64 // while active: since when the lowest layer has not fit, or 0
 }
 
 // tile is one video subscription as the allocator sees it.
@@ -75,7 +85,7 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 	// Keep what fits and drop at once what no longer does.
 	used := 0.0
 	for index := range tiles {
-		used += hold(&tiles[index], estimate.warm, budget-used, now)
+		used += hold(&tiles[index], estimate, budget-used, now)
 	}
 	if !estimate.warm {
 		return 0
@@ -122,9 +132,11 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 
 // hold keeps one tile at its layer, or the best lower one that fits the room
 // left, and returns the bits/s it takes. Before any feedback a tile keeps its
-// layer, because the estimate has nothing to judge by yet.
-func hold(t *tile, warm bool, room float64, now int64) float64 {
-	state := t.state
+// layer, because the estimate has nothing to judge by yet. A tile whose lowest
+// layer does not fit pauses only after pauseHold, and only once the path stops
+// delivering.
+func hold(t *tile, estimate transportEstimate, room float64, now int64) float64 {
+	warm, state := estimate.warm, t.state
 	if state.backoff == 0 {
 		state.backoff = backoffMin
 	}
@@ -147,9 +159,16 @@ func hold(t *tile, warm bool, room float64, now int64) float64 {
 		dropped = true
 	}
 	if warm && t.layers[current].bps > room {
-		state.paused, state.fitSince = true, 0
-		state.backOff(now)
-		return 0
+		if state.short == 0 {
+			state.short = now
+		}
+		if now-state.short >= int64(pauseHold) && !estimate.delivering {
+			state.paused, state.fitSince, state.short = true, 0, 0
+			state.backOff(now)
+			return 0
+		}
+	} else {
+		state.short = 0
 	}
 	if dropped {
 		// A layer that is merely inactive leaves rid alone, so the tile returns

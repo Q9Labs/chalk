@@ -41,7 +41,11 @@ type simulation struct {
 	now       int64
 	pending   []packetAck
 	debt      float64
-	tagged    int // packets sent in a probe
+	probe     probeSend // what was sent in a probe
+	// loseFeedback drops every other feedback, as a receiver that names the
+	// probe's RTX SSRC does.
+	loseFeedback bool
+	feedbacks    int
 }
 
 const (
@@ -63,7 +67,12 @@ func (s *simulation) run(duration time.Duration, rate func(*simulation) float64,
 			s.debt -= simPacket
 			arrival, ok := s.link.carry(s.now, simPacket)
 			if probe != 0 {
-				s.tagged++
+				if s.probe.packets == 0 {
+					s.probe.first = s.now
+				}
+				s.probe.packets++
+				s.probe.bytes += simPacket
+				s.probe.last = s.now
 			}
 			s.pending = append(s.pending, packetAck{sent: s.now, arrival: arrival, size: simPacket, received: ok, probe: probe})
 		}
@@ -79,7 +88,10 @@ func (s *simulation) run(duration time.Duration, rate func(*simulation) float64,
 				}
 			}
 			s.pending = rest
-			s.estimator.onFeedback(ready, s.now+s.link.delay)
+			s.feedbacks++
+			if !s.loseFeedback || s.feedbacks%2 == 0 {
+				s.estimator.onFeedback(ready, s.now+s.link.delay)
+			}
 			nextFeedback += int64(simFeedback)
 		}
 	}
@@ -134,12 +146,41 @@ func TestAProbeProvesSpareCapacity(t *testing.T) {
 	run.run(probeDuration, steady(900_000), 1)
 	run.estimator.endProbe(run.now)
 	run.run(200*time.Millisecond, steady(200_000), 0)
-	done, proved := run.estimator.probeOutcome(run.tagged, run.now)
+	done, proved := run.estimator.probeOutcome(run.probe, run.now)
 	if !done || proved < 0.85*900_000 {
 		t.Fatalf("probe done %v proved %.0f, want about 900 kbit/s", done, proved)
 	}
 	if after := run.estimator.proven(run.now); after < 0.85*900_000 || after <= before {
 		t.Fatalf("proven %.0f after the probe, %.0f before", after, before)
+	}
+}
+
+func TestAProbeProvesSpareCapacityWhenHalfItsFeedbackIsLost(t *testing.T) {
+	link := &bottleneck{capacity: 2_000_000, queueBytes: 100_000, delay: int64(20 * time.Millisecond)}
+	run := newSimulation(link)
+	run.run(3*time.Second, steady(200_000), 0)
+	run.loseFeedback = true
+	run.estimator.startProbe(1, 900_000)
+	run.run(probeDuration, steady(900_000), 1)
+	run.estimator.endProbe(run.now)
+	run.run(probeFeedbackWait, steady(200_000), 0)
+	done, proved := run.estimator.probeOutcome(run.probe, run.now)
+	if !done || proved < 0.85*900_000 {
+		t.Fatalf("probe done %v proved %.0f with half its feedback lost, want about 900 kbit/s", done, proved)
+	}
+}
+
+func TestAProbeIntoAFullPathFailsWhenHalfItsFeedbackIsLost(t *testing.T) {
+	link := &bottleneck{capacity: 400_000, queueBytes: 30_000, delay: int64(20 * time.Millisecond)}
+	run := newSimulation(link)
+	run.run(3*time.Second, steady(200_000), 0)
+	run.loseFeedback = true
+	run.estimator.startProbe(1, 900_000)
+	run.run(probeDuration, steady(900_000), 1)
+	run.estimator.endProbe(run.now)
+	run.run(probeFeedbackWait, steady(200_000), 0)
+	if done, proved := run.estimator.probeOutcome(run.probe, run.now); !done || proved != 0 {
+		t.Fatalf("probe done %v proved %.0f into a full path, want a failure", done, proved)
 	}
 }
 
@@ -152,12 +193,33 @@ func TestAProbeIntoAFullPathFails(t *testing.T) {
 	run.estimator.endProbe(run.now)
 	// The queue holds part of the probe for a while; the outcome waits for its feedback.
 	run.run(1200*time.Millisecond, steady(200_000), 0)
-	done, proved := run.estimator.probeOutcome(run.tagged, run.now)
+	done, proved := run.estimator.probeOutcome(run.probe, run.now)
 	if !done || proved != 0 {
 		t.Fatalf("probe done %v proved %.0f, want a failure", done, proved)
 	}
 	if proven := run.estimator.proven(run.now); proven > 0.9*900_000 {
 		t.Fatalf("a failed probe left the proven rate at %.0f", proven)
+	}
+}
+
+func TestAFailedProbeLeavesTheEstimateAtTheBottleneck(t *testing.T) {
+	// 230 kbit/s of media fits a 300 kbit/s link; a probe for 450 fills its queue.
+	link := &bottleneck{capacity: 300_000, queueBytes: 16_000, delay: int64(20 * time.Millisecond)}
+	run := newSimulation(link)
+	run.run(3*time.Second, steady(230_000), 0)
+	run.estimator.startProbe(1, 450_000)
+	run.run(probeDuration, steady(450_000), 1)
+	run.estimator.endProbe(run.now)
+	lowest := run.estimator.current()
+	for range 10 {
+		run.run(100*time.Millisecond, steady(230_000), 0)
+		lowest = min(lowest, run.estimator.current())
+	}
+	// The decrease backs off from what got through the full link, not from an
+	// average over the second before it filled, so the media still fits.
+	t.Logf("lowest estimate after the probe %.0f bit/s on a %.0f bit/s link", lowest, link.capacity)
+	if lowest < 230_000 {
+		t.Fatalf("a failed probe cut the estimate to %.0f, below the 230 kbit/s the link carried", lowest)
 	}
 }
 

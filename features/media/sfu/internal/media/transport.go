@@ -44,7 +44,7 @@ const (
 	probeTick       = 5 * time.Millisecond
 	probePadding    = 255 // bytes of RTP padding in one probe packet
 	probeBackoffMin = time.Second
-	probeBackoffMax = 30 * time.Second
+	probeBackoffMax = 8 * time.Second
 	// feedbackSeen bounds the feedback reports remembered to ignore the copies
 	// Pion hands every sender named in the same compound packet.
 	feedbackSeen = 16
@@ -132,6 +132,7 @@ type transport struct {
 	probeEnd    int64
 	probeSent   int
 	probeBytes  int
+	probeLast   int64 // when the probe's last packet left
 	probeNext   int64
 	backoff     time.Duration
 	// probeStream is a bound video stream with RTX, which probe padding travels on.
@@ -266,6 +267,7 @@ func (t *transport) assign(class packetClass, size int, now int64) uint16 {
 		entry.probe = t.probeID
 		t.probeSent++
 		t.probeBytes += size
+		t.probeLast = now
 	}
 	t.log[int(seq)%sendLogSize] = entry
 	t.counters.Sent[class]++
@@ -402,7 +404,7 @@ func (t *transport) settleProbe(now int64) {
 		return
 	}
 	t.estimator.endProbe(now)
-	done, proved := t.estimator.probeOutcome(t.probeSent, now)
+	done, proved := t.estimator.probeOutcome(probeSend{packets: t.probeSent, bytes: t.probeBytes, first: t.probeStart, last: t.probeLast}, now)
 	if !done {
 		return
 	}
@@ -491,11 +493,14 @@ func (t *transport) close() {
 
 // transportEstimate is what the allocator reads of one transport.
 type transportEstimate struct {
-	warm       bool    // feedback has arrived
-	current    float64 // delay- and loss-based, bits/s
-	proven     float64 // bits/s the transport has shown it carries
-	feedback   int64   // monotonic time of the latest feedback, or 0
-	congested  bool    // the pacer dropped video since the last read
+	warm      bool    // feedback has arrived
+	current   float64 // delay- and loss-based, bits/s
+	proven    float64 // bits/s the transport has shown it carries
+	feedback  int64   // monotonic time of the latest feedback, or 0
+	congested bool    // the pacer dropped video since the last read
+	// delivering means the receiver got nearly every byte of the last second,
+	// so whatever the estimate says, the path carries what is being sent.
+	delivering bool
 	probing    bool
 	probeReady bool // a probe may start now
 }
@@ -508,6 +513,7 @@ func (t *transport) estimate(now int64) transportEstimate {
 	return transportEstimate{
 		warm: t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
+		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
 		probeReady: t.probeID == 0 && now >= t.probeNext && t.probeStream != nil,
 	}
 }
