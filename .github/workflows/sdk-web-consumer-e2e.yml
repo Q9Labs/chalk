@@ -1,37 +1,16 @@
 name: Packed web SDK consumer
 
+# The Gate runs the packed consumer in Chromium on every pull request that touches these packages.
+# Firefox and WebKit have not failed alone in the last 30 days, so the three-browser run happens nightly,
+# and on a pull request only when its own workflow or browser setup changes.
 on:
   pull_request:
     paths:
       - ".github/actions/setup-playwright/**"
       - ".github/workflows/sdk-web-consumer-e2e.yml"
-      - "packages/assets/**"
-      - "packages/facehash/**"
-      - "packages/recording-presentation/**"
-      - "packages/ui/**"
-      - "packages/whiteboard/**"
-      - "sdks/typescript/client/**"
-      - "sdks/typescript/react/**"
-      - "tools/sdk-web-consumer-e2e/**"
-      - "scripts/web-proof/**"
-      - "tests/call.e2e.ts"
-      - "e2e.config.ts"
-  push:
-    branches: [main, master]
-    paths:
-      - ".github/actions/setup-playwright/**"
-      - ".github/workflows/sdk-web-consumer-e2e.yml"
-      - "packages/assets/**"
-      - "packages/facehash/**"
-      - "packages/recording-presentation/**"
-      - "packages/ui/**"
-      - "packages/whiteboard/**"
-      - "sdks/typescript/client/**"
-      - "sdks/typescript/react/**"
-      - "tools/sdk-web-consumer-e2e/**"
-      - "scripts/web-proof/**"
-      - "tests/call.e2e.ts"
-      - "e2e.config.ts"
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
