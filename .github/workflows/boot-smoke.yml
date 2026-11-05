@@ -79,7 +79,7 @@ jobs:
       - name: Install dependencies and the test browser
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps --no-shell chromium
+          pnpm exec playwright install --with-deps chromium
 
       - name: Start the stack from empty
         run: |
