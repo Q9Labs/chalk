@@ -375,7 +375,7 @@ Cloudflare. Only item 3 is provider-neutral.
    `paused`), a reason (`congestion`, `viewer` or `source_inactive`) and a
    revision (M4 defines it; M5 exposes it through the API and SDK transport
    behind a `subscriptionState` capability). When the receive-stall detector
-   (`receive-stall.ts`) would call a track stalled, an own-provider session first
+   (`sdks/typescript/client/src/media/receive-stall.ts`) would call a track stalled, an own-provider session first
    reads that state: a `paused` track is shown as paused, not repulled, and is
    re-read every five seconds until RTP advances or the state is `active`; a
    higher revision wins over a late response. Without the capability the stall
