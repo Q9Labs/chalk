@@ -127,3 +127,23 @@ func TestTheMeterReportsTheLastSecond(t *testing.T) {
 		t.Fatalf("rate after a silent second %.0f, want 0", pps)
 	}
 }
+
+func TestARepairThatNeverArrivesAsksForAKeyframe(t *testing.T) {
+	tracker, sent, keyframes := recordingTracker()
+	defer tracker.stop()
+	base := uint64(1 << 16)
+	tracker.observe(base, 0, monotonic())
+	// base+1 is lost and never repaired.
+	tracker.observe(base+2, base, monotonic())
+	for range nackTries {
+		nextRequest(t, sent, 200*time.Millisecond)
+	}
+	select {
+	case <-keyframes:
+	case <-time.After(3 * nackRetry):
+		t.Fatal("no keyframe after the last request went unanswered")
+	}
+	if abandoned := tracker.abandoned.Load(); abandoned != 1 {
+		t.Fatalf("abandoned %d gaps, want 1", abandoned)
+	}
+}

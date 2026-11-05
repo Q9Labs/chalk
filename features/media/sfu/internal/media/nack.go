@@ -37,7 +37,7 @@ type nackTracker struct {
 	timer    *time.Timer
 	deadline int64               // monotonic time the timer fires, or 0 while it is idle
 	send     func(seqs []uint16) // writes one NACK; nil after the layer closes
-	gaveUp   func()              // asks for a keyframe instead; called by the layer's reader
+	gaveUp   func()              // asks for a keyframe instead; called without t.mu
 
 	requested atomic.Uint64 // sequence numbers asked for, retries included
 	abandoned atomic.Uint64 // gaps repaired with a keyframe instead
@@ -122,6 +122,7 @@ func (t *nackTracker) fire() {
 	t.mu.Lock()
 	t.deadline = 0
 	var seqs []uint16
+	exhausted := false
 	next := int64(-1)
 	for index := range t.missing {
 		entry := &t.missing[index]
@@ -130,6 +131,7 @@ func (t *nackTracker) fire() {
 		}
 		if entry.tries >= nackTries {
 			*entry = missingPacket{}
+			exhausted = true
 			continue
 		}
 		if entry.due <= now {
@@ -149,6 +151,9 @@ func (t *nackTracker) fire() {
 	if len(seqs) > 0 && send != nil {
 		t.requested.Add(uint64(len(seqs)))
 		send(seqs)
+	}
+	if exhausted {
+		t.giveUp()
 	}
 }
 
