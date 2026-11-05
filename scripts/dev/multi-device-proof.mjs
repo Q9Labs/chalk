@@ -77,6 +77,12 @@ import {createSpaceClientForPlatform} from './sdks/typescript/client/src/space-c
 import {Chalk} from './sdks/typescript/react/src/components/chalk/Chalk.tsx';
 window.startDevice = (space, baseUrl, syncUrl, name) => {
   window.client = createSpaceClientForPlatform({space, baseUrl, getAccess: () => window.proofAccess()}, {syncUrl});
+  window.proofRoles = [];
+  window.client.subscribe(() => {
+    const snapshot = window.client.getSnapshot();
+    const value = {status: snapshot.connection.status, role: snapshot.self.role, endEpisode: snapshot.self.can('endEpisode')};
+    if (JSON.stringify(value) !== JSON.stringify(window.proofRoles.at(-1))) window.proofRoles.push(value);
+  });
   createRoot(document.getElementById('root')).render(React.createElement(Chalk, {client: window.client, displayName: name, spaceName: 'Multi-device classroom', defaults: {microphone:true, camera:false}, features: {whiteboard:false, sounds:false, recording:false}}));
 };`,
     resolveDir: root,
@@ -95,14 +101,29 @@ await writeFile(`${output}/index.html`, '<!doctype html><html><head><meta name="
 await viteBuild({ root: output, configFile: false, plugins: [tailwind()], logLevel: "warn", build: { outDir: "static", emptyOutDir: true } });
 await build({ entryPoints: ["sdks/typescript/client/src/server/index.ts"], bundle: true, outfile: `${output}/server.mjs`, platform: "node", format: "esm" });
 const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(`${output}/server.mjs`));
+await build({ stdin: { contents: "export {V1SyncClient} from './sdks/typescript/client/src/sync/v1-client.ts'; export {parseParsedAccessGrant} from './sdks/typescript/client/src/access/grant.ts';", resolveDir: root }, bundle: true, outfile: `${output}/role-sync.mjs`, platform: "node", format: "esm" });
+const { V1SyncClient, parseParsedAccessGrant } = await import(pathToFileURL(`${output}/role-sync.mjs`));
 let server;
 const blockedSyncHandshakes = new Set();
 let browser;
+let studentSync;
 let chalk;
 let episode;
 const pages = [];
 let previousEntryEnforcement;
 const localSQL = (sql) => execFileSync("docker", ["exec", config.postgres.container, "psql", "-U", "postgres", "-d", config.databaseName, "-Atqc", sql], { encoding: "utf8" }).trim();
+async function settledLayout(page) {
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity));
+  return page.evaluate(() => ({
+    focused: document.activeElement?.getAttribute("data-part"),
+    focusVisible: document.activeElement?.matches(":focus-visible"),
+    tiles: [...document.querySelectorAll("[data-stage-item]")].map((element) => {
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { role: element.getAttribute("data-stage-role"), x, y, width, height, transform: getComputedStyle(element).transform };
+    }),
+  }));
+}
 async function freezeReview(page, name) {
   let css = await page.evaluate(() => [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules].map((rule) => rule.cssText)).join("\n"));
   for (const match of css.matchAll(/url\((["']?)(\/assets\/[^)"']+)\1\)/g)) {
@@ -295,7 +316,44 @@ try {
       assert.equal(cold.sharedAudioPlays, 0);
       report.coldJoinDuringSyncOutage = cold;
       report.assertions.push("desktop Sync socket closes before a fresh phone joins: phone mic off, zero desktop mic/shared-audio playback calls");
+      report.coldRoleHistory = await page.evaluate(() => window.proofRoles);
+      await settledLayout(page);
+      await page.waitForFunction(() => ![...document.querySelectorAll(".chalk-toast")].some((toast) => toast.textContent.includes("You’re now the host.")));
+      report.coldSettledBeforePointer = await settledLayout(page);
+      await page.screenshot({ path: `${output}/cold-join-settled-before-pointer.png` });
+      // A pointer interaction leaves the keyboard focus ring available for keyboard users.
+      await page.locator('[data-part="header-region"]').click({ position: { x: 280, y: 20 } });
+      report.coldSettledLayout = await settledLayout(page);
       await page.screenshot({ path: `${output}/cold-join-phone.png` });
+      await freezeReview(page, "review-cold-phone");
+      const student = await chalk.participants.admit(space.id, episode.id, { name: "Learner", role: "collaborator", identityExternalId: "person-learner" });
+      const studentGrant = parseParsedAccessGrant(student.access);
+      studentSync = new V1SyncClient({ url: `ws://127.0.0.1:${config.ports.sync}/v1/sync`, token: async () => studentGrant.sync.token, webSocket: { connect: (url) => new WebSocket(url) }, entryConfirmation: true });
+      await studentSync.start();
+      const waitForSync = async (ready) => {
+        let detach = () => {};
+        try {
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Learner Sync did not settle")), 15000);
+            detach = studentSync.subscribe((snapshot) => {
+              if (!ready(snapshot)) return;
+              clearTimeout(timeout);
+              resolve();
+            });
+          });
+        } finally {
+          detach();
+        }
+      };
+      await waitForSync((snapshot) => snapshot.connection.phase === "live");
+      await studentSync.confirmEntered();
+      await waitForSync((snapshot) => snapshot.control?.participants.some((seat) => seat.participantId === student.participant.id));
+      const studentSeat = studentSync.getSnapshot().control.participants.find((seat) => seat.participantId === student.participant.id);
+      report.learnerDuringOutage = { role: studentSeat.role, endEpisode: studentSeat.capabilities.includes("endEpisode"), muteOthers: studentSeat.capabilities.includes("muteOthers") };
+      assert.equal(report.learnerDuringOutage.role, "collaborator");
+      assert.equal(report.learnerDuringOutage.endEpisode, false);
+      assert.equal(report.learnerDuringOutage.muteOthers, false);
+      assert.equal(await page.evaluate((id) => client.getSnapshot().participants.roster.find((seat) => seat.participantId === id)?.presence.state, desktopId), "disconnected");
       await pages[0].evaluate(() => {
         window.proofBlockSync = false;
         for (const socket of window.proofSyncSockets) if (socket.readyState === WebSocket.CONNECTING) socket.close();
@@ -471,6 +529,7 @@ try {
   );
   throw error;
 } finally {
+  studentSync?.stop();
   for (const page of pages)
     await page
       .evaluate(async () => {
