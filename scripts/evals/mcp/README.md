@@ -65,6 +65,8 @@ The [November 1, 2026 comparison](proof/comparison-k1.md) contains full-suite k=
 
 The observed CLI costs were $0.4658 (tools) and $0.8971 (code). Elapsed times including fixtures and SSH were 10.0 and 12.1 minutes. A linear extrapolation gives approximately **$4.09 and 66 minutes** for both arms at k=3, concurrency two. This is not a measured k=3 result or a winner selection.
 
+The [k=3 comparison](proof/comparison-k3.md) (sanitized [tools JSON](proof/tools-k3.json) and [code JSON](proof/code-k3.json)) ran 144 sessions on harness `ef0ed54af` and Claude Code 2.1.318. Accuracy tied: tools passed 57 of 72 trials (57 of 60 operational) and code passed 58 of 72 (58 of 60). Code mode used about 2.5 times the output tokens ($2.82 against $1.54 in CLI list-price accounting), about 1.8 times the wall time per trial, and its programs made 83 failed shared-operation calls against 9 for tools. Two code trials lacked server evidence, so that arm returned the infrastructure exit code. Code mode showed no accuracy or cost advantage on this task suite.
+
 ## Grading and accounting
 
 - `tasks.py` specifies requested JSON facts. Graders require exact types/values, including names, counts and timestamps. Write tasks additionally query resulting DB state. Rotation must change the existing row's credential hash and prefix while preserving its ID, name and scopes. The scope task requires the specific `chalk_update_tenant:auth.forbidden` server event, not just a plausible refusal or an unrelated error. No LLM graders are used.
