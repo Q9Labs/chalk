@@ -54,6 +54,8 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isHandRaised: participant.handRaised,
       videoTrack: media?.camera,
       screenShareTrack: media?.screen,
+      videoPublicationId: participant.media.cameraPublicationId,
+      screenSharePublicationId: participant.media.screenSharePublicationId,
     });
   }
   return result;

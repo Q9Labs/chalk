@@ -3,6 +3,7 @@ import { ReceiveStallRecovery } from "./receive-stall";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
+import { VideoTileSubscriptions } from "./video-tile-visibility";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
@@ -114,6 +115,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #remoteParticipantIds: ReadonlySet<string> | null = null;
   #remoteParticipantRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
+  readonly #videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now());
+  readonly #stopObservingVideoTiles: () => void;
+  #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
+  // A tile change must reach the provider even while the tab is hidden, where routine polls pause.
+  #videoTilesChanged = false;
+  #videoTileRevision = 0;
   #generation = 0;
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
@@ -163,6 +170,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       failure: null,
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
+    this.#stopObservingVideoTiles = this.#observeVideoTiles();
   }
   getSnapshot(): CloudflareSFUSnapshot {
     return this.#snapshot;
@@ -766,6 +774,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const source of [...this.#localRecoveries.keys()]) this.#dropLocalRecovery(source);
     this.#recentRecoveries.clear();
     this.#subscribedPublicationIds.clear();
+    this.#stopObservingVideoTiles();
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
@@ -1074,9 +1083,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const cursor = this.#nextRemotePublicationCursor(authoritative);
     if (cursor === null) return;
     const participantRevision = this.#remoteParticipantRevision;
-    const desired = this.#desiredRemotePublications(authoritative, cursor);
-    this.#receiveHealth.roster(desired.values());
+    const videoTileRevision = this.#videoTileRevision;
+    const advertised = this.#desiredRemotePublications(authoritative, cursor);
+    this.#receiveHealth.roster(advertised.values());
+    this.#pruneRemotePullState(advertised);
+    const desired = this.#visibleRemotePublications(advertised);
     this.#pollFailedPull = true;
+    await this.#closeHiddenVideo(advertised, desired, generation);
     const pulled = await this.#pullWithRecovery(desired, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
@@ -1085,7 +1098,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
-    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || next.size !== desired.size;
+    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || videoTileRevision !== this.#videoTileRevision || next.size !== desired.size;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
@@ -1095,14 +1108,50 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitRemote();
   }
-  #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
-    const desiredIds = new Set([...desired.values()].map((publication) => publication.publicationId));
+  // A hidden tile keeps its pull backoff and subscription eligibility; only a withdrawn publication loses them.
+  #pruneRemotePullState(advertised: ReadonlyMap<string, CloudflareSFUPublication>): void {
+    const advertisedIds = new Set([...advertised.values()].map((publication) => publication.publicationId));
     for (const publicationId of this.#remotePullRetries.keys()) {
-      if (!desiredIds.has(publicationId)) this.#remotePullRetries.delete(publicationId);
+      if (!advertisedIds.has(publicationId)) this.#remotePullRetries.delete(publicationId);
     }
     for (const publicationId of this.#subscribedPublicationIds) {
-      if (!desiredIds.has(publicationId)) this.#subscribedPublicationIds.delete(publicationId);
+      if (!advertisedIds.has(publicationId)) this.#subscribedPublicationIds.delete(publicationId);
     }
+  }
+  #visibleRemotePublications(advertised: ReadonlyMap<string, CloudflareSFUPublication>): Map<string, CloudflareSFUPublication> {
+    const video = [...advertised.values()].filter(isVideoPublication).map((publication) => publication.publicationId);
+    const pulled = new Set([...this.#remoteTracks.values()].filter(isVideoPublication).map((publication) => publication.publicationId));
+    const { wanted, wakeAt } = this.#videoTiles.select(Date.now(), video, pulled);
+    this.#wakeForVideoTiles(wakeAt);
+    return new Map([...advertised].filter(([, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId)));
+  }
+  // Closing a receive-only subscription is the same call a stalled receiver uses, so it needs no provider feature.
+  async #closeHiddenVideo(advertised: ReadonlyMap<string, CloudflareSFUPublication>, desired: ReadonlyMap<string, CloudflareSFUPublication>, generation: number): Promise<void> {
+    const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
+    if (!hidden.length) return;
+    try {
+      await this.#serializeSDP(async () => {
+        this.#requireGeneration(generation);
+        const receivers = hidden.flatMap(([, publication]) => {
+          const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
+          return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+        });
+        if (receivers.length) await this.#closeReceivers(receivers, generation);
+      });
+    } catch (error) {
+      this.#requireGeneration(generation);
+      // The subscription stays pulled and the next poll retries the close.
+      this.#reportError(error);
+      return;
+    }
+    for (const [key, publication] of hidden) {
+      this.#remoteTracks.delete(key);
+      safeStopTrack(publication.track, this.#reportError.bind(this));
+    }
+    this.#publishSnapshot();
+    this.#emitRemote();
+  }
+  #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const now = Date.now();
     return [...desired]
       .filter(([key, publication]) => {
@@ -1189,12 +1238,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!transceiver || transceiver.mid === null) throw new CloudflareSFUError("The stalled receiver has no negotiated MID", "media_failed");
         return { publication, transceiver, mid: transceiver.mid };
       });
-      const connectionId = this.#bootstrap.connectionId;
-      await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: receivers.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
-      this.#requireGeneration(generation);
-      for (const { transceiver } of receivers) transceiver.stop();
+      await this.#closeReceivers(receivers, generation);
       return stalled;
     });
+  }
+  async #closeReceivers(receivers: readonly { readonly publication: Pick<CloudflareSFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
+    const connectionId = this.#bootstrap.connectionId;
+    await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: receivers.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
+    this.#requireGeneration(generation);
+    for (const { transceiver } of receivers) transceiver.stop();
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
@@ -1707,16 +1759,51 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#publishSnapshot();
     this.#emitRemote();
   }
+  #observeVideoTiles(): () => void {
+    const stopReports = this.#videoTiles.observe(() => this.#reconcileVideoTiles());
+    if (typeof document === "undefined") return stopReports;
+    const onPage = () => {
+      this.#videoTiles.page(pageIsHidden(), Date.now());
+      this.#reconcileVideoTiles();
+    };
+    document.addEventListener("visibilitychange", onPage);
+    return () => {
+      stopReports();
+      document.removeEventListener("visibilitychange", onPage);
+      if (this.#videoTileWake !== undefined) globalThis.clearTimeout(this.#videoTileWake);
+      this.#videoTileWake = undefined;
+    };
+  }
+  #reconcileVideoTiles(): void {
+    if (this.#stopped || (!this.#started && !this.#receivingInitial)) return;
+    this.#videoTilesChanged = true;
+    this.#videoTileRevision++;
+    this.#remotePullIncomplete = true;
+    this.remotePublicationsChanged();
+  }
+  #wakeForVideoTiles(wakeAt: number | undefined): void {
+    if (this.#videoTileWake !== undefined) globalThis.clearTimeout(this.#videoTileWake);
+    this.#videoTileWake = undefined;
+    if (wakeAt === undefined || this.#stopped) return;
+    this.#videoTileWake = globalThis.setTimeout(
+      () => {
+        this.#videoTileWake = undefined;
+        this.#reconcileVideoTiles();
+      },
+      Math.max(0, wakeAt - Date.now()),
+    );
+  }
   #schedulePoll(delayMs = this.#pollIntervalMs): void {
     if (this.#stopped || (!this.#started && !this.#receivingInitial) || this.#pollTimer !== undefined) return;
     this.#pollTimer = globalThis.setTimeout(async () => {
       this.#pollTimer = undefined;
       // Skip the network round-trip while the tab is hidden; the poll
       // reschedules itself and resumes on the next tick after visibility.
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      if (pageIsHidden() && !this.#videoTilesChanged) {
         this.#schedulePoll();
         return;
       }
+      this.#videoTilesChanged = false;
       let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
@@ -1876,6 +1963,12 @@ function observeConnectionState(
   if (peerState === "disconnected" || iceState === "disconnected") return { phase: "recovering", failure: null };
   if (started && peerState === "connected" && (iceState === "connected" || iceState === "completed")) return { phase: "live", failure: null };
   return null;
+}
+function isVideoPublication(publication: Pick<CloudflareSFUPublication, "source">): boolean {
+  return publication.source === "camera" || publication.source === "screen";
+}
+function pageIsHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
 }
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
