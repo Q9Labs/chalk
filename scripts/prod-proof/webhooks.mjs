@@ -2,10 +2,10 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
 import { shareHTML } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
-import { catcherRequest, CatcherRateLimited } from "./webhook-transport.mjs";
+import { catcherRequest } from "./webhook-transport.mjs";
+import { startCollector } from "./webhook-collector.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
@@ -64,36 +64,6 @@ function saveEvents(run, receiver) {
     `${run.directory}/signed-webhooks.json`,
     [...receiver.events.values()].map((event) => ({ event: event.event, objectId: event.data.object.id, verified: true })),
   );
-}
-// A rate-limited poll is not a failed delivery: skip it and let the proof's own timeout decide.
-async function pollOnce(collect, signal) {
-  try {
-    await collect(signal);
-    return 2000;
-  } catch (error) {
-    if (error instanceof CatcherRateLimited) return 15_000;
-    throw error;
-  }
-}
-function startCollector(run, receiver, collect) {
-  const controller = new AbortController();
-  const completion = (async () => {
-    try {
-      while (!controller.signal.aborted) {
-        await delay(await pollOnce(collect, controller.signal), undefined, { signal: controller.signal });
-      }
-    } catch (error) {
-      if (!controller.signal.aborted) receiver.failure = error.message;
-    }
-  })();
-  run.resources.push({
-    kind: "webhook-collector",
-    force: () => controller.abort(),
-    dispose: async () => {
-      controller.abort();
-      await completion;
-    },
-  });
 }
 export async function exposeWebhook(run, receiver) {
   check(run.config.webhook_service_url, "Proof configuration is missing webhook_service_url");
