@@ -32,8 +32,9 @@ type Fleet struct {
 	nodes         []*Adapter
 	log           *slog.Logger
 
-	mu    sync.Mutex
-	loads map[string]nodeLoad
+	mu     sync.Mutex
+	loads  map[string]nodeLoad
+	probed bool // a probe round has finished, so a node without a load record has none
 }
 
 // nodeLoad is a node's last ready probe. A draining or silent node has none.
@@ -79,32 +80,26 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 // Place picks the node for a new Episode. Nodes are tried in configuration
 // order, so the first one is the primary and later ones are standbys of any
 // size: the first node whose last probe is fresh, ready (so not draining) and
-// has packet budget left for a new Episode wins. When no node qualifies, or
-// before the first probe, it picks the first node, whose admission then
-// answers the join. It reads the last probes and does no I/O, because Episode
-// creation calls it inside a database transaction. A one-node pool always
-// gets its one node.
-func (f *Fleet) Place() string {
-	if len(f.nodes) == 1 {
-		return f.nodes[0].node
-	}
+// has packet budget left for a new Episode wins, and room is true. When no
+// node qualifies after a probe, every node would refuse the Episode, so room
+// is false and the caller may start it on another provider. Before the first
+// probe it reports the first node with room, whose admission then answers the
+// join. It reads the last probes and does no I/O, because Episode creation
+// calls it inside a database transaction.
+func (f *Fleet) Place() (node string, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, node := range f.nodes {
 		load, probed := f.loads[node.node]
 		if probed && load.hasRoom && time.Since(load.at) <= probeFreshness {
-			return node.node
+			return node.node, true
 		}
 	}
-	return f.nodes[0].node
+	return f.nodes[0].node, !f.probed
 }
 
-// Watch probes every node's readiness until ctx ends. A one-node pool never
-// needs it, because placement has no choice to make.
+// Watch probes every node's readiness until ctx ends.
 func (f *Fleet) Watch(ctx context.Context) {
-	if len(f.nodes) == 1 {
-		return
-	}
 	ticker := time.NewTicker(probeInterval)
 	defer ticker.Stop()
 	for {
@@ -141,4 +136,7 @@ func (f *Fleet) Probe(ctx context.Context) {
 		})
 	}
 	wg.Wait()
+	f.mu.Lock()
+	f.probed = true
+	f.mu.Unlock()
 }

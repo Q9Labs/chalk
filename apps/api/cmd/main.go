@@ -679,7 +679,7 @@ func run() error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if chalkSFU != nil {
-		// Placement reads node load from these probes; a one-node pool returns at once.
+		// Placement reads node load from these probes.
 		go chalkSFU.Watch(signalCtx)
 	}
 	receiveHealthDone := make(chan struct{})

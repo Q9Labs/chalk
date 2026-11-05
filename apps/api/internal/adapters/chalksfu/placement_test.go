@@ -3,14 +3,19 @@ package chalksfu_test
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 // Two real nodes under one CA, as a production pool runs them: a primary and a
 // smaller standby. Placement takes the first node in order that is ready and has
-// budget left for a new Episode, and falls back to the primary when none has.
+// budget left for a new Episode, and reports no room when none has.
 func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	// At 200 packets/s per stream pair a new Episode reserves 1,200, so two lone
@@ -21,11 +26,11 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	ctx := context.Background()
 
-	if placed := fleet.Place(); placed != "sfu-primary" {
-		t.Fatalf("before any probe: placed on %q, want the primary", placed)
+	if placed, room := fleet.Place(); placed != "sfu-primary" || !room {
+		t.Fatalf("before any probe: placed on %q with room %t, want the primary", placed, room)
 	}
 	fleet.Probe(ctx)
-	if placed := fleet.Place(); placed != "sfu-primary" {
+	if placed, _ := fleet.Place(); placed != "sfu-primary" {
 		t.Fatalf("two nodes with room: placed on %q, want the primary", placed)
 	}
 
@@ -36,12 +41,12 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	onPrimary := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first)
 	join(t, onPrimary, scopeOf("ep-1", "alice"))
 	fleet.Probe(ctx)
-	if placed := fleet.Place(); placed != "sfu-primary" {
+	if placed, _ := fleet.Place(); placed != "sfu-primary" {
 		t.Fatalf("primary with room for one more Episode: placed on %q, want the primary", placed)
 	}
 	join(t, onPrimary, scopeOf("ep-2", "bob"))
 	fleet.Probe(ctx)
-	if placed := fleet.Place(); placed != "sfu-standby" {
+	if placed, _ := fleet.Place(); placed != "sfu-standby" {
 		t.Fatalf("full primary: placed on %q, want the standby", placed)
 	}
 
@@ -56,8 +61,8 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 		t.Fatalf("the standby's session on the primary: %+v, %v, want not found", found, err)
 	}
 	fleet.Probe(ctx)
-	if placed := fleet.Place(); placed != "sfu-primary" {
-		t.Fatalf("no node with room: placed on %q, want the primary fallback", placed)
+	if placed, room := fleet.Place(); placed != "sfu-primary" || room {
+		t.Fatalf("no node with room: placed on %q with room %t, want the primary without room", placed, room)
 	}
 
 	if _, err := fleet.Node("sfu-gone"); err == nil {
@@ -77,7 +82,7 @@ func TestConformancePlacementSkipsASilentNode(t *testing.T) {
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first), scopeOf("ep-1", "alice"))
 	fleet.Probe(context.Background())
-	if placed := fleet.Place(); placed != "sfu-primary" {
+	if placed, _ := fleet.Place(); placed != "sfu-primary" {
 		t.Fatalf("silent standby: placed on %q, want the primary", placed)
 	}
 }
@@ -95,13 +100,51 @@ func TestConformancePlacementNeedsTheServiceIdentity(t *testing.T) {
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, nodeA), scopeOf("ep-busy", "alice"))
 	trusted.Probe(context.Background())
-	if placed := trusted.Place(); placed != "sfu-b" {
+	if placed, _ := trusted.Place(); placed != "sfu-b" {
 		t.Fatalf("readable nodes, full first node: placed on %q, want sfu-b", placed)
 	}
 
 	stranger := first.fleetOf(t, ca, "someone-else.test", nodes...)
 	stranger.Probe(context.Background())
-	if placed := stranger.Place(); placed != "sfu-a" {
-		t.Fatalf("no readable node: placed on %q, want the first-node fallback", placed)
+	if placed, room := stranger.Place(); placed != "sfu-a" || room {
+		t.Fatalf("no readable node: placed on %q with room %t, want the first node without room", placed, room)
+	}
+}
+
+// A new Episode that every node would refuse starts on Cloudflare before its
+// binding is frozen. An Episode already bound to the own SFU never moves.
+func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
+	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1200"})
+	fleet := box.fleet(t)
+	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	registry := func(process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding) mediaplaneproviders.Registry {
+		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, Episodes: episodeBindings{live},
+		})
+	}
+	withCloudflare := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
+
+	bound, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	if err != nil || bound.Provider != string(spaces.MediaPlaneProviderChalkSFU) || bound.Node != "sfu-a" {
+		t.Fatalf("binding with room: %+v, %v, want chalk_sfu on sfu-a", bound, err)
+	}
+	node, err := fleet.Node("sfu-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
+	fleet.Probe(context.Background())
+
+	next, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	if err != nil || next.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || next.Node != "" {
+		t.Fatalf("binding on a full pool: %+v, %v, want Cloudflare", next, err)
+	}
+	stays, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	if err != nil || stays.Provider != string(spaces.MediaPlaneProviderChalkSFU) || stays.Node != "sfu-a" {
+		t.Fatalf("binding on a full pool without Cloudflare: %+v, %v, want chalk_sfu on sfu-a", stays, err)
+	}
+	live, err := registry(withCloudflare, bound).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{})
+	if err != nil || live.Provider() != mediaplane.ProviderChalkSFU {
+		t.Fatalf("Episode bound before the pool filled: %v, %v, want chalk_sfu", live, err)
 	}
 }
