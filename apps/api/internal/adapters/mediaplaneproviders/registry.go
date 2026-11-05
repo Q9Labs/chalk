@@ -178,17 +178,19 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 	if err != nil {
 		return nil, err
 	}
+	mode := strings.TrimSpace(providerConfig.Mode)
 	if configuredProvider := strings.TrimSpace(providerConfig.Provider); configuredProvider != "" {
 		parsedProvider, parseErr := spaces.ParseMediaPlaneProvider(configuredProvider)
 		if parseErr != nil {
 			return nil, fmt.Errorf("%w: provider %s", providercontracts.ErrInvalidProviderConfig, configuredProvider)
 		}
-		if pin == "" && parsedProvider != providerName {
+		// Tenant-managed credentials belong to one provider. In Chalk-managed mode
+		// Chalk runs every provider, so the Space selection may pick another one.
+		if pin == "" && mode == providercontracts.ModeTenantManaged && parsedProvider != providerName {
 			return nil, fmt.Errorf("%w: provider does not match space", providercontracts.ErrInvalidProviderConfig)
 		}
 	}
 
-	mode := strings.TrimSpace(providerConfig.Mode)
 	resolution.Mode = mode
 	switch mode {
 	case providercontracts.ModeChalkManaged:

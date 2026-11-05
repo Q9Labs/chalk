@@ -441,3 +441,18 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 		t.Fatalf("next Episode after flipping back: %v, %v", service, err)
 	}
 }
+
+// A Tenant whose Chalk-managed document names Cloudflare still lets a Space pick
+// the own SFU, because Chalk runs both providers in that mode.
+func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
+	box := startSFU(t, nil)
+	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+		ProcessConfig:   runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second},
+		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: box.fleet(t),
+	})
+	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
+	binding, err := registry.ResolveBinding(tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)})
+	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
+		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
+	}
+}
