@@ -2,6 +2,7 @@ package mediaplaneproviders
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
@@ -53,5 +54,19 @@ func TestUnconfiguredMediaDoesNotInventBinding(t *testing.T) {
 	binding, err := registry.ResolveBinding(tenants.Tenant{}, spaces.Space{MediaPlane: providercontracts.SpaceProviderCloudflareSFU}, mediaplane.ClientProviders{})
 	if err != nil || binding != nil {
 		t.Fatalf("unconfigured deployment: %#v %v", binding, err)
+	}
+}
+
+func TestOldSDKInOwnSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
+	registry := NewRegistry(Config{DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU})
+	chalkSelected := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	binding, err := registry.ResolveBinding(tenants.Tenant{}, chalkSelected, mediaplane.ClientProviders{})
+	if !errors.Is(err, providercontracts.ErrAdapterUnavailable) || binding != nil {
+		t.Fatalf("an old SDK must not get an Episode without media: %#v %v", binding, err)
+	}
+	disabled := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"enabled":false}`)}
+	binding, err = registry.ResolveBinding(disabled, chalkSelected, mediaplane.ClientProviders{})
+	if err != nil || binding != nil {
+		t.Fatalf("disabled media still creates an Episode without media: %#v %v", binding, err)
 	}
 }
