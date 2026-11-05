@@ -65,20 +65,22 @@ function saveEvents(run, receiver) {
     [...receiver.events.values()].map((event) => ({ event: event.event, objectId: event.data.object.id, verified: true })),
   );
 }
+// A rate-limited poll is not a failed delivery: skip it and let the proof's own timeout decide.
+async function pollOnce(collect, signal) {
+  try {
+    await collect(signal);
+    return 2000;
+  } catch (error) {
+    if (error instanceof CatcherRateLimited) return 15_000;
+    throw error;
+  }
+}
 function startCollector(run, receiver, collect) {
   const controller = new AbortController();
   const completion = (async () => {
     try {
       while (!controller.signal.aborted) {
-        let pause = 2000;
-        try {
-          await collect(controller.signal);
-        } catch (error) {
-          // A rate-limited poll is not a failed delivery: skip it and let the proof's own timeout decide.
-          if (!(error instanceof CatcherRateLimited)) throw error;
-          pause = 15_000;
-        }
-        await delay(pause, undefined, { signal: controller.signal });
+        await delay(await pollOnce(collect, controller.signal), undefined, { signal: controller.signal });
       }
     } catch (error) {
       if (!controller.signal.aborted) receiver.failure = error.message;
