@@ -56,7 +56,7 @@ const UNREAD = "Couldn’t load the transcript";
 const SPEECH = "Item speech";
 const CLOSED_VIDEO = "The recording is no longer available";
 const CLOSED_TRANSCRIPT = "A transcript can no longer be made for this recording.";
-const MAKE = "Make a transcript in English";
+const MAKE = "Make a transcript";
 const SIGNED_OUT: Expectation = { polled: true, retried: false, shown: [], hidden: [] };
 
 const TABLE: Record<Item, Record<Place, Record<State, Expectation>>> = {
@@ -153,7 +153,7 @@ function recordingJSON({ transcripts: _transcripts, createdAt, ...recording }: R
   return { ...recording, ...common, transcription_policy: "automatic", storage_provider: "r2", storage_key: null, metadata: {}, created_at: createdAt, updated_at: createdAt };
 }
 function transcriptJSON(recordingId: string, transcript: { id: string; status: string }) {
-  return { ...common, ...transcript, recording_id: recordingId, generation: 1, languages: ["en"], created_at: iso(PAGE_START), updated_at: iso(PAGE_START) };
+  return { ...common, ...transcript, recording_id: recordingId, generation: 1, transcript_language: "en", languages: ["en"], created_at: iso(PAGE_START), updated_at: iso(PAGE_START) };
 }
 const page = (size: number) => ({ has_more: false, next_cursor: null, page_size: size });
 const apiError = (status: number, code: string) => Response.json({ error: { code, message: code } }, { status });
@@ -182,6 +182,7 @@ async function chalkAPI(input: RequestInfo | URL): Promise<Response> {
       recurring_policy: null,
       roles: [],
       transcription_policy: "automatic",
+      transcript_language: null,
       created_at: iso(PAGE_START - 48 * HOUR),
       updated_at: iso(PAGE_START - 48 * HOUR),
     });
