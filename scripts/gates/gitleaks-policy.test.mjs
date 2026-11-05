@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -25,13 +25,8 @@ const cases = [
   {
     name: "a different key on the access-grant refresh fixture's line",
     file: refreshTest,
-    // The whole real file, with the key on the line that master's history fingerprints by position.
-    source: () => {
-      const lines = readFileSync(new URL(`../../${refreshTest}`, import.meta.url), "utf8").split("\n");
-      assert.match(lines[396], /^\ttoken\.Value = /u);
-      lines[396] = `\ttoken.Value = "${genericKey}"`;
-      return lines.join("\n");
-    },
+    // The ignore list fingerprints a past commit by path, rule and line 397; a new commit with a real key there must still fail.
+    source: () => `${"\n".repeat(396)}\ttoken.Value = "${genericKey}"\n`,
   },
 ];
 
