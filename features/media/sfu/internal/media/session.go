@@ -253,6 +253,8 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: code, Message: message})
 			if transceiver != nil && !existing[track.Mid] && s.published[track.Mid] == nil {
 				refused = append(refused, transceiver)
+				// A stopped transceiver never receives again, so a retry must use a new section.
+				s.retired[track.Mid] = true
 			}
 			continue
 		}

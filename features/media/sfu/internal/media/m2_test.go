@@ -216,7 +216,23 @@ func TestOnlyOneScreenShareRunsInAnEpisode(t *testing.T) {
 	if response := share(alice, "alice-screen"); len(response.Tracks) != 1 {
 		t.Fatalf("first screen share: %+v", response)
 	}
-	refused := share(bob, "bob-screen")
+	bobPeer := newTestPeer(t)
+	bobShare := func(name string, section int) protocol.TracksResponse {
+		t.Helper()
+		offer := bobPeer.offer(t)
+		response, err := bob.AddTracks(context.Background(), protocol.TracksRequest{
+			OperationID: op(), Scope: bob.scope, SessionDescription: offer, Tracks: localTracks(name, bobPeer.mids()[section:section+1], "screen"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := bobPeer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: response.SessionDescription.SDP}); err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+	bobPeer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
+	refused := bobShare("bob-screen", 0)
 	if len(refused.Tracks) != 0 || len(refused.TrackErrors) != 1 || refused.TrackErrors[0].Code != protocol.TrackCodeScreenShareActive {
 		t.Fatalf("second screen share: %+v, want screen_share_active", refused)
 	}
@@ -233,8 +249,13 @@ func TestOnlyOneScreenShareRunsInAnEpisode(t *testing.T) {
 	if _, err := alice.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: alice.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
 		t.Fatal(err)
 	}
-	if response := share(bob, "bob-screen-2"); len(response.Tracks) != 1 {
-		t.Fatalf("screen share after the first stopped: %+v", response)
+	// The refused section was stopped, so it can never carry media again.
+	if response := bobShare("bob-screen-retry", 0); len(response.Tracks) != 0 || len(response.TrackErrors) != 1 || response.TrackErrors[0].Code != protocol.TrackCodeInvalid {
+		t.Fatalf("a retry on the refused section: %+v, want invalid", response)
+	}
+	bobPeer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
+	if response := bobShare("bob-screen-2", 1); len(response.Tracks) != 1 {
+		t.Fatalf("screen share on a new section after the first stopped: %+v", response)
 	}
 }
 
