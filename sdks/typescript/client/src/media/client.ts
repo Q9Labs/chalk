@@ -1089,16 +1089,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pruneRemotePullState(advertised);
     const desired = this.#visibleRemotePublications(advertised);
     this.#pollFailedPull = true;
-    await this.#closeHiddenVideo(advertised, desired, generation);
+    const unclosed = await this.#closeHiddenVideo(advertised, desired, generation);
     const pulled = await this.#pullWithRecovery(desired, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
+    for (const [key, publication] of unclosed) next.set(key, publication);
     stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
-    this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size !== desired.size;
+    this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size !== desired.size || unclosed.length > 0;
+    // A hidden tab polls only after a tile change, so a failed close has to ask for the retry itself.
+    if (unclosed.length) this.#videoTilesChanged = true;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
@@ -1123,27 +1126,41 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const pulled = new Set([...this.#remoteTracks.values()].filter(isVideoPublication).map((publication) => publication.publicationId));
     const { wanted, wakeAt } = this.#videoTiles.select(Date.now(), video, pulled);
     this.#wakeForVideoTiles(wakeAt);
-    return new Map([...advertised].filter(([, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId)));
+    // A video in picture-in-picture is on screen even while its tab is hidden or its tile is off screen.
+    const floating = new Set(pictureInPictureTracks());
+    const isFloating = (key: string, publicationId: string) => {
+      const track = this.#remoteTracks.get(key);
+      return track?.publicationId === publicationId && floating.has(track.track);
+    };
+    return new Map([...advertised].filter(([key, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId) || isFloating(key, publication.publicationId)));
   }
   // Closing a receive-only subscription is the same call a stalled receiver uses, so it needs no provider feature.
-  async #closeHiddenVideo(advertised: ReadonlyMap<string, CloudflareSFUPublication>, desired: ReadonlyMap<string, CloudflareSFUPublication>, generation: number): Promise<void> {
+  // Returns the hidden video it could not close; the caller keeps it tracked so a later poll retries the close.
+  async #closeHiddenVideo(advertised: ReadonlyMap<string, CloudflareSFUPublication>, desired: ReadonlyMap<string, CloudflareSFUPublication>, generation: number): Promise<readonly (readonly [string, CloudflareSFURemoteTrack])[]> {
     const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
-    if (!hidden.length) return;
-    // A failed close throws before reconciliation drops the track, so the poll keeps its cursor and retries the close.
-    await this.#serializeSDP(async () => {
-      this.#requireGeneration(generation);
-      const receivers = hidden.flatMap(([, publication]) => {
-        const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
-        return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+    if (!hidden.length) return [];
+    try {
+      await this.#serializeSDP(async () => {
+        this.#requireGeneration(generation);
+        const receivers = hidden.flatMap(([, publication]) => {
+          const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
+          return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+        });
+        if (receivers.length) await this.#closeReceivers(receivers, generation);
       });
-      if (receivers.length) await this.#closeReceivers(receivers, generation);
-    });
+    } catch (error) {
+      // A failed close must not stop this poll from pulling new audio and visible video.
+      this.#requireGeneration(generation);
+      this.#reportError(error);
+      return hidden;
+    }
     for (const [key, publication] of hidden) {
       this.#remoteTracks.delete(key);
       safeStopTrack(publication.track, this.#reportError.bind(this));
     }
     this.#publishSnapshot();
     this.#emitRemote();
+    return [];
   }
   #pendingRemotePulls(desired: ReadonlyMap<string, CloudflareSFUPublication>): CloudflareSFUPublication[] {
     const now = Date.now();
@@ -1760,10 +1777,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#videoTiles.page(pageIsHidden(), Date.now());
       this.#reconcileVideoTiles();
     };
-    document.addEventListener("visibilitychange", onPage);
+    for (const event of PAGE_VISIBILITY_EVENTS) document.addEventListener(event, onPage);
     return () => {
       stopReports();
-      document.removeEventListener("visibilitychange", onPage);
+      for (const event of PAGE_VISIBILITY_EVENTS) document.removeEventListener(event, onPage);
       if (this.#videoTileWake !== undefined) globalThis.clearTimeout(this.#videoTileWake);
       this.#videoTileWake = undefined;
     };
@@ -1963,6 +1980,13 @@ function observeConnectionState(
 }
 function isVideoPublication(publication: Pick<CloudflareSFUPublication, "source">): boolean {
   return publication.source === "camera" || publication.source === "screen";
+}
+// Picture-in-picture events bubble from the video element to the document.
+const PAGE_VISIBILITY_EVENTS = ["visibilitychange", "enterpictureinpicture", "leavepictureinpicture"] as const;
+function pictureInPictureTracks(): readonly MediaStreamTrack[] {
+  if (typeof document === "undefined" || typeof HTMLVideoElement === "undefined" || typeof MediaStream === "undefined") return [];
+  const video = document.pictureInPictureElement;
+  return video instanceof HTMLVideoElement && video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks() : [];
 }
 function pageIsHidden(): boolean {
   return typeof document !== "undefined" && document.visibilityState === "hidden";

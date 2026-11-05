@@ -5768,8 +5768,8 @@ describe("visible-tile video subscriptions", () => {
   const onScreen = { width: 640, height: 360 };
 
   // The tile registry is shared by every client, so each call uses its own publication IDs.
-  function tileCall(tag: string, people: number) {
-    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS });
+  function tileCall(tag: string, people: number, options: { readonly onError?: (error: unknown) => void } = {}) {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...options });
     harness.transport.uniqueRemoteMids = true;
     const cameras = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "1", "camera"));
     const microphones = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "0", "microphone"));
@@ -5793,7 +5793,7 @@ describe("visible-tile video subscriptions", () => {
       const closed = new Set(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.mid)));
       return harness.peers.flatMap((peer) => peer.getTransceivers().filter((transceiver) => transceiver.mid?.startsWith("remote-") && transceiver.receiver.track?.kind === "video" && !closed.has(transceiver.mid)));
     };
-    return { harness, cameras, join, pulls, held, openVideoSubscriptions };
+    return { harness, cameras, publications, join, pulls, held, openVideoSubscriptions };
   }
 
   it("pulls video only for tiles on screen, reported before their tracks exist, and always pulls audio", async () => {
@@ -5925,6 +5925,30 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
+  it("keeps pulling a newly joined participant's audio while closing hidden video keeps failing", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const call = tileCall("m8-close-down", 2, { onError });
+    const second = call.cameras[1]!;
+    const late = versionedPublicationID("m8-close-down-late", "0", "microphone");
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const close = vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      call.harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...call.publications, { participantId: "m8-close-down-late", source: "microphone", publicationId: late }] };
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.held("microphone")).toContain(late);
+      expect(call.held("camera")).toContain(second);
+      expect(close.mock.calls.length).toBeGreaterThan(1);
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "close 503" }), expect.anything());
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("waits briefly for an unreported tile in a UI that reports, then pulls it as before", async () => {
     vi.useFakeTimers();
     const call = tileCall("m8-late", 3);
@@ -5966,6 +5990,69 @@ describe("visible-tile video subscriptions", () => {
       showPage("visible");
       await vi.advanceTimersByTimeAsync(0);
       expect(call.held("camera")).toEqual(call.cameras);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-close-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 10_000);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the video shown in picture-in-picture after the tab stays hidden, and closes it once picture-in-picture ends", async () => {
+    vi.useFakeTimers();
+    class FakeMediaStream {
+      constructor(readonly tracks: readonly unknown[]) {}
+      getVideoTracks() {
+        return this.tracks;
+      }
+    }
+    class FakeVideoElement extends EventTarget {
+      constructor(readonly srcObject: FakeMediaStream) {
+        super();
+      }
+    }
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState, pictureInPictureElement: null as FakeVideoElement | null });
+    vi.stubGlobal("document", page);
+    vi.stubGlobal("MediaStream", FakeMediaStream);
+    vi.stubGlobal("HTMLVideoElement", FakeVideoElement);
+    const call = tileCall("m8-pip", 2);
+    const second = call.cameras[1]!;
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const shared = call.harness.client.getSnapshot().remoteTracks.find((track) => track.publicationId === second)!;
+      page.pictureInPictureElement = new FakeVideoElement(new FakeMediaStream([shared.track]));
+      page.dispatchEvent(new Event("enterpictureinpicture"));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 1);
+      expect(call.held("camera")).toEqual([second]);
+
+      page.pictureInPictureElement = null;
+      page.dispatchEvent(new Event("leavepictureinpicture"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
     } finally {
       call.harness.client.stop();
       vi.unstubAllGlobals();
