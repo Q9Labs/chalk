@@ -321,6 +321,7 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("issueAccessGrant", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/access-grant", {
       params: S.IssueAccessGrantPathParamsSchema,
+      headers: S.IssueAccessGrantRequestHeadersSchema,
       payload: S.IssueAccessGrantRequestBodySchema,
       success: S.IssueAccessGrantResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [
@@ -345,6 +346,7 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.MediaTokenSubjectMismatchErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantConnectionSupersededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantMediaReplacementPendingErrorSchema.pipe(HttpApiSchema.status(409)),
@@ -769,6 +771,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),

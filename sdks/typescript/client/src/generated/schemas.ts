@@ -2239,6 +2239,7 @@ export type AdmitEpisodeParticipantPathParams = typeof AdmitEpisodeParticipantPa
 export const AdmitEpisodeParticipantRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type AdmitEpisodeParticipantRequestHeaders = typeof AdmitEpisodeParticipantRequestHeadersSchema.Type;
 
@@ -2434,6 +2435,7 @@ export type CreateEpisodePathParams = typeof CreateEpisodePathParamsSchema.Type;
 export const CreateEpisodeRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type CreateEpisodeRequestHeaders = typeof CreateEpisodeRequestHeadersSchema.Type;
 
@@ -3010,6 +3012,12 @@ export const IssueAccessGrantPathParamsSchema = /* @__PURE__ */ (() =>
     tenant_id: TenantIdSchema,
   }))();
 export type IssueAccessGrantPathParams = typeof IssueAccessGrantPathParamsSchema.Type;
+
+export const IssueAccessGrantRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
+  }))();
+export type IssueAccessGrantRequestHeaders = typeof IssueAccessGrantRequestHeadersSchema.Type;
 
 export const IssueAccessGrantRequestBodySchema = /* @__PURE__ */ (() => IssueAccessGrantRequestSchema)();
 export type IssueAccessGrantRequestBody = typeof IssueAccessGrantRequestBodySchema.Type;
@@ -4468,6 +4476,25 @@ export const McpOauthRequestNotFoundErrorWireSchema = Schema.Struct({
 export const McpOauthRequestNotFoundErrorSchema = McpOauthRequestNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(McpOauthRequestNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "McpOauthRequestNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaClientUnsupportedError extends Schema.TaggedErrorClass<MediaClientUnsupportedError>()("MediaClientUnsupportedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media.client_unsupported"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaClientUnsupportedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media.client_unsupported"),
+    message: Schema.String,
+  }),
+});
+export const MediaClientUnsupportedErrorSchema = MediaClientUnsupportedErrorWireSchema.pipe(
+  Schema.decodeTo(MediaClientUnsupportedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaClientUnsupportedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6207,6 +6234,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestIdempotencyConflictErrorSchema,
@@ -6786,6 +6814,7 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   MediaTokenExpiredErrorSchema,
   MediaTokenInvalidAudienceErrorSchema,
   MediaTokenInvalidHeaderErrorSchema,
