@@ -52,6 +52,10 @@ func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, erro
 	if err != nil {
 		return MediaCredential{}, ErrSigningFailed
 	}
+	connectionClaims := jwtClaims{ConnectionID: subject.ConnectionID}
+	if subject.Provider == ProviderCloudflareSFU {
+		connectionClaims = jwtClaims{CloudflareConnectionID: subject.ConnectionID}
+	}
 	claims, err := encodeJWTPart(jwtClaims{
 		Issuer:                 i.config.Issuer,
 		Audience:               json.RawMessage(`"` + Audience + `"`),
@@ -66,7 +70,8 @@ func (i Issuer) Issue(_ context.Context, subject Subject) (MediaCredential, erro
 		ParticipantID:          subject.ParticipantID.String(),
 		ParticipantGeneration:  subject.ParticipantGeneration,
 		MediaProvider:          subject.Provider,
-		CloudflareConnectionID: subject.CloudflareConnectionID,
+		CloudflareConnectionID: connectionClaims.CloudflareConnectionID,
+		ConnectionID:           connectionClaims.ConnectionID,
 		ProviderSubject:        subject.ProviderSubject,
 	})
 	if err != nil {

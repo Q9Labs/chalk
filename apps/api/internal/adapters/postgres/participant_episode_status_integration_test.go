@@ -23,7 +23,7 @@ func TestEndingEpisodeFailsActiveAuthorizationButRetainsLifecycleRead(t *testing
 	fixture := newRouteMatrixFixture(t, tx, own, foreign)
 	// The refresh endpoint maps this same false authorization result to access.forbidden.
 	mustExec(t, tx, `update episodes set status='ending' where tenant_id=$1 and space_id=$2 and id=$3`, uuid(own.TenantID), uuid(own.SpaceID), uuid(own.EpisodeID))
-	subject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "matrix-own-connection"}
+	subject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, ConnectionID: "matrix-own-connection"}
 	allowed, err := fixture.options.ParticipantMediaActive.AuthorizeActiveParticipant(ctx, subject)
 	if err != nil || allowed {
 		t.Fatalf("ending Episode active authorization: allowed=%t, err=%v", allowed, err)

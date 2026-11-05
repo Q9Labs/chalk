@@ -680,7 +680,7 @@ func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, part
 		return apiErrorUnauthenticated
 	}
 	if connectionID == "" {
-		connectionID = subject.CloudflareConnectionID
+		connectionID = subject.ConnectionID
 	}
 	return requireParticipantMediaRoute(
 		ctx, tenantID, spaceID, episodeID, participantID, subject.ParticipantGeneration,

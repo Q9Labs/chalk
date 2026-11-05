@@ -131,7 +131,7 @@ func issueAccessGrantEndpoint(
 					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
 					Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
-					CloudflareConnectionID: subject.CloudflareConnectionID,
+					ConnectionID: subject.ConnectionID,
 				}); routeErr != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(routeErr)
 				}
@@ -158,7 +158,7 @@ func issueAccessGrantEndpoint(
 				if expected == "" {
 					return accessGrantResponse{}, apiErrorInvalidRequest
 				}
-				if subject.CloudflareConnectionID != expected {
+				if subject.ConnectionID != expected {
 					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
 				}
 				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
@@ -197,14 +197,14 @@ func issueAccessGrantEndpoint(
 					stage = "media_binding"
 					reservation := previous
 					if conditionalReplacement {
-						reservation.CloudflareConnectionID = fmt.Sprintf("replacement:%x", requestHash)
+						reservation.ConnectionID = fmt.Sprintf("replacement:%x", requestHash)
 						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
 					} else {
 						reservationID, idErr := utilities.NewID()
 						if idErr != nil {
 							return accessGrantResponse{}, idErr
 						}
-						reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+						reservation.ConnectionID = "replacement:" + reservationID.String()
 						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
 					}
 					if err != nil {
@@ -331,7 +331,7 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
-	connectionRef := subject.CloudflareConnectionID
+	connectionRef := subject.ConnectionID
 
 	if strings.TrimSpace(connectionRef) == "" {
 		return mediaplane.Join{}, mediaplane.ErrInvalidConnectionRef
@@ -366,7 +366,7 @@ func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.
 			return accessgrants.Subject{}, mediaplane.ErrProviderFailed
 		}
 		subject.Provider = accessgrants.ProviderCloudflareSFU
-		subject.CloudflareConnectionID = strings.TrimSpace(connectionID)
+		subject.ConnectionID = strings.TrimSpace(connectionID)
 
 	default:
 		return accessgrants.Subject{}, mediaplane.ErrInvalidProvider

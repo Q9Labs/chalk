@@ -332,7 +332,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		Provider: provider,
 	}
 	if service.Provider() == mediaplane.ProviderCloudflareSFU {
-		mediaSubject.CloudflareConnectionID = providerSubject
+		mediaSubject.ConnectionID = providerSubject
 	} else {
 		mediaSubject.ProviderSubject = providerSubject
 	}
@@ -412,7 +412,7 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 		return false
 	}
 	if arrival.Provider == publicinvites.PublicProviderCloudflareSFU {
-		return subject.CloudflareConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
+		return subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
 	}
 
 	return false

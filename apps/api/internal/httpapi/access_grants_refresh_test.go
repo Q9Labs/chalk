@@ -69,7 +69,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now().UTC().Truncate(time.Second)
 			subject := participantMediaSubject(t)
-			subject.CloudflareConnectionID = "original"
+			subject.ConnectionID = "original"
 			public, private, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
 				t.Fatal(err)
@@ -253,7 +253,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			issued, err := verifier.Verify(context.Background(), grant.Media.Token)
-			if err != nil || issued.CloudflareConnectionID != wantConnection {
+			if err != nil || issued.ConnectionID != wantConnection {
 				t.Fatalf("issued subject=%+v err=%v", issued, err)
 			}
 			if tc.replacement && tc.change != "replace" {

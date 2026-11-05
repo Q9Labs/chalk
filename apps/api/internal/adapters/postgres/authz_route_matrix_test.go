@@ -221,7 +221,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "matrix-own-connection"}
+	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, ConnectionID: "matrix-own-connection"}
 	mediaToken, err := mediaSigner.Issue(t.Context(), mediaSubject)
 	if err != nil {
 		t.Fatal(err)

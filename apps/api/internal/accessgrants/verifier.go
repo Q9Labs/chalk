@@ -51,7 +51,8 @@ type jwtClaims struct {
 	ParticipantGeneration  int64           `json:"participant_generation"`
 	MediaProvider          string          `json:"media_provider"`
 	ProviderSubject        string          `json:"provider_subject,omitempty"`
-	CloudflareConnectionID string          `json:"cloudflare_connection_id"`
+	CloudflareConnectionID string          `json:"cloudflare_connection_id,omitempty"`
+	ConnectionID           string          `json:"connection_id,omitempty"`
 }
 
 func NewVerifier(config VerifierConfig) (Verifier, error) {
@@ -186,10 +187,15 @@ func subjectFromClaims(claims jwtClaims) (Subject, error) {
 	}
 	switch claims.MediaProvider {
 	case ProviderCloudflareSFU:
-		if !validConnectionID(claims.CloudflareConnectionID) {
+		if claims.ConnectionID != "" || !validConnectionID(claims.CloudflareConnectionID) {
 			return Subject{}, ErrInvalidSubject
 		}
-		subject.CloudflareConnectionID = claims.CloudflareConnectionID
+		subject.ConnectionID = claims.CloudflareConnectionID
+	case ProviderChalkSFU:
+		if claims.CloudflareConnectionID != "" || !validConnectionID(claims.ConnectionID) {
+			return Subject{}, ErrInvalidSubject
+		}
+		subject.ConnectionID = claims.ConnectionID
 
 	default:
 		return Subject{}, ErrInvalidSubject
@@ -222,8 +228,8 @@ func validSubject(subject Subject) bool {
 		return false
 	}
 	switch subject.Provider {
-	case ProviderCloudflareSFU:
-		return subject.ProviderSubject == "" && validConnectionID(subject.CloudflareConnectionID)
+	case ProviderCloudflareSFU, ProviderChalkSFU:
+		return subject.ProviderSubject == "" && validConnectionID(subject.ConnectionID)
 
 	default:
 		return false
