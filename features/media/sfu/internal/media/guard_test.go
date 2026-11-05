@@ -124,3 +124,46 @@ func TestSchedulerLatencyIsReadable(t *testing.T) {
 	}
 	_ = histogramDeltaPercentile(*first, *second, 0.99)
 }
+
+// TestADelayedPacerClosesAdmissionAndTheLiveEpisodeContinues delays packets in
+// a live session's own pacer, so the delay reaches the guard the way production
+// traffic does: new Episodes are refused while the live Episode still admits.
+func TestADelayedPacerClosesAdmissionAndTheLiveEpisodeContinues(t *testing.T) {
+	node := newTestNode(t, nil)
+	node.guard.readSteal = func() (cpuTimes, bool) { return cpuTimes{}, false }
+	live := node.newTestSession(t, episodeScope("live", "alice"))
+
+	wire := &wireWriter{}
+	video := &egressBinding{writer: wire, ssrc: 10, payloadType: 96, twccID: 3}
+	pacer := live.transport
+	pacer.mu.Lock()
+	pacer.refill(monotonic())
+	pacer.tokens = -1e6 // the pace lets nothing out
+	pacer.mu.Unlock()
+	var w packetWriter
+	payload := make([]byte, 500)
+	for seq := range uint16(4) {
+		pacer.send(&egressPacket{binding: video, class: classVideo, seq: seq, payload: payload}, &w)
+	}
+	time.Sleep(80 * time.Millisecond)
+	pacer.mu.Lock()
+	pacer.tokens = 0
+	pacer.mu.Unlock()
+	pacer.signal()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(wire.sent()) < 4 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if sent := len(wire.sent()); sent != 4 {
+		t.Fatalf("the pacer sent %d of 4 packets", sent)
+	}
+
+	node.guard.tick()
+	if health := node.guard.snapshot(); health.AdmissionReason != reasonPacerQueueDelay {
+		t.Fatalf("health %+v, want admission closed for pacer queue delay", health)
+	}
+	if _, err := node.CreateSession("create-new", episodeScope("new", "bob")); !errors.Is(err, errAdmissionClosed) {
+		t.Fatalf("new Episode while the pacer lags: %v, want admission closed", err)
+	}
+	node.newTestSession(t, episodeScope("live", "carol"))
+}
