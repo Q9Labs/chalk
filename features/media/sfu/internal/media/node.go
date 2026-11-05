@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -54,12 +55,13 @@ type Node struct {
 	participants map[participantKey]*Session
 	creates      map[string]createRecord
 	fences       map[participantKey]int64 // highest generation seen per Participant; outlives sessions
-	fenceOrder   []participantKey         // insertion order, to evict the oldest fence
+	fenceOrder   []participantKey         // insertion order, oldest first
+	fenceLimit   int
 }
 
-// maxFences bounds the generation fences. Evicting the oldest reopens the stale-generation
-// check for that Participant only, and only until its next create.
-const maxFences = 1 << 14
+// defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
+// is only ever evicted for a Participant that has no live session.
+const defaultFenceLimit = 1 << 14
 
 type createRecord struct {
 	digest [sha256.Size]byte
@@ -94,6 +96,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
 		fences:       map[participantKey]int64{},
+		fenceLimit:   defaultFenceLimit,
 	}, nil
 }
 
@@ -207,6 +210,9 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	if scope.Generation < n.fences[keyOf(scope)] {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
+	if err := n.makeFenceRoom(keyOf(scope)); err != nil {
+		return protocol.CreateSessionResponse{}, nil, err
+	}
 	var fenced *Session
 	if existing := n.participants[keyOf(scope)]; existing != nil {
 		if scope.Generation == existing.scope.Generation {
@@ -232,16 +238,29 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	return n.responseFor(session.id), fenced, nil
 }
 
+// makeFenceRoom makes sure the fence table can take the Participant. It evicts the oldest
+// fence of a Participant with no live session, never one that has a live session: that fence
+// is what keeps an older generation from replacing the live one. When every fence belongs to
+// a live session it refuses instead. The caller holds n.mu.
+func (n *Node) makeFenceRoom(key participantKey) error {
+	if _, known := n.fences[key]; known || len(n.fences) < n.fenceLimit {
+		return nil
+	}
+	index := slices.IndexFunc(n.fenceOrder, func(candidate participantKey) bool { return n.participants[candidate] == nil })
+	if index < 0 {
+		return fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
+	}
+	delete(n.fences, n.fenceOrder[index])
+	n.fenceOrder = slices.Delete(n.fenceOrder, index, index+1)
+	return nil
+}
+
 // raiseFence records the generation as the lowest the Participant may create again.
-// The caller holds n.mu.
+// makeFenceRoom has already run under the same lock.
 func (n *Node) raiseFence(scope protocol.Scope) {
 	key := keyOf(scope)
 	if _, known := n.fences[key]; !known {
 		n.fenceOrder = append(n.fenceOrder, key)
-		if len(n.fenceOrder) > maxFences {
-			delete(n.fences, n.fenceOrder[0])
-			n.fenceOrder = n.fenceOrder[1:]
-		}
 	}
 	n.fences[key] = max(n.fences[key], scope.Generation)
 }
