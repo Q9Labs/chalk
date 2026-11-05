@@ -96,7 +96,7 @@ func requireParticipantMediaRoute(
 		ParticipantID:          participantID,
 		ParticipantGeneration:  participantGeneration,
 		Provider:               provider,
-		CloudflareConnectionID: connectionID,
+		ConnectionID: connectionID,
 	})
 	if err != nil {
 		return apiErrorForbidden

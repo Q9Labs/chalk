@@ -174,7 +174,7 @@ func TestParticipantMediaAddTracksObservesSuccessfulAndFailedPulls(t *testing.T)
 			if len(observer.captures) != 1 || observer.captures[0] != input.ReceiveHealthEpisode {
 				t.Fatal("pull identity was not captured for the observed Episode")
 			}
-			if input.ParticipantID != subject.ParticipantID || input.ParticipantGeneration != subject.ParticipantGeneration || input.EpisodeID != subject.EpisodeID || input.SpaceID != subject.SpaceID || input.TenantID != subject.TenantID || input.ConnectionID != subject.CloudflareConnectionID || (input.Err != nil) != failed || len(input.Requested) != 1 {
+			if input.ParticipantID != subject.ParticipantID || input.ParticipantGeneration != subject.ParticipantGeneration || input.EpisodeID != subject.EpisodeID || input.SpaceID != subject.SpaceID || input.TenantID != subject.TenantID || input.ConnectionID != subject.ConnectionID || (input.Err != nil) != failed || len(input.Requested) != 1 {
 				t.Fatalf("observation = %+v", input)
 			}
 			if failed && (len(input.Response.TrackErrors) != 1 || input.Response.TrackErrors[0].Code != "empty_track_error") {
@@ -227,7 +227,7 @@ func participantMediaSubject(t *testing.T) accessgrants.Subject {
 		ParticipantID:          participantMediaID(t, "44444444-4444-4444-8444-444444444444"),
 		ParticipantGeneration:  7,
 		Provider:               accessgrants.ProviderCloudflareSFU,
-		CloudflareConnectionID: "connection-123",
+		ConnectionID: "connection-123",
 	}
 }
 

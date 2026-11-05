@@ -31,6 +31,7 @@ type Provider string
 
 const (
 	ProviderCloudflareSFU Provider = "cloudflare_sfu"
+	ProviderChalkSFU      Provider = "chalk_sfu"
 )
 
 type Plane interface {
@@ -59,6 +60,7 @@ type EnsureEpisodeInput struct {
 
 type CreateJoinInput struct {
 	Provider              Provider
+	Scope                 Scope
 	Episode               Episode
 	ParticipantName       string
 	ExternalParticipantID string
@@ -71,6 +73,7 @@ type CreateJoinInput struct {
 
 type ResumeJoinInput struct {
 	Provider              Provider
+	Scope                 Scope
 	Episode               Episode
 	ExternalParticipantID string
 	ConnectionRef         string
@@ -81,12 +84,14 @@ type ResumeJoinInput struct {
 
 type RemoveParticipantInput struct {
 	Provider       Provider
+	Scope          Scope
 	EpisodeRef     string
 	ParticipantRef string
 }
 
 type EndEpisodeInput struct {
 	Provider   Provider
+	TenantID   string
 	EpisodeRef string
 }
 
@@ -338,7 +343,7 @@ func requireEpisodeUsageInput(input *EpisodeUsageInput) error {
 
 func validProvider(provider Provider) bool {
 	switch provider {
-	case ProviderCloudflareSFU:
+	case ProviderCloudflareSFU, ProviderChalkSFU:
 		return true
 	default:
 		return false
