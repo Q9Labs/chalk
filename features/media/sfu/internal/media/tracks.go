@@ -34,6 +34,8 @@ type publication struct {
 	name    string
 	source  string
 	kind    webrtc.RTPCodecType
+	// authority decides whether the source may forward; a revoke or a lapsed lease stops it.
+	authority *sourceAuthority
 
 	closed atomic.Bool
 	done   chan struct{}
@@ -46,7 +48,10 @@ type publication struct {
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) *publication {
-	return &publication{session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{})}
+	return &publication{
+		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
+		authority: session.node.authorityFor(session.scope, track.Source),
+	}
 }
 
 func (p *publication) video() bool { return p.kind == webrtc.RTPCodecTypeVideo }

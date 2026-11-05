@@ -98,7 +98,7 @@ func m1Forward(local *webrtc.TrackLocalStaticRTP, raw []byte) {
 // forwarding "h" and one forwarding "l": a class of three, one camera's view.
 func benchPublication(tb testing.TB) (*publication, [2]*ingressLayer, *discardWriter) {
 	tb.Helper()
-	pub := &publication{kind: webrtc.RTPCodecTypeVideo, source: "camera", done: make(chan struct{})}
+	pub := &publication{kind: webrtc.RTPCodecTypeVideo, source: "camera", done: make(chan struct{}), authority: freeAuthority()}
 	var layers [2]*ingressLayer
 	for index, rid := range []string{"h", "l"} {
 		layers[index] = &ingressLayer{index: index, rid: rid}

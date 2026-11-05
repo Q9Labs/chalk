@@ -148,7 +148,7 @@ func (s *subscription) pendingLayer() int {
 // deliver forwards one packet of layer if this subscription takes it. It runs
 // on the layer's reader and never blocks another subscriber.
 func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWriter) {
-	if s.interest.Load()&(1<<layer.index) == 0 {
+	if s.interest.Load()&(1<<layer.index) == 0 || !s.pub.authority.allows(p.arrival, p.arrival) {
 		return
 	}
 	s.mu.Lock()
@@ -213,7 +213,7 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 	now := monotonic()
 	for ext, sent := from+1, 0; int64(layer.highest-ext) >= 0 && sent < maxFlushAfterSwitch; ext, sent = ext+1, sent+1 {
 		stored, ok := history.load(ext, now, w.stored[:])
-		if !ok {
+		if !ok || !s.pub.authority.allows(stored.arrival, now) {
 			continue
 		}
 		stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
@@ -307,6 +307,14 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 		return
 	}
 	stored, ok := history.load(ext, now, w.stored[:])
+	if ok && !s.pub.authority.allows(stored.arrival, now) {
+		// A packet from before the source's current window is never sent: a viewer
+		// that missed it decodes again from a keyframe of the new window.
+		if s.pub.authority.allows(now, now) {
+			s.requestKeyframe()
+		}
+		return
+	}
 	if !ok {
 		s.requestKeyframe()
 		return
