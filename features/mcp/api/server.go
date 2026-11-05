@@ -1,8 +1,10 @@
 package mcpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -13,6 +15,8 @@ import (
 )
 
 const MaxResultBytes = 64 << 10
+
+const maxRequestBodyBytes = 1 << 20
 
 type Principal struct {
 	ProfileID string
@@ -162,7 +166,7 @@ type boundedResult struct {
 // NewHandler exposes neither protocol sessions nor standalone SSE streams.
 // Origin is an explicit allowlist, independent of caller-controlled Host headers.
 func NewHandler(server *mcp.Server, allowedOrigins []string) http.Handler {
-	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: 1 << 20, PropagateRequestCancellation: true})
+	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, MaxRequestBodyBytes: maxRequestBodyBytes, PropagateRequestCancellation: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -175,6 +179,25 @@ func NewHandler(server *mcp.Server, allowedOrigins []string) http.Handler {
 				return
 			}
 		}
+		if r.Method == http.MethodPost && !rejectBatch(w, r) {
+			return
+		}
 		transport.ServeHTTP(w, r)
 	})
+}
+
+// rejectBatch refuses JSON-RPC batch arrays. Both supported protocol versions drop
+// batching, and one HTTP request must stay one rate-limited operation.
+func rejectBatch(w http.ResponseWriter, r *http.Request) bool {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBodyBytes))
+	if err != nil {
+		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+		return false
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if trimmed := bytes.TrimLeft(body, " \t\r\n"); len(trimmed) > 0 && trimmed[0] == '[' {
+		http.Error(w, "JSON-RPC batches are not supported", http.StatusBadRequest)
+		return false
+	}
+	return true
 }
