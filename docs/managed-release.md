@@ -20,12 +20,14 @@ requires one for a selected nightly.
 ## Nightly cut
 
 `Cut nightly` checks master's current tip hourly, at 17 minutes past the hour.
-Automatic cuts require a successful push Gate for that exact tip, new commits
-since the last completed cut, and at least 6 hours since the last cut attempt.
+Automatic cuts ship the newest master commit whose push Gate passed, require commits
+newer than the last completed cut, and need at least 6 hours since the last cut attempt.
+Pushes to master share one Gate group, so a newer push cancels the Gate run that is still
+queued and the tip may have no Gate; the plan never waits for one and takes the newest green commit.
 Each check reads the current tip and requires its workflow revision to match.
 A queued older scheduled workflow waits for the next check. A stale manual
 request queues a fresh manual run on master, retaining its deliberate override.
-Neither path cuts an older Gate commit.
+A manual cut ships the tip and refuses at once when its Gate has not passed; the error names the newest commit that has.
 A tip skipped during the cooldown is retried without another push.
 The 6-hour interval starts at reservation, not at completion. Completed cuts
 supply the timestamp only when no reservation exists from older workflows.

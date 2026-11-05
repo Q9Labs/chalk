@@ -69,7 +69,7 @@ class ReleasePlan(unittest.TestCase):
         return 'true'
 
     def test_inflight_gate_turns_green_before_release_continues(self):
-        for caller in ('scheduled', 'manual', 'entry'):
+        for caller in ('entry',):
             for status in ('queued', 'in_progress'):
                 with self.subTest(caller=caller, status=status):
                     api = MemoryGitHub()
@@ -101,7 +101,7 @@ class ReleasePlan(unittest.TestCase):
                     self.assertEqual(api.items, [])
 
     def test_inflight_gate_wait_is_bounded(self):
-        for caller in ('scheduled', 'manual', 'entry'):
+        for caller in ('entry',):
             with self.subTest(caller=caller):
                 api = MemoryGitHub()
                 api.gates[0].update(status='in_progress', conclusion=None)
@@ -134,21 +134,6 @@ class ReleasePlan(unittest.TestCase):
                                 self.gate_call(api, caller)
                     sleep.assert_not_called()
                     self.assertEqual(api.items, [])
-
-    def test_master_moving_while_waiting_still_defers_cut(self):
-        for manual in (False, True):
-            with self.subTest(manual=manual):
-                api = MemoryGitHub()
-                api.gates[0].update(status='in_progress', conclusion=None)
-
-                def finish(seconds):
-                    api.gates[0].update(status='completed', conclusion='success')
-                    api.tip = 'b' * 40
-
-                with patch('github_release.backoff_sleep', side_effect=finish):
-                    self.assertEqual(self.cut(api, 8, manual=manual)['should_cut'], 'false')
-                self.assertEqual(api.items, [])
-                self.assertEqual(api.dispatches, int(manual))
 
     def test_green_tip_is_retried_after_cooldown_without_a_new_push(self):
         api = MemoryGitHub()
@@ -191,7 +176,7 @@ class ReleasePlan(unittest.TestCase):
         self.assertEqual(len(api.items), 1)
 
     def test_only_a_successful_push_gate_on_the_tip_allows_a_cut(self):
-        for change in [dict(head_sha='b' * 40), dict(conclusion='failure'), dict(conclusion=None),
+        for change in [dict(conclusion='failure'), dict(conclusion=None),
                        dict(event='schedule'), dict(event='workflow_dispatch'), dict(head_branch='other')]:
             with self.subTest(change=change):
                 api = MemoryGitHub()
@@ -202,12 +187,37 @@ class ReleasePlan(unittest.TestCase):
                 self.assertEqual(result['target_sha'], SHA)
                 self.assertEqual(api.items, [])
 
-    def test_older_gate_sha_cannot_choose_the_cut_commit(self):
+    def test_scheduled_cut_ships_the_newest_green_gate_commit_without_waiting(self):
+        # Master pushes supersede each other, so the tip may have a cancelled or queued Gate while an older commit passed.
+        older = 'b' * 40
+        for tip_gate in (dict(conclusion='cancelled'), dict(conclusion=None, status='queued'), None):
+            with self.subTest(tip_gate=tip_gate):
+                api = MemoryGitHub()
+                api.gates = [dict(api.gates[0], head_sha=older)]
+                if tip_gate:
+                    api.gates.append(dict(api.gates[0], run_number=2, head_sha=SHA, **tip_gate))
+                with patch('github_release.backoff_sleep') as sleep:
+                    result = self.cut(api, 2)
+                sleep.assert_not_called()
+                self.assertEqual((result['should_cut'], result['target_sha']), ('true', older))
+                self.assertEqual(api.items[-1]['ref'], older)
+
+    def test_manual_cut_refuses_at_once_while_the_tip_gate_is_in_flight(self):
+        for status in ('queued', 'in_progress'):
+            with self.subTest(status=status):
+                api = MemoryGitHub()
+                api.gates[0].update(status=status, conclusion=None)
+                with patch('github_release.backoff_sleep') as sleep, \
+                        self.assertRaisesRegex(ValueError, 'still queued or running'):
+                    self.cut(api, 2, manual=True)
+                sleep.assert_not_called()
+                self.assertEqual(api.items, [])
+
+    def test_manual_cut_still_ships_the_tip(self):
         api = MemoryGitHub()
-        with patch.dict(os.environ, GATE_SHA='b' * 40):
-            result = self.cut(api, 2)
-        self.assertEqual(result['target_sha'], SHA)
-        self.assertEqual(api.items[-1]['ref'], SHA)
+        api.gates = [dict(api.gates[0], head_sha='b' * 40)]
+        with self.assertRaisesRegex(ValueError, 'is not successful'):
+            self.cut(api, 2, manual=True)
 
     def test_tip_moving_during_planning_cannot_reserve_an_older_commit(self):
         api = MemoryGitHub()
