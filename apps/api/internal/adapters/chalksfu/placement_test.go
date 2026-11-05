@@ -124,7 +124,7 @@ func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	}
 	withCloudflare := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
 
-	bound, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	bound, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace, ownSFUClients)
 	if err != nil || bound.Provider != string(spaces.MediaPlaneProviderChalkSFU) || bound.Node != "sfu-a" {
 		t.Fatalf("binding with room: %+v, %v, want chalk_sfu on sfu-a", bound, err)
 	}
@@ -135,11 +135,11 @@ func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
 	fleet.Probe(context.Background())
 
-	next, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	next, err := registry(withCloudflare, nil).ResolveBinding(tenants.Tenant{}, chalkSpace, ownSFUClients)
 	if err != nil || next.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || next.Node != "" {
 		t.Fatalf("binding on a full pool: %+v, %v, want Cloudflare", next, err)
 	}
-	stays, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(tenants.Tenant{}, chalkSpace)
+	stays, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(tenants.Tenant{}, chalkSpace, ownSFUClients)
 	if err != nil || stays.Provider != string(spaces.MediaPlaneProviderChalkSFU) || stays.Node != "sfu-a" {
 		t.Fatalf("binding on a full pool without Cloudflare: %+v, %v, want chalk_sfu on sfu-a", stays, err)
 	}

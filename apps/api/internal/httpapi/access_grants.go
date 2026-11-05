@@ -69,6 +69,7 @@ type issueAccessGrantRequest struct {
 	SpaceID       utilities.ID
 	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
+	MediaClients  mediaplane.ClientProviders
 	Body          issueAccessGrantBody
 }
 
@@ -275,7 +276,7 @@ func issueAccessGrantEndpoint(
 		Parameters(accessGrantParameters()...).
 		RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).
 		Responds(http.StatusCreated, "AccessGrant", accessGrantResponse{}).
-		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorRateLimited))...).
+		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited))...).
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
@@ -285,7 +286,7 @@ func decodeIssueAccessGrantRequest(request *http.Request) (issueAccessGrantReque
 		return issueAccessGrantRequest{}, err
 	}
 	body, err := decodeJSONBody[issueAccessGrantBody](request)
-	return issueAccessGrantRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, err
+	return issueAccessGrantRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, MediaClients: mediaClients(request), Body: body}, err
 }
 
 func accessGrantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {
@@ -311,11 +312,12 @@ func accessGrantParameters() []APIParameterContract {
 		{Name: "space_id", In: "path", Type: "string", Required: true},
 		{Name: "episode_id", In: "path", Type: "string", Required: true},
 		{Name: "participant_id", In: "path", Type: "string", Required: true},
+		mediaProvidersParameter(),
 	}
 }
 
 func createAccessGrantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest) (mediaplane.Join, error) {
-	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request.TenantID, request.SpaceID, request.EpisodeID)
+	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request)
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
@@ -327,7 +329,7 @@ func createAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 }
 
 func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest, subject accessgrants.Subject) (mediaplane.Join, error) {
-	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request.TenantID, request.SpaceID, request.EpisodeID)
+	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request)
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
@@ -342,13 +344,17 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 	})
 }
 
-func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID) (*mediaplane.Service, mediaplane.Episode, error) {
+func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest) (*mediaplane.Service, mediaplane.Episode, error) {
+	tenantID, spaceID, episodeID := request.TenantID, request.SpaceID, request.EpisodeID
 	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
 	}
 	if service == nil || !grantProvider(service.Provider()) {
 		return nil, mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
+	}
+	if !request.MediaClients.Runs(service.Provider()) {
+		return nil, mediaplane.Episode{}, mediaplane.ErrClientUnsupported
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
 	return service, episode, err

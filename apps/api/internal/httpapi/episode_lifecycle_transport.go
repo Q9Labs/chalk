@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -20,7 +21,7 @@ func decodeCreateEpisodeRequest(r *http.Request) (createEpisodeEndpointRequest, 
 	if err != nil {
 		return createEpisodeEndpointRequest{}, err
 	}
-	return createEpisodeEndpointRequest{TenantID: tenantID, SpaceID: spaceID, RequestKey: r.Header.Get(idempotencyKeyHeader), Body: body}, nil
+	return createEpisodeEndpointRequest{TenantID: tenantID, SpaceID: spaceID, RequestKey: r.Header.Get(idempotencyKeyHeader), MediaClients: mediaClients(r), Body: body}, nil
 }
 
 type listEpisodesRequest struct {
@@ -86,7 +87,7 @@ func decodeAdmitParticipantRequest(r *http.Request) (admitParticipantEndpointReq
 			return admitParticipantEndpointRequest{}, apiErrorInvalidRequest
 		}
 	}
-	return admitParticipantEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RequestKey: r.Header.Get(idempotencyKeyHeader), ParticipantID: participantID, IdentityID: identityID, Body: body}, nil
+	return admitParticipantEndpointRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, RequestKey: r.Header.Get(idempotencyKeyHeader), ParticipantID: participantID, IdentityID: identityID, MediaClients: mediaClients(r), Body: body}, nil
 }
 
 func decodeRemoveParticipantRequest(r *http.Request) (removeParticipantEndpointRequest, error) {
@@ -127,4 +128,17 @@ func idempotencyKeyParameter() APIParameterContract {
 
 func participantIDParameter() APIParameterContract {
 	return APIParameterContract{Name: "participant_id", In: "path", Type: "string", Required: true}
+}
+
+// mediaProvidersHeader names the media providers the caller's SDK can run.
+// Episode creation binds the own SFU only for an SDK that declares it, and a
+// join into an own-SFU Episode needs the same declaration.
+const mediaProvidersHeader = "X-Chalk-Media-Providers"
+
+func mediaClients(r *http.Request) mediaplane.ClientProviders {
+	return mediaplane.ParseClientProviders(r.Header.Get(mediaProvidersHeader))
+}
+
+func mediaProvidersParameter() APIParameterContract {
+	return APIParameterContract{Name: mediaProvidersHeader, In: "header", Type: "string", Required: false, MaxLength: 256}
 }

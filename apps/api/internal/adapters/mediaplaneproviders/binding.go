@@ -9,8 +9,18 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space) (*mediaplane.Binding, error) {
-	resolved, resolution, err := r.resolveApplication(tenant, space, "")
+// An SDK that cannot run the own SFU gets Cloudflare, so old SDK cohorts stay
+// on Cloudflare when their Space selects the own SFU.
+func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	selected, err := selectedProvider(tenant, space)
+	if err != nil {
+		return nil, err
+	}
+	var pin spaces.MediaPlaneProvider
+	if selected == spaces.MediaPlaneProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+		pin = spaces.MediaPlaneProviderCloudflareSFU
+	}
+	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
 	if err != nil || resolved == nil {
 		return nil, err
 	}

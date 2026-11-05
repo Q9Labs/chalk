@@ -58,7 +58,7 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 		if err != nil {
 			return fmt.Errorf("lock episode space policy: %w", err)
 		}
-		mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space)
+		mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space, input.MediaClients)
 		if err != nil {
 			return fmt.Errorf("resolve episode media binding: %w", err)
 		}

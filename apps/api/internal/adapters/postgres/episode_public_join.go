@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
@@ -357,7 +358,9 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 	if err != nil {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode Artifact policy: %w", err)
 	}
-	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, tenantID, space)
+	// Public access runs Cloudflare only, so a public arrival never binds the
+	// own SFU.
+	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, tenantID, space, mediaplane.ClientProviders{})
 	if err != nil {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode media binding: %w", err)
 	}

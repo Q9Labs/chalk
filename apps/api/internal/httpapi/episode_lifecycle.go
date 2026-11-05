@@ -64,10 +64,11 @@ type createEpisodeRequest struct {
 }
 
 type createEpisodeEndpointRequest struct {
-	TenantID   utilities.ID
-	SpaceID    utilities.ID
-	RequestKey string
-	Body       createEpisodeRequest
+	TenantID     utilities.ID
+	SpaceID      utilities.ID
+	RequestKey   string
+	MediaClients mediaplane.ClientProviders
+	Body         createEpisodeRequest
 }
 
 type admitParticipantRequest struct {
@@ -87,6 +88,7 @@ type admitParticipantEndpointRequest struct {
 	RequestKey    string
 	ParticipantID utilities.ID
 	IdentityID    utilities.ID
+	MediaClients  mediaplane.ClientProviders
 	Body          admitParticipantRequest
 }
 
@@ -252,13 +254,13 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 		if service == nil {
 			return episodeResponse{}, apiErrorServiceUnavailable
 		}
-		created, err := service.CreateEpisode(ctx, episodes.CreateEpisodeInput{TenantID: request.TenantID, SpaceID: request.SpaceID, Metadata: request.Body.Metadata.Value, CreatedByUserID: createdByUserID(ctx), StartedAt: request.Body.StartedAt, Request: episodes.Request{Key: request.RequestKey}})
+		created, err := service.CreateEpisode(ctx, episodes.CreateEpisodeInput{TenantID: request.TenantID, SpaceID: request.SpaceID, Metadata: request.Body.Metadata.Value, CreatedByUserID: createdByUserID(ctx), StartedAt: request.Body.StartedAt, MediaClients: request.MediaClients, Request: episodes.Request{Key: request.RequestKey}})
 		if err != nil {
 			return episodeResponse{}, err
 		}
 		return newEpisodeResponse(created), nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).
+		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).
 		RequestBody("CreateEpisodeRequest", createEpisodeRequest{}).Responds(http.StatusCreated, "Episode", episodeResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
@@ -358,7 +360,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 			syncCredential = token
 			response.SyncToken, response.ExpiresAt = token.Value, token.ExpiresAt.UTC().Format(time.RFC3339)
 		}
-		join, err := createParticipantJoin(ctx, spacesService, tenantsService, media, admission.Participant)
+		join, err := createParticipantJoin(ctx, spacesService, tenantsService, media, admission.Participant, request.MediaClients)
 		if err != nil {
 			return participantLifecycleResponse{}, err
 		}
@@ -391,13 +393,13 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		}
 		return response, nil
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
-		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
+		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant) (mediaplane.Join, error) {
-	service, episode, err := resolveMediaEpisode(ctx, spacesService, tenantsService, resolver, participant.TenantID, participant.SpaceID, participant.EpisodeID)
+func createParticipantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, participant episodes.Participant, clients mediaplane.ClientProviders) (mediaplane.Join, error) {
+	service, episode, err := resolveMediaEpisode(ctx, spacesService, tenantsService, resolver, participant.TenantID, participant.SpaceID, participant.EpisodeID, clients)
 	if err != nil || service == nil {
 		return mediaplane.Join{}, err
 	}
@@ -484,10 +486,15 @@ func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesS
 	return resolver.ResolveEpisode(ctx, tenant, space, episodeID)
 }
 
-func resolveMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID) (*mediaplane.Service, mediaplane.Episode, error) {
+// resolveMediaEpisode refuses before any provider work when the caller's SDK
+// cannot run the Episode's provider.
+func resolveMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID, clients mediaplane.ClientProviders) (*mediaplane.Service, mediaplane.Episode, error) {
 	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
 	if err != nil || service == nil {
 		return service, mediaplane.Episode{}, err
+	}
+	if !clients.Runs(service.Provider()) {
+		return nil, mediaplane.Episode{}, mediaplane.ErrClientUnsupported
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
 	return service, episode, err
@@ -555,6 +562,8 @@ func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 	switch {
 	case errors.Is(err, mediaplane.ErrConnectionNotFound):
 		return apiErrorMediaConnectionNotFound, true
+	case errors.Is(err, mediaplane.ErrClientUnsupported):
+		return apiErrorMediaClientUnsupported, true
 	case errors.Is(err, episodes.ErrEpisodeControlBusy):
 		return apiErrorEpisodeControlBusy, true
 	case errors.Is(err, mediapublications.ErrInvalidPublication), errors.Is(err, mediaplane.ErrInvalidSignalRequest):
