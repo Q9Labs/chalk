@@ -346,15 +346,12 @@ func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tena
 
 func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest) (*mediaplane.Service, mediaplane.Episode, error) {
 	tenantID, spaceID, episodeID := request.TenantID, request.SpaceID, request.EpisodeID
-	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
+	service, err := resolveMediaPlaneForClients(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID, request.MediaClients)
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
 	}
 	if service == nil || !grantProvider(service.Provider()) {
 		return nil, mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
-	}
-	if !request.MediaClients.Runs(service.Provider()) {
-		return nil, mediaplane.Episode{}, mediaplane.ErrClientUnsupported
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
 	return service, episode, err

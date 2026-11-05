@@ -93,3 +93,27 @@ func TestAnOldSDKIsNotJoinedToAnOwnSFUEpisode(t *testing.T) {
 		t.Fatalf("a new SDK was refused: %v", err)
 	}
 }
+
+// admissionRecorder counts the admissions that would store a Participant.
+type admissionRecorder struct {
+	EpisodeLifecycleService
+	admitted int
+}
+
+func (a *admissionRecorder) AdmitParticipant(context.Context, episodes.AdmitParticipantInput) (episodes.Admission, error) {
+	a.admitted++
+	return episodes.Admission{}, nil
+}
+
+func TestAnOldSDKIsRefusedBeforeAdmissionStoresTheParticipant(t *testing.T) {
+	fixture := &chalkGrantPlane{}
+	lifecycle := &admissionRecorder{}
+	endpoint := admitParticipantEndpoint(lifecycle, nil, nil, nil, nil, fixture, fixture, fixture, fixture)
+	participantID := participantMediaID(t, "44444444-4444-4444-8444-444444444444")
+	ctx := authentication.ContextWithPrincipal(context.Background(), authentication.Principal{Kind: authentication.PrincipalUser, UserID: participantID})
+	request := admitParticipantEndpointRequest{TenantID: participantMediaID(t, "11111111-1111-4111-8111-111111111111"), SpaceID: participantMediaID(t, "22222222-2222-4222-8222-222222222222"), EpisodeID: participantMediaID(t, "33333333-3333-4333-8333-333333333333"), ParticipantID: participantID}
+
+	if _, err := endpoint.handle(ctx, request); !errors.Is(err, mediaplane.ErrClientUnsupported) || lifecycle.admitted != 0 {
+		t.Fatalf("old SDK admission: %v after %d admissions, want ErrClientUnsupported before any", err, lifecycle.admitted)
+	}
+}

@@ -335,6 +335,12 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		if service == nil {
 			return participantLifecycleResponse{}, apiErrorServiceUnavailable
 		}
+		// Refuse an SDK that cannot run the Episode's media before admission stores
+		// the Participant and takes a join seat. Other resolution failures surface
+		// from the join below, as before, so a waiting-room request needs no media.
+		if _, err := resolveMediaPlaneForClients(ctx, media, spacesService, tenantsService, request.TenantID, request.SpaceID, request.EpisodeID, request.MediaClients); errors.Is(err, mediaplane.ErrClientUnsupported) {
+			return participantLifecycleResponse{}, err
+		}
 		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, IdentityExternalID: request.Body.IdentityExternalID, Request: episodes.Request{Key: request.RequestKey}})
 		if err != nil {
 			return participantLifecycleResponse{}, err
@@ -486,15 +492,26 @@ func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesS
 	return resolver.ResolveEpisode(ctx, tenant, space, episodeID)
 }
 
+// resolveMediaPlaneForClients is the compatibility preflight of admission, join
+// and grant: it resolves the Episode's bound media plane and refuses an SDK that
+// cannot run its provider. It does no provider work and writes nothing.
+func resolveMediaPlaneForClients(ctx context.Context, resolver MediaPlaneResolver, spacesService SpaceService, tenantsService TenantService, tenantID, spaceID, episodeID utilities.ID, clients mediaplane.ClientProviders) (*mediaplane.Service, error) {
+	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
+	if err != nil || service == nil {
+		return service, err
+	}
+	if !clients.Runs(service.Provider()) {
+		return nil, mediaplane.ErrClientUnsupported
+	}
+	return service, nil
+}
+
 // resolveMediaEpisode refuses before any provider work when the caller's SDK
 // cannot run the Episode's provider.
 func resolveMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID, clients mediaplane.ClientProviders) (*mediaplane.Service, mediaplane.Episode, error) {
-	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
+	service, err := resolveMediaPlaneForClients(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID, clients)
 	if err != nil || service == nil {
 		return service, mediaplane.Episode{}, err
-	}
-	if !clients.Runs(service.Provider()) {
-		return nil, mediaplane.Episode{}, mediaplane.ErrClientUnsupported
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
 	return service, episode, err
