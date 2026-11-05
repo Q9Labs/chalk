@@ -58,7 +58,7 @@ func (r MCPOAuthRepository) PruneStale(ctx context.Context, cutoff time.Time) er
 
 func (r MCPOAuthRepository) CreateAuthorizationRequest(ctx context.Context, handleHash string, client mcpauth.Client, request mcpauth.AuthorizationRequest) error {
 	return sqlc.New(r.pool).CreateMCPOAuthAuthorizationRequest(ctx, sqlc.CreateMCPOAuthAuthorizationRequestParams{
-		RequestHash: handleHash, ClientID: uuid(client.ID), RedirectUri: request.RedirectURI, State: stateText(request.State),
+		RequestHash: handleHash, ClientID: uuid(client.ID), RedirectUri: request.RedirectURI, RedirectUriSupplied: request.RedirectURISupplied, State: stateText(request.State),
 		CodeChallenge: request.CodeChallenge, Scopes: []string{request.Scope}, Resource: request.Resource, ExpiresAt: pgTime(request.ExpiresAt),
 	})
 }
@@ -79,7 +79,7 @@ func (r MCPOAuthRepository) GetOpenAuthorizationRequest(ctx context.Context, han
 		return mcpauth.AuthorizationRequest{}, fmt.Errorf("get mcp oauth authorization request: %w", err)
 	}
 	return mcpauth.AuthorizationRequest{
-		ClientID: row.ClientID, ClientName: row.ClientName, RedirectURI: row.RedirectUri, State: nullableString(row.State),
+		ClientID: row.ClientID, ClientName: row.ClientName, RedirectURI: row.RedirectUri, RedirectURISupplied: row.RedirectUriSupplied, State: nullableString(row.State),
 		CodeChallenge: row.CodeChallenge, Scope: firstScope(row.Scopes), Resource: row.Resource, ExpiresAt: row.ExpiresAt.Time,
 	}, nil
 }
@@ -105,7 +105,7 @@ func (r MCPOAuthRepository) ApproveAuthorizationRequest(ctx context.Context, inp
 		return mcpauth.AuthorizationRequest{}, fmt.Errorf("create mcp oauth grant: %w", err)
 	}
 	if err := queries.CreateMCPOAuthCode(ctx, sqlc.CreateMCPOAuthCodeParams{
-		CodeHash: input.CodeHash, GrantID: uuid(input.GrantID), RedirectUri: decided.RedirectUri, CodeChallenge: decided.CodeChallenge, ExpiresAt: pgTime(input.CodeExpiry),
+		CodeHash: input.CodeHash, GrantID: uuid(input.GrantID), RedirectUri: decided.RedirectUri, RedirectUriSupplied: decided.RedirectUriSupplied, CodeChallenge: decided.CodeChallenge, ExpiresAt: pgTime(input.CodeExpiry),
 	}); err != nil {
 		return mcpauth.AuthorizationRequest{}, fmt.Errorf("create mcp oauth code: %w", err)
 	}
@@ -147,7 +147,7 @@ func (r MCPOAuthRepository) RedeemCode(ctx context.Context, codeHash string, now
 	if grant.revoked {
 		return mcpauth.Grant{}, commitThen(ctx, tx, mcpauth.ErrInvalidGrant)
 	}
-	if err := verify(mcpauth.Redemption{Grant: grant.Grant, RedirectURI: code.RedirectUri, CodeChallenge: code.CodeChallenge}); err != nil {
+	if err := verify(mcpauth.Redemption{Grant: grant.Grant, RedirectURI: code.RedirectUri, RedirectURISupplied: code.RedirectUriSupplied, CodeChallenge: code.CodeChallenge}); err != nil {
 		// The code stays consumed: a failed attempt burns it.
 		return mcpauth.Grant{}, commitThen(ctx, tx, err)
 	}

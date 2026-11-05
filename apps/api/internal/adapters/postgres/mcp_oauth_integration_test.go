@@ -688,3 +688,42 @@ func TestMCPOAuthConnectionListPagesThroughEveryActiveGrant(t *testing.T) {
 		}
 	}
 }
+
+// RFC 6749 section 4.1.3: the token request repeats redirect_uri only if the
+// authorization request carried it.
+func TestMCPOAuthRedirectURIFollowsTheAuthorizationRequest(t *testing.T) {
+	h := newOAuthHarness(t)
+	const second = "http://127.0.0.1/cb"
+	payload, _ := json.Marshal(map[string]any{"client_name": "Two", "redirect_uris": []string{oauthTestRedirect, second}})
+	_, registered := h.do(http.MethodPost, "/oauth/register", map[string]string{"Content-Type": "application/json"}, string(payload))
+	var two struct {
+		ClientID string `json:"client_id"`
+	}
+	if err := json.Unmarshal([]byte(registered), &two); err != nil {
+		t.Fatal(err)
+	}
+	single := h.register(oauthTestRedirect)
+
+	cases := []struct {
+		name      string
+		client    string
+		authorize string // redirect_uri sent to /authorize; empty means omitted
+		token     string // redirect_uri sent to /oauth/token; empty means omitted
+		want      int
+	}{
+		{"supplied then identical", two.ClientID, oauthTestRedirect, oauthTestRedirect, http.StatusOK},
+		{"supplied then omitted", two.ClientID, oauthTestRedirect, "", http.StatusBadRequest},
+		{"supplied then another registered URI", two.ClientID, oauthTestRedirect, second, http.StatusBadRequest},
+		{"supplied then an unregistered URI", two.ClientID, oauthTestRedirect, "https://evil.example.test/cb", http.StatusBadRequest},
+		{"omitted then omitted", single, "", "", http.StatusOK},
+		{"omitted then the single registered URI", single, "", oauthTestRedirect, http.StatusOK},
+		{"omitted then an unregistered URI", single, "", "https://evil.example.test/cb", http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		pkce := newPKCE()
+		code := h.obtainCode(c.client, c.authorize, pkce, h.tenantA)
+		if status, tokens := h.exchange(c.client, c.token, code, pkce.verifier); status != c.want || (c.want == http.StatusOK) != (tokens.AccessToken != "") {
+			t.Errorf("%s: token request = %d, want %d", c.name, status, c.want)
+		}
+	}
+}

@@ -22,14 +22,14 @@ where c.created_at < sqlc.arg(cutoff)
 
 -- name: CreateMCPOAuthAuthorizationRequest :exec
 insert into mcp_oauth_authorization_requests (
-    request_hash, client_id, redirect_uri, state, code_challenge, scopes, resource, expires_at
+    request_hash, client_id, redirect_uri, redirect_uri_supplied, state, code_challenge, scopes, resource, expires_at
 ) values (
-    sqlc.arg(request_hash), sqlc.arg(client_id), sqlc.arg(redirect_uri), sqlc.narg(state),
+    sqlc.arg(request_hash), sqlc.arg(client_id), sqlc.arg(redirect_uri), sqlc.arg(redirect_uri_supplied), sqlc.narg(state),
     sqlc.arg(code_challenge), sqlc.arg(scopes), sqlc.arg(resource), sqlc.arg(expires_at)
 );
 
 -- name: GetOpenMCPOAuthAuthorizationRequest :one
-select r.request_hash, r.client_id as client_row_id, c.client_id, c.client_name, r.redirect_uri,
+select r.request_hash, r.client_id as client_row_id, c.client_id, c.client_name, r.redirect_uri, r.redirect_uri_supplied,
        r.state, r.code_challenge, r.scopes, r.resource, r.expires_at
 from mcp_oauth_authorization_requests r
 join mcp_oauth_clients c on c.id = r.client_id
@@ -43,15 +43,15 @@ set decided_at = sqlc.arg(now)
 where request_hash = sqlc.arg(request_hash)
   and decided_at is null
   and expires_at > sqlc.arg(now)
-returning client_id as client_row_id, redirect_uri, state, code_challenge, scopes, resource;
+returning client_id as client_row_id, redirect_uri, redirect_uri_supplied, state, code_challenge, scopes, resource;
 
 -- name: CreateMCPOAuthGrant :exec
 insert into mcp_oauth_grants (id, tenant_id, client_id, scopes, resource, approved_by_service_id)
 values (sqlc.arg(id), sqlc.arg(tenant_id), sqlc.arg(client_id), sqlc.arg(scopes), sqlc.arg(resource), sqlc.arg(approved_by_service_id));
 
 -- name: CreateMCPOAuthCode :exec
-insert into mcp_oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, expires_at)
-values (sqlc.arg(code_hash), sqlc.arg(grant_id), sqlc.arg(redirect_uri), sqlc.arg(code_challenge), sqlc.arg(expires_at));
+insert into mcp_oauth_codes (code_hash, grant_id, redirect_uri, redirect_uri_supplied, code_challenge, expires_at)
+values (sqlc.arg(code_hash), sqlc.arg(grant_id), sqlc.arg(redirect_uri), sqlc.arg(redirect_uri_supplied), sqlc.arg(code_challenge), sqlc.arg(expires_at));
 
 -- name: ConsumeMCPOAuthCode :one
 update mcp_oauth_codes
@@ -59,7 +59,7 @@ set consumed_at = sqlc.arg(now)
 where code_hash = sqlc.arg(code_hash)
   and consumed_at is null
   and expires_at > sqlc.arg(now)
-returning grant_id, redirect_uri, code_challenge;
+returning grant_id, redirect_uri, redirect_uri_supplied, code_challenge;
 
 -- name: GetMCPOAuthCodeGrant :one
 select grant_id, consumed_at

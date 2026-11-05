@@ -55,7 +55,7 @@ set consumed_at = $1
 where code_hash = $2
   and consumed_at is null
   and expires_at > $1
-returning grant_id, redirect_uri, code_challenge
+returning grant_id, redirect_uri, redirect_uri_supplied, code_challenge
 `
 
 type ConsumeMCPOAuthCodeParams struct {
@@ -64,15 +64,21 @@ type ConsumeMCPOAuthCodeParams struct {
 }
 
 type ConsumeMCPOAuthCodeRow struct {
-	GrantID       pgtype.UUID `json:"grant_id"`
-	RedirectUri   string      `json:"redirect_uri"`
-	CodeChallenge string      `json:"code_challenge"`
+	GrantID             pgtype.UUID `json:"grant_id"`
+	RedirectUri         string      `json:"redirect_uri"`
+	RedirectUriSupplied bool        `json:"redirect_uri_supplied"`
+	CodeChallenge       string      `json:"code_challenge"`
 }
 
 func (q *Queries) ConsumeMCPOAuthCode(ctx context.Context, arg ConsumeMCPOAuthCodeParams) (ConsumeMCPOAuthCodeRow, error) {
 	row := q.db.QueryRow(ctx, consumeMCPOAuthCode, arg.Now, arg.CodeHash)
 	var i ConsumeMCPOAuthCodeRow
-	err := row.Scan(&i.GrantID, &i.RedirectUri, &i.CodeChallenge)
+	err := row.Scan(
+		&i.GrantID,
+		&i.RedirectUri,
+		&i.RedirectUriSupplied,
+		&i.CodeChallenge,
+	)
 	return i, err
 }
 
@@ -105,22 +111,23 @@ func (q *Queries) ConsumeMCPOAuthRefreshToken(ctx context.Context, arg ConsumeMC
 
 const createMCPOAuthAuthorizationRequest = `-- name: CreateMCPOAuthAuthorizationRequest :exec
 insert into mcp_oauth_authorization_requests (
-    request_hash, client_id, redirect_uri, state, code_challenge, scopes, resource, expires_at
+    request_hash, client_id, redirect_uri, redirect_uri_supplied, state, code_challenge, scopes, resource, expires_at
 ) values (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9
 )
 `
 
 type CreateMCPOAuthAuthorizationRequestParams struct {
-	RequestHash   string             `json:"request_hash"`
-	ClientID      pgtype.UUID        `json:"client_id"`
-	RedirectUri   string             `json:"redirect_uri"`
-	State         pgtype.Text        `json:"state"`
-	CodeChallenge string             `json:"code_challenge"`
-	Scopes        []string           `json:"scopes"`
-	Resource      string             `json:"resource"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	RequestHash         string             `json:"request_hash"`
+	ClientID            pgtype.UUID        `json:"client_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	State               pgtype.Text        `json:"state"`
+	CodeChallenge       string             `json:"code_challenge"`
+	Scopes              []string           `json:"scopes"`
+	Resource            string             `json:"resource"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreateMCPOAuthAuthorizationRequest(ctx context.Context, arg CreateMCPOAuthAuthorizationRequestParams) error {
@@ -128,6 +135,7 @@ func (q *Queries) CreateMCPOAuthAuthorizationRequest(ctx context.Context, arg Cr
 		arg.RequestHash,
 		arg.ClientID,
 		arg.RedirectUri,
+		arg.RedirectUriSupplied,
 		arg.State,
 		arg.CodeChallenge,
 		arg.Scopes,
@@ -160,16 +168,17 @@ func (q *Queries) CreateMCPOAuthClient(ctx context.Context, arg CreateMCPOAuthCl
 }
 
 const createMCPOAuthCode = `-- name: CreateMCPOAuthCode :exec
-insert into mcp_oauth_codes (code_hash, grant_id, redirect_uri, code_challenge, expires_at)
-values ($1, $2, $3, $4, $5)
+insert into mcp_oauth_codes (code_hash, grant_id, redirect_uri, redirect_uri_supplied, code_challenge, expires_at)
+values ($1, $2, $3, $4, $5, $6)
 `
 
 type CreateMCPOAuthCodeParams struct {
-	CodeHash      string             `json:"code_hash"`
-	GrantID       pgtype.UUID        `json:"grant_id"`
-	RedirectUri   string             `json:"redirect_uri"`
-	CodeChallenge string             `json:"code_challenge"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	CodeHash            string             `json:"code_hash"`
+	GrantID             pgtype.UUID        `json:"grant_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	CodeChallenge       string             `json:"code_challenge"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) CreateMCPOAuthCode(ctx context.Context, arg CreateMCPOAuthCodeParams) error {
@@ -177,6 +186,7 @@ func (q *Queries) CreateMCPOAuthCode(ctx context.Context, arg CreateMCPOAuthCode
 		arg.CodeHash,
 		arg.GrantID,
 		arg.RedirectUri,
+		arg.RedirectUriSupplied,
 		arg.CodeChallenge,
 		arg.ExpiresAt,
 	)
@@ -239,7 +249,7 @@ set decided_at = $1
 where request_hash = $2
   and decided_at is null
   and expires_at > $1
-returning client_id as client_row_id, redirect_uri, state, code_challenge, scopes, resource
+returning client_id as client_row_id, redirect_uri, redirect_uri_supplied, state, code_challenge, scopes, resource
 `
 
 type DecideMCPOAuthAuthorizationRequestParams struct {
@@ -248,12 +258,13 @@ type DecideMCPOAuthAuthorizationRequestParams struct {
 }
 
 type DecideMCPOAuthAuthorizationRequestRow struct {
-	ClientRowID   pgtype.UUID `json:"client_row_id"`
-	RedirectUri   string      `json:"redirect_uri"`
-	State         pgtype.Text `json:"state"`
-	CodeChallenge string      `json:"code_challenge"`
-	Scopes        []string    `json:"scopes"`
-	Resource      string      `json:"resource"`
+	ClientRowID         pgtype.UUID `json:"client_row_id"`
+	RedirectUri         string      `json:"redirect_uri"`
+	RedirectUriSupplied bool        `json:"redirect_uri_supplied"`
+	State               pgtype.Text `json:"state"`
+	CodeChallenge       string      `json:"code_challenge"`
+	Scopes              []string    `json:"scopes"`
+	Resource            string      `json:"resource"`
 }
 
 func (q *Queries) DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg DecideMCPOAuthAuthorizationRequestParams) (DecideMCPOAuthAuthorizationRequestRow, error) {
@@ -262,6 +273,7 @@ func (q *Queries) DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg De
 	err := row.Scan(
 		&i.ClientRowID,
 		&i.RedirectUri,
+		&i.RedirectUriSupplied,
 		&i.State,
 		&i.CodeChallenge,
 		&i.Scopes,
@@ -417,7 +429,7 @@ func (q *Queries) GetMCPOAuthRefreshToken(ctx context.Context, tokenHash string)
 }
 
 const getOpenMCPOAuthAuthorizationRequest = `-- name: GetOpenMCPOAuthAuthorizationRequest :one
-select r.request_hash, r.client_id as client_row_id, c.client_id, c.client_name, r.redirect_uri,
+select r.request_hash, r.client_id as client_row_id, c.client_id, c.client_name, r.redirect_uri, r.redirect_uri_supplied,
        r.state, r.code_challenge, r.scopes, r.resource, r.expires_at
 from mcp_oauth_authorization_requests r
 join mcp_oauth_clients c on c.id = r.client_id
@@ -432,16 +444,17 @@ type GetOpenMCPOAuthAuthorizationRequestParams struct {
 }
 
 type GetOpenMCPOAuthAuthorizationRequestRow struct {
-	RequestHash   string             `json:"request_hash"`
-	ClientRowID   pgtype.UUID        `json:"client_row_id"`
-	ClientID      string             `json:"client_id"`
-	ClientName    string             `json:"client_name"`
-	RedirectUri   string             `json:"redirect_uri"`
-	State         pgtype.Text        `json:"state"`
-	CodeChallenge string             `json:"code_challenge"`
-	Scopes        []string           `json:"scopes"`
-	Resource      string             `json:"resource"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+	RequestHash         string             `json:"request_hash"`
+	ClientRowID         pgtype.UUID        `json:"client_row_id"`
+	ClientID            string             `json:"client_id"`
+	ClientName          string             `json:"client_name"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	State               pgtype.Text        `json:"state"`
+	CodeChallenge       string             `json:"code_challenge"`
+	Scopes              []string           `json:"scopes"`
+	Resource            string             `json:"resource"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error) {
@@ -453,6 +466,7 @@ func (q *Queries) GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg G
 		&i.ClientID,
 		&i.ClientName,
 		&i.RedirectUri,
+		&i.RedirectUriSupplied,
 		&i.State,
 		&i.CodeChallenge,
 		&i.Scopes,

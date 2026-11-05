@@ -64,14 +64,16 @@ type Client struct {
 
 // AuthorizationRequest is a validated /authorize request that waits for consent.
 type AuthorizationRequest struct {
-	ClientID      string
-	ClientName    string
-	RedirectURI   string
-	State         string
-	CodeChallenge string
-	Scope         string
-	Resource      string
-	ExpiresAt     time.Time
+	ClientID    string
+	ClientName  string
+	RedirectURI string
+	// RedirectURISupplied is false when the client omitted redirect_uri and RedirectURI is its only registered one.
+	RedirectURISupplied bool
+	State               string
+	CodeChallenge       string
+	Scope               string
+	Resource            string
+	ExpiresAt           time.Time
 }
 
 // GrantList is one page of a tenant's active connected apps, newest first.
@@ -109,9 +111,10 @@ const (
 
 // Redemption is what a consumed authorization code or refresh token resolves to.
 type Redemption struct {
-	Grant         Grant
-	RedirectURI   string
-	CodeChallenge string
+	Grant               Grant
+	RedirectURI         string
+	RedirectURISupplied bool
+	CodeChallenge       string
 }
 
 // AccessGrant is the verified identity behind an access token.

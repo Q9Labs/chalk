@@ -122,7 +122,7 @@ func (s Service) Authorize(ctx context.Context, params AuthorizeParams) (string,
 		return fail("server_error", "temporary failure")
 	}
 	request := AuthorizationRequest{
-		ClientID: client.ClientID, ClientName: client.Name, RedirectURI: redirectURI, State: params.State,
+		ClientID: client.ClientID, ClientName: client.Name, RedirectURI: redirectURI, RedirectURISupplied: params.RedirectURI != "", State: params.State,
 		CodeChallenge: params.CodeChallenge, Scope: NormalizeScope(params.Scope), Resource: s.config.Resource(),
 		ExpiresAt: s.config.Now().Add(s.config.RequestTTL),
 	}
@@ -257,7 +257,7 @@ func (s Service) exchangeCode(ctx context.Context, params TokenParams) (TokenRes
 		return TokenResponse{}, oauthError(500, "server_error", "temporary failure")
 	}
 	verify := func(redemption Redemption) error {
-		if redemption.Grant.ClientID != params.ClientID || redemption.RedirectURI != params.RedirectURI || !verifyPKCE(params.CodeVerifier, redemption.CodeChallenge) {
+		if redemption.Grant.ClientID != params.ClientID || !redirectMatches(redemption, params.RedirectURI) || !verifyPKCE(params.CodeVerifier, redemption.CodeChallenge) {
 			return ErrInvalidGrant
 		}
 		return nil
@@ -268,6 +268,16 @@ func (s Service) exchangeCode(ctx context.Context, params TokenParams) (TokenRes
 	}
 	response.Scope = grant.Scope
 	return response, nil
+}
+
+// redirectMatches applies RFC 6749 section 4.1.3: a redirect_uri that the
+// authorization request carried must come back identical, and one it omitted
+// may be omitted again or name the single registered URI.
+func redirectMatches(redemption Redemption, redirectURI string) bool {
+	if redirectURI == redemption.RedirectURI {
+		return true
+	}
+	return !redemption.RedirectURISupplied && redirectURI == ""
 }
 
 func (s Service) refresh(ctx context.Context, params TokenParams) (TokenResponse, *Error) {

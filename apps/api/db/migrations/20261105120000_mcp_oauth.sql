@@ -15,6 +15,8 @@ create table mcp_oauth_authorization_requests (
     request_hash text primary key,
     client_id uuid not null references mcp_oauth_clients(id),
     redirect_uri text not null,
+    -- False when the client omitted redirect_uri and the registered one was used (RFC 6749 4.1.3).
+    redirect_uri_supplied boolean not null,
     state text,
     code_challenge text not null,
     scopes text[] not null,
@@ -45,6 +47,8 @@ create table mcp_oauth_codes (
     code_hash text primary key,
     grant_id uuid not null references mcp_oauth_grants(id) on delete cascade,
     redirect_uri text not null,
+    -- False when the client omitted redirect_uri and the registered one was used (RFC 6749 4.1.3).
+    redirect_uri_supplied boolean not null,
     code_challenge text not null,
     expires_at timestamptz not null,
     consumed_at timestamptz

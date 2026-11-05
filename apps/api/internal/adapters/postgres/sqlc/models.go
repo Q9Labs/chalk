@@ -164,16 +164,17 @@ type LoginSession struct {
 }
 
 type McpOauthAuthorizationRequest struct {
-	RequestHash   string             `json:"request_hash"`
-	ClientID      pgtype.UUID        `json:"client_id"`
-	RedirectUri   string             `json:"redirect_uri"`
-	State         pgtype.Text        `json:"state"`
-	CodeChallenge string             `json:"code_challenge"`
-	Scopes        []string           `json:"scopes"`
-	Resource      string             `json:"resource"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	DecidedAt     pgtype.Timestamptz `json:"decided_at"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	RequestHash         string             `json:"request_hash"`
+	ClientID            pgtype.UUID        `json:"client_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	State               pgtype.Text        `json:"state"`
+	CodeChallenge       string             `json:"code_challenge"`
+	Scopes              []string           `json:"scopes"`
+	Resource            string             `json:"resource"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	DecidedAt           pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 }
 
 type McpOauthClient struct {
@@ -185,12 +186,13 @@ type McpOauthClient struct {
 }
 
 type McpOauthCode struct {
-	CodeHash      string             `json:"code_hash"`
-	GrantID       pgtype.UUID        `json:"grant_id"`
-	RedirectUri   string             `json:"redirect_uri"`
-	CodeChallenge string             `json:"code_challenge"`
-	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
-	ConsumedAt    pgtype.Timestamptz `json:"consumed_at"`
+	CodeHash            string             `json:"code_hash"`
+	GrantID             pgtype.UUID        `json:"grant_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	CodeChallenge       string             `json:"code_challenge"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt          pgtype.Timestamptz `json:"consumed_at"`
 }
 
 type McpOauthGrant struct {
