@@ -29,10 +29,10 @@ func (s *standingGrant) ListRenewableSourceGrants(_ context.Context, after provi
 // Against the real SFU binary: renewal from durable authorization keeps a granted
 // microphone flowing well past its lease, and once the host's stop commits, media
 // stops within one lease and one renewal interval even though the revoke never
-// reaches the node. The test runs renewal at 1 s against a 3 s lease, the same
-// ratio as the API's 5 s against the node's default 15 s.
+// reaches the node. The test renews every 2 s against the node's shortest lease,
+// 10 s, so several renewals fall inside each lease, as with the API's 5 s.
 func TestRenewalKeepsGrantsLiveAndADroppedRevokeStillStopsMedia(t *testing.T) {
-	const lease, renewEvery = 3 * time.Second, time.Second
+	const lease, renewEvery = 10 * time.Second, 2 * time.Second
 	box := startSFU(t, map[string]string{"SFU_SOURCE_LEASE_TTL": lease.String()})
 	service := box.service(t)
 	node := box.adapterAt(t, box.controlURL)
@@ -93,9 +93,9 @@ func TestRenewalKeepsGrantsLiveAndADroppedRevokeStillStopsMedia(t *testing.T) {
 	t.Cleanup(func() { stop(); <-done })
 
 	eventually(t, "media under the first renewal's grant", 20*time.Second, func() bool { return subscriber.received.Load() >= 20 })
-	time.Sleep(2 * lease)
+	time.Sleep(lease + renewEvery)
 	if !flowing() {
-		t.Fatalf("a renewed grant stopped forwarding within %s of its first lease", 2*lease)
+		t.Fatalf("a renewed grant stopped forwarding past its first lease")
 	}
 
 	// The host's stop commits; its revoke is dropped and never reaches the node.
@@ -105,7 +105,7 @@ func TestRenewalKeepsGrantsLiveAndADroppedRevokeStillStopsMedia(t *testing.T) {
 	if waited, bound := time.Since(stopped), lease+renewEvery+time.Second; waited > bound {
 		t.Fatalf("media ran %s after the stop committed, beyond the %s bound", waited, bound)
 	}
-	time.Sleep(lease)
+	time.Sleep(2 * renewEvery)
 	if flowing() {
 		t.Fatal("media resumed after the lease lapsed")
 	}

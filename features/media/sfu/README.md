@@ -71,7 +71,7 @@ go run ./cmd/sfu
 | `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
 | `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
 | `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.  |
-| `SFU_SOURCE_LEASE_TTL`                  | `15s`           | How long a grant lets a source forward, 3s to 2m.     |
+| `SFU_SOURCE_LEASE_TTL`                  | `15s`           | How long a grant lets a source forward, 10s to 2m.    |
 
 ## Deploy
 

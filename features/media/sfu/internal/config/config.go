@@ -59,6 +59,10 @@ type Config struct {
 type Lookup func(key string) (string, bool)
 
 // Load reads SFU_* settings. It reports every invalid setting at once.
+// minSourceLeaseTTL is two of the API's 5 s lease renewal intervals
+// (providerbridge.SourceLeaseRenewInterval), so a lease cannot lapse between renewals.
+const minSourceLeaseTTL = 10 * time.Second
+
 func Load(lookup Lookup) (Config, error) {
 	r := reader{lookup: lookup}
 	cfg := Config{
@@ -71,7 +75,7 @@ func Load(lookup Lookup) (Config, error) {
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
 		ClientIdentity:             r.required("SFU_CLIENT_IDENTITY"),
-		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", 15*time.Second, 3*time.Second, 2*time.Minute),
+		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", 15*time.Second, minSourceLeaseTTL, 2*time.Minute),
 		MaxSessions:                r.integer("SFU_MAX_SESSIONS", 64, 1, 1024),
 		MaxPublishedPerSession:     r.integer("SFU_MAX_PUBLISHED_PER_SESSION", 8, 1, 32),
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
