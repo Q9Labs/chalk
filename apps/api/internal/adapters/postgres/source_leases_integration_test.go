@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,11 +82,14 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 			values($1, $2, $3, $4, $5, $6, 1, $7, $8, `+failure+`, now() + interval '5 minutes', `+completedAt+`, $9)`,
 			tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), id().Bytes(), "grant_"+id().String()[:16], participantID.Bytes(), source, status, revision)
 	}
-	stop := func(episodeID, participantID utilities.ID, operation string, source any, revision int64) {
+	settledStop := func(episodeID, participantID utilities.ID, operation string, source any, revision int64, status string, failure any) {
 		spaceID := spaces[episodeID]
-		exec(`insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, target_participant_id, target_participant_generation, source, payload, control_revision)
-			values($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, '{}'::jsonb, $10)`,
-			tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), id().Bytes(), "stop_"+id().String()[:16], make([]byte, 32), operation, participantID.Bytes(), source, revision)
+		exec(`insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, target_participant_id, target_participant_generation, source, payload, control_revision, status, last_error_code, completed_at)
+			values($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, '{}'::jsonb, $10, $11, $12, case when $11 = 'pending' then null else now() end)`,
+			tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), id().Bytes(), "stop_"+id().String()[:16], make([]byte, 32), operation, participantID.Bytes(), source, revision, status, failure)
+	}
+	stop := func(episodeID, participantID utilities.ID, operation string, source any, revision int64) {
+		settledStop(episodeID, participantID, operation, source, revision, "pending", nil)
 	}
 
 	live := episode("active", `{"provider":"chalk_sfu","node":"sfu-a"}`)
@@ -109,6 +113,16 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 	removed := participant(live, "active", "{publishAudio}")
 	grant(live, removed, "microphone", "confirmed", 5)
 	stop(live, removed, "remove_participant", nil, 7)
+
+	// A refresh: the old entry's Leave is accepted after the grant, then the new entry's
+	// confirmation supersedes it and the Participant is active again.
+	reentered := participant(live, "active", "{publishAudio}")
+	grant(live, reentered, "microphone", "confirmed", 3)
+	settledStop(live, reentered, "participant_leave", nil, 4, "failed", "participant_inactive")
+	// A Leave that failed on its own still ends renewal.
+	abandoned := participant(live, "active", "{publishAudio}")
+	grant(live, abandoned, "microphone", "confirmed", 3)
+	settledStop(live, abandoned, "participant_leave", nil, 4, "failed", "retry_exhausted")
 
 	departed := participant(live, "leaving", "{publishAudio}")
 	grant(live, departed, "microphone", "confirmed", 3)
@@ -143,7 +157,12 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 	want := []providerbridge.SourceGrant{
 		{TenantID: tenantID, EpisodeID: live, Node: "sfu-a", ParticipantID: host, Source: "microphone", Revision: 3},
 		{TenantID: tenantID, EpisodeID: live, Node: "sfu-a", ParticipantID: host, Source: "screen", Revision: 6},
+		{TenantID: tenantID, EpisodeID: live, Node: "sfu-a", ParticipantID: reentered, Source: "microphone", Revision: 3},
 	}
+	// Rows come in key order, and participant IDs are random.
+	slices.SortStableFunc(want, func(a, b providerbridge.SourceGrant) int {
+		return strings.Compare(a.ParticipantID.String(), b.ParticipantID.String())
+	})
 	if !slices.Equal(got, want) {
 		t.Fatalf("renewable grants = %+v, want %+v", got, want)
 	}

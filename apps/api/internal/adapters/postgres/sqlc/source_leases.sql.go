@@ -55,6 +55,11 @@ where episode.status = 'active'
             and stop.episode_id = grant_row.episode_id
             and stop.target_participant_id = grant_row.participant_id
             and stop.control_revision >= grant_row.control_revision
+            and not (
+                stop.operation_name = 'participant_leave'
+                and stop.status = 'failed'
+                and stop.last_error_code = 'participant_inactive'
+            )
             and (
                 stop.operation_name in ('remove_participant', 'participant_leave')
                 or (
@@ -95,7 +100,10 @@ type ListRenewableSourceGrantsRow struct {
 // authorization still stands, in key order after the cursor. A stop decided at
 // or after the grant ends it whatever its delivery outcome, so a dropped or
 // failed revoke can never be renewed back to life. So does the Participant's
-// departure or the loss of the source's capability.
+// departure or the loss of the source's capability. A Leave a newer entry's
+// confirmation superseded is the one exception: a Leave sends nothing to the SFU
+// itself, and Sync marks the superseded one failed with participant_inactive and
+// makes the Participant active again.
 func (q *Queries) ListRenewableSourceGrants(ctx context.Context, arg ListRenewableSourceGrantsParams) ([]ListRenewableSourceGrantsRow, error) {
 	rows, err := q.db.Query(ctx, listRenewableSourceGrants,
 		arg.AfterTenantID,
