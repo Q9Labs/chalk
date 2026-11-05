@@ -4,7 +4,7 @@ import type { ConnectionDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago } from "../../lib/dashboard/format";
 import { useLoad } from "./AppShell";
-import { Dialog, Sk, useToast } from "./kit";
+import { Dialog, MoreButton, Sk, useToast } from "./kit";
 
 /** Apps such as Claude and ChatGPT that signed in to this account through OAuth. */
 export function ConnectedApps() {
@@ -41,6 +41,9 @@ export function ConnectedApps() {
           ))}
         </div>
       ) : null}
+      {state.kind === "ready" && state.data.nextCursor ? (
+        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
+      ) : null}
       {revoking ? (
         <Dialog
           alert
@@ -58,7 +61,7 @@ export function ConnectedApps() {
                 onClick={() =>
                   act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
                     () => {
-                      update((value) => ({ connections: value.connections.filter((item) => item.id !== revoking.id) }));
+                      update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
                       setRevoking(null);
                       toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
                     },
