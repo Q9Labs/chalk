@@ -67,3 +67,4 @@ fi
 forbid 'r2:GetObject|s3:GetObject|r2:PutObject|r2:DeleteObject|rds:|dynamodb:|ec2:|iam:Create|iam:Put|iam:Attach|ssm:GetParametersByPath' "$MODULE_DIR" \
   "broad database, reusable object-storage, or infrastructure-mutation permission found"
 echo "validated transcription dispatcher infrastructure contract"
+python3 "$ROOT_DIR/scripts/transcription-dispatcher/test_configure_mai.py"

@@ -247,6 +247,14 @@ test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
 });
 
+test("SFU changes run the SFU gate and nothing else that is Go", () => {
+  const plan = createGatePlan(["features/media/sfu/internal/media/session.go"]);
+  assert.equal(plan.full, false);
+  assert.equal(plan.tasks.find((task) => task.id === "sfu")?.selected, true);
+  assert.equal(plan.services.api, false);
+  assert.equal(createGatePlan(["apps/api/internal/server.go"]).tasks.find((task) => task.id === "sfu")?.selected, false);
+});
+
 test("deployment tree changes run the gates that read them, not a full gate", () => {
   for (const file of ["infrastructure/managed-episode/env/api.nightly.env.example", "infrastructure/nightly/transcription/main.tf"]) {
     const plan = createGatePlan([file]);

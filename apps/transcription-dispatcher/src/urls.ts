@@ -1,3 +1,4 @@
+import { parseTranscriptLanguageMode } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
 import type { ChunkAssignment, CleanupAssignment, FinalizeAssignment, FinalizeChunkAssignment, SpeakerTurnManifest, TranscriptionAssignment } from "./types.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
@@ -213,6 +214,7 @@ export function validateSpeakerTurnManifest(value: unknown, assignment: Transcri
 
 export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_000): TranscriptionAssignment {
   const assignment = row(value, "assignment");
+  const transcriptLanguage = parseTranscriptLanguageMode(assignment.transcriptLanguage === undefined ? { mode: "auto" } : assignment.transcriptLanguage);
   const chunkRow = row(assignment.chunk, "chunk");
   const tenantId = text(assignment.tenantId, "tenant ID");
   const inputUrl = expiringUrl(chunkRow.inputUrl, "chunk input URL", configuredMaxTtlMs);
@@ -290,6 +292,7 @@ export function validateAssignment(value: unknown, configuredMaxTtlMs = 15 * 60_
   const outputContentType = assignment.outputContentType;
   if (outputContentType !== "application/json") throw new AssignmentError("result content type is invalid");
   return {
+    transcriptLanguage,
     jobId: text(assignment.jobId, "job ID"),
     tenantId,
     episodeId: text(assignment.episodeId, "episode ID"),

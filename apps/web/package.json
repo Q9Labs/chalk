@@ -21,6 +21,7 @@
     "build:dashboard-functions": "wrangler pages functions build --outdir dist/client/_worker.js --output-routes-path dist/client/_routes.json"
   },
   "dependencies": {
+    "@chalk/transcript-language": "workspace:*",
     "@cloudflare/vite-plugin": "^1.43.0",
     "@q9labsai/chalk-client": "workspace:^5.4.1",
     "@q9labsai/chalk-react": "workspace:^5.4.1",
@@ -52,6 +53,7 @@
     "aws4fetch": "1.0.20",
     "github-slugger": "2.0.0",
     "jsdom": "^29.1.1",
+    "jsqr": "1.4.0",
     "playwright": "^1.62.1",
     "rehype-autolink-headings": "7.1.0",
     "rehype-slug": "6.0.0",

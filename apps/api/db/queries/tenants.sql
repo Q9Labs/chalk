@@ -13,6 +13,7 @@ select
     tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
+    tenant_artifact_policies.transcript_language,
     tenant_artifact_policies.provider_policy_version,
     tenant_artifact_policies.recording_retention_seconds,
     tenant_artifact_policies.transcript_retention_seconds,
@@ -38,6 +39,7 @@ select
     tenants.recording_render_mode,
     tenant_artifact_policies.transcription_ceiling,
     tenant_artifact_policies.transcription_default_mode,
+    tenant_artifact_policies.transcript_language,
     tenant_artifact_policies.provider_policy_version,
     tenant_artifact_policies.recording_retention_seconds,
     tenant_artifact_policies.transcript_retention_seconds,
@@ -96,6 +98,7 @@ returning id, name, created_by_service_id, external_id, default_media_plane, med
         tenant_id,
         transcription_ceiling,
         transcription_default_mode,
+        transcript_language,
         provider_policy_version,
         recording_retention_seconds,
         transcript_retention_seconds,
@@ -115,6 +118,7 @@ select
     inserted.recording_render_mode,
     seeded.transcription_ceiling,
     seeded.transcription_default_mode,
+    seeded.transcript_language,
     seeded.provider_policy_version,
     seeded.recording_retention_seconds,
     seeded.transcript_retention_seconds,
@@ -167,6 +171,7 @@ returning id, name, created_by_service_id, external_id, default_media_plane, med
 ), updated_policy as (
 update tenant_artifact_policies
 set
+    transcript_language = case when sqlc.arg(transcript_language_set)::boolean then sqlc.arg(transcript_language)::text else transcript_language end,
     transcription_ceiling = case
         when sqlc.arg(transcription_ceiling_set)::boolean then sqlc.arg(transcription_ceiling)::text
         else transcription_ceiling
@@ -209,6 +214,7 @@ select
     updated_tenant.recording_render_mode,
     updated_policy.transcription_ceiling,
     updated_policy.transcription_default_mode,
+    updated_policy.transcript_language,
     updated_policy.provider_policy_version,
     updated_policy.recording_retention_seconds,
     updated_policy.transcript_retention_seconds,

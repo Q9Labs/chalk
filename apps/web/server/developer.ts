@@ -17,6 +17,7 @@ export async function developerPage(engine: Engine, cursors: { keyCursor?: strin
     tenantId: engine.tenantId,
     allowedWebsites: tenant.cors_allowed_origins,
     recordingRenderMode: tenant.recording_render_mode,
+    transcriptLanguage: tenant.transcript_language,
     keys: keys.api_keys.map(keyDTO),
     webhooks: await Promise.all(
       webhooks.webhook_endpoints.map(async (webhook) => {
@@ -36,6 +37,10 @@ export async function developerMutation(engine: Engine, action: DeveloperAction)
   const api = engine.api.default;
   const params = { tenant_id: engine.tenantId };
   switch (action.action) {
+    case "set-default-transcript-language": {
+      const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { transcript_language: action.transcriptLanguage } }));
+      return { transcriptLanguage: tenant.transcript_language };
+    }
     case "set-recording-render-mode": {
       const tenant = await run(engine.api.tenants.updateTenant({ params, payload: { recording_render_mode: action.mode } }));
       return { recordingRenderMode: tenant.recording_render_mode } satisfies RecordingRenderSettingsDTO;

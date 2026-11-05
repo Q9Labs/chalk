@@ -95,6 +95,12 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if _, err := tx.Exec(ctx, `insert into tenant_artifact_policies(tenant_id) values($1) on conflict do nothing`, row.TenantID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := tx.Exec(ctx, `update spaces set transcript_language='ur' where id=$1`, row.SpaceID); err != nil {
+				t.Fatal(err)
+			}
 			if err := tx.Commit(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -134,11 +140,15 @@ func TestTranscriptPreparationServiceAutomaticAndOnDemand(t *testing.T) {
 					t.Fatalf("automatic jobs = %v", result.JobIDs)
 				}
 				assertCounts(1)
+				var language string
+				if err := pool.QueryRow(ctx, `select transcript_language from artifact_jobs where id=$1`, result.JobIDs[0].Bytes()).Scan(&language); err != nil || language != "ur" {
+					t.Fatalf("automatic language=%s error=%v", language, err)
+				}
 			} else {
 				assertCounts(0)
 				repository := postgres.NewTranscriptRepositoryWithPool(sqlc.New(pool), pool)
 				transcript, job, err := transcripts.NewService(repository).Request(ctx, transcripts.RequestInput{TenantID: tenantID, RecordingID: fixture.recordingID, IdempotencyKey: "on-demand-after-automatic-default", AttemptLimit: 4, Now: time.Now()})
-				if err != nil || transcript.ID.IsZero() || job.ID.IsZero() {
+				if err != nil || transcript.ID.IsZero() || job.ID.IsZero() || job.TranscriptLanguage.String() != "ur" {
 					t.Fatalf("on-demand request: %+v %+v %v", transcript, job, err)
 				}
 				assertCounts(1)

@@ -1,3 +1,4 @@
+import { parseTranscriptLanguageMode, transcriptLanguageValue } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult } from "./types.js";
@@ -54,6 +55,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   for (const result of ordered) {
     const document = validateChunkDocument(result.document, result.assignment, episodeId, MAX_FINAL_CUES, maxTextChars);
     if (document.provider === "mixed") throw new AssignmentError("finalize chunk provider summary is invalid");
+    if (transcriptLanguageValue(document.transcriptLanguage ?? { mode: "auto" }) !== transcriptLanguageValue(ordered[0]?.document.transcriptLanguage ?? { mode: "auto" })) throw new AssignmentError("finalize transcript language modes differ");
     providers.add(document.provider);
     models.add(document.model);
     versionContracts.add(document.versionContract);
@@ -92,6 +94,7 @@ export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTrans
   const language = languages.size === 1 ? [...languages][0] : undefined;
   return {
     schemaVersion: "transcript.v1",
+    transcriptLanguage: ordered[0]?.document.transcriptLanguage ?? { mode: "auto" },
     jobId: options.jobId,
     episodeId,
     cues: cues.map(({ chunkId: _chunkId, ...cue }) => cue),
@@ -189,10 +192,11 @@ function nextPowerOfTwo(value: number): number {
 
 function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: FinalizeChunkAssignment, expectedEpisodeId: string, maxCues: number, maxTextChars: number): NormalizedTranscriptDocument {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new AssignmentError("finalize chunk document is invalid");
+  if (value.transcriptLanguage !== undefined) parseTranscriptLanguageMode(value.transcriptLanguage);
   if (value.schemaVersion !== "transcript.v1") throw new AssignmentError("finalize schema drift");
   boundedText(value.jobId, "finalize source job ID");
   if (typeof value.episodeId !== "string" || value.episodeId.length === 0 || value.episodeId !== expectedEpisodeId) throw new AssignmentError("finalize identity metadata conflicts");
-  if (value.provider !== "deepinfra" && value.provider !== "cloudflare") throw new AssignmentError("finalize provider is invalid");
+  if (value.provider !== "deepinfra" && value.provider !== "cloudflare" && value.provider !== "openrouter") throw new AssignmentError("finalize provider is invalid");
   boundedText(value.model, "finalize model");
   boundedText(value.versionContract, "finalize version contract");
   if (!Number.isInteger(value.attempt) || value.attempt < 0) throw new AssignmentError("finalize attempt is invalid");
@@ -234,7 +238,7 @@ function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxText
   validateIdentity(cue.identity);
   boundedText(cue.displayNameSnapshot, "finalize display name", 256);
   if (typeof cue.overlap !== "boolean") throw new AssignmentError("finalize cue overlap is invalid");
-  if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare") throw new AssignmentError("finalize cue provider is invalid");
+  if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare" && cue.provider !== "openrouter") throw new AssignmentError("finalize cue provider is invalid");
   boundedText(cue.model, "finalize cue model");
   boundedText(cue.versionContract, "finalize cue version contract");
   if (!Number.isInteger(cue.attempt) || cue.attempt < 0) throw new AssignmentError("finalize cue attempt is invalid");

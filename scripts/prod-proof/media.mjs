@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
+import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mjs";
 import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
@@ -75,6 +76,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       const browser = await chromium.connect(server.wsEndpoint());
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
+      await context.addInitScript(installAgreementProbe);
+      await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
       await context.addInitScript(installFixture, { speech, guest, tones });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       const page = await context.newPage();

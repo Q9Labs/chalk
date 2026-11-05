@@ -146,6 +146,8 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 		RecordingPolicySet:               input.RecordingPolicy.Set,
 		RecordingPolicy:                  optionalRecordingPolicy(input.RecordingPolicy),
 		TranscriptionPolicySet:           input.TranscriptionPolicy.Set,
+		TranscriptLanguageSet:            input.TranscriptLanguage.Set,
+		TranscriptLanguage:               text(optionalLanguageString(input.TranscriptLanguage.Value)),
 		TranscriptionPolicy:              optionalTranscriptionPolicy(input.TranscriptionPolicy),
 	})
 	if err != nil {
@@ -305,6 +307,9 @@ func spaceChangedFields(before spaces.Space, input spaces.UpdateSpaceInput) []st
 	}
 	if input.TranscriptionPolicy.Set && input.TranscriptionPolicy.Value != nil && *input.TranscriptionPolicy.Value != before.TranscriptionPolicy {
 		result = append(result, "transcription_policy")
+	}
+	if input.TranscriptLanguage.Set && !reflect.DeepEqual(input.TranscriptLanguage.Value, before.TranscriptLanguage) {
+		result = append(result, "transcript_language")
 	}
 	slices.Sort(result)
 	return result

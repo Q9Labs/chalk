@@ -40,6 +40,7 @@ insert into spaces (
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -56,6 +57,7 @@ select
     sqlc.narg(admission_policy),
     coalesce(sqlc.narg(recording_policy)::text, 'automatic'),
     coalesce(sqlc.narg(transcription_policy)::text, tenant_facts.transcription_default_mode),
+    sqlc.narg(transcript_language)::text,
     sqlc.arg(default_episode_duration_seconds),
     sqlc.arg(maximum_episode_duration_seconds),
     sqlc.arg(linger_window_seconds),
@@ -127,6 +129,7 @@ select
     inserted.admission_policy,
     inserted.recording_policy,
     inserted.transcription_policy,
+    inserted.transcript_language,
     inserted.default_episode_duration_seconds,
     inserted.maximum_episode_duration_seconds,
     inserted.linger_window_seconds,
@@ -200,6 +203,7 @@ select
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -224,6 +228,7 @@ select
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -280,6 +285,7 @@ set
         when sqlc.arg(recording_policy_set)::boolean then sqlc.arg(recording_policy)::text
         else recording_policy
     end,
+    transcript_language = case when sqlc.arg(transcript_language_set)::boolean then sqlc.narg(transcript_language)::text else transcript_language end,
     transcription_policy = case
         when sqlc.arg(transcription_policy_set)::boolean then sqlc.arg(transcription_policy)::text
         else transcription_policy
@@ -311,6 +317,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -337,6 +344,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,
@@ -363,6 +371,7 @@ returning
     admission_policy,
     recording_policy,
     transcription_policy,
+    transcript_language,
     default_episode_duration_seconds,
     maximum_episode_duration_seconds,
     linger_window_seconds,

@@ -23,9 +23,10 @@ type APIHeaderContract struct {
 }
 
 type APIResponseContract struct {
-	Status  int
-	Schema  *APISchemaRef
-	Headers []APIHeaderContract
+	ContentType string
+	Status      int
+	Schema      *APISchemaRef
+	Headers     []APIHeaderContract
 }
 
 type APIParameterContract struct {
@@ -72,12 +73,14 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil)...)
+	endpoints = append(endpoints, mcpOAuthConnectionEndpoints(nil, nil)...)
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil, nil)...)
+	endpoints = append(endpoints, transcriptTextEndpoint(nil, nil, nil, nil))
 
 	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
 	endpoints = append(endpoints, publicInviteEndpoints(nil, nil)...)

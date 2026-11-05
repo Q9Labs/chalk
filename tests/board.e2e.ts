@@ -207,6 +207,9 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
   await withProofCall({ app, screen }, async (guest) => {
     await guest.ready;
     await guest.board.open();
+    await browser.locator(".chalk-board[data-ready]").waitFor({ state: "visible" });
+    const compactTools = screen.getByRole("button", "Drawing tools", { exact: true });
+    if (await compactTools.count()) await compactTools.click();
     await expect(screen.getByRole("toolbar", "Drawing tools", { exact: true })).toBeVisible();
     const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
     await expect(following).toBeVisible();

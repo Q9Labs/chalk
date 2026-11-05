@@ -36,6 +36,7 @@ type ApiKeyMutationRequest struct {
 }
 
 type ArtifactJob struct {
+	TranscriptLanguage   string             `json:"transcript_language"`
 	ID                   pgtype.UUID        `json:"id"`
 	IdempotencyKey       string             `json:"idempotency_key"`
 	TenantID             pgtype.UUID        `json:"tenant_id"`
@@ -160,6 +161,60 @@ type LoginSession struct {
 	RevokedAt  pgtype.Timestamptz `json:"revoked_at"`
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type McpOauthAuthorizationRequest struct {
+	RequestHash         string             `json:"request_hash"`
+	ClientID            pgtype.UUID        `json:"client_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	State               pgtype.Text        `json:"state"`
+	CodeChallenge       string             `json:"code_challenge"`
+	Scopes              []string           `json:"scopes"`
+	Resource            string             `json:"resource"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	DecidedAt           pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type McpOauthClient struct {
+	ID           pgtype.UUID        `json:"id"`
+	ClientID     string             `json:"client_id"`
+	ClientName   string             `json:"client_name"`
+	RedirectUris []string           `json:"redirect_uris"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type McpOauthCode struct {
+	CodeHash            string             `json:"code_hash"`
+	GrantID             pgtype.UUID        `json:"grant_id"`
+	RedirectUri         string             `json:"redirect_uri"`
+	RedirectUriSupplied bool               `json:"redirect_uri_supplied"`
+	CodeChallenge       string             `json:"code_challenge"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	ConsumedAt          pgtype.Timestamptz `json:"consumed_at"`
+}
+
+type McpOauthGrant struct {
+	ID                  pgtype.UUID        `json:"id"`
+	TenantID            pgtype.UUID        `json:"tenant_id"`
+	ClientID            pgtype.UUID        `json:"client_id"`
+	Scopes              []string           `json:"scopes"`
+	Resource            string             `json:"resource"`
+	ApprovedByServiceID string             `json:"approved_by_service_id"`
+	LastUsedAt          pgtype.Timestamptz `json:"last_used_at"`
+	RevokedAt           pgtype.Timestamptz `json:"revoked_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+type McpOauthToken struct {
+	TokenHash string             `json:"token_hash"`
+	Kind      string             `json:"kind"`
+	GrantID   pgtype.UUID        `json:"grant_id"`
+	Resource  string             `json:"resource"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Membership struct {
@@ -928,6 +983,7 @@ type Space struct {
 	AdmissionPolicy               []byte             `json:"admission_policy"`
 	RecordingPolicy               string             `json:"recording_policy"`
 	TranscriptionPolicy           string             `json:"transcription_policy"`
+	TranscriptLanguage            pgtype.Text        `json:"transcript_language"`
 	DefaultEpisodeDurationSeconds int32              `json:"default_episode_duration_seconds"`
 	MaximumEpisodeDurationSeconds int32              `json:"maximum_episode_duration_seconds"`
 	LingerWindowSeconds           int32              `json:"linger_window_seconds"`
@@ -1485,6 +1541,7 @@ type Tenant struct {
 }
 
 type TenantArtifactPolicy struct {
+	TranscriptLanguage         string             `json:"transcript_language"`
 	TenantID                   pgtype.UUID        `json:"tenant_id"`
 	TranscriptionCeiling       string             `json:"transcription_ceiling"`
 	TranscriptionDefaultMode   string             `json:"transcription_default_mode"`
@@ -1541,6 +1598,7 @@ type TranscriptChunk struct {
 }
 
 type Transcription struct {
+	TranscriptLanguage        string             `json:"transcript_language"`
 	ID                        pgtype.UUID        `json:"id"`
 	TenantID                  pgtype.UUID        `json:"tenant_id"`
 	RecordingID               pgtype.UUID        `json:"recording_id"`

@@ -74,7 +74,7 @@ export function providerFailureKind(error: unknown): ProviderFailureKind {
   if (error instanceof ProviderError) return error.kind;
   if (error instanceof AssignmentError) return error.retryable ? "retryable" : "nonretryable";
   if (error instanceof ControlApiError) return error.retryable ? "retryable" : "nonretryable";
-  if (error instanceof DOMException && error.name === "AbortError") return "timeout";
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) return "timeout";
   if (error instanceof TypeError) return "retryable";
   return "nonretryable";
 }
@@ -89,7 +89,7 @@ export function safeErrorCode(error: unknown): string {
   }
   if (error instanceof AssignmentError) return error.retryable ? "chunk_download_retryable" : "assignment_invalid";
   if (error instanceof ControlApiError) return "control_api_rejected";
-  if (error instanceof DOMException && error.name === "AbortError") return "timeout";
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) return "timeout";
   if (error instanceof TypeError) return "network_failure";
   return "dispatcher_failure";
 }

@@ -229,8 +229,12 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 			body["headers"] = headers(response.Headers)
 		}
 		if response.Schema != nil {
+			contentType := response.ContentType
+			if contentType == "" {
+				contentType = "application/json"
+			}
 			body["content"] = map[string]any{
-				"application/json": map[string]any{
+				contentType: map[string]any{
 					"schema": g.schemaRef(*response.Schema, false),
 				},
 			}
@@ -370,6 +374,9 @@ func (g *generator) schemaRef(ref httpapi.APISchemaRef, request bool) map[string
 }
 
 func (g *generator) schemaFromType(t reflect.Type, request bool, currentName string) map[string]any {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return map[string]any{"type": "string"}
+	}
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -470,6 +477,14 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 		property := g.fieldSchema(currentName, name, field, request)
 		if nullable && !schemaIncludesNull(property) {
 			property = nullableSchema(property)
+		}
+
+		if name == "transcript_language" && schemaIncludesNull(property) {
+			values := make([]any, 0, len(artifactpolicy.TranscriptLanguageValues())+1)
+			for _, value := range artifactpolicy.TranscriptLanguageValues() {
+				values = append(values, value)
+			}
+			property["enum"] = append(values, nil)
 		}
 
 		properties[name] = property
@@ -747,6 +762,8 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		return httpapi.CallStatsFieldEnum(fieldName)
 	}
 	switch fieldName {
+	case "transcript_language":
+		return artifactpolicy.TranscriptLanguageValues()
 	case "recording_render_mode":
 		return []string{"on_demand", "automatic"}
 	case "admission":
@@ -827,6 +844,9 @@ func nullableSchema(schema map[string]any) map[string]any {
 }
 
 func isOptionalRequestField(t reflect.Type) bool {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return true
+	}
 	return t.Kind() == reflect.Pointer ||
 		isRawJSON(t) ||
 		isOptionalString(t) ||
@@ -839,6 +859,9 @@ func isOptionalRequestField(t reflect.Type) bool {
 }
 
 func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bool {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return schemaName != "UpdateTenantRequest"
+	}
 	if _, ok := providerConfigSchemaName(fieldName); ok {
 		return true
 	}

@@ -347,44 +347,14 @@
   flex-wrap: wrap;
 }
 
-.site .dash .toast {
+.site .dash .toast-slot {
   position: fixed;
-  left: 50%;
+  inset-inline: 0;
   bottom: 24px;
-  transform: translateX(-50%);
   z-index: 95;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  max-width: calc(100% - 32px);
-  padding: 6px 6px 6px 14px;
-  background: var(--chalk-popover);
-  border: 1px solid var(--chalk-line);
-  border-radius: 12px;
-  box-shadow: var(--raise);
-  font-size: 14px;
-  white-space: nowrap;
-  animation: dash-tin 0.22s var(--ease);
-}
-
-.site .dash .toast svg.site-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--chalk-muted-text);
-}
-
-.site .dash .toast span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding-right: 8px;
-}
-
-@keyframes dash-tin {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
+  justify-content: center;
+  pointer-events: none;
 }
 
 .site .dash .sk {
@@ -872,6 +842,21 @@
   text-align: center;
   border-radius: 16px;
   background: var(--chalk-surface);
+}
+
+.site .dash .empty-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 12px;
+  background: var(--chalk-raised);
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .empty .btn {
+  margin-top: 20px;
 }
 
 .site .dash .empty b {
@@ -1823,11 +1808,6 @@
   .site .dash .acts .btn {
     width: 100%;
     height: 48px;
-  }
-
-  .site .dash .toast {
-    white-space: normal;
-    width: calc(100% - 32px);
   }
 
   .site .dash [data-tip]:hover::after {

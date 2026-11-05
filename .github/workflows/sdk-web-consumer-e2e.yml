@@ -13,6 +13,9 @@ on:
       - "sdks/typescript/client/**"
       - "sdks/typescript/react/**"
       - "tools/sdk-web-consumer-e2e/**"
+      - "scripts/web-proof/**"
+      - "tests/call.e2e.ts"
+      - "e2e.config.ts"
   push:
     branches: [main, master]
     paths:
@@ -26,6 +29,9 @@ on:
       - "sdks/typescript/client/**"
       - "sdks/typescript/react/**"
       - "tools/sdk-web-consumer-e2e/**"
+      - "scripts/web-proof/**"
+      - "tests/call.e2e.ts"
+      - "e2e.config.ts"
 
 permissions:
   contents: read

@@ -18,6 +18,7 @@ type Querier interface {
 	AdvanceRecordingCaptureCommandSequence(ctx context.Context, arg AdvanceRecordingCaptureCommandSequenceParams) (int64, error)
 	ApplyRecordingCaptureConnectionProjection(ctx context.Context, arg ApplyRecordingCaptureConnectionProjectionParams) (RecordingCaptureConnection, error)
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
+	AuthenticateMCPOAuthAccessToken(ctx context.Context, arg AuthenticateMCPOAuthAccessTokenParams) (AuthenticateMCPOAuthAccessTokenRow, error)
 	AuthorizeRecordingArtifactReplay(ctx context.Context, arg AuthorizeRecordingArtifactReplayParams) (bool, error)
 	AuthorizeRecordingFleetWorker(ctx context.Context, arg AuthorizeRecordingFleetWorkerParams) (bool, error)
 	AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error)
@@ -63,6 +64,8 @@ type Querier interface {
 	CompleteRecordingTranscriptionPreparation(ctx context.Context, arg CompleteRecordingTranscriptionPreparationParams) (pgtype.UUID, error)
 	CompleteTranscriptionCleanupJob(ctx context.Context, arg CompleteTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CompleteWhiteboardFileCleanup(ctx context.Context, arg CompleteWhiteboardFileCleanupParams) (int64, error)
+	ConsumeMCPOAuthCode(ctx context.Context, arg ConsumeMCPOAuthCodeParams) (ConsumeMCPOAuthCodeRow, error)
+	ConsumeMCPOAuthRefreshToken(ctx context.Context, arg ConsumeMCPOAuthRefreshTokenParams) (ConsumeMCPOAuthRefreshTokenRow, error)
 	CountOrphanWebhookJourneyParents(ctx context.Context) (int64, error)
 	CountTenantLiveEpisodes(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountWebhookEndpoints(ctx context.Context, tenantID pgtype.UUID) (int32, error)
@@ -77,6 +80,11 @@ type Querier interface {
 	CreateLifecycleEpisode(ctx context.Context, arg CreateLifecycleEpisodeParams) (Episode, error)
 	CreateLifecycleIntent(ctx context.Context, arg CreateLifecycleIntentParams) (SyncLifecycleIntent, error)
 	CreateLifecycleParticipant(ctx context.Context, arg CreateLifecycleParticipantParams) (Participant, error)
+	CreateMCPOAuthAuthorizationRequest(ctx context.Context, arg CreateMCPOAuthAuthorizationRequestParams) error
+	CreateMCPOAuthClient(ctx context.Context, arg CreateMCPOAuthClientParams) error
+	CreateMCPOAuthCode(ctx context.Context, arg CreateMCPOAuthCodeParams) error
+	CreateMCPOAuthGrant(ctx context.Context, arg CreateMCPOAuthGrantParams) error
+	CreateMCPOAuthToken(ctx context.Context, arg CreateMCPOAuthTokenParams) error
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (CreateMembershipRow, error)
 	CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error)
 	CreateRecordingReservation(ctx context.Context, arg CreateRecordingReservationParams) (CreateRecordingReservationRow, error)
@@ -99,7 +107,10 @@ type Querier interface {
 	CreateTranscriptionAttempt(ctx context.Context, arg CreateTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	CreateTranscriptionCleanupJob(ctx context.Context, arg CreateTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	CreateTranscriptionFinalizerJobIfReady(ctx context.Context, arg CreateTranscriptionFinalizerJobIfReadyParams) (ArtifactJob, error)
+	DecideMCPOAuthAuthorizationRequest(ctx context.Context, arg DecideMCPOAuthAuthorizationRequestParams) (DecideMCPOAuthAuthorizationRequestRow, error)
+	DeleteExpiredMCPOAuthGrantRows(ctx context.Context, arg DeleteExpiredMCPOAuthGrantRowsParams) error
 	DeleteSpaceMember(ctx context.Context, arg DeleteSpaceMemberParams) error
+	DeleteStaleMCPOAuthRegistrations(ctx context.Context, cutoff pgtype.Timestamptz) error
 	DeleteTenantTranscription(ctx context.Context, arg DeleteTenantTranscriptionParams) (Transcription, error)
 	DeleteWebhookEndpoint(ctx context.Context, arg DeleteWebhookEndpointParams) (pgtype.UUID, error)
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
@@ -121,6 +132,7 @@ type Querier interface {
 	FinalizeRecordingBundleAllocation(ctx context.Context, arg FinalizeRecordingBundleAllocationParams) (RecordingBundleAllocation, error)
 	FinalizeRecordingRenderObject(ctx context.Context, arg FinalizeRecordingRenderObjectParams) (RecordingRenderObjectAllocation, error)
 	FinalizeTranscription(ctx context.Context, arg FinalizeTranscriptionParams) (Transcription, error)
+	FindMCPOAuthGrantByToken(ctx context.Context, tokenHash string) (FindMCPOAuthGrantByTokenRow, error)
 	FindServiceTenantID(ctx context.Context, arg FindServiceTenantIDParams) (pgtype.UUID, error)
 	FinishTranscriptionAttempt(ctx context.Context, arg FinishTranscriptionAttemptParams) (TranscriptionAttempt, error)
 	GetAPIKeyMutation(ctx context.Context, arg GetAPIKeyMutationParams) (ApiKeyMutationRequest, error)
@@ -138,6 +150,11 @@ type Querier interface {
 	GetFirstOpenRecordingCaptureCommand(ctx context.Context, arg GetFirstOpenRecordingCaptureCommandParams) (RecordingCaptureCommand, error)
 	GetLatestRecordingCapturePlan(ctx context.Context, planHandle pgtype.UUID) (RecordingCapturePlan, error)
 	GetLiveEpisodeForPublicJoin(ctx context.Context, arg GetLiveEpisodeForPublicJoinParams) (Episode, error)
+	GetMCPOAuthClientByPublicID(ctx context.Context, clientID string) (McpOauthClient, error)
+	GetMCPOAuthCodeGrant(ctx context.Context, codeHash string) (GetMCPOAuthCodeGrantRow, error)
+	GetMCPOAuthGrant(ctx context.Context, id pgtype.UUID) (GetMCPOAuthGrantRow, error)
+	GetMCPOAuthRefreshToken(ctx context.Context, tokenHash string) (GetMCPOAuthRefreshTokenRow, error)
+	GetOpenMCPOAuthAuthorizationRequest(ctx context.Context, arg GetOpenMCPOAuthAuthorizationRequestParams) (GetOpenMCPOAuthAuthorizationRequestRow, error)
 	GetProblemReportAttribution(ctx context.Context, arg GetProblemReportAttributionParams) (GetProblemReportAttributionRow, error)
 	GetPublicAdmissionBinding(ctx context.Context, arg GetPublicAdmissionBindingParams) (GetPublicAdmissionBindingRow, error)
 	GetPublicEpisodeAdmission(ctx context.Context, arg GetPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
@@ -178,6 +195,7 @@ type Querier interface {
 	GetRecordingReservation(ctx context.Context, arg GetRecordingReservationParams) (GetRecordingReservationRow, error)
 	GetRecordingReservationByKey(ctx context.Context, arg GetRecordingReservationByKeyParams) (GetRecordingReservationByKeyRow, error)
 	GetRecordingReservationFingerprint(ctx context.Context, arg GetRecordingReservationFingerprintParams) ([]byte, error)
+	GetRecordingTranscriptLanguage(ctx context.Context, arg GetRecordingTranscriptLanguageParams) (GetRecordingTranscriptLanguageRow, error)
 	GetRecordingTranscriptionMode(ctx context.Context, arg GetRecordingTranscriptionModeParams) (string, error)
 	GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error)
 	GetRecordingTranscriptionPreparationCommit(ctx context.Context, arg GetRecordingTranscriptionPreparationCommitParams) (pgtype.UUID, error)
@@ -207,6 +225,7 @@ type Querier interface {
 	GetTenantTranscriptionByRecording(ctx context.Context, arg GetTenantTranscriptionByRecordingParams) (Transcription, error)
 	GetTranscriptChunk(ctx context.Context, id pgtype.UUID) (TranscriptChunk, error)
 	GetTranscriptChunkResult(ctx context.Context, arg GetTranscriptChunkResultParams) (TranscriptionChunkResult, error)
+	GetTranscriptTextMetadata(ctx context.Context, arg GetTranscriptTextMetadataParams) (GetTranscriptTextMetadataRow, error)
 	GetTranscriptionChunkJob(ctx context.Context, transcriptID pgtype.UUID) (ArtifactJob, error)
 	GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID) (TranscriptionCleanupJob, error)
 	GetWebhookDelivery(ctx context.Context, arg GetWebhookDeliveryParams) (GetWebhookDeliveryRow, error)
@@ -256,6 +275,7 @@ type Querier interface {
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
+	ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error)
 	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]ListTenantMembershipsRow, error)
 	ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error)
 	ListTenantSpaceRecordings(ctx context.Context, arg ListTenantSpaceRecordingsParams) ([]Recording, error)
@@ -373,10 +393,12 @@ type Querier interface {
 	RetryAutoSpaceLifecycle(ctx context.Context, arg RetryAutoSpaceLifecycleParams) (AutoSpaceLifecycle, error)
 	RetryTranscriptionCleanupJob(ctx context.Context, arg RetryTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	RevokeActiveAPIKey(ctx context.Context, arg RevokeActiveAPIKeyParams) (pgtype.UUID, error)
+	RevokeMCPOAuthGrant(ctx context.Context, arg RevokeMCPOAuthGrantParams) (int64, error)
 	// A lost row still needs a durable fence against bootstrap replay. Metadata
 	// unavailable after row loss uses explicit tombstone placeholders; it can never
 	// authorize a worker or be activated as a bootstrap reservation.
 	RevokeRecordingFleetNode(ctx context.Context, arg RevokeRecordingFleetNodeParams) (string, error)
+	RevokeTenantMCPOAuthGrant(ctx context.Context, arg RevokeTenantMCPOAuthGrantParams) (int64, error)
 	RotateActiveAPIKey(ctx context.Context, arg RotateActiveAPIKeyParams) (RotateActiveAPIKeyRow, error)
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
 	RotateWebhookEndpointSecret(ctx context.Context, arg RotateWebhookEndpointSecretParams) (RotateWebhookEndpointSecretRow, error)
@@ -385,6 +407,7 @@ type Querier interface {
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)
 	TouchActiveAPIKeyLastUsed(ctx context.Context, arg TouchActiveAPIKeyLastUsedParams) error
+	TouchMCPOAuthGrant(ctx context.Context, arg TouchMCPOAuthGrantParams) error
 	UpdateSpacePublicAdmissionRequest(ctx context.Context, arg UpdateSpacePublicAdmissionRequestParams) (SpacePublicAdmissionRequest, error)
 	UpdateSpacePublicArrivalState(ctx context.Context, arg UpdateSpacePublicArrivalStateParams) (SpacePublicArrival, error)
 	UpdateSpacePublicInviteEnabled(ctx context.Context, arg UpdateSpacePublicInviteEnabledParams) (SpacePublicInvite, error)

@@ -388,6 +388,9 @@ func insertTranscriptPolicyFixture(t *testing.T, ctx context.Context, connection
 	if _, err := connection.Exec(ctx, `insert into tenants (id, name) values ($1, $2) on conflict (id) do nothing`, tenantID.Bytes(), "Transcript policy test"); err != nil {
 		t.Fatalf("insert policy tenant: %v", err)
 	}
+	if _, err := connection.Exec(ctx, `insert into tenant_artifact_policies(tenant_id) values($1) on conflict do nothing`, tenantID.Bytes()); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := connection.Exec(ctx, `insert into spaces (id, tenant_id, name, slug, media_plane, admission_policy, recording_policy, transcription_policy, default_episode_duration_seconds, maximum_episode_duration_seconds) values ($1, $2, $3, $4, 'cf_sfu', '{"mode":"open"}', 'manual', $5, 60, 60)`, spaceID.Bytes(), tenantID.Bytes(), "Transcript policy space "+spaceID.String(), "transcript-policy-"+spaceID.String(), modeOrDisabled(mode)); err != nil {
 		t.Fatalf("insert policy space: %v", err)
 	}
@@ -528,6 +531,7 @@ func cleanupTranscriptPolicyFixture(t *testing.T, ctx context.Context, connectio
 		`delete from recordings where tenant_id = $1`,
 		`delete from episodes where tenant_id = $1`,
 		`delete from spaces where tenant_id = $1`,
+		`delete from tenant_artifact_policies where tenant_id=$1`,
 		`delete from tenants where id = $1`,
 	} {
 		if _, err := connection.Exec(ctx, statement, tenantID.Bytes()); err != nil {

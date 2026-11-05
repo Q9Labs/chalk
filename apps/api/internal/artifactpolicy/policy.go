@@ -25,6 +25,7 @@ var (
 )
 
 type TenantPolicy struct {
+	TranscriptLanguage        TranscriptLanguage
 	TranscriptionCeiling      TranscriptionMode
 	TranscriptionDefault      TranscriptionMode
 	ProviderPolicyVersion     string

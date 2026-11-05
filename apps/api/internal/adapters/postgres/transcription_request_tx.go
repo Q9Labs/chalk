@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -49,9 +50,18 @@ func admitTranscriptionTx(ctx context.Context, queries sqlc.Querier, input trans
 		return transcripts.Transcript{}, nil, err
 	}
 	languages := requestedTranscriptLanguages(input)
+	storedLanguage, err := queries.GetRecordingTranscriptLanguage(ctx, sqlc.GetRecordingTranscriptLanguageParams{TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID)})
+	if err != nil {
+		return transcripts.Transcript{}, nil, err
+	}
+	explicit, err := explicitTranscriptLanguage(input)
+	if err != nil {
+		return transcripts.Transcript{}, nil, err
+	}
+	mode := artifactpolicy.ResolveTranscriptLanguage(explicit, nullableTranscriptLanguage(storedLanguage.SpaceTranscriptLanguage), storedTranscriptLanguage(storedLanguage.TenantTranscriptLanguage))
 	create := sqlc.CreateRequestedTranscriptionParams{
 		ID: uuid(transcriptID), TenantID: uuid(input.TenantID), RecordingID: uuid(input.RecordingID), Status: transcripts.StatusPreparing,
-		Languages: languages, SourceManifestKey: text(&source.ManifestKey), SourceManifestSha256: source.ManifestSHA256,
+		TranscriptLanguage: mode.String(), Languages: languages, SourceManifestKey: text(&source.ManifestKey), SourceManifestSha256: source.ManifestSHA256,
 		SourceManifestSize: pgtype.Int8{Int64: source.ManifestSize, Valid: true}, SourceManifestContentType: text(&source.ManifestContentType),
 		SourceExpiresAt: pgtype.Timestamptz{Time: source.ExpiresAt, Valid: true}, Generation: source.Generation,
 	}
@@ -59,7 +69,7 @@ func admitTranscriptionTx(ctx context.Context, queries sqlc.Querier, input trans
 	if allowAutomaticReplay {
 		row, err = queries.CreateRenderCommittedTranscription(ctx, sqlc.CreateRenderCommittedTranscriptionParams{
 			ID: create.ID, TenantID: create.TenantID, RecordingID: create.RecordingID, Status: create.Status,
-			Languages: create.Languages, SourceManifestKey: create.SourceManifestKey, SourceManifestSha256: create.SourceManifestSha256,
+			TranscriptLanguage: create.TranscriptLanguage, Languages: create.Languages, SourceManifestKey: create.SourceManifestKey, SourceManifestSha256: create.SourceManifestSha256,
 			SourceManifestSize: create.SourceManifestSize, SourceManifestContentType: create.SourceManifestContentType,
 			SourceExpiresAt: create.SourceExpiresAt, Generation: create.Generation,
 		})
@@ -108,7 +118,7 @@ func admitTranscriptionTx(ctx context.Context, queries sqlc.Querier, input trans
 		job, err := queries.CreateArtifactJob(ctx, sqlc.CreateArtifactJobParams{
 			ID: uuid(jobID), IdempotencyKey: chunkJobKey(input.IdempotencyKey, index), TenantID: uuid(input.TenantID), EpisodeID: row.EpisodeID,
 			RecordingID: uuid(input.RecordingID), TranscriptID: uuid(transcriptID), ChunkID: chunkRow.ID, ArtifactKind: "transcription_chunk",
-			PayloadSchemaVersion: 1, Priority: int32(input.Priority), AvailableAt: pgtype.Timestamptz{Time: input.Now, Valid: true},
+			TranscriptLanguage: text(stringPtr(mode.String())), PayloadSchemaVersion: 1, Priority: int32(input.Priority), AvailableAt: pgtype.Timestamptz{Time: input.Now, Valid: true},
 			AttemptLimit: int32(input.AttemptLimit), JourneyID: uuid(input.JourneyID), Traceparent: text(stringPtr(input.Traceparent)), Tracestate: text(stringPtr(input.Tracestate)),
 		})
 		if err != nil {
@@ -141,4 +151,22 @@ func mapTranscriptionJobs(rows []sqlc.ArtifactJob) []transcripts.Job {
 		jobs = append(jobs, mapJob(row))
 	}
 	return jobs
+}
+
+func explicitTranscriptLanguage(input transcripts.RequestInput) (*artifactpolicy.TranscriptLanguage, error) {
+	value := input.Language
+	if value == "" && len(input.Languages) == 1 {
+		value = input.Languages[0]
+	}
+	if value == "" && len(input.Languages) > 1 {
+		value = "auto"
+	}
+	if value == "" {
+		return nil, nil
+	}
+	mode, err := artifactpolicy.ParseTranscriptLanguage(value)
+	if err != nil {
+		return nil, transcripts.ErrInvalidLanguages
+	}
+	return &mode, nil
 }

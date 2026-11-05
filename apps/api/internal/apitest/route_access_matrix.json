@@ -33,6 +33,51 @@
     "body": "{}"
   },
   {
+    "route": "POST /v1/mcp-oauth/requests/approve",
+    "operation": "approveMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/mcp-oauth/requests/deny",
+    "operation": "denyMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/mcp-oauth/requests/inspect",
+    "operation": "inspectMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/mcp-connections",
+    "operation": "listMCPConnections",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "DELETE /v1/tenants/{tenant_id}/mcp-connections/{connection_id}",
+    "operation": "revokeMCPConnection",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
     "route": "GET /v1/tenants/by-external-id",
     "operation": "findTenantByExternalID",
     "credentials": [
@@ -498,6 +543,15 @@
   {
     "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/document",
     "operation": "getTranscriptDocument",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text",
+    "operation": "getTranscriptText",
     "credentials": [
       { "class": "tenant session", "wrong": 403, "foreign": 403 },
       { "class": "API key", "wrong": 403, "foreign": 403 }

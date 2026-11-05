@@ -11,6 +11,7 @@ const transcript = {
   space_id: "22222222-2222-4222-8222-222222222222",
   episode_id: "33333333-3333-4333-8333-333333333333",
   status: "complete",
+  transcript_language: "auto",
   languages: ["en"],
   provider: "test-provider",
   model: "test-model",
@@ -83,6 +84,7 @@ const space = {
   media_plane: "cloudflare_sfu",
   recording_policy: "off",
   transcription_policy: "off",
+  transcript_language: null,
   admission_policy: {},
   metadata: {},
   recurring_policy: {},
@@ -97,6 +99,14 @@ const space = {
 
 describe("generated Space update contract", () => {
   const decodeUpdate = Schema.decodeUnknownSync(UpdateSpaceRequestBodySchema);
+
+  it.each([null, "auto", "en", "ur", "ar"])("preserves transcript language %s in the generated contract", (language) => {
+    expect(decodeUpdate({ transcript_language: language })).toEqual({ transcript_language: language });
+  });
+
+  it.each(["en-US", "unknown", ""])("rejects unsupported transcript language %s", (language) => {
+    expect(() => decodeUpdate({ transcript_language: language })).toThrow();
+  });
 
   it("renames a Space through the client with a name-only body", async () => {
     const bodies: unknown[] = [];

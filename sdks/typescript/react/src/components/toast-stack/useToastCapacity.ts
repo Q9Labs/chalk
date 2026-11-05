@@ -52,9 +52,11 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
       const style = getComputedStyle(node);
       const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
       const width = node.clientWidth;
-      const available = Math.max(0, node.clientHeight - padding);
       const gap = parseFloat(style.rowGap) || 0;
       const mounted = selected.filter((toast) => ownedIds.includes(toast.id));
+      const reserved = elements.slice(mounted.length);
+      const reservedHeight = reserved.reduce((height, element) => height + Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height)) + gap, 0);
+      const available = Math.max(0, node.clientHeight - padding - reservedHeight);
       const updates = new Map<string, Measurement>();
       mounted.forEach((toast, index) => {
         const element = elements[index];

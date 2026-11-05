@@ -56,6 +56,22 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  {
+    const { tab, context } = await open("/dashboard");
+    const action = tab.getByRole("button", { name: /^More actions for / }).first();
+    const label = await action.getAttribute("aria-label");
+    // Reproduce a first-use chunk download failure without breaking the mutation API.
+    await tab.route("**/*", (route) => (route.request().resourceType() === "script" ? route.abort("failed") : route.continue()));
+    await action.click();
+    await tab.getByRole("menuitem", { name: "Archive call", exact: true }).click();
+    const undo = tab.getByRole("button", { name: "Undo", exact: true });
+    await undo.waitFor();
+    check("archive keeps Undo available when later script downloads fail", (await tab.getByRole("button", { name: label, exact: true }).count()) === 0);
+    await undo.click();
+    await tab.getByRole("button", { name: label, exact: true }).waitFor();
+    check("Undo restores the archived call without another script download", true);
+    await context.close();
+  }
   await (await import("./developer-recording-checks.mjs")).developerRecordingChecks({ open, fixture, check });
   await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
@@ -184,7 +200,7 @@ try {
   {
     const { tab, context } = await open("/dashboard");
     await dialogCheck(tab, "Join with a link", () => tab.getByRole("button", { name: "Join with a link" }).click(), "Join with a link");
-    await dialogCheck(tab, "Your call is ready", () => tab.getByRole("button", { name: "Start a call" }).click(), "Start a call");
+    await dialogCheck(tab, "Your call is ready", () => tab.getByRole("button", { name: "Start a call" }).first().click(), "Start a call");
     await dialogCheck(tab, "Rename (Home)", async () => {
       await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
       await tab.getByRole("menuitem", { name: "Rename" }).click();
@@ -262,7 +278,7 @@ try {
     const { tab, context } = await open(CALL, { set: "limit=set-admission" });
     await tab.getByRole("button", { name: "Anyone with the link" }).click();
     await tab.waitForTimeout(500);
-    check("rate-limited action shows a toast with the wait", (await tab.locator(".toast").filter({ hasText: "Try again in 60 seconds" }).count()) === 1);
+    check("rate-limited action shows a toast with the wait", (await tab.locator("[data-part=toast]").filter({ hasText: "Try again in 60 seconds" }).count()) === 1);
     await context.close();
   }
   {
@@ -271,7 +287,7 @@ try {
     await tab.getByRole("menuitem", { name: "Revoke key" }).click();
     await tab.locator("[role=alertdialog] .btn.dz").click();
     await tab.waitForTimeout(500);
-    check("fresh sign-in requirement is explained", (await tab.locator(".toast").filter({ hasText: "Sign in again to make this change" }).count()) === 1);
+    check("fresh sign-in requirement is explained", (await tab.locator("[data-part=toast]").filter({ hasText: "Sign in again to make this change" }).count()) === 1);
     await context.close();
   }
   // Transcript seek and search on the past session.
@@ -304,12 +320,12 @@ try {
   }
   {
     const { tab, context } = await open(`${CALL}/session/${uuid(0x200)}`, { set: "transcript=none" });
-    const button = tab.getByRole("button", { name: "Make a transcript in English" });
+    const button = tab.getByRole("button", { name: "Make a transcript" });
     const offered = await button.count();
     await button.click();
     await tab.waitForTimeout(800);
     const [create] = await posted("create-transcript");
-    check("transcript action sends one explicit language", offered === 1 && JSON.stringify(create?.body?.languages) === '["en"]' && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
+    check("transcript action inherits the configured language", offered === 1 && !("languages" in (create?.body ?? {})) && create.body.recordingId === uuid(0x800) && create.csrf === "fixture-csrf-hasan", JSON.stringify(create?.body ?? null));
     check("transcript action leaves the panel processing", (await tab.getByText("The transcript is being prepared.").count()) === 1);
     await context.close();
   }
@@ -325,7 +341,7 @@ try {
   }
   {
     const { tab, context } = await open("/dashboard");
-    await tab.getByRole("button", { name: "Start a call" }).click();
+    await tab.getByRole("button", { name: "Start a call" }).first().click();
     await tab.waitForTimeout(900);
     const [create] = await posted("create-call");
     check("Start a call sends no name", Boolean(create) && !("name" in create.body), JSON.stringify(create?.body ?? null));

@@ -53,7 +53,7 @@ export async function checkReportTransitions({ browser, page, origin, call, csrf
       const owner = await ownerContext.newPage();
       const guest = await guestContext.newPage();
       await owner.goto(`${origin}/dashboard`);
-      await owner.getByRole("button", { name: "Start a call", exact: true }).click();
+      await owner.getByRole("button", { name: "Start a call", exact: true }).first().click();
       await owner.getByRole("button", { name: "Join call", exact: true }).click();
       await owner.locator('[data-tour="video-grid"]').first().waitFor({ state: "visible", timeout: 45000 });
       const spaceId = new URL(owner.url()).pathname.split("/").at(-2);

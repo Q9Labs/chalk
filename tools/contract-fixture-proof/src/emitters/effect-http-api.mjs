@@ -48,6 +48,12 @@ function collectOperations(document) {
         continue;
       }
 
+      // Attachment downloads use raw HTTP to retain streaming bodies and filenames.
+      // Keep them in OpenAPI, not the generated JSON client loaded by live calls.
+      if (Object.values(operation.responses ?? {}).some((response) => response.content?.["text/plain"])) {
+        continue;
+      }
+
       const operationName = pascalCase(operation.operationId);
       operations.push({
         method,

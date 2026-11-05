@@ -19,7 +19,7 @@ command -v zip >/dev/null 2>&1 || fail "zip is required"
 
 SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
 [[ "$SOURCE_REVISION" =~ ^[0-9a-f]{40}$ ]] || fail "could not resolve a full source revision"
-SOURCE_STATE_JSON="$(node "$SCRIPT_DIR/source-state.mjs" "$ROOT_DIR" apps/transcription-dispatcher infrastructure scripts/transcription-dispatcher package.json pnpm-lock.yaml pnpm-workspace.yaml)"
+SOURCE_STATE_JSON="$(node "$SCRIPT_DIR/source-state.mjs" "$ROOT_DIR" apps/transcription-dispatcher packages/transcript-language infrastructure scripts/transcription-dispatcher package.json pnpm-lock.yaml pnpm-workspace.yaml)"
 SOURCE_STATE="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.source_state)' "$SOURCE_STATE_JSON")"
 SOURCE_TREE_DIGEST="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.source_tree_digest??"")' "$SOURCE_STATE_JSON")"
 if [[ "$SOURCE_STATE" == "dirty-local-proof" ]]; then

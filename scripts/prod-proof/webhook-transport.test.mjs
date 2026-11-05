@@ -97,3 +97,91 @@ for (const responseType of ["json", "arrayBuffer"]) {
     );
   });
 }
+
+for (const retryAfter of ["12", new Date(12_000).toUTCString()]) {
+  test(`a quota-limited GET honours Retry-After ${retryAfter} before recovering`, async (t) => {
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+    const requests = [];
+    t.mock.method(globalThis, "fetch", async () => {
+      requests.push(Date.now());
+      return requests.length === 1 ? new Response(null, { status: 429, headers: { "Retry-After": retryAfter } }) : Response.json({ data: [] });
+    });
+    const result = catcherRequest("https://catcher.example.test", "/requests");
+    await new Promise(setImmediate);
+    t.mock.timers.tick(11_999);
+    await new Promise(setImmediate);
+    assert.equal(requests.length, 1, "must not retry before the service permits it");
+    t.mock.timers.tick(1);
+    assert.deepEqual(await result, { data: [] });
+    assert.deepEqual(requests, [0, 12_000]);
+  });
+}
+
+test("transient server errors use exponential backoff when Retry-After is invalid or absent", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  const requests = [];
+  t.mock.method(globalThis, "fetch", async () => {
+    requests.push(Date.now());
+    if (requests.length === 1) return new Response(null, { status: 503, headers: { "Retry-After": "invalid" } });
+    if (requests.length === 2) return new Response(null, { status: 502 });
+    return Response.json({ data: [] });
+  });
+  const result = catcherRequest("https://catcher.example.test", "/requests");
+  await new Promise(setImmediate);
+  t.mock.timers.tick(1000);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(2000);
+  assert.deepEqual(await result, { data: [] });
+  assert.deepEqual(requests, [0, 1000, 3000]);
+});
+
+test("persistent throttling exhausts a single total budget instead of restarting it per retry", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++;
+    return new Response(null, { status: 429, headers: { "Retry-After": "30" } });
+  });
+  const result = assert.rejects(catcherRequest("https://catcher.example.test", "/requests"), /HTTP 429; retry budget exhausted/);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(30_000);
+  await new Promise(setImmediate);
+  t.mock.timers.tick(30_000);
+  await result;
+  assert.equal(requests, 3);
+  assert.equal(Date.now(), 60_000);
+});
+
+test("Retry-After beyond the budget fails without retrying early", async (t) => {
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++;
+    return new Response(null, { status: 503, headers: { "Retry-After": "120" } });
+  });
+  await assert.rejects(catcherRequest("https://catcher.example.test", "/requests"), /HTTP 503; retry budget exhausted/);
+  assert.equal(requests, 1);
+});
+
+test("cancellation interrupts quota backoff without another request", async (t) => {
+  const controller = new AbortController();
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++;
+    return new Response(null, { status: 429, headers: { "Retry-After": "30" } });
+  });
+  const result = assert.rejects(catcherRequest("https://catcher.example.test", "/requests", "GET", undefined, controller.signal), { name: "AbortError" });
+  await new Promise(setImmediate);
+  controller.abort();
+  await result;
+  assert.equal(requests, 1);
+});
+
+test("a throttled write fails immediately instead of risking duplicate creation", async (t) => {
+  let requests = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++;
+    return new Response(null, { status: 429, headers: { "Retry-After": "30" } });
+  });
+  await assert.rejects(catcherRequest("https://catcher.example.test", "/token", "POST", {}), /HTTP 429/);
+  assert.equal(requests, 1);
+});

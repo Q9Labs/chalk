@@ -730,6 +730,27 @@ These events contain no tool arguments, result bodies, bearer tokens, signed
 URLs, transcript text, or signing secrets. Unexpected application errors return
 only the existing public API error code and message.
 
+OAuth sign-in for `/mcp` logs `mcp.oauth.*` events with grant, tenant and client
+IDs only: `client_registered`, `grant_created`, `grant_revoked`, `reuse_detected`
+(a replayed code or refresh token) and the `*_failed` events for server errors. They never carry tokens, codes, authorization request
+handles, PKCE values or redirect query strings. `TestMCPOAuthKeepsSecretsOutOfLogs`
+proves it. A rise in `reuse_detected` means a client is racing refreshes or
+a token leaked. The grant lifecycle (approve, use, revoke) is visible in the
+connected apps list; there is no separate journey ledger entry.
+
 The Postgres proof `TestMCPPostgresToolsAndPermissions` drives the official Go
 MCP client through Streamable HTTP. The MCP module's transport proof covers
 Origin rejection, bounded UTF-8 continuation, body limits, and disabled SSE.
+
+## Auto transcription provider
+
+Auto MAI requests retain the existing dispatcher/API transcript lifecycle and
+journey carrier. `dispatcher_completed` identifies `provider=openrouter`, fallback
+use and attempts. Provider HTTP/timeout failures keep the existing bounded
+`provider_*` retry reasons; malformed timing or Urdu conversion emits
+`provider_schema_invalid` with field/type metadata, never transcript text,
+provider bodies or audio. Silent Auto chunks complete with zero cues and zero
+provider cost, not a provider failure. Fixed-language requests remain Whisper.
+Provider word and segment timestamps are restored to the original source clock
+before manifest-based speaker attribution. The dispatcher tests exercise this
+mapping through a real synthetic FLAC decoder and a fake provider boundary.

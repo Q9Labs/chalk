@@ -3,6 +3,7 @@ import { cn } from "../../utils/cn";
 
 export interface TileShellProps {
   readonly label: string;
+  readonly participantId?: string;
   readonly accentColor: string;
   readonly pinned?: boolean;
   /** The 2px ring that marks the person whose view this board follows. */
@@ -26,11 +27,12 @@ interface TileVars extends CSSProperties {
 }
 
 /** One shared frame and bottom-left name tag for camera, screen and board tiles. */
-export function TileShell({ label, accentColor, pinned = false, ring = false, speaking = false, audioLevel = 0.5, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
+export function TileShell({ label, participantId, accentColor, pinned = false, ring = false, speaking = false, audioLevel = 0.5, lift = true, onClick, onDoubleClick, className, style, dataTour, hidden = false, chip, corner, children }: TileShellProps): React.JSX.Element {
   const vars: TileVars = { ...style, containerType: "size", "--chalk-participant-color": accentColor, "--chalk-voice-level": audioLevel };
   return (
     <div
       data-part="stage-tile"
+      data-participant-id={participantId}
       className={cn(
         "group/tile relative overflow-clip rounded-[12px] bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-[14px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out]",
         onClick && lift && "min-[641px]:[@media(hover:hover)]:hover:-translate-y-0.5",

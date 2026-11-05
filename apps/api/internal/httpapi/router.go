@@ -35,6 +35,7 @@ type CapabilityStatus struct {
 
 type Options struct {
 	MCP                  http.Handler
+	OAuth                MCPOAuthService
 	RecorderWorkerLogger *slog.Logger
 	Capabilities         CapabilityStatus
 	CORS                 CORSOptions
@@ -89,6 +90,7 @@ type Options struct {
 	TenantAuthz            TenantAuthorizer
 	Tenants                TenantService
 	TranscriptArtifacts    TranscriptArtifactService
+	TranscriptTextMetadata TranscriptTextMetadataService
 	TranscriptWorker       TranscriptWorkerService
 	WorkloadAuthorizer     WorkloadAuthorizer
 	ChunkAuthority         ChunkAuthority
@@ -137,6 +139,7 @@ func NewRouter(options Options) http.Handler {
 	if options.MCP != nil {
 		r.Handle("/mcp", options.MCP)
 	}
+	mountMCPOAuthProtocolRoutes(r, options.OAuth, options.RateLimit)
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))

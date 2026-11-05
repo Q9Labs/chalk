@@ -30,4 +30,6 @@ The root gate includes contract checks. For endpoint declarations, see [the API 
 - Public routes and accepted/emitted frames must match their generated contracts. `PreviewRouteContracts` is the Go export inventory; endpoint collections should feed both it and runtime mount helpers. Don't remove the Go exporter until runtime-route and semantic parity are established.
 - Breaking changes need an explicit version decision and compatibility report. Test changed generated bindings against their runtime and SDK consumers, not just a successful generator exit.
 
+Non-JSON attachment download operations remain in OpenAPI and generated wire types, but are not included in the generated JSON HTTP client. Consumers stream those responses over HTTP to retain attachment headers.
+
 The default TypeScript client is Promise-based; Effect is an optional subpath. Keep framework/Effect dependencies out of the default consumer graph. Do not add empty language-SDK shells before a working client exists.
