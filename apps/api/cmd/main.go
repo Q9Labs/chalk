@@ -631,22 +631,23 @@ func run() error {
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)
 
+	// The Episode binding picks the node for grants, revokes and cleanup. A typed nil
+	// adapter inside the interface would pass the nil check, so the nil case stays a
+	// nil interface.
+	var chalkNodes providerbridge.ChalkNodes
+	if chalkSFU != nil {
+		chalkNodes = func(node string) (providerbridge.ChalkNode, error) {
+			adapter, err := chalkSFU.Node(node)
+			if err != nil {
+				return nil, err
+			}
+			return adapter, nil
+		}
+	}
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
-		// The Episode binding picks the cleanup closer. A typed nil adapter inside the
-		// interface would pass the nil check, so the nil case stays a nil interface.
-		var chalkCleanup providerbridge.ChalkNodes
-		if chalkSFU != nil {
-			chalkCleanup = func(node string) (providerbridge.ChalkCleanup, error) {
-				adapter, err := chalkSFU.Node(node)
-				if err != nil {
-					return nil, err
-				}
-				return adapter, nil
-			}
-		}
-		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkCleanup)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
@@ -681,6 +682,8 @@ func run() error {
 	if chalkSFU != nil {
 		// Placement reads node load from these probes.
 		go chalkSFU.Watch(signalCtx)
+		// Own SFU nodes forward a source only while the API renews its grant.
+		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
 	}
 	receiveHealthDone := make(chan struct{})
 	go func() {

@@ -32,7 +32,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
         attempt_count,
         applied_event_id,
         applied_revision,
-        last_error_code
+        last_error_code,
+        control_revision
       ]) do
     %ExternalOperation{
       external_operation_id: UUID.load!(operation_id),
@@ -60,7 +61,8 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
       producing_tracestate: producing_tracestate,
       applied_event_id: Scope.nullable_uuid(applied_event_id),
       applied_revision: applied_revision,
-      last_error_code: failure_reason(last_error_code)
+      last_error_code: failure_reason(last_error_code),
+      control_revision: control_revision
     }
   end
 

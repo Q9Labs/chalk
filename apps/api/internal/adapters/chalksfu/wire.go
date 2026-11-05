@@ -102,6 +102,37 @@ type wireEndRequest struct {
 	EpisodeID string `json:"episodeId"`
 }
 
+type wireSourceControlRequest struct {
+	TenantID  string              `json:"tenantId"`
+	EpisodeID string              `json:"episodeId"`
+	Controls  []wireSourceControl `json:"controls"`
+}
+
+type wireSourceControl struct {
+	ParticipantID string `json:"participantId"`
+	Source        string `json:"source"`
+	Action        string `json:"action"`
+	Revision      int64  `json:"revision"`
+}
+
+type wireSourceControlResponse struct {
+	Results []wireSourceControlResult `json:"results"`
+}
+
+type wireSourceControlResult struct {
+	ParticipantID string                  `json:"participantId"`
+	Source        string                  `json:"source"`
+	Action        string                  `json:"action"`
+	Revision      int64                   `json:"revision"`
+	Applied       bool                    `json:"applied"`
+	Closed        []wireClosedSourceTrack `json:"closed,omitempty"`
+}
+
+type wireClosedSourceTrack struct {
+	SessionID string `json:"sessionId"`
+	Mid       string `json:"mid"`
+}
+
 type wireInspectRequest struct {
 	Scope wireScope `json:"scope"`
 	Peer  bool      `json:"peer,omitempty"`

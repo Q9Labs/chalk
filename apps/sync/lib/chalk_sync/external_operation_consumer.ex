@@ -331,6 +331,11 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_media_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_media_plane({module, adapter}, episode, operation, timeout_ms) do
+    adapter =
+      if module == ProviderBridgeMediaPlane,
+        do: ProviderBridgeMediaPlane.with_control_revision(adapter, operation.control_revision),
+        else: adapter
+
     arguments = media_arguments(adapter, episode, operation)
     invoke_adapter(module, arguments, :provider, timeout_ms)
   end

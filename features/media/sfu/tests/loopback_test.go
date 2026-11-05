@@ -45,6 +45,20 @@ var operations atomic.Int64
 // op returns a fresh operation ID for a test request.
 func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
 
+// grantSources grants every source of each Participant once, as Sync does when it
+// lets them publish. The default test lease outlasts any test, so nothing renews.
+func (s *service) grantSources(t *testing.T, scopes ...protocol.Scope) {
+	t.Helper()
+	for _, scope := range scopes {
+		var controls []protocol.SourceControl
+		for _, source := range []string{"microphone", "camera", "screen", "screen_audio"} {
+			controls = append(controls, protocol.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: protocol.SourceGrant, Revision: 1})
+		}
+		var response protocol.SourceControlResponse
+		s.mustCall(t, "/v1/episodes/sources", protocol.SourceControlRequest{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, Controls: controls}, &response)
+	}
+}
+
 func startService(t *testing.T, ca *authority, configure ...func(*config.Config)) *service {
 	t.Helper()
 	dir := t.TempDir()
@@ -69,6 +83,7 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		NegotiationTimeout:         time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,
+		SourceLeaseTTL:             time.Hour,
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, apply := range configure {
@@ -329,6 +344,7 @@ func TestLoopback(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
+	svc.grantSources(t, scopeA, scopeB, scopeC, scopeD)
 
 	t.Run("mutual TLS", func(t *testing.T) {
 		rogue := newAuthority(t, "rogue CA")

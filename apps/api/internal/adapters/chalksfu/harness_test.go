@@ -175,6 +175,9 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 		"SFU_TLS_KEY_FILE="+write(t, dir, "server.key", serverKey),
 		"SFU_CLIENT_CA_FILE="+write(t, dir, "ca.pem", ca.pem),
 		"SFU_CLIENT_IDENTITY="+clientIdentity,
+		// A source forwards only under a grant. The longest lease outlasts a test that
+		// grants once, and a test of lapses sets its own.
+		"SFU_SOURCE_LEASE_TTL=2m",
 	)
 	for key, value := range settings {
 		command.Env = append(command.Env, key+"="+value)
@@ -273,6 +276,22 @@ func (s *sfu) fleetOf(t *testing.T, clientCA *authority, identity string, nodes 
 		t.Fatalf("new fleet: %v", err)
 	}
 	return fleet
+}
+
+// grant grants every source of each Participant at revision 1, as Sync does when it
+// lets them publish.
+func (s *sfu) grant(t *testing.T, scopes ...mediaplane.Scope) {
+	t.Helper()
+	adapter := s.adapterAt(t, s.controlURL)
+	for _, scope := range scopes {
+		var controls []mediaplane.SourceControl
+		for _, source := range []string{"microphone", "camera", "screen", "screen_audio"} {
+			controls = append(controls, mediaplane.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: mediaplane.SourceGrant, Revision: 1})
+		}
+		if _, err := adapter.ControlSources(context.Background(), mediaplane.ControlSourcesInput{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, Controls: controls}); err != nil {
+			t.Fatalf("grant %s: %v", scope.ParticipantID, err)
+		}
+	}
 }
 
 func (s *sfu) service(t *testing.T) mediaplane.Service {

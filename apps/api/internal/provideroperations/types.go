@@ -56,6 +56,7 @@ var (
 	ErrInvalidParticipantGeneration = errors.New("invalid provider operation participant generation")
 	ErrInvalidPublicationSource     = errors.New("invalid provider publication source")
 	ErrInvalidPublicationID         = errors.New("invalid provider publication id")
+	ErrInvalidControlRevision       = errors.New("invalid provider operation control revision")
 	ErrInvalidRecordingID           = errors.New("invalid provider operation recording id")
 	ErrInvalidRecordingReservation  = errors.New("invalid provider recording reservation")
 	ErrReceiptPayloadCorrupt        = errors.New("provider operation receipt payload is corrupt")
@@ -88,8 +89,12 @@ type OperationInput struct {
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
 	PublicationSource     string
-	RecordingID           utilities.ID
-	RecordingReservation  *RecordingReservation
+	// ControlRevision orders a grant, revoke or removal against the other source
+	// controls of its Episode: one more than the Episode control revision Sync read
+	// when it decided. Zero means Sync sent none.
+	ControlRevision      int64
+	RecordingID          utilities.ID
+	RecordingReservation *RecordingReservation
 }
 
 // RecordingReservation is the immutable, server-derived admission envelope
@@ -192,6 +197,7 @@ type canonicalPayload struct {
 	ParticipantID         *string                        `json:"participant_id,omitempty"`
 	ParticipantGeneration *int64                         `json:"participant_generation,omitempty"`
 	PublicationSource     *string                        `json:"publication_source,omitempty"`
+	ControlRevision       *int64                         `json:"control_revision,omitempty"`
 	RecordingID           *string                        `json:"recording_id,omitempty"`
 	RecordingReservation  *canonicalRecordingReservation `json:"recording_reservation,omitempty"`
 }
@@ -256,6 +262,9 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 	}
 	if input.PublicationSource != "" {
 		payload.PublicationSource = &input.PublicationSource
+	}
+	if input.ControlRevision > 0 {
+		payload.ControlRevision = &input.ControlRevision
 	}
 	if !input.RecordingID.IsZero() {
 		id := input.RecordingID.String()
@@ -338,6 +347,9 @@ func OperationFromReceipt(receipt Receipt) (OperationInput, error) {
 	}
 	if payload.PublicationSource != nil {
 		input.PublicationSource = *payload.PublicationSource
+	}
+	if payload.ControlRevision != nil {
+		input.ControlRevision = *payload.ControlRevision
 	}
 	if payload.RecordingID != nil {
 		if input.RecordingID, err = utilities.ParseID(*payload.RecordingID); err != nil {
@@ -487,6 +499,9 @@ func validateEffectFields(input OperationInput) error {
 	}
 	if !participantRequired && !input.ParticipantID.IsZero() {
 		return ErrInvalidParticipantID
+	}
+	if input.ControlRevision < 0 || (!participantRequired && input.ControlRevision != 0) {
+		return ErrInvalidControlRevision
 	}
 	if input.Effect == EffectStartRecording && input.RecordingReservation == nil {
 		return ErrInvalidRecordingReservation

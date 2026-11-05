@@ -72,6 +72,7 @@ func TestConformanceSignaling(t *testing.T) {
 	service := box.service(t)
 	ctx := context.Background()
 	alice, bob := scopeOf("ep-signal", "alice"), scopeOf("ep-signal", "bob")
+	box.grant(t, alice)
 
 	aliceConn, joined := join(t, service, alice)
 	capabilities, _ := joined.ClientPayload["capabilities"].(map[string]any)

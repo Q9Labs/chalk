@@ -407,6 +407,7 @@ func TestLayerSwitching(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	t.Cleanup(svc.stop)
+	svc.grantSources(t, scopeA)
 	fixtures := [2]layerFixture{{rid: "h", frames: readIVF(t, "high.ivf")}, {rid: "l", frames: readIVF(t, "low.ivf")}}
 
 	connA := svc.createSession(t, "create-alice", scopeA)

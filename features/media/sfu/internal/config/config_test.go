@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func lookupOf(values map[string]string) Lookup {
@@ -58,5 +59,22 @@ func TestLoadReportsEveryInvalidSetting(t *testing.T) {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %q does not name %s", err, key)
 		}
+	}
+}
+
+// A lease must outlast two of the API's 5 s renewal intervals, or it lapses between them.
+func TestSourceLeaseOutlastsTwoRenewals(t *testing.T) {
+	load := func(ttl string) (Config, error) {
+		values := map[string]string{"SFU_SOURCE_LEASE_TTL": ttl}
+		for key, value := range required {
+			values[key] = value
+		}
+		return Load(lookupOf(values))
+	}
+	if _, err := load("9s"); err == nil || !strings.Contains(err.Error(), "SFU_SOURCE_LEASE_TTL") {
+		t.Fatalf("a 9s lease loaded: %v", err)
+	}
+	if cfg, err := load("10s"); err != nil || cfg.SourceLeaseTTL != 10*time.Second {
+		t.Fatalf("a 10s lease = %v, %v", cfg.SourceLeaseTTL, err)
 	}
 }

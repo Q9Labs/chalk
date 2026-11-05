@@ -120,7 +120,8 @@ func TestPauseReasonsAndRevision(t *testing.T) {
 	views := []layerView{{rid: "h", active: true}, {rid: "l", active: true}}
 	state := func() (string, uint64) {
 		state, reason, revision, _, _ := s.state()
-		return state + "/" + reason, revision
+		// The open lease window adds 1 to the subscription's own revision.
+		return state + "/" + reason, revision - 1
 	}
 	s.request = layerRequest{ceiling: "h", paused: true}
 	s.reselect(views)
@@ -297,6 +298,7 @@ func TestPushMIDRules(t *testing.T) {
 func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
+	apply(t, node, control("alice", "camera", protocol.SourceGrant, 1))
 	camera, err := webrtc.NewTrackLocalStaticRTP(vp8Capability, "cam", "alice")
 	if err != nil {
 		t.Fatal(err)

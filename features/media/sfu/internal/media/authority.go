@@ -2,7 +2,6 @@ package media
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -33,12 +32,26 @@ type sourceKey struct {
 // leaseWindow is when a source may forward: a packet that arrived at or after since,
 // while the current time is before until. A grant after a revoke or a lapsed lease
 // starts a new window, so packets held from the unauthorized time are never resent.
-type leaseWindow struct{ since, until int64 }
+// opens counts the windows the source has started, so inspection can tell each
+// window, and each gap between windows, apart.
+type leaseWindow struct {
+	since, until int64
+	opens        uint64
+}
 
-var (
-	openWindow   = &leaseWindow{since: math.MinInt64, until: math.MaxInt64}
-	closedWindow = &leaseWindow{}
-)
+// open reports whether a packet arriving now may be sent now.
+func (w *leaseWindow) open(now int64) bool { return w.since <= now && now < w.until }
+
+// leaseRevision rises when the window opens and again when it ends by revoke or
+// lapse, and stays put while renewals extend it: 2 × opens, less one while open.
+func (w *leaseWindow) leaseRevision(now int64) uint64 {
+	if w.open(now) {
+		return 2*w.opens - 1
+	}
+	return 2 * w.opens
+}
+
+var closedWindow = &leaseWindow{}
 
 // sourceAuthority is the node's record of the newest control for one source. The
 // node's mutex guards revision and revoked. Packet loops read only window.
@@ -57,10 +70,9 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 
 // authorityFor returns the authority a new publication of the session's source
 // forwards under, creating it, and the control it is admitted under. A source
-// that no control has named forwards freely unless the node requires a grant. It
-// refuses a new source when every entry belongs to a live session or would need a
-// floor past the limit, so the table never holds more than its limit. The caller
-// may hold the session's mutex.
+// that no control has named waits for a grant. It refuses a new source when every
+// entry belongs to a live session or would need a floor past the limit, so the
+// table never holds more than its limit. The caller may hold the session's mutex.
 func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -71,11 +83,7 @@ func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthori
 	if err := n.makeSourceRoom(1, nil); err != nil {
 		return nil, 0, false, err
 	}
-	initial := openWindow
-	if n.cfg.RequireSourceGrant {
-		initial = closedWindow
-	}
-	authority := n.addSource(key, initial)
+	authority := n.addSource(key, closedWindow)
 	return authority, authority.revision, authority.revoked, nil
 }
 
@@ -192,14 +200,15 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 		case stale:
 		case control.Action == protocol.SourceRevoke:
 			authority.revision, authority.revoked = control.Revision, true
-			authority.window.Store(closedWindow)
+			authority.window.Store(&leaseWindow{opens: authority.window.Load().opens})
 			result.Applied = true
 			changed[index] = authority
 		default:
 			current := authority.window.Load()
-			window := &leaseWindow{since: current.since, until: now + int64(lease)}
+			window := &leaseWindow{since: current.since, until: now + int64(lease), opens: current.opens}
 			if authority.revoked || !authority.allows(now, now) {
 				window.since = now
+				window.opens++
 				changed[index] = authority
 			}
 			authority.revision, authority.revoked = control.Revision, false
@@ -207,7 +216,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 			result.Applied = true
 		}
 		result.Revision = authority.revision
-		if until := authority.window.Load().until; until > now && until != math.MaxInt64 {
+		if until := authority.window.Load().until; until > now {
 			result.LeaseMillis = time.Duration(until - now).Milliseconds()
 		}
 	}

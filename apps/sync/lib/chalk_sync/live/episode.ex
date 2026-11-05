@@ -505,7 +505,8 @@ defmodule ChalkSync.Live.Episode do
         outcome =
           if screen_observed?(state.media_items, authority.participant_id),
             do: :satisfied,
-            else: grant(module, adapter, state, authority, :screen, target.operation_id)
+            else:
+              grant(module, adapter, state, authority, :screen, target.operation_id, reservation)
 
         {reported, retain?} = complete_grant(state, reservation, outcome)
         retain_or_release_screen_lease(state, authority, lease, retain?, target, reported)
@@ -525,12 +526,14 @@ defmodule ChalkSync.Live.Episode do
          module,
          adapter
        ) do
-    outcome = grant(module, adapter, state, authority, source, target.operation_id)
+    outcome = grant(module, adapter, state, authority, source, target.operation_id, reservation)
     {reported, _retain?} = complete_grant(state, reservation, outcome)
     {state, live_result(target, reported)}
   end
 
-  defp grant(module, adapter, state, authority, source, operation_id) do
+  defp grant(module, adapter, state, authority, source, operation_id, reservation) do
+    adapter = with_control_revision(module, adapter, reservation.control_revision)
+
     MediaPlaneCall.invoke(fn ->
       module.grant_publication(
         adapter,
@@ -866,6 +869,11 @@ defmodule ChalkSync.Live.Episode do
   end
 
   defp media_plane, do: Application.get_env(:chalk_sync, :media_plane)
+
+  defp with_control_revision(ProviderBridgeMediaPlane, adapter, revision),
+    do: ProviderBridgeMediaPlane.with_control_revision(adapter, revision)
+
+  defp with_control_revision(_module, adapter, _revision), do: adapter
 
   defp media_plane(authority) do
     case media_plane() do

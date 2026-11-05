@@ -26,7 +26,7 @@ func nodes(byName map[string]*chalkCleanupRecorder) ChalkNodes {
 	if byName == nil {
 		return nil
 	}
-	return func(node string) (ChalkCleanup, error) {
+	return func(node string) (ChalkNode, error) {
 		recorder, ok := byName[node]
 		if !ok {
 			return nil, errors.New("node is not configured")
@@ -37,7 +37,25 @@ func nodes(byName map[string]*chalkCleanupRecorder) ChalkNodes {
 
 type chalkCleanupRecorder struct {
 	executorTrackCloser
-	ended []mediaplane.EndEpisodeInput
+	ended    []mediaplane.EndEpisodeInput
+	controls []mediaplane.SourceControl
+	// stale makes the node hold a newer control for every source, so nothing applies.
+	stale bool
+	// closed is what an applied revoke reports it closed.
+	closed []mediaplane.ClosedSourceTrack
+}
+
+func (c *chalkCleanupRecorder) ControlSources(_ context.Context, input mediaplane.ControlSourcesInput) ([]mediaplane.SourceControlResult, error) {
+	c.controls = append(c.controls, input.Controls...)
+	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
+	for _, control := range input.Controls {
+		result := mediaplane.SourceControlResult{SourceControl: control, Applied: !c.stale}
+		if result.Applied && control.Action == mediaplane.SourceRevoke && len(results) == 0 {
+			result.Closed = c.closed
+		}
+		results = append(results, result)
+	}
+	return results, nil
 }
 
 func (c *chalkCleanupRecorder) EndEpisode(_ context.Context, input mediaplane.EndEpisodeInput) error {

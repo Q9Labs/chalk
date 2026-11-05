@@ -46,6 +46,7 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		NegotiationTimeout:         5 * time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,
+		SourceLeaseTTL:             time.Hour,
 	}
 	if mutate != nil {
 		mutate(&cfg)

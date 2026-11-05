@@ -429,6 +429,39 @@ func (a *Adapter) EndEpisode(ctx context.Context, input mediaplane.EndEpisodeInp
 	return a.call(ctx, "/v1/episodes/end", wireEndRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeRef}, nil)
 }
 
+// maxSourceControls is the node's limit on one source control request.
+const maxSourceControls = 64
+
+// ControlSources sends grants and revokes in requests the node accepts. The node
+// orders controls by revision, so a retry after an ambiguous failure is harmless.
+// A revoke stops forwarding and closes the source's publications before the node
+// answers.
+func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSourcesInput) ([]mediaplane.SourceControlResult, error) {
+	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
+	for start := 0; start < len(input.Controls); start += maxSourceControls {
+		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
+		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Controls: make([]wireSourceControl, len(batch))}
+		for index, control := range batch {
+			request.Controls[index] = wireSourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
+		}
+		var response wireSourceControlResponse
+		if err := a.call(ctx, "/v1/episodes/sources", request, &response); err != nil {
+			return nil, err
+		}
+		if len(response.Results) != len(batch) {
+			return nil, fmt.Errorf("%w: source control results do not match the request", mediaplane.ErrProviderFailed)
+		}
+		for index, result := range response.Results {
+			closed := make([]mediaplane.ClosedSourceTrack, 0, len(result.Closed))
+			for _, track := range result.Closed {
+				closed = append(closed, mediaplane.ClosedSourceTrack{ConnectionID: track.SessionID, MID: track.Mid})
+			}
+			results = append(results, mediaplane.SourceControlResult{SourceControl: batch[index], Applied: result.Applied, Closed: closed})
+		}
+	}
+	return results, nil
+}
+
 // EpisodeUsage reports no counters: the SFU does not meter usage yet.
 func (a *Adapter) EpisodeUsage(_ context.Context, input mediaplane.EpisodeUsageInput) (mediaplane.Usage, error) {
 	if input.Provider != mediaplane.ProviderChalkSFU {

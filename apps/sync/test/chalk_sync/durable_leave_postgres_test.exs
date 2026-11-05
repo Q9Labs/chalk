@@ -325,6 +325,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert cleanup_payload["effect"] == "media.remove_participant"
     assert cleanup_payload["participant_id"] == old.participant_id
     assert cleanup_payload["participant_generation"] == old.participant_generation
+    assert_control_revision(cleanup.control_revision)
+    assert cleanup_payload["control_revision"] == cleanup.control_revision
 
     current = account_join(episode, account, "reentry_second_join")
     assert current.participant_id != old.participant_id
@@ -339,6 +341,10 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
     assert {:ok, grant} =
              Postgres.reserve_publication_grant(current, "reentry_current_camera_001", :camera)
+
+    # Reserved after the old generation's cleanup was accepted, so it is ordered after it.
+    assert_control_revision(grant.control_revision)
+    assert grant.control_revision > cleanup.control_revision
 
     assert {:ok, %{status: :confirmed, result: :authorized}} =
              Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)
@@ -411,6 +417,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert mute_payload["participant_id"] == old.participant_id
     assert mute_payload["participant_generation"] == old.participant_generation
     assert mute_payload["publication_source"] == source
+    assert_control_revision(old_mute.control_revision)
+    assert mute_payload["control_revision"] == old_mute.control_revision
 
     assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
              Postgres.read_operation(episode, mute_id)
@@ -489,8 +497,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       System.cmd(
         "go",
         ["run", "./tests/sync-reentry", episode.tenant_id, episode.space_id, account, key],
-        cd: Path.expand("../../../api", __DIR__),
-        stderr_to_stdout: true
+        cd: Path.expand("../../../api", __DIR__)
       )
 
     assert status == 0, output
@@ -710,4 +717,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       [id]
     ).rows
   end
+
+  defp assert_control_revision(revision),
+    do: assert(is_integer(revision) and revision > 0)
 end

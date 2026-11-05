@@ -236,7 +236,9 @@ type InspectedLayer struct {
 }
 
 // SubscriptionState is how a subscription is delivered. Revision rises on every
-// change of State or Reason, so a reader keeps the highest one it has seen.
+// change of State or Reason, so a reader keeps the highest one it has seen. It also
+// rises when the source's grant opens a forwarding window and when that window ends
+// by revoke or lapse, but not when a renewal extends it.
 type SubscriptionState struct {
 	State    string `json:"state"`
 	Reason   string `json:"reason,omitempty"`
@@ -254,6 +256,9 @@ const (
 	PauseCongestion     = "congestion"
 	PauseViewer         = "viewer"
 	PauseSourceInactive = "source_inactive"
+	// PauseSourceUnauthorized: the source has no live grant. It was never granted,
+	// was revoked, or its lease lapsed, so RTP that still arrives is not delivered.
+	PauseSourceUnauthorized = "source_unauthorized"
 )
 
 type InspectResponse struct {

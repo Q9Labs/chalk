@@ -95,6 +95,46 @@ type EndEpisodeInput struct {
 	EpisodeRef string
 }
 
+type SourceAction string
+
+const (
+	SourceGrant  SourceAction = "grant"
+	SourceRevoke SourceAction = "revoke"
+)
+
+// SourceControl grants or revokes one Participant's source on a media plane that
+// fences sources itself, as the own SFU does. Revision orders it against the
+// source's other controls: the plane applies it only when it records nothing
+// newer, and a revoke wins a tie, so a retried or delayed control is harmless.
+// A grant at the recorded revision renews the source's forwarding lease.
+type SourceControl struct {
+	ParticipantID string
+	Source        string
+	Action        SourceAction
+	Revision      int64
+}
+
+type ControlSourcesInput struct {
+	TenantID  string
+	EpisodeID string
+	Controls  []SourceControl
+}
+
+// SourceControlResult is one control's effect. Applied is false for a control
+// older than the plane's record, which changed nothing. Closed lists the tracks an
+// applied revoke closed, which are only those admitted before it.
+type SourceControlResult struct {
+	SourceControl
+	Applied bool
+	Closed  []ClosedSourceTrack
+}
+
+// ClosedSourceTrack is a published track a revoke closed, named by its connection and MID.
+type ClosedSourceTrack struct {
+	ConnectionID string
+	MID          string
+}
+
 type EpisodeUsageInput struct {
 	Provider   Provider
 	EpisodeRef string
