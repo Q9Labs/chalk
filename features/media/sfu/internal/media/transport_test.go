@@ -255,3 +255,27 @@ func TestAQueueThatNeverEmptiesKeepsOnlyWhatItHolds(t *testing.T) {
 		t.Fatalf("a queue holding one packet grew to capacity %d after 10,000 pushes", c)
 	}
 }
+
+func TestPacketsWithoutTransportFeedbackAreCountedAndTheirRepairsCapped(t *testing.T) {
+	transport := newTransport(&delayHistogram{}, 128<<10, nil)
+	t.Cleanup(transport.close)
+	wire := &wireWriter{}
+	video := &egressBinding{writer: wire, ssrc: 10, payloadType: 96, rtxSSRC: 11, rtxPayloadType: 97}
+	audio := &egressBinding{writer: wire, ssrc: 20, payloadType: 111}
+	var w packetWriter
+	payload := make([]byte, 1000)
+	transport.send(&egressPacket{binding: audio, class: classAudio, seq: 1, payload: payload[:80]}, &w)
+	for seq := range uint16(200) {
+		transport.send(&egressPacket{binding: video, class: classRepair, rtx: true, seq: seq, payload: payload}, &w)
+	}
+	if audio := transport.meters[classAudio].packets.Load(); audio != 1 {
+		t.Fatalf("the audio meter counted %d packets, want 1", audio)
+	}
+	repairs := transport.meters[classRepair].packets.Load()
+	if repairs == 0 || transport.counters.RepairsCut == 0 || repairs+transport.counters.RepairsCut != 200 {
+		t.Fatalf("%d repairs counted and %d cut of 200, want both and all accounted", repairs, transport.counters.RepairsCut)
+	}
+	if sent := len(wire.sent()); uint64(sent) != 1+repairs {
+		t.Fatalf("%d packets on the wire, want the audio and %d repairs", sent, repairs)
+	}
+}

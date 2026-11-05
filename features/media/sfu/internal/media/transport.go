@@ -197,12 +197,9 @@ func (t *transport) refill(now int64) {
 // send paces one packet. It reports whether the packet went out or waits in
 // the queue; a packet the pacer drops still reports true, because the
 // subscriber's NACK recovers it. Without transport-wide feedback there is no
-// estimate to pace by, so the packet goes out at once.
+// estimate to pace by, so the packet goes out at once, but it is still counted
+// and a repair is still capped.
 func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
-	binding := packet.binding
-	if binding.twccID == 0 {
-		return w.transmit(packet, 0)
-	}
 	size := packet.size()
 	t.mu.Lock()
 	if t.closed {
@@ -218,6 +215,12 @@ func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 			return true
 		}
 		t.repair -= float64(size)
+	}
+	if packet.binding.twccID == 0 {
+		t.counters.Sent[packet.class]++
+		t.meters[packet.class].add(size)
+		t.mu.Unlock()
+		return w.transmit(packet, 0)
 	}
 	if !t.sendsNow(packet.class) {
 		queued := t.enqueue(packet, size, now)
