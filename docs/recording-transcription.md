@@ -313,10 +313,10 @@ re-resolve current settings. Language policy is evaluated at job creation, not
 frozen with the Episode's transcription permission or retention snapshot.
 
 Fixed mode sends `language` to the qualified DeepInfra Whisper adapter (or the
-qualified Cloudflare Whisper adapter if enabled). Auto currently uses Whisper
-without a language parameter. `CODESWITCH_PROVIDER` must remain unset: no
-code-switching adapter is qualified yet. Configuring one fails startup, without
-weakening the privacy, corpus, adapter-version, or provider-identity checks.
+qualified Cloudflare Whisper adapter if enabled). Auto uses MAI-Transcribe-2 via
+OpenRouter when `CODESWITCH_PROVIDER=mai` is configured. An unavailable or disabled
+MAI slot fails closed and retries; Auto never falls back to Whisper. Fixed-mode
+privacy, corpus, adapter-version, and provider-identity checks remain enforced.
 Chunk and final `transcript.v1` documents record `transcriptLanguage` as
 `{mode:"auto"}` or `{mode:"fixed",language:"ur"}`, alongside the actual provider,
 model, and version contract. Older documents lacking the field remain readable.
@@ -330,15 +330,18 @@ microphone source's full `[StartMS, EndMS)` span in `apps/api/internal/recorderw
 VAD or a silence-removal filter. The decoder explicitly preserves DTX gaps as
 silence (`apps/api/internal/recordingdecode/audio.go`). The source manifest authenticates source
 intervals and identities; it is not a voice-activity/speaker-turn selector. The
-dispatcher submits every claimed FLAC, including an all-silent chunk.
+dispatcher decodes Auto chunks, removes long silence and uploads at most 60 speech
+seconds per request, retaining an offset map to restore original timestamps.
+Fixed-language Whisper still receives the original FLAC, including silence.
+All-silent Auto chunks complete without a provider upload.
 
 Code-derived estimate, not a production measurement: four microphone sources
 covering a full one-hour meeting submit approximately **4 provider audio-hours**
-(48 five-minute chunks), before retries. Muting or listening inside a retained
+(48 five-minute chunks), before silence trimming and retries. Muting or listening inside a retained
 source span does not itself remove duration; absent tracks or shorter source
 spans reduce it. FLAC compression reduces bytes, not audio seconds. At 2,000 such
 meeting-hours/month the same assumption gives 8,000 submitted audio-hours before
-retries. This does not establish a dollar price or provider billing fact.
+silence trimming and retries. This does not establish a dollar price or provider billing fact.
 
 Speaking-span-only submission is feasible before chunk encoding in
 `persistTranscription` in `apps/api/internal/recorderworker/render_attempt.go`: detect bounded

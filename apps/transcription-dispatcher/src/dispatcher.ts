@@ -11,6 +11,7 @@ import type { ControlApi, DispatcherContext, DispatcherEvent, DispatcherLogger, 
 export interface DispatcherDependencies {
   config: ReleaseConfig;
   control: ControlApi;
+  codeswitch?: TranscriptionProvider;
   primary?: TranscriptionProvider;
   fallback?: TranscriptionProvider;
   fetch: typeof fetch;
@@ -123,9 +124,12 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     } catch {
       throw new AssignmentError("speaker turn manifest is invalid");
     }
+    const auto = (assignment.transcriptLanguage?.mode ?? "auto") === "auto";
+    if (auto && !dependencies.codeswitch) throw new ProviderError("Auto transcription provider is unavailable", "retryable");
+    const primary = auto ? dependencies.codeswitch : dependencies.primary;
     const transcription = await transcribeWithFallback({
-      ...(dependencies.primary === undefined ? {} : { primary: dependencies.primary }),
-      ...(dependencies.fallback ? { fallback: dependencies.fallback } : {}),
+      ...(primary ? { primary } : {}),
+      ...(!auto && dependencies.fallback ? { fallback: dependencies.fallback } : {}),
       request: { transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" }, audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId, onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }) },
       policy: dependencies.config.provider,
       circuit,

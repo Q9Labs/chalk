@@ -387,11 +387,21 @@ describe("provider segment timing contract", () => {
 });
 
 describe("dispatcher provider schema logging", () => {
-  it.each(["malformed", "overlap", "zero", "reversed"])("logs private-safe timing diagnostics and completes only repairable answers: %s", async (kind) => {
+  it.each(
+    ["malformed", "overlap", "zero", "reversed"].flatMap((kind) => [
+      { kind, auto: true },
+      { kind, auto: false },
+    ]),
+  )("logs private-safe timing diagnostics and completes only repairable answers: %j", async ({ kind, auto }) => {
     const audio = new Uint8Array(4096);
     const audioHash = createHash("sha256").update(audio).digest("hex");
     const manifest = JSON.stringify(sourceManifest(audioHash));
-    const claim = { ...assignment, chunk: { ...assignment.chunk, inputSha256: audioHash }, manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") } };
+    const claim = {
+      ...assignment,
+      transcriptLanguage: auto ? { mode: "auto" as const } : { mode: "fixed" as const, language: "en" as const },
+      chunk: { ...assignment.chunk, inputSha256: audioHash },
+      manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") },
+    };
     const policy: ProviderPolicy = { timeoutMs: 1000, maxAudioBytes: 8192, maxAudioSeconds: 900, maxResponseBytes: 8192, maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxRetries: 0, retryBaseDelayMs: 1, retryMaxDelayMs: 1, circuitFailureThreshold: 5, circuitCooldownMs: 1000 };
     const config: ReleaseConfig = {
       environment: "test",
@@ -426,7 +436,23 @@ describe("dispatcher provider schema logging", () => {
       { getRemainingTimeInMillis: () => 30000 },
       {
         config,
-        primary: provider,
+        ...(auto
+          ? {
+              codeswitch: provider,
+              primary: {
+                name: "deepinfra" as const,
+                transcribe: async () => {
+                  throw new Error("Auto reached Whisper primary");
+                },
+              },
+              fallback: {
+                name: "cloudflare" as const,
+                transcribe: async () => {
+                  throw new Error("Auto reached Whisper fallback");
+                },
+              },
+            }
+          : { primary: provider }),
         control: {
           claim: async () => ({ assignments: [claim] }),
           heartbeat: async () => undefined,
