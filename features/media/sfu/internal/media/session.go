@@ -179,6 +179,11 @@ func (s *Session) readyForNegotiation() error {
 }
 
 func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
+	description := request.SessionDescription
+	if len(request.Tracks) == 0 && description != nil && description.Type == "offer" && description.SDP != "" {
+		// A push of no tracks renegotiates the connection, as an ICE restart does.
+		return true, nil
+	}
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
 		return false, fmt.Errorf("%w: a request carries 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
@@ -203,7 +208,6 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 			return false, fmt.Errorf("%w: tracks[%d].sessionId is required for a remote track", ErrInvalidRequest, index)
 		}
 	}
-	description := request.SessionDescription
 	switch {
 	case local && (description == nil || description.Type != "offer" || description.SDP == ""):
 		return false, fmt.Errorf("%w: a push needs an offer", ErrInvalidRequest)
