@@ -13,6 +13,8 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
+const sourceScreen = "screen"
+
 const (
 	// activeWindow is how recently RTP must have arrived for a track to count as active.
 	activeWindow = 5 * time.Second
@@ -78,6 +80,9 @@ func (p *publication) forward(remote *webrtc.TrackRemote) {
 // close stops forwarding. Subscribers keep their senders but receive nothing more.
 func (p *publication) close() {
 	p.closed.Store(true)
+	if p.source == sourceScreen {
+		p.session.node.releaseScreen(p.session)
+	}
 	if remote := p.remote.Load(); remote != nil {
 		_ = remote.SetReadDeadline(time.Now())
 	}
@@ -109,6 +114,8 @@ type subscription struct {
 	sender      *webrtc.RTPSender
 	mid         string
 	closed      atomic.Bool
+	// ceiling is the layer the subscriber last asked for through UpdateTracks.
+	ceiling atomic.Pointer[string]
 }
 
 // readFeedback relays the subscriber's keyframe requests until its sender stops.

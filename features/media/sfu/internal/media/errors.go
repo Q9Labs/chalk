@@ -1,6 +1,9 @@
 package media
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Request-level failures. The control layer maps each to a status and a protocol code.
 var (
@@ -15,4 +18,7 @@ var (
 	ErrCapacityExceeded     = errors.New("capacity exceeded")
 	ErrUnsupportedOperation = errors.New("unsupported operation")
 	ErrDraining             = errors.New("node is draining")
+
+	errEpisodeFull = fmt.Errorf("%w: the Episode is full", ErrCapacityExceeded)
+	errNodeFull    = fmt.Errorf("%w: the node packet budget is reserved", ErrCapacityExceeded)
 )

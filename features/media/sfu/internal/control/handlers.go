@@ -25,7 +25,10 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks", s.v1(s.addTracks))
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/renegotiate", s.v1(s.renegotiate))
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks/close", s.v1(s.closeTracks))
+	mux.Handle("POST "+prefix+"/sessions/{connectionId}/tracks/update", s.v1(s.updateTracks))
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/inspect", s.v1(s.inspect))
+	mux.Handle("POST "+prefix+"/sessions/{connectionId}/remove", s.v1(s.removeSession))
+	mux.Handle("POST "+prefix+"/episodes/end", s.v1(s.endEpisode))
 	return s.logged(mux)
 }
 
@@ -34,7 +37,8 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
 		writeProblem(w, media.ErrDraining)
 		return
 	}
-	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount()})
+	budget, reserved := s.node.Budget()
+	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved})
 }
 
 // v1 guards an operation: the caller must hold the expected service identity.
@@ -85,7 +89,7 @@ func (s *Server) renegotiate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := session.Renegotiate(r.Context(), request.SessionDescription); err != nil {
+	if err := session.Renegotiate(r.Context(), request); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -103,6 +107,45 @@ func (s *Server) closeTracks(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	writeJSON(w, http.StatusOK, response)
+	return nil
+}
+
+func (s *Server) updateTracks(w http.ResponseWriter, r *http.Request) error {
+	var request protocol.UpdateTracksRequest
+	session, err := s.sessionFor(w, r, &request, func() protocol.Scope { return request.Scope })
+	if err != nil {
+		return err
+	}
+	response, err := session.UpdateTracks(r.Context(), request)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, response)
+	return nil
+}
+
+// removeSession closes one session. An absent session reads as gone, which the API treats as removed.
+func (s *Server) removeSession(w http.ResponseWriter, r *http.Request) error {
+	var request protocol.RemoveSessionRequest
+	session, err := s.sessionFor(w, r, &request, func() protocol.Scope { return request.Scope })
+	if err != nil {
+		return err
+	}
+	session.Close()
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
+	var request protocol.EndEpisodeRequest
+	if err := s.decode(w, r, &request); err != nil {
+		return err
+	}
+	scope := protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: 1}
+	if err := media.ValidateScope(scope); err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID)})
 	return nil
 }
 

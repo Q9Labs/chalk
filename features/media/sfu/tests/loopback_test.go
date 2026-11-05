@@ -40,6 +40,11 @@ type service struct {
 	stop    func()
 }
 
+var operations atomic.Int64
+
+// op returns a fresh operation ID for a test request.
+func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
+
 func startService(t *testing.T, ca *authority) *service {
 	t.Helper()
 	dir := t.TempDir()
@@ -54,6 +59,10 @@ func startService(t *testing.T, ca *authority) *service {
 		ClientCAFile:               writeFile(t, dir, "ca.pem", ca.pem),
 		ClientIdentity:             apiIdentity,
 		MaxSessions:                8,
+		PacketBudget:               1 << 20,
+		VideoStreamCost:            150,
+		AudioStreamCost:            50,
+		MaxEpisodeParticipants:     8,
 		MaxPublishedPerSession:     4,
 		MaxSubscriptionsPerSession: 8,
 		MaxRequestBytes:            256 << 10,
@@ -379,7 +388,7 @@ func TestLoopback(t *testing.T) {
 	audioMid, videoMid := alice.mid(t, audio), alice.mid(t, video)
 
 	var pushed protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope:              scopeA,
 		SessionDescription: &pushOffer,
 		Tracks: []protocol.Track{
@@ -405,7 +414,7 @@ func TestLoopback(t *testing.T) {
 	bob := newPeer(t)
 	received := collect(bob)
 	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connB+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connB+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope: scopeB,
 		Tracks: []protocol.Track{
 			{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName},
@@ -430,7 +439,7 @@ func TestLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	answerSDP := bob.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{Scope: scopeB, SessionDescription: answerSDP}, nil)
+	svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scopeB, SessionDescription: answerSDP}, nil)
 
 	t.Run("audio and video arrive in order", func(t *testing.T) {
 		eventually(t, "30 audio and 30 video packets", 20*time.Second, func() bool {
@@ -454,7 +463,7 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("a pull across Tenants fails", func(t *testing.T) {
 		var response protocol.TracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connC+"/tracks", protocol.TracksRequest{
+		svc.mustCall(t, "/v1/sessions/"+connC+"/tracks", protocol.TracksRequest{OperationID: op(),
 			Scope:  scopeC,
 			Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: videoName}},
 		}, &response)
@@ -468,7 +477,7 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("close stops forwarding and inspect marks the track gone", func(t *testing.T) {
 		var closed protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &closed)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &closed)
 		if len(closed.Tracks) != 1 || closed.Tracks[0].AlreadyClosed {
 			t.Fatalf("close response: %+v", closed)
 		}
@@ -491,7 +500,7 @@ func TestLoopback(t *testing.T) {
 			t.Fatal("closing video stopped the audio")
 		}
 		var again protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &again)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &again)
 		if !again.Tracks[0].AlreadyClosed {
 			t.Fatal("closing an absent track was not idempotent")
 		}
@@ -504,8 +513,9 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("an unanswered server offer closes the session", func(t *testing.T) {
 		connD := svc.createSession(t, "create-dave", scopeD)
-		pull := protocol.TracksRequest{Scope: scopeD, Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName}}}
+		pull := protocol.TracksRequest{OperationID: op(), Scope: scopeD, Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName}}}
 		svc.mustCall(t, "/v1/sessions/"+connD+"/tracks", pull, nil)
+		pull.OperationID = op()
 		if status, code := svc.call(t, "/v1/sessions/"+connD+"/tracks", pull, nil); status != http.StatusConflict || code != protocol.CodeNegotiationBusy {
 			t.Fatalf("second negotiation: status %d code %q, want 409 negotiation_in_progress", status, code)
 		}

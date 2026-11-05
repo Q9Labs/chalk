@@ -50,9 +50,9 @@ adapter retries. Preserve partial responses and existing public
 route flow. Persist provider/application binding at Episode creation and resolve
 all subsequent operations from it, including refresh, cleanup and recorder
 exclusion. Add the default-off Tenant/Space selector, eight-Participant own-provider
-admission cap and the node admission budget: each Episode is reserved at its
-supported peak (all remote cameras on `h`, microphones, one screen share), a join
-that would exceed the node's packet budget is refused, and one active screen share
+admission cap and the node admission budget: each Episode is reserved at
+`c·n·(n+1)` packets/s with a configured cost per stream (150 video, 50 audio), a join
+that would exceed the node's packet budget (16,000 on `s-1vcpu-1gb`, 32,000 on `s-2vcpu-2gb`) is refused, and one active screen share
 per Episode is allowed (see [Hosting and budget](design.md#hosting-and-budget)). Advertise capability fields but leave
 server adaptation/ICE restart false until their milestones pass. Reject capture
 before reserving work. Old providers and old SDK cohorts stay on Cloudflare.

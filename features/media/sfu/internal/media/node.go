@@ -57,6 +57,7 @@ type Node struct {
 	fences       map[participantKey]int64 // highest generation seen per Participant; outlives sessions
 	fenceOrder   []participantKey         // insertion order, oldest first
 	fenceLimit   int
+	screens      map[episodeKey]*Session // the session sharing a screen in each Episode
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -96,6 +97,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
 		fences:       map[participantKey]int64{},
+		screens:      map[episodeKey]*Session{},
 		fenceLimit:   defaultFenceLimit,
 	}, nil
 }
@@ -162,6 +164,13 @@ func (n *Node) Incarnation() string { return n.incarnation }
 // UDPPort is the bound shared media port.
 func (n *Node) UDPPort() int { return n.conn.LocalAddr().(*net.UDPAddr).Port }
 
+// Budget reports the node's packet budget and the part live Episodes reserve.
+func (n *Node) Budget() (budget, reserved int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.cfg.PacketBudget, n.reservedPackets()
+}
+
 // SessionCount is the number of live sessions.
 func (n *Node) SessionCount() int {
 	n.mu.Lock()
@@ -227,6 +236,9 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	if live >= n.cfg.MaxSessions {
 		return protocol.CreateSessionResponse{}, nil, ErrCapacityExceeded
 	}
+	if err := n.admit(scope, fenced); err != nil {
+		return protocol.CreateSessionResponse{}, nil, err
+	}
 	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope)
 	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
@@ -267,6 +279,45 @@ func (n *Node) raiseFence(scope protocol.Scope) {
 
 func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
 	return protocol.CreateSessionResponse{ConnectionID: id, NodeIncarnation: n.incarnation}
+}
+
+// claimScreen reserves the Episode's one screen share for the session. It reports false when
+// another publication already holds it, including one of the same session. The caller may hold
+// the session's own mutex: nothing takes it while holding n.mu.
+func (n *Node) claimScreen(s *Session) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := episodeOf(s.scope)
+	if n.screens[key] != nil {
+		return false
+	}
+	n.screens[key] = s
+	return true
+}
+
+// releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
+func (n *Node) releaseScreen(s *Session) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if key := episodeOf(s.scope); n.screens[key] == s {
+		delete(n.screens, key)
+	}
+}
+
+// EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
+func (n *Node) EndEpisode(tenantID, episodeID string) int {
+	n.mu.Lock()
+	var ended []*Session
+	for _, session := range n.sessions {
+		if session.scope.TenantID == tenantID && session.scope.EpisodeID == episodeID {
+			ended = append(ended, session)
+		}
+	}
+	n.mu.Unlock()
+	for _, session := range ended {
+		session.Close()
+	}
+	return len(ended)
 }
 
 // Session finds a live session. A session outside the scope reads as gone,

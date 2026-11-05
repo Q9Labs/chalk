@@ -587,35 +587,36 @@ fully used vCPU. Halve it for shared-CPU steal risk, then halve again to stay at
 | -------------------------------- | ---------------- | ---------------------- |
 | Planned packets/s, in + out      | 10,000           | 20,000                 |
 | Active Participants (memory cap) | 8                | 16                     |
-| Packet ceiling for one Episode   | 10,000           | 11,520                 |
+| Admission budget (packets/s)     | 16,000           | 32,000                 |
 
-**Admission reserves each Episode at its supported peak.** The supported peak is
-every remote camera on `h`, every microphone, and **one screen share** with its
-audio. The own provider allows one active screen share per Episode, because the
-reservation counts one. For an Episode with `n` active Participants this is
-`300·n(n-1) + 630·n` packets/s (the `n(n-1)` all-high term, plus `370·n` ingress
-and `260·n` for one screen and its audio): 1,860 at two, 6,120 at four, 9,150 at
-five and 21,840 at eight.
+The admission budget counts reservations, which sit above real use, so it is
+higher than the planned packets/s the CPU estimate supports. The live steal and
+queue guard below is the backstop if real use climbs toward the CPU estimate.
 
-That peak is more than one node can carry at eight Participants (21,840 against
-20,000), so the allocator **enforces a packet ceiling per Episode** and the
-reservation is the lower of the peak and the ceiling. The ceiling is 11,520, the
-eight-person adaptive profile with a screen share (6,480 egress, 2,960 ingress
-and 2,080 for the screen), or the node budget if that is smaller. When viewers'
-requested layers would exceed the ceiling, the allocator lowers the layers of the
-largest set of non-speaker tiles first and keeps audio and screen. Forwarding can
-then never exceed the reservation.
+**Admission reserves each Episode by a configured cost per stream.** The node
+configures a cost in packets/s for one video stream (default 150) and one audio
+stream (default 50), so `c` is 200 for a camera and a microphone. For an Episode
+with `n` live Participants the reservation is `c·n·(n+1)` packets/s, with `n`
+never below 2: `c·n` ingress, `c·n·(n-1)` egress to the other Participants, and
+`c·n` of headroom for the one allowed screen share and its audio. At the defaults
+that is 1,200 at two, 4,000 at four and 14,400 at eight. The own provider allows
+one active screen share per Episode, and the cap is eight Participants.
 
-A Participant join is refused if it would push the sum of reservations above the
-node budget, and a new Episode needs room for two Participants. The live steal
-and queue-delay signals below are a second gate, not a substitute for this one.
-Production therefore fits one Episode of up to eight (11,520) plus one
-four-person Episode (6,120) for 17,640, or three four-person Episodes (18,360),
-or two five-person Episodes (18,300). It does **not** fit two eight-person
-Episodes (23,040): the second is refused as it grows. Staging fits one
-four-person Episode (6,120) or one eight-person Episode held to 10,000. A
-reservation above typical use is deliberate headroom against steal; once M6 has
-measured real load, a later change may reserve measured use instead.
+The cost per stream is a planning number, not a measurement of any one call.
+Simulcast layers and adaptive profiles change real use well below the reservation,
+and the reservation is deliberate headroom against steal. M6 measures real load
+and may lower the costs. There is no per-Episode packet ceiling: the node budget
+and the eight-Participant cap bound an Episode.
+
+The node budget is set per node: **16,000 packets/s on `s-1vcpu-1gb`** and
+**32,000 on `s-2vcpu-2gb`**. A Participant join is refused if it would push the sum
+of reservations above the node budget, and a new Episode needs room for two
+Participants. A reconnect replaces its own session and does not count twice. The
+live steal and queue-delay signals below stay as the second gate, because the
+budget is a plan and those signals show what the machine really does. With the
+defaults, `s-1vcpu-1gb` fits one eight-person Episode (14,400) plus one two-person
+Episode (1,200), or four four-person Episodes (16,000). `s-2vcpu-2gb` fits two
+eight-person Episodes (28,800) plus a two-person Episode.
 
 The tightest of the packet, Participant, memory and live-signal budgets wins. These are
 not throughput guarantees. M6 measures the real cost per packet on
