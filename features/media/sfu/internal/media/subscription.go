@@ -158,7 +158,7 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 	if !send {
 		return
 	}
-	if !w.write(s.track, p, out) {
+	if !s.write(w, p, out) {
 		if switched {
 			s.abandonSwitch(switches)
 		}
@@ -227,8 +227,15 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 		if !send {
 			return
 		}
-		w.write(s.track, &stored, out)
+		s.write(w, &stored, out)
 	}
+}
+
+// write sends one translated packet if the source may still forward it. It reads the
+// clock at each write, because an earlier write, to this subscriber or another, can
+// stall past the lease.
+func (s *subscription) write(w *packetWriter, p *rtpPacket, out outgoing) bool {
+	return s.pub.authority.allows(p.arrival, monotonic()) && w.write(s.track, p, out)
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
@@ -320,7 +327,7 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 		return
 	}
 	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
-	w.write(s.track, &stored, seg.translate(&stored))
+	s.write(w, &stored, seg.translate(&stored))
 }
 
 // state reports the subscription's delivery for inspection.
