@@ -95,7 +95,7 @@
     "@ast-grep/cli": "0.51.0",
     "@e2e-dev/web": "0.15.0",
     "@q9labsai/config-depcruise": "^0.3.0",
-    "@q9labsai/gates": "^0.3.0",
+    "@q9labsai/gates": "^0.4.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
     "dependency-cruiser": "18.2.0",

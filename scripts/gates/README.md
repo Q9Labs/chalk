@@ -88,6 +88,14 @@ filtering. `GATE_HEAD_REF` is not supported by q9gate; `--base`
 compares against `HEAD`. Use `--lane <id>` for a focused check. Do not infer a
 shipment target from branch, release mode, or directory.
 
+## Design-token ratchet
+
+The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow values in the web, UI, SDK and mobile
+source. `scripts/gates/design-tokens-baseline.json` lists today's values. A new raw value fails the gate. A removed
+value also fails until the baseline shrinks, so the change that removes it runs
+`pnpm exec q9gate accept-baseline design-tokens --message "shrink design-token baseline"` and commits the smaller
+file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on the line or the line above.
+
 ## Selection Rules
 
 - Repository hygiene and diff-scoped secret scanning always run.
