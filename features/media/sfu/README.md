@@ -1,6 +1,6 @@
 # Chalk SFU
 
-A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and milestones are in `docs/sfu/`. This is milestone M1: the service skeleton and real single-layer push and pull. Nothing in the API, Sync or the SDK uses it yet.
+A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This is milestone M1: the service skeleton and real single-layer push and pull. Nothing in the API, Sync or the SDK uses it yet.
 
 The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `apps/api/internal`. The API adapter will translate between the public `protocol` package and its own ports.
 
