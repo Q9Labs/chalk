@@ -55,7 +55,7 @@ type ingressLayer struct {
 	rid     string
 	ssrc    uint32
 	remote  *webrtc.TrackRemote
-	history *history
+	history atomic.Pointer[history] // nil for audio and after the publication closes
 
 	lastRTP   atomic.Int64 // monotonic; 0 before the first packet
 	lastAsked atomic.Int64 // monotonic time of the last keyframe request
@@ -68,7 +68,7 @@ type ingressLayer struct {
 func newIngressLayer(index int, remote *webrtc.TrackRemote, source string) *ingressLayer {
 	layer := &ingressLayer{index: index, rid: remote.RID(), ssrc: uint32(remote.SSRC()), remote: remote}
 	if bytes := historyBytes(remote.Kind(), source, layer.rid); bytes > 0 {
-		layer.history = newHistory(bytes, historySlots)
+		layer.history.Store(newHistory(bytes, historySlots))
 	}
 	return layer
 }

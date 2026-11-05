@@ -109,8 +109,8 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, header *rtp.Heade
 	packet.arrival = monotonic()
 	resumed := !layer.active(packet.arrival)
 	layer.lastRTP.Store(packet.arrival)
-	if layer.history != nil {
-		layer.history.store(&packet)
+	if history := layer.history.Load(); history != nil {
+		history.store(&packet)
 	}
 	if resumed {
 		p.reselect()
@@ -183,9 +183,10 @@ func (p *publication) monitor() {
 // views reports every layer slot for the selection policy.
 func (p *publication) views(now int64) [maxLayers]layerView {
 	var views [maxLayers]layerView
+	closed := p.closed.Load()
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil {
-			views[index] = layerView{rid: layer.rid, active: layer.active(now)}
+			views[index] = layerView{rid: layer.rid, active: !closed && layer.active(now)}
 		}
 	}
 	return views
@@ -227,14 +228,22 @@ func (p *publication) removeSubscriber(removed *subscription) {
 }
 
 // close stops forwarding. Subscribers keep their senders but receive nothing
-// more, and the layers' readers drain until the session closes.
+// more and report the source inactive. The layers' readers drain until the
+// session closes, so their histories are released now.
 func (p *publication) close() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.closed.Swap(true) {
+		p.mu.Unlock()
 		return
 	}
 	close(p.done)
+	p.mu.Unlock()
+	for index := range p.layers {
+		if layer := p.layers[index].Load(); layer != nil {
+			layer.history.Store(nil)
+		}
+	}
+	p.reselect()
 }
 
 // active reports whether any layer carried RTP within the activity window.

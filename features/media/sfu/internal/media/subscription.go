@@ -61,6 +61,11 @@ func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track
 // start joins the publication's forwarding and chooses the first layer.
 func (s *subscription) start() {
 	s.pub.addSubscriber(s)
+	// A session that closed between pull and start already detached it.
+	if s.closed.Load() {
+		s.pub.removeSubscriber(s)
+		return
+	}
 	s.update(s.currentRequest())
 }
 
@@ -148,7 +153,7 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 		}
 		return
 	}
-	if switched && layer.history != nil && int64(layer.highest-p.extSeq) > 0 {
+	if switched && int64(layer.highest-p.extSeq) > 0 {
 		s.flush(layer, p.extSeq, w)
 	}
 }
@@ -190,9 +195,13 @@ func (s *subscription) abandonSwitch(switches uint64) {
 // first packet, reordered in transit, so the keyframe is complete without a
 // retransmission round trip.
 func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) {
+	history := layer.history.Load()
+	if history == nil {
+		return
+	}
 	now := monotonic()
 	for ext, sent := from+1, 0; int64(layer.highest-ext) >= 0 && sent < maxFlushAfterSwitch; ext, sent = ext+1, sent+1 {
-		stored, ok := layer.history.load(ext, now, w.stored[:])
+		stored, ok := history.load(ext, now, w.stored[:])
 		if !ok {
 			continue
 		}
@@ -264,19 +273,31 @@ func (s *subscription) retransmit(nack *rtcp.TransportLayerNack, budget int, w *
 	return budget
 }
 
+// resend repeats one packet. A paused subscription sends nothing, and a video
+// packet no longer held asks for a keyframe instead, because the frame it
+// belonged to may be a reference the viewer can't decode without.
 func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 	s.mu.Lock()
+	if s.reason != "" || s.closed.Load() {
+		s.mu.Unlock()
+		return
+	}
 	seg, ext, ok := s.translator.lookup(seq)
 	s.mu.Unlock()
-	if !ok {
+	if !s.pub.video() {
 		return
 	}
-	layer := s.pub.layer(seg.layer)
-	if layer == nil || layer.history == nil {
+	var history *history
+	if layer := s.pub.layer(seg.layer); ok && layer != nil {
+		history = layer.history.Load()
+	}
+	if history == nil {
+		s.requestKeyframe()
 		return
 	}
-	stored, ok := layer.history.load(ext, now, w.stored[:])
+	stored, ok := history.load(ext, now, w.stored[:])
 	if !ok {
+		s.requestKeyframe()
 		return
 	}
 	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)

@@ -32,9 +32,9 @@ type SessionDescription struct {
 }
 
 // Simulcast carries the subscriber's layer policy for a simulcast publication.
-// PreferredRID is the layer to forward and the ceiling of any lower choice. With
+// PreferredRID is the layer to forward and the ceiling for StartRID. With
 // RIDNotAvailable "asciibetical" an inactive preferred layer falls back to the
-// first active RID in ASCII order ("h" before "l"); with "none" delivery pauses
+// first active RID in ASCII order ("h" before "l"), which can be higher; with "none" delivery pauses
 // until the preferred layer returns. A publication without simulcast ignores it.
 type Simulcast struct {
 	PreferredRID     string `json:"preferredRid"`
@@ -147,7 +147,7 @@ type SubscriptionState struct {
 	State    string `json:"state"`
 	Reason   string `json:"reason,omitempty"`
 	Revision uint64 `json:"revision"`
-	// RequestedRID is the subscriber's preferred layer, the ceiling. EffectiveRID
+	// RequestedRID is the subscriber's preferred layer. EffectiveRID
 	// is the layer being forwarded, empty while paused or before the first keyframe.
 	RequestedRID string `json:"requestedRid,omitempty"`
 	EffectiveRID string `json:"effectiveRid,omitempty"`

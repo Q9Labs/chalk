@@ -101,7 +101,8 @@ func benchPublication(tb testing.TB) (*publication, [2]*ingressLayer, *discardWr
 	pub := &publication{kind: webrtc.RTPCodecTypeVideo, source: "camera", done: make(chan struct{})}
 	var layers [2]*ingressLayer
 	for index, rid := range []string{"h", "l"} {
-		layers[index] = &ingressLayer{index: index, rid: rid, history: newHistory(historyBytes(pub.kind, pub.source, rid), historySlots)}
+		layers[index] = &ingressLayer{index: index, rid: rid}
+		layers[index].history.Store(newHistory(historyBytes(pub.kind, pub.source, rid), historySlots))
 		layers[index].lastRTP.Store(monotonic())
 		pub.layers[index].Store(layers[index])
 	}

@@ -5,9 +5,11 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
@@ -263,6 +265,20 @@ func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 	if err := sender.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
 		t.Fatal(err)
 	}
+	var keyframeRequests atomic.Int64
+	go func() {
+		for {
+			packets, _, err := sender.pc.GetSenders()[0].ReadRTCP()
+			if err != nil {
+				return
+			}
+			for _, packet := range packets {
+				if _, ok := packet.(*rtcp.PictureLossIndication); ok {
+					keyframeRequests.Add(1)
+				}
+			}
+		}
+	}()
 	// One packet per frame and a keyframe every 15 frames; PLIs are ignored.
 	ctx, stop := context.WithCancel(context.Background())
 	sending := make(chan struct{})
@@ -374,4 +390,84 @@ func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 	}
 	assertContinuous("carol", received(carol))
 	assertContinuous("bob", received(bob))
+
+	// A NACK for a packet the SFU no longer holds asks the publisher for a
+	// keyframe, because the lost packet may belong to a reference frame.
+	time.Sleep(2 * keyframeInterval)
+	asked := keyframeRequests.Load()
+	latest := received(bob)[len(received(bob))-1]
+	nack := &rtcp.TransportLayerNack{SenderSSRC: 1, MediaSSRC: latest.SSRC, Nacks: rtcp.NackPairsFromSequenceNumbers([]uint16{latest.SequenceNumber - 2000})}
+	if err := bob.peer.pc.WriteRTCP([]rtcp.Packet{nack}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "a keyframe request for the lost packet", 2*time.Second, func() bool { return keyframeRequests.Load() > asked })
+}
+
+// recordingWriter keeps the sequence numbers a subscriber was sent.
+type recordingWriter struct{ sequences []uint16 }
+
+func (r *recordingWriter) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
+	r.sequences = append(r.sequences, header.SequenceNumber)
+	return header.MarshalSize() + len(payload), nil
+}
+
+func (r *recordingWriter) Write(b []byte) (int, error) { return len(b), nil }
+
+func TestRetransmissionStopsWhilePausedAndOnceTheSourceCloses(t *testing.T) {
+	pub, layers, _ := benchPublication(t)
+	subscribers := *pub.subscribers.Load()
+	paused, watching := subscribers[0], subscribers[1] // both forward "h"
+	recorders := map[*subscription]*recordingWriter{}
+	for _, s := range []*subscription{paused, watching} {
+		recorders[s] = &recordingWriter{}
+		s.track.binding.Store(&egressBinding{writer: recorders[s], ssrc: 100, payloadType: 96})
+	}
+	packets := cameraPackets("h")
+	var header rtp.Header
+	writer := &packetWriter{}
+	for n := range 2 * benchPacketsPerFrame {
+		stamp(packets[n], n)
+		pub.forward(layers[0], packets[n], &header, writer)
+	}
+	// nack reports a packet s was sent as lost and returns how many s got again.
+	nack := func(s *subscription) int {
+		recorder := recorders[s]
+		sent := len(recorder.sequences)
+		s.retransmit(&rtcp.TransportLayerNack{Nacks: rtcp.NackPairsFromSequenceNumbers([]uint16{recorder.sequences[3]})}, 10, writer)
+		return len(recorder.sequences) - sent
+	}
+	if got := nack(paused); got != 1 {
+		t.Fatalf("an active subscription resent %d packets for one NACK", got)
+	}
+
+	paused.update(layerRequest{ceiling: "h", fallback: true, paused: true})
+	if got := nack(paused); got != 0 {
+		t.Fatalf("a paused subscription resent %d packets", got)
+	}
+
+	_, _, revision, _, _ := watching.state()
+	pub.close()
+	state, reason, closedRevision, _, effective := watching.state()
+	if state != protocol.SubscriptionPaused || reason != protocol.PauseSourceInactive || effective != "" || closedRevision <= revision {
+		t.Fatalf("after its source closed the subscription inspects as %s %s %q revision %d", state, reason, effective, closedRevision)
+	}
+	if got := nack(watching); got != 0 {
+		t.Fatalf("a subscription whose source closed resent %d packets", got)
+	}
+	for _, layer := range layers {
+		if layer.history.Load() != nil {
+			t.Fatalf("layer %q kept its history after the publication closed", layer.rid)
+		}
+	}
+}
+
+func TestASubscriptionClosedBeforeItStartsNeverJoins(t *testing.T) {
+	pub, _, _ := benchPublication(t)
+	before := len(*pub.subscribers.Load())
+	s := &subscription{pub: pub, track: &egressTrack{codec: vp8Capability, kind: pub.kind}, request: layerRequest{ceiling: "h"}, target: -1, revision: 1}
+	s.detach() // the subscriber's session closed between pull and start
+	s.start()
+	if got := len(*pub.subscribers.Load()); got != before {
+		t.Fatalf("a closed subscription joined its publication: %d subscribers, want %d", got, before)
+	}
 }
