@@ -138,8 +138,13 @@ try {
         const drawing = canvas.getContext("2d");
         let frame = 0;
         setInterval(() => {
+          // Changing noise, so each camera sends a realistic bitrate instead of a few bytes of flat colour.
           drawing.fillStyle = `hsl(${(frame++ * 37) % 360} 70% 50%)`;
           drawing.fillRect(0, 0, 640, 360);
+          for (let block = 0; block < 40; block++) {
+            drawing.fillStyle = `hsl(${Math.random() * 360} 80% ${20 + Math.random() * 60}%)`;
+            drawing.fillRect(Math.random() * 640, Math.random() * 360, 8 + Math.random() * 40, 8 + Math.random() * 40);
+          }
         }, 1000 / 15);
         const camera = canvas.captureStream(15).getVideoTracks()[0];
         const tileSize = { width: 640, height: 360 };
@@ -216,7 +221,7 @@ try {
             for (const pc of window.proofPCs.filter((item) => item.connectionState !== "closed")) collector.observe(await pc.getStats());
             await new Promise((resolve) => setTimeout(resolve, 1000));
           }
-          await collector.flush(async (request) => void (sample = request.samples.at(-1)));
+          await collector.flush(async (request) => void (sample = request.samples.find((item) => item.window_ms >= milliseconds)));
           return sample?.recv_bitrate_kbps ?? null;
         };
         await client.start(new MediaStream([...output.stream.getAudioTracks(), ...(viewer ? [] : [camera])]));
@@ -268,6 +273,7 @@ try {
     await evaluate((tile) => window.hide(tile), id);
     await until(() => viewer.closes.slice(closes).some((close) => close.publicationIds.includes(id)), debounceMs + 5000, "hidden tile closed after the debounce");
     closeAfterMs.push(Date.now() - hiddenAt);
+    await until(() => evaluate((tile) => !window.client.getSnapshot().remoteTracks.some((item) => item.publicationId === tile), id), 5000, "closed tile's track released");
     repull.push(Math.round(await evaluate((tile) => window.show(tile), id)));
     await evaluate((tile) => window.hide(tile), id);
   }
@@ -299,10 +305,20 @@ try {
   console.log(JSON.stringify({ stage: "storm", ...storm }));
 
   // The same call-stats window with 4 tiles and then with every tile on screen.
+  const videoKbps = async () => {
+    const start = await evaluate(() => window.inboundVideo());
+    await pause(5000);
+    const end = await evaluate(() => window.inboundVideo());
+    return end.map((row) => Math.round(((row.bytes - (start.find((item) => item.id === row.id)?.bytes ?? 0)) * 8) / 5000)).filter((kbps) => kbps > 0);
+  };
+  const videoKbpsFourTiles = await videoKbps();
   const recvKbpsFourTiles = await evaluate(() => window.callStatsWindow(10_000));
   await evaluate((ids) => window.page(ids), cameraIds);
   await until(async () => (await evaluate(() => window.receivers())).video === PUBLISHERS, 30_000, "every tile received");
+  const videoKbpsAllTiles = await videoKbps();
   const recvKbpsAllTiles = await evaluate(() => window.callStatsWindow(10_000));
+  console.log(JSON.stringify({ stage: "call_stats", recvKbpsFourTiles, recvKbpsAllTiles, videoKbpsFourTiles, videoKbpsAllTiles }));
+  assert.ok(recvKbpsFourTiles > 0 && recvKbpsFourTiles < recvKbpsAllTiles, "call-stats receive bitrate drops with hidden tiles");
   const errors = await evaluate(() => window.proofErrors);
   console.log(
     JSON.stringify({
@@ -313,7 +329,7 @@ try {
       warmResumeFrameMs: warm,
       cold: { firstPullFrameMs: firstPull, repullFrameMs: repull, closeAfterHideMs: closeAfterMs, debounceMs },
       storm,
-      callStats: { recvKbpsFourTiles, recvKbpsAllTiles },
+      callStats: { recvKbpsFourTiles, recvKbpsAllTiles, videoKbpsFourTiles, videoKbpsAllTiles },
       viewerErrors: errors,
       replacements: viewer.replacements,
       upstreamStatuses: Object.fromEntries(statuses),
