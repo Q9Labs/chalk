@@ -38,6 +38,7 @@ export async function runDispatcher(event: DispatcherEvent = {}, context: Dispat
     ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
   };
   const circuit = new InvocationCircuit(dependencies.config.provider.circuitFailureThreshold, dependencies.config.provider.circuitCooldownMs);
+  const autoCircuit = new InvocationCircuit(dependencies.config.provider.circuitFailureThreshold, dependencies.config.provider.circuitCooldownMs);
   let claimed = 0;
   let completed = 0;
   let failed = 0;
@@ -64,7 +65,7 @@ export async function runDispatcher(event: DispatcherEvent = {}, context: Dispat
         failed += 1;
         continue;
       }
-      const result = await processAssignment(assignment, contextHeaders, context, dependencies, circuit, now);
+      const result = await processAssignment(assignment, contextHeaders, context, dependencies, assignment.transcriptLanguage?.mode === "fixed" ? circuit : autoCircuit, now);
       if (result === "completed") completed += 1;
       else failed += 1;
     }
@@ -130,7 +131,14 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     const transcription = await transcribeWithFallback({
       ...(primary ? { primary } : {}),
       ...(!auto && dependencies.fallback ? { fallback: dependencies.fallback } : {}),
-      request: { transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" }, audio: audio.bytes, contentType: audio.contentType, chunkId: assignment.chunk.chunkId, onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }) },
+      request: {
+        signal: AbortSignal.timeout(Math.max(1, context.getRemainingTimeInMillis() - dependencies.config.timeoutReserveMs)),
+        transcriptLanguage: assignment.transcriptLanguage ?? { mode: "auto" },
+        audio: audio.bytes,
+        contentType: audio.contentType,
+        chunkId: assignment.chunk.chunkId,
+        onTimingRepair: (repair) => logger.warn("provider_segment_timing_repaired", { ...repair }),
+      },
       policy: dependencies.config.provider,
       circuit,
       runtime: {

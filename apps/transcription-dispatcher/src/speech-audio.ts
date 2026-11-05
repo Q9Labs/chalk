@@ -99,7 +99,7 @@ function makeBatch(pcm: Float32Array, spans: Span[], samples: number): SpeechBat
     durationSeconds: samples / RATE,
     sourceSeconds(seconds, edge) {
       if (!Number.isFinite(seconds) || seconds < 0 || seconds > samples / RATE + 0.05) throw providerSchemaError("MAI timing exceeded uploaded speech", "timestamp", "uploaded duration", seconds);
-      const sample = Math.min(samples, seconds * RATE);
+      const sample = Math.min(samples, Math.round(seconds * RATE));
       for (const span of spans) {
         const end = span.packedStart + span.sourceEnd - span.sourceStart;
         if (sample < end || (edge === "end" && sample === end) || span === spans.at(-1)) return (span.sourceStart + sample - span.packedStart) / RATE;

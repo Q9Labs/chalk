@@ -20,7 +20,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
   async transcribe(request: ProviderRequest): Promise<ProviderResult> {
     if (request.transcriptLanguage?.mode === "fixed") throw new ProviderError("MAI requires Auto language mode", "nonretryable");
     if (request.contentType !== "audio/flac" || !request.audio.length || request.audio.length > this.options.policy.maxAudioBytes) throw providerSchemaError("invalid MAI audio source", "audio", "bounded renderer FLAC", undefined);
-    const signal = AbortSignal.any([AbortSignal.timeout(this.options.policy.timeoutMs), ...(request.signal ? [request.signal] : [])]);
+    const signal = request.signal;
     const prepared = await prepareSpeechAudio(request.audio, this.options.policy.maxAudioSeconds);
     const segments: ProviderResult["segments"] = [];
     const words: NonNullable<ProviderResult["words"]> = [];
@@ -29,7 +29,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     let cost = 0;
     let speechMs = 0;
     for (const batch of prepared.batches) {
-      if (signal.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
+      if (signal?.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
       const response = await this.post(
         "audio/transcriptions",
         {
@@ -54,7 +54,18 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
         });
       });
       if (result.text.trim() && !result.words?.length) throw providerSchemaError("MAI omitted requested word timestamps", "words", "nonempty timed words for speech", undefined);
-      const converted = await this.convertScript(result, signal);
+      // Partial word timestamps must not discard the rest of a provider segment.
+      const complete = {
+        ...result,
+        segments: result.segments.map((segment) => {
+          const timedText = (result.words ?? [])
+            .filter((word) => word.startSeconds < segment.endSeconds && word.endSeconds > segment.startSeconds)
+            .map((word) => word.word)
+            .join(" ");
+          return lexicalText(timedText) === lexicalText(segment.text) ? segment : { ...segment, useSegmentText: true as const };
+        }),
+      };
+      const converted = await this.convertScript(complete, signal);
       cost += converted.cost;
       language = converted.result.language ?? language;
       texts.push(converted.result.text);
@@ -66,7 +77,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     return { provider: this.name, model: MODEL, versionContract: VERSION, text: texts.join(" "), segments, words, ...(language ? { language } : {}), durationMs: speechMs, providerReportedCostUsd: cost, quality: { segmentCount: segments.length, wordCount: words.length } };
   }
 
-  private async convertScript(result: ProviderResult, signal: AbortSignal): Promise<{ result: ProviderResult; cost: number }> {
+  private async convertScript(result: ProviderResult, signal: AbortSignal | undefined): Promise<{ result: ProviderResult; cost: number }> {
     const tokens = [...new Set([result.text, ...result.segments.map((s) => s.text), ...(result.words ?? []).map((w) => w.word)].flatMap((text) => text.match(DEVANAGARI) ?? []))];
     if (!tokens.length) return { result, cost: 0 };
     const response = await this.post(
@@ -94,7 +105,8 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     };
   }
 
-  private async post(path: string, body: object, signal: AbortSignal): Promise<Response> {
+  private async post(path: string, body: object, parent: AbortSignal | undefined): Promise<Response> {
+    const signal = AbortSignal.any([AbortSignal.timeout(this.options.policy.timeoutMs), ...(parent ? [parent] : [])]);
     try {
       const response = await this.options.fetch(`https://openrouter.ai/api/v1/${path}`, { method: "POST", headers: { authorization: `Bearer ${this.options.token}`, "content-type": "application/json" }, body: JSON.stringify({ ...body, provider: { zdr: true, data_collection: "deny" } }), signal });
       if (!response.ok) {
@@ -103,7 +115,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
       }
       return response;
     } catch (error) {
-      if (signal.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
+      if (signal?.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
       throw error;
     }
   }
@@ -123,4 +135,8 @@ function conversionTokens(body: unknown): string[] {
   if (!parsed || typeof parsed !== "object" || !("tokens" in parsed) || !Array.isArray(parsed.tokens) || !parsed.tokens.every((token: unknown): token is string => typeof token === "string" && token.length <= 256))
     throw providerSchemaError("conversion tokens missing", "tokens", "bounded string array", undefined);
   return parsed.tokens;
+}
+
+function lexicalText(text: string): string {
+  return text.normalize("NFKC").replace(/[\p{P}\p{Z}\s]/gu, "");
 }

@@ -348,8 +348,9 @@ Speaking-span-only submission is feasible before chunk encoding in
 speech intervals per decoded microphone source, retain a small context margin,
 and split only those intervals. Keep each interval's recording/source offsets
 and authenticated track provenance in the canonical manifest. Separate interval
-chunks fit today's linear timestamp mapping; concatenating disjoint speech would
-need an explicit piecewise time map and normalizer changes. Account for VAD
+chunks fit the renderer's linear timestamp mapping; the MAI provider adapter
+already retains a piecewise source-time map when packing disjoint speech. Account for VAD
 misses, overlap, quiet speech, all-silent sources, maximum chunk counts, and the
-manifest's minimum-one-chunk admission rule before adopting it. No VAD or silence
-optimization is included in this change.
+manifest's minimum-one-chunk admission rule before moving trimming into rendering.
+The current energy-based silence optimization lives only in the MAI adapter;
+fixed-language Whisper still receives the original source.

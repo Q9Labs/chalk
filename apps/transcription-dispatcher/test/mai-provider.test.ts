@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { providerFailureKind, safeErrorCode } from "../src/errors.js";
 import { MaiTranscribeProvider } from "../src/mai-provider.js";
+import { normalizeTranscriptChunk } from "../src/normalize.js";
 import { prepareSpeechAudio } from "../src/speech-audio.js";
 import type { ProviderPolicy } from "../src/types.js";
 
@@ -50,6 +52,42 @@ describe("MAI Auto transcription", () => {
     expect(result.providerReportedCostUsd).toBeCloseTo(0.00011);
   });
 
+  it("preserves complete segment text when the provider returns only partial word timings", async () => {
+    const result = await provider(async (url) => Response.json(String(url).endsWith("transcriptions") ? { ...answer, words: answer.words.slice(0, 1) } : conversion)).transcribe(request);
+    const identity = { kind: "participant" as const, participantRef: "speaker", participantGeneration: 1, trackId: "track", trackEpoch: "1" };
+    const document = normalizeTranscriptChunk({
+      jobId: "job",
+      episodeId: "episode",
+      episodeStartMs: 0,
+      episodeEndMs: 5000,
+      sourceStartMs: 0,
+      sourceEndMs: 5000,
+      attempt: 1,
+      measuredAudioMs: 5000,
+      sourceIdentity: identity,
+      sourceTrackClass: "microphone",
+      provider: result,
+      manifest: {
+        schemaVersion: "recording-transcription-source.v1",
+        tenantId: "tenant",
+        recordingId: "recording",
+        episodeId: "episode",
+        captureEpoch: 1,
+        durationMs: 5000,
+        timebase: "recording_relative_ms",
+        presentationSha256: "a".repeat(64),
+        turns: [{ identity, startMs: 0, endMs: 5000, trackClass: "microphone", displayNameSnapshot: "Speaker", overlap: false }],
+      },
+    });
+    expect(document.cues.map((cue) => cue.text)).toEqual(["میرا meeting", "next"]);
+  });
+
+  it("maps exact packed splice timestamps on the integer sample grid", async () => {
+    const prepared = await prepareSpeechAudio(readFileSync(new URL("./fixtures/mai-splice.flac", import.meta.url)), 900);
+    expect(prepared.batches[0]?.sourceSeconds(2.01, "start")).toBe(3.85);
+    expect(prepared.batches[0]?.sourceSeconds(2.01, "end")).toBe(2.01);
+  });
+
   it("never uploads an all-silent chunk and reports an empty successful transcript", async () => {
     const result = await provider(async () => {
       throw new Error("silent audio must not be uploaded");
@@ -97,6 +135,23 @@ describe("MAI Auto transcription", () => {
         { timeoutMs: 20 },
       ).transcribe(request),
     ).rejects.toMatchObject({ kind: "timeout" });
+  });
+
+  it("keeps a response-body timeout retryable after headers arrive", async () => {
+    const pending = provider(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              init?.signal?.addEventListener("abort", () => controller.error(init.signal?.reason), { once: true });
+            },
+          }),
+        ),
+      { timeoutMs: 20 },
+    ).transcribe(request);
+    const error: unknown = await pending.catch((failure: unknown) => failure);
+    expect(providerFailureKind(error)).toBe("timeout");
+    expect(safeErrorCode(error)).toBe("timeout");
   });
 
   it("rejects speech without requested timestamps instead of inventing timings", async () => {

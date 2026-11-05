@@ -74,7 +74,7 @@ def check_plan(plan, arn, enabled, environment):
                 before.pop(name, None)
                 after.pop(name, None)
         else:
-            raise ValueError('MAI migration exceeds its resource allowlist')
+            raise ValueError('MAI migration exceeds its resource allowlist: ' + address)
         require(before == after, 'MAI migration changes unrelated resource fields')
 
 
@@ -86,6 +86,7 @@ def main():
     parser.add_argument('--secret-parameter-arn')
     parser.add_argument('--disable', action='store_true')
     parser.add_argument('--apply', action='store_true', help='Apply the checked plan; otherwise plan only')
+    parser.add_argument('--plan-output', type=Path, help='Save a private review copy of the plan')
     args = parser.parse_args()
     provider = Provider(args.region, args.profile)
     config = validate_config(json.loads(provider.parameter(f'/chalk/{args.environment}/release/recorder.json')['Value']), args.environment)
@@ -112,10 +113,22 @@ def main():
         def tofu(*arguments):
             return provider.command(['tofu', '-chdir=' + str(directory), *arguments], timeout=600)
         tofu('init', '-input=false', '-upgrade=false')
-        tofu('plan', '-input=false', '-no-color', '-out=mai.plan')
-        check_plan(json.loads(tofu('show', '-json', 'mai.plan')), arn, not args.disable, env)
+        # The unchanged scheduler policy is deferred while Lambda updates. Match the
+        # existing binding workflow: apply only checked targets, then prove a full no-op.
+        tofu('plan', '-input=false', '-no-color', '-target=module.dispatcher.aws_iam_role_policy.dispatcher',
+             '-target=module.dispatcher.aws_lambda_function.dispatcher', '-out=mai.plan')
+        plan = json.loads(tofu('show', '-json', 'mai.plan'))
+        if args.plan_output:
+            private_json(args.plan_output, plan)
+        check_plan(plan, arn, not args.disable, env)
         if args.apply:
             tofu('apply', '-input=false', '-no-color', 'mai.plan')
+            tofu('plan', '-input=false', '-no-color', '-out=outputs.plan')
+            outputs = json.loads(tofu('show', '-json', 'outputs.plan'))
+            require(all(item['change']['actions'] in (['no-op'], ['read']) for item in outputs.get('resource_changes', [])), 'MAI migration left resource drift')
+            require(all(item['actions'] == ['no-op'] or name in ('required_egress_destinations', 'release_identity') for name, item in outputs.get('output_changes', {}).items()), 'MAI migration changes unrelated outputs')
+            tofu('apply', '-input=false', '-no-color', 'outputs.plan')
+            tofu('plan', '-input=false', '-detailed-exitcode', '-no-color')
             observed = provider.aws('lambda', 'get-function-configuration', '--function-name', inputs['function_name'])
             require(observed['Environment']['Variables'] == env, 'MAI configuration readback mismatch')
             require(observed['CodeSha256'] == current['CodeSha256'], 'MAI migration changed code')
