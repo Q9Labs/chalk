@@ -88,14 +88,14 @@ func TestTokensAreHashedAndPrefixed(t *testing.T) {
 	}
 }
 
-func TestScopeNeverGrantsCredentialManagement(t *testing.T) {
+func TestScopeBundlesExcludeCredentialsAndMembers(t *testing.T) {
 	if NormalizeScope("") != ScopeRead || NormalizeScope("bogus chalk:manage") != ScopeManage && NormalizeScope("bogus chalk:manage") != ScopeRead {
 		t.Fatalf("normalize: %q %q", NormalizeScope(""), NormalizeScope("bogus chalk:manage"))
 	}
 	if ApprovalAllowed(ScopeRead, ScopeManage) || !ApprovalAllowed(ScopeManage, ScopeRead) {
 		t.Fatal("approval may only narrow the request")
 	}
-	forbidden := []authentication.Scope{authentication.ScopeAPIKeysRead, authentication.ScopeAPIKeysWrite, authentication.ScopeSigningKeysRead, authentication.ScopeTenantsWrite}
+	forbidden := []authentication.Scope{authentication.ScopeAPIKeysRead, authentication.ScopeAPIKeysWrite, authentication.ScopeSigningKeysRead, authentication.ScopeTenantsWrite, authentication.ScopeMembershipsRead, authentication.ScopeMembershipsWrite, authentication.ScopeWebhooksDelete, authentication.ScopeSpacesDelete}
 	for _, bundle := range []string{ScopeRead, ScopeManage} {
 		granted := AuthenticationScopes(bundle)
 		if len(granted) == 0 {

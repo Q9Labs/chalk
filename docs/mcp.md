@@ -75,7 +75,8 @@ receives a token for your tenant only.
   one bundle: `chalk:read` or `chalk:manage` (read plus Spaces, Episodes,
   Recordings, Transcriptions and Webhooks changes). No bundle includes API keys,
   signing keys, memberships or tenant settings. Approval can narrow the request,
-  never widen it.
+  never widen it. A tenant keeps its newest 100 connected apps; approving a new one
+  beyond that revokes the oldest, so every active connection stays listed and revocable.
 - Access tokens last one hour and are bound to the `/mcp` resource. Refresh tokens
   rotate on every use and last 30 days from the last use. Presenting a used
   refresh token or authorization code again revokes the whole grant.

@@ -123,6 +123,19 @@ update mcp_oauth_grants
 set revoked_at = sqlc.arg(now)
 where id = sqlc.arg(id) and tenant_id = sqlc.arg(tenant_id) and revoked_at is null;
 
+-- A Tenant keeps its newest 100 connected apps, the number the dashboard lists,
+-- so every active connection stays visible and revocable.
+-- name: RevokeMCPOAuthGrantsBeyondLimit :exec
+update mcp_oauth_grants g
+set revoked_at = sqlc.arg(now)
+where g.tenant_id = sqlc.arg(tenant_id) and g.revoked_at is null
+  and g.id not in (
+    select newest.id from mcp_oauth_grants newest
+    where newest.tenant_id = sqlc.arg(tenant_id) and newest.revoked_at is null
+    order by newest.created_at desc, newest.id
+    limit 100
+  );
+
 -- name: FindMCPOAuthGrantByToken :one
 select t.grant_id, c.client_id
 from mcp_oauth_tokens t

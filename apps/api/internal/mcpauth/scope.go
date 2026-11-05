@@ -7,12 +7,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 )
 
-// Connected apps get one of two bundles. Neither includes API keys or signing
-// keys (not even to read them), membership changes or tenant settings, so a connected app cannot mint
-// credentials or widen its own access.
-var credentialResources = []string{"api_keys", "signing_keys"}
-
-var manageResources = []string{"spaces", "episodes", "recordings", "transcriptions", "webhooks"}
+// Connected apps get one of two bundles built from an explicit allowlist, so a
+// new scope is never granted until someone adds it here. Neither bundle includes
+// API keys, signing keys, memberships, deletes or tenant settings, so a connected
+// app cannot read credentials, list members or widen its own access.
+var contentResources = []string{"spaces", "episodes", "recordings", "transcriptions", "webhooks"}
 
 // NormalizeScope reduces a client's requested scope string to one bundle.
 // Unknown scopes are ignored. An empty request gets the read bundle.
@@ -33,15 +32,16 @@ func ApprovalAllowed(requested, approved string) bool {
 }
 
 // AuthenticationScopes expands a bundle into the scopes the tools check.
+// Both bundles read the tenant and its content; only manage writes.
 func AuthenticationScopes(scope string) []authentication.Scope {
 	var scopes []authentication.Scope
 	for _, candidate := range authentication.AllScopes {
 		resource, action, _ := strings.Cut(string(candidate), ":")
 		switch {
-		case slices.Contains(credentialResources, resource): // never granted
-		case action == "read":
+		case candidate == authentication.ScopeTenantsRead:
 			scopes = append(scopes, candidate)
-		case scope == ScopeManage && slices.Contains(manageResources, resource):
+		case !slices.Contains(contentResources, resource):
+		case action == "read", action == "write" && scope == ScopeManage:
 			scopes = append(scopes, candidate)
 		}
 	}

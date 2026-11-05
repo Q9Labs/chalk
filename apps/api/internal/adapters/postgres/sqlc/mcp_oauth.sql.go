@@ -528,6 +528,30 @@ func (q *Queries) RevokeMCPOAuthGrant(ctx context.Context, arg RevokeMCPOAuthGra
 	return result.RowsAffected(), nil
 }
 
+const revokeMCPOAuthGrantsBeyondLimit = `-- name: RevokeMCPOAuthGrantsBeyondLimit :exec
+update mcp_oauth_grants g
+set revoked_at = $1
+where g.tenant_id = $2 and g.revoked_at is null
+  and g.id not in (
+    select newest.id from mcp_oauth_grants newest
+    where newest.tenant_id = $2 and newest.revoked_at is null
+    order by newest.created_at desc, newest.id
+    limit 100
+  )
+`
+
+type RevokeMCPOAuthGrantsBeyondLimitParams struct {
+	Now      pgtype.Timestamptz `json:"now"`
+	TenantID pgtype.UUID        `json:"tenant_id"`
+}
+
+// A Tenant keeps its newest 100 connected apps, the number the dashboard lists,
+// so every active connection stays visible and revocable.
+func (q *Queries) RevokeMCPOAuthGrantsBeyondLimit(ctx context.Context, arg RevokeMCPOAuthGrantsBeyondLimitParams) error {
+	_, err := q.db.Exec(ctx, revokeMCPOAuthGrantsBeyondLimit, arg.Now, arg.TenantID)
+	return err
+}
+
 const revokeTenantMCPOAuthGrant = `-- name: RevokeTenantMCPOAuthGrant :execrows
 update mcp_oauth_grants
 set revoked_at = $1

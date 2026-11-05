@@ -93,9 +93,13 @@ func (s Service) Authorize(ctx context.Context, params AuthorizeParams) (string,
 	if redirectURI == "" && len(client.RedirectURIs) == 1 {
 		redirectURI = client.RedirectURIs[0]
 	}
-	if !slices.Contains(client.RedirectURIs, redirectURI) {
+	// Use the registered string, never the request's, so a redirect can only
+	// ever go to a URI that passed the registration allowlist.
+	registered := slices.Index(client.RedirectURIs, redirectURI)
+	if registered < 0 {
 		return "", &AuthorizeFailure{Err: oauthError(400, "invalid_request", "redirect_uri does not match a registered redirect URI")}
 	}
+	redirectURI = client.RedirectURIs[registered]
 	fail := func(code, description string) (string, *AuthorizeFailure) {
 		return "", &AuthorizeFailure{Err: oauthError(400, code, description), RedirectURI: redirectURI, State: params.State}
 	}

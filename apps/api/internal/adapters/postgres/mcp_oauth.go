@@ -103,6 +103,9 @@ func (r MCPOAuthRepository) ApproveAuthorizationRequest(ctx context.Context, inp
 	}); err != nil {
 		return mcpauth.AuthorizationRequest{}, fmt.Errorf("create mcp oauth grant: %w", err)
 	}
+	if err := queries.RevokeMCPOAuthGrantsBeyondLimit(ctx, sqlc.RevokeMCPOAuthGrantsBeyondLimitParams{Now: pgTime(input.Now), TenantID: uuid(input.TenantID)}); err != nil {
+		return mcpauth.AuthorizationRequest{}, fmt.Errorf("limit mcp oauth grants: %w", err)
+	}
 	if err := queries.CreateMCPOAuthCode(ctx, sqlc.CreateMCPOAuthCodeParams{
 		CodeHash: input.CodeHash, GrantID: uuid(input.GrantID), RedirectUri: decided.RedirectUri, CodeChallenge: decided.CodeChallenge, ExpiresAt: pgTime(input.CodeExpiry),
 	}); err != nil {

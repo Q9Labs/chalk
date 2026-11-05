@@ -575,3 +575,74 @@ func TestMCPOAuthKeepsSecretsOutOfLogs(t *testing.T) {
 		t.Error("expected mcp.oauth.* log events")
 	}
 }
+
+func TestMCPOAuthAuthorizeRedirectsOnlyToRegisteredURIs(t *testing.T) {
+	h := newOAuthHarness(t)
+	clientID := h.register(oauthTestRedirect)
+	pkce := newPKCE()
+
+	// A rejected request with a registered redirect_uri goes back to exactly that URI.
+	query := h.authorizeQuery(clientID, oauthTestRedirect, pkce, url.Values{"response_type": {"token"}})
+	response, body := h.do(http.MethodGet, "/oauth/authorize?"+query.Encode(), nil, "")
+	location, err := url.Parse(response.Header.Get("Location"))
+	if response.StatusCode != http.StatusFound || err != nil || location.Scheme+"://"+location.Host+location.Path != oauthTestRedirect || location.Query().Get("error") != "unsupported_response_type" {
+		t.Fatalf("registered redirect error: %d %q %s", response.StatusCode, response.Header.Get("Location"), body)
+	}
+
+	// Every lookalike gets an error page and no redirect, even though the request is also invalid.
+	for _, attempt := range []string{
+		"https://evil.example.test/cb",
+		"//evil.example.test/cb",
+		"https://claude.ai@evil.example.test/api/mcp/auth_callback",
+		"https://claude.ai.evil.example.test/api/mcp/auth_callback",
+		"https://CLAUDE.AI/api/mcp/auth_callback",
+		"https://claude.ai/api/mcp/auth_callback/",
+		"https://claude.ai/api/mcp/auth_callback?next=https://evil.example.test",
+		"https://claude.ai/api/mcp/auth_callback#https://evil.example.test",
+		"https://claude.ai:444/api/mcp/auth_callback",
+		"/api/mcp/auth_callback",
+		"javascript:alert(1)",
+	} {
+		query := h.authorizeQuery(clientID, attempt, pkce, url.Values{"response_type": {"token"}})
+		response, body := h.do(http.MethodGet, "/oauth/authorize?"+query.Encode(), nil, "")
+		if response.StatusCode != http.StatusBadRequest || response.Header.Get("Location") != "" || strings.Contains(body, "evil.example.test/cb?") {
+			t.Errorf("redirect_uri %q: %d Location=%q", attempt, response.StatusCode, response.Header.Get("Location"))
+		}
+	}
+
+	// A client with several registered URIs only uses the one the request names; omitting it is ambiguous.
+	payload, _ := json.Marshal(map[string]any{"client_name": "Two", "redirect_uris": []string{oauthTestRedirect, "http://127.0.0.1/cb"}})
+	registered, registeredBody := h.do(http.MethodPost, "/oauth/register", map[string]string{"Content-Type": "application/json"}, string(payload))
+	var two struct {
+		ClientID string `json:"client_id"`
+	}
+	if err := json.Unmarshal([]byte(registeredBody), &two); err != nil || registered.StatusCode != http.StatusCreated {
+		t.Fatalf("register two: %d %s", registered.StatusCode, registeredBody)
+	}
+	query = h.authorizeQuery(two.ClientID, "", pkce, url.Values{"response_type": {"token"}})
+	query.Del("redirect_uri")
+	if response, _ := h.do(http.MethodGet, "/oauth/authorize?"+query.Encode(), nil, ""); response.Header.Get("Location") != "" {
+		t.Errorf("ambiguous redirect_uri was redirected to %q", response.Header.Get("Location"))
+	}
+}
+
+func TestMCPOAuthKeepsOnlyTheNewestHundredConnections(t *testing.T) {
+	h := newOAuthHarness(t)
+	clientID := h.register(oauthTestRedirect)
+	var clientRow [16]byte
+	if err := h.pool.QueryRow(context.Background(), `select id from mcp_oauth_clients where client_id=$1`, clientID).Scan(&clientRow); err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, h.pool, `insert into mcp_oauth_grants(id,tenant_id,client_id,scopes,resource,approved_by_service_id,created_at)
+		select gen_random_uuid(), $1, $2, array['chalk:read'], $3, 'seed', now() - make_interval(mins => g) from generate_series(1,100) g`,
+		uuid(h.tenantA), clientRow, h.resource)
+	h.obtainCode(clientID, oauthTestRedirect, newPKCE(), h.tenantA)
+
+	var active, newest int
+	if err := h.pool.QueryRow(context.Background(), `select count(*), count(*) filter (where created_at > now() - interval '1 minute') from mcp_oauth_grants where tenant_id=$1 and revoked_at is null`, uuid(h.tenantA)).Scan(&active, &newest); err != nil {
+		t.Fatal(err)
+	}
+	if active != 100 || newest < 1 {
+		t.Fatalf("active grants = %d (new in last minute: %d), want 100 including the new one", active, newest)
+	}
+}
