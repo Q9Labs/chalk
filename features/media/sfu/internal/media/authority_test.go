@@ -536,3 +536,48 @@ func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 		t.Fatal("a refused batch changed the table")
 	}
 }
+
+func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) {
+	pub, layers, _ := benchPublication(t)
+	authority := &sourceAuthority{}
+	authority.window.Store(openWindow)
+	pub.authority = authority
+	viewer := (*pub.subscribers.Load())[0]
+	wire := &wireWriter{}
+	viewer.track.binding.Store(&egressBinding{writer: wire, ssrc: 100, payloadType: 96, rtxSSRC: 101, rtxPayloadType: 97, twccID: 3})
+	layers[0].lastAsked.Store(monotonic() + int64(time.Hour)) // the test publication has no peer to ask
+	transport := viewer.transport
+	transport.mu.Lock()
+	transport.setRates(0) // the bench paces without bound
+	transport.refill(monotonic())
+	transport.tokens = -1e6 // the pacer holds everything that arrives
+	transport.mu.Unlock()
+
+	var header rtp.Header
+	writer := &packetWriter{}
+	for index, raw := range cameraPackets("h")[:benchPacketsPerFrame] {
+		stamp(raw, index)
+		pub.forward(layers[0], raw, false, &header, writer)
+	}
+	queued := transport.queues[classVideo]
+	if queued.empty() {
+		t.Fatal("no video waits in the pacer, so the test proves nothing")
+	}
+	first := queued.items[queued.head].packet.seq
+	viewer.retransmit(&rtcp.TransportLayerNack{Nacks: rtcp.NackPairsFromSequenceNumbers([]uint16{first})}, 64, writer)
+	if transport.queues[classRepair].empty() {
+		t.Fatal("no RTX repair waits in the pacer, so the test proves nothing")
+	}
+
+	authority.window.Store(closedWindow)
+	transport.mu.Lock()
+	transport.tokens = 1e9
+	transport.mu.Unlock()
+	transport.drainOnce()
+	if sent := wire.sent(); len(sent) != 0 {
+		t.Fatalf("the pacer sent %d packets of a revoked source, first %+v", len(sent), sent[0])
+	}
+	if transport.queuedBytes != 0 {
+		t.Fatalf("%d bytes of a revoked source still wait in the pacer", transport.queuedBytes)
+	}
+}

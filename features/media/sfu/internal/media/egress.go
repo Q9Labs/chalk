@@ -101,7 +101,11 @@ func (e *egressTrack) Kind() webrtc.RTPCodecType { return e.kind }
 
 // egressPacket is one packet for a subscriber, as the pacer holds it.
 type egressPacket struct {
-	binding       *egressBinding
+	binding *egressBinding
+	// authority is the source's forwarding lease, checked when the packet is
+	// written; nil for probe padding, which carries no media.
+	authority     *sourceAuthority
+	arrival       int64 // when the media packet reached the SFU, monotonic
 	class         packetClass
 	rtx           bool // sent on the RTX stream; the payload starts with the original sequence number
 	marker        bool
@@ -117,6 +121,11 @@ type egressPacket struct {
 const rtpOverhead = 12 + 12
 
 func (p *egressPacket) size() int { return rtpOverhead + len(p.payload) + int(p.padding) }
+
+// allowed reports whether the packet's source may still forward it at now.
+func (p *egressPacket) allowed(now int64) bool {
+	return p.authority == nil || p.authority.allows(p.arrival, now)
+}
 
 // packetWriter is one goroutine's scratch space for writing translated
 // packets, so the forwarding path allocates nothing per packet. Pion encrypts

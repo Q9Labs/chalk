@@ -310,17 +310,17 @@ func (s *subscription) class() packetClass {
 	return classAudio
 }
 
-// send hands one translated packet to the subscriber's transport if the source
-// may still forward it. A repair goes on the RTX stream when the subscriber
-// negotiated one. It reads the clock at each send, because an earlier write, to
-// this subscriber or another, can stall past the lease.
+// send hands one translated packet to the subscriber's transport, which checks
+// the source's lease when it writes the packet. A repair goes on the RTX stream
+// when the subscriber negotiated one.
 func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repair bool, w *packetWriter) bool {
 	binding := s.track.binding.Load()
-	if binding == nil || !s.pub.authority.allows(p.arrival, monotonic()) {
+	if binding == nil {
 		return false
 	}
 	packet := egressPacket{
-		binding: binding, class: class, marker: p.marker, padding: p.paddingSize,
+		binding: binding, authority: s.pub.authority, arrival: p.arrival,
+		class: class, marker: p.marker, padding: p.paddingSize,
 		seq: out.seq, timestamp: out.timestamp, payload: p.payload,
 		audioLevel: p.audioLevel, hasAudioLevel: p.hasAudioLevel,
 	}

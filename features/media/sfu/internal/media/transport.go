@@ -198,7 +198,8 @@ func (t *transport) refill(now int64) {
 // the queue; a packet the pacer drops still reports true, because the
 // subscriber's NACK recovers it. Without transport-wide feedback there is no
 // estimate to pace by, so the packet goes out at once, but it is still counted
-// and a repair is still capped.
+// and a repair is still capped. A packet its source may no longer forward
+// reports false, here and when the pacer writes it later.
 func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 	size := packet.size()
 	t.mu.Lock()
@@ -207,6 +208,10 @@ func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 		return false
 	}
 	now := monotonic()
+	if !packet.allowed(now) {
+		t.mu.Unlock()
+		return false
+	}
 	t.refill(now)
 	if packet.class == classRepair {
 		if t.repair < float64(size) {
@@ -344,6 +349,11 @@ func (t *transport) drainOnce() time.Duration {
 		}
 		size := item.packet.size()
 		t.queuedBytes -= size
+		if !item.packet.allowed(now) {
+			t.mu.Unlock()
+			queueBuffers.Put(item.buffer)
+			continue
+		}
 		seq := t.assign(class, size, now)
 		t.mu.Unlock()
 		t.delays.record(time.Duration(now - item.queued))
