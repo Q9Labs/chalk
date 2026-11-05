@@ -21,6 +21,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -626,23 +627,64 @@ func TestMCPOAuthAuthorizeRedirectsOnlyToRegisteredURIs(t *testing.T) {
 	}
 }
 
-func TestMCPOAuthKeepsOnlyTheNewestHundredConnections(t *testing.T) {
+func TestMCPOAuthConnectionListPagesThroughEveryActiveGrant(t *testing.T) {
 	h := newOAuthHarness(t)
 	clientID := h.register(oauthTestRedirect)
 	var clientRow [16]byte
 	if err := h.pool.QueryRow(context.Background(), `select id from mcp_oauth_clients where client_id=$1`, clientID).Scan(&clientRow); err != nil {
 		t.Fatal(err)
 	}
+	// 105 grants with only 5 distinct timestamps, so the cursor must break ties on id.
 	mustExec(t, h.pool, `insert into mcp_oauth_grants(id,tenant_id,client_id,scopes,resource,approved_by_service_id,created_at)
-		select gen_random_uuid(), $1, $2, array['chalk:read'], $3, 'seed', now() - make_interval(mins => g) from generate_series(1,100) g`,
+		select gen_random_uuid(), $1, $2, array['chalk:read'], $3, 'seed', now() - make_interval(mins => g % 5 + 1) from generate_series(1,105) g`,
 		uuid(h.tenantA), clientRow, h.resource)
-	h.obtainCode(clientID, oauthTestRedirect, newPKCE(), h.tenantA)
+	repository := NewMCPOAuthRepository(accountTenantIntegrationPool(t))
 
-	var active, newest int
-	if err := h.pool.QueryRow(context.Background(), `select count(*), count(*) filter (where created_at > now() - interval '1 minute') from mcp_oauth_grants where tenant_id=$1 and revoked_at is null`, uuid(h.tenantA)).Scan(&active, &newest); err != nil {
+	listAll := func() []mcpauth.Grant {
+		var all []mcpauth.Grant
+		var cursor *pagination.Cursor
+		for pages := 0; pages < 10; pages++ {
+			request, err := pagination.NewPageRequest(40, cursor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			list, err := repository.ListGrants(context.Background(), h.tenantA, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			all = append(all, list.Grants...)
+			if !list.Page.HasMore {
+				return all
+			}
+			cursor = list.Page.NextCursor
+		}
+		t.Fatal("pagination did not finish")
+		return nil
+	}
+
+	all := listAll()
+	seen := make(map[utilities.ID]bool, len(all))
+	for i, grant := range all {
+		if seen[grant.ID] {
+			t.Fatalf("grant %s listed twice", grant.ID)
+		}
+		seen[grant.ID] = true
+		if i > 0 && grant.CreatedAt.After(all[i-1].CreatedAt) {
+			t.Fatalf("grants out of order at %d", i)
+		}
+	}
+	if len(all) != 105 {
+		t.Fatalf("paged through %d active grants, want all 105", len(all))
+	}
+
+	// The oldest grant is reachable and revocable, and then it disappears from the list.
+	oldest := all[len(all)-1]
+	if err := repository.RevokeTenantGrant(context.Background(), h.tenantA, oldest.ID, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if active != 100 || newest < 1 {
-		t.Fatalf("active grants = %d (new in last minute: %d), want 100 including the new one", active, newest)
+	for _, grant := range listAll() {
+		if grant.ID == oldest.ID {
+			t.Fatal("revoked grant is still listed")
+		}
 	}
 }

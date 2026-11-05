@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -102,9 +103,6 @@ func (r MCPOAuthRepository) ApproveAuthorizationRequest(ctx context.Context, inp
 		Resource: decided.Resource, ApprovedByServiceID: input.ServiceID,
 	}); err != nil {
 		return mcpauth.AuthorizationRequest{}, fmt.Errorf("create mcp oauth grant: %w", err)
-	}
-	if err := queries.RevokeMCPOAuthGrantsBeyondLimit(ctx, sqlc.RevokeMCPOAuthGrantsBeyondLimitParams{Now: pgTime(input.Now), TenantID: uuid(input.TenantID)}); err != nil {
-		return mcpauth.AuthorizationRequest{}, fmt.Errorf("limit mcp oauth grants: %w", err)
 	}
 	if err := queries.CreateMCPOAuthCode(ctx, sqlc.CreateMCPOAuthCodeParams{
 		CodeHash: input.CodeHash, GrantID: uuid(input.GrantID), RedirectUri: decided.RedirectUri, CodeChallenge: decided.CodeChallenge, ExpiresAt: pgTime(input.CodeExpiry),
@@ -296,21 +294,35 @@ func (r MCPOAuthRepository) RevokeByToken(ctx context.Context, tokenHash, client
 	return nil
 }
 
-func (r MCPOAuthRepository) ListGrants(ctx context.Context, tenantID utilities.ID) ([]mcpauth.Grant, error) {
-	rows, err := sqlc.New(r.pool).ListTenantMCPOAuthGrants(ctx, uuid(tenantID))
-	if err != nil {
-		return nil, fmt.Errorf("list mcp oauth grants: %w", err)
+func (r MCPOAuthRepository) ListGrants(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (mcpauth.GrantList, error) {
+	params := sqlc.ListTenantMCPOAuthGrantsParams{TenantID: uuid(tenantID), PageSize: int32(page.Size() + 1)}
+	if cursor := page.Cursor(); cursor != nil {
+		params.CursorSet = true
+		params.CursorCreatedAt = pgTime(cursor.CreatedAt)
+		params.CursorID = uuid(cursor.ID)
 	}
-	grants := make([]mcpauth.Grant, 0, len(rows))
+	rows, err := sqlc.New(r.pool).ListTenantMCPOAuthGrants(ctx, params)
+	if err != nil {
+		return mcpauth.GrantList{}, fmt.Errorf("list mcp oauth grants: %w", err)
+	}
+	hasMore := len(rows) > page.Size()
+	if hasMore {
+		rows = rows[:page.Size()]
+	}
+	list := mcpauth.GrantList{Grants: make([]mcpauth.Grant, 0, len(rows)), Page: pagination.Page{PageSize: page.Size(), HasMore: hasMore}}
 	for _, row := range rows {
 		grant := mcpauth.Grant{ID: nullableID(row.ID), TenantID: tenantID, ClientID: row.ClientID, ClientName: row.ClientName, Scope: firstScope(row.Scopes), Resource: row.Resource, CreatedAt: row.CreatedAt.Time}
 		if row.LastUsedAt.Valid {
 			used := row.LastUsedAt.Time
 			grant.LastUsedAt = &used
 		}
-		grants = append(grants, grant)
+		list.Grants = append(list.Grants, grant)
 	}
-	return grants, nil
+	if hasMore {
+		last := list.Grants[len(list.Grants)-1]
+		list.Page.NextCursor = &pagination.Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
+	}
+	return list, nil
 }
 
 func (r MCPOAuthRepository) RevokeTenantGrant(ctx context.Context, tenantID, grantID utilities.ID, now time.Time) error {

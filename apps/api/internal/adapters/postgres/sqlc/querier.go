@@ -275,7 +275,7 @@ type Querier interface {
 	ListSpaceRoles(ctx context.Context, arg ListSpaceRolesParams) ([]SpaceRole, error)
 	ListTenantAPIKeys(ctx context.Context, arg ListTenantAPIKeysParams) ([]ListTenantAPIKeysRow, error)
 	ListTenantEpisodes(ctx context.Context, arg ListTenantEpisodesParams) ([]Episode, error)
-	ListTenantMCPOAuthGrants(ctx context.Context, tenantID pgtype.UUID) ([]ListTenantMCPOAuthGrantsRow, error)
+	ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error)
 	ListTenantMemberships(ctx context.Context, arg ListTenantMembershipsParams) ([]ListTenantMembershipsRow, error)
 	ListTenantRecordings(ctx context.Context, arg ListTenantRecordingsParams) ([]Recording, error)
 	ListTenantSpaceRecordings(ctx context.Context, arg ListTenantSpaceRecordingsParams) ([]Recording, error)
@@ -394,9 +394,6 @@ type Querier interface {
 	RetryTranscriptionCleanupJob(ctx context.Context, arg RetryTranscriptionCleanupJobParams) (TranscriptionCleanupJob, error)
 	RevokeActiveAPIKey(ctx context.Context, arg RevokeActiveAPIKeyParams) (pgtype.UUID, error)
 	RevokeMCPOAuthGrant(ctx context.Context, arg RevokeMCPOAuthGrantParams) (int64, error)
-	// A Tenant keeps its newest 100 connected apps, the number the dashboard lists,
-	// so every active connection stays visible and revocable.
-	RevokeMCPOAuthGrantsBeyondLimit(ctx context.Context, arg RevokeMCPOAuthGrantsBeyondLimitParams) error
 	// A lost row still needs a durable fence against bootstrap replay. Metadata
 	// unavailable after row loss uses explicit tombstone placeholders; it can never
 	// authorize a worker or be activated as a bootstrap reservation.

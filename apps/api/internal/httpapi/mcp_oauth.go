@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -35,7 +36,7 @@ type MCPOAuthService interface {
 	ConsentRequest(ctx context.Context, handle string) (mcpauth.AuthorizationRequest, error)
 	Approve(ctx context.Context, handle string, tenantID utilities.ID, scope, serviceID string) (string, error)
 	Deny(ctx context.Context, handle string) (string, error)
-	ListGrants(ctx context.Context, tenantID utilities.ID) ([]mcpauth.Grant, error)
+	ListGrants(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (mcpauth.GrantList, error)
 	RevokeGrant(ctx context.Context, tenantID, grantID utilities.ID) error
 }
 

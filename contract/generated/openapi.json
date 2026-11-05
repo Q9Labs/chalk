@@ -3457,6 +3457,22 @@
             "schema": {
               "$ref": "#/components/schemas/TenantId"
             }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3479,7 +3495,7 @@
               }
             },
             "description": "Bad Request",
-            "x-chalk-error-codes": ["tenant.invalid_id"]
+            "x-chalk-error-codes": ["pagination.invalid_cursor", "pagination.invalid_page_size", "tenant.invalid_id"]
           },
           "401": {
             "content": {
@@ -15193,9 +15209,12 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         },
-        "required": ["data"],
+        "required": ["data", "pagination"],
         "type": "object"
       },
       "MCPConsentApproval": {

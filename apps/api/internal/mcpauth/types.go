@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -71,6 +72,12 @@ type AuthorizationRequest struct {
 	Scope         string
 	Resource      string
 	ExpiresAt     time.Time
+}
+
+// GrantList is one page of a tenant's active connected apps, newest first.
+type GrantList struct {
+	Grants []Grant
+	Page   pagination.Page
 }
 
 // Grant is one connected app: a tenant's consent for one client and resource.
@@ -143,7 +150,7 @@ type Repository interface {
 
 	AuthenticateAccessToken(ctx context.Context, tokenHash string, now time.Time) (AccessTokenRecord, error)
 	RevokeByToken(ctx context.Context, tokenHash string, clientID string, now time.Time) error
-	ListGrants(ctx context.Context, tenantID utilities.ID) ([]Grant, error)
+	ListGrants(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (GrantList, error)
 	RevokeTenantGrant(ctx context.Context, tenantID, grantID utilities.ID, now time.Time) error
 }
 

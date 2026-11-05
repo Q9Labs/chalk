@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -48,7 +49,25 @@ type mcpConnectionResponse struct {
 }
 
 type mcpConnectionListResponse struct {
-	Data []mcpConnectionResponse `json:"data"`
+	Data       []mcpConnectionResponse `json:"data"`
+	Pagination paginationResponse      `json:"pagination"`
+}
+
+type listMCPConnectionsRequest struct {
+	TenantID utilities.ID
+	Page     pagination.PageRequest
+}
+
+func decodeListMCPConnectionsRequest(r *http.Request) (listMCPConnectionsRequest, error) {
+	tenantID, err := tenantIDRequest(r)
+	if err != nil {
+		return listMCPConnectionsRequest{}, err
+	}
+	page, err := parsePageRequest(r)
+	if err != nil {
+		return listMCPConnectionsRequest{}, paginationAPIError(err)
+	}
+	return listMCPConnectionsRequest{TenantID: tenantID, Page: page}, nil
 }
 
 type mcpConnectionIDsRequest struct {
@@ -161,29 +180,33 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 		MapErrors(mcpOAuthAPIError)
 }
 
-func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, mcpConnectionListResponse] {
-	return Get("/v1/tenants/{tenant_id}/mcp-connections", "/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (mcpConnectionListResponse, error) {
+func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[listMCPConnectionsRequest, mcpConnectionListResponse] {
+	return Get("/v1/tenants/{tenant_id}/mcp-connections", "/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeListMCPConnectionsRequest, func(ctx context.Context, request listMCPConnectionsRequest) (mcpConnectionListResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
 			return mcpConnectionListResponse{}, err
 		}
 		if service == nil {
 			return mcpConnectionListResponse{}, apiErrorServiceUnavailable
 		}
-		grants, err := service.ListGrants(ctx, request.TenantID)
+		list, err := service.ListGrants(ctx, request.TenantID, request.Page)
 		if err != nil {
 			return mcpConnectionListResponse{}, err
 		}
-		response := mcpConnectionListResponse{Data: make([]mcpConnectionResponse, 0, len(grants))}
-		for _, grant := range grants {
+		page, err := newPaginationResponse(list.Page)
+		if err != nil {
+			return mcpConnectionListResponse{}, err
+		}
+		response := mcpConnectionListResponse{Data: make([]mcpConnectionResponse, 0, len(list.Grants)), Pagination: page}
+		for _, grant := range list.Grants {
 			response.Data = append(response.Data, mcpConnectionResponse{ID: grant.ID.String(), ClientName: grant.ClientName, Scope: grant.Scope, LastUsedAt: grant.LastUsedAt, CreatedAt: grant.CreatedAt})
 		}
 		return response, nil
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
-		Parameters(tenantIDParameter()).
+		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "MCPConnectionList", mcpConnectionListResponse{}).
-		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidTenantID, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
+		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidTenantID, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
 		MapErrors(mcpOAuthAPIError)
 }
 

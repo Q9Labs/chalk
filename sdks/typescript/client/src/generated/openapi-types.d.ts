@@ -1923,6 +1923,7 @@ export interface components {
         last_used_at: components["schemas"]["DateTimeString"] | null;
         scope: string;
       }[];
+      pagination: components["schemas"]["Pagination"];
     };
     MCPConsentApproval: {
       request: string;
@@ -5405,7 +5406,10 @@ export interface operations {
   };
   listMCPConnections: {
     parameters: {
-      query?: never;
+      query?: {
+        page_size?: number;
+        cursor?: string;
+      };
       header?: never;
       path: {
         tenant_id: components["schemas"]["TenantId"];

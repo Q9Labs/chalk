@@ -825,6 +825,7 @@ export const MCPConnectionListSchema = /* @__PURE__ */ (() =>
         scope: Schema.String,
       }),
     ),
+    pagination: PaginationSchema,
   }))();
 export type MCPConnectionList = typeof MCPConnectionListSchema.Type;
 
@@ -3116,6 +3117,13 @@ export const ListMCPConnectionsPathParamsSchema = /* @__PURE__ */ (() =>
     tenant_id: TenantIdSchema,
   }))();
 export type ListMCPConnectionsPathParams = typeof ListMCPConnectionsPathParamsSchema.Type;
+
+export const ListMCPConnectionsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListMCPConnectionsQueryParams = typeof ListMCPConnectionsQueryParamsSchema.Type;
 
 export const ListMCPConnectionsResponseSchema = /* @__PURE__ */ (() => MCPConnectionListSchema)();
 export type ListMCPConnectionsResponse = typeof ListMCPConnectionsResponseSchema.Type;
@@ -6870,7 +6878,16 @@ export const ListEpisodesErrorSchema = Schema.Union([
 ]);
 export type ListEpisodesError = typeof ListEpisodesErrorSchema.Type;
 
-export const ListMCPConnectionsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export const ListMCPConnectionsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PaginationInvalidCursorErrorSchema,
+  PaginationInvalidPageSizeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
 export type ListMCPConnectionsError = typeof ListMCPConnectionsErrorSchema.Type;
 
 export const ListMembershipsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);

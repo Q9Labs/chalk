@@ -395,8 +395,11 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.get("listMCPConnections", "/v1/tenants/:tenant_id/mcp-connections", {
       params: S.ListMCPConnectionsPathParamsSchema,
+      query: S.ListMCPConnectionsQueryParamsSchema,
       success: S.ListMCPConnectionsResponseSchema.pipe(HttpApiSchema.status(200)),
       error: [
+        S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),

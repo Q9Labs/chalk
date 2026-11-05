@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -339,8 +340,8 @@ func (s Service) Authenticate(ctx context.Context, rawToken string) (authenticat
 	return authentication.Principal{Kind: authentication.PrincipalOAuth, TenantID: record.TenantID, GrantID: record.GrantID, Scopes: AuthenticationScopes(record.Scope)}, nil
 }
 
-func (s Service) ListGrants(ctx context.Context, tenantID utilities.ID) ([]Grant, error) {
-	return s.repository.ListGrants(ctx, tenantID)
+func (s Service) ListGrants(ctx context.Context, tenantID utilities.ID, page pagination.PageRequest) (GrantList, error) {
+	return s.repository.ListGrants(ctx, tenantID, page)
 }
 
 func (s Service) RevokeGrant(ctx context.Context, tenantID, grantID utilities.ID) error {

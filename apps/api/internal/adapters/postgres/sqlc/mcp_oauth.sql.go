@@ -467,9 +467,21 @@ select g.id, c.client_id, c.client_name, g.scopes, g.resource, g.last_used_at, g
 from mcp_oauth_grants g
 join mcp_oauth_clients c on c.id = g.client_id
 where g.tenant_id = $1 and g.revoked_at is null
-order by g.created_at desc, g.id
-limit 100
+  and (
+    not $2::boolean
+    or (g.created_at, g.id) < ($3::timestamptz, $4::uuid)
+  )
+order by g.created_at desc, g.id desc
+limit $5::integer
 `
+
+type ListTenantMCPOAuthGrantsParams struct {
+	TenantID        pgtype.UUID        `json:"tenant_id"`
+	CursorSet       bool               `json:"cursor_set"`
+	CursorCreatedAt pgtype.Timestamptz `json:"cursor_created_at"`
+	CursorID        pgtype.UUID        `json:"cursor_id"`
+	PageSize        int32              `json:"page_size"`
+}
 
 type ListTenantMCPOAuthGrantsRow struct {
 	ID         pgtype.UUID        `json:"id"`
@@ -481,8 +493,14 @@ type ListTenantMCPOAuthGrantsRow struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
-func (q *Queries) ListTenantMCPOAuthGrants(ctx context.Context, tenantID pgtype.UUID) ([]ListTenantMCPOAuthGrantsRow, error) {
-	rows, err := q.db.Query(ctx, listTenantMCPOAuthGrants, tenantID)
+func (q *Queries) ListTenantMCPOAuthGrants(ctx context.Context, arg ListTenantMCPOAuthGrantsParams) ([]ListTenantMCPOAuthGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listTenantMCPOAuthGrants,
+		arg.TenantID,
+		arg.CursorSet,
+		arg.CursorCreatedAt,
+		arg.CursorID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -526,30 +544,6 @@ func (q *Queries) RevokeMCPOAuthGrant(ctx context.Context, arg RevokeMCPOAuthGra
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const revokeMCPOAuthGrantsBeyondLimit = `-- name: RevokeMCPOAuthGrantsBeyondLimit :exec
-update mcp_oauth_grants g
-set revoked_at = $1
-where g.tenant_id = $2 and g.revoked_at is null
-  and g.id not in (
-    select newest.id from mcp_oauth_grants newest
-    where newest.tenant_id = $2 and newest.revoked_at is null
-    order by newest.created_at desc, newest.id
-    limit 100
-  )
-`
-
-type RevokeMCPOAuthGrantsBeyondLimitParams struct {
-	Now      pgtype.Timestamptz `json:"now"`
-	TenantID pgtype.UUID        `json:"tenant_id"`
-}
-
-// A Tenant keeps its newest 100 connected apps, the number the dashboard lists,
-// so every active connection stays visible and revocable.
-func (q *Queries) RevokeMCPOAuthGrantsBeyondLimit(ctx context.Context, arg RevokeMCPOAuthGrantsBeyondLimitParams) error {
-	_, err := q.db.Exec(ctx, revokeMCPOAuthGrantsBeyondLimit, arg.Now, arg.TenantID)
-	return err
 }
 
 const revokeTenantMCPOAuthGrant = `-- name: RevokeTenantMCPOAuthGrant :execrows
