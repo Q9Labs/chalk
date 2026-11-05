@@ -5,7 +5,7 @@ import { FailureKind, failure } from "./model.mjs";
 const execFileAsync = promisify(execFile);
 const credentialTitle = /api[_ -]?credential/i;
 
-export async function resolveLocalSfuCredentials({ enumerateVaults, enumerateItems, getItem, itemIsCandidate = defaultCandidate, selectCandidate } = {}) {
+async function resolveLocalSfuCredentials({ enumerateVaults, enumerateItems, getItem, itemIsCandidate = defaultCandidate, selectCandidate } = {}) {
   if (!enumerateVaults || !enumerateItems || !getItem) throw failure(FailureKind.CONFIG, "SFU credential resolver is not configured", { stage: "secrets" });
   const candidates = [];
   for (const vault of await enumerateVaults()) {
@@ -76,7 +76,7 @@ export function createSecretResolver({ env = process.env, op } = {}) {
   return async () => sfuCredentialsFromEnv(env) ?? fromOp();
 }
 
-export function createOpSecretResolver({ op = "op", env = process.env } = {}) {
+function createOpSecretResolver({ op = "op", env = process.env } = {}) {
   const json = async (args) => {
     const { stdout } = await execFileAsync(op, args, { env, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 });
     return JSON.parse(stdout);
