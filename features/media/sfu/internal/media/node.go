@@ -51,6 +51,9 @@ const (
 	rtcpBufferLimit = 32 << 10
 )
 
+// closeWait bounds how long Close waits for the node's goroutines.
+const closeWait = 5 * time.Second
+
 // Node is one SFU process. All its peers share one UDP socket.
 type Node struct {
 	cfg         config.Config
@@ -563,7 +566,20 @@ func (n *Node) Close() {
 	for _, session := range sessions {
 		session.Close()
 	}
-	n.wg.Wait()
+	// When a publisher sends a second SSRC under a RID it already sent, such as
+	// RTX packets that carry the RID instead of the repaired RID, Pion rebinds
+	// the layer and never closes the first stream. That layer's reader may then
+	// never return, so the wait is bounded.
+	waited := make(chan struct{})
+	go func() {
+		n.wg.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+	case <-time.After(closeWait):
+		n.log.Error("media readers still running after close", "wait", closeWait)
+	}
 	_ = n.mux.Close()
 	_ = n.conn.Close()
 }
