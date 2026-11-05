@@ -1780,10 +1780,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#videoTiles.page(pageIsHidden(), Date.now());
       this.#reconcileVideoTiles();
     };
-    for (const event of PAGE_VISIBILITY_EVENTS) document.addEventListener(event, onPage);
+    // Capture, so the picture-in-picture events reach the document even where a browser does not bubble them.
+    for (const event of PAGE_VISIBILITY_EVENTS) document.addEventListener(event, onPage, { capture: true });
     return () => {
       stopReports();
-      for (const event of PAGE_VISIBILITY_EVENTS) document.removeEventListener(event, onPage);
+      for (const event of PAGE_VISIBILITY_EVENTS) document.removeEventListener(event, onPage, { capture: true });
       if (this.#videoTileWake !== undefined) globalThis.clearTimeout(this.#videoTileWake);
       this.#videoTileWake = undefined;
     };
