@@ -131,7 +131,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await dashboard.getByRole("link", { name: "Join call", exact: true }).waitFor();
     const pending = await knock("Rotated invite guest", true);
     try {
-      const row = dashboard.locator(".orow").filter({ hasText: "Rotated invite guest" });
+      const row = dashboard.locator(".knock").filter({ hasText: "Rotated invite guest" });
       await row.getByRole("button", { name: "Let in", exact: true }).waitFor();
       const handle = await sql(`select request_handle from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Rotated invite guest'`);
       const session = await (await dashboard.request.get(`${origin}/auth/session`)).json();
@@ -177,7 +177,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-X", "-v", "ON_ERROR_STOP=1", "-c", "drop trigger if exists proof_hold_admission_decision on sync_external_operations; drop function if exists proof_hold_admission_decision();"]);
     };
     try {
-      const row = dashboard.locator(".orow").filter({ hasText: "Retryable dashboard guest" });
+      const row = dashboard.locator(".knock").filter({ hasText: "Retryable dashboard guest" });
       await row.getByRole("button", { name: "Let in", exact: true }).waitFor();
       const handle = await sql(`select request_handle from space_public_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Retryable dashboard guest'`);
       // Prevent the existing consumer from applying this one operation before
@@ -242,7 +242,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await pending.guest.evaluate((marker) => {
         window.admissionProofDocument = marker;
       }, guestDocument);
-      const row = page.locator(".orow").filter({ hasText: "Hostless dashboard guest" });
+      const row = page.locator(".knock").filter({ hasText: "Hostless dashboard guest" });
       try {
         await row.getByRole("button", { name: "Let in", exact: true }).waitFor({ timeout: 15000 });
       } catch (error) {
