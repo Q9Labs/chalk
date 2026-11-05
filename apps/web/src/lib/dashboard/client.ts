@@ -6,6 +6,10 @@ import type {
   CallAction,
   CallDTO,
   CallPageDTO,
+  ConnectAction,
+  ConnectDTO,
+  ConnectionsAction,
+  ConnectionsDTO,
   CallStatusDTO,
   CallMetadataDTO,
   CallMetadataQuery,
@@ -40,6 +44,8 @@ type Pages = {
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
   developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
+  connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
+  connections: { query: Record<string, never>; data: ConnectionsDTO; action: ConnectionsAction };
 };
 export type DashboardPage = keyof Pages;
 
@@ -82,6 +88,9 @@ type Results = {
   "webhook-deliveries": { deliveries: DeliveryDTO[]; nextCursor: string | null };
   "webhook-delivery": DeliveryDetailDTO;
   "redeliver-webhook": { deliveryId: string };
+  "approve-connection": { redirectUrl: string };
+  "deny-connection": { redirectUrl: string };
+  "revoke-connection": Ok;
 };
 
 /** A failed dashboard request, with the server's error code. */
@@ -96,7 +105,7 @@ export class DashboardRequestError extends Error {
   }
 }
 
-const RETURN_PATH = /^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?$/;
+const RETURN_PATH = /^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/;
 
 /** The sign-in redirect for a provider. `returnTo` must be a dashboard path, as `/auth/start` accepts. */
 export function signInURL(provider: Provider, returnTo = "/dashboard"): string {
