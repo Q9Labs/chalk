@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChalkButton } from "./ChalkButton";
 import { noticeIdentity } from "../toast-stack/notice-announcement";
 export interface ChalkToastProps {
   readonly message: ReactNode;
@@ -15,7 +14,7 @@ export interface ChalkToastProps {
   readonly announce?: boolean;
   readonly onDismiss: () => void;
 }
-export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
+export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const identity = noticeIdentity({ message, announcementText, announcementKey, type });
@@ -36,10 +35,16 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
   }, [exiting, identity]);
   return (
     <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={announce ? (type === "error" ? "alert" : "status") : undefined} aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={announce || undefined}>
-      {icon}
-      <span>{message}</span>
-      {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
-      {type === "error" ? (
+      <span data-part="toast-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span data-part="toast-message">{message}</span>
+      {action ? (
+        <button type="button" data-part="pill-button" className="chalk-pill-button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
+      {duration === Infinity ? (
         <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setLifetime({ identity, exiting: true })}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />

@@ -9,6 +9,7 @@ export const sourceAliases = [
   { find: /^@q9labsai\/chalk-client$/, replacement: fileURLToPath(new URL("../../sdks/typescript/client/src/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-react\/ui$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/components/ui/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-react\/utils$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/utils/index.ts", import.meta.url)) },
+  { find: /^@q9labsai\/chalk-react\/toast$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/toast.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-react\/preview$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/test-support/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-react$/, replacement: fileURLToPath(new URL("../../sdks/typescript/react/src/index.ts", import.meta.url)) },
   { find: /^@q9labsai\/chalk-ui$/, replacement: fileURLToPath(new URL("../../packages/ui/src/index.ts", import.meta.url)) },
