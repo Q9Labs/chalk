@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +24,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestAccessGrantRefreshHTTP(t *testing.T) {
@@ -301,7 +301,6 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 		})
 	}
 }
-
 func boolCount(value bool) int {
 	if value {
 		return 1
