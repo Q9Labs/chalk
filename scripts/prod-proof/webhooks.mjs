@@ -71,7 +71,9 @@ function startCollector(run, receiver, collect) {
     try {
       while (!controller.signal.aborted) {
         await collect(controller.signal);
-        await delay(2000, undefined, { signal: controller.signal });
+        // Lifecycle delivery is asynchronous; six list reads per minute are enough
+        // even while a long recording/export proof is running.
+        await delay(10_000, undefined, { signal: controller.signal });
       }
     } catch (error) {
       if (!controller.signal.aborted) receiver.failure = error.message;
