@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2026-11-24
+reason = "The advisory covers golang.org/x/crypto/openpgp, which is unmaintained and has no fixed version. The SFU's dependency graph does not include openpgp (go list -deps ./... lists no such package on 2026-11-05). Revisit if openpgp usage is added or OSV publishes a fix path."

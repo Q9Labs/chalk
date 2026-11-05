@@ -50,6 +50,7 @@
     "tools/contract-fixture-proof/test/*.mjs",
     "tools/sdk-web-consumer-e2e/consumer/styles.css",
     "scripts/gates/chalk-gate-plan.mjs",
+    "features/media/sfu/tests/browser/chromium-check.mjs",
     "scripts/gates/doclint.mjs",
     "scripts/gates/theory-coverage.mjs",
     "scripts/gates/osv-snapshot.mjs",
