@@ -1,8 +1,8 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { ChalkButton } from "./ChalkButton";
 import { noticeIdentity } from "../toast-stack/notice-announcement";
 // Decorative icons may be absent offline; the message and actions stay eager.
-const SeverityIcon = lazy(() => import("./ToastIcon").catch(() => ({ default: () => null })));
+const SeverityIcon = lazy<ComponentType<{ readonly type: NonNullable<ChalkToastProps["type"]> }>>(() => import("./ToastIcon").catch(() => ({ default: () => null })));
 export interface ChalkToastProps {
   readonly message: ReactNode;
   /** Stable semantic identity for rich message content. Change it when the message changes. */
