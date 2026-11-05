@@ -76,10 +76,11 @@ jobs:
         with:
           version-file: .tool-versions
           version-type: strict
-      - name: Install dependencies and the test browser
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps chromium
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
 
       - name: Start the stack from empty
         run: |
