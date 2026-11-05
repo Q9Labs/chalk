@@ -38,6 +38,7 @@ type providerOperationRequest struct {
 	ParticipantID         *string                              `json:"participant_id,omitempty"`
 	ParticipantGeneration *int64                               `json:"participant_generation,omitempty"`
 	PublicationSource     *string                              `json:"publication_source,omitempty"`
+	ControlRevision       *int64                               `json:"control_revision,omitempty"`
 	RecordingID           *string                              `json:"recording_id,omitempty"`
 	RecordingReservation  *providerRecordingReservationRequest `json:"recording_reservation,omitempty"`
 }
@@ -236,6 +237,9 @@ func providerOperationInput(operationID string, body providerOperationRequest) (
 	if body.PublicationSource != nil {
 		input.PublicationSource = *body.PublicationSource
 	}
+	if body.ControlRevision != nil {
+		input.ControlRevision = *body.ControlRevision
+	}
 	if body.RecordingID != nil {
 		recordingID, parseErr := utilities.ParseID(*body.RecordingID)
 		if parseErr != nil {
@@ -358,6 +362,7 @@ func writeProviderBridgeError(w http.ResponseWriter, err error) {
 		errors.Is(err, provideroperations.ErrInvalidParticipantID),
 		errors.Is(err, provideroperations.ErrInvalidParticipantGeneration),
 		errors.Is(err, provideroperations.ErrInvalidPublicationSource),
+		errors.Is(err, provideroperations.ErrInvalidControlRevision),
 		errors.Is(err, provideroperations.ErrInvalidRecordingID),
 		errors.Is(err, provideroperations.ErrInvalidRecordingReservation),
 		errors.Is(err, provideroperations.ErrInvalidObservationCursor):

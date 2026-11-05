@@ -29,7 +29,8 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationColumns do
       "attempt_count",
       "applied_event_id",
       "applied_revision",
-      "last_error_code"
+      "last_error_code",
+      "control_revision"
     ]
 
     Enum.map_join(columns, ", ", fn column ->

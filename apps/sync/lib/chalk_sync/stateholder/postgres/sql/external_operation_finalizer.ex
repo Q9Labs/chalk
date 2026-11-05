@@ -279,13 +279,15 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer do
       request_fingerprint, operation_name, target_participant_id,
       target_participant_generation, payload, fence_active,
       journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
-      producing_traceparent, producing_tracestate
+      producing_traceparent, producing_tracestate, control_revision
     )
     select tenant_id, space_id, episode_id, $5, $5::uuid::text,
       request_fingerprint, 'remove_participant', target_participant_id,
       target_participant_generation, jsonb_build_object('departureOperationId', $4::uuid), false,
       journey_id, parent_journey_event_id, producing_trace_id, producing_span_id,
-      producing_traceparent, producing_tracestate
+      producing_traceparent, producing_tracestate,
+      (select control_revision + 1 from sync_episode_control
+        where tenant_id = $1 and space_id = $2 and episode_id = $3)
     from sync_external_operations
     where tenant_id=$1 and space_id=$2 and episode_id=$3 and external_operation_id=$4
     """

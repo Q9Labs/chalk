@@ -4,7 +4,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
   def lock_active_publication_reservations do
     """
     select reservation_id, operation_id, participant_id,
-      participant_generation, source, status, failure_code, expires_at
+      participant_generation, source, status, failure_code, expires_at, control_revision
     from sync_publication_grant_reservations
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and participant_id = $4 and participant_generation = $5
@@ -20,8 +20,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
       tenant_id, space_id, episode_id, external_operation_id, request_key,
       request_fingerprint, operation_name, actor_participant_id,
       actor_generation, target_participant_id, target_participant_generation,
-      payload, fence_active
-    ) values ($1, $2, $3, $4, $5, $6, 'role_transition_cleanup', $7, $8, $9, $10, $11, true)
+      payload, fence_active, control_revision
+    ) values (
+      $1, $2, $3, $4, $5, $6, 'role_transition_cleanup', $7, $8, $9, $10, $11, true,
+      (select control_revision + 1 from sync_episode_control
+        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+    )
     """
   end
 
@@ -30,8 +34,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.RoleTransitionPlanner do
     insert into sync_external_operations (
       tenant_id, space_id, episode_id, external_operation_id, parent_external_operation_id,
       request_key, request_fingerprint, operation_name,
-      target_participant_id, target_participant_generation, source, payload
-    ) values ($1, $2, $3, $4, $5, $6, $7, 'role_transition_source_stop', $8, $9, $10, $11)
+      target_participant_id, target_participant_generation, source, payload, control_revision
+    ) values (
+      $1, $2, $3, $4, $5, $6, $7, 'role_transition_source_stop', $8, $9, $10, $11,
+      (select control_revision + 1 from sync_episode_control
+        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+    )
     """
   end
 

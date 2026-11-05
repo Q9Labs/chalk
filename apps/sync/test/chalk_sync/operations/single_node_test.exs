@@ -55,25 +55,27 @@ defmodule ChalkSync.Operations.SingleNodeTest do
          observations: observations
        } do
     # The controller migrates the stopped runtime's database before starting Sync.
-    # 20261023190003 is the schema before sync_media_stops: every live registration reads that table.
+    # 20261105120000 is the schema before source control revisions: grants and stops write them.
     for version <- [
           20_261_023_153_001,
-          20_261_023_190_002,
           20_261_023_190_003,
-          20_261_030_180_000
+          20_261_031_120_000,
+          20_261_105_120_000
         ] do
       assert {:error, :incompatible_database_migration} =
                Probe.validate_database(%{observations | migration_version: version})
     end
 
-    for version <- [20_261_031_120_000, 20_261_031_120_001] do
+    for version <- [20_261_106_120_000, 20_261_106_120_001] do
       assert :ok = Probe.validate_database(%{observations | migration_version: version})
     end
   end
 
-  test "the compatibility floor covers the sync_media_stops migration" do
+  test "the compatibility floor covers the source control revision migration" do
     [file] =
-      Path.wildcard(Path.expand("../../../../api/db/migrations/*_sync_media_stops.sql", __DIR__))
+      Path.wildcard(
+        Path.expand("../../../../api/db/migrations/*_sync_source_control_revisions.sql", __DIR__)
+      )
 
     {version, _rest} = file |> Path.basename() |> Integer.parse()
 

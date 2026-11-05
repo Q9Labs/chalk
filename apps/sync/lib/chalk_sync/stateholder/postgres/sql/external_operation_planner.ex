@@ -17,10 +17,12 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner do
       actor_generation, target_participant_id, target_participant_generation,
       source, recording_id, deadline_generation, journey_id, parent_journey_event_id,
       producing_trace_id, producing_span_id, producing_traceparent, producing_tracestate,
-      payload, fence_active
+      payload, fence_active, control_revision
     ) values (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-      $17, $18, $19, $20, $21, $22
+      $17, $18, $19, $20, $21, $22,
+      (select control_revision + 1 from sync_episode_control
+        where tenant_id = $1 and space_id = $2 and episode_id = $3)
     )
     """
   end

@@ -4,7 +4,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
   def select_publication_grant_reservation do
     """
     select reservation_id, operation_id, participant_id,
-      participant_generation, source, status, failure_code, expires_at
+      participant_generation, source, status, failure_code, expires_at, control_revision
     from sync_publication_grant_reservations
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and operation_id = $4
     """
@@ -17,7 +17,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
   def read_publication_grant_reservation do
     """
     select reservation_id, operation_id, participant_id,
-      participant_generation, source, status, failure_code, expires_at
+      participant_generation, source, status, failure_code, expires_at, control_revision
     from sync_publication_grant_reservations
     where tenant_id = $1 and space_id = $2 and episode_id = $3 and reservation_id = $4
     """
@@ -27,18 +27,23 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
     """
     insert into sync_publication_grant_reservations (
       tenant_id, space_id, episode_id, reservation_id, operation_id,
-      participant_id, participant_generation, source, expires_at
-    ) values ($1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds')
+      participant_id, participant_generation, source, expires_at, control_revision
+    ) values (
+      $1, $2, $3, $4, $5, $6, $7, $8, now() + interval '30 seconds',
+      (select control_revision + 1 from sync_episode_control
+        where tenant_id = $1 and space_id = $2 and episode_id = $3)
+    )
     on conflict (tenant_id, episode_id, participant_id, source)
       where status in ('pending', 'ambiguous') do update
     set space_id = excluded.space_id, reservation_id = excluded.reservation_id,
       operation_id = excluded.operation_id,
       participant_generation = excluded.participant_generation,
       status = 'pending', failure_code = null,
-      expires_at = excluded.expires_at, created_at = now(), completed_at = null
+      expires_at = excluded.expires_at, created_at = now(), completed_at = null,
+      control_revision = excluded.control_revision
     where sync_publication_grant_reservations.expires_at <= now()
     returning reservation_id, operation_id, participant_id,
-      participant_generation, source, status, failure_code, expires_at
+      participant_generation, source, status, failure_code, expires_at, control_revision
     """
   end
 
@@ -51,7 +56,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.PublicationGrants do
     where tenant_id = $1 and space_id = $2 and episode_id = $3
       and reservation_id = $4 and status in ('pending', 'ambiguous')
     returning reservation_id, operation_id, participant_id,
-      participant_generation, source, status, failure_code, expires_at
+      participant_generation, source, status, failure_code, expires_at, control_revision
     """
   end
 

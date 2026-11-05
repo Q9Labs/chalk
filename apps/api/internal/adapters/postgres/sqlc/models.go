@@ -1304,6 +1304,7 @@ type SyncExternalOperation struct {
 	CompletedAt                 pgtype.Timestamptz `json:"completed_at"`
 	ProducingTraceparent        pgtype.Text        `json:"producing_traceparent"`
 	ProducingTracestate         pgtype.Text        `json:"producing_tracestate"`
+	ControlRevision             pgtype.Int8        `json:"control_revision"`
 }
 
 type SyncLifecycleIntent struct {
@@ -1385,6 +1386,7 @@ type SyncPublicationGrantReservation struct {
 	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	CompletedAt           pgtype.Timestamptz `json:"completed_at"`
+	ControlRevision       pgtype.Int8        `json:"control_revision"`
 }
 
 type SyncRecording struct {

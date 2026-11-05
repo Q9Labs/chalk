@@ -7,12 +7,13 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
   alias ChalkSync.Stateholder.EpisodeKey
 
   @enforce_keys [:client]
-  defstruct [:client, context: %{}, participant_generation_resolver: nil]
+  defstruct [:client, context: %{}, participant_generation_resolver: nil, control_revision: nil]
 
   @type t :: %__MODULE__{
           client: Client.t(),
           context: map(),
-          participant_generation_resolver: function() | nil
+          participant_generation_resolver: function() | nil,
+          control_revision: pos_integer() | nil
         }
 
   @spec new(Client.t() | keyword() | map(), keyword()) :: {:ok, t()} | {:error, atom()}
@@ -58,6 +59,19 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
   def with_participant_generation(%__MODULE__{} = adapter, _participant_id, _generation),
     do: %{adapter | participant_generation_resolver: nil}
 
+  @doc """
+  Orders the next grant, revoke or removal against the Episode's other source controls.
+  The revision is one more than the Episode control revision Sync read when it decided,
+  so the media plane applies a delayed or retried control only if nothing newer exists.
+  """
+  @spec with_control_revision(t(), pos_integer() | nil) :: t()
+  def with_control_revision(%__MODULE__{} = adapter, revision)
+      when is_integer(revision) and revision > 0,
+      do: %{adapter | control_revision: revision}
+
+  def with_control_revision(%__MODULE__{} = adapter, _revision),
+    do: %{adapter | control_revision: nil}
+
   @impl true
   def grant_publication(adapter, operation_id, episode, participant_id, source) do
     operation(adapter, operation_id, episode, "media.grant_publication",
@@ -100,6 +114,7 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
       |> Keyword.put(:tenant_id, episode.tenant_id)
       |> Keyword.put(:episode_id, episode.episode_id)
       |> maybe_generation(adapter, episode)
+      |> maybe_control_revision(adapter, effect)
       |> Map.new()
 
     case Client.post_operation(context_client(adapter), operation_id, payload) do
@@ -126,6 +141,13 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
 
   defp operation(_adapter, _operation_id, _episode, _effect, _fields),
     do: {:terminal_failure, :invalid_contract}
+
+  defp maybe_control_revision(fields, %__MODULE__{control_revision: revision}, effect)
+       when is_integer(revision) and
+              effect in ["media.grant_publication", "media.revoke_publication", "media.remove_participant"],
+       do: Keyword.put(fields, :control_revision, revision)
+
+  defp maybe_control_revision(fields, _adapter, _effect), do: fields
 
   defp maybe_generation(fields, %__MODULE__{participant_generation_resolver: nil}, _episode),
     do: fields
