@@ -370,7 +370,7 @@ func pullVideo(t *testing.T, svc *service, connID string, scope protocol.Scope, 
 	subscriber := newPeer(t, func(settings *webrtc.SettingEngine) { settings.DisableSRTPReplayProtection(true) })
 	received := collectVideo(subscriber)
 	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connID+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connID+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope:  scope,
 		Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: publisher, TrackName: videoName, Simulcast: &simulcast}},
 	}, &pulled)
@@ -385,7 +385,7 @@ func pullVideo(t *testing.T, svc *service, connID string, scope protocol.Scope, 
 		t.Fatal(err)
 	}
 	answerSDP := subscriber.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+connID+"/renegotiate", protocol.RenegotiateRequest{Scope: scope, SessionDescription: answerSDP}, nil)
+	svc.mustCall(t, "/v1/sessions/"+connID+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: answerSDP}, nil)
 	return received
 }
 
@@ -433,7 +433,7 @@ func TestLayerSwitching(t *testing.T) {
 	pushOffer := alice.complete(t, offer)
 	publisher.mid = alice.mid(t, publisher.tracks[0])
 	var pushed protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope: scopeA, SessionDescription: &pushOffer,
 		Tracks: []protocol.Track{{Location: protocol.LocationLocal, Mid: publisher.mid, TrackName: videoName, Source: "camera"}},
 	}, &pushed)

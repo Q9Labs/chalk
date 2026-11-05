@@ -73,6 +73,9 @@ type CreateSessionResponse struct {
 // TracksRequest is a push (local tracks with the client's offer) or a pull
 // (remote tracks without SDP). One request never mixes both.
 type TracksRequest struct {
+	// OperationID makes a retry of this request return the first result. It is
+	// stable across the API adapter's retries of one logical call.
+	OperationID        string              `json:"operationId"`
 	Scope              Scope               `json:"scope"`
 	SessionDescription *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks             []Track             `json:"tracks"`
@@ -95,6 +98,7 @@ type TrackError struct {
 }
 
 type RenegotiateRequest struct {
+	OperationID        string             `json:"operationId"`
 	Scope              Scope              `json:"scope"`
 	SessionDescription SessionDescription `json:"sessionDescription"`
 }
@@ -103,12 +107,25 @@ type CloseTrack struct {
 	Mid string `json:"mid"`
 }
 
-// CloseTracksRequest closes tracks by MID. M1 supports only Force, which needs
-// no SDP; negotiated close arrives later.
+// UpdateTracksRequest changes how existing remote subscriptions are delivered,
+// such as the layer ceiling. It carries no SDP and never creates a track or MID.
+type UpdateTracksRequest struct {
+	OperationID string  `json:"operationId"`
+	Scope       Scope   `json:"scope"`
+	Tracks      []Track `json:"tracks"`
+}
+
+// CloseTracksRequest closes tracks by MID. Force needs no SDP. Without Force the
+// request carries the client's offer for the connection after it stopped the
+// tracks' transceivers, and the response carries the answer. ReceiveOnly limits
+// the close to the session's subscriptions: it never stops a publication.
 type CloseTracksRequest struct {
-	Scope  Scope        `json:"scope"`
-	Tracks []CloseTrack `json:"tracks"`
-	Force  bool         `json:"force"`
+	OperationID        string              `json:"operationId"`
+	Scope              Scope               `json:"scope"`
+	Tracks             []CloseTrack        `json:"tracks"`
+	Force              bool                `json:"force"`
+	ReceiveOnly        bool                `json:"receiveOnly,omitempty"`
+	SessionDescription *SessionDescription `json:"sessionDescription,omitempty"`
 }
 
 type ClosedTrack struct {
@@ -117,11 +134,31 @@ type ClosedTrack struct {
 }
 
 type CloseTracksResponse struct {
-	Tracks []ClosedTrack `json:"tracks"`
+	Tracks             []ClosedTrack       `json:"tracks"`
+	SessionDescription *SessionDescription `json:"sessionDescription,omitempty"`
+}
+
+// RemoveSessionRequest closes one session. An absent session reads as gone.
+type RemoveSessionRequest struct {
+	Scope Scope `json:"scope"`
+}
+
+// EndEpisodeRequest closes every session of one Tenant's Episode.
+type EndEpisodeRequest struct {
+	TenantID  string `json:"tenantId"`
+	EpisodeID string `json:"episodeId"`
+}
+
+type EndEpisodeResponse struct {
+	Closed int `json:"closed"`
 }
 
 type InspectRequest struct {
 	Scope Scope `json:"scope"`
+	// Peer inspects a session of another Participant in the same Tenant and Episode,
+	// as the API does to confirm that a publisher's track is really gone. The scope
+	// is the caller's own; a session of another Tenant or Episode still reads as gone.
+	Peer bool `json:"peer,omitempty"`
 }
 
 type InspectedTrack struct {
@@ -169,6 +206,13 @@ type InspectResponse struct {
 type ReadyResponse struct {
 	NodeIncarnation string `json:"nodeIncarnation"`
 	Sessions        int    `json:"sessions"`
+	// PacketBudget is the node's packets/s budget and ReservedPackets the part
+	// that live Episodes reserve. Admission refuses a join that would exceed it.
+	PacketBudget    int `json:"packetBudget"`
+	ReservedPackets int `json:"reservedPackets"`
+	// NewEpisodePackets is what a new Episode reserves at its first join. The API
+	// places a new Episode only on a node with at least this much budget left.
+	NewEpisodePackets int `json:"newEpisodePackets"`
 }
 
 type ErrorResponse struct {
@@ -190,7 +234,6 @@ const (
 	CodeNoPendingOffer       = "no_pending_offer"
 	CodeNegotiationFailed    = "negotiation_failed"
 	CodeOperationConflict    = "operation_conflict"
-	CodeSessionExists        = "session_exists"
 	CodeStaleGeneration      = "stale_generation"
 	CodeCapacityExceeded     = "capacity_exceeded"
 	CodeUnsupportedOperation = "unsupported_operation"
@@ -206,4 +249,6 @@ const (
 	TrackCodeDuplicate           = "duplicate_track"
 	TrackCodeLimitExceeded       = "limit_exceeded"
 	TrackCodeSubscriptionFailure = "subscription_failed"
+	// TrackCodeScreenShareActive refuses a second screen share in one Episode.
+	TrackCodeScreenShareActive = "screen_share_active"
 )

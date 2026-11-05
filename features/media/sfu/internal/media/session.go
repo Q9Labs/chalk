@@ -27,8 +27,9 @@ type Session struct {
 	node            *Node
 	pc              *webrtc.PeerConnection
 
-	// opMu serializes AddTracks, Renegotiate and CloseTracks.
+	// opMu serializes AddTracks, Renegotiate, UpdateTracks and CloseTracks. It also guards ops.
 	opMu sync.Mutex
+	ops  replayTable
 
 	mu           sync.Mutex
 	closed       bool
@@ -146,7 +147,7 @@ func (s *Session) isClosed() bool {
 }
 
 // AddTracks pushes local tracks from a client offer, or pulls remote tracks
-// and returns a server offer.
+// and returns a server offer. A retry with the same operation ID returns the first result.
 func (s *Session) AddTracks(ctx context.Context, request protocol.TracksRequest) (protocol.TracksResponse, error) {
 	local, err := classifyTracks(request)
 	if err != nil {
@@ -154,13 +155,15 @@ func (s *Session) AddTracks(ctx context.Context, request protocol.TracksRequest)
 	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
-	if err := s.readyForNegotiation(); err != nil {
-		return protocol.TracksResponse{}, err
-	}
-	if local {
-		return s.push(ctx, request)
-	}
-	return s.pull(ctx, request)
+	return once(s, request.OperationID, request, func() (protocol.TracksResponse, error) {
+		if err := s.readyForNegotiation(); err != nil {
+			return protocol.TracksResponse{}, err
+		}
+		if local {
+			return s.push(ctx, request)
+		}
+		return s.pull(ctx, request)
+	})
 }
 
 func (s *Session) readyForNegotiation() error {
@@ -229,6 +232,12 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	var refused []*webrtc.RTPTransceiver
 	named := make(map[string]bool, len(request.Tracks))
 	s.mu.Lock()
+	// A Close that ran while the offer was applied has already released this session's
+	// publications, so a publication registered now, and its screen claim, would never be released.
+	if s.closed {
+		s.mu.Unlock()
+		return protocol.TracksResponse{}, ErrSessionGone
+	}
 	for _, track := range request.Tracks {
 		if named[track.Mid] {
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: protocol.TrackCodeDuplicate, Message: "the request names this mid twice"})
@@ -335,6 +344,9 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	}
 	if s.published[track.Mid] != nil || s.publishedByName(track.TrackName) != nil {
 		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
+	}
+	if track.Source == sourceScreen && !s.node.claimScreen(s) {
+		return transceiver, protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
 	}
 	s.published[track.Mid] = newPublication(s, track, transceiver.Kind())
 	return transceiver, "", ""
@@ -480,37 +492,41 @@ func layerRequestFor(track protocol.Track) layerRequest {
 	return request
 }
 
-// Renegotiate applies the client's answer to the pending server offer.
-func (s *Session) Renegotiate(_ context.Context, description protocol.SessionDescription) error {
+// Renegotiate applies the client's answer to the pending server offer. A retry with the same
+// operation ID succeeds without applying the answer twice.
+func (s *Session) Renegotiate(_ context.Context, request protocol.RenegotiateRequest) error {
+	description := request.SessionDescription
 	if description.Type != "answer" || description.SDP == "" {
 		return fmt.Errorf("%w: renegotiate needs an answer", ErrInvalidRequest)
 	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
-	s.mu.Lock()
-	pending, closed := s.pending, s.closed
-	s.mu.Unlock()
-	switch {
-	case closed:
-		return ErrSessionGone
-	case pending == nil:
-		return ErrNoPendingOffer
-	}
-	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: description.SDP}); err != nil {
-		return s.failNegotiation("apply the answer", err)
-	}
-	pending.timer.Stop()
-	s.mu.Lock()
-	s.pending = nil
-	s.mu.Unlock()
-	return nil
+	_, err := once(s, request.OperationID, request, func() (struct{}, error) {
+		s.mu.Lock()
+		pending, closed := s.pending, s.closed
+		s.mu.Unlock()
+		switch {
+		case closed:
+			return struct{}{}, ErrSessionGone
+		case pending == nil:
+			return struct{}{}, ErrNoPendingOffer
+		}
+		if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: description.SDP}); err != nil {
+			return struct{}{}, s.failNegotiation("apply the answer", err)
+		}
+		pending.timer.Stop()
+		s.mu.Lock()
+		s.pending = nil
+		s.mu.Unlock()
+		return struct{}{}, nil
+	})
+	return err
 }
 
-// CloseTracks force-closes tracks by MID. A MID that is already absent succeeds.
-func (s *Session) CloseTracks(_ context.Context, request protocol.CloseTracksRequest) (protocol.CloseTracksResponse, error) {
-	if !request.Force {
-		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: negotiated close", ErrUnsupportedOperation)
-	}
+// CloseTracks closes tracks by MID. A MID that is already absent succeeds. A forced close needs
+// no SDP. A negotiated close applies the client's offer, which stopped the tracks'
+// transceivers, and returns the answer. ReceiveOnly closes subscriptions and never a publication.
+func (s *Session) CloseTracks(ctx context.Context, request protocol.CloseTracksRequest) (protocol.CloseTracksResponse, error) {
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
 		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a request closes 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
@@ -519,23 +535,120 @@ func (s *Session) CloseTracks(_ context.Context, request protocol.CloseTracksReq
 			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: tracks[%d].mid is required", ErrInvalidRequest, index)
 		}
 	}
+	description := request.SessionDescription
+	switch {
+	case request.Force && description != nil:
+		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a forced close carries no SDP", ErrInvalidRequest)
+	case !request.Force && (description == nil || description.Type != "offer" || description.SDP == ""):
+		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a negotiated close needs the client's offer", ErrInvalidRequest)
+	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
-	if s.isClosed() {
-		return protocol.CloseTracksResponse{}, ErrSessionGone
+	return once(s, request.OperationID, request, func() (protocol.CloseTracksResponse, error) {
+		if request.Force {
+			return s.closeForced(request), nil
+		}
+		return s.closeNegotiated(ctx, request)
+	})
+}
+
+func (s *Session) closeForced(request protocol.CloseTracksRequest) protocol.CloseTracksResponse {
+	var response protocol.CloseTracksResponse
+	for _, track := range request.Tracks {
+		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid, request.ReceiveOnly)})
+	}
+	return response
+}
+
+// closeNegotiated applies the client's offer first. The offer already carries the stopped
+// sections, and Pion releases the matching senders and receivers while it applies it. Tracks the
+// registry still holds are then released, and a section the offer did not stop stays open.
+func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTracksRequest) (protocol.CloseTracksResponse, error) {
+	if err := s.readyForNegotiation(); err != nil {
+		return protocol.CloseTracksResponse{}, err
+	}
+	sections, err := parseOffer(request.SessionDescription.SDP)
+	if err != nil {
+		return protocol.CloseTracksResponse{}, err
+	}
+	known := map[string]bool{}
+	for _, transceiver := range s.pc.GetTransceivers() {
+		known[transceiver.Mid()] = true
+	}
+	for mid := range sections {
+		if !known[mid] {
+			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a close offer cannot add a section", ErrInvalidRequest)
+		}
+	}
+	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
+		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
 	}
 	var response protocol.CloseTracksResponse
 	for _, track := range request.Tracks {
-		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid)})
+		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid, request.ReceiveOnly)})
 	}
+	answer, err := s.pc.CreateAnswer(nil)
+	if err == nil {
+		err = s.pc.SetLocalDescription(answer)
+	}
+	if err != nil {
+		return protocol.CloseTracksResponse{}, s.failNegotiation("answer the close offer", err)
+	}
+	description, err := s.completeLocalDescription(ctx)
+	if err != nil {
+		return protocol.CloseTracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+	}
+	response.SessionDescription = description
 	return response, nil
 }
 
-// closeMid stops one track and reports whether it existed.
-func (s *Session) closeMid(mid string) bool {
+// UpdateTracks changes the layer policy of existing subscriptions without SDP. A layer change
+// takes effect at the next keyframe of the new layer. A track that is not a live subscription of
+// this session is a per-track error.
+func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksRequest) (protocol.TracksResponse, error) {
+	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
+		return protocol.TracksResponse{}, fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
+	}
+	for index, track := range request.Tracks {
+		if track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "" || track.Simulcast == nil || track.Simulcast.PreferredRID == "" {
+			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId, trackName and simulcast.preferredRid", ErrInvalidRequest, index)
+		}
+	}
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+	return once(s, request.OperationID, request, func() (protocol.TracksResponse, error) {
+		var response protocol.TracksResponse
+		updated := make([]*subscription, len(request.Tracks))
+		s.mu.Lock()
+		for index, track := range request.Tracks {
+			subscription := s.subscribed[track.Mid]
+			if subscription == nil || subscription.pub.name != track.TrackName || subscription.pub.session.id != track.SessionID {
+				response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such subscription"})
+				continue
+			}
+			updated[index] = subscription
+			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast})
+		}
+		s.mu.Unlock()
+		for index, subscription := range updated {
+			if subscription != nil {
+				subscription.update(layerRequestFor(request.Tracks[index]))
+			}
+		}
+		return response, nil
+	})
+}
+
+// closeMid stops one track and reports whether it existed. With receiveOnly it leaves
+// publications alone, so a subscriber's close can never stop a camera.
+func (s *Session) closeMid(mid string, receiveOnly bool) bool {
 	s.mu.Lock()
-	pub, subscription := s.published[mid], s.subscribed[mid]
-	delete(s.published, mid)
+	var pub *publication
+	if !receiveOnly {
+		pub = s.published[mid]
+		delete(s.published, mid)
+	}
+	subscription := s.subscribed[mid]
 	delete(s.subscribed, mid)
 	if pub != nil {
 		s.retired[mid] = true

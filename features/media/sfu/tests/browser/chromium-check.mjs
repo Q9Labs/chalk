@@ -231,6 +231,7 @@ async function push(page, control, connectionId, scope) {
     return { sdp: description.sdp, type: description.type, microphoneMid: microphone.mid, cameraMid: camera.mid };
   }, encodings);
   const pushed = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    operationId: `push-${connectionId}`,
     scope,
     sessionDescription: { sdp: offer.sdp, type: offer.type },
     tracks: [
@@ -246,6 +247,7 @@ async function push(page, control, connectionId, scope) {
 // connection as window[name].
 async function pull(page, control, connectionId, publisherId, scope, name, preferredRid) {
   const pulled = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    operationId: `pull-${connectionId}`,
     scope,
     tracks: [
       { location: "remote", sessionId: publisherId, trackName: "microphone-1" },
@@ -264,7 +266,11 @@ async function pull(page, control, connectionId, publisherId, scope, name, prefe
     },
     { serverOffer: pulled.body.sessionDescription, name },
   );
-  const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, { scope, sessionDescription: answer });
+  const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, {
+    operationId: `renegotiate-${connectionId}`,
+    scope,
+    sessionDescription: answer,
+  });
   expect(renegotiated.status === 204, `renegotiate answered with ${renegotiated.status}`);
 }
 

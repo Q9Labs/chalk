@@ -227,7 +227,7 @@ func TestPushMIDRules(t *testing.T) {
 		// The second entry reuses a name, so it is refused and its new section
 		// stopped; the third names that section again under a new name.
 		response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-			Scope: session.scope, SessionDescription: offer,
+			OperationID: op(), Scope: session.scope, SessionDescription: offer,
 			Tracks: []protocol.Track{
 				{Location: protocol.LocationLocal, Mid: mids[0], TrackName: "mic-a", Source: "microphone"},
 				{Location: protocol.LocationLocal, Mid: mids[1], TrackName: "mic-a", Source: "microphone"},
@@ -256,7 +256,7 @@ func TestPushMIDRules(t *testing.T) {
 		push := func(name string) protocol.TracksResponse {
 			offer := peer.offer(t)
 			response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-				Scope: session.scope, SessionDescription: offer,
+				OperationID: op(), Scope: session.scope, SessionDescription: offer,
 				Tracks: []protocol.Track{{Location: protocol.LocationLocal, Mid: peer.mids()[0], TrackName: name, Source: "microphone"}},
 			})
 			if err != nil {
@@ -270,7 +270,7 @@ func TestPushMIDRules(t *testing.T) {
 		if first := push("mic"); len(first.Tracks) != 1 {
 			t.Fatalf("first push: %+v", first)
 		}
-		if _, err := session.CloseTracks(context.Background(), protocol.CloseTracksRequest{Scope: session.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: peer.mids()[0]}}}); err != nil {
+		if _, err := session.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: session.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: peer.mids()[0]}}}); err != nil {
 			t.Fatal(err)
 		}
 		again := push("mic-again")
@@ -295,7 +295,7 @@ func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 	}
 	offer := sender.offer(t)
 	pushed, err := publisher.AddTracks(context.Background(), protocol.TracksRequest{
-		Scope: publisher.scope, SessionDescription: offer, Tracks: localTracks("cam", sender.mids(), "camera"),
+		OperationID: op(), Scope: publisher.scope, SessionDescription: offer, Tracks: localTracks("cam", sender.mids(), "camera"),
 	})
 	if err != nil || len(pushed.Tracks) != 1 {
 		t.Fatalf("push: %+v %v", pushed, err)
@@ -360,12 +360,14 @@ func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 				v.mu.Unlock()
 			}
 		})
-		pulled, err := v.session.AddTracks(context.Background(), pullRequest(v.session, publisher, "cam-0"))
+		pull := pullRequest(v.session, publisher, "cam-0")
+		pull.OperationID = op()
+		pulled, err := v.session.AddTracks(context.Background(), pull)
 		if err != nil || len(pulled.Tracks) != 1 {
 			t.Fatalf("pull: %+v %v", pulled, err)
 		}
 		v.mid = pulled.Tracks[0].Mid
-		if err := v.session.Renegotiate(context.Background(), v.peer.answer(t, pulled.SessionDescription)); err != nil {
+		if err := v.session.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), SessionDescription: v.peer.answer(t, pulled.SessionDescription)}); err != nil {
 			t.Fatal(err)
 		}
 		return v

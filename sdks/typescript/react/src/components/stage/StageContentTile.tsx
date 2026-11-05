@@ -3,6 +3,7 @@ import React, { useRef, type CSSProperties } from "react";
 import { ScreenSharePresentation, type ScreenSharePresentationProps } from "../composite/ScreenShareView";
 import { StageIcon } from "./StageIcon";
 import { TileShell } from "../participant-tile/TileShell";
+import { useVideoTileVisibility } from "../participant-tile/useVideoTileVisibility";
 import { useVideoTrack } from "../participant-tile/useVideoTrack";
 import type { StageItem } from "./stage-items";
 
@@ -43,6 +44,7 @@ export const StageContentTile = React.memo(function StageContentTile({ item, act
   const videoRef = useRef<HTMLVideoElement>(null);
   const track = item.kind === "screen-share" ? item.participant.screenShareTrack : null;
   const status = useVideoTrack(videoRef, track, active);
+  useVideoTileVisibility(videoRef, item.kind === "screen-share" && !item.participant.isLocal ? item.participant.screenSharePublicationId : undefined, active);
 
   return (
     <StageContentTileSurface

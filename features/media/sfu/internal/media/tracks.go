@@ -14,6 +14,8 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
+const sourceScreen = "screen"
+
 const (
 	// activeWindow is how recently RTP must have arrived for a track to count as active.
 	activeWindow = 5 * time.Second
@@ -238,6 +240,9 @@ func (p *publication) close() {
 	}
 	close(p.done)
 	p.mu.Unlock()
+	if p.source == sourceScreen {
+		p.session.node.releaseScreen(p.session)
+	}
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil {
 			layer.history.Store(nil)

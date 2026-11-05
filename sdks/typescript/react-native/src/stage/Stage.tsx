@@ -19,6 +19,7 @@ import { ParticipantTile } from "./ParticipantTile";
 import { shallowEqual, useSpaceSelector } from "./space-selector";
 import { useStageView } from "./stage-view";
 import { TileSheet } from "./TileSheet";
+import { useStageVideoTiles } from "./video-tile-visibility";
 
 export type StageProps = {
   /** The stage box in screen points, from `frameRegions`. */
@@ -102,6 +103,7 @@ export const Stage = memo(function Stage({ frame, onOpenPeople }: StageProps): R
       }),
     [arrangement, content, frame, next, pinned, shareAspect, view.layout],
   );
+  useStageVideoTiles(items, content);
 
   const followTile = useCallback(
     (id: string) => {

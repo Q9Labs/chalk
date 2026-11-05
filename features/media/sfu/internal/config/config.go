@@ -34,9 +34,20 @@ type Config struct {
 	MaxPublishedPerSession     int
 	MaxSubscriptionsPerSession int
 	MaxRequestBytes            int64
-	NegotiationTimeout         time.Duration
-	ConnectTimeout             time.Duration
-	ShutdownTimeout            time.Duration
+	// PacketBudget is the node's admission budget in packets/s, in plus out. Set it
+	// per node size: 16000 on s-1vcpu-1gb, 32000 on s-2vcpu-2gb. A join that would
+	// push the Episodes' reservations above it is refused.
+	PacketBudget int
+	// VideoStreamCost and AudioStreamCost are the reserved packets/s of one
+	// video or audio stream, per hop (a publisher's uplink or one subscriber's downlink).
+	VideoStreamCost int
+	AudioStreamCost int
+	// MaxEpisodeParticipants caps live sessions in one Episode. It is a safety bound, not the
+	// admission rule: the packet budget refuses a large Episode first on today's node sizes.
+	MaxEpisodeParticipants int
+	NegotiationTimeout     time.Duration
+	ConnectTimeout         time.Duration
+	ShutdownTimeout        time.Duration
 }
 
 // Lookup reads one setting, like os.LookupEnv.
@@ -59,6 +70,10 @@ func Load(lookup Lookup) (Config, error) {
 		MaxPublishedPerSession:     r.integer("SFU_MAX_PUBLISHED_PER_SESSION", 8, 1, 32),
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
 		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 256<<10, 4<<10, 1<<20)),
+		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
+		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 150, 1, 10000),
+		AudioStreamCost:            r.integer("SFU_AUDIO_STREAM_COST", 50, 1, 10000),
+		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 16, 1, 64),
 		NegotiationTimeout:         r.duration("SFU_NEGOTIATION_TIMEOUT", 10*time.Second, time.Second, time.Minute),
 		ConnectTimeout:             r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
 		ShutdownTimeout:            r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),
