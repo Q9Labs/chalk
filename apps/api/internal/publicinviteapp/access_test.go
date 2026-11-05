@@ -189,7 +189,7 @@ func (s publicTenantStub) GetTenant(context.Context, utilities.ID) (tenants.Tena
 
 type mediaResolverStub struct{ service *mediaplane.Service }
 
-func (s mediaResolverStub) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (s mediaResolverStub) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	return s.service, nil
 }
 

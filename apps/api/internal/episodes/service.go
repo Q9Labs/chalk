@@ -149,6 +149,28 @@ type EpisodeConfigSnapshot struct {
 	MediaPlaneBinding             *mediaplane.Binding      `json:"media_plane_binding,omitempty"`
 }
 
+// MediaPlaneBinding returns the provider application frozen when the Episode
+// started. It is nil for an Episode that started without media configuration or
+// before the binding existed.
+func (e Episode) MediaPlaneBinding() (*mediaplane.Binding, error) {
+	var snapshot struct {
+		Binding *mediaplane.Binding `json:"media_plane_binding"`
+	}
+	if len(e.ConfigSnapshot) == 0 {
+		return nil, nil
+	}
+	if err := json.Unmarshal(e.ConfigSnapshot, &snapshot); err != nil {
+		return nil, ErrInvalidConfigSnapshot
+	}
+	if snapshot.Binding == nil {
+		return nil, nil
+	}
+	if err := snapshot.Binding.Validate(); err != nil {
+		return nil, ErrInvalidConfigSnapshot
+	}
+	return snapshot.Binding, nil
+}
+
 type CreateEpisodeInput struct {
 	ID                            utilities.ID
 	TenantID                      utilities.ID

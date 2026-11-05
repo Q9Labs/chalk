@@ -78,7 +78,7 @@ func (*replacementGrantFixture) GetSpace(context.Context, utilities.ID, utilitie
 func (*replacementGrantFixture) GetTenant(context.Context, utilities.ID) (tenants.Tenant, error) {
 	return tenants.Tenant{}, nil
 }
-func (f *replacementGrantFixture) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *replacementGrantFixture) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -222,7 +223,7 @@ func (f *recoveryGrantPlane) CreateJoin(ctx context.Context, input mediaplane.Cr
 	return join, err
 }
 
-func (f *recoveryGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *recoveryGrantPlane) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }

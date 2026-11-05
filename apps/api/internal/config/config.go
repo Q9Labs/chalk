@@ -79,7 +79,17 @@ const (
 	CloudflareTurnAPIToken      = "CHALK_CLOUDFLARE_TURN_API_TOKEN"
 
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
-	DefaultMediaPlane                  = "CHALK_DEFAULT_MEDIA_PLANE"
+
+	ChalkSFUEnabled        = "CHALK_SFU_ENABLED"
+	ChalkSFUControlURL     = "CHALK_SFU_CONTROL_URL"
+	ChalkSFUApplicationID  = "CHALK_SFU_APPLICATION_ID"
+	ChalkSFUServerName     = "CHALK_SFU_SERVER_NAME"
+	ChalkSFUCAFile         = "CHALK_SFU_CA_FILE"
+	ChalkSFUClientCertFile = "CHALK_SFU_CLIENT_CERT_FILE"
+	ChalkSFUClientKeyFile  = "CHALK_SFU_CLIENT_KEY_FILE"
+	ChalkSFUTimeoutMS      = "CHALK_SFU_TIMEOUT_MS"
+	ChalkSFUSTUNURLs       = "CHALK_SFU_STUN_URLS"
+	DefaultMediaPlane      = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -121,6 +131,7 @@ const (
 	DefaultLogFormat                          = "json"
 	DefaultLogLevel                           = "info"
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
+	DefaultChalkSFUTimeoutMS                  = int64(6000)
 
 	DefaultRequestLogs                  = "off"
 	DefaultRequestSampleRate            = 0.01
@@ -179,6 +190,23 @@ type CloudflareRealtimeConfig struct {
 	// clients get STUN only.
 	TurnKeyID    string
 	TurnAPIToken string
+
+	RequestTimeout time.Duration
+}
+
+// ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
+// Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
+type ChalkSFUConfig struct {
+	Enabled bool
+	// ApplicationID names the SFU pool and goes into each Episode binding, so it
+	// stays the same when hosts or certificates rotate.
+	ApplicationID  string
+	ControlURL     string
+	ServerName     string
+	CAFile         string
+	ClientCertFile string
+	ClientKeyFile  string
+	STUNURLs       []string
 
 	RequestTimeout time.Duration
 }
@@ -267,6 +295,7 @@ type Config struct {
 
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
+	ChalkSFU           ChalkSFUConfig
 	DefaultMediaPlane  spaces.MediaPlaneProvider
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
@@ -473,6 +502,10 @@ func Load() (Config, error) {
 
 		RequestTimeout: cloudflareRealtimeRequestTimeout,
 	}
+	chalkSFU, err := loadChalkSFUConfig()
+	if err != nil {
+		return Config{}, err
+	}
 	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
@@ -538,6 +571,7 @@ func Load() (Config, error) {
 		ProblemReportsDiscordWebhookURL: strings.TrimSpace(os.Getenv("CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL")),
 		Capabilities:                    capabilities,
 		CloudflareRealtime:              cloudflareRealtime,
+		ChalkSFU:                        chalkSFU,
 		DefaultMediaPlane:               defaultMediaPlane,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
@@ -590,6 +624,48 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 	return provider, nil
+}
+
+func loadChalkSFUConfig() (ChalkSFUConfig, error) {
+	if !envBool(ChalkSFUEnabled) {
+		return ChalkSFUConfig{}, nil
+	}
+	timeout, err := envMilliseconds(ChalkSFUTimeoutMS, DefaultChalkSFUTimeoutMS)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
+	if timeout <= 0 {
+		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUTimeoutMS)
+	}
+	config := ChalkSFUConfig{
+		Enabled:        true,
+		ApplicationID:  strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
+		ControlURL:     strings.TrimSpace(envOrDefault(ChalkSFUControlURL, "")),
+		ServerName:     strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
+		CAFile:         strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
+		ClientCertFile: strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
+		ClientKeyFile:  strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
+		STUNURLs:       envList(ChalkSFUSTUNURLs),
+		RequestTimeout: timeout,
+	}
+	required := []struct{ name, value string }{
+		{ChalkSFUApplicationID, config.ApplicationID},
+		{ChalkSFUControlURL, config.ControlURL},
+		{ChalkSFUServerName, config.ServerName},
+		{ChalkSFUCAFile, config.CAFile},
+		{ChalkSFUClientCertFile, config.ClientCertFile},
+		{ChalkSFUClientKeyFile, config.ClientKeyFile},
+	}
+	for _, field := range required {
+		if field.value == "" {
+			return ChalkSFUConfig{}, fmt.Errorf("%s must be set when %s is on", field.name, ChalkSFUEnabled)
+		}
+	}
+	parsed, err := url.Parse(config.ControlURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return ChalkSFUConfig{}, fmt.Errorf("%s must be an absolute https URL without query or fragment", ChalkSFUControlURL)
+	}
+	return config, nil
 }
 
 func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {

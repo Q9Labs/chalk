@@ -102,7 +102,10 @@ type CloseTracksResponse struct {
 
 type InspectSessionRequest struct {
 	ConnectionID string
-	Scope        Scope
+	// Scope is the caller's own scope. Peer says the session belongs to another
+	// Participant of the same Episode, such as the publisher of a failed pull.
+	Scope Scope
+	Peer  bool
 }
 
 type SessionTrack struct {

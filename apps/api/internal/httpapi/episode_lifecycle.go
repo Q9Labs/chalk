@@ -51,8 +51,11 @@ type SyncTokenRefreshIssuer interface {
 	IssueForParticipant(context.Context, synctokens.SubjectKey) (synctokens.Token, error)
 }
 
+// MediaPlaneResolver finds the media plane an Episode is bound to. It reads the
+// Episode's frozen binding, never the Space's current selection, so a change to
+// the selector cannot move a live Episode to another provider.
 type MediaPlaneResolver interface {
-	Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error)
+	ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error)
 }
 
 type createEpisodeRequest struct {
@@ -362,7 +365,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 		if join.Provider != "" {
 			response.MediaPlane = &mediaPlaneResponse{Provider: string(join.Provider), ClientPayload: join.ClientPayload}
 		}
-		if join.Provider == mediaplane.ProviderCloudflareSFU {
+		if grantProvider(join.Provider) {
 			if generations == nil {
 				return participantLifecycleResponse{}, apiErrorServiceUnavailable
 			}
@@ -398,7 +401,14 @@ func createParticipantJoin(ctx context.Context, spacesService SpaceService, tena
 	if err != nil || service == nil {
 		return mediaplane.Join{}, err
 	}
-	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor", AllowRelay: true})
+	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{Provider: service.Provider(), Scope: participantScope(participant), Episode: episode, ParticipantName: participant.ID.String(), ExternalParticipantID: participant.ID.String(), ParticipantPreset: "contributor", AllowRelay: true})
+}
+
+func participantScope(participant episodes.Participant) mediaplane.Scope {
+	return mediaplane.Scope{
+		TenantID: participant.TenantID.String(), EpisodeID: participant.EpisodeID.String(),
+		ParticipantID: participant.ID.String(), Generation: participant.Generation,
+	}
 }
 
 func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantRemovalResponse] {
@@ -456,7 +466,7 @@ func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAutho
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidRequestKey, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeControlBusy, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
-func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesService SpaceService, tenantsService TenantService, tenantID, spaceID utilities.ID) (*mediaplane.Service, error) {
+func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesService SpaceService, tenantsService TenantService, tenantID, spaceID, episodeID utilities.ID) (*mediaplane.Service, error) {
 	if resolver == nil {
 		return nil, nil
 	}
@@ -471,11 +481,11 @@ func resolveMediaPlane(ctx context.Context, resolver MediaPlaneResolver, spacesS
 	if err != nil {
 		return nil, fmt.Errorf("%w: tenant lookup failed", mediaplane.ErrPlaneUnavailable)
 	}
-	return resolver.Resolve(ctx, tenant, space)
+	return resolver.ResolveEpisode(ctx, tenant, space, episodeID)
 }
 
 func resolveMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID) (*mediaplane.Service, mediaplane.Episode, error) {
-	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID)
+	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID)
 	if err != nil || service == nil {
 		return service, mediaplane.Episode{}, err
 	}
