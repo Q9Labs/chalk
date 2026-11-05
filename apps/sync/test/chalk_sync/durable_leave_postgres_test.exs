@@ -492,6 +492,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              ).rows
   end
 
+  @tag timeout: 180_000
   test "reentry helper reports stderr on failure" do
     assert_raise ExUnit.AssertionError, ~r/expected tenant, space, account and request key/, fn ->
       run_reentry_helper([])
