@@ -53,19 +53,23 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 	}
-	pc.OnTrack(s.onTrack)
-	pc.OnConnectionStateChange(s.onConnectionState)
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 			n.log.Warn("session never connected", "connectionId", id)
 			s.Close()
 		}
 	})
+	pc.OnTrack(s.onTrack)
+	pc.OnConnectionStateChange(s.onConnectionState)
 	return s, nil
 }
 
 func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
-	if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+	switch state {
+	case webrtc.PeerConnectionStateConnected:
+		// The timer only guards a session that never connects. Later drops are ICE's to report.
+		s.connectTimer.Stop()
+	case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
 		s.Close()
 	}
 }
@@ -194,20 +198,38 @@ func validSource(source string) bool {
 }
 
 func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (protocol.TracksResponse, error) {
+	sections, existing, err := s.checkOffer(request)
+	if err != nil {
+		if errors.Is(err, ErrInvalidRequest) || errors.Is(err, ErrCapacityExceeded) {
+			return protocol.TracksResponse{}, err
+		}
+		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
+	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
-		return protocol.TracksResponse{}, fmt.Errorf("%w: apply offer: %w", ErrNegotiationFailed, err)
+		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
 	}
 	var response protocol.TracksResponse
+	var refused []*webrtc.RTPTransceiver
 	s.mu.Lock()
 	for _, track := range request.Tracks {
-		code, message := s.registerPublication(track)
+		transceiver, code, message := s.registerPublication(track, sections)
 		if code != "" {
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: code, Message: message})
+			if transceiver != nil && !existing[track.Mid] && s.published[track.Mid] == nil {
+				refused = append(refused, transceiver)
+			}
 			continue
 		}
 		response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: track.Source})
 	}
 	s.mu.Unlock()
+	// Pion has already created a transceiver for each refused section. Stop it so it carries
+	// no media, and the answer marks the section inactive.
+	for _, transceiver := range refused {
+		if err := transceiver.Stop(); err != nil {
+			s.node.log.Warn("stop refused section", "connectionId", s.id, "error", err)
+		}
+	}
 
 	answer, err := s.pc.CreateAnswer(nil)
 	if err == nil {
@@ -224,25 +246,76 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	return response, nil
 }
 
-// registerPublication records one pushed track. The caller holds s.mu.
-// It returns a track error code when the track cannot be published.
-func (s *Session) registerPublication(track protocol.Track) (code, message string) {
-	transceiver := s.receiveTransceiver(track.Mid)
-	if transceiver == nil {
-		return protocol.TrackCodeInvalid, "mid is not a sending section of the offer"
+// checkOffer bounds the offer before Pion sees it: its size, and the sections it adds. Every
+// new section must belong to a track of the request, and the new tracks must fit the
+// publication and section limits, so the peer connection never allocates for an offer the
+// node would not accept. It returns the parsed sections and the MIDs the connection already has.
+func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSection, map[string]bool, error) {
+	sections, err := parseOffer(request.SessionDescription.SDP)
+	if err != nil {
+		return nil, nil, err
 	}
-	if len(s.published) >= s.node.cfg.MaxPublishedPerSession {
-		return protocol.TrackCodeLimitExceeded, "too many published tracks"
+	named := make(map[string]bool, len(request.Tracks))
+	for _, track := range request.Tracks {
+		named[track.Mid] = true
+	}
+	transceivers := s.pc.GetTransceivers()
+	existing := make(map[string]bool, len(transceivers))
+	for _, transceiver := range transceivers {
+		existing[transceiver.Mid()] = true
+	}
+	added := 0
+	for mid := range sections {
+		if existing[mid] {
+			continue
+		}
+		if !named[mid] {
+			return nil, nil, fmt.Errorf("%w: the offer has a section that no track of the request names", ErrInvalidRequest)
+		}
+		added++
+	}
+	if len(transceivers)+added > s.transceiverLimit() {
+		return nil, nil, fmt.Errorf("%w: too many media sections on this connection", ErrCapacityExceeded)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fresh := 0
+	for _, track := range request.Tracks {
+		if s.published[track.Mid] == nil && s.publishedByName(track.TrackName) == nil {
+			fresh++
+		}
+	}
+	if len(s.published)+fresh > s.node.cfg.MaxPublishedPerSession {
+		return nil, nil, fmt.Errorf("%w: too many published tracks", ErrCapacityExceeded)
+	}
+	return sections, existing, nil
+}
+
+// transceiverLimit is the most media sections one connection may ever hold.
+func (s *Session) transceiverLimit() int {
+	return sectionHeadroom * (s.node.cfg.MaxPublishedPerSession + s.node.cfg.MaxSubscriptionsPerSession)
+}
+
+// registerPublication records one pushed track. The caller holds s.mu. It returns the
+// section's transceiver and a track error code when the track cannot be published.
+func (s *Session) registerPublication(track protocol.Track, sections map[string]offerSection) (*webrtc.RTPTransceiver, string, string) {
+	transceiver := s.receiveTransceiver(track.Mid)
+	section, offered := sections[track.Mid]
+	if transceiver == nil || !offered || !section.sending {
+		return transceiver, protocol.TrackCodeInvalid, "mid is not a sending section of the offer"
+	}
+	if !section.supports(transceiver.Kind()) {
+		return transceiver, protocol.TrackCodeInvalid, "the section does not offer a supported codec: Opus for audio, VP8 for video"
 	}
 	if s.published[track.Mid] != nil || s.publishedByName(track.TrackName) != nil {
-		return protocol.TrackCodeDuplicate, "mid or track name is already published"
+		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
 	}
 	pub, err := newPublication(s, track, transceiver.Kind())
 	if err != nil {
-		return protocol.TrackCodeInvalid, err.Error()
+		return transceiver, protocol.TrackCodeInvalid, err.Error()
 	}
 	s.published[track.Mid] = pub
-	return "", ""
+	return transceiver, "", ""
 }
 
 // receiveTransceiver finds the section where the client sends to the SFU.
@@ -275,7 +348,7 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 	var response protocol.TracksResponse
 	var added []*subscription
 	for _, track := range request.Tracks {
-		subscription, code, message := s.subscribe(track)
+		subscription, code, message := s.subscribe(track, added)
 		if code != "" {
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: code, Message: message})
 			continue
@@ -334,9 +407,10 @@ func (s *Session) offerExpired(pending *pendingOffer) {
 	}
 }
 
-// subscribe adds one sendonly transceiver for a publisher's track.
-// It returns a track error code when the track cannot be pulled.
-func (s *Session) subscribe(track protocol.Track) (*subscription, string, string) {
+// subscribe adds one sendonly transceiver for a publisher's track. staged holds the
+// subscriptions this request already added; they count against the limits and the
+// duplicate check like committed ones. It returns a track error code when the track cannot be pulled.
+func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subscription, string, string) {
 	publisher := s.node.lookup(track.SessionID)
 	if publisher == nil || publisher == s || !sameEpisode(publisher.scope, s.scope) {
 		return nil, protocol.TrackCodeNotFound, "no such published track"
@@ -346,13 +420,16 @@ func (s *Session) subscribe(track protocol.Track) (*subscription, string, string
 		return nil, protocol.TrackCodeNotFound, "no such published track"
 	}
 	s.mu.Lock()
-	duplicate := slices.ContainsFunc(s.sortedSubscriptionsLocked(), func(existing *subscription) bool { return existing.pub == pub })
-	full := len(s.subscribed) >= s.node.cfg.MaxSubscriptionsPerSession
+	duplicate := slices.ContainsFunc(staged, func(existing *subscription) bool { return existing.pub == pub })
+	for _, existing := range s.subscribed {
+		duplicate = duplicate || existing.pub == pub
+	}
+	full := len(s.subscribed)+len(staged) >= s.node.cfg.MaxSubscriptionsPerSession
 	s.mu.Unlock()
 	switch {
 	case duplicate:
 		return nil, protocol.TrackCodeDuplicate, "track is already pulled"
-	case full:
+	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
 	transceiver, err := s.pc.AddTransceiverFromTrack(pub.local, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
@@ -379,7 +456,7 @@ func (s *Session) Renegotiate(_ context.Context, description protocol.SessionDes
 		return ErrNoPendingOffer
 	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: description.SDP}); err != nil {
-		return fmt.Errorf("%w: apply answer: %w", ErrNegotiationFailed, err)
+		return s.failNegotiation("apply the answer", err)
 	}
 	pending.timer.Stop()
 	s.mu.Lock()
@@ -396,17 +473,19 @@ func (s *Session) CloseTracks(_ context.Context, request protocol.CloseTracksReq
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
 		return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a request closes 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
+	for index, track := range request.Tracks {
+		if track.Mid == "" {
+			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: tracks[%d].mid is required", ErrInvalidRequest, index)
+		}
+	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
-	var response protocol.CloseTracksResponse
-	for _, track := range request.Tracks {
-		if track.Mid == "" {
-			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: every track needs a mid", ErrInvalidRequest)
-		}
-		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid)})
-	}
 	if s.isClosed() {
 		return protocol.CloseTracksResponse{}, ErrSessionGone
+	}
+	var response protocol.CloseTracksResponse
+	for _, track := range request.Tracks {
+		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid)})
 	}
 	return response, nil
 }
@@ -449,14 +528,6 @@ func (s *Session) Inspect() (protocol.InspectResponse, error) {
 		return cmp.Or(-strings.Compare(a.Location, b.Location), strings.Compare(a.Mid, b.Mid))
 	})
 	return response, nil
-}
-
-func (s *Session) sortedSubscriptionsLocked() []*subscription {
-	list := make([]*subscription, 0, len(s.subscribed))
-	for _, subscription := range s.subscribed {
-		list = append(list, subscription)
-	}
-	return list
 }
 
 // completeLocalDescription waits for the ICE candidates, so the SDP is complete.

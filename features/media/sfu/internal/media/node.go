@@ -53,7 +53,13 @@ type Node struct {
 	sessions     map[string]*Session
 	participants map[participantKey]*Session
 	creates      map[string]createRecord
+	fences       map[participantKey]int64 // highest generation seen per Participant; outlives sessions
+	fenceOrder   []participantKey         // insertion order, to evict the oldest fence
 }
+
+// maxFences bounds the generation fences. Evicting the oldest reopens the stale-generation
+// check for that Participant only, and only until its next create.
+const maxFences = 1 << 14
 
 type createRecord struct {
 	digest [sha256.Size]byte
@@ -87,6 +93,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sessions:     map[string]*Session{},
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
+		fences:       map[participantKey]int64{},
 	}, nil
 }
 
@@ -195,13 +202,15 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 		}
 		return n.responseFor(record.id), nil, nil
 	}
+	// The fence outlives the session, so a delayed create from an older generation stays refused
+	// after the newer session closes.
+	if scope.Generation < n.fences[keyOf(scope)] {
+		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
+	}
 	var fenced *Session
 	if existing := n.participants[keyOf(scope)]; existing != nil {
-		switch {
-		case scope.Generation == existing.scope.Generation:
+		if scope.Generation == existing.scope.Generation {
 			return protocol.CreateSessionResponse{}, nil, ErrSessionExists
-		case scope.Generation < existing.scope.Generation:
-			return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 		}
 		fenced = existing
 	}
@@ -218,8 +227,23 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	}
 	n.sessions[session.id] = session
 	n.participants[keyOf(scope)] = session
+	n.raiseFence(scope)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
 	return n.responseFor(session.id), fenced, nil
+}
+
+// raiseFence records the generation as the lowest the Participant may create again.
+// The caller holds n.mu.
+func (n *Node) raiseFence(scope protocol.Scope) {
+	key := keyOf(scope)
+	if _, known := n.fences[key]; !known {
+		n.fenceOrder = append(n.fenceOrder, key)
+		if len(n.fenceOrder) > maxFences {
+			delete(n.fences, n.fenceOrder[0])
+			n.fenceOrder = n.fenceOrder[1:]
+		}
+	}
+	n.fences[key] = max(n.fences[key], scope.Generation)
 }
 
 func (n *Node) responseFor(id string) protocol.CreateSessionResponse {

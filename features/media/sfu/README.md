@@ -15,6 +15,8 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - `POST /v1/sessions/{id}/tracks/close` force-closes tracks by MID. Closing an absent MID succeeds.
   - `POST /v1/sessions/{id}/inspect` lists the session's tracks.
     A session or publisher outside the caller's Tenant and Episode reads as gone.
+  - An offer is checked before Pion sees it: at most 64 KiB, audio and video sections only, and every section it adds must belong to a track of the request. Tracks that would exceed the publication limit fail the whole request with 429. A section without Opus (audio) or VP8 (video) gets a per-track `invalid_track` error. A session holds at most four times its publication plus subscription limit in media sections over its life, because Pion keeps stopped sections.
+  - A delayed create from an older generation stays refused after the newer session closes. The node remembers the highest generation per Participant, up to 16384 Participants.
 - **Media**: Opus and VP8 passthrough on one Pion UDP socket (ICE-lite). Keyframe requests from a subscriber are relayed to the publisher. A camera that offers simulcast negotiates it, and the node forwards the first RID whose packets arrive.
 
 Not in M1: the API adapter, SDK changes, layer selection and adaptation, congestion control, NACK policy, negotiated close, track updates, operation-ID replay beyond session create, certificate rotation, deployment and the provider flag.

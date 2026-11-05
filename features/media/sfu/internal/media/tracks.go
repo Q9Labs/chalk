@@ -131,10 +131,13 @@ func (s *subscription) readFeedback() {
 	}
 }
 
-// close detaches the publisher's track from the subscriber's sender.
+// close stops the subscription's transceiver and sender. That ends the RTCP reader, unbinds
+// the publisher's track from the sender and frees the sender's SRTP stream. It is idempotent.
 func (s *subscription) close() {
-	s.closed.Store(true)
-	if err := s.sender.ReplaceTrack(nil); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-		s.pub.session.node.log.Warn("detach subscription", "connectionId", s.pub.session.id, "error", err)
+	if !s.closed.CompareAndSwap(false, true) {
+		return
+	}
+	if err := s.transceiver.Stop(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+		s.pub.session.node.log.Warn("stop subscription", "connectionId", s.pub.session.id, "error", err)
 	}
 }
