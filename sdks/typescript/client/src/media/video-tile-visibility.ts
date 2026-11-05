@@ -60,30 +60,39 @@ export class VideoTileSubscriptions {
    * for its report, a hidden one is not pulled, and a pulled one that goes off screen is closed after a debounce.
    */
   select(now: number, publicationIds: readonly string[], pulled: ReadonlySet<string>): VideoTileSelection {
+    this.#list(now, publicationIds);
+    this.#reporting ||= publicationIds.some((id) => reports.has(id));
+    if (!this.#reporting) return { wanted: new Set(publicationIds), wakeAt: undefined };
+    const wanted = new Set<string>();
+    let wakeAt: number | undefined;
+    for (const id of publicationIds) {
+      const choice = this.#choose(id, now, pulled.has(id));
+      if (choice.wanted) wanted.add(id);
+      if (choice.until !== undefined) wakeAt = Math.min(wakeAt ?? choice.until, choice.until);
+    }
+    return { wanted, wakeAt };
+  }
+
+  #list(now: number, publicationIds: readonly string[]): void {
     const listed = new Set(publicationIds);
     for (const id of this.#firstListed.keys()) if (!listed.has(id)) this.#firstListed.delete(id);
     for (const id of publicationIds) if (!this.#firstListed.has(id)) this.#firstListed.set(id, now);
-    this.#reporting ||= publicationIds.some((id) => reports.has(id));
-    if (!this.#reporting) return { wanted: listed, wakeAt: undefined };
-    const wanted = new Set<string>();
-    let wakeAt: number | undefined;
-    const keepUntil = (id: string, at: number) => {
-      if (now >= at) return;
-      wanted.add(id);
-      wakeAt = Math.min(wakeAt ?? at, at);
-    };
-    for (const id of publicationIds) {
-      const report = reports.get(id);
-      if (!report) {
-        const due = this.#firstListed.get(id)! + UNREPORTED_TILE_WAIT_MS;
-        if (now >= due) wanted.add(id);
-        else wakeAt = Math.min(wakeAt ?? due, due);
-        continue;
-      }
-      const closeAt = report.size === null ? report.since + HIDDEN_TILE_CLOSE_MS : this.#pageHiddenSince === undefined ? undefined : this.#pageHiddenSince + HIDDEN_PAGE_CLOSE_MS;
-      if (closeAt === undefined) wanted.add(id);
-      else if (pulled.has(id)) keepUntil(id, closeAt);
+  }
+
+  /** Whether to pull one video now, and when that answer next changes on its own. */
+  #choose(id: string, now: number, pulled: boolean): { readonly wanted: boolean; readonly until?: number } {
+    const report = reports.get(id);
+    if (!report) {
+      const due = this.#firstListed.get(id)! + UNREPORTED_TILE_WAIT_MS;
+      return now >= due ? { wanted: true } : { wanted: false, until: due };
     }
-    return { wanted, wakeAt };
+    const closeAt = this.#closeAt(report);
+    if (closeAt === undefined) return { wanted: true };
+    return pulled && now < closeAt ? { wanted: true, until: closeAt } : { wanted: false };
+  }
+
+  #closeAt(report: TileReport): number | undefined {
+    if (report.size === null) return report.since + HIDDEN_TILE_CLOSE_MS;
+    return this.#pageHiddenSince === undefined ? undefined : this.#pageHiddenSince + HIDDEN_PAGE_CLOSE_MS;
   }
 }

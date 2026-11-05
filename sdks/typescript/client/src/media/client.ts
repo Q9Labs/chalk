@@ -113,14 +113,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
   #remoteParticipantIds: ReadonlySet<string> | null = null;
-  #remoteParticipantRevision = 0;
+  // Bumped when the remote participants or tile visibility change, so a reconcile that raced the change pulls again.
+  #remotePullInputRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
   readonly #videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now());
   readonly #stopObservingVideoTiles: () => void;
   #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
   // A tile change must reach the provider even while the tab is hidden, where routine polls pause.
   #videoTilesChanged = false;
-  #videoTileRevision = 0;
   #generation = 0;
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
@@ -190,7 +190,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   remoteParticipantsChanged(participantIds: readonly string[]): void {
     this.#remoteParticipantIds = new Set(participantIds);
-    this.#remoteParticipantRevision++;
+    this.#remotePullInputRevision++;
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
@@ -1082,8 +1082,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #reconcileRemotePublications(authoritative: CloudflareSFUPublicationSnapshot, generation: number): Promise<void> {
     const cursor = this.#nextRemotePublicationCursor(authoritative);
     if (cursor === null) return;
-    const participantRevision = this.#remoteParticipantRevision;
-    const videoTileRevision = this.#videoTileRevision;
+    const inputRevision = this.#remotePullInputRevision;
     const advertised = this.#desiredRemotePublications(authoritative, cursor);
     this.#receiveHealth.roster(advertised.values());
     this.#pruneRemotePullState(advertised);
@@ -1098,7 +1097,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#cursor = cursor;
-    this.#remotePullIncomplete = participantRevision !== this.#remoteParticipantRevision || videoTileRevision !== this.#videoTileRevision || next.size !== desired.size;
+    this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size !== desired.size;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
     for (const publication of pulled) {
@@ -1777,7 +1776,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #reconcileVideoTiles(): void {
     if (this.#stopped || (!this.#started && !this.#receivingInitial)) return;
     this.#videoTilesChanged = true;
-    this.#videoTileRevision++;
+    this.#remotePullInputRevision++;
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
