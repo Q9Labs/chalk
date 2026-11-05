@@ -297,7 +297,7 @@ export async function checkReports({ browser, page, origin, call, repository }) 
       socket.onMessage(() => {});
     });
     await failedOwner.goto(`${origin}/dashboard`);
-    await failedOwner.getByRole("button", { name: "Start a call", exact: true }).click();
+    await failedOwner.getByRole("button", { name: "Start a call", exact: true }).first().click();
     await failedOwner.getByRole("button", { name: "Join call", exact: true }).click();
     await failedOwner.getByText(/Could(?: not|n’t) connect to/).waitFor({ timeout: 45000 });
     assert(interceptedOwnerSync > 0, "Owner failure must follow a real admission and intercepted Sync connection");

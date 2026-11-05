@@ -27,7 +27,7 @@ try {
     });
   });
   await page.goto(`${origin}/dashboard`);
-  await page.getByRole("button", { name: "Start a call", exact: true }).click();
+  await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
   await page.getByRole("button", { name: "Join call", exact: true }).click();
   await page.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   const spaceId = new URL(page.url()).pathname.split("/").at(-2);

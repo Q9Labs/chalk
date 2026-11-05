@@ -22,7 +22,7 @@ try {
   const first = await context.newPage();
   recordPage(first);
   await first.goto(`${origin}/dashboard`);
-  await first.getByRole("button", { name: "Start a call", exact: true }).click();
+  await first.getByRole("button", { name: "Start a call", exact: true }).first().click();
   const firstJoined = callResponse(first, "join");
   await first.getByRole("button", { name: "Join call", exact: true }).click();
   const original = await access(await firstJoined);
@@ -39,7 +39,7 @@ try {
   await proveCookieBudget(context, origin);
   const leaving = await context.newPage();
   await leaving.goto(`${origin}/dashboard`);
-  await leaving.getByRole("button", { name: "Start a call", exact: true }).click();
+  await leaving.getByRole("button", { name: "Start a call", exact: true }).first().click();
   await leaving.getByRole("button", { name: "Join call", exact: true }).click();
   await leaving.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
   await leaveOwnerCall(leaving, origin);

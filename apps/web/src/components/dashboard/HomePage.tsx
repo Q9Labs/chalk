@@ -107,9 +107,12 @@ export function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
   const startKey = useRef(intentKey());
+  const startButton = useRef<HTMLButtonElement>(null);
 
   async function startCall() {
     if (starting) return;
+    // The empty-state opener disappears when the first row is added.
+    startButton.current?.focus();
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
@@ -153,7 +156,7 @@ export function HomePage() {
   return (
     <div className="wrap">
       <div className="hact">
-        <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+        <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
           <Icon name="plus" />
           Start a call
         </button>
