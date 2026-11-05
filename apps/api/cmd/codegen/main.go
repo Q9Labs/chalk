@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -761,6 +762,14 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "CallStatsRequest" {
 		return httpapi.CallStatsFieldEnum(fieldName)
 	}
+	if schemaName == "SFUSubscriptionsResponse" {
+		switch fieldName {
+		case "state":
+			return []string{mediaplane.SubscriptionActive, mediaplane.SubscriptionPaused}
+		case "reason":
+			return []string{mediaplane.PauseCongestion, mediaplane.PauseViewer, mediaplane.PauseSourceInactive}
+		}
+	}
 	switch fieldName {
 	case "transcript_language":
 		return artifactpolicy.TranscriptLanguageValues()
@@ -1175,6 +1184,9 @@ func isUUIDField(fieldName string) bool {
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if schemaName == "IssueAccessGrantRequest" && fieldName == "expected_media_connection_id" {
+		return true
+	}
+	if schemaName == "SFUSubscriptionsResponse" && fieldName == "session_id" {
 		return true
 	}
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {

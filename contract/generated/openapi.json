@@ -8095,6 +8095,160 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions": {
+      "get": {
+        "operationId": "listSFUSubscriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ParticipantId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SFUSubscriptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "participant.invalid_id", "request.invalid", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["media.unavailable", "service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "List s f u subscriptions"
+      }
+    },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks": {
       "post": {
         "operationId": "addCloudflareSFUTracks",
@@ -13813,6 +13967,11 @@
                   "minimum": 0,
                   "type": ["number", "null"]
                 },
+                "recv_paused_videos": {
+                  "maximum": 64,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
                 "relay_protocol": {
                   "enum": ["udp", "tcp", "tls"],
                   "type": "string"
@@ -14136,6 +14295,9 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "paused": {
+                  "type": ["boolean", "null"]
+                },
                 "publication_id": {
                   "minLength": 1,
                   "type": "string"
@@ -14229,6 +14391,9 @@
                 "mid": {
                   "type": "string"
                 },
+                "paused": {
+                  "type": ["boolean", "null"]
+                },
                 "publication_id": {
                   "type": "string"
                 },
@@ -14284,6 +14449,9 @@
                 "mid": {
                   "minLength": 1,
                   "type": "string"
+                },
+                "paused": {
+                  "type": ["boolean", "null"]
                 },
                 "publication_id": {
                   "minLength": 1,
@@ -14438,7 +14606,7 @@
                   "type": "string"
                 },
                 "media_error_step": {
-                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"],
+                  "enum": ["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"],
                   "type": "string"
                 },
                 "outcome": {
@@ -16160,6 +16328,50 @@
           }
         },
         "required": ["endpoint_id", "previous_secret_expires_at", "revision", "secret"],
+        "type": "object"
+      },
+      "SFUSubscriptionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "subscriptions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "effective_rid": {
+                  "type": "string"
+                },
+                "mid": {
+                  "type": "string"
+                },
+                "reason": {
+                  "enum": ["congestion", "viewer", "source_inactive"],
+                  "type": "string"
+                },
+                "requested_rid": {
+                  "type": "string"
+                },
+                "revision": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "session_id": {
+                  "type": "string"
+                },
+                "state": {
+                  "enum": ["active", "paused"],
+                  "type": "string"
+                },
+                "track_name": {
+                  "type": "string"
+                }
+              },
+              "required": ["mid", "revision", "session_id", "state", "track_name"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["subscriptions"],
         "type": "object"
       },
       "SetEpisodeDeadlineRequest": {

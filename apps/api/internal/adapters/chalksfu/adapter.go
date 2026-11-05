@@ -238,8 +238,10 @@ func (a *Adapter) metadata() map[string]string {
 	return map[string]string{"application_id": a.applicationID}
 }
 
-// join builds the client payload. The capability flags are false because the SFU
-// forwards one layer and has no ICE restart yet, so the SDK keeps those paths off.
+// join builds the client payload. The SFU picks each subscriber's layer from its
+// own estimate and treats the SDK's layer as a ceiling, and it reports each
+// subscription's delivery state, so the SDK reads that before it repulls. It has
+// no ICE restart yet, so the SDK keeps that path off.
 func (a *Adapter) join(episodeRef, participantRef, connectionID string) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderChalkSFU,
@@ -249,7 +251,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string) mediapla
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   a.iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": false, "iceRestart": false},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": false},
 		},
 		Metadata: a.metadata(),
 	}
@@ -313,8 +315,8 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 	return tracksResponseOf(input.ConnectionID, response), nil
 }
 
-// UpdateTracks changes a subscription's layer policy. The SFU forwards one layer
-// and accepts the policy without acting on it, so no renegotiation follows.
+// UpdateTracks changes a subscription's layer ceiling or pauses and resumes it in
+// place. The MID and track stay, so no renegotiation follows.
 func (a *Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
 	path, err := sessionPath(input.ConnectionID, "tracks/update")
 	if err != nil {
@@ -415,6 +417,47 @@ func (a *Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSe
 	return mediaplane.SessionState{Found: true, Tracks: tracks}, nil
 }
 
+// SubscriptionStates reads how the SFU delivers each remote subscription of the
+// caller's own session. A state or reason this adapter does not know fails the
+// read, because the SDK would otherwise act on a guess.
+func (a *Adapter) SubscriptionStates(ctx context.Context, input mediaplane.SubscriptionStatesRequest) ([]mediaplane.SubscriptionState, error) {
+	path, err := sessionPath(input.ConnectionID, "inspect")
+	if err != nil {
+		return nil, err
+	}
+	var response wireInspectResponse
+	if err := a.call(ctx, path, wireInspectRequest{Scope: wireScopeOf(input.Scope)}, &response); err != nil {
+		return nil, err
+	}
+	states := make([]mediaplane.SubscriptionState, 0, len(response.Tracks))
+	for _, track := range response.Tracks {
+		if track.Location != "remote" || track.Subscription == nil {
+			continue
+		}
+		state := track.Subscription
+		if !knownSubscriptionState(state.State, state.Reason) {
+			return nil, fmt.Errorf("%w: sfu subscription state %q reason %q", mediaplane.ErrProviderFailed, state.State, state.Reason)
+		}
+		states = append(states, mediaplane.SubscriptionState{
+			Mid: track.Mid, SessionID: track.SessionID, TrackName: track.TrackName,
+			State: state.State, Reason: state.Reason, Revision: state.Revision,
+			RequestedRID: state.RequestedRID, EffectiveRID: state.EffectiveRID,
+		})
+	}
+	return states, nil
+}
+
+func knownSubscriptionState(state, reason string) bool {
+	switch state {
+	case mediaplane.SubscriptionActive:
+		return reason == ""
+	case mediaplane.SubscriptionPaused:
+		return reason == mediaplane.PauseCongestion || reason == mediaplane.PauseViewer || reason == mediaplane.PauseSourceInactive
+	default:
+		return false
+	}
+}
+
 // RemoveParticipant is unsupported, as on Cloudflare: public-access removal gets
 // a provider subject, not the SFU connection ID the remove route needs. Leaving
 // the Episode closes the session through track cleanup and the Episode end.
@@ -487,7 +530,7 @@ func descriptionOf(description *wireDescription) *mediaplane.SessionDescription 
 func wireTracksOf(tracks []mediaplane.Track) []wireTrack {
 	out := make([]wireTrack, 0, len(tracks))
 	for _, track := range tracks {
-		wired := wireTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source}
+		wired := wireTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Source: track.Source, Paused: track.Paused != nil && *track.Paused}
 		if track.Simulcast != nil {
 			wired.Simulcast = &wireSimulcast{PreferredRID: track.Simulcast.PreferredRID, PriorityOrdering: track.Simulcast.PriorityOrdering, RIDNotAvailable: track.Simulcast.RIDNotAvailable}
 		}

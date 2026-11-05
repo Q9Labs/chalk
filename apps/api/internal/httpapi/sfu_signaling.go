@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -104,6 +105,21 @@ type sfuPublicationsResponse struct {
 	Publications []sfuPublicationResponse `json:"publications"`
 }
 
+type sfuSubscriptionResponse struct {
+	Mid          string `json:"mid"`
+	SessionID    string `json:"session_id"`
+	TrackName    string `json:"track_name"`
+	State        string `json:"state"`
+	Reason       string `json:"reason,omitempty"`
+	Revision     uint64 `json:"revision"`
+	RequestedRID string `json:"requested_rid,omitempty"`
+	EffectiveRID string `json:"effective_rid,omitempty"`
+}
+
+type sfuSubscriptionsResponse struct {
+	Subscriptions []sfuSubscriptionResponse `json:"subscriptions"`
+}
+
 // EpisodeLookup provides the bounded read needed to ensure participant media
 // routes refer to an Episode belonging to the requested Space.
 type EpisodeLookup interface {
@@ -124,6 +140,7 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuListSubscriptionsEndpoint(spaces, episodeLookup, tenants, media),
 	}
 }
 
@@ -547,6 +564,48 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 		Parameters(tenantSpaceEpisodeParticipantParameters()...).
 		Responds(http.StatusOK, "CloudflareSFUPublicationsResponse", sfuPublicationsResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+// sfuListSubscriptionsEndpoint reports whether the plane is delivering each
+// remote video of the caller's connection, and on which layer. A client reads it
+// when a video goes quiet, so it can tell a paused subscription from a stall.
+func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuPublicationsEndpointRequest, sfuSubscriptionsResponse] {
+	return Get(
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
+		"listSFUSubscriptions",
+		decodeSFUPublicationsRequest,
+		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuSubscriptionsResponse, error) {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, ""); err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
+			if err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			subject, _ := accessgrants.SubjectFromContext(ctx)
+			states, err := service.SubscriptionStates(ctx, mediaplane.SubscriptionStatesRequest{ConnectionID: subject.ConnectionID, Scope: sfuScope(ctx)})
+			if errors.Is(err, mediaplane.ErrUnsupportedOperation) {
+				return sfuSubscriptionsResponse{}, fmt.Errorf("%w: this media plane reports no subscription state", mediaplane.ErrInvalidSignalRequest)
+			}
+			if err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			response := sfuSubscriptionsResponse{Subscriptions: make([]sfuSubscriptionResponse, 0, len(states))}
+			for _, state := range states {
+				response.Subscriptions = append(response.Subscriptions, sfuSubscriptionResponse{
+					Mid: state.Mid, SessionID: state.SessionID, TrackName: state.TrackName, State: state.State, Reason: state.Reason,
+					Revision: state.Revision, RequestedRID: state.RequestedRID, EffectiveRID: state.EffectiveRID,
+				})
+			}
+			return response, nil
+		},
+	).
+		Auth(APIAuthParticipantMedia).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		Responds(http.StatusOK, "SFUSubscriptionsResponse", sfuSubscriptionsResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 

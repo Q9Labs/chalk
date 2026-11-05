@@ -58,6 +58,9 @@ type callStatsSample struct {
 	RecvHeight          *int64   `json:"recv_height,omitempty"`
 	FreezeCount         *int64   `json:"freeze_count,omitempty"`
 	FreezeMS            *int64   `json:"freeze_ms,omitempty"`
+	// RecvPausedVideos counts remote videos the SFU had paused for network at the
+	// end of the window. Only an SDK on a plane that reports subscription state sends it.
+	RecvPausedVideos *int64 `json:"recv_paused_videos,omitempty"`
 }
 
 // These are also the OpenAPI enums, so no free text can enter the log through a
@@ -92,6 +95,8 @@ func CallStatsMaximum(field string) int64 {
 		return 10000
 	case "freeze_ms":
 		return 600000
+	case "recv_paused_videos":
+		return 64
 	default:
 		return 0
 	}
@@ -138,7 +143,7 @@ func validateCallStatsSample(sample callStatsSample) string {
 			return field + "_label"
 		}
 	}
-	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS} {
+	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos} {
 		if value != nil && (*value < 0 || *value > CallStatsMaximum(field)) {
 			return field + "_range"
 		}
@@ -239,9 +244,12 @@ func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequ
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
+			// provider and provider_session_id join a summary to the media plane's own
+			// logs for the same connection, which the API's SFU adapters log under these keys.
 			logger := observability.RequestLogger(ctx).With(request.Origin...).With(
 				"event", "sdk.call_stats",
 				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
+				"provider", subject.Provider, "provider_session_id", subject.ConnectionID,
 				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))))
 			for _, sample := range request.Stats.Samples {
 				logger.InfoContext(ctx, "SDK call stats", sample.logAttributes()...)
@@ -261,7 +269,7 @@ func (s callStatsSample) logAttributes() []any {
 			attributes = append(attributes, key, value)
 		}
 	}
-	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS} {
+	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos} {
 		if value != nil {
 			attributes = append(attributes, key, *value)
 		}

@@ -419,9 +419,14 @@ func (a Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSes
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
 // Cloudflare answers with requiresImmediateRenegotiation=false, so no SDP moves.
+// Cloudflare has no pause in place, so a paused request fails instead of
+// silently switching layers.
 func (a Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
 	tracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
+		if track.Paused != nil {
+			return mediaplane.TracksResponse{}, fmt.Errorf("%w: cloudflare sfu cannot pause a track in place", mediaplane.ErrInvalidSignalRequest)
+		}
 		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: a.sessions.providerID(track.SessionID), Simulcast: track.Simulcast})
 	}
 	response := updateTracksResponse{requestedTracks: tracks}

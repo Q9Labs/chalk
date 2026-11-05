@@ -42,6 +42,7 @@ func TestLocalPublicationRejectsSubscriberPolicy(t *testing.T) {
 }
 
 func TestUpdateTracksRequiresAnExistingRemoteSubscriptionWithPolicy(t *testing.T) {
+	paused := true
 	policy := &Simulcast{"l", "none", "asciibetical"}
 	valid := Track{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher", Simulcast: policy}
 	for _, tc := range []struct {
@@ -55,6 +56,8 @@ func TestUpdateTracksRequiresAnExistingRemoteSubscriptionWithPolicy(t *testing.T
 		{"local publication", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "local", Mid: "3", TrackName: "camera", Simulcast: policy}}}, true},
 		{"missing mid", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", TrackName: "camera", SessionID: "publisher", Simulcast: policy}}}, true},
 		{"missing publisher session", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", Simulcast: policy}}}, true},
+		{"pause in place without a policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "screen", SessionID: "publisher", Paused: &paused}}}, false},
+		{"resume in place without a policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "screen", SessionID: "publisher", Paused: new(bool)}}}, false},
 		{"missing policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher"}}}, true},
 		{"invalid policy", UpdateTracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher", Simulcast: &Simulcast{"l", "descending", "none"}}}}, true},
 	} {
@@ -63,5 +66,14 @@ func TestUpdateTracksRequiresAnExistingRemoteSubscriptionWithPolicy(t *testing.T
 				t.Fatalf("invalid=%v: %v", tc.invalid, err)
 			}
 		})
+	}
+}
+
+// A pull starts flowing; only an update of an existing subscription pauses it.
+func TestPullCannotStartPaused(t *testing.T) {
+	paused := true
+	err := requireTracksRequest(&TracksRequest{ConnectionID: "viewer", Tracks: []Track{{Location: "remote", TrackName: "camera", SessionID: "publisher", Paused: &paused}}})
+	if !errors.Is(err, ErrInvalidSignalRequest) {
+		t.Fatalf("paused pull accepted: %v", err)
 	}
 }
