@@ -54,14 +54,21 @@ type Node struct {
 	sessions     map[string]*Session
 	participants map[participantKey]*Session
 	creates      map[string]createRecord
+	closedOrder  []string                 // create operation IDs whose session closed, oldest first
+	createLimit  int                      // bounds the create records kept for closed sessions
 	fences       map[participantKey]int64 // highest generation seen per Participant; outlives sessions
 	fenceOrder   []participantKey         // insertion order, oldest first
 	fenceLimit   int
+	screens      map[episodeKey]*Session // the session sharing a screen in each Episode
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
 // is only ever evicted for a Participant that has no live session.
 const defaultFenceLimit = 1 << 14
+
+// defaultClosedCreateLimit bounds the create records kept after their session closed. A delayed
+// retry of a create then still returns the closed connection ID instead of a second session.
+const defaultClosedCreateLimit = 1 << 12
 
 type createRecord struct {
 	digest [sha256.Size]byte
@@ -96,7 +103,9 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
 		fences:       map[participantKey]int64{},
+		screens:      map[episodeKey]*Session{},
 		fenceLimit:   defaultFenceLimit,
+		createLimit:  defaultClosedCreateLimit,
 	}, nil
 }
 
@@ -162,6 +171,13 @@ func (n *Node) Incarnation() string { return n.incarnation }
 // UDPPort is the bound shared media port.
 func (n *Node) UDPPort() int { return n.conn.LocalAddr().(*net.UDPAddr).Port }
 
+// Budget reports the node's packet budget and the part live Episodes reserve.
+func (n *Node) Budget() (budget, reserved int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.cfg.PacketBudget, n.reservedPackets()
+}
+
 // SessionCount is the number of live sessions.
 func (n *Node) SessionCount() int {
 	n.mu.Lock()
@@ -210,16 +226,14 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	if scope.Generation < n.fences[keyOf(scope)] {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
-	if err := n.makeFenceRoom(keyOf(scope)); err != nil {
+	evict, err := n.fenceVictim(keyOf(scope))
+	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
 	}
-	var fenced *Session
-	if existing := n.participants[keyOf(scope)]; existing != nil {
-		if scope.Generation == existing.scope.Generation {
-			return protocol.CreateSessionResponse{}, nil, ErrSessionExists
-		}
-		fenced = existing
-	}
+	// A create with a new operation ID replaces the Participant's live session, also at the
+	// same generation: the API replaces a media connection that way, and its database has
+	// already superseded the old connection ID.
+	fenced := n.participants[keyOf(scope)]
 	live := len(n.sessions)
 	if fenced != nil {
 		live--
@@ -227,9 +241,18 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	if live >= n.cfg.MaxSessions {
 		return protocol.CreateSessionResponse{}, nil, ErrCapacityExceeded
 	}
+	if err := n.admit(scope, fenced); err != nil {
+		return protocol.CreateSessionResponse{}, nil, err
+	}
 	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope)
 	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
+	}
+	// Only an admitted create may take another Participant's fence: a refused one must leave
+	// every fence in place, or a later stale create for that Participant could pass.
+	if evict >= 0 {
+		delete(n.fences, n.fenceOrder[evict])
+		n.fenceOrder = slices.Delete(n.fenceOrder, evict, evict+1)
 	}
 	n.sessions[session.id] = session
 	n.participants[keyOf(scope)] = session
@@ -238,25 +261,24 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	return n.responseFor(session.id), fenced, nil
 }
 
-// makeFenceRoom makes sure the fence table can take the Participant. It evicts the oldest
-// fence of a Participant with no live session, never one that has a live session: that fence
-// is what keeps an older generation from replacing the live one. When every fence belongs to
-// a live session it refuses instead. The caller holds n.mu.
-func (n *Node) makeFenceRoom(key participantKey) error {
+// fenceVictim finds the fence a new Participant would take the place of, or -1 when the table
+// has room or already knows the Participant. It picks the oldest fence of a Participant with no
+// live session, never one that has a live session: that fence is what keeps an older generation
+// from replacing the live one. When every fence belongs to a live session it refuses instead.
+// The caller holds n.mu and evicts only once the create is admitted.
+func (n *Node) fenceVictim(key participantKey) (int, error) {
 	if _, known := n.fences[key]; known || len(n.fences) < n.fenceLimit {
-		return nil
+		return -1, nil
 	}
 	index := slices.IndexFunc(n.fenceOrder, func(candidate participantKey) bool { return n.participants[candidate] == nil })
 	if index < 0 {
-		return fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
+		return -1, fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
 	}
-	delete(n.fences, n.fenceOrder[index])
-	n.fenceOrder = slices.Delete(n.fenceOrder, index, index+1)
-	return nil
+	return index, nil
 }
 
 // raiseFence records the generation as the lowest the Participant may create again.
-// makeFenceRoom has already run under the same lock.
+// fenceVictim has already made room under the same lock.
 func (n *Node) raiseFence(scope protocol.Scope) {
 	key := keyOf(scope)
 	if _, known := n.fences[key]; !known {
@@ -269,6 +291,45 @@ func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
 	return protocol.CreateSessionResponse{ConnectionID: id, NodeIncarnation: n.incarnation}
 }
 
+// claimScreen reserves the Episode's one screen share for the session. It reports false when
+// another publication already holds it, including one of the same session. The caller may hold
+// the session's own mutex: nothing takes it while holding n.mu.
+func (n *Node) claimScreen(s *Session) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	key := episodeOf(s.scope)
+	if n.screens[key] != nil {
+		return false
+	}
+	n.screens[key] = s
+	return true
+}
+
+// releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
+func (n *Node) releaseScreen(s *Session) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if key := episodeOf(s.scope); n.screens[key] == s {
+		delete(n.screens, key)
+	}
+}
+
+// EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
+func (n *Node) EndEpisode(tenantID, episodeID string) int {
+	n.mu.Lock()
+	var ended []*Session
+	for _, session := range n.sessions {
+		if session.scope.TenantID == tenantID && session.scope.EpisodeID == episodeID {
+			ended = append(ended, session)
+		}
+	}
+	n.mu.Unlock()
+	for _, session := range ended {
+		session.Close()
+	}
+	return len(ended)
+}
+
 // Session finds a live session. A session outside the scope reads as gone,
 // so one Tenant cannot probe another's connection IDs.
 func (n *Node) Session(id string, scope protocol.Scope) (*Session, error) {
@@ -277,6 +338,18 @@ func (n *Node) Session(id string, scope protocol.Scope) (*Session, error) {
 	}
 	session := n.lookup(id)
 	if session == nil || session.scope != scope {
+		return nil, ErrSessionGone
+	}
+	return session, nil
+}
+
+// PeerSession finds a live session of any Participant in the caller's Tenant and Episode.
+func (n *Node) PeerSession(id string, scope protocol.Scope) (*Session, error) {
+	if err := ValidateScope(scope); err != nil {
+		return nil, err
+	}
+	session := n.lookup(id)
+	if session == nil || episodeOf(session.scope) != episodeOf(scope) {
 		return nil, ErrSessionGone
 	}
 	return session, nil
@@ -297,8 +370,14 @@ func (n *Node) remove(session *Session) {
 	if n.participants[keyOf(session.scope)] == session {
 		delete(n.participants, keyOf(session.scope))
 	}
+	// The create record outlives the session, so a delayed retry of the same create replays the
+	// closed connection ID instead of creating a second session. Closed records are bounded.
 	if record, ok := n.creates[session.createOperation]; ok && record.id == session.id {
-		delete(n.creates, session.createOperation)
+		n.closedOrder = append(n.closedOrder, session.createOperation)
+		if len(n.closedOrder) > n.createLimit {
+			delete(n.creates, n.closedOrder[0])
+			n.closedOrder = slices.Delete(n.closedOrder, 0, 1)
+		}
 	}
 }
 

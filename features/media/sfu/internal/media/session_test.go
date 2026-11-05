@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,11 @@ import (
 
 // These tests drive the node and its sessions directly with real Pion peers, because they
 // assert state HTTP cannot show: transceivers, reader goroutines and timers.
+
+var operations atomic.Int64
+
+// op returns a fresh operation ID for a test request.
+func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
 
 func testScope(participant string, generation int64) protocol.Scope {
 	return protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: participant, Generation: generation}
@@ -33,6 +39,10 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		MaxPublishedPerSession:     4,
 		MaxSubscriptionsPerSession: 4,
 		MaxRequestBytes:            256 << 10,
+		PacketBudget:               1 << 20,
+		VideoStreamCost:            150,
+		AudioStreamCost:            50,
+		MaxEpisodeParticipants:     16,
 		NegotiationTimeout:         5 * time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,
@@ -50,7 +60,7 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 
 func (n *Node) newTestSession(t *testing.T, scope protocol.Scope) *Session {
 	t.Helper()
-	response, err := n.CreateSession("create-"+scope.ParticipantID+"-"+fmt.Sprint(scope.Generation), scope)
+	response, err := n.CreateSession("create-"+scope.EpisodeID+"-"+scope.ParticipantID+"-"+fmt.Sprint(scope.Generation), scope)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +169,7 @@ func publish(t *testing.T, s *Session, prefix string, count int) *testPeer {
 	peer := newTestPeer(t)
 	peer.sendOnly(t, webrtc.RTPCodecTypeAudio, count)
 	offer := peer.offer(t)
-	response, err := s.AddTracks(context.Background(), protocol.TracksRequest{
+	response, err := s.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 		Scope: s.scope, SessionDescription: offer, Tracks: localTracks(prefix, peer.mids(), "microphone"),
 	})
 	if err != nil || len(response.TrackErrors) != 0 || len(response.Tracks) != count {
@@ -169,7 +179,7 @@ func publish(t *testing.T, s *Session, prefix string, count int) *testPeer {
 }
 
 func pullRequest(s *Session, publisher *Session, names ...string) protocol.TracksRequest {
-	request := protocol.TracksRequest{Scope: s.scope}
+	request := protocol.TracksRequest{OperationID: op(), Scope: s.scope}
 	for _, name := range names {
 		request.Tracks = append(request.Tracks, protocol.Track{Location: protocol.LocationRemote, SessionID: publisher.id, TrackName: name})
 	}
@@ -196,14 +206,14 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 		peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 20)
 		offer := peer.offer(t)
 		// The request names one track; the other 19 sections belong to nothing.
-		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: offer, Tracks: localTracks("mic", peer.mids()[:1], "microphone"),
 		})
 		if !errors.Is(err, ErrInvalidRequest) {
 			t.Fatalf("round %d: unnamed sections: %v, want invalid request", round, err)
 		}
 		// The request names 16 of 20 sections: still four unnamed.
-		_, err = session.AddTracks(context.Background(), protocol.TracksRequest{
+		_, err = session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: offer, Tracks: localTracks("mic", peer.mids()[:protocol.MaxTracksPerRequest], "microphone"),
 		})
 		if !errors.Is(err, ErrInvalidRequest) {
@@ -218,7 +228,7 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 		peer := newTestPeer(t)
 		peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 3)
 		offer := peer.offer(t)
-		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: offer, Tracks: localTracks("mic", peer.mids(), "microphone"),
 		})
 		if !errors.Is(err, ErrCapacityExceeded) {
@@ -231,7 +241,7 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 
 	t.Run("oversized SDP", func(t *testing.T) {
 		huge := &protocol.SessionDescription{Type: "offer", SDP: "v=0\r\n" + strings.Repeat("a=padding:x\r\n", maxSDPBytes/10)}
-		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: huge, Tracks: localTracks("mic", []string{"0"}, "microphone"),
 		})
 		if !errors.Is(err, ErrInvalidRequest) {
@@ -252,7 +262,7 @@ func TestForcedSubscriptionCloseReleasesTheSender(t *testing.T) {
 		if err != nil || len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 0 {
 			t.Fatalf("cycle %d pull: %+v, %v", cycle, pulled, err)
 		}
-		if err := subscriber.Renegotiate(context.Background(), viewer.answer(t, pulled.SessionDescription)); err != nil {
+		if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
 			t.Fatalf("cycle %d answer: %v", cycle, err)
 		}
 		mid := pulled.Tracks[0].Mid
@@ -263,7 +273,7 @@ func TestForcedSubscriptionCloseReleasesTheSender(t *testing.T) {
 			t.Fatalf("cycle %d: no subscription for mid %q", cycle, mid)
 		}
 
-		if _, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{Scope: subscriber.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
+		if _, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
 			t.Fatalf("cycle %d close: %v", cycle, err)
 		}
 
@@ -344,7 +354,7 @@ func TestUnsupportedCodecIsATrackError(t *testing.T) {
 	}
 	peer := newTestPeer(t, h264)
 	peer.sendOnly(t, webrtc.RTPCodecTypeVideo, 1)
-	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 		Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
 	})
 	if err != nil {
@@ -368,7 +378,7 @@ func TestConnectTimerStopsOnceConnected(t *testing.T) {
 	session := node.newTestSession(t, testScope("alice", 1))
 	peer := newTestPeer(t)
 	peer.sendOnly(t, webrtc.RTPCodecTypeAudio, 1)
-	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+	response, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 		Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("mic", peer.mids(), "microphone"),
 	})
 	if err != nil || len(response.TrackErrors) != 0 {
@@ -397,7 +407,7 @@ func TestRejectedRemoteDescriptionClosesTheSession(t *testing.T) {
 		if err != nil || pulled.SessionDescription == nil {
 			t.Fatalf("pull: %+v, %v", pulled, err)
 		}
-		if err := subscriber.Renegotiate(context.Background(), garbage); !errors.Is(err, ErrNegotiationFailed) {
+		if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: garbage}); !errors.Is(err, ErrNegotiationFailed) {
 			t.Fatalf("garbage answer: %v, want negotiation failed", err)
 		}
 		if !subscriber.isClosed() {
@@ -411,7 +421,7 @@ func TestRejectedRemoteDescriptionClosesTheSession(t *testing.T) {
 	t.Run("offer", func(t *testing.T) {
 		node := newTestNode(t, nil)
 		session := node.newTestSession(t, testScope("alice", 1))
-		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: &protocol.SessionDescription{Type: "offer", SDP: "not sdp"},
 			Tracks: localTracks("mic", []string{"0"}, "microphone"),
 		})
@@ -429,7 +439,7 @@ func TestInvalidCloseBatchChangesNothing(t *testing.T) {
 	session := node.newTestSession(t, testScope("alice", 1))
 	publish(t, session, "mic", 2)
 
-	_, err := session.CloseTracks(context.Background(), protocol.CloseTracksRequest{
+	_, err := session.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(),
 		Scope: session.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: "0"}, {Mid: ""}},
 	})
 	if !errors.Is(err, ErrInvalidRequest) {
