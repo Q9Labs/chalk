@@ -117,7 +117,7 @@ async function push(page, control, connectionId, scope) {
       { location: "local", mid: offer.cameraMid, trackName: "camera-1", source: "camera" },
     ],
   });
-  expect(pushed.status === 200 && pushed.body.sessionDescription?.type === "answer" && pushed.body.tracks?.length === 2 && !pushed.body.trackErrors, `push answered: ${JSON.stringify(pushed.body).slice(0, 300)}`);
+  expect(isCleanTrackResponse(pushed, "answer"), `push answered: ${JSON.stringify(pushed.body).slice(0, 300)}`);
   await page.evaluate((answer) => window.publisher.setRemoteDescription(answer), pushed.body.sessionDescription);
 }
 
@@ -130,7 +130,7 @@ async function pull(page, control, connectionId, publisherId, scope) {
       { location: "remote", sessionId: publisherId, trackName: "camera-1", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
     ],
   });
-  expect(pulled.status === 200 && pulled.body.sessionDescription?.type === "offer" && pulled.body.tracks?.length === 2 && !pulled.body.trackErrors, `pull offered: ${JSON.stringify(pulled.body).slice(0, 300)}`);
+  expect(isCleanTrackResponse(pulled, "offer"), `pull offered: ${JSON.stringify(pulled.body).slice(0, 300)}`);
   const answer = await page.evaluate(async (serverOffer) => {
     const connection = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
     window.subscriber = connection;
@@ -141,6 +141,12 @@ async function pull(page, control, connectionId, publisherId, scope) {
   }, pulled.body.sessionDescription);
   const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, { scope, sessionDescription: answer });
   expect(renegotiated.status === 204, `renegotiate answered with ${renegotiated.status}`);
+}
+
+// A track request succeeded when it returned the expected SDP for both tracks and no per-track error.
+function isCleanTrackResponse(response, sdpType) {
+  const { sessionDescription, tracks, trackErrors } = response.body ?? {};
+  return response.status === 200 && sessionDescription?.type === sdpType && tracks?.length === 2 && !trackErrors;
 }
 
 async function receivedMedia(page) {
