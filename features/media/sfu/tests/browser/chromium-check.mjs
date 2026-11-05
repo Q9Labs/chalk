@@ -88,13 +88,19 @@ async function viewerState(page, control, viewer) {
 }
 
 // Waits until every viewer forwards its expected layer and has decoded frames
-// on it, then returns their states.
-async function expectLayers(page, control, viewers, want, what) {
+// on it, and settled(states) holds, then returns their states. On a timeout it
+// prints what each viewer and each encoding was doing.
+async function expectLayers(page, control, viewers, want, what, settled = () => true) {
   const start = await Promise.all(viewers.map((viewer) => viewerState(page, control, viewer)));
+  let last = start;
   const states = await waitFor(what, 60_000, async () => {
-    const now = await Promise.all(viewers.map((viewer) => viewerState(page, control, viewer)));
-    const settled = now.every((state, index) => state.rid === want[index] && state.frames >= start[index].frames + 30);
-    return settled ? now : false;
+    last = await Promise.all(viewers.map((viewer) => viewerState(page, control, viewer)));
+    const forwarding = last.every((state, index) => state.rid === want[index] && state.frames >= start[index].frames + 30);
+    return forwarding && settled(last) ? last : false;
+  }).catch(async (error) => {
+    for (const [index, state] of last.entries()) console.log(`STUCK viewer=${viewers[index].name} rid=${state.rid} height=${state.height} frames=${state.frames - start[index].frames}`);
+    for (const layer of await publisherLayers(page)) console.log(`STUCK encoder rid=${layer.rid} ${layer.width}x${layer.height} limitation=${layer.limitation}`);
+    throw error;
   });
   for (const [index, state] of states.entries()) {
     expect(state.mid === viewers[index].mid && state.mids === viewers[index].mids, `${viewers[index].name} kept its MID: ${state.mid} ${state.mids}`);
@@ -119,9 +125,8 @@ async function setEncoding(page, rid, active) {
 async function checkLayerSwitching(page, control, viewers) {
   for (const viewer of viewers) Object.assign(viewer, await viewerState(page, control, viewer));
   // Chrome ramps its estimate from loss reports alone until M5 adds congestion
-  // feedback, so "h" can take a while to start.
-  const both = await expectLayers(page, control, viewers, ["h", "l"], "B on h and C on l");
-  expect(both[0].height > both[1].height, `h decodes taller than l: ${both[0].height} vs ${both[1].height}`);
+  // feedback, so "h" can take a while to start and to reach full size.
+  await expectLayers(page, control, viewers, ["h", "l"], "B on h and C on l, h decoding taller", ([b, c]) => b.height > c.height);
   for (const round of [1, 2]) {
     await setEncoding(page, "h", false);
     const fallen = await expectLayers(page, control, viewers, ["l", "l"], `round ${round}: h stopped, B falls back to l`);
@@ -135,16 +140,20 @@ async function checkLayerSwitching(page, control, viewers) {
   }
 }
 
+// The publisher's video encodings as Chrome reports them.
+function publisherLayers(page) {
+  return page.evaluate(async () => {
+    const report = await window.publisher.getStats();
+    return [...report.values()]
+      .filter((entry) => entry.type === "outbound-rtp" && entry.kind === "video")
+      .map((entry) => ({ rid: entry.rid, width: entry.frameWidth, height: entry.frameHeight, frames: entry.framesEncoded ?? 0, encodeSeconds: entry.totalEncodeTime ?? 0, bytes: entry.bytesSent ?? 0, limitation: entry.qualityLimitationReason }));
+  });
+}
+
 // Prints each encoding's resolution and encode time per frame, and what each
 // viewer decodes, over a 20-second window.
 async function reportEncoders(page, control, viewers) {
-  const sample = () =>
-    page.evaluate(async () => {
-      const report = await window.publisher.getStats();
-      return [...report.values()]
-        .filter((entry) => entry.type === "outbound-rtp" && entry.kind === "video")
-        .map((entry) => ({ rid: entry.rid, width: entry.frameWidth, height: entry.frameHeight, frames: entry.framesEncoded ?? 0, encodeSeconds: entry.totalEncodeTime ?? 0, bytes: entry.bytesSent ?? 0, limitation: entry.qualityLimitationReason }));
-    });
+  const sample = () => publisherLayers(page);
   const before = await sample();
   await new Promise((resolve) => setTimeout(resolve, 20_000));
   const after = await sample();

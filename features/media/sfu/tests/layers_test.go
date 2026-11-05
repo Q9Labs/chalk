@@ -194,6 +194,10 @@ type receivedFrame struct {
 	pictureID    uint16
 	tl0          uint8
 	data         []byte
+	// incompleteBefore counts the frames whose start arrived since the previous
+	// complete frame but which never completed. A switch cuts the old layer's
+	// frame short that way, and each such frame still used a picture ID.
+	incompleteBefore int
 }
 
 // reassemble rebuilds a subscriber's frames the way a receiver's jitter buffer
@@ -233,11 +237,13 @@ func reassemble(t *testing.T, label string, packets []*rtp.Packet, fixtures [2]l
 	}
 	var first *rtp.Packet
 	var data []byte
+	incomplete := 0
 	for ext := lowest; ext <= highest; ext++ {
 		packet, ok := bySeq[ext]
 		if first != nil && (!ok || packet.Timestamp != first.Timestamp || packet.Payload[0]&0x10 != 0) {
 			first, data = nil, nil
 			dropped++
+			incomplete++
 		}
 		if !ok {
 			continue
@@ -259,8 +265,9 @@ func reassemble(t *testing.T, label string, packets []*rtp.Packet, fixtures [2]l
 		frames = append(frames, receivedFrame{
 			layer: where[0], index: where[1], timestamp: first.Timestamp, data: data,
 			pictureID: uint16(first.Payload[2]&0x7F)<<8 | uint16(first.Payload[3]), tl0: first.Payload[4],
+			incompleteBefore: incomplete,
 		})
-		first, data = nil, nil
+		first, data, incomplete = nil, nil, 0
 	}
 	return frames, dropped
 }
@@ -296,11 +303,12 @@ func assertDecodable(t *testing.T, label string, frames []receivedFrame, fixture
 		if delta := int32(frame.timestamp - previous.timestamp); delta <= 0 {
 			t.Fatalf("%s: timestamp went %d then %d", label, previous.timestamp, frame.timestamp)
 		}
-		if frame.pictureID != (previous.pictureID+1)&0x7FFF {
-			t.Fatalf("%s: picture ID went %d then %d", label, previous.pictureID, frame.pictureID)
+		step := 1 + frame.incompleteBefore
+		if frame.pictureID != (previous.pictureID+uint16(step))&0x7FFF {
+			t.Fatalf("%s: picture ID went %d then %d with %d incomplete frames between", label, previous.pictureID, frame.pictureID, frame.incompleteBefore)
 		}
-		if frame.tl0 != previous.tl0+1 {
-			t.Fatalf("%s: TL0PICIDX went %d then %d", label, previous.tl0, frame.tl0)
+		if frame.tl0 != previous.tl0+uint8(step) {
+			t.Fatalf("%s: TL0PICIDX went %d then %d with %d incomplete frames between", label, previous.tl0, frame.tl0, frame.incompleteBefore)
 		}
 	}
 	return switches
