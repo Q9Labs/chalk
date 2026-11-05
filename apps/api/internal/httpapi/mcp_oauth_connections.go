@@ -88,11 +88,11 @@ func requireDashboardService(ctx context.Context, scope authentication.Scope) (a
 
 func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentResponse] {
 	return Post("/v1/mcp-oauth/requests/inspect", "/mcp-oauth/requests/inspect", "inspectMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentResponse, error) {
-		if service == nil {
-			return mcpConsentResponse{}, apiErrorServiceUnavailable
-		}
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsRead); err != nil {
 			return mcpConsentResponse{}, err
+		}
+		if service == nil {
+			return mcpConsentResponse{}, apiErrorServiceUnavailable
 		}
 		pending, err := service.ConsentRequest(ctx, request.Request)
 		if err != nil {
@@ -110,12 +110,12 @@ func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLooku
 
 func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConsentApproveBody, mcpConsentRedirectResponse] {
 	return Post("/v1/mcp-oauth/requests/approve", "/mcp-oauth/requests/approve", "approveMCPConsentRequest", decodeJSONBody[mcpConsentApproveBody], func(ctx context.Context, request mcpConsentApproveBody) (mcpConsentRedirectResponse, error) {
-		if service == nil {
-			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
-		}
 		principal, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite)
 		if err != nil {
 			return mcpConsentRedirectResponse{}, err
+		}
+		if service == nil {
+			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
 		}
 		tenantID, err := utilities.ParseID(request.TenantID)
 		if err != nil {
@@ -141,11 +141,11 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 
 func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentRedirectResponse] {
 	return Post("/v1/mcp-oauth/requests/deny", "/mcp-oauth/requests/deny", "denyMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentRedirectResponse, error) {
-		if service == nil {
-			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
-		}
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite); err != nil {
 			return mcpConsentRedirectResponse{}, err
+		}
+		if service == nil {
+			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
 		}
 		redirect, err := service.Deny(ctx, request.Request)
 		if err != nil {
@@ -163,11 +163,11 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 
 func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, mcpConnectionListResponse] {
 	return Get("/v1/tenants/{tenant_id}/mcp-connections", "/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (mcpConnectionListResponse, error) {
-		if service == nil {
-			return mcpConnectionListResponse{}, apiErrorServiceUnavailable
-		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
 			return mcpConnectionListResponse{}, err
+		}
+		if service == nil {
+			return mcpConnectionListResponse{}, apiErrorServiceUnavailable
 		}
 		grants, err := service.ListGrants(ctx, request.TenantID)
 		if err != nil {
@@ -196,11 +196,11 @@ func revokeMCPConnectionEndpoint(service MCPOAuthService, authorizer TenantAutho
 		connectionID, err := routeID(r, "connection_id", apiErrorMCPConnectionNotFound)
 		return mcpConnectionIDsRequest{TenantID: tenantID, ConnectionID: connectionID}, err
 	}, func(ctx context.Context, request mcpConnectionIDsRequest) (noResponse, error) {
-		if service == nil {
-			return noResponse{}, apiErrorServiceUnavailable
-		}
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTenantPermission); err != nil {
 			return noResponse{}, err
+		}
+		if service == nil {
+			return noResponse{}, apiErrorServiceUnavailable
 		}
 		return noResponse{}, service.RevokeGrant(ctx, request.TenantID, request.ConnectionID)
 	}).
