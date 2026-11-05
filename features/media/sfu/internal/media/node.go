@@ -73,7 +73,8 @@ type Node struct {
 	screens      map[episodeKey]*Session        // the session sharing a screen in each Episode
 	sources      map[sourceKey]*sourceAuthority // newest grant or revoke per source; outlives sessions
 	sourceOrder  []sourceKey                    // insertion order, oldest first
-	sourceLimit  int
+	sourceLimit  int                            // bounds sources, and sourceFloors apart from it
+	sourceFloors map[episodeKey]int64           // highest revision of a source evicted per Episode
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -121,6 +122,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		screens:      map[episodeKey]*Session{},
 		sources:      map[sourceKey]*sourceAuthority{},
 		sourceLimit:  defaultSourceLimit,
+		sourceFloors: map[episodeKey]int64{},
 		fenceLimit:   defaultFenceLimit,
 		createLimit:  defaultClosedCreateLimit,
 	}, nil

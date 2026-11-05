@@ -2,6 +2,7 @@ package media
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"slices"
 	"testing"
@@ -154,6 +155,62 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 	}
 	if n.sources[sourceKey{keyOf(testScope("carol", 1)), "camera"}] != nil {
 		t.Fatal("the entry without a live session was kept")
+	}
+}
+
+// A revoke the full table evicts still fences its source: a delayed older grant cannot
+// open it, and a later publication starts without a lease even when grants are not
+// required. A grant at or above the Episode's floor still opens it.
+func TestAnEvictedRevokeStillFencesItsSource(t *testing.T) {
+	for _, require := range []bool{true, false} {
+		t.Run(fmt.Sprintf("require=%v", require), func(t *testing.T) {
+			n := leaseNode(t, time.Minute, require)
+			n.sourceLimit = 1
+			alice := testScope("alice", 1)
+			apply(t, n, control("alice", "camera", protocol.SourceRevoke, 5)) // alice has no session
+			if result := apply(t, n, control("bob", "camera", protocol.SourceGrant, 6)); !result.Applied {
+				t.Fatalf("bob's grant: %+v", result)
+			}
+			if n.sources[sourceKey{keyOf(alice), "camera"}] != nil {
+				t.Fatal("alice's revoke was not evicted")
+			}
+
+			if result := apply(t, n, control("alice", "camera", protocol.SourceGrant, 4)); result.Applied || result.LeaseMillis != 0 {
+				t.Fatalf("a grant older than the evicted revoke applied: %+v", result)
+			}
+			session := n.newTestSession(t, alice)
+			pub := newPublication(session, protocol.Track{Mid: "0", TrackName: "cam", Source: "camera"}, webrtc.RTPCodecTypeVideo)
+			if pub.authority.allows(monotonic(), monotonic()) {
+				t.Fatal("a publication after the evicted revoke forwards")
+			}
+
+			if result := apply(t, n, control("alice", "camera", protocol.SourceGrant, 6)); !result.Applied || !pub.authority.allows(monotonic(), monotonic()) {
+				t.Fatalf("a grant at the Episode's floor did not open the source: %+v", result)
+			}
+		})
+	}
+}
+
+// The Episode floors share the source table's limit. Evicting into an Episode that has a
+// floor costs nothing, and once the floors are full an entry that needs one stays.
+func TestSourceFloorsStayBounded(t *testing.T) {
+	n := leaseNode(t, time.Minute, true)
+	n.sourceLimit = 1
+	in := func(episode, participant string, revision int64) protocol.SourceControlRequest {
+		request := control(participant, "camera", protocol.SourceGrant, revision)
+		request.EpisodeID = episode
+		return request
+	}
+	apply(t, n, in("episode-1", "alice", 1))
+	apply(t, n, in("episode-1", "bob", 2)) // evicts alice, so episode-1 takes the only floor
+	if result := apply(t, n, in("episode-2", "carol", 1)); !result.Applied {
+		t.Fatalf("evicting into an Episode with a floor was refused: %+v", result)
+	}
+	if _, err := n.ControlSources(in("episode-3", "dave", 1)); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("an eviction that needs a floor past the limit was admitted: %v", err)
+	}
+	if len(n.sources) != 1 || len(n.sourceFloors) != 1 {
+		t.Fatalf("table holds %d sources and %d floors, limit 1", len(n.sources), len(n.sourceFloors))
 	}
 }
 

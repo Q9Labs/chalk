@@ -14,6 +14,11 @@ import (
 // defaultSourceLimit bounds the source authority table. Live sessions hold at most four
 // sources each, far below it, so an entry is only ever evicted for a Participant with no
 // live session, and a live session's revoke is never forgotten to admit more work.
+//
+// An evicted entry raises its Episode's floor to its revision. Control revisions are
+// ordered across an Episode, so a control below the floor may be older than a revoke the
+// node forgot, and a source the table no longer holds refuses it. A control at the floor
+// or above is at least as new as anything forgotten. The floors are bounded by the same limit.
 const defaultSourceLimit = 1 << 14
 
 // sourceKey names one Participant's source in one Episode. Its authority spans every
@@ -63,32 +68,35 @@ func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthori
 	if n.cfg.RequireSourceGrant {
 		initial = closedWindow
 	}
-	// The table goes over its limit only by live sessions' sources, which MaxSessions bounds.
-	if victim := n.sourceVictim(); victim >= 0 {
-		n.evictSource(victim)
-	}
-	return n.addSource(key, initial), 0, false
+	// With no room the table goes over its limit, by this live session's source. A refused
+	// push would take the source down, and a refusal here protects nothing.
+	_ = n.makeSourceRoom(1, nil)
+	authority := n.addSource(key, initial)
+	return authority, authority.revision, authority.revoked
 }
 
+// addSource records a source the table does not hold. Below its Episode's floor the node
+// may have forgotten a revoke, so the source starts at the floor with no lease, and only a
+// grant at the floor or above opens it.
 func (n *Node) addSource(key sourceKey, window *leaseWindow) *sourceAuthority {
-	authority := &sourceAuthority{key: key}
+	authority := &sourceAuthority{key: key, revision: n.sourceFloors[sourceEpisode(key)]}
+	if authority.revision > 0 {
+		window = closedWindow
+	}
 	authority.window.Store(window)
 	n.sources[key] = authority
 	n.sourceOrder = append(n.sourceOrder, key)
 	return authority
 }
 
-// sourceVictim finds the entry a new one takes the place of when the table is full, or
-// -1. It picks the oldest entry of a Participant with no live session. The caller holds n.mu.
-func (n *Node) sourceVictim() int {
-	if len(n.sources) < n.sourceLimit {
-		return -1
-	}
-	return slices.IndexFunc(n.sourceOrder, func(key sourceKey) bool { return n.participants[key.participantKey] == nil })
-}
+func sourceEpisode(key sourceKey) episodeKey { return episodeKey{key.tenant, key.episode} }
 
 func (n *Node) evictSource(index int) {
-	delete(n.sources, n.sourceOrder[index])
+	key := n.sourceOrder[index]
+	if revision := n.sources[key].revision; revision > n.sourceFloors[sourceEpisode(key)] {
+		n.sourceFloors[sourceEpisode(key)] = revision
+	}
+	delete(n.sources, key)
 	n.sourceOrder = slices.Delete(n.sourceOrder, index, index+1)
 }
 
@@ -195,8 +203,8 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 			result.Applied = true
 		}
 		result.Revision = authority.revision
-		if !authority.revoked && authority.window.Load().until != math.MaxInt64 {
-			result.LeaseMillis = time.Duration(authority.window.Load().until - now).Milliseconds()
+		if until := authority.window.Load().until; until > now && until != math.MaxInt64 {
+			result.LeaseMillis = time.Duration(until - now).Milliseconds()
 		}
 	}
 	return changed, nil
@@ -204,7 +212,8 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 
 // makeSourceRoom evicts entries of Participants with no live session until count new
 // entries fit, or refuses without evicting any. It never evicts a source the batch
-// names, because that would forget the revision the batch's controls are fenced by.
+// names, because that would forget the revision the batch's controls are fenced by,
+// and never an entry whose Episode would need a floor when the floors are full.
 // The caller holds n.mu.
 func (n *Node) makeSourceRoom(count int, named map[sourceKey]bool) error {
 	excess := len(n.sources) + count - n.sourceLimit
@@ -212,13 +221,22 @@ func (n *Node) makeSourceRoom(count int, named map[sourceKey]bool) error {
 		return nil
 	}
 	victims := make([]int, 0, excess)
+	floors := map[episodeKey]bool{} // Episodes these evictions give a first floor; revision 0 needs none
 	for index, key := range n.sourceOrder {
 		if len(victims) == excess {
 			break
 		}
-		if n.participants[key.participantKey] == nil && !named[key] {
-			victims = append(victims, index)
+		if n.participants[key.participantKey] != nil || named[key] {
+			continue
 		}
+		episode := sourceEpisode(key)
+		if _, floored := n.sourceFloors[episode]; !floored && !floors[episode] && n.sources[key].revision > 0 {
+			if len(n.sourceFloors)+len(floors) >= n.sourceLimit {
+				continue
+			}
+			floors[episode] = true
+		}
+		victims = append(victims, index)
 	}
 	if len(victims) < excess {
 		return fmt.Errorf("%w: the source table has no room for this batch's new sources", ErrCapacityExceeded)
