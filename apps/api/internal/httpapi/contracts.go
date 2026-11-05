@@ -73,6 +73,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, apiKeyEndpoints(nil, nil)...)
+	endpoints = append(endpoints, mcpOAuthConnectionEndpoints(nil, nil)...)
 	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
