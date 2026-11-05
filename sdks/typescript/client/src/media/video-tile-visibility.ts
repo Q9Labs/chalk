@@ -1,6 +1,6 @@
 import type { VideoRenderSize } from "./video-render-size";
 
-/** How long a UI that reports tiles gets to report a new publication before it is pulled as if nobody reported. */
+/** How long the UI gets to report a new video publication before it is pulled as if nobody reported. */
 export const UNREPORTED_TILE_WAIT_MS = 250;
 /** A tile that leaves the screen keeps its video this long, so scrolling straight back costs no re-pull. */
 export const HIDDEN_TILE_CLOSE_MS = 5000;
@@ -38,11 +38,12 @@ export type VideoTileSelection = {
 /** One per media client: picks the remote videos to pull from what the UI reports. */
 export class VideoTileSubscriptions {
   readonly #firstListed = new Map<string, number>();
+  readonly #unreportedWaitMs: number;
   #pageHiddenSince: number | undefined;
-  #reporting = false;
 
-  constructor(pageHidden: boolean, now: number) {
+  constructor(pageHidden: boolean, now: number, unreportedWaitMs: number) {
     this.#pageHiddenSince = pageHidden ? now : undefined;
+    this.#unreportedWaitMs = unreportedWaitMs;
   }
 
   /** Calls the listener when a tile appears, leaves the screen, or is first reported. */
@@ -56,13 +57,11 @@ export class VideoTileSubscriptions {
   }
 
   /**
-   * A UI that never reports keeps every video. Once it reports any listed publication, an unreported one waits briefly
-   * for its report, a hidden one is not pulled, and a pulled one that goes off screen is closed after a debounce.
+   * An unreported publication waits briefly for its report and is then pulled, so a UI that never reports keeps every
+   * video. A hidden one is not pulled, and a pulled one that goes off screen is closed after a debounce.
    */
   select(now: number, publicationIds: readonly string[], pulled: ReadonlySet<string>): VideoTileSelection {
     this.#list(now, publicationIds);
-    this.#reporting ||= publicationIds.some((id) => reports.has(id));
-    if (!this.#reporting) return { wanted: new Set(publicationIds), wakeAt: undefined };
     const wanted = new Set<string>();
     let wakeAt: number | undefined;
     for (const id of publicationIds) {
@@ -83,7 +82,7 @@ export class VideoTileSubscriptions {
   #choose(id: string, now: number, pulled: boolean): { readonly wanted: boolean; readonly until?: number } {
     const report = reports.get(id);
     if (!report) {
-      const due = this.#firstListed.get(id)! + UNREPORTED_TILE_WAIT_MS;
+      const due = this.#firstListed.get(id)! + this.#unreportedWaitMs;
       return now >= due ? { wanted: true } : { wanted: false, until: due };
     }
     const closeAt = this.#closeAt(report);

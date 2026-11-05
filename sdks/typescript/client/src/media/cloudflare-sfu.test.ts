@@ -4557,6 +4557,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly unreportedVideoTileWaitMs?: number;
     readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   } = {},
 ) {
@@ -4573,6 +4574,8 @@ function createHarness(
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
+    // Most tests never report tiles and expect video in the first pull.
+    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
     onError: options.onError,
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
@@ -5766,7 +5769,7 @@ describe("visible-tile video subscriptions", () => {
 
   // The tile registry is shared by every client, so each call uses its own publication IDs.
   function tileCall(tag: string, people: number) {
-    const harness = createHarness();
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS });
     harness.transport.uniqueRemoteMids = true;
     const cameras = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "1", "camera"));
     const microphones = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "0", "microphone"));
@@ -5866,15 +5869,59 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
-  it("pulls every video at once, as before, for a UI that never reports tiles", async () => {
+  it("pulls every video after the report wait for a UI that never reports tiles", async () => {
+    vi.useFakeTimers();
     const call = tileCall("m8-silent", 8);
     try {
       await call.join();
-      expect(remotePullCount(call.harness)).toBe(1);
-      expect(call.pulls("camera")).toHaveLength(8);
       expect(call.pulls("microphone")).toHaveLength(8);
+      expect(call.pulls("camera")).toEqual([]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
+      expect(remotePullCount(call.harness)).toBe(2);
+      expect(call.pulls("camera")).toHaveLength(8);
     } finally {
       call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for tiles reported just after the first listing instead of pulling every video", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-first", 8);
+    try {
+      await call.join();
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.pulls("camera")).toHaveLength(4);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.harness.transport.closeInputs).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close of a hidden tile's video instead of leaking its subscription", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-close-fail", 2);
+    const [first, second] = call.cameras as [string, string];
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 10_000);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: second })] })]);
+      expect(call.held("camera")).toEqual([first]);
+      expect(call.openVideoSubscriptions()).toHaveLength(1);
+
+      setVideoTileVisibility(second, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([first, second]);
+      expect(call.openVideoSubscriptions()).toHaveLength(2);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
     }
   });
 

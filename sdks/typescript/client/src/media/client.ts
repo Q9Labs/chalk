@@ -3,7 +3,7 @@ import { ReceiveStallRecovery } from "./receive-stall";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
-import { VideoTileSubscriptions } from "./video-tile-visibility";
+import { UNREPORTED_TILE_WAIT_MS, VideoTileSubscriptions } from "./video-tile-visibility";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
@@ -116,7 +116,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // Bumped when the remote participants or tile visibility change, so a reconcile that raced the change pulls again.
   #remotePullInputRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
-  readonly #videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now());
+  readonly #videoTiles: VideoTileSubscriptions;
   readonly #stopObservingVideoTiles: () => void;
   #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
   // A tile change must reach the provider even while the tab is hidden, where routine polls pause.
@@ -146,6 +146,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#bootstrap = options.bootstrap;
     this.#transport = options.transport;
     this.#pollIntervalMs = options.pollIntervalMs ?? 15000;
+    this.#videoTiles = new VideoTileSubscriptions(pageIsHidden(), Date.now(), options.unreportedVideoTileWaitMs ?? UNREPORTED_TILE_WAIT_MS);
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onDiagnostic = options.onDiagnostic;
@@ -1128,21 +1129,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #closeHiddenVideo(advertised: ReadonlyMap<string, CloudflareSFUPublication>, desired: ReadonlyMap<string, CloudflareSFUPublication>, generation: number): Promise<void> {
     const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
     if (!hidden.length) return;
-    try {
-      await this.#serializeSDP(async () => {
-        this.#requireGeneration(generation);
-        const receivers = hidden.flatMap(([, publication]) => {
-          const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
-          return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
-        });
-        if (receivers.length) await this.#closeReceivers(receivers, generation);
-      });
-    } catch (error) {
+    // A failed close throws before reconciliation drops the track, so the poll keeps its cursor and retries the close.
+    await this.#serializeSDP(async () => {
       this.#requireGeneration(generation);
-      // The subscription stays pulled and the next poll retries the close.
-      this.#reportError(error);
-      return;
-    }
+      const receivers = hidden.flatMap(([, publication]) => {
+        const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
+        return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+      });
+      if (receivers.length) await this.#closeReceivers(receivers, generation);
+    });
     for (const [key, publication] of hidden) {
       this.#remoteTracks.delete(key);
       safeStopTrack(publication.track, this.#reportError.bind(this));
@@ -1921,6 +1916,9 @@ function validateClientOptions(options: CloudflareSFUClientOptions): void {
   if (!options.participantId.trim()) throw new CloudflareSFUError("Cloudflare SFU participant is missing", "invalid_bootstrap");
   if (options.pollIntervalMs !== undefined && (!Number.isFinite(options.pollIntervalMs) || options.pollIntervalMs < 0)) {
     throw new CloudflareSFUError("Cloudflare SFU polling interval is invalid", "invalid_bootstrap");
+  }
+  if (options.unreportedVideoTileWaitMs !== undefined && (!Number.isFinite(options.unreportedVideoTileWaitMs) || options.unreportedVideoTileWaitMs < 0)) {
+    throw new CloudflareSFUError("Cloudflare SFU unreported video tile wait is invalid", "invalid_bootstrap");
   }
 }
 function validateBootstrap(bootstrap: CloudflareSFUBootstrap): void {
