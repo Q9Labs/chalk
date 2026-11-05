@@ -448,18 +448,19 @@ Next ==
 \* steps, deliveries, resends, reconnects and garbage collection. Faults and user
 \* actions get none; budgets bound them. No strong fairness is needed: a repair
 \* step becomes enabled and stays enabled once the faults have stopped.
-Fair(A) == WF_vars(A /\ Stamp)
+\* Each WF is written out: TLC v1.7.4 cannot check fairness through an operator
+\* that takes an action, such as Fair(A) == WF_vars(A /\ Stamp).
 Fairness ==
-  /\ Fair(DeviceSendOn) /\ Fair(DeviceSendOff) /\ Fair(DevicePublish)
-  /\ Fair(PublisherDropDead) /\ Fair(PublisherSelfDetectLoss) /\ Fair(PublisherRecover)
-  /\ Fair(SyncRecvOn) /\ Fair(SyncRecvOff) /\ Fair(Admit)
-  /\ Fair(RebuildSfu) /\ Fair(ReconnectPub)
-  /\ \A r \in Recipients : Fair(RecvSnap(r)) /\ Fair(SyncSend(r))
-  /\ \A g \in Gens : Fair(SyncRecvDead(g)) /\ Fair(SfuGc(g)) /\ Fair(SfuClose(g))
-  /\ \A l \in Listeners : Fair(HealReconnect(l))
+  /\ WF_vars(DeviceSendOn /\ Stamp) /\ WF_vars(DeviceSendOff /\ Stamp) /\ WF_vars(DevicePublish /\ Stamp)
+  /\ WF_vars(PublisherDropDead /\ Stamp) /\ WF_vars(PublisherSelfDetectLoss /\ Stamp) /\ WF_vars(PublisherRecover /\ Stamp)
+  /\ WF_vars(SyncRecvOn /\ Stamp) /\ WF_vars(SyncRecvOff /\ Stamp) /\ WF_vars(Admit /\ Stamp)
+  /\ WF_vars(RebuildSfu /\ Stamp) /\ WF_vars(ReconnectPub /\ Stamp)
+  /\ \A r \in Recipients : WF_vars(RecvSnap(r) /\ Stamp) /\ WF_vars(SyncSend(r) /\ Stamp)
+  /\ \A g \in Gens : WF_vars(SyncRecvDead(g) /\ Stamp) /\ WF_vars(SfuGc(g) /\ Stamp) /\ WF_vars(SfuClose(g) /\ Stamp)
+  /\ \A l \in Listeners : WF_vars(HealReconnect(l) /\ Stamp)
   /\ \A l \in Listeners, g \in Gens :
-       Fair(HealDropUndesired(l, g)) /\ Fair(HealPullOk(l, g)) /\ Fair(HealPullGone(l, g))
-       /\ Fair(HealBackoffTick(l, g)) /\ Fair(HealFlatTick(l, g)) /\ Fair(HealFlatDrop(l, g))
+       WF_vars(HealDropUndesired(l, g) /\ Stamp) /\ WF_vars(HealPullOk(l, g) /\ Stamp) /\ WF_vars(HealPullGone(l, g) /\ Stamp)
+       /\ WF_vars(HealBackoffTick(l, g) /\ Stamp) /\ WF_vars(HealFlatTick(l, g) /\ Stamp) /\ WF_vars(HealFlatDrop(l, g) /\ Stamp)
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 

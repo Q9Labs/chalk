@@ -26,12 +26,12 @@ tlc_check() {
   start=$(date +%s)
   # TLC exits non-zero when it finds a violation.
   (cd "$work" && java -Xmx6g -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers "${TLC_WORKERS:-auto}" \
-      -noTE -metadir "$work/states" -config "$cfg" "$tla" > "$work/$name.log" 2>&1) || true
+      -metadir "$work/states" -config "$cfg" "$tla" > "$work/$name.log" 2>&1) || true
   seconds=$(( $(date +%s) - start ))
 
   grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path|Running breadth-first|Starting\.\.\.|Progress\()" "$work/$name.log" > "$here/results/$name.txt"
   if grep -q "Model checking completed. No error has been found" "$work/$name.log"; then outcome=pass
-  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated" "$work/$name.log"; then outcome=violated
+  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated|Temporal properties were violated" "$work/$name.log"; then outcome=violated
   else outcome=error; fi
   counts=$(grep -E "^[0-9,]+ states generated" "$work/$name.log" | tail -1)
   gen=$(echo "$counts" | sed -E 's/^([0-9,]+) states generated.*/\1/')

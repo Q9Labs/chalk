@@ -58,7 +58,7 @@ Each action is one Postgres transaction under the Episode control row lock (`Aut
 tools/formal/sync-entry-leave/run.sh
 ```
 
-It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4, checksum in `tools/formal/sync-entry-leave/run.sh`) once into `~/.cache/chalk-tla`. It takes about 10 seconds on a laptop. It does three things, and fails if any one fails:
+It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7.4, pinned by checksum in `tools/formal/tla2tools.sh` for every model) once into `~/.cache/chalk-tla`. It takes about 10 seconds on a laptop. It does three things, and fails if any one fails:
 
 1. It checks that every fragment in `anchors` is still in its file.
 2. It runs TLC on `EntryLeave.cfg` (3 entry generations, 2 consumer nodes, `Break = "none"`), which is the real code, and needs every rule to hold.
