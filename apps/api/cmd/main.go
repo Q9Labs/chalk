@@ -638,7 +638,7 @@ func run() error {
 		// interface would pass the nil check, so the nil case stays a nil interface.
 		var chalkCleanup providerbridge.ChalkNodes
 		if chalkSFU != nil {
-			chalkCleanup = func(node string) (providerbridge.ChalkCleanup, error) {
+			chalkCleanup = func(node string) (providerbridge.ChalkNode, error) {
 				adapter, err := chalkSFU.Node(node)
 				if err != nil {
 					return nil, err
