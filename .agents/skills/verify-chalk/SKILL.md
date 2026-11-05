@@ -26,7 +26,7 @@ pnpm dev                                           # run it in tmux or another s
 - Chalk's guest cookie is `__Host-chalk_space_guest_*` and is `Secure`. A browser only stores it on `https://` origins or on `localhost`. Use `http://localhost:3070` (or `http://<name>.localhost:3070`, which Chromium resolves to loopback) for a plain-HTTP run. A real remote origin needs HTTPS in front of port 3070. A name such as `http://chalk-orb.test` fails: the browser cannot resolve it.
 - From an empty data dir the first run starts Postgres and Redis containers, pulls their images, compiles the API, runs `mix deps.get` and compile for Sync, runs migrations, creates a tenant and a Space, and enables the Space's public invite. On a 4 vCPU, 8 GB Linux box with the pnpm store warm, empty caches reached ready in about 100 s, and the stack alone uses about 3 GB of memory. Two headless Chromium contexts from the join-call journey raise the machine's used memory to about 6 GB, so keep other work off that box while you drive. Pulling the images and `pnpm install` add to the first run.
 
-Ready means the supervisor printed `Chalk dev ready`. That line only appears after a seeded guest has arrived through the invite page and left again, using the web origin. The seed is in `.private/chalk-dev/seed.json` (mode 0600, git-ignored) and holds `tenantId`, `spaceId`, `invite.path`, `systemToken`, `urls`. The `systemToken` is a credential: read it, never copy it into evidence.
+Ready means the supervisor printed `Chalk dev ready`. That line only appears after a seeded guest has arrived through the invite page and left again, using the web origin. The seed is in .private/chalk-dev/seed.json (mode 0600, git-ignored) and holds `tenantId`, `spaceId`, `invite.path`, `systemToken`, `urls`. The `systemToken` is a credential: read it, never copy it into evidence.
 
 ## Doctor
 
@@ -50,11 +50,11 @@ Prefer ARIA roles and names (`Join call`, `Video tile for <name>`, `Leave call`)
 
 Evidence goes to `.verify/<run-id>/` (git-ignored). Choose a unique `<run-id>`, for example the UTC time plus the feature id.
 
-- `result.json`: journey, run id, origin, verdict and every step with its time.
+- result.json: journey, run id, origin, verdict and every step with its time.
 - `screenshots/`: entrance and in-call screenshots per participant, and a failure screenshot on error.
 - `video/`: one recording per participant (webm).
-- `console.json` and `network.json`: browser console and every `/v1` response (method, path, status).
-- `attendance.json`: the API's attendance for the Episode, read back with the system token.
+- console.json and network.json: browser console and every `/v1` response (method, path, status).
+- attendance.json: the API's attendance for the Episode, read back with the system token.
 
 Proof standards: enter through the invite page and the buttons a user presses, not internal setters; check the resulting state in the page (decoded frames of the remote tile must increase) and through a second view (the API attendance lists both people); keep the SFU real. Only the camera and microphone are fakes. The helper scans every text artifact for the run's credentials and exits 3 if one appears. If it does, delete the artifact and fix the leak before you share anything.
 
@@ -68,5 +68,5 @@ pnpm dev:down
 
 ## Helpers
 
-- `scripts/join-call.mjs <run-id> [--web <origin>]`: the join-call journey above. It reads the seed from `.private/chalk-dev/seed.json` in the current directory and defaults `--web` to the seed's public origin. Needs `playwright` (a repo dev dependency) and its Chromium (`pnpm exec playwright install --with-deps chromium` on a fresh Linux box).
+- `scripts/join-call.mjs <run-id> [--web <origin>]`: the join-call journey above. It reads the seed from .private/chalk-dev/seed.json in the current directory and defaults `--web` to the seed's public origin. Needs `playwright` (a repo dev dependency) and its Chromium (`pnpm exec playwright install --with-deps chromium` on a fresh Linux box).
 - `pnpm dev:doctor`, `pnpm dev:down`, `pnpm dev:status`, `pnpm dev:logs -- <service>`: the repo's own supervisor commands.
