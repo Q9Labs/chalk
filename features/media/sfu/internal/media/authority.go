@@ -2,7 +2,6 @@ package media
 
 import (
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -35,10 +34,7 @@ type sourceKey struct {
 // starts a new window, so packets held from the unauthorized time are never resent.
 type leaseWindow struct{ since, until int64 }
 
-var (
-	openWindow   = &leaseWindow{since: math.MinInt64, until: math.MaxInt64}
-	closedWindow = &leaseWindow{}
-)
+var closedWindow = &leaseWindow{}
 
 // sourceAuthority is the node's record of the newest control for one source. The
 // node's mutex guards revision and revoked. Packet loops read only window.
@@ -57,10 +53,9 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 
 // authorityFor returns the authority a new publication of the session's source
 // forwards under, creating it, and the control it is admitted under. A source
-// that no control has named forwards freely unless the node requires a grant. It
-// refuses a new source when every entry belongs to a live session or would need a
-// floor past the limit, so the table never holds more than its limit. The caller
-// may hold the session's mutex.
+// that no control has named waits for a grant. It refuses a new source when every
+// entry belongs to a live session or would need a floor past the limit, so the
+// table never holds more than its limit. The caller may hold the session's mutex.
 func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -71,11 +66,7 @@ func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthori
 	if err := n.makeSourceRoom(1, nil); err != nil {
 		return nil, 0, false, err
 	}
-	initial := openWindow
-	if n.cfg.RequireSourceGrant {
-		initial = closedWindow
-	}
-	authority := n.addSource(key, initial)
+	authority := n.addSource(key, closedWindow)
 	return authority, authority.revision, authority.revoked, nil
 }
 
@@ -207,7 +198,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 			result.Applied = true
 		}
 		result.Revision = authority.revision
-		if until := authority.window.Load().until; until > now && until != math.MaxInt64 {
+		if until := authority.window.Load().until; until > now {
 			result.LeaseMillis = time.Duration(until - now).Milliseconds()
 		}
 	}

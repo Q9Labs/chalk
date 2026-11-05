@@ -187,7 +187,6 @@ const testLease = time.Second
 
 func TestSourceFencing(t *testing.T) {
 	svc := startService(t, newAuthority(t, "chalk test CA"), func(cfg *config.Config) {
-		cfg.RequireSourceGrant = true
 		cfg.SourceLeaseTTL = testLease
 	})
 
@@ -371,6 +370,7 @@ func TestICERestartAndRecovery(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	episode := "episode-ice"
+	svc.grantSources(t, scopeIn(episode, "alice", 1))
 	alice := joinAndPublish(t, svc, scopeIn(episode, "alice", 1), "alice-mic")
 	bob := join(t, svc, scopeIn(episode, "bob", 1))
 	bob.pull(t, svc, alice)
@@ -425,6 +425,8 @@ func TestICERestartAndRecovery(t *testing.T) {
 		oldConn, oldScope := bob.conn, bob.scope
 		svc.stop()
 		next := startService(t, ca)
+		// A fresh node holds no grants until the API's renewal re-sends them.
+		next.grantSources(t, scopeIn(episode, "alice", 3))
 		if status, code := next.call(t, "/v1/sessions/"+oldConn+"/inspect", protocol.InspectRequest{Scope: oldScope}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
 			t.Fatalf("a handle from the lost node: status %d code %q", status, code)
 		}

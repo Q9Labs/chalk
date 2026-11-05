@@ -297,6 +297,7 @@ func TestPushMIDRules(t *testing.T) {
 func TestPausedSubscriptionForwardsNothingAndResumesOnAKeyframe(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
+	apply(t, node, control("alice", "camera", protocol.SourceGrant, 1))
 	camera, err := webrtc.NewTrackLocalStaticRTP(vp8Capability, "cam", "alice")
 	if err != nil {
 		t.Fatal(err)
