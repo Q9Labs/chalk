@@ -33,6 +33,10 @@ export interface Participant {
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
   screenShareTrack?: MediaStreamTrack | null;
+  /** The remote camera publication, so the tile can report whether it is on screen before its video arrives. */
+  videoPublicationId?: string;
+  /** The remote screen-share publication, reported the same way. */
+  screenSharePublicationId?: string;
   screenShareAudioTrack?: MediaStreamTrack | null;
 }
 

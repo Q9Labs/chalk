@@ -9,6 +9,7 @@ import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { TileShell } from "./TileShell";
+import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
 
 export interface ParticipantTileProps {
@@ -28,6 +29,8 @@ export interface ParticipantTileProps {
     /** 0 means unknown; 1–2 show a poor-connection badge. */
     connectionQuality?: 0 | 1 | 2 | 3 | 4;
     avatarUrl?: string;
+    /** A remote camera's publication; the tile reports whether it is on screen so hidden video is not pulled. */
+    videoPublicationId?: string;
   };
   videoTrack?: MediaStreamTrack | null;
   /** Mirror the video horizontally. Defaults to the persisted self-view preference for local cameras, false for remote cameras. */
@@ -68,6 +71,7 @@ const aspectRatioClasses = {
 export const ParticipantTile = React.memo(function ParticipantTile({ videoTrack, ...props }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const status = useVideoTrack(videoRef, videoTrack, props.participant.isVideoEnabled === true);
+  useVideoTileVisibility(videoRef, props.participant.isLocal ? undefined : props.participant.videoPublicationId, props.hidden !== true);
 
   return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} />;
 });
