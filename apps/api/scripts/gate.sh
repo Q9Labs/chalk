@@ -227,6 +227,9 @@ fi
 
 run "Module tidy check" go mod tidy -diff
 ( cd "${repository_root}/features/mcp/api"; go mod tidy -diff; go test ./...; go vet ./... )
+run "MCP eval harness" python3 -m unittest discover -s "${repository_root}/scripts/evals/mcp" -p 'test_*.py'
+run "MCP eval stack syntax" bash -n "${repository_root}/scripts/evals/mcp/stack.sh"
+run "MCP eval host compile" go test -tags=mcp_eval -run '^$' ./internal/adapters/postgres
 run "sqlc vet" go tool sqlc vet
 
 start_lane "go vet" run_lane_command "go vet" go vet ./...
