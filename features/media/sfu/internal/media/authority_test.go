@@ -538,9 +538,26 @@ func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 }
 
 func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) {
+	t.Run("revoked", func(t *testing.T) {
+		pacedPacketsOfAStoppedSource(t, func(*Node, *sourceAuthority) {}, func(authority *sourceAuthority) { authority.window.Store(closedWindow) })
+	})
+	// The publisher left, so the table may evict its source, and a later revoke reaches
+	// only the replacement entry.
+	t.Run("evicted", func(t *testing.T) {
+		pacedPacketsOfAStoppedSource(t, func(n *Node, authority *sourceAuthority) {
+			n.mu.Lock()
+			n.evictSource(slices.Index(n.sourceOrder, authority.key))
+			n.mu.Unlock()
+		}, func(*sourceAuthority) {})
+	})
+}
+
+func pacedPacketsOfAStoppedSource(t *testing.T, evict func(*Node, *sourceAuthority), revoke func(*sourceAuthority)) {
+	t.Helper()
+	n := leaseNode(t, time.Minute)
+	apply(t, n, control("alice", "camera", protocol.SourceGrant, 1))
+	authority := authorityOf(t, n, testScope("alice", 1), "camera")
 	pub, layers, _ := benchPublication(t)
-	authority := &sourceAuthority{}
-	authority.window.Store(openWindow)
 	pub.authority = authority
 	viewer := (*pub.subscribers.Load())[0]
 	wire := &wireWriter{}
@@ -569,7 +586,8 @@ func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) 
 		t.Fatal("no RTX repair waits in the pacer, so the test proves nothing")
 	}
 
-	authority.window.Store(closedWindow)
+	evict(n, authority)
+	revoke(authority)
 	transport.mu.Lock()
 	transport.tokens = 1e9
 	transport.mu.Unlock()
