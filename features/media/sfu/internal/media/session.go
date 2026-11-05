@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -136,6 +137,13 @@ func audioLevelID(receiver *webrtc.RTPReceiver, source string) uint8 {
 	return 0
 }
 
+// media snapshots the session's publications and subscriptions.
+func (s *Session) media() ([]*publication, []*subscription) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
+}
+
 // Close tears the session down. It is idempotent.
 func (s *Session) Close() {
 	s.mu.Lock()
@@ -144,14 +152,7 @@ func (s *Session) Close() {
 		return
 	}
 	s.closed = true
-	published := make([]*publication, 0, len(s.published))
-	for _, pub := range s.published {
-		published = append(published, pub)
-	}
-	subscribed := make([]*subscription, 0, len(s.subscribed))
-	for _, subscription := range s.subscribed {
-		subscribed = append(subscribed, subscription)
-	}
+	published, subscribed := slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
 	if s.pending != nil {
 		s.pending.timer.Stop()
 		s.pending = nil

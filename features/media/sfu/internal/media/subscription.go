@@ -56,7 +56,35 @@ type subscription struct {
 	// resent remembers recent resends by outgoing sequence number.
 	resent     [resendMemory]resentPacket
 	resentNext int
+	// limit is how far the node holds this subscription below its request.
+	limit serverLimit
+
+	// Owned by the node's control loop.
+	order uint64
+	alloc allocation
 }
+
+// serverLimit is the node's own cap on a subscription, from its transport's
+// estimate and its Episode's packet ceiling. rid is the best layer it may
+// forward, "" for any; paused stops its video for congestion.
+type serverLimit struct {
+	rid    string
+	paused bool
+}
+
+// capped applies an Episode plan level on top of the transport's limit.
+func (l serverLimit) capped(level uint8) serverLimit {
+	switch level {
+	case planLowest:
+		l.rid = lowestLayer
+	case planPaused:
+		l.paused = true
+	}
+	return l
+}
+
+// serials orders publications and subscriptions by age for the allocator's tie-breaks.
+var serials atomic.Uint64
 
 type resentPacket struct {
 	seq uint16
@@ -71,11 +99,19 @@ func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track
 	return &subscription{
 		pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
+		order: serials.Add(1),
 	}
 }
 
-// start joins the publication's forwarding and chooses the first layer.
+// start joins the publication's forwarding and chooses the first layer. A
+// camera starts on its lowest layer, and the allocator raises it as the
+// subscriber's estimate allows.
 func (s *subscription) start() {
+	if s.pub.video() && s.pub.source != sourceScreen {
+		s.mu.Lock()
+		s.limit = serverLimit{rid: lowestLayer}
+		s.mu.Unlock()
+	}
 	s.pub.addSubscriber(s)
 	// A session that closed between pull and start already detached it.
 	if s.closed.Load() {
@@ -117,10 +153,15 @@ func (s *subscription) reselect(views []layerView) int {
 		views = closed[:]
 	}
 	target, reason := -1, ""
-	if s.request.paused {
+	switch {
+	case s.request.paused:
 		reason = protocol.PauseViewer
-	} else if target = pickLayer(s.request, views); target < 0 {
-		reason = protocol.PauseSourceInactive
+	case s.limit.paused:
+		reason = protocol.PauseCongestion
+	default:
+		if target = pickLayer(s.request, s.limit.rid, views); target < 0 {
+			reason = protocol.PauseSourceInactive
+		}
 	}
 	if reason != s.reason {
 		s.reason = reason
@@ -149,6 +190,21 @@ func (s *subscription) reselect(views []layerView) int {
 	}
 	s.interest.Store(interest)
 	return target
+}
+
+// setServerLimit applies the node's limit and switches layers if it changed.
+func (s *subscription) setServerLimit(limit serverLimit) {
+	s.mu.Lock()
+	changed := s.limit != limit
+	s.limit = limit
+	s.mu.Unlock()
+	if !changed {
+		return
+	}
+	views := s.pub.views(monotonic())
+	if layer := s.reselect(views[:]); layer >= 0 {
+		s.pub.requestKeyframe(layer)
+	}
 }
 
 // pendingLayer is the layer this subscription waits to switch to, or -1.

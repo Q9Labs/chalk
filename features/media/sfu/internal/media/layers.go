@@ -134,9 +134,41 @@ func (r layerRequest) wanted() string {
 	return r.ceiling
 }
 
+// lowestLayer sorts after every RID, so as a server limit it holds a
+// subscription to its lowest active layer.
+const lowestLayer = "\x7f"
+
 // pickLayer chooses the layer to forward, or -1 for none. A track without
-// simulcast has one layer with an empty RID, and it always serves.
-func pickLayer(request layerRequest, layers []layerView) int {
+// simulcast has one layer with an empty RID, and it always serves. limit, when
+// set, is the best RID the node lets this subscriber have: a better choice is
+// lowered to the best active layer at or below it, or else the lowest active
+// layer. Lowering is the node's own decision, so it ignores the request's
+// fallback rule, which only governs a missing layer.
+func pickLayer(request layerRequest, limit string, layers []layerView) int {
+	chosen := pickRequested(request, layers)
+	if limit == "" || chosen < 0 || layers[chosen].rid >= limit {
+		return chosen
+	}
+	best, lowest := -1, -1
+	for index, layer := range layers {
+		if !layer.active {
+			continue
+		}
+		if layer.rid >= limit && (best < 0 || layer.rid < layers[best].rid) {
+			best = index
+		}
+		if lowest < 0 || layer.rid > layers[lowest].rid {
+			lowest = index
+		}
+	}
+	if best >= 0 {
+		return best
+	}
+	return lowest
+}
+
+// pickRequested applies the subscriber's request alone.
+func pickRequested(request layerRequest, layers []layerView) int {
 	fallback := -1
 	for index, layer := range layers {
 		switch {

@@ -98,18 +98,24 @@ func TestPickLayer(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		request layerRequest
+		limit   string
 		layers  []layerView
 		want    int
 	}{
-		{"the wanted layer", layerRequest{ceiling: "h", fallback: true}, []layerView{l, h}, 1},
-		{"fallback takes the first active RID in ASCII order", layerRequest{ceiling: "q", fallback: true}, []layerView{l, h, off(layerView{rid: "q"})}, 1},
-		{"no fallback pauses", layerRequest{ceiling: "h"}, []layerView{l, off(h)}, -1},
-		{"a start RID below the ceiling", layerRequest{ceiling: "h", start: "l"}, []layerView{h, l}, 1},
-		{"a start RID above the ceiling is ignored", layerRequest{ceiling: "l", start: "h"}, []layerView{h, l}, 1},
-		{"a track without simulcast always serves", layerRequest{ceiling: "h"}, []layerView{{rid: "", active: true}}, 0},
-		{"nothing active", layerRequest{ceiling: "h", fallback: true}, []layerView{off(h), off(l)}, -1},
+		{"the wanted layer", layerRequest{ceiling: "h", fallback: true}, "", []layerView{l, h}, 1},
+		{"fallback takes the first active RID in ASCII order", layerRequest{ceiling: "q", fallback: true}, "", []layerView{l, h, off(layerView{rid: "q"})}, 1},
+		{"no fallback pauses", layerRequest{ceiling: "h"}, "", []layerView{l, off(h)}, -1},
+		{"a start RID below the ceiling", layerRequest{ceiling: "h", start: "l"}, "", []layerView{h, l}, 1},
+		{"a start RID above the ceiling is ignored", layerRequest{ceiling: "l", start: "h"}, "", []layerView{h, l}, 1},
+		{"a track without simulcast always serves", layerRequest{ceiling: "h"}, lowestLayer, []layerView{{rid: "", active: true}}, 0},
+		{"nothing active", layerRequest{ceiling: "h", fallback: true}, "l", []layerView{off(h), off(l)}, -1},
+		{"a limit lowers the wanted layer", layerRequest{ceiling: "h"}, "l", []layerView{h, l}, 1},
+		{"the lowest layer limit", layerRequest{ceiling: "h"}, lowestLayer, []layerView{h, l}, 1},
+		{"a limit never raises", layerRequest{ceiling: "l"}, "h", []layerView{h, l}, 1},
+		{"a missing layer still follows the request", layerRequest{ceiling: "h"}, "h", []layerView{l, off(h)}, -1},
+		{"a limit with only a better layer left keeps it", layerRequest{ceiling: "h"}, "l", []layerView{h, off(l)}, 0},
 	} {
-		if got := pickLayer(c.request, c.layers); got != c.want {
+		if got := pickLayer(c.request, c.limit, c.layers); got != c.want {
 			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
 		}
 	}

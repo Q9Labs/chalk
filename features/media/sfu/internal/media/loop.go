@@ -28,6 +28,3 @@ func (n *Node) run() {
 		}
 	}
 }
-
-// allocate is filled in by the allocator.
-func (n *Node) allocate() {}

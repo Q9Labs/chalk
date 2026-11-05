@@ -78,6 +78,9 @@ type Node struct {
 	sourceOrder  []sourceKey                    // insertion order, oldest first
 	sourceLimit  int                            // bounds sources, and sourceFloors apart from it
 	sourceFloors map[episodeKey]int64           // highest revision of a source evicted per Episode
+
+	// plans holds each Episode's latest plan change. Only the control loop touches it.
+	plans map[episodeKey]int64
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -128,6 +131,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sources:      map[sourceKey]*sourceAuthority{},
 		sourceLimit:  defaultSourceLimit,
 		sourceFloors: map[episodeKey]int64{},
+		plans:        map[episodeKey]int64{},
 		fenceLimit:   defaultFenceLimit,
 		createLimit:  defaultClosedCreateLimit,
 	}

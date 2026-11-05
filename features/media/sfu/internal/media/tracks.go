@@ -52,6 +52,10 @@ type publication struct {
 
 	mu         sync.Mutex // guards attaching layers and changing subscribers
 	monitoring bool
+
+	// Owned by the node's control loop.
+	order uint64
+	plan  uint8 // the Episode plan level of a camera
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
@@ -61,7 +65,7 @@ func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodec
 	}
 	return &publication{
 		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
-		authority: authority, revision: revision, revoked: revoked,
+		authority: authority, revision: revision, revoked: revoked, order: serials.Add(1),
 	}, nil
 }
 
