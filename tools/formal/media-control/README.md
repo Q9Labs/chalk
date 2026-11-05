@@ -10,7 +10,7 @@ The same model also holds a switchable variant, `current`, that reproduces how t
 
 ## Result
 
-Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU and for an own SFU. The current SDK variant violates P2 and P4. The rows below come from `results/summary.md`, produced by `./run.sh`.
+Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The current SDK variant violates P2 and P4. The rows below come from `results/summary.md`, produced by `./run.sh`.
 
 | Property | Meaning                                                                                                            | `decided` | `current`    |
 | -------- | ------------------------------------------------------------------------------------------------------------------ | --------- | ------------ |
@@ -23,25 +23,27 @@ P1 and P3 hold for `current` because the SDK stops capture locally and shows on 
 
 All 17 runs matched their expected outcome (`pass` or `violated`). Columns after `check` are the bounds: sources, revisions per source (`seq`), link drops, lost messages, host mutes, failed closes.
 
-| run                         | check  | sources     | seq | drops | loss | mutes | cfails | rule      | ui    | sfu        | expect   | outcome  | states   | distinct | depth | seconds |
-| --------------------------- | ------ | ----------- | --- | ----- | ---- | ----- | ------ | --------- | ----- | ---------- | -------- | -------- | -------- | -------- | ----- | ------- |
-| cf-decided-safety-1src      | safety | mic         | 3   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 7165145  | 1176766  | 35    | 38      |
-| cf-decided-live-1src        | P4     | mic         | 3   | 1     | 2    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 1660460  | 298666   | 31    | 41      |
-| cf-decided-live-1src-d2     | P4     | mic         | 2   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 1328652  | 224087   | 31    | 29      |
-| own-decided-safety-1src     | safety | mic         | 3   | 2     | 2    | 1     | 0      | decided   | FALSE | own        | pass     | pass     | 2096638  | 396511   | 31    | 12      |
-| own-decided-live-1src       | P4     | mic         | 3   | 1     | 2    | 1     | 0      | decided   | FALSE | own        | pass     | pass     | 597155   | 119445   | 28    | 16      |
-| cf-current-P2-1src          | P2     | mic         | 2   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare | violated | violated | 550      | 250      | 8     | 0       |
-| cf-current-P4-1src          | P4     | mic         | 2   | 0     | 1    | 0     | 0      | current   | FALSE | cloudflare | violated | violated | 1128     | 362      | 15    | 1       |
-| cf-current-P4-drop-1src     | P4     | mic         | 3   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare | violated | violated | 37604    | 8732     | 22    | 3       |
-| cf-current-P1-1src          | P1     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare | pass     | pass     | 8807336  | 1474009  | 36    | 35      |
-| cf-current-P3-1src          | P3     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare | pass     | pass     | 8807336  | 1474009  | 35    | 35      |
-| mutant-adoptSync-P1         | P1     | mic         | 2   | 1     | 1    | 0     | 0      | adoptSync | FALSE | cloudflare | violated | violated | 2570     | 788      | 12    | 1       |
-| mutant-optimisticUi-P3      | P3     | mic         | 1   | 0     | 0    | 0     | 0      | decided   | TRUE  | cloudflare | violated | violated | 2        | 2        | 2     | 1       |
-| witness-on                  | W1     | mic         | 2   | 0     | 0    | 0     | 0      | decided   | FALSE | cloudflare | violated | violated | 136      | 48       | 13    | 1       |
-| witness-hostmute            | W2     | mic         | 2   | 0     | 0    | 1     | 0      | decided   | FALSE | cloudflare | violated | violated | 819      | 261      | 11    | 0       |
-| deep-cf-decided-live-2src   | P4     | mic,cam     | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 2494203  | 342256   | 32    | 81      |
-| deep-cf-decided-safety-2src | safety | mic,cam     | 2   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 46590684 | 5644562  | 40    | 240     |
-| deep-cf-decided-safety-3src | safety | mic,cam,scr | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare | pass     | pass     | 41996446 | 4068999  | 44    | 293     |
+| run                         | check  | sources     | seq | drops | loss | mutes | cfails | rule      | ui    | sfu             | expect   | outcome  | states   | distinct | depth | seconds |
+| --------------------------- | ------ | ----------- | --- | ----- | ---- | ----- | ------ | --------- | ----- | --------------- | -------- | -------- | -------- | -------- | ----- | ------- |
+| cf-decided-safety-1src      | safety | mic         | 3   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 7165145  | 1176766  | 35    | 38      |
+| cf-decided-live-1src        | P4     | mic         | 3   | 1     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 1660460  | 298666   | 31    | 41      |
+| cf-decided-live-1src-d2     | P4     | mic         | 2   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 1328652  | 224087   | 31    | 29      |
+| own-decided-safety-1src     | safety | mic         | 3   | 2     | 2    | 1     | 0      | decided   | FALSE | own             | pass     | pass     | 2096638  | 396511   | 31    | 12      |
+| own-decided-live-1src       | P4     | mic         | 3   | 1     | 2    | 1     | 0      | decided   | FALSE | own             | pass     | pass     | 597155   | 119445   | 28    | 16      |
+| own-dist-safety-1src        | safety | mic         | 3   | 2     | 2    | 1     | 1      | decided   | FALSE | own-distributed | pass     | pass     | 7165145  | 1176766  | 35    | 12      |
+| own-dist-live-1src          | P4     | mic         | 3   | 1     | 2    | 1     | 1      | decided   | FALSE | own-distributed | pass     | pass     | 1660460  | 298666   | 30    | 16      |
+| cf-current-P2-1src          | P2     | mic         | 2   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 550      | 250      | 8     | 0       |
+| cf-current-P4-1src          | P4     | mic         | 2   | 0     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 1128     | 362      | 15    | 1       |
+| cf-current-P4-drop-1src     | P4     | mic         | 3   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 37604    | 8732     | 22    | 3       |
+| cf-current-P1-1src          | P1     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare      | pass     | pass     | 8807336  | 1474009  | 36    | 35      |
+| cf-current-P3-1src          | P3     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare      | pass     | pass     | 8807336  | 1474009  | 35    | 35      |
+| mutant-adoptSync-P1         | P1     | mic         | 2   | 1     | 1    | 0     | 0      | adoptSync | FALSE | cloudflare      | violated | violated | 2570     | 788      | 12    | 1       |
+| mutant-optimisticUi-P3      | P3     | mic         | 1   | 0     | 0    | 0     | 0      | decided   | TRUE  | cloudflare      | violated | violated | 2        | 2        | 2     | 1       |
+| witness-on                  | W1     | mic         | 2   | 0     | 0    | 0     | 0      | decided   | FALSE | cloudflare      | violated | violated | 136      | 48       | 13    | 1       |
+| witness-hostmute            | W2     | mic         | 2   | 0     | 0    | 1     | 0      | decided   | FALSE | cloudflare      | violated | violated | 819      | 261      | 11    | 0       |
+| deep-cf-decided-live-2src   | P4     | mic,cam     | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 2494203  | 342256   | 32    | 81      |
+| deep-cf-decided-safety-2src | safety | mic,cam     | 2   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 46590684 | 5644562  | 40    | 240     |
+| deep-cf-decided-safety-3src | safety | mic,cam,scr | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 41996446 | 4068999  | 44    | 293     |
 
 ## Counterexample for the current SDK
 
@@ -91,7 +93,7 @@ Fixes 1 and 2 close P2. Fix 3 is what makes P4 hold when the link never drops.
 
 Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed SFU closes (Cloudflare only). Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
 
-Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The own SFU: closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step.
+Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized own SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The own SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests (`features/media/sfu/tests/fencing_test.go`), not by this model.
 
 ## What it proves and what it does not
 
@@ -128,7 +130,7 @@ Files:
 
 `MediaControl.tla` talks to the SFU only through `Sfu.tla` (`Pub`, `Admit`, `OnRevoke`, `OnSessionLost`, `Collectable`, `Closable`) and the actions `SfuAdmit`, `SyncCloseOk`, `SyncCloseFail`, `SfuGc`, `DropSfu` and `RebuildSfu`, which schedule those operators.
 
-- To switch between the two SFUs already described, change the `sfu` column in `runs.txt` to `cloudflare` or `own`. `run.sh` maps that to the three constants `CloseCanFail`, `OrphansLinger` and `AtomicRevoke`.
+- To switch between the SFUs already described, change the `sfu` column in `runs.txt` to `cloudflare`, `own` or `own-distributed`. `run.sh` maps that to the three constants `CloseCanFail`, `OrphansLinger` and `AtomicRevoke`.
 - To model a different SFU, change the operators in `Sfu.tla`, or add constants to it. For example, an SFU that admits a publication without asking Sync for a grant is a change to the guard in `SfuAdmit`, and an SFU with its own session recovery is a change to `OnSessionLost` and `RebuildSfu`. Then rerun `./run.sh`; the properties do not mention the SFU.
 
 ## Variants and properties

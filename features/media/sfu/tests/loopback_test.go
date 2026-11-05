@@ -45,7 +45,7 @@ var operations atomic.Int64
 // op returns a fresh operation ID for a test request.
 func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
 
-func startService(t *testing.T, ca *authority) *service {
+func startService(t *testing.T, ca *authority, configure ...func(*config.Config)) *service {
 	t.Helper()
 	dir := t.TempDir()
 	_, serverCert, serverKey := ca.issue("localhost", x509.ExtKeyUsageServerAuth)
@@ -71,6 +71,9 @@ func startService(t *testing.T, ca *authority) *service {
 		ShutdownTimeout:            5 * time.Second,
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	for _, apply := range configure {
+		apply(&cfg)
+	}
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		t.Fatalf("start service: %v", err)

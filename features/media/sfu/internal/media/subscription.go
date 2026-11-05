@@ -148,7 +148,7 @@ func (s *subscription) pendingLayer() int {
 // deliver forwards one packet of layer if this subscription takes it. It runs
 // on the layer's reader and never blocks another subscriber.
 func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWriter) {
-	if s.interest.Load()&(1<<layer.index) == 0 {
+	if s.interest.Load()&(1<<layer.index) == 0 || !s.pub.authority.allows(p.arrival, p.arrival) {
 		return
 	}
 	s.mu.Lock()
@@ -158,7 +158,7 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 	if !send {
 		return
 	}
-	if !w.write(s.track, p, out) {
+	if !s.write(w, p, out) {
 		if switched {
 			s.abandonSwitch(switches)
 		}
@@ -213,7 +213,7 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 	now := monotonic()
 	for ext, sent := from+1, 0; int64(layer.highest-ext) >= 0 && sent < maxFlushAfterSwitch; ext, sent = ext+1, sent+1 {
 		stored, ok := history.load(ext, now, w.stored[:])
-		if !ok {
+		if !ok || !s.pub.authority.allows(stored.arrival, now) {
 			continue
 		}
 		stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
@@ -227,8 +227,15 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 		if !send {
 			return
 		}
-		w.write(s.track, &stored, out)
+		s.write(w, &stored, out)
 	}
+}
+
+// write sends one translated packet if the source may still forward it. It reads the
+// clock at each write, because an earlier write, to this subscriber or another, can
+// stall past the lease.
+func (s *subscription) write(w *packetWriter, p *rtpPacket, out outgoing) bool {
+	return s.pub.authority.allows(p.arrival, monotonic()) && w.write(s.track, p, out)
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
@@ -307,12 +314,20 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 		return
 	}
 	stored, ok := history.load(ext, now, w.stored[:])
+	if ok && !s.pub.authority.allows(stored.arrival, now) {
+		// A packet from before the source's current window is never sent: a viewer
+		// that missed it decodes again from a keyframe of the new window.
+		if s.pub.authority.allows(now, now) {
+			s.requestKeyframe()
+		}
+		return
+	}
 	if !ok {
 		s.requestKeyframe()
 		return
 	}
 	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
-	w.write(s.track, &stored, seg.translate(&stored))
+	s.write(w, &stored, seg.translate(&stored))
 }
 
 // state reports the subscription's delivery for inspection.

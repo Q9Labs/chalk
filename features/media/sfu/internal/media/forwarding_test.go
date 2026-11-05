@@ -116,7 +116,7 @@ func TestPickLayer(t *testing.T) {
 }
 
 func TestPauseReasonsAndRevision(t *testing.T) {
-	s := &subscription{pub: &publication{kind: webrtc.RTPCodecTypeVideo}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
+	s := &subscription{pub: &publication{kind: webrtc.RTPCodecTypeVideo, authority: freeAuthority()}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
 	views := []layerView{{rid: "h", active: true}, {rid: "l", active: true}}
 	state := func() (string, uint64) {
 		state, reason, revision, _, _ := s.state()
@@ -150,7 +150,7 @@ func TestPauseReasonsAndRevision(t *testing.T) {
 // delta frames wait for an "h" keyframe instead of reaching the decoder.
 func TestAnInactiveForwardedLayerResumesOnlyOnAKeyframe(t *testing.T) {
 	s := &subscription{
-		pub: &publication{kind: webrtc.RTPCodecTypeVideo}, target: -1, revision: 1, translator: translator{clockRate: 90000},
+		pub: &publication{kind: webrtc.RTPCodecTypeVideo, authority: freeAuthority()}, target: -1, revision: 1, translator: translator{clockRate: 90000},
 		request: layerRequest{ceiling: "h", fallback: true},
 	}
 	views := []layerView{{rid: "h", active: true}, {rid: "l", active: true}}
@@ -184,7 +184,7 @@ func TestAnInactiveForwardedLayerResumesOnlyOnAKeyframe(t *testing.T) {
 }
 
 func TestAStaleSnapshotNeverRevivesAClosedPublication(t *testing.T) {
-	pub := &publication{kind: webrtc.RTPCodecTypeVideo}
+	pub := &publication{kind: webrtc.RTPCodecTypeVideo, authority: freeAuthority()}
 	pub.closed.Store(true)
 	s := &subscription{pub: pub, target: -1, translator: translator{clockRate: 90000}, request: layerRequest{fallback: true}}
 	if pending := s.reselect([]layerView{{rid: "h", active: true}}); pending >= 0 {

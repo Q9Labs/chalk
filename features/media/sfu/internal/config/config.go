@@ -30,6 +30,14 @@ type Config struct {
 	ClientCAFile   string
 	ClientIdentity string
 
+	// SourceLeaseTTL is how long a granted source forwards without a renewing grant.
+	// The API renews every live grant well inside it, so lost control connectivity
+	// stops forwarding at expiry instead of leaving an orphan publication running.
+	SourceLeaseTTL time.Duration
+	// RequireSourceGrant makes a source forward only under a live grant. Without it a
+	// source the API never controlled forwards freely, and grants and revokes still apply.
+	RequireSourceGrant bool
+
 	MaxSessions                int
 	MaxPublishedPerSession     int
 	MaxSubscriptionsPerSession int
@@ -66,6 +74,8 @@ func Load(lookup Lookup) (Config, error) {
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
 		ClientIdentity:             r.required("SFU_CLIENT_IDENTITY"),
+		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", 15*time.Second, 3*time.Second, 2*time.Minute),
+		RequireSourceGrant:         r.boolean("SFU_REQUIRE_SOURCE_GRANT", false),
 		MaxSessions:                r.integer("SFU_MAX_SESSIONS", 64, 1, 1024),
 		MaxPublishedPerSession:     r.integer("SFU_MAX_PUBLISHED_PER_SESSION", 8, 1, 32),
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),

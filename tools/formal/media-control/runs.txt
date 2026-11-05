@@ -6,6 +6,10 @@ cf-decided-live-1src-d2 | P4     | mic          | 2 | 2 | 2 | 1 | 1 | decided | 
 # Decided rule, own SFU (state in the room authority): all four properties hold.
 own-decided-safety-1src | safety | mic          | 3 | 2 | 2 | 1 | 0 | decided | FALSE | own        | pass
 own-decided-live-1src   | P4     | mic          | 3 | 1 | 2 | 1 | 0 | decided | FALSE | own        | pass
+# Decided rule, own SFU as a separate service: revoke and close calls from the API can be lost
+# or fail, and publications of a dead session can linger, as with Cloudflare.
+own-dist-safety-1src    | safety | mic          | 3 | 2 | 2 | 1 | 1 | decided | FALSE | own-distributed | pass
+own-dist-live-1src      | P4     | mic          | 3 | 1 | 2 | 1 | 1 | decided | FALSE | own-distributed | pass
 # Current SDK reconnect behavior: P2 and P4 fail, P1 and P3 hold.
 cf-current-P2-1src      | P2     | mic          | 2 | 1 | 1 | 0 | 0 | current | FALSE | cloudflare | violated
 cf-current-P4-1src      | P4     | mic          | 2 | 0 | 1 | 0 | 0 | current | FALSE | cloudflare | violated

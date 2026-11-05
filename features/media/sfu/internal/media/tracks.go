@@ -34,6 +34,12 @@ type publication struct {
 	name    string
 	source  string
 	kind    webrtc.RTPCodecType
+	// authority decides whether the source may forward; a revoke or a lapsed lease stops it.
+	authority *sourceAuthority
+	// revision and revoked are the authority's control when the publication was
+	// admitted, so a revoke closes only what was published before it applied.
+	revision int64
+	revoked  bool
 
 	closed atomic.Bool
 	done   chan struct{}
@@ -45,8 +51,15 @@ type publication struct {
 	monitoring bool
 }
 
-func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) *publication {
-	return &publication{session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{})}
+func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
+	authority, revision, revoked, err := session.node.authorityFor(session.scope, track.Source)
+	if err != nil {
+		return nil, err
+	}
+	return &publication{
+		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
+		authority: authority, revision: revision, revoked: revoked,
+	}, nil
 }
 
 func (p *publication) video() bool { return p.kind == webrtc.RTPCodecTypeVideo }
