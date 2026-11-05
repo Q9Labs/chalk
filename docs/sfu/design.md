@@ -173,14 +173,14 @@ Do not import API `internal` packages across module boundaries. A small public
 translates to/from `mediaplane`. No parallel domain model or database replica.
 
 ```text
-SDK -- authenticated HTTPS signaling --> API -- private mTLS --> SFU control
+SDK -- authenticated HTTPS signaling --> API -- mTLS over public TCP 8443 --> SFU control
  |                                        ^                     |
  +--------- ICE / DTLS-SRTP / RTCP ------------------------------+
                                           |
 Sync -- existing private provider bridge -+ -- Postgres authority
 ```
 
-Control listens on private TCP 8443, using mutual TLS with separately rotated
+Control listens on public TCP 8443, using mutual TLS with separately rotated
 API-client and SFU-server identities; authorize the expected service identity,
 not any certificate signed by the CA. Private networking is not authentication.
 The browser never receives a service secret and never calls this listener.

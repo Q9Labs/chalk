@@ -8,7 +8,7 @@ Instabox; the sgp1 capacity proof runs on the target class of Droplet, not the A
 ## M1 — Service skeleton and real single-layer push/pull
 
 **Scope:** create the standalone Go module at `features/media/sfu/`. Implement
-bounded configuration, private mTLS control, `/healthz`, `/readyz`, graceful stop,
+bounded configuration, mTLS control on the public TCP 8443 listener, `/healthz`, `/readyz`, graceful stop,
 session creation, push, pull, renegotiate, forced track close and inspection.
 Start with VP8/Opus passthrough on a Pion UDP mux. Scope every session/reference
 to Tenant/Episode/Participant/generation. Define the versioned wire DTOs in public
