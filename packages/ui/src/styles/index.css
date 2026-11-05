@@ -1311,6 +1311,23 @@
   height: 28px;
   color: var(--chalk-toast-accent);
 }
+/* Decorative defaults are bundled with the shared surface, never fetched after an action. */
+.chalk-toast [data-part="toast-icon"]:empty::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  background: currentColor;
+  mask: var(--chalk-toast-glyph) center / contain no-repeat;
+}
+.chalk-toast {
+  --chalk-toast-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v6M12 7v.01'/%3E%3C/svg%3E");
+}
+.chalk-toast[data-type="success"] {
+  --chalk-toast-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='m8 12 3 3 5-6'/%3E%3C/svg%3E");
+}
+.chalk-toast:is([data-type="warning"], [data-type="error"]) {
+  --chalk-toast-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m10.3 3.9-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3.1l-8-14a2 2 0 0 0-3.4 0ZM12 9v4M12 17v.01'/%3E%3C/svg%3E");
+}
 .chalk-toast [data-part="toast-icon"] svg {
   width: 20px;
   height: 20px;

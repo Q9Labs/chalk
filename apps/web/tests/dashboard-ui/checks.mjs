@@ -56,6 +56,22 @@ async function dialogCheck(tab, name, openDialog, opener) {
 }
 
 try {
+  {
+    const { tab, context } = await open("/dashboard");
+    const action = tab.getByRole("button", { name: /^More actions for / }).first();
+    const label = await action.getAttribute("aria-label");
+    // Reproduce a first-use chunk download failure without breaking the mutation API.
+    await tab.route("**/*", (route) => (route.request().resourceType() === "script" ? route.abort("failed") : route.continue()));
+    await action.click();
+    await tab.getByRole("menuitem", { name: "Archive call", exact: true }).click();
+    const undo = tab.getByRole("button", { name: "Undo", exact: true });
+    await undo.waitFor();
+    check("archive keeps Undo available when later script downloads fail", (await tab.getByRole("button", { name: label, exact: true }).count()) === 0);
+    await undo.click();
+    await tab.getByRole("button", { name: label, exact: true }).waitFor();
+    check("Undo restores the archived call without another script download", true);
+    await context.close();
+  }
   await (await import("./developer-recording-checks.mjs")).developerRecordingChecks({ open, fixture, check });
   await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
