@@ -226,8 +226,8 @@ try {
   }
   const viewer = states.get(VIEWER);
   const evaluate = (fn, arg) => viewerPage.evaluate(fn, arg);
+  await until(async () => (await evaluate(() => window.cameraIds.length)) === PUBLISHERS, 10_000, "viewer listed every camera");
   const cameraIds = await evaluate(() => window.cameraIds);
-  assert.equal(cameraIds.length, PUBLISHERS);
   const pulled = (source) => viewer.pulls.flatMap((pull) => pull.sources).filter((item) => item === source).length;
   await until(async () => (await evaluate(() => window.receivers())).video === VISIBLE && (await evaluate(() => window.receivers())).audio === PUBLISHERS, 30_000, "4 videos and 8 microphones received");
   await pause(3000);
