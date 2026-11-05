@@ -1,6 +1,6 @@
 # Chalk SFU
 
-A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real push and pull), M2 (retry-safe lifecycle, admission, negotiated close) and the media side of M4 (simulcast layer routing). The API reaches it through the `chalk_sfu` media-plane adapter.
+A standalone Go service that forwards Participants' audio and video as a second media provider beside Cloudflare Realtime. The design and the milestone plan are in the SFU design pull request (#796). This covers milestones M1 (service skeleton with real push and pull), M2 (retry-safe lifecycle, admission, negotiated close), the media side of M4 (simulcast layer routing) and the SFU side of M3 (source fencing, forwarding leases and in-place ICE restart). The API reaches it through the `chalk_sfu` media-plane adapter.
 
 The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `apps/api/internal`. The API adapter will translate between the public `protocol` package and its own ports.
 
@@ -10,7 +10,7 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
 - **Health**: `GET /healthz` (process is up, no identifiers) and `GET /readyz` (node incarnation, session count, packet budget, reserved packets and what a new Episode would reserve; 503 while draining). Both sit on the same mutual-TLS listener, and `/readyz` also needs the service identity, like `/v1`.
 - **Sessions** under `/v1`, each scoped to Tenant, Episode, Participant and generation:
   - `POST /v1/sessions` creates a session. The operation ID makes a retry return the same connection ID, also after that session closed, and reusing it with another body fails with 409. The node keeps the create records of the last 4096 closed sessions. A create with a new operation ID closes the Participant's live session and replaces it, at a newer or the same generation, because the API replaces a media connection that way; an older generation is refused.
-  - `POST /v1/sessions/{id}/tracks` pushes local tracks (client offer, SFU answer) or pulls remote tracks (no SDP, SFU offer). A request is all local or all remote. Failed tracks return per-track errors while the rest succeed.
+  - `POST /v1/sessions/{id}/tracks` pushes local tracks (client offer, SFU answer) or pulls remote tracks (no SDP, SFU offer). A request is all local or all remote. Failed tracks return per-track errors while the rest succeed. A push with an offer and no tracks renegotiates the connection in place, so a client's ICE restart gets an answer with the new credentials and keeps its publications and subscriptions.
   - `POST /v1/sessions/{id}/renegotiate` applies the client's answer to the pending server offer. An unanswered offer closes the session after `SFU_NEGOTIATION_TIMEOUT`.
   - `POST /v1/sessions/{id}/tracks/close` force-closes tracks by MID. Closing an absent MID succeeds.
   - `POST /v1/sessions/{id}/inspect` lists the session's tracks.
@@ -24,6 +24,12 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - `POST /v1/sessions/{id}/remove` ends one session. `POST /v1/episodes/end` closes every session of a Tenant's Episode and reports the count.
   - **Admission** reserves `c * n * (n + 1)` packets/s per Episode, where `c` is the video plus audio stream cost and `n` is the live Participants (at least 2). A create that would push the node past `SFU_PACKET_BUDGET` is refused with 429 `capacity_exceeded`. The budget is the real limit: at the default costs an Episode reaches it at 9 Participants on a 16000 budget and at 13 on 32000. `SFU_MAX_EPISODE_PARTICIPANTS` is a separate safety cap, 16 by default. A reconnect replaces its own session and is not counted twice. `/readyz` reports the budget and the reserved packets.
   - **One screen share** per Episode. A second screen publication gets the per-track error `screen_share_active`.
+- **Source control** (M3) decides which sources may forward. The API does not call it yet; until it does, keep `SFU_REQUIRE_SOURCE_GRANT` off.
+  - `POST /v1/episodes/sources` grants or revokes Participants' sources in one Tenant's Episode, 1 to 64 controls per request. Each control carries the Episode's durable control revision. The node applies a control only at or above the source's recorded revision, and a revoke wins a tie, so a duplicate, delayed or stale control never undoes a newer one. Each result says whether the control applied, the recorded revision, the lease left and the publications a revoke closed.
+  - A revoke stops forwarding before it returns, and closes the source's publications admitted before it on every session of the Participant; their MIDs are retired. Controls outlive sessions, so a revoke also fences a later publication of a source that had none.
+  - A grant opens a forwarding lease of `SFU_SOURCE_LEASE_TTL`, and a later grant renews it. Every egress write checks the lease when it sends, so media stops when the lease lapses even if a write stalls. A packet that arrived outside the lease is never sent, as live media or as a retransmission. A grant that opens a new lease asks the source's publications for keyframes.
+  - With `SFU_REQUIRE_SOURCE_GRANT=false` a source no control has named forwards freely. With `true` a source forwards only under a live grant.
+  - The node keeps the newest control of up to 16384 sources. When the table is full it evicts the oldest entry of a Participant with no live session, never one the batch names, and raises that Episode's floor to the evicted revision: a source the node no longer holds starts with no lease and refuses a control below the floor. If nothing can be evicted, the batch gets 429 `capacity_exceeded`.
 - **Media**: Opus and VP8 on one Pion UDP socket (ICE-lite).
   - A simulcast camera's layers (`h`, `l`, at most three) are each read once. Every subscription forwards one layer: it is the pull's `simulcast.preferredRid`, or `startRid` when that is lower. With `ridNotAvailable` other than `none`, a wanted layer without RTP for one second falls back to the first active RID in ASCII order, which can be higher than the one asked for, and the subscription returns when the layer resumes. A track without RIDs always serves.
   - A switch waits for a keyframe of the new layer and asks for one, at most once per 500 ms per layer. Each subscriber gets its own continuous stream: sequence numbers, timestamps, VP8 picture IDs and TL0PICIDX are rewritten so a switch, a pause, a sequence wrap or reordering never breaks decoding.
@@ -32,7 +38,7 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - Streams nobody forwards are still read and discarded, and Pion's per-stream buffers are capped at 128 KiB, so no buffer grows.
   - The forwarding path allocates nothing per packet; `TestForwardingAllocatesNothing` keeps it that way.
 
-Not yet built: adaptation, congestion control, RTX and NACK rate policy, ICE restart, certificate rotation and deployment.
+Not yet built: the API's source-control dispatch and lease renewal, adaptation, congestion control, RTX and NACK rate policy, certificate rotation and deployment.
 
 ## Run it
 
@@ -65,6 +71,8 @@ go run ./cmd/sfu
 | `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
 | `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
 | `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.  |
+| `SFU_SOURCE_LEASE_TTL`                  | `15s`           | How long a grant lets a source forward, 3s to 2m.     |
+| `SFU_REQUIRE_SOURCE_GRANT`              | `false`         | Forward a source only under a live grant.             |
 
 ## Deploy
 
