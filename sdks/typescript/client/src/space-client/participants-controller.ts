@@ -307,8 +307,18 @@ function capabilitiesFor(control: readonly string[], collaboration: readonly str
 }
 function participantMedia(participantId: string, media: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["media"]): ChalkParticipantMediaState {
   if (!media) return Object.freeze({ microphone: "unknown", camera: "unknown", screenShare: "unknown" });
-  const active = new Set(media.items.filter((publication) => publication.participantId === participantId && publication.enabled).map((publication) => publication.source));
-  return Object.freeze({ microphone: active.has("microphone") ? "active" : "inactive", camera: active.has("camera") ? "active" : "inactive", screenShare: active.has("screen") ? "active" : "inactive" });
+  const enabled = media.items.filter((publication) => publication.participantId === participantId && publication.enabled);
+  const active = new Set(enabled.map((publication) => publication.source));
+  const publicationId = (source: string) => enabled.find((publication) => publication.source === source)?.publicationId ?? undefined;
+  const cameraPublicationId = publicationId("camera");
+  const screenSharePublicationId = publicationId("screen");
+  return Object.freeze({
+    microphone: active.has("microphone") ? "active" : "inactive",
+    camera: active.has("camera") ? "active" : "inactive",
+    screenShare: active.has("screen") ? "active" : "inactive",
+    ...(cameraPublicationId ? { cameraPublicationId } : {}),
+    ...(screenSharePublicationId ? { screenSharePublicationId } : {}),
+  });
 }
 function participantPresence(participantId: string, presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"]): ParticipantPresence {
   const item = presence?.items.find((candidate) => candidate.participantId === participantId);
@@ -332,7 +342,14 @@ function sameParticipantProfile(left: Participant, right: Participant): boolean 
   return left.participantId === right.participantId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.eligibleRoles, right.eligibleRoles) && sameValues(left.capabilities, right.capabilities);
 }
 function sameParticipantMedia(left: Participant, right: Participant): boolean {
-  return left.media.microphone === right.media.microphone && left.media.camera === right.media.camera && left.media.screenShare === right.media.screenShare && left.media.screenShareHasAudio === right.media.screenShareHasAudio;
+  return (
+    left.media.microphone === right.media.microphone &&
+    left.media.camera === right.media.camera &&
+    left.media.screenShare === right.media.screenShare &&
+    left.media.screenShareHasAudio === right.media.screenShareHasAudio &&
+    left.media.cameraPublicationId === right.media.cameraPublicationId &&
+    left.media.screenSharePublicationId === right.media.screenSharePublicationId
+  );
 }
 function sameParticipantPresence(left: Participant, right: Participant): boolean {
   return left.identityId === right.identityId && left.deviceType === right.deviceType && left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;

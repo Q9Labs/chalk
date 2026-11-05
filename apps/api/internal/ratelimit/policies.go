@@ -6,6 +6,8 @@ const (
 	PolicyNameAuthenticatedWrite = "v1.authenticated.write"
 	PolicyNameWebhookRead        = "v1.webhooks.read"
 	PolicyNameTelemetryIntake    = "v1.telemetry.intake"
+	PolicyNameMCPOAuthRegister   = "mcp.oauth.register"
+	PolicyNameMCPOAuthProtocol   = "mcp.oauth.protocol"
 )
 
 const (

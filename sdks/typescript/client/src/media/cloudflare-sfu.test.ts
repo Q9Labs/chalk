@@ -13,6 +13,7 @@ import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
+import { HIDDEN_PAGE_CLOSE_MS, HIDDEN_TILE_CLOSE_MS, setVideoTileVisibility, UNREPORTED_TILE_WAIT_MS } from "./video-tile-visibility";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -4556,6 +4557,7 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly unreportedVideoTileWaitMs?: number;
     readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
   } = {},
 ) {
@@ -4572,6 +4574,8 @@ function createHarness(
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
+    // Most tests never report tiles and expect video in the first pull.
+    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
     onError: options.onError,
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
@@ -5758,4 +5762,323 @@ it("a re-pull whose final renegotiation fails still falls back for the retired a
     },
     { replaceMediaConnection: async () => reviewReplacement(receiver, `retired-fallback-${++replacements}`) },
   );
+});
+
+describe("visible-tile video subscriptions", () => {
+  const onScreen = { width: 640, height: 360 };
+
+  // The tile registry is shared by every client, so each call uses its own publication IDs.
+  function tileCall(tag: string, people: number, options: { readonly onError?: (error: unknown) => void } = {}) {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...options });
+    harness.transport.uniqueRemoteMids = true;
+    const cameras = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "1", "camera"));
+    const microphones = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "0", "microphone"));
+    const publications = cameras.flatMap((camera, i) => [
+      { participantId: `${tag}-person-${i}`, source: "microphone" as const, publicationId: microphones[i]! },
+      { participantId: `${tag}-person-${i}`, source: "camera" as const, publicationId: camera },
+    ]);
+    const join = async () => {
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      await harness.client.refreshRemotePublications();
+    };
+    const pulls = (trackName: "camera" | "microphone") => harness.transport.addInputs.flatMap((input) => input.tracks.filter((track) => track.location === "remote" && track.trackName === trackName));
+    const held = (source: "camera" | "microphone") =>
+      harness.client
+        .getSnapshot()
+        .remoteTracks.filter((track) => track.source === source)
+        .map((track) => track.publicationId);
+    // A receiver leaks when its track is gone but the SFU was never told to close its subscription.
+    const openVideoSubscriptions = () => {
+      const closed = new Set(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.mid)));
+      return harness.peers.flatMap((peer) => peer.getTransceivers().filter((transceiver) => transceiver.mid?.startsWith("remote-") && transceiver.receiver.track?.kind === "video" && !closed.has(transceiver.mid)));
+    };
+    return { harness, cameras, publications, join, pulls, held, openVideoSubscriptions };
+  }
+
+  it("pulls video only for tiles on screen, reported before their tracks exist, and always pulls audio", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-grid", 8);
+    try {
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await call.join();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.pulls("camera")).toHaveLength(4);
+      expect(call.pulls("microphone")).toHaveLength(8);
+      expect(remotePullCount(call.harness)).toBe(1);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.held("microphone")).toHaveLength(8);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("pulls a tile scrolled into view, keeps it through the debounce, and closes only its video after", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-scroll", 3);
+    const [first, second, third] = call.cameras as [string, string, string];
+    try {
+      setVideoTileVisibility(first, onScreen);
+      setVideoTileVisibility(second, onScreen);
+      setVideoTileVisibility(third, null);
+      await call.join();
+      setVideoTileVisibility(third, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([first, second, third]);
+
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS - 1);
+      expect(call.held("camera")).toContain(second);
+      expect(call.harness.transport.closeInputs).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([first, third]);
+      expect(call.held("microphone")).toHaveLength(3);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: second, source: "camera" })] })]);
+      expect(call.openVideoSubscriptions()).toHaveLength(2);
+
+      setVideoTileVisibility(second, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual(expect.arrayContaining([first, second, third]));
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces rapid scrolling into a few pulls and leaks no receivers", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-fling", 8);
+    try {
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await call.join();
+      for (let step = 0; step < 40; step++) {
+        const page = step % 2;
+        call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, Math.floor(i / 4) === page ? onScreen : null));
+        await vi.advanceTimersByTimeAsync(25);
+      }
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1000);
+      expect(remotePullCount(call.harness)).toBeLessThanOrEqual(3);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.openVideoSubscriptions()).toHaveLength(4);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("pulls every video after the report wait for a UI that never reports tiles", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-silent", 8);
+    try {
+      await call.join();
+      expect(call.pulls("microphone")).toHaveLength(8);
+      expect(call.pulls("camera")).toEqual([]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
+      expect(remotePullCount(call.harness)).toBe(2);
+      expect(call.pulls("camera")).toHaveLength(8);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for tiles reported just after the first listing instead of pulling every video", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-first", 8);
+    try {
+      await call.join();
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.pulls("camera")).toHaveLength(4);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.harness.transport.closeInputs).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close of a hidden tile's video instead of leaking its subscription", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-close-fail", 2);
+    const [first, second] = call.cameras as [string, string];
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 10_000);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: second })] })]);
+      expect(call.held("camera")).toEqual([first]);
+      expect(call.openVideoSubscriptions()).toHaveLength(1);
+
+      setVideoTileVisibility(second, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([first, second]);
+      expect(call.openVideoSubscriptions()).toHaveLength(2);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps pulling a newly joined participant's audio while closing hidden video keeps failing", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const call = tileCall("m8-close-down", 2, { onError });
+    const second = call.cameras[1]!;
+    const late = versionedPublicationID("m8-close-down-late", "0", "microphone");
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const close = vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      call.harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...call.publications, { participantId: "m8-close-down-late", source: "microphone", publicationId: late }] };
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.held("microphone")).toContain(late);
+      expect(call.held("camera")).toContain(second);
+      expect(close.mock.calls.length).toBeGreaterThan(1);
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "close 503" }), expect.anything());
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits briefly for an unreported tile in a UI that reports, then pulls it as before", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-late", 3);
+    const [first, second, third] = call.cameras as [string, string, string];
+    try {
+      setVideoTileVisibility(first, onScreen);
+      setVideoTileVisibility(second, null);
+      await call.join();
+      expect(call.held("camera")).toEqual([first]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS - 1);
+      expect(call.held("camera")).toEqual([first]);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([first, third]);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes on-screen video only after the tab stays hidden, and pulls it again when the tab returns", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab", 2);
+    const showPage = (state: DocumentVisibilityState) => {
+      page.visibilityState = state;
+      page.dispatchEvent(new Event("visibilitychange"));
+    };
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      showPage("hidden");
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS - 1);
+      expect(call.held("camera")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+      expect(call.held("microphone")).toHaveLength(2);
+      showPage("visible");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual(call.cameras);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-close-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 10_000);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed listing at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-list-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS - 100);
+      vi.spyOn(call.harness.transport, "listPublications").mockRejectedValueOnce(new CloudflareSFUError("list 503", "signaling_failed", { status: 503 }));
+      await vi.advanceTimersByTimeAsync(10_100);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the video shown in picture-in-picture after the tab stays hidden, and closes it once picture-in-picture ends", async () => {
+    vi.useFakeTimers();
+    class FakeMediaStream {
+      constructor(readonly tracks: readonly unknown[]) {}
+      getVideoTracks() {
+        return this.tracks;
+      }
+    }
+    class FakeVideoElement extends EventTarget {
+      constructor(readonly srcObject: FakeMediaStream) {
+        super();
+      }
+    }
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState, pictureInPictureElement: null as FakeVideoElement | null });
+    vi.stubGlobal("document", page);
+    vi.stubGlobal("MediaStream", FakeMediaStream);
+    vi.stubGlobal("HTMLVideoElement", FakeVideoElement);
+    const call = tileCall("m8-pip", 2);
+    const second = call.cameras[1]!;
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const shared = call.harness.client.getSnapshot().remoteTracks.find((track) => track.publicationId === second)!;
+      page.pictureInPictureElement = new FakeVideoElement(new FakeMediaStream([shared.track]));
+      page.dispatchEvent(new Event("enterpictureinpicture"));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 1);
+      expect(call.held("camera")).toEqual([second]);
+
+      page.pictureInPictureElement = null;
+      page.dispatchEvent(new Event("leavepictureinpicture"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
 });

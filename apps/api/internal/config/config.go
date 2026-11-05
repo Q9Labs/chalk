@@ -40,6 +40,10 @@ const (
 	APIServiceSecrets     = "CHALK_API_SERVICE_SECRETS"
 	APIServiceScopes      = "CHALK_API_SERVICE_SCOPES"
 
+	OAuthIssuer            = "CHALK_OAUTH_ISSUER"
+	OAuthConsentURL        = "CHALK_OAUTH_CONSENT_URL"
+	OAuthExtraRedirectURIs = "CHALK_OAUTH_EXTRA_REDIRECT_URIS"
+
 	APIVersion                       = "CHALK_API_VERSION"
 	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
 	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
@@ -138,8 +142,16 @@ type APIConfig struct {
 	CORSAllowedOrigins             []string
 	LocalSystemToken               string
 	ServicePrincipal               authentication.ServiceCredential
+	OAuth                          OAuthConfig
 
 	TrustedProxyCIDRs []string
+}
+
+// OAuthConfig turns on OAuth for the hosted MCP server. A zero Issuer keeps it off.
+type OAuthConfig struct {
+	Issuer            string
+	ConsentURL        string
+	ExtraRedirectURIs []string
 }
 
 type CapabilityConfig struct {
@@ -414,6 +426,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	oauth, err := loadOAuthConfig(environment)
+	if err != nil {
+		return Config{}, err
+	}
 	syncToken, err := loadSyncTokenConfig(environment)
 	if err != nil {
 		return Config{}, err
@@ -515,6 +531,7 @@ func Load() (Config, error) {
 			CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
 			LocalSystemToken:               localSystemToken,
 			ServicePrincipal:               servicePrincipal,
+			OAuth:                          oauth,
 
 			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
 		},
@@ -1166,4 +1183,39 @@ func envStrictBool(name string, fallback bool) (bool, error) {
 	default:
 		return false, fmt.Errorf("%s must be true or false", name)
 	}
+}
+
+func loadOAuthConfig(environment string) (OAuthConfig, error) {
+	issuer := strings.TrimSpace(envOrDefault(OAuthIssuer, ""))
+	consent := strings.TrimSpace(envOrDefault(OAuthConsentURL, ""))
+	extra := envList(OAuthExtraRedirectURIs)
+	if issuer == "" {
+		if consent != "" || len(extra) > 0 {
+			return OAuthConfig{}, fmt.Errorf("%s is required when other OAuth settings are set", OAuthIssuer)
+		}
+		return OAuthConfig{}, nil
+	}
+	if err := validateOAuthURL(environment, OAuthIssuer, issuer, false); err != nil {
+		return OAuthConfig{}, err
+	}
+	if err := validateOAuthURL(environment, OAuthConsentURL, consent, true); err != nil {
+		return OAuthConfig{}, err
+	}
+	return OAuthConfig{Issuer: issuer, ConsentURL: consent, ExtraRedirectURIs: extra}, nil
+}
+
+// validateOAuthURL requires an absolute https URL, with no credentials or
+// fragment. The issuer is an origin; the consent URL may carry a path.
+func validateOAuthURL(environment, name, raw string, allowPath bool) error {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.RawQuery != "" {
+		return fmt.Errorf("%s must be an absolute URL without credentials, query or fragment", name)
+	}
+	if !allowPath && (parsed.Path != "" || strings.HasSuffix(raw, "/")) {
+		return fmt.Errorf("%s must be an origin without a path", name)
+	}
+	if parsed.Scheme != "https" && !(environment == DefaultEnvironment && parsed.Scheme == "http") {
+		return fmt.Errorf("%s must use https outside local environments", name)
+	}
+	return nil
 }

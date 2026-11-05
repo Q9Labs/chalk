@@ -116,6 +116,11 @@ export type CloudflareSFUClientOptions = {
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
+  /**
+   * How long an unreported video publication waits for `setVideoTileVisibility` before it is pulled. Defaults to 250 ms;
+   * a UI that never reports tiles can pass 0 to pull every video at once.
+   */
+  readonly unreportedVideoTileWaitMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;

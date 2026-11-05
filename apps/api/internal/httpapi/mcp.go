@@ -3,12 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
+	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -37,17 +39,16 @@ func NewMCPHandler(options Options) http.Handler {
 	transport := mcpapi.NewHandler(server, options.CORS.AllowedOrigins)
 	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok := authentication.PrincipalFromContext(r.Context())
-		// Phase 1 only accepts tenant API keys. A future OAuth authenticator can
-		// supply a tenant-bound principal here without changing any tool port.
-		if !ok || principal.Kind != authentication.PrincipalAPIKey || principal.TenantID.IsZero() || principal.APIKeyID.IsZero() {
-			writeUnauthenticated(w)
+		actor, valid := mcpActor(principal)
+		if !ok || !valid {
+			writeMCPUnauthenticated(w, options.OAuth)
 			return
 		}
 		scopes := make([]string, 0, len(principal.Scopes))
 		for _, s := range principal.Scopes {
 			scopes = append(scopes, string(s))
 		}
-		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: "api_key:" + principal.APIKeyID.String(), Scopes: scopes})
+		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: scopes})
 		quota := mcpQuota{key: rateLimitKey(r, options.RateLimit.ClientIP), options: options.RateLimit}
 		ctx = context.WithValue(ctx, mcpQuotaKey{}, quota)
 		ctx = context.WithValue(ctx, writeBudgetContextKey{}, func() error { return quota.allow(ctx, authenticatedWriteRateLimit) })
@@ -58,7 +59,63 @@ func NewMCPHandler(options Options) http.Handler {
 		}
 		transport.ServeHTTP(w, r.WithContext(ctx))
 	})
-	return requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP)(authenticated)
+	return acceptMCPOAuthToken(options.OAuth)(requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP)(authenticated))
+}
+
+// mcpActor names the credential behind a tenant-bound principal for audit
+// trails. Only tenant API keys and MCP OAuth grants may call tools.
+func mcpActor(principal authentication.Principal) (string, bool) {
+	if principal.TenantID.IsZero() {
+		return "", false
+	}
+	switch principal.Kind {
+	case authentication.PrincipalAPIKey:
+		return "api_key:" + principal.APIKeyID.String(), !principal.APIKeyID.IsZero()
+	case authentication.PrincipalOAuth:
+		return "oauth:" + principal.GrantID.String(), !principal.GrantID.IsZero()
+	default:
+		return "", false
+	}
+}
+
+// acceptMCPOAuthToken turns a valid OAuth access token into a tenant-bound
+// principal. A request without any credential, or with a bad OAuth token, gets
+// the RFC 9728 challenge so a client can find the authorization server.
+func acceptMCPOAuthToken(service MCPOAuthService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if service == nil {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token, err := oauthBearer(r); err == nil {
+				principal, err := service.Authenticate(r.Context(), token)
+				switch {
+				case err == nil:
+					next.ServeHTTP(w, r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal)))
+				case errors.Is(err, mcpauth.ErrInvalidAccessToken):
+					writeMCPUnauthenticated(w, service)
+				default:
+					slog.ErrorContext(r.Context(), "MCP OAuth token check failed", "event", "mcp.oauth.authenticate_failed", "error", err)
+					writeServiceUnavailable(w)
+				}
+				return
+			}
+			if _, present := bearerToken(r.Header.Get("Authorization")); !present {
+				if _, ok := authentication.PrincipalFromContext(r.Context()); !ok {
+					writeMCPUnauthenticated(w, service)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func writeMCPUnauthenticated(w http.ResponseWriter, service MCPOAuthService) {
+	if challenge := mcpChallenge(service); challenge != "" {
+		w.Header().Set("WWW-Authenticate", challenge)
+	}
+	writeUnauthenticated(w)
 }
 func (q mcpQuota) allow(ctx context.Context, policy ratelimit.Policy) error {
 	if q.options.Limiter == nil {
