@@ -43,6 +43,16 @@ function chunkWithCueTexts(index: number, texts: readonly string[]): ChunkDocume
 }
 
 describe("reported provider charges", () => {
+  it("retains a pinned mode in the final document and rejects inconsistent modes", () => {
+    const first = chunk(1);
+    const second = chunk(2);
+    first.document.transcriptLanguage = { mode: "fixed", language: "ur" };
+    second.document.transcriptLanguage = { mode: "fixed", language: "ur" };
+    expect(mergeTranscriptDocuments({ jobId: "finalize-1", episodeId: "episode-1", attempt: 1, chunks: [first, second] }).transcriptLanguage).toEqual({ mode: "fixed", language: "ur" });
+    second.document.transcriptLanguage = { mode: "auto" };
+    expect(() => mergeTranscriptDocuments({ jobId: "finalize-1", episodeId: "episode-1", attempt: 1, chunks: [first, second] })).toThrow(/language modes differ/);
+  });
+
   it("sums observed successful-request charges only when every chunk reports a charge", () => {
     const result = mergeTranscriptDocuments({ jobId: "finalize-1", episodeId: "episode-1", attempt: 1, chunks: [chunk(1, 0.00001), chunk(2, 0.00002)] });
     expect(result.providerReportedCostUsd).toBeCloseTo(0.00003, 8);

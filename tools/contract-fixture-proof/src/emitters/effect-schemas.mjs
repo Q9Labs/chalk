@@ -38,21 +38,22 @@ lines.push(
   "",
 );
 
+// The outer pure expression lets bundlers drop unused schemas and their nested field factories.
 for (const [name, schema] of orderedSchemas(schemas)) {
-  lines.push(`export const ${name}Schema = ${renderSchema(schema, { schemaName: name })}`);
+  lines.push(`export const ${name}Schema = /* @__PURE__ */ (() => ${renderSchema(schema, { schemaName: name })})()`);
   lines.push(`export type ${name} = typeof ${name}Schema.Type`);
   lines.push("");
 }
 
 for (const header of headerDefinitions) {
-  lines.push(`export const ${header.schemaName} = ${header.rendered}`);
+  lines.push(`export const ${header.schemaName} = /* @__PURE__ */ (() => ${header.rendered})()`);
   lines.push(`export type ${header.typeName} = typeof ${header.schemaName}.Type`);
   lines.push("");
 }
 
 for (const operation of operationSchemas) {
   for (const schema of operation.schemas) {
-    lines.push(`export const ${schema.name}Schema = ${renderSchema(schema.schema)}`);
+    lines.push(`export const ${schema.name}Schema = /* @__PURE__ */ (() => ${renderSchema(schema.schema)})()`);
     lines.push(`export type ${schema.name} = typeof ${schema.name}Schema.Type`);
     lines.push("");
   }
@@ -130,7 +131,7 @@ function renderSchema(schema, context = {}) {
   if (Array.isArray(schema.type)) {
     const nonNullTypes = schema.type.filter((type) => type !== "null");
     if (nonNullTypes.length === 1 && schema.type.includes("null")) {
-      return `Schema.NullOr(${renderSchema({ ...schema, type: nonNullTypes[0] }, context)})`;
+      return `Schema.NullOr(${renderSchema({ ...schema, type: nonNullTypes[0], ...(schema.enum ? { enum: schema.enum.filter((value) => value !== null) } : {}) }, context)})`;
     }
 
     return "Schema.Unknown";
@@ -278,6 +279,11 @@ function renderRegex(pattern) {
 }
 
 function renderLiteral(values) {
+  if (values.includes(null)) {
+    const nonNullValues = values.filter((value) => value !== null);
+    return nonNullValues.length === 0 ? "Schema.Null" : `Schema.NullOr(${renderLiteral(nonNullValues)})`;
+  }
+
   if (values.length === 1) {
     return `Schema.Literal(${JSON.stringify(values[0])})`;
   }

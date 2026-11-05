@@ -1,3 +1,4 @@
+import { parseTranscriptLanguage } from "@chalk/transcript-language";
 import { ControlApiError } from "./errors.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./urls.js";
@@ -247,6 +248,7 @@ function canonicalAssignment(value: unknown): unknown {
   const source = chunk as Record<string, unknown>;
   return {
     ...assignment,
+    transcriptLanguage: parseTranscriptLanguage(assignment.transcript_language === undefined ? "auto" : assignment.transcript_language),
     jobId: assignment.jobId ?? assignment.job_id,
     tenantId: assignment.tenantId ?? assignment.tenant_id,
     episodeId: assignment.episodeId ?? assignment.episode_id,

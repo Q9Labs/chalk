@@ -101,3 +101,14 @@ pnpm --dir apps/transcription-dispatcher run test
 The tests are deterministic and use injected fetch/control/provider boundaries;
 they do not claim live provider qualification, quota proof, DPA acceptance, or
 production credentials.
+
+## Language routing
+
+Claims carry `transcript_language` (`auto` or a supported Whisper v3 primary
+code). Missing fields from an older API default to auto. The worker parses this
+into an auto/fixed mode, forwards fixed codes as `language` on both Whisper
+adapters, and records the mode alongside actual provider facts in chunk and final
+documents. Auto currently omits the language parameter. `CODESWITCH_PROVIDER` is
+reserved but **must be unset** until a code-switching adapter passes release
+qualification; any configured value fails startup. Existing provider privacy,
+corpus, version, and identity requirements remain mandatory.

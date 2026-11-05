@@ -28,6 +28,7 @@ const space = (id: string) => ({
   slug: `call-${id}`,
   tenant_id: tenant,
   transcription_policy: "off",
+  transcript_language: null,
   updated_at: at,
 });
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });

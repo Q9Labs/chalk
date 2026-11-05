@@ -83,6 +83,22 @@ class MediaIdentities(unittest.TestCase):
                 self.assertEqual(capture, media.fingerprint('capture'))
                 previous = current
 
+    def test_shared_transcript_language_changes_dispatcher_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
+            def git(*args):
+                return subprocess.run(['git', '-C', directory, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args], check=True, capture_output=True)
+            git('init')
+            source = Path(directory, 'packages/transcript-language/src/index.ts')
+            source.parent.mkdir(parents=True)
+            source.write_text('original')
+            git('add', '.')
+            git('commit', '-m', 'base')
+            previous = media.fingerprint('dispatcher')
+            source.write_text('changed')
+            git('add', '.')
+            git('commit', '-m', 'parser change')
+            self.assertNotEqual(previous, media.fingerprint('dispatcher'))
+
     def test_adding_or_editing_package_manager_config_changes_both_fingerprints(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(media, 'ROOT', Path(directory)):
             def git(*args):

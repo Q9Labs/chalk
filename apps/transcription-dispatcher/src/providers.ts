@@ -58,6 +58,7 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
     const signal = ensureAbortableTimeout(this.options.policy.timeoutMs, request.signal);
     const form = new FormData();
     const audioCopy = Uint8Array.from(request.audio);
+    if (request.transcriptLanguage?.mode === "fixed") form.append("language", request.transcriptLanguage.language);
     form.append("audio", new Blob([audioCopy.buffer], { type: request.contentType }), "chunk.audio");
     let response: Response;
     try {
@@ -124,7 +125,7 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
       response = await this.options.fetch(endpoint, {
         method: "POST",
         headers: { authorization: `Bearer ${this.options.token}`, "content-type": "application/json" },
-        body: JSON.stringify({ audio: Buffer.from(request.audio).toString("base64") }),
+        body: JSON.stringify({ audio: Buffer.from(request.audio).toString("base64"), ...(request.transcriptLanguage?.mode === "fixed" ? { language: request.transcriptLanguage.language } : {}) }),
         signal,
       });
     } catch (error) {

@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/effect";
+import { createChalkEffectClient, TenantIdSchema, type TranscriptSchema } from "@q9labsai/chalk-client/effect";
 import { afterEach, expect, it, vi } from "vitest";
 import { configuration } from "./config";
 import { pastTranscriptText } from "./past-session";
@@ -21,7 +21,19 @@ const env = configuration({
 });
 const id = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 const input = { spaceId: id(1), episodeId: id(2), transcriptId: id(3) };
-const transcript = { id: id(3), tenant_id: id(4), space_id: id(1), episode_id: id(2), recording_id: id(5), generation: 1, status: "complete", languages: ["ur"], created_at: "2026-11-01T12:00:00Z", updated_at: "2026-11-01T12:00:00Z" };
+const transcript = {
+  id: id(3),
+  tenant_id: id(4),
+  space_id: id(1),
+  episode_id: id(2),
+  recording_id: id(5),
+  generation: 1,
+  status: "complete",
+  transcript_language: "ur",
+  languages: ["ur"],
+  created_at: "2026-11-01T12:00:00Z",
+  updated_at: "2026-11-01T12:00:00Z",
+} satisfies typeof TranscriptSchema.Encoded;
 const text = "Release planning · 1 Nov 2026 · 42 min\nLanguages: Urdu\n\n[00:00:04] حسن: شکریہ۔\n";
 const filename = "attachment; filename=transcript-2026-11-01.txt; filename*=UTF-8''%D8%A7%D8%B1%D8%AF%D9%88-2026-11-01.txt";
 async function engine() {

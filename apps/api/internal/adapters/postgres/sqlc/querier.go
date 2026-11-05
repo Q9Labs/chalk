@@ -178,6 +178,7 @@ type Querier interface {
 	GetRecordingReservation(ctx context.Context, arg GetRecordingReservationParams) (GetRecordingReservationRow, error)
 	GetRecordingReservationByKey(ctx context.Context, arg GetRecordingReservationByKeyParams) (GetRecordingReservationByKeyRow, error)
 	GetRecordingReservationFingerprint(ctx context.Context, arg GetRecordingReservationFingerprintParams) ([]byte, error)
+	GetRecordingTranscriptLanguage(ctx context.Context, arg GetRecordingTranscriptLanguageParams) (GetRecordingTranscriptLanguageRow, error)
 	GetRecordingTranscriptionMode(ctx context.Context, arg GetRecordingTranscriptionModeParams) (string, error)
 	GetRecordingTranscriptionPolicyForCommit(ctx context.Context, arg GetRecordingTranscriptionPolicyForCommitParams) (GetRecordingTranscriptionPolicyForCommitRow, error)
 	GetRecordingTranscriptionPreparationCommit(ctx context.Context, arg GetRecordingTranscriptionPreparationCommitParams) (pgtype.UUID, error)

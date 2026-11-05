@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { loadReleaseConfig } from "../src/config.js";
 import { ProviderError } from "../src/errors.js";
-import { DeepInfraWhisperProvider } from "../src/providers.js";
+import { parseTranscriptLanguage } from "@chalk/transcript-language";
+import { DeepInfraWhisperProvider, CloudflareWhisperProvider } from "../src/providers.js";
 import { InvocationCircuit, transcribeWithFallback } from "../src/retry.js";
 import { loadDispatcherSecrets } from "../src/secrets.js";
 import type { ProviderPolicy } from "../src/types.js";
@@ -35,6 +36,35 @@ const nativeResponse = {
 };
 
 describe("direct DeepInfra contract", () => {
+  it.each(["auto", "en", "ur", "ar"])("sends the language pin only for fixed %s on both adapters", async (value) => {
+    const transcriptLanguage = parseTranscriptLanguage(value);
+    let deepBody: FormData | undefined;
+    const deep = new DeepInfraWhisperProvider({
+      policy,
+      token: "test-token",
+      fetch: async (_url, init) => {
+        deepBody = init?.body as FormData;
+        return Response.json(nativeResponse);
+      },
+    });
+    await deep.transcribe({ ...request, transcriptLanguage });
+    expect(deepBody?.get("language")).toBe(value === "auto" ? null : value);
+    expect(deepBody?.get("audio")).toBeInstanceOf(Blob);
+    let cloudBody: unknown;
+    const cloud = new CloudflareWhisperProvider({
+      policy,
+      token: "test-token",
+      accountId: "fixture",
+      adapterContractVersion: "test.v1",
+      fetch: async (_url, init) => {
+        cloudBody = JSON.parse(String(init?.body));
+        return Response.json({ result: { text: "Hello", segments: [{ start: 0, end: 1, text: "Hello" }], language: "en" } });
+      },
+    });
+    await cloud.transcribe({ ...request, transcriptLanguage });
+    expect(cloudBody).toEqual({ audio: "AQI=", ...(value === "auto" ? {} : { language: value }) });
+  });
+
   it.each(["AbortError", "TimeoutError"])("classifies %s as a bounded provider timeout", async (name) => {
     const provider = new DeepInfraWhisperProvider({
       policy,
@@ -187,6 +217,9 @@ describe("provider selection", () => {
     TRANSCRIPTION_CIRCUIT_COOLDOWN_MS: "1000",
   };
 
+  it("rejects an unqualified code-switching provider", () => {
+    expect(() => loadReleaseConfig({ ...env, CODESWITCH_PROVIDER: "pilot" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/not release-qualified/);
+  });
   it("loads a DeepInfra-only release without any Cloudflare credentials or identity pins", () => {
     expect(loadReleaseConfig(env, { workloadAuth: "test-key", deepInfraToken: "test-token" }).cloudflare).toEqual({ enabled: false });
   });
