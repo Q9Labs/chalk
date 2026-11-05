@@ -128,8 +128,9 @@ func TestConformanceSignaling(t *testing.T) {
 		if len(pulled.Tracks) != 1 || pulled.Tracks[0].TrackName != "alice-mic" || pulled.Tracks[0].SessionID != aliceConn {
 			t.Fatalf("pull = %+v", pulled)
 		}
-		// The error names the publisher's connection, which is what the client asked for.
-		if len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != aliceConn {
+		// The error names the publisher's connection, which is what the client asked for,
+		// and marks the publication missing so the API can retire it.
+		if len(pulled.TrackErrors) != 1 || pulled.TrackErrors[0].TrackName != "alice-missing" || pulled.TrackErrors[0].Code != "track_not_found" || pulled.TrackErrors[0].ConnectionID != aliceConn || !pulled.TrackErrors[0].PublicationMissing {
 			t.Fatalf("pull = %+v", pulled)
 		}
 		if !pulled.RequiresImmediateRenegotiation || pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" {

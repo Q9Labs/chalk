@@ -478,7 +478,7 @@ func tracksResponseOf(connectionID string, response wireTracksResponse) mediapla
 		if owner == "" {
 			owner = connectionID
 		}
-		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: owner, TrackName: failed.TrackName, Code: failed.Code})
+		out.TrackErrors = append(out.TrackErrors, mediaplane.TrackError{ConnectionID: owner, TrackName: failed.TrackName, Code: failed.Code, PublicationMissing: failed.Code == "track_not_found"})
 	}
 	return out
 }
