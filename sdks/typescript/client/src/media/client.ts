@@ -1121,13 +1121,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
-    const kept = new Set([...next.values()].map((publication) => publication.publicationId));
-    for (const publicationId of this.#viewerPaused) if (!kept.has(publicationId)) this.#viewerPaused.delete(publicationId);
+    this.#forgetViewerPauses(next.values());
     this.#cursor = cursor;
     // A video paused in place is complete: it is off screen on purpose.
     this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size - parked.length !== desired.size || unclosed.length > 0;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
+  }
+  #forgetViewerPauses(kept: Iterable<CloudflareSFURemoteTrack>): void {
+    const ids = new Set([...kept].map((publication) => publication.publicationId));
+    for (const publicationId of this.#viewerPaused) if (!ids.has(publicationId)) this.#viewerPaused.delete(publicationId);
   }
   // A hidden tile keeps its pull backoff and subscription eligibility; only a withdrawn publication loses them.
   #pruneRemotePullState(advertised: ReadonlyMap<string, CloudflareSFUPublication>): void {
@@ -2139,7 +2142,7 @@ function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return (
     (left.receiveStalls ?? EMPTY_RECEIVE_STALLS) === (right.receiveStalls ?? EMPTY_RECEIVE_STALLS) &&
-    (left.remoteDelivery ?? EMPTY_RECEIVE_STALLS) === (right.remoteDelivery ?? EMPTY_RECEIVE_STALLS) &&
+    left.remoteDelivery === right.remoteDelivery &&
     connectionEqual(left.connection, right.connection) &&
     cursorEqual(left.cursor, right.cursor) &&
     failureEqual(left.failure, right.failure) &&

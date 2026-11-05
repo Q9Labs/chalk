@@ -66,16 +66,21 @@ export class ViewerLayerPolicy {
     return this.#layer;
   }
 
+  #checksFrameRate(sample: ViewerLayerSample): boolean {
+    if (this.#layer === "h" && sample.framesPerSecond !== undefined && sample.framesPerSecond >= MIN_FRAMES_PER_SECOND) this.#senderFrameRate = undefined;
+    return this.#layer === "h" && (this.#senderFrameRate === undefined || (sample.framesPerSecond ?? 0) < this.#senderFrameRate * 0.75);
+  }
+
+  #followTile(): ViewerLayer {
+    const ceiling = this.#tileIsSmall ? "l" : "h";
+    return ceiling === this.#layer ? ceiling : this.#switchTo(ceiling);
+  }
+
   /** Drops fast, rises slowly: a failed attempt at h doubles the wait before the next one. */
   sample(sample: ViewerLayerSample): ViewerLayer {
     this.#tileIsSmall = tileIsSmall(this.#tileIsSmall, sample.tileHeight);
-    if (!this.#followsNetwork) {
-      const ceiling = this.#tileIsSmall ? "l" : "h";
-      return ceiling === this.#layer ? ceiling : this.#switchTo(ceiling);
-    }
-    if (this.#layer === "h" && sample.framesPerSecond !== undefined && sample.framesPerSecond >= MIN_FRAMES_PER_SECOND) this.#senderFrameRate = undefined;
-    const checkFrameRate = this.#layer === "h" && (this.#senderFrameRate === undefined || (sample.framesPerSecond ?? 0) < this.#senderFrameRate * 0.75);
-    const health = this.#settling > 0 ? this.#settle() : classify(sample, checkFrameRate);
+    if (!this.#followsNetwork) return this.#followTile();
+    const health = this.#settling > 0 ? this.#settle() : classify(sample, this.#checksFrameRate(sample));
     return this.#layer === "h" ? this.#sampleHigh(health, sample) : this.#sampleLow(health, sample);
   }
 

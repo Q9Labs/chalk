@@ -77,18 +77,13 @@ export class SubscriptionDelivery {
   held(publicationId: string): boolean {
     const entry = this.#entries.get(publicationId);
     if (!entry) return false;
-    if (entry.state?.state === "paused") return true;
-    return entry.quietSince !== undefined && (entry.verifiedAt === undefined || entry.verifiedAt < entry.quietSince);
+    return entry.state?.state === "paused" || awaitsRead(entry);
   }
 
   needsRead(now: number): boolean {
     if (this.#reading || now < this.#nextReadAt || this.#entries.size === 0) return false;
-    if (now - this.#lastReadAt >= LAYER_REREAD_MS) return true;
-    for (const entry of this.#entries.values()) {
-      if (entry.state?.state === "paused" && now - this.#lastReadAt >= PAUSED_REREAD_MS) return true;
-      if (entry.quietSince !== undefined && now - entry.quietSince >= SUBSCRIPTION_READ_AFTER_QUIET_MS && (entry.verifiedAt === undefined || entry.verifiedAt < entry.quietSince)) return true;
-    }
-    return false;
+    const sinceRead = now - this.#lastReadAt;
+    return sinceRead >= LAYER_REREAD_MS || [...this.#entries.values()].some((entry) => (entry.state?.state === "paused" ? sinceRead >= PAUSED_REREAD_MS : awaitsRead(entry) && now - (entry.quietSince ?? now) >= SUBSCRIPTION_READ_AFTER_QUIET_MS));
   }
 
   /** Returns the read's start time, which `applied` and `failed` take back. */
@@ -149,6 +144,11 @@ export class SubscriptionDelivery {
     if (next.length === this.#deliveries.length && next.every((delivery, index) => deliveryEqual(delivery, this.#deliveries[index]))) return;
     this.#deliveries = next.length ? Object.freeze(next.map((delivery) => Object.freeze(delivery))) : EMPTY;
   }
+}
+
+// A read that started before the quiet began says nothing about it.
+function awaitsRead(entry: Entry): boolean {
+  return entry.quietSince !== undefined && (entry.verifiedAt === undefined || entry.verifiedAt < entry.quietSince);
 }
 
 function deliveryEqual(left: RemoteVideoDelivery, right: RemoteVideoDelivery | undefined): boolean {
