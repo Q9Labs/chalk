@@ -51,21 +51,25 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 			t.Fatalf("seed %q: %v", query, err)
 		}
 	}
-	tenantID, spaceID := id(), id()
+	tenantID := id()
 	exec(`insert into tenants(id, name) values($1, 'Source lease renewal')`, tenantID.Bytes())
-	exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Source lease renewal', $2, $3, 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "source-leases-"+spaceID.String())
+	// A Space holds one live Episode, so each Episode gets its own.
+	spaces := map[utilities.ID]utilities.ID{}
 	episode := func(status, binding string) utilities.ID {
-		episodeID := id()
+		episodeID, spaceID := id(), id()
+		spaces[episodeID] = spaceID
+		exec(`insert into spaces(id, name, tenant_id, slug, media_plane) values($1, 'Source lease renewal', $2, $3, 'cf_sfu')`, spaceID.Bytes(), tenantID.Bytes(), "source-leases-"+spaceID.String())
 		exec(`insert into episodes(id, status, space_id, tenant_id, config_snapshot) values($1, $2, $3, $4, $5::jsonb)`, episodeID.Bytes(), status, spaceID.Bytes(), tenantID.Bytes(), `{"media_plane_binding":`+binding+`}`)
 		exec(`insert into sync_episode_control(tenant_id, space_id, episode_id, folded_state, state_schema_version, state_digest, snapshot_bytes) values($1, $2, $3, '{}'::jsonb, 1, $4, 2)`, tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), make([]byte, 32))
 		return episodeID
 	}
 	participant := func(episodeID utilities.ID, status, capabilities string) utilities.ID {
-		participantID := id()
+		participantID, spaceID := id(), spaces[episodeID]
 		exec(`insert into participants(id, tenant_id, space_id, episode_id, capabilities, generation, status, role) values($1, $2, $3, $4, $5::text[], 1, $6, 'collaborator')`, participantID.Bytes(), tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), capabilities, status)
 		return participantID
 	}
 	grant := func(episodeID, participantID utilities.ID, source, status string, revision any) {
+		spaceID := spaces[episodeID]
 		completedAt, failure := "now()", "null"
 		switch status {
 		case "pending":
@@ -78,6 +82,7 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 			tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), id().Bytes(), "grant_"+id().String()[:16], participantID.Bytes(), source, status, revision)
 	}
 	stop := func(episodeID, participantID utilities.ID, operation string, source any, revision int64) {
+		spaceID := spaces[episodeID]
 		exec(`insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, target_participant_id, target_participant_generation, source, payload, control_revision)
 			values($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, '{}'::jsonb, $10)`,
 			tenantID.Bytes(), spaceID.Bytes(), episodeID.Bytes(), id().Bytes(), "stop_"+id().String()[:16], make([]byte, 32), operation, participantID.Bytes(), source, revision)
