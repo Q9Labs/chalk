@@ -28,9 +28,27 @@ let browser;
 
 async function main() {
   const certs = createPki(work);
+  const control = await startService(certs);
+  const tenant = { tenantId: "tenant-browser", episodeId: "episode-1", generation: 1 };
+  const scopeA = { ...tenant, participantId: "browser-a" };
+  const scopeB = { ...tenant, participantId: "browser-b" };
+  const connectionA = (await control.post("/v1/sessions", { operationId: "browser-create-a", scope: scopeA })).body.connectionId;
+  const connectionB = (await control.post("/v1/sessions", { operationId: "browser-create-b", scope: scopeB })).body.connectionId;
+  const page = await openPage();
+
+  await push(page, control, connectionA, scopeA);
+  await pull(page, control, connectionB, connectionA, scopeB);
+
+  const media = await waitFor("decoded video frames and audio packets", 30_000, () => receivedMedia(page));
+  console.log(`PASS: simulcast=${simulcast} decoded ${media.video.framesDecoded} video frames (${media.video.packets} packets) and received ${media.audio.packets} audio packets`);
+
+  const inspected = await control.post(`/v1/sessions/${connectionA}/inspect`, { scope: scopeA });
+  expect(inspected.body.tracks?.length === 2, `inspect lists both published tracks: ${JSON.stringify(inspected.body)}`);
+}
+
+async function startService(certs) {
   const binary = path.join(work, "sfu");
   execFileSync("go", ["build", "-o", binary, "./cmd/sfu"], { stdio: "inherit" });
-
   const controlPort = await freeTcpPort();
   const udpPort = await freeUdpPort();
   const sfu = spawn(binary, [], {
@@ -50,13 +68,10 @@ async function main() {
   children.push(sfu);
   const control = controlClient(controlPort, certs);
   await waitFor("the SFU to become ready", 15_000, async () => (await control.get("/readyz").catch(() => ({ status: 0 }))).status === 200);
+  return control;
+}
 
-  const tenant = { tenantId: "tenant-browser", episodeId: "episode-1", generation: 1 };
-  const scopeA = { ...tenant, participantId: "browser-a" };
-  const scopeB = { ...tenant, participantId: "browser-b" };
-  const connectionA = (await control.post("/v1/sessions", { operationId: "browser-create-a", scope: scopeA })).body.connectionId;
-  const connectionB = (await control.post("/v1/sessions", { operationId: "browser-create-b", scope: scopeB })).body.connectionId;
-
+async function openPage() {
   browser = await chromium.launch({
     headless: true,
     args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required"],
@@ -66,8 +81,11 @@ async function main() {
   // getUserMedia needs a secure context, and http://localhost is one.
   await page.route("http://localhost/", (route) => route.fulfill({ contentType: "text/html", body: "<title>sfu</title>" }));
   await page.goto("http://localhost/");
+  return page;
+}
 
-  // Connection A: the SDK offers without waiting for ICE gathering.
+// Connection A: the SDK offers without waiting for ICE gathering.
+async function push(page, control, connectionId, scope) {
   const offer = await page.evaluate(async (useSimulcast) => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     const connection = new RTCPeerConnection({ bundlePolicy: "max-bundle" });
@@ -91,8 +109,8 @@ async function main() {
     await connection.setLocalDescription(description);
     return { sdp: description.sdp, type: description.type, microphoneMid: microphone.mid, cameraMid: camera.mid };
   }, simulcast);
-  const pushed = await control.post(`/v1/sessions/${connectionA}/tracks`, {
-    scope: scopeA,
+  const pushed = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    scope,
     sessionDescription: { sdp: offer.sdp, type: offer.type },
     tracks: [
       { location: "local", mid: offer.microphoneMid, trackName: "microphone-1", source: "microphone" },
@@ -101,13 +119,15 @@ async function main() {
   });
   expect(pushed.status === 200 && pushed.body.sessionDescription?.type === "answer" && pushed.body.tracks?.length === 2 && !pushed.body.trackErrors, `push answered: ${JSON.stringify(pushed.body).slice(0, 300)}`);
   await page.evaluate((answer) => window.publisher.setRemoteDescription(answer), pushed.body.sessionDescription);
+}
 
-  // Connection B: the SFU offers, the browser answers.
-  const pulled = await control.post(`/v1/sessions/${connectionB}/tracks`, {
-    scope: scopeB,
+// Connection B: the SFU offers, the browser answers.
+async function pull(page, control, connectionId, publisherId, scope) {
+  const pulled = await control.post(`/v1/sessions/${connectionId}/tracks`, {
+    scope,
     tracks: [
-      { location: "remote", sessionId: connectionA, trackName: "microphone-1" },
-      { location: "remote", sessionId: connectionA, trackName: "camera-1", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
+      { location: "remote", sessionId: publisherId, trackName: "microphone-1" },
+      { location: "remote", sessionId: publisherId, trackName: "camera-1", simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } },
     ],
   });
   expect(pulled.status === 200 && pulled.body.sessionDescription?.type === "offer" && pulled.body.tracks?.length === 2 && !pulled.body.trackErrors, `pull offered: ${JSON.stringify(pulled.body).slice(0, 300)}`);
@@ -119,22 +139,18 @@ async function main() {
     await connection.setLocalDescription(description);
     return { sdp: description.sdp, type: description.type };
   }, pulled.body.sessionDescription);
-  const renegotiated = await control.post(`/v1/sessions/${connectionB}/renegotiate`, { scope: scopeB, sessionDescription: answer });
+  const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, { scope, sessionDescription: answer });
   expect(renegotiated.status === 204, `renegotiate answered with ${renegotiated.status}`);
+}
 
-  const media = await waitFor("decoded video frames and audio packets", 30_000, async () => {
-    const stats = await page.evaluate(async () => {
-      const report = await window.subscriber.getStats();
-      const inbound = [...report.values()].filter((entry) => entry.type === "inbound-rtp");
-      const pick = (kind) => inbound.find((entry) => entry.kind === kind) ?? {};
-      return { video: { framesDecoded: pick("video").framesDecoded ?? 0, packets: pick("video").packetsReceived ?? 0 }, audio: { packets: pick("audio").packetsReceived ?? 0 } };
-    });
-    return stats.video.framesDecoded >= 30 && stats.audio.packets >= 50 ? stats : false;
+async function receivedMedia(page) {
+  const stats = await page.evaluate(async () => {
+    const report = await window.subscriber.getStats();
+    const inbound = [...report.values()].filter((entry) => entry.type === "inbound-rtp");
+    const pick = (kind) => inbound.find((entry) => entry.kind === kind) ?? {};
+    return { video: { framesDecoded: pick("video").framesDecoded ?? 0, packets: pick("video").packetsReceived ?? 0 }, audio: { packets: pick("audio").packetsReceived ?? 0 } };
   });
-  console.log(`PASS: simulcast=${simulcast} decoded ${media.video.framesDecoded} video frames (${media.video.packets} packets) and received ${media.audio.packets} audio packets`);
-
-  const inspected = await control.post(`/v1/sessions/${connectionA}/inspect`, { scope: scopeA });
-  expect(inspected.body.tracks?.length === 2, `inspect lists both published tracks: ${JSON.stringify(inspected.body)}`);
+  return stats.video.framesDecoded >= 30 && stats.audio.packets >= 50 ? stats : false;
 }
 
 function createPki(directory) {

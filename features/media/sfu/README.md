@@ -29,22 +29,22 @@ SFU_ANNOUNCE_IPS=203.0.113.10 \
 go run ./cmd/sfu
 ```
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `SFU_CONTROL_ADDR` | `:8443` | Control listener. |
-| `SFU_UDP_ADDR` | `:50000` | The one UDP socket every peer shares. |
-| `SFU_ANNOUNCE_IPS` | host interfaces | Addresses placed in ICE candidates (comma-separated). |
-| `SFU_ICE_LOOPBACK` | `false` | Offer loopback candidates; local runs only. |
-| `SFU_TLS_CERT_FILE`, `SFU_TLS_KEY_FILE` | required | Server identity. |
-| `SFU_CLIENT_CA_FILE` | required | CA that signs the API's client certificate. |
-| `SFU_CLIENT_IDENTITY` | required | DNS or URI SAN the API's certificate must carry. |
-| `SFU_MAX_SESSIONS` | `64` | 1 to 1024. |
-| `SFU_MAX_PUBLISHED_PER_SESSION` | `8` | 1 to 32. |
-| `SFU_MAX_SUBSCRIPTIONS_PER_SESSION` | `32` | 1 to 128. |
-| `SFU_MAX_REQUEST_BYTES` | `262144` | 4096 to 1048576. |
-| `SFU_NEGOTIATION_TIMEOUT` | `10s` | How long a server offer waits for its answer. |
-| `SFU_CONNECT_TIMEOUT` | `60s` | How long a new session may take to connect. |
-| `SFU_SHUTDOWN_TIMEOUT` | `15s` | Graceful stop budget. |
+| Setting                                 | Default         | Meaning                                               |
+| --------------------------------------- | --------------- | ----------------------------------------------------- |
+| `SFU_CONTROL_ADDR`                      | `:8443`         | Control listener.                                     |
+| `SFU_UDP_ADDR`                          | `:50000`        | The one UDP socket every peer shares.                 |
+| `SFU_ANNOUNCE_IPS`                      | host interfaces | Addresses placed in ICE candidates (comma-separated). |
+| `SFU_ICE_LOOPBACK`                      | `false`         | Offer loopback candidates; local runs only.           |
+| `SFU_TLS_CERT_FILE`, `SFU_TLS_KEY_FILE` | required        | Server identity.                                      |
+| `SFU_CLIENT_CA_FILE`                    | required        | CA that signs the API's client certificate.           |
+| `SFU_CLIENT_IDENTITY`                   | required        | DNS or URI SAN the API's certificate must carry.      |
+| `SFU_MAX_SESSIONS`                      | `64`            | 1 to 1024.                                            |
+| `SFU_MAX_PUBLISHED_PER_SESSION`         | `8`             | 1 to 32.                                              |
+| `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                             |
+| `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                      |
+| `SFU_NEGOTIATION_TIMEOUT`               | `10s`           | How long a server offer waits for its answer.         |
+| `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
+| `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
 
 SIGINT or SIGTERM drains the node: `/readyz` fails, new sessions are refused, in-flight requests finish, then every session, the control listener and the UDP socket close.
 
