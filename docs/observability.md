@@ -629,3 +629,23 @@ Cleanup inherits the journey and trace context, so its provider span and retaine
 terminal failure can be inspected separately from the confirmed Leave. The
 Postgres durable Leave proof blocks a fake cleanup provider and checks the
 receipt, attendance timestamp, and webhook while that provider is still blocked.
+
+## Hosted MCP operations
+
+`/mcp` uses the API's HTTP trace context. Each application call adds a child span
+named `mcp.<operationID>` with the tenant ID and the existing API operation ID.
+The same application handler preserves the domain's durable journey events;
+MCP does not introduce a parallel lifecycle ledger.
+
+`mcp.tool.completed` records the curated tool, tenant ID, API-key actor ID, and
+an allowlisted outcome code. `mcp.operation.completed` identifies the selected
+application operation, including the action of a mixed-action tool. Look for
+`mcp.protocol.rejected` for schema or protocol failures and `mcp.origin.rejected`
+for Origin denial. Authentication failures retain the normal API HTTP signal.
+These events contain no tool arguments, result bodies, bearer tokens, signed
+URLs, transcript text, or signing secrets. Unexpected application errors return
+only the existing public API error code and message.
+
+The Postgres proof `TestMCPPostgresToolsAndPermissions` drives the official Go
+MCP client through Streamable HTTP. The MCP module's transport proof covers
+Origin rejection, bounded UTF-8 continuation, body limits, and disabled SSE.

@@ -5,9 +5,10 @@ ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:ee3901c61e423732605a51f1b8157c849ec0
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 ARG TARGETARCH
 ARG TARGETOS
-WORKDIR /src
+WORKDIR /src/apps/api
 
 COPY --from=api_source go.mod go.sum ./
+COPY --from=mcp_source . /src/features/mcp/api/
 COPY --from=api_source . ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

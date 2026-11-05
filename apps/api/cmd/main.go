@@ -635,6 +635,7 @@ func run() error {
 		}
 	}
 
+	routerOptions.MCP = httpapi.NewMCPHandler(routerOptions)
 	handler := httpapi.NewRouter(routerOptions)
 
 	server := &http.Server{
