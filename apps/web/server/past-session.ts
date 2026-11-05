@@ -4,7 +4,8 @@ import type { Engine } from "./engine";
 import { attendance, listedRecording, recordingTranscripts, run } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
-import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO } from "../src/lib/dashboard/contracts";
+import type { DashboardEnvironment } from "./config";
+import type { ArtifactURLDTO, CueDTO, PastSessionAction, PastSessionDTO, TranscriptTextQuery } from "../src/lib/dashboard/contracts";
 export async function pastSessionPage(engine: Engine, spaceId: string, episodeId: string, cursor?: string, viewerParticipantId: string | null = null): Promise<PastSessionDTO> {
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(spaceId), episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) };
   const episode = await run(engine.api.episodes.getEpisode({ params }));
@@ -55,10 +56,31 @@ export async function pastMutation(engine: Engine, action: PastSessionAction) {
       const document = await run(engine.api.transcripts.getTranscriptDocument({ params }));
       return { cues: document.cues.map((cue) => ({ startMs: cue.start_ms, endMs: cue.end_ms, text: cue.text, speaker: cue.identity ? { name: cue.identity.display_name ?? null, participantRef: cue.identity.participant_ref } : null }) satisfies CueDTO) };
     }
-    case "transcript-url":
-      return artifactDTO(await run(engine.api.transcripts.createTranscriptDownloadURL({ params, payload: { expires_in_seconds: 300 } })));
     case "delete-transcript":
       await run(engine.api.transcripts.deleteTranscript({ params }));
       return { ok: true };
   }
+}
+
+export async function pastTranscriptText(engine: Engine, env: DashboardEnvironment, input: TranscriptTextQuery): Promise<Response> {
+  const transcriptId = Schema.decodeUnknownSync(TranscriptIdSchema)(input.transcriptId);
+  const transcript = await run(engine.api.transcripts.getTranscript({ params: { tenant_id: engine.tenantId, transcript_id: transcriptId } }));
+  if (transcript.space_id !== input.spaceId || transcript.episode_id !== input.episodeId) throw new DashboardError(404, "transcript_not_found");
+  const traceId = crypto.randomUUID().replaceAll("-", "");
+  const response = await fetch(new URL(`/v1/tenants/${engine.tenantId}/transcripts/${transcriptId}/text`, env.CHALK_API_ORIGIN), {
+    headers: { Authorization: `Bearer ${env.DASHBOARD_SERVICE_TOKEN}`, traceparent: `00-${traceId}-${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}-01` },
+    redirect: "manual",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    console.warn(JSON.stringify({ event: "dashboard.engine_response_failed", engine_status: response.status, trace_id: traceId }));
+    throw new DashboardError(response.status === 404 ? 404 : response.status === 409 ? 409 : 502, "transcript_download_failed");
+  }
+  const headers = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer" });
+  for (const name of ["Content-Type", "Content-Disposition"]) {
+    const value = response.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  return new Response(response.body, { headers });
 }

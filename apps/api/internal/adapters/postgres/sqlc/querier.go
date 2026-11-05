@@ -207,6 +207,7 @@ type Querier interface {
 	GetTenantTranscriptionByRecording(ctx context.Context, arg GetTenantTranscriptionByRecordingParams) (Transcription, error)
 	GetTranscriptChunk(ctx context.Context, id pgtype.UUID) (TranscriptChunk, error)
 	GetTranscriptChunkResult(ctx context.Context, arg GetTranscriptChunkResultParams) (TranscriptionChunkResult, error)
+	GetTranscriptTextMetadata(ctx context.Context, arg GetTranscriptTextMetadataParams) (GetTranscriptTextMetadataRow, error)
 	GetTranscriptionChunkJob(ctx context.Context, transcriptID pgtype.UUID) (ArtifactJob, error)
 	GetTranscriptionCleanupJob(ctx context.Context, id pgtype.UUID) (TranscriptionCleanupJob, error)
 	GetWebhookDelivery(ctx context.Context, arg GetWebhookDeliveryParams) (GetWebhookDeliveryRow, error)

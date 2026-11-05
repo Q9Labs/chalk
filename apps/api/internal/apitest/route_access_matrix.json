@@ -505,6 +505,15 @@
     "body": ""
   },
   {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text",
+    "operation": "getTranscriptText",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
     "route": "POST /v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url",
     "operation": "createTranscriptDownloadURL",
     "credentials": [
