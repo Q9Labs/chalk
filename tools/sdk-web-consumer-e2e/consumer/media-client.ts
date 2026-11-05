@@ -1,5 +1,5 @@
-import type { CloudflareSFUBootstrap, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
-import { CloudflareSFUError, mediaBootstrap } from "@q9labsai/chalk-client";
+import type { CloudflareSFUBootstrap, CloudflareSFUIceServer, CloudflareSFULocalTrack, CloudflareSFURemoteTrack, CloudflareSFUSnapshot, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "@q9labsai/chalk-client";
+import { CloudflareSFUError } from "@q9labsai/chalk-client";
 
 import type { ServerMessage } from "./protocol";
 import { registerPeer, registerSocket, releasePeer, releaseTrack } from "./resource-ledger";
@@ -25,7 +25,15 @@ type FixtureMediaClientInput = {
   readonly onScreenEnded: () => void;
 };
 
-type FixtureMediaAccess = Parameters<typeof mediaBootstrap>[0];
+type FixtureMediaAccess =
+  | { readonly token: string; readonly expiresAt: string; readonly provider: "cloudflare_sfu"; readonly clientPayload: CloudflareSFUBootstrap }
+  | { readonly token: string; readonly expiresAt: string; readonly provider: "chalk_sfu"; readonly clientPayload: FixtureChalkSFUPayload };
+type FixtureChalkSFUPayload = {
+  readonly connectionId: string;
+  readonly episodeRef: string;
+  readonly iceServers: readonly CloudflareSFUIceServer[];
+  readonly capabilities: { readonly serverLayerAdaptation: boolean; readonly iceRestart: boolean };
+};
 
 export class FixtureMediaClient {
   readonly #credential: () => Promise<string>;
@@ -448,7 +456,9 @@ export class FixtureMediaClient {
 }
 
 function fixtureBootstrap(input: CloudflareSFUBootstrap | FixtureMediaAccess): CloudflareSFUBootstrap {
-  return "provider" in input ? mediaBootstrap(input) : input;
+  if (!("provider" in input)) return input;
+  if (input.provider !== "cloudflare_sfu") throw new TypeError("The fixture media client only supports Cloudflare SFU access");
+  return input.clientPayload;
 }
 
 function recordFixtureRemoteTrack(received: Map<string, CloudflareSFURemoteTrack>, remote: CloudflareSFURemoteTrack): void {

@@ -25,28 +25,30 @@ export type ChalkSFUCapabilities = {
   readonly serverLayerAdaptation: boolean;
   readonly iceRestart: boolean;
 };
+export type CloudflareSFUClientPayload = {
+  readonly connectionId: string;
+  readonly stunServer: string;
+  readonly iceServers?: readonly CloudflareSFUIceServer[];
+};
+export type ChalkSFUClientPayload = {
+  readonly connectionId: string;
+  readonly episodeRef: string;
+  /** Every ICE server the own SFU wants. It can be empty, because the SFU has a public address. */
+  readonly iceServers: readonly CloudflareSFUIceServer[];
+  readonly capabilities: ChalkSFUCapabilities;
+};
 export type ParticipantMediaAccess =
   | {
       readonly token: ParticipantMediaCredential;
       readonly expiresAt: string;
       readonly provider: "cloudflare_sfu";
-      readonly clientPayload: {
-        readonly connectionId: string;
-        readonly stunServer: string;
-        readonly iceServers?: readonly CloudflareSFUIceServer[];
-      };
+      readonly clientPayload: CloudflareSFUClientPayload;
     }
   | {
       readonly token: ParticipantMediaCredential;
       readonly expiresAt: string;
       readonly provider: "chalk_sfu";
-      readonly clientPayload: {
-        readonly connectionId: string;
-        readonly episodeRef: string;
-        /** Every ICE server the own SFU wants. It can be empty, because the SFU has a public address. */
-        readonly iceServers: readonly CloudflareSFUIceServer[];
-        readonly capabilities: ChalkSFUCapabilities;
-      };
+      readonly clientPayload: ChalkSFUClientPayload;
     };
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
@@ -186,31 +188,24 @@ function parseMediaAccess(value: unknown): ParticipantMediaAccess {
   const expiresAt = requireDateTime(value.expires_at ?? value.expiresAt);
   switch (value.provider) {
     case "cloudflare_sfu":
-      return {
-        token,
-        expiresAt,
-        provider: value.provider,
-        clientPayload: {
-          connectionId: requireNonEmptyString(payload.connectionId),
-          stunServer: requireNonEmptyString(payload.stunServer),
-          ...(payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) }),
-        },
-      };
+      return { token, expiresAt, provider: value.provider, clientPayload: parseCloudflareSFUPayload(payload) };
     case "chalk_sfu":
-      return {
-        token,
-        expiresAt,
-        provider: value.provider,
-        clientPayload: {
-          connectionId: requireNonEmptyString(payload.connectionId),
-          episodeRef: requireNonEmptyString(payload.episodeRef),
-          iceServers: parseIceServers(payload.iceServers ?? []),
-          capabilities: parseChalkSFUCapabilities(payload.capabilities),
-        },
-      };
+      return { token, expiresAt, provider: value.provider, clientPayload: parseChalkSFUPayload(payload) };
     default:
       throw new AccessGrantError();
   }
+}
+function parseCloudflareSFUPayload(payload: Readonly<Record<string, unknown>>): CloudflareSFUClientPayload {
+  const iceServers = payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) };
+  return { connectionId: requireNonEmptyString(payload.connectionId), stunServer: requireNonEmptyString(payload.stunServer), ...iceServers };
+}
+function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): ChalkSFUClientPayload {
+  return {
+    connectionId: requireNonEmptyString(payload.connectionId),
+    episodeRef: requireNonEmptyString(payload.episodeRef),
+    iceServers: parseIceServers(payload.iceServers ?? []),
+    capabilities: parseChalkSFUCapabilities(payload.capabilities),
+  };
 }
 function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
   const flags = isRecord(value) ? value : {};
