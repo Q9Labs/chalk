@@ -10,7 +10,7 @@ export function InviteQR({ value }: { readonly value: string }) {
   return (
     <Suspense
       fallback={
-        <span role="status" className="inline-flex size-28 shrink-0 items-center justify-center text-center text-[13px] text-[var(--chalk-muted-text)]">
+        <span role="status" className="size-28 shrink-0">
           Loading QR code…
         </span>
       }
