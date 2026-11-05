@@ -92,30 +92,35 @@ func (p *publication) read(layer *ingressLayer) {
 		if err != nil {
 			return
 		}
-		if p.closed.Load() {
-			continue
+		if !p.closed.Load() {
+			p.forward(layer, buffer[:n], &header, writer)
 		}
-		packet, ok := parseRTP(&header, buffer[:n], p.video())
-		if !ok {
-			continue
-		}
-		packet.extSeq = layer.extend(header.SequenceNumber)
-		packet.arrival = monotonic()
-		resumed := !layer.active(packet.arrival)
-		layer.lastRTP.Store(packet.arrival)
-		if layer.history != nil {
-			layer.history.store(&packet)
-		}
-		if resumed {
-			p.reselect()
-		}
-		subscribers := p.subscribers.Load()
-		if subscribers == nil {
-			continue
-		}
-		for _, subscription := range *subscribers {
-			subscription.deliver(layer, &packet, writer)
-		}
+	}
+}
+
+// forward keeps one packet of layer in its history and hands it to every
+// subscription. The caller owns header and writer, so it allocates nothing.
+func (p *publication) forward(layer *ingressLayer, raw []byte, header *rtp.Header, writer *packetWriter) {
+	packet, ok := parseRTP(header, raw, p.video())
+	if !ok {
+		return
+	}
+	packet.extSeq = layer.extend(header.SequenceNumber)
+	packet.arrival = monotonic()
+	resumed := !layer.active(packet.arrival)
+	layer.lastRTP.Store(packet.arrival)
+	if layer.history != nil {
+		layer.history.store(&packet)
+	}
+	if resumed {
+		p.reselect()
+	}
+	subscribers := p.subscribers.Load()
+	if subscribers == nil {
+		return
+	}
+	for _, subscription := range *subscribers {
+		subscription.deliver(layer, &packet, writer)
 	}
 }
 
