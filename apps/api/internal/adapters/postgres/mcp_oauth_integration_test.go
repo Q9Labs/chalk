@@ -157,6 +157,9 @@ func (h *oauthHarness) register(redirect string) string {
 
 func (h *oauthHarness) authorizeQuery(clientID, redirect string, pkce oauthPKCE, extra url.Values) url.Values {
 	q := url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {redirect}, "state": {"state-1"}, "code_challenge": {pkce.challenge}, "code_challenge_method": {"S256"}, "scope": {"chalk:read"}, "resource": {h.resource}}
+	if redirect == "" {
+		q.Del("redirect_uri") // omitted means the key is absent, not empty
+	}
 	for k, v := range extra {
 		q[k] = v
 	}
@@ -224,7 +227,11 @@ func (h *oauthHarness) token(form url.Values) (int, oauthTokens) {
 }
 
 func (h *oauthHarness) exchange(clientID, redirect, code, verifier string) (int, oauthTokens) {
-	return h.token(url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {code}, "redirect_uri": {redirect}, "code_verifier": {verifier}, "resource": {h.resource}})
+	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {clientID}, "code": {code}, "code_verifier": {verifier}, "resource": {h.resource}}
+	if redirect != "" {
+		form.Set("redirect_uri", redirect) // omitted means the key is absent, not empty
+	}
+	return h.token(form)
 }
 
 func (h *oauthHarness) refresh(clientID, refresh string) (int, oauthTokens) {
@@ -725,5 +732,41 @@ func TestMCPOAuthRedirectURIFollowsTheAuthorizationRequest(t *testing.T) {
 		if status, tokens := h.exchange(c.client, c.token, code, pkce.verifier); status != c.want || (c.want == http.StatusOK) != (tokens.AccessToken != "") {
 			t.Errorf("%s: token request = %d, want %d", c.name, status, c.want)
 		}
+	}
+}
+
+// RFC 6749 section 3.1: a parameter sent without a value is treated as omitted.
+func TestMCPOAuthEmptyRedirectURIIsTreatedAsOmitted(t *testing.T) {
+	h := newOAuthHarness(t)
+	single := h.register(oauthTestRedirect)
+
+	// Empty at /authorize counts as omitted, so the token request may omit it, send it empty or name the registered URI.
+	for _, token := range []url.Values{{}, {"redirect_uri": {""}}, {"redirect_uri": {oauthTestRedirect}}} {
+		pkce := newPKCE()
+		query := h.authorizeQuery(single, "", pkce, url.Values{"redirect_uri": {""}})
+		handle := h.authorize(query)
+		response, body := h.approve(handle, h.tenantA, "chalk:read")
+		var out struct {
+			RedirectURL string `json:"redirect_url"`
+		}
+		if err := json.Unmarshal([]byte(body), &out); err != nil || response.StatusCode != http.StatusOK {
+			t.Fatalf("approve: %d %s", response.StatusCode, body)
+		}
+		location, _ := url.Parse(out.RedirectURL)
+		form := url.Values{"grant_type": {"authorization_code"}, "client_id": {single}, "code": {location.Query().Get("code")}, "code_verifier": {pkce.verifier}, "resource": {h.resource}}
+		for k, v := range token {
+			form[k] = v
+		}
+		if status, tokens := h.token(form); status != http.StatusOK || tokens.AccessToken == "" {
+			t.Errorf("token form %v after empty redirect_uri: %d", token, status)
+		}
+	}
+
+	// Empty at the token endpoint does not satisfy a redirect_uri the authorization request supplied.
+	pkce := newPKCE()
+	code := h.obtainCode(single, oauthTestRedirect, pkce, h.tenantA)
+	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {single}, "code": {code}, "redirect_uri": {""}, "code_verifier": {pkce.verifier}, "resource": {h.resource}}
+	if status, _ := h.token(form); status != http.StatusBadRequest {
+		t.Errorf("empty redirect_uri after a supplied one = %d, want 400", status)
 	}
 }
