@@ -38,6 +38,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 
+	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -636,6 +637,9 @@ func run() error {
 		}
 	}
 
+	if oauth := cfg.API.OAuth; oauth.Issuer != "" {
+		routerOptions.OAuth = mcpauth.NewService(postgres.NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: oauth.Issuer, ConsentURL: oauth.ConsentURL, ExtraRedirectURIs: oauth.ExtraRedirectURIs})
+	}
 	routerOptions.MCP = httpapi.NewMCPHandler(routerOptions)
 	handler := httpapi.NewRouter(routerOptions)
 

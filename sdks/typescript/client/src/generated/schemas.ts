@@ -814,6 +814,50 @@ export const IssueAccessGrantRequestSchema = /* @__PURE__ */ (() =>
   }))();
 export type IssueAccessGrantRequest = typeof IssueAccessGrantRequestSchema.Type;
 
+export const MCPConnectionListSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    data: Schema.Array(
+      Schema.Struct({
+        client_name: Schema.String,
+        created_at: DateTimeStringSchema,
+        id: UUIDSchema,
+        last_used_at: Schema.NullOr(DateTimeStringSchema),
+        scope: Schema.String,
+      }),
+    ),
+    pagination: PaginationSchema,
+  }))();
+export type MCPConnectionList = typeof MCPConnectionListSchema.Type;
+
+export const MCPConsentApprovalSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    request: Schema.String.check(Schema.isMinLength(1)),
+    scope: Schema.String.check(Schema.isMinLength(1)),
+    tenant_id: TenantIdSchema,
+  }))();
+export type MCPConsentApproval = typeof MCPConsentApprovalSchema.Type;
+
+export const MCPConsentLookupSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    request: Schema.String.check(Schema.isMinLength(1)),
+  }))();
+export type MCPConsentLookup = typeof MCPConsentLookupSchema.Type;
+
+export const MCPConsentRedirectSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    redirect_url: URLStringSchema,
+  }))();
+export type MCPConsentRedirect = typeof MCPConsentRedirectSchema.Type;
+
+export const MCPConsentRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    client_name: Schema.String,
+    expires_at: DateTimeStringSchema,
+    redirect_host: Schema.String,
+    scope: Schema.String,
+  }))();
+export type MCPConsentRequest = typeof MCPConsentRequestSchema.Type;
+
 export const MembershipIdSchema = /* @__PURE__ */ (() => Schema.String.check(Schema.isMinLength(36), Schema.isMaxLength(36), Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)).pipe(Schema.brand("MembershipId")))();
 export type MembershipId = typeof MembershipIdSchema.Type;
 
@@ -2212,6 +2256,20 @@ export const AdmitEpisodeParticipant429ResponseHeadersSchema = /* @__PURE__ */ (
   }))();
 export type AdmitEpisodeParticipant429ResponseHeaders = typeof AdmitEpisodeParticipant429ResponseHeadersSchema.Type;
 
+export const ApproveMCPConsentRequestRequestBodySchema = /* @__PURE__ */ (() => MCPConsentApprovalSchema)();
+export type ApproveMCPConsentRequestRequestBody = typeof ApproveMCPConsentRequestRequestBodySchema.Type;
+
+export const ApproveMCPConsentRequestResponseSchema = /* @__PURE__ */ (() => MCPConsentRedirectSchema)();
+export type ApproveMCPConsentRequestResponse = typeof ApproveMCPConsentRequestResponseSchema.Type;
+
+export const ApproveMCPConsentRequest429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ApproveMCPConsentRequest429ResponseHeaders = typeof ApproveMCPConsentRequest429ResponseHeadersSchema.Type;
+
 export const ApproveSpacePublicAdmissionRequestPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
@@ -2570,6 +2628,20 @@ export const DeleteWebhookEndpoint429ResponseHeadersSchema = /* @__PURE__ */ (()
   }))();
 export type DeleteWebhookEndpoint429ResponseHeaders = typeof DeleteWebhookEndpoint429ResponseHeadersSchema.Type;
 
+export const DenyMCPConsentRequestRequestBodySchema = /* @__PURE__ */ (() => MCPConsentLookupSchema)();
+export type DenyMCPConsentRequestRequestBody = typeof DenyMCPConsentRequestRequestBodySchema.Type;
+
+export const DenyMCPConsentRequestResponseSchema = /* @__PURE__ */ (() => MCPConsentRedirectSchema)();
+export type DenyMCPConsentRequestResponse = typeof DenyMCPConsentRequestResponseSchema.Type;
+
+export const DenyMCPConsentRequest429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type DenyMCPConsentRequest429ResponseHeaders = typeof DenyMCPConsentRequest429ResponseHeadersSchema.Type;
+
 export const DenySpacePublicAdmissionRequestPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     request_handle: Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]{16,128}$"))),
@@ -2916,6 +2988,20 @@ export const InitiateChatAttachmentUpload429ResponseHeadersSchema = /* @__PURE__
   }))();
 export type InitiateChatAttachmentUpload429ResponseHeaders = typeof InitiateChatAttachmentUpload429ResponseHeadersSchema.Type;
 
+export const InspectMCPConsentRequestRequestBodySchema = /* @__PURE__ */ (() => MCPConsentLookupSchema)();
+export type InspectMCPConsentRequestRequestBody = typeof InspectMCPConsentRequestRequestBodySchema.Type;
+
+export const InspectMCPConsentRequestResponseSchema = /* @__PURE__ */ (() => MCPConsentRequestSchema)();
+export type InspectMCPConsentRequestResponse = typeof InspectMCPConsentRequestResponseSchema.Type;
+
+export const InspectMCPConsentRequest429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type InspectMCPConsentRequest429ResponseHeaders = typeof InspectMCPConsentRequest429ResponseHeadersSchema.Type;
+
 export const IssueAccessGrantPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     episode_id: EpisodeIdSchema,
@@ -3025,6 +3111,30 @@ export type ListEpisodesQueryParams = typeof ListEpisodesQueryParamsSchema.Type;
 
 export const ListEpisodesResponseSchema = /* @__PURE__ */ (() => EpisodeListSchema)();
 export type ListEpisodesResponse = typeof ListEpisodesResponseSchema.Type;
+
+export const ListMCPConnectionsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListMCPConnectionsPathParams = typeof ListMCPConnectionsPathParamsSchema.Type;
+
+export const ListMCPConnectionsQueryParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    cursor: Schema.optional(Schema.String),
+    page_size: Schema.optional(Schema.NumberFromString),
+  }))();
+export type ListMCPConnectionsQueryParams = typeof ListMCPConnectionsQueryParamsSchema.Type;
+
+export const ListMCPConnectionsResponseSchema = /* @__PURE__ */ (() => MCPConnectionListSchema)();
+export type ListMCPConnectionsResponse = typeof ListMCPConnectionsResponseSchema.Type;
+
+export const ListMCPConnections429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListMCPConnections429ResponseHeaders = typeof ListMCPConnections429ResponseHeadersSchema.Type;
 
 export const ListMembershipsPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -3494,6 +3604,21 @@ export const RevokeAPIKey429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type RevokeAPIKey429ResponseHeaders = typeof RevokeAPIKey429ResponseHeadersSchema.Type;
+
+export const RevokeMCPConnectionPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    connection_id: UUIDSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type RevokeMCPConnectionPathParams = typeof RevokeMCPConnectionPathParamsSchema.Type;
+
+export const RevokeMCPConnection429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type RevokeMCPConnection429ResponseHeaders = typeof RevokeMCPConnection429ResponseHeadersSchema.Type;
 
 export const RotateAPIKeyPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4286,6 +4411,63 @@ export const EpisodeNotFoundErrorWireSchema = Schema.Struct({
 export const EpisodeNotFoundErrorSchema = EpisodeNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(EpisodeNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "EpisodeNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class McpOauthConnectionNotFoundError extends Schema.TaggedErrorClass<McpOauthConnectionNotFoundError>()("McpOauthConnectionNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.connection_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const McpOauthConnectionNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.connection_not_found"),
+    message: Schema.String,
+  }),
+});
+export const McpOauthConnectionNotFoundErrorSchema = McpOauthConnectionNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(McpOauthConnectionNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "McpOauthConnectionNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class McpOauthInvalidScopeError extends Schema.TaggedErrorClass<McpOauthInvalidScopeError>()("McpOauthInvalidScopeError", {
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.invalid_scope"),
+    message: Schema.String,
+  }),
+}) {}
+export const McpOauthInvalidScopeErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.invalid_scope"),
+    message: Schema.String,
+  }),
+});
+export const McpOauthInvalidScopeErrorSchema = McpOauthInvalidScopeErrorWireSchema.pipe(
+  Schema.decodeTo(McpOauthInvalidScopeError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "McpOauthInvalidScopeError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class McpOauthRequestNotFoundError extends Schema.TaggedErrorClass<McpOauthRequestNotFoundError>()("McpOauthRequestNotFoundError", {
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.request_not_found"),
+    message: Schema.String,
+  }),
+}) {}
+export const McpOauthRequestNotFoundErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("mcp_oauth.request_not_found"),
+    message: Schema.String,
+  }),
+});
+export const McpOauthRequestNotFoundErrorSchema = McpOauthRequestNotFoundErrorWireSchema.pipe(
+  Schema.decodeTo(McpOauthRequestNotFoundError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "McpOauthRequestNotFoundError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6040,6 +6222,19 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
 ]);
 export type AdmitEpisodeParticipantError = typeof AdmitEpisodeParticipantErrorSchema.Type;
 
+export const ApproveMCPConsentRequestErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  McpOauthInvalidScopeErrorSchema,
+  McpOauthRequestNotFoundErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ApproveMCPConsentRequestError = typeof ApproveMCPConsentRequestErrorSchema.Type;
+
 export const ApproveSpacePublicAdmissionRequestErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6321,6 +6516,9 @@ export const DeleteWebhookEndpointErrorSchema = Schema.Union([
 ]);
 export type DeleteWebhookEndpointError = typeof DeleteWebhookEndpointErrorSchema.Type;
 
+export const DenyMCPConsentRequestErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthRequestNotFoundErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type DenyMCPConsentRequestError = typeof DenyMCPConsentRequestErrorSchema.Type;
+
 export const DenySpacePublicAdmissionRequestErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6581,6 +6779,9 @@ export const InitiateChatAttachmentUploadErrorSchema = Schema.Union([
 ]);
 export type InitiateChatAttachmentUploadError = typeof InitiateChatAttachmentUploadErrorSchema.Type;
 
+export const InspectMCPConsentRequestErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthRequestNotFoundErrorSchema, RequestPayloadTooLargeErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema]);
+export type InspectMCPConsentRequestError = typeof InspectMCPConsentRequestErrorSchema.Type;
+
 export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -6676,6 +6877,18 @@ export const ListEpisodesErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ListEpisodesError = typeof ListEpisodesErrorSchema.Type;
+
+export const ListMCPConnectionsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  PaginationInvalidCursorErrorSchema,
+  PaginationInvalidPageSizeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ListMCPConnectionsError = typeof ListMCPConnectionsErrorSchema.Type;
 
 export const ListMembershipsErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, PaginationInvalidCursorErrorSchema, PaginationInvalidPageSizeErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListMembershipsError = typeof ListMembershipsErrorSchema.Type;
@@ -6958,6 +7171,9 @@ export const RevokeAPIKeyErrorSchema = Schema.Union([
 ]);
 export type RevokeAPIKeyError = typeof RevokeAPIKeyErrorSchema.Type;
 
+export const RevokeMCPConnectionErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, McpOauthConnectionNotFoundErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type RevokeMCPConnectionError = typeof RevokeMCPConnectionErrorSchema.Type;
+
 export const RotateAPIKeyErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7206,6 +7422,7 @@ export type UploadCallStatsError = typeof UploadCallStatsErrorSchema.Type;
 export const ChalkOperationPolicies = {
   addCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   admitEpisodeParticipant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  approveMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   approveSpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   archiveSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   arriveBySpacePublicInvite: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7223,6 +7440,7 @@ export const ChalkOperationPolicies = {
   createWebhookEndpoint: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteTranscript: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   deleteWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  denyMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   denySpacePublicAdmissionRequest: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   endEpisode: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   finalizeChatAttachmentUpload: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
@@ -7236,10 +7454,12 @@ export const ChalkOperationPolicies = {
   getWebhookDelivery: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   getWebhookEndpoint: { rateLimit: { limit: 300, policy: "v1.webhooks.read", windowSeconds: 60 } },
   initiateChatAttachmentUpload: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  inspectMCPConsentRequest: { maxBodyBytes: 1048576, rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   issueAccessGrant: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   issueEpisodeParticipantSyncToken: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   leaveSpacePublicInviteArrival: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   listEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
+  listMCPConnections: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceActivity: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpaceLiveEpisodes: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
   listSpacePublicAdmissionRequests: { rateLimit: { limit: 300, policy: "v1.authenticated.read", windowSeconds: 60 } },
@@ -7258,6 +7478,7 @@ export const ChalkOperationPolicies = {
   requestTranscript: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   restoreSpace: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   revokeAPIKey: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  revokeMCPConnection: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateAPIKey: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateSpacePublicInvite: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

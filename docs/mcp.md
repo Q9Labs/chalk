@@ -58,8 +58,36 @@ Creating, rotating, or revoking keys cannot exceed the caller's scope authority.
 Credential and signing-secret issuance require explicit actions and return
 sensitive values. Responses are not cacheable.
 
-The server has no OAuth login in this phase. Browser connector authentication,
-including claude.ai and ChatGPT OAuth connections, is outside this release.
+## Connect a browser connector (OAuth)
+
+Browser connectors such as claude.ai and ChatGPT sign in with OAuth instead of an
+API key. Add `https://api.chalkmeet.com/mcp` as a custom connector. The connector
+registers itself, sends you to the Chalk dashboard to sign in and approve, then
+receives a token for your tenant only.
+
+- The authorization server is part of the API. It publishes RFC 9728 and RFC 8414
+  metadata under `/.well-known/`, accepts dynamic client registration at
+  `/oauth/register` for public clients, and requires PKCE `S256`.
+- Registration only accepts redirect URIs for claude.ai, claude.com, ChatGPT,
+  loopback addresses and operator-configured exact URIs. `/oauth/authorize`
+  never redirects to a URI that is not registered for the client.
+- Consent runs on the dashboard, where the signed-in person approves one tenant and
+  one bundle: `chalk:read` or `chalk:manage` (read plus Spaces, Episodes,
+  Recordings, Transcriptions and Webhooks changes). No bundle includes API keys,
+  signing keys, memberships or tenant settings. Approval can narrow the request,
+  never widen it. The connected-apps list pages through every active connection
+  (newest first), so each one can be revoked.
+- Access tokens last one hour and are bound to the `/mcp` resource. Refresh tokens
+  rotate on every use and last 30 days from the last use. Presenting a used
+  refresh token or authorization code again revokes the whole grant.
+- Tokens and codes are stored as SHA-256 hashes. An OAuth token is accepted only
+  on `/mcp`, never on `/v1`.
+- The dashboard lists connected apps and revokes them. `POST /oauth/revoke`
+  (RFC 7009) also revokes a grant.
+
+Operators enable OAuth by setting `CHALK_OAUTH_ISSUER` and
+`CHALK_OAUTH_CONSENT_URL`; unsetting them turns it off and `/mcp` keeps accepting
+API keys.
 
 ## Available tools
 

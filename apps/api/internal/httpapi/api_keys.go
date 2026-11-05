@@ -300,7 +300,7 @@ func preventAPIKeyTargetEscalation(ctx context.Context, service APIKeyService, r
 	if !ok {
 		return apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalService {
+	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalOAuth && principal.Kind != authentication.PrincipalService {
 		return nil
 	}
 	key, err := service.Get(ctx, request.TenantID, request.APIKeyID)
@@ -319,7 +319,7 @@ func preventAPIKeyScopeEscalation(ctx context.Context, scopes []authentication.S
 	if !ok {
 		return apiErrorUnauthenticated
 	}
-	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalService {
+	if principal.Kind != authentication.PrincipalAPIKey && principal.Kind != authentication.PrincipalOAuth && principal.Kind != authentication.PrincipalService {
 		return nil
 	}
 	for _, scope := range scopes {

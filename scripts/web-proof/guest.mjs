@@ -23,7 +23,10 @@ export async function withProofCall({ app, screen }, run) {
     await run(guest);
   };
   for (const step of [call, () => leaveWebCall(screen, joined), () => guest.dispose()]) {
-    await step().catch((error) => errors.push(error));
+    await step().catch(async (error) => {
+      errors.push(error);
+      if (step === call) await app.screenshot("before-cleanup").catch((error) => errors.push(error));
+    });
   }
   throwErrors(errors, "Web proof call or cleanup failed");
 }
@@ -36,7 +39,10 @@ function throwErrors(errors, message) {
 
 async function leaveWebCall(screen, joined) {
   const leave = screen.getByRole("button", "Leave call", { exact: true });
-  if (await leave.count()) await leave.click();
+  if (await leave.count()) {
+    await screen.getByRole("region", "Space stage", { exact: true }).hover();
+    await leave.click();
+  }
   // The left heading appears during leave; Rejoin stays disabled until release finishes.
   if (joined) await screen.getByRole("button", "Rejoin", { exact: true, disabled: false }).waitFor({ state: "visible", timeout: 15_000 });
 }
