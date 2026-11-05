@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChalkButton } from "./ChalkButton";
 import { noticeIdentity } from "../toast-stack/notice-announcement";
 export interface ChalkToastProps {
   readonly message: ReactNode;
@@ -40,7 +39,11 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
         {icon}
       </span>
       <span data-part="toast-message">{message}</span>
-      {action ? <ChalkButton onClick={action.onClick}>{action.label}</ChalkButton> : null}
+      {action ? (
+        <button type="button" data-part="pill-button" className="chalk-pill-button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      ) : null}
       {duration === Infinity ? (
         <button type="button" data-part="toast-dismiss" className="chalk-dismiss" aria-label="Dismiss" onClick={() => setLifetime({ identity, exiting: true })}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
