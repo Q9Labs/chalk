@@ -333,9 +333,11 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 // state reports the subscription's delivery for inspection. The source's lease is
 // read here rather than tracked by forwarding, so a lapse costs the packet path
 // nothing: while it does not allow forwarding the subscription reads as paused,
-// unless the viewer paused it. Both parts of the revision only rise.
-func (s *subscription) state(now int64) (state, reason string, revision uint64, requested, effective string) {
+// unless the viewer paused it. Both parts of the revision only rise, because the
+// time is read after the window: a window a grant opens later never starts after it.
+func (s *subscription) state() (state, reason string, revision uint64, requested, effective string) {
 	window := s.pub.authority.window.Load()
+	now := monotonic()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	reason, revision = s.reason, s.revision+window.leaseRevision(now)

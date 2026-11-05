@@ -119,7 +119,7 @@ func TestPauseReasonsAndRevision(t *testing.T) {
 	s := &subscription{pub: &publication{kind: webrtc.RTPCodecTypeVideo, authority: freeAuthority()}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
 	views := []layerView{{rid: "h", active: true}, {rid: "l", active: true}}
 	state := func() (string, uint64) {
-		state, reason, revision, _, _ := s.state(monotonic())
+		state, reason, revision, _, _ := s.state()
 		// The open lease window adds 1 to the subscription's own revision.
 		return state + "/" + reason, revision - 1
 	}
@@ -528,9 +528,9 @@ func TestRetransmissionStopsWhilePausedAndOnceTheSourceCloses(t *testing.T) {
 		t.Fatalf("a paused subscription resent %d packets", got)
 	}
 
-	_, _, revision, _, _ := watching.state(monotonic())
+	_, _, revision, _, _ := watching.state()
 	pub.close()
-	state, reason, closedRevision, _, effective := watching.state(monotonic())
+	state, reason, closedRevision, _, effective := watching.state()
 	if state != protocol.SubscriptionPaused || reason != protocol.PauseSourceInactive || effective != "" || closedRevision <= revision {
 		t.Fatalf("after its source closed the subscription inspects as %s %s %q revision %d", state, reason, effective, closedRevision)
 	}
