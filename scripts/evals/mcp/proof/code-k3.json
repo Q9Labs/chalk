@@ -41,10 +41,7 @@
     ]
   },
   "preflight": {
-    "catalog": [
-      "chalk_execute",
-      "chalk_search_api"
-    ],
+    "catalog": ["chalk_execute", "chalk_search_api"],
     "server_calls": 11,
     "server_errors": 1,
     "server_tools": {
@@ -81,16 +78,10 @@
     "trials": 72,
     "passed": 58,
     "pass_rate": 0.8055555555555556,
-    "pass_rate_95ci_wilson": [
-      0.6996724105411147,
-      0.8804852062054944
-    ],
+    "pass_rate_95ci_wilson": [0.6996724105411147, 0.8804852062054944],
     "operational_passed": 58,
     "operational_trials": 60,
-    "operational_95ci_wilson": [
-      0.886362257256914,
-      0.9908106807438021
-    ],
+    "operational_95ci_wilson": [0.886362257256914, 0.9908106807438021],
     "input_tokens": 88437,
     "output_tokens": 74300,
     "cache_read_input_tokens": 2171024,
@@ -137,16 +128,9 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -220,16 +204,9 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -303,16 +280,9 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -386,21 +356,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -477,20 +435,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -567,20 +514,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -655,19 +591,9 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -744,19 +670,9 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -833,20 +749,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -940,13 +845,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1023,23 +923,9 @@
       "assistant_messages": 11,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1132,13 +1018,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1215,23 +1096,9 @@
       "assistant_messages": 13,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1308,22 +1175,9 @@
       "assistant_messages": 11,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1400,23 +1254,9 @@
       "assistant_messages": 13,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1511,13 +1351,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -1614,13 +1449,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -1713,13 +1543,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -1815,13 +1640,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -1917,13 +1737,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -2017,13 +1832,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -2104,20 +1914,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2196,20 +1995,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2288,20 +2076,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2392,13 +2169,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2477,23 +2249,9 @@
       "assistant_messages": 12,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2571,24 +2329,9 @@
       "assistant_messages": 13,
       "tool_calls": 9,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2667,22 +2410,9 @@
       "assistant_messages": 11,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -2759,22 +2489,9 @@
       "assistant_messages": 11,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -2851,22 +2568,9 @@
       "assistant_messages": 10,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -2943,19 +2647,9 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -3032,21 +2726,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -3123,21 +2805,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -3214,21 +2884,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -3305,20 +2963,9 @@
       "assistant_messages": 6,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -3394,22 +3041,9 @@
       "assistant_messages": 9,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -3486,21 +3120,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -3579,21 +3201,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -3672,21 +3282,9 @@
       "assistant_messages": 8,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -3765,21 +3363,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -3856,21 +3442,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -3947,21 +3521,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -4054,13 +3616,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -4154,13 +3711,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -4253,13 +3805,8 @@
         "mcp__chalk__chalk_execute",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -4339,20 +3886,9 @@
       "assistant_messages": 7,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -4428,20 +3964,9 @@
       "assistant_messages": 7,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -4519,20 +4044,9 @@
       "assistant_messages": 7,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -4610,23 +4124,9 @@
       "assistant_messages": 13,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -4710,24 +4210,9 @@
       "assistant_messages": 15,
       "tool_calls": 9,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -4811,24 +4296,9 @@
       "assistant_messages": 16,
       "tool_calls": 9,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -4912,21 +4382,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -5005,21 +4463,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -5098,21 +4544,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -5192,20 +4626,9 @@
       "assistant_messages": 6,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -5282,19 +4705,9 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -5371,20 +4784,9 @@
       "assistant_messages": 6,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -5460,22 +4862,9 @@
       "assistant_messages": 11,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -5556,22 +4945,9 @@
       "assistant_messages": 11,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -5648,23 +5024,9 @@
       "assistant_messages": 12,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -5745,19 +5107,9 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -5838,13 +5190,8 @@
         "mcp__chalk__chalk_search_api",
         "mcp__chalk__chalk_execute"
       ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -5918,22 +5265,9 @@
       "assistant_messages": 10,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -6003,21 +5337,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6094,20 +5416,9 @@
       "assistant_messages": 8,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6183,21 +5494,9 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6274,22 +5573,9 @@
       "assistant_messages": 13,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6366,23 +5652,9 @@
       "assistant_messages": 13,
       "tool_calls": 8,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6460,24 +5732,9 @@
       "assistant_messages": 15,
       "tool_calls": 9,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -6554,21 +5811,9 @@
       "assistant_messages": 11,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -6644,22 +5889,9 @@
       "assistant_messages": 14,
       "tool_calls": 7,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -6737,20 +5969,9 @@
       "assistant_messages": 9,
       "tool_calls": 5,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api",
-        "mcp__chalk__chalk_execute"
-      ],
-      "offered_tools": [
-        "mcp__chalk__chalk_execute",
-        "mcp__chalk__chalk_search_api"
-      ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "used_tools": ["mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api", "mcp__chalk__chalk_execute"],
+      "offered_tools": ["mcp__chalk__chalk_execute", "mcp__chalk__chalk_search_api"],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,

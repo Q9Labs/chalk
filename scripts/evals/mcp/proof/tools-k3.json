@@ -112,16 +112,10 @@
     "trials": 72,
     "passed": 57,
     "pass_rate": 0.7916666666666666,
-    "pass_rate_95ci_wilson": [
-      0.6843073658064066,
-      0.869479450178993
-    ],
+    "pass_rate_95ci_wilson": [0.6843073658064066, 0.869479450178993],
     "operational_passed": 57,
     "operational_trials": 60,
-    "operational_95ci_wilson": [
-      0.8629948352365147,
-      0.9828504978356043
-    ],
+    "operational_95ci_wilson": [0.8629948352365147, 0.9828504978356043],
     "input_tokens": 88027,
     "output_tokens": 29311,
     "cache_read_input_tokens": 3035958,
@@ -167,9 +161,7 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -205,9 +197,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -281,9 +271,7 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -319,9 +307,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -395,9 +381,7 @@
       "assistant_messages": 2,
       "tool_calls": 1,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -433,9 +417,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1183,
@@ -509,10 +491,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -548,9 +527,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -626,10 +603,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -665,9 +639,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -743,10 +715,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -782,9 +751,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1193,
@@ -860,10 +827,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -899,9 +863,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -977,10 +939,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1016,9 +975,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -1094,10 +1051,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1133,9 +1087,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1190,
@@ -1211,10 +1163,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1250,9 +1199,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1328,10 +1275,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1367,9 +1311,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1445,10 +1387,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1484,9 +1423,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1196,
@@ -1562,12 +1499,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_list_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_list_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1603,9 +1535,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1683,12 +1613,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_list_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_list_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1724,9 +1649,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1804,12 +1727,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_list_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_list_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1845,9 +1763,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -1925,12 +1841,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_inspect_episode"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_inspect_episode"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -1966,9 +1877,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -2048,12 +1957,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_inspect_episode"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_inspect_episode"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -2089,9 +1993,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -2171,12 +2073,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_episodes",
-        "mcp__chalk__chalk_inspect_episode"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_episodes", "mcp__chalk__chalk_inspect_episode"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -2212,9 +2109,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1220,
@@ -2343,9 +2238,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -2474,9 +2367,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -2605,9 +2496,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1282,
@@ -2687,11 +2576,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_live_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_live_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -2727,9 +2612,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2807,11 +2690,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_live_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_live_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -2847,9 +2726,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -2927,11 +2804,7 @@
       "assistant_messages": 5,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_live_episodes"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_live_episodes"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -2967,9 +2840,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -3047,12 +2918,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_admission_requests",
-        "mcp__chalk__chalk_list_admission_requests"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_admission_requests", "mcp__chalk__chalk_list_admission_requests"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3088,9 +2954,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -3169,11 +3033,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_admission_requests"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_admission_requests"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3209,9 +3069,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -3289,11 +3147,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_list_admission_requests"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_list_admission_requests"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3329,9 +3183,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1199,
@@ -3409,10 +3261,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_recordings"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_recordings"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3448,9 +3297,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -3526,10 +3373,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_recordings"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_recordings"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3565,9 +3409,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -3643,10 +3485,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_recordings"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_recordings"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3682,9 +3521,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1201,
@@ -3760,10 +3597,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3799,9 +3633,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -3877,10 +3709,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -3916,9 +3745,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -3994,10 +3821,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4033,9 +3857,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -4111,10 +3933,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4150,9 +3969,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -4228,10 +4045,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4267,9 +4081,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -4345,10 +4157,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4384,9 +4193,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -4462,11 +4269,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4502,9 +4305,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -4582,11 +4383,7 @@
       "assistant_messages": 4,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4622,9 +4419,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -4702,12 +4497,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_inspect_webhook_deliveries",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_inspect_webhook_deliveries", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4743,9 +4533,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1214,
@@ -4823,12 +4611,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4864,9 +4647,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -4946,12 +4727,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -4987,9 +4763,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -5069,12 +4843,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5110,9 +4879,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1200,
@@ -5192,12 +4959,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_configure_space",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_configure_space", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5233,9 +4995,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -5315,12 +5075,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_configure_space",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_configure_space", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5356,9 +5111,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -5438,12 +5191,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_configure_space",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_configure_space", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5479,9 +5227,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1217,
@@ -5561,12 +5307,7 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_api_keys",
-        "mcp__chalk__chalk_issue_api_key",
-        "mcp__chalk__chalk_list_api_keys"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_api_keys", "mcp__chalk__chalk_issue_api_key", "mcp__chalk__chalk_list_api_keys"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5602,9 +5343,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -5682,12 +5421,7 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_api_keys",
-        "mcp__chalk__chalk_issue_api_key",
-        "mcp__chalk__chalk_list_api_keys"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_api_keys", "mcp__chalk__chalk_issue_api_key", "mcp__chalk__chalk_list_api_keys"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5723,9 +5457,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -5803,12 +5535,7 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_api_keys",
-        "mcp__chalk__chalk_issue_api_key",
-        "mcp__chalk__chalk_list_api_keys"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_api_keys", "mcp__chalk__chalk_issue_api_key", "mcp__chalk__chalk_list_api_keys"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5844,9 +5571,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1262,
@@ -5924,14 +5649,7 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_send_webhook",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_send_webhook", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -5967,9 +5685,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -6052,14 +5768,7 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_send_webhook",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_send_webhook", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6095,9 +5804,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -6180,14 +5887,7 @@
       "assistant_messages": 9,
       "tool_calls": 6,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_inspect_webhooks",
-        "mcp__chalk__chalk_configure_webhook",
-        "mcp__chalk__chalk_send_webhook",
-        "mcp__chalk__chalk_inspect_webhook_deliveries"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_inspect_webhooks", "mcp__chalk__chalk_configure_webhook", "mcp__chalk__chalk_send_webhook", "mcp__chalk__chalk_inspect_webhook_deliveries"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6223,9 +5923,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1265,
@@ -6308,12 +6006,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships",
-        "mcp__chalk__chalk_set_membership",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships", "mcp__chalk__chalk_set_membership", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6349,9 +6042,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -6429,12 +6120,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships",
-        "mcp__chalk__chalk_set_membership",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships", "mcp__chalk__chalk_set_membership", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6470,9 +6156,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -6550,12 +6234,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_memberships",
-        "mcp__chalk__chalk_set_membership",
-        "mcp__chalk__chalk_list_memberships"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_memberships", "mcp__chalk__chalk_set_membership", "mcp__chalk__chalk_list_memberships"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6591,9 +6270,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1204,
@@ -6672,10 +6349,7 @@
       "assistant_messages": 4,
       "tool_calls": 2,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_update_tenant"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_update_tenant"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6711,9 +6385,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -6790,10 +6462,7 @@
       "assistant_messages": 3,
       "tool_calls": 2,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_update_tenant"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_update_tenant"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6829,9 +6498,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -6908,10 +6575,7 @@
       "assistant_messages": 4,
       "tool_calls": 2,
       "tool_errors": 1,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_update_tenant"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_update_tenant"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -6947,9 +6611,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1236,
@@ -7025,12 +6687,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7066,9 +6723,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -7148,12 +6803,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7189,9 +6839,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -7271,12 +6919,7 @@
       "assistant_messages": 5,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_spaces",
-        "mcp__chalk__chalk_set_space_archived",
-        "mcp__chalk__chalk_inspect_space"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_spaces", "mcp__chalk__chalk_set_space_archived", "mcp__chalk__chalk_inspect_space"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7312,9 +6955,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1202,
@@ -7394,12 +7035,7 @@
       "assistant_messages": 6,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7435,9 +7071,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -7515,12 +7149,7 @@
       "assistant_messages": 7,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7556,9 +7185,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -7636,11 +7263,7 @@
       "assistant_messages": 6,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7676,9 +7299,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1225,
@@ -7756,12 +7377,7 @@
       "assistant_messages": 7,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7797,9 +7413,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -7877,11 +7491,7 @@
       "assistant_messages": 6,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -7917,9 +7527,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -7997,11 +7605,7 @@
       "assistant_messages": 6,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8037,9 +7641,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -8117,12 +7719,7 @@
       "assistant_messages": 7,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8158,9 +7755,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -8238,11 +7833,7 @@
       "assistant_messages": 6,
       "tool_calls": 3,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8278,9 +7869,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -8358,12 +7947,7 @@
       "assistant_messages": 8,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8399,9 +7983,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1221,
@@ -8479,14 +8061,7 @@
       "assistant_messages": 10,
       "tool_calls": 6,
       "tool_errors": 2,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording_download"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording_download"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8522,9 +8097,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -8605,12 +8178,7 @@
       "assistant_messages": 8,
       "tool_calls": 4,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_list_transcripts"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_list_transcripts"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8646,9 +8214,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,
@@ -8726,14 +8292,7 @@
       "assistant_messages": 10,
       "tool_calls": 6,
       "tool_errors": 0,
-      "used_tools": [
-        "mcp__chalk__chalk_get_connection",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_get_recording",
-        "mcp__chalk__chalk_list_transcripts",
-        "mcp__chalk__chalk_inspect_episode",
-        "mcp__chalk__chalk_inspect_episode"
-      ],
+      "used_tools": ["mcp__chalk__chalk_get_connection", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_get_recording", "mcp__chalk__chalk_list_transcripts", "mcp__chalk__chalk_inspect_episode", "mcp__chalk__chalk_inspect_episode"],
       "offered_tools": [
         "mcp__chalk__chalk_configure_space",
         "mcp__chalk__chalk_configure_webhook",
@@ -8769,9 +8328,7 @@
         "mcp__chalk__chalk_set_space_archived",
         "mcp__chalk__chalk_update_tenant"
       ],
-      "models": [
-        "claude-sonnet-5-5"
-      ],
+      "models": ["claude-sonnet-5-5"],
       "model_usage": {
         "claude-haiku-5-5": {
           "inputTokens": 1213,

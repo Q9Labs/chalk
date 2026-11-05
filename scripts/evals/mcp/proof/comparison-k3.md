@@ -2,60 +2,60 @@
 
 Verdict: inconclusive (a proof run is not a model-selection benchmark).
 
-| Metric | tools | code |
-|---|---|---|
-| All tasks | 57/72 (79.2%; 95% CI 68.4%–86.9%) | 58/72 (80.6%; 95% CI 70.0%–88.0%) |
-| Operational tasks (excludes text capability gaps) | 57/60 | 58/60 |
-| Uncached input tokens | 88027 | 88437 |
-| Output tokens | 29311 | 74300 |
-| Cache read tokens | 3035958 | 2171024 |
-| Cache creation tokens | 242599 | 473484 |
-| Assistant turns | 332 | 583 |
-| Client tool calls | 260 | 511 |
-| Client tool errors | 9 | 0 |
-| Server shared-operation calls | 260 | 325 |
-| Server shared-operation errors | 9 | 83 |
-| Server code tool calls | 0 | 511 |
-| Server code tool errors | 0 | 0 |
-| Cost (CLI list-price accounting, USD) | $1.5359 | $2.8189 |
-| Trials with incomplete cost accounting | 0 | 0 |
-| Sum of trial wall times (seconds) | 876.5 | 1557.6 |
-| Run elapsed (seconds, including fixtures) | 1857.7 | 2181.5 |
-| Median trial (seconds) | 10.7 | 21.6 |
-| Model / effort | claude-sonnet-5-5 / medium | claude-sonnet-5-5 / medium |
-| k / concurrency | 3 / 2 | 3 / 2 |
-| API source | `d23b75a827af` | `d23b75a827af` |
+| Metric                                            | tools                             | code                              |
+| ------------------------------------------------- | --------------------------------- | --------------------------------- |
+| All tasks                                         | 57/72 (79.2%; 95% CI 68.4%–86.9%) | 58/72 (80.6%; 95% CI 70.0%–88.0%) |
+| Operational tasks (excludes text capability gaps) | 57/60                             | 58/60                             |
+| Uncached input tokens                             | 88027                             | 88437                             |
+| Output tokens                                     | 29311                             | 74300                             |
+| Cache read tokens                                 | 3035958                           | 2171024                           |
+| Cache creation tokens                             | 242599                            | 473484                            |
+| Assistant turns                                   | 332                               | 583                               |
+| Client tool calls                                 | 260                               | 511                               |
+| Client tool errors                                | 9                                 | 0                                 |
+| Server shared-operation calls                     | 260                               | 325                               |
+| Server shared-operation errors                    | 9                                 | 83                                |
+| Server code tool calls                            | 0                                 | 511                               |
+| Server code tool errors                           | 0                                 | 0                                 |
+| Cost (CLI list-price accounting, USD)             | $1.5359                           | $2.8189                           |
+| Trials with incomplete cost accounting            | 0                                 | 0                                 |
+| Sum of trial wall times (seconds)                 | 876.5                             | 1557.6                            |
+| Run elapsed (seconds, including fixtures)         | 1857.7                            | 2181.5                            |
+| Median trial (seconds)                            | 10.7                              | 21.6                              |
+| Model / effort                                    | claude-sonnet-5-5 / medium        | claude-sonnet-5-5 / medium        |
+| k / concurrency                                   | 3 / 2                             | 3 / 2                             |
+| API source                                        | `d23b75a827af`                    | `d23b75a827af`                    |
 
 ## Tasks
 
 ★ marks different pass counts between arms; † marks a transcript text capability gap.
 
-| Task | tools | code |
-|---|---|---|
-| connection | 3/3 | 3/3 |
-| active-spaces | 3/3 | 3/3 |
-| archived-spaces | 3/3 | 3/3 |
-| space-settings | 3/3 | 3/3 |
-| episode-counts | 3/3 | 3/3 |
-| attendance ★ | 3/3 | 2/3 — unsupported_capability |
-| frequent-attendees ★ | 2/3 — invalid_answer_json | 3/3 |
-| live-spaces | 3/3 | 3/3 |
-| admissions | 3/3 | 3/3 |
-| exports | 3/3 | 3/3 |
-| transcript-languages ★ | 1/3 — invalid_answer_json | 3/3 |
-| memberships | 3/3 | 3/3 |
-| webhook-history ★ | 3/3 | 2/3 — invalid_answer_json |
-| archive-space | 3/3 | 3/3 |
-| recording-settings | 3/3 | 3/3 |
-| rotate-key | 3/3 | 3/3 |
-| create-test-webhook | 3/3 | 3/3 |
-| change-membership | 3/3 | 3/3 |
-| missing-scope | 3/3 | 3/3 |
-| restore-space | 3/3 | 3/3 |
-| invoice-search † | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, no_server_evidence |
-| urdu-reading † | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, unsupported_capability |
-| arabic-reading † | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, unsupported_capability |
-| long-transcript † | 0/3 — unsupported_capability | 0/3 — invalid_answer_json, unsupported_capability |
+| Task                   | tools                                             | code                                              |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| connection             | 3/3                                               | 3/3                                               |
+| active-spaces          | 3/3                                               | 3/3                                               |
+| archived-spaces        | 3/3                                               | 3/3                                               |
+| space-settings         | 3/3                                               | 3/3                                               |
+| episode-counts         | 3/3                                               | 3/3                                               |
+| attendance ★           | 3/3                                               | 2/3 — unsupported_capability                      |
+| frequent-attendees ★   | 2/3 — invalid_answer_json                         | 3/3                                               |
+| live-spaces            | 3/3                                               | 3/3                                               |
+| admissions             | 3/3                                               | 3/3                                               |
+| exports                | 3/3                                               | 3/3                                               |
+| transcript-languages ★ | 1/3 — invalid_answer_json                         | 3/3                                               |
+| memberships            | 3/3                                               | 3/3                                               |
+| webhook-history ★      | 3/3                                               | 2/3 — invalid_answer_json                         |
+| archive-space          | 3/3                                               | 3/3                                               |
+| recording-settings     | 3/3                                               | 3/3                                               |
+| rotate-key             | 3/3                                               | 3/3                                               |
+| create-test-webhook    | 3/3                                               | 3/3                                               |
+| change-membership      | 3/3                                               | 3/3                                               |
+| missing-scope          | 3/3                                               | 3/3                                               |
+| restore-space          | 3/3                                               | 3/3                                               |
+| invoice-search †       | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, no_server_evidence     |
+| urdu-reading †         | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, unsupported_capability |
+| arabic-reading †       | 0/3 — invalid_answer_json, unsupported_capability | 0/3 — invalid_answer_json, unsupported_capability |
+| long-transcript †      | 0/3 — unsupported_capability                      | 0/3 — invalid_answer_json, unsupported_capability |
 
 ## Interpretation
 
