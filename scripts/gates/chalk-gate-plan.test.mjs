@@ -308,7 +308,7 @@ test("browser CI groups each run only their own selected lanes", () => {
       laneGroupLanes(plan.tasks, group)
         .filter((lane) => lane.selected)
         .map((lane) => lane.id),
-      { "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["call-performance", "build"] }[group],
+      { "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "call-performance"] }[group],
     );
   }
   assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
