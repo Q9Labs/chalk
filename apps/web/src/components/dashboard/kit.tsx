@@ -1,9 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { errorMessage } from "../../lib/dashboard/client";
 import { trapDialogFocus } from "../docs/dialog-focus";
-import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
+
+const ChalkToast = lazy(() => import("@q9labsai/chalk-react/toast").then((module) => ({ default: module.ChalkToast })));
 
 const PHONE = "(max-width: 640px)";
 
@@ -243,26 +244,28 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
     <ToastContext.Provider value={show}>
       {children}
       <div className="toast-slot">
-        {toast ? (
-          <ChalkToast
-            key={toast.id}
-            type={toast.icon === "alert" ? "error" : "success"}
-            duration={toast.icon === "alert" ? Infinity : toast.undo ? 6000 : 3200}
-            message={toast.message}
-            action={
-              toast.undo
-                ? {
-                    label: "Undo",
-                    onClick: () => {
-                      toast.undo?.();
-                      setToast(null);
-                    },
-                  }
-                : undefined
-            }
-            onDismiss={() => setToast((current) => (current?.id === toast.id ? null : current))}
-          />
-        ) : null}
+        <Suspense fallback={null}>
+          {toast ? (
+            <ChalkToast
+              key={toast.id}
+              type={toast.icon === "alert" ? "error" : "success"}
+              duration={toast.icon === "alert" ? Infinity : toast.undo ? 6000 : 3200}
+              message={toast.message}
+              action={
+                toast.undo
+                  ? {
+                      label: "Undo",
+                      onClick: () => {
+                        toast.undo?.();
+                        setToast(null);
+                      },
+                    }
+                  : undefined
+              }
+              onDismiss={() => setToast((current) => (current?.id === toast.id ? null : current))}
+            />
+          ) : null}
+        </Suspense>
       </div>
     </ToastContext.Provider>
   );
