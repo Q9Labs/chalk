@@ -23,7 +23,8 @@ const (
 	// resendSpacing is how soon one packet may be resent again, about a round
 	// trip, so repeated NACKs for a repair still in flight cost nothing.
 	resendSpacing = 100 * time.Millisecond
-	resendMemory  = 32
+	// resendMemory holds two full reports' resends within one spacing.
+	resendMemory = 2 * maxRetransmitsPerFeedback
 )
 
 // subscription is one session's pull of a publication. It chooses which of the
@@ -54,8 +55,7 @@ type subscription struct {
 	beforeSwitch translator
 	switches     uint64
 	// resent remembers recent resends by outgoing sequence number.
-	resent     [resendMemory]resentPacket
-	resentNext int
+	resent [resendMemory]resentPacket
 	// limit is how far the node holds this subscription below its request.
 	limit serverLimit
 
@@ -448,15 +448,25 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 }
 
 // recentlyResent reports whether seq went out again within resendSpacing, and
-// records it otherwise. The caller holds s.mu.
+// records it otherwise. A record is reused only once it expires, so a table
+// full of recent resends refuses the resend. The caller holds s.mu.
 func (s *subscription) recentlyResent(seq uint16, now int64) bool {
-	for _, entry := range s.resent {
-		if entry.at != 0 && entry.seq == seq && now-entry.at < int64(resendSpacing) {
+	free := -1
+	for index, entry := range s.resent {
+		if entry.at == 0 || now-entry.at >= int64(resendSpacing) {
+			if free < 0 {
+				free = index
+			}
+			continue
+		}
+		if entry.seq == seq {
 			return true
 		}
 	}
-	s.resent[s.resentNext] = resentPacket{seq: seq, at: now}
-	s.resentNext = (s.resentNext + 1) % resendMemory
+	if free < 0 {
+		return true
+	}
+	s.resent[free] = resentPacket{seq: seq, at: now}
 	return false
 }
 

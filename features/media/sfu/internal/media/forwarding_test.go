@@ -560,3 +560,28 @@ func TestASubscriptionClosedBeforeItStartsNeverJoins(t *testing.T) {
 		t.Fatalf("a closed subscription joined its publication: %d subscribers, want %d", got, before)
 	}
 }
+
+func TestAFullNACKReportRepeatedAtOnceResendsNothing(t *testing.T) {
+	var s subscription
+	start := int64(time.Second)
+	for seq := range uint16(maxRetransmitsPerFeedback) {
+		if s.recentlyResent(seq, start) {
+			t.Fatalf("packet %d refused on its first resend", seq)
+		}
+	}
+	for seq := range uint16(maxRetransmitsPerFeedback) {
+		if !s.recentlyResent(seq, start+int64(10*time.Millisecond)) {
+			t.Fatalf("packet %d resent again 10 ms after the same report", seq)
+		}
+	}
+	// A table full of recent resends refuses a new one until a record expires.
+	for seq := maxRetransmitsPerFeedback; seq < resendMemory; seq++ {
+		s.recentlyResent(uint16(seq), start+int64(20*time.Millisecond))
+	}
+	if !s.recentlyResent(1000, start+int64(30*time.Millisecond)) {
+		t.Fatal("a resend went out while every record was recent")
+	}
+	if s.recentlyResent(1000, start+int64(resendSpacing)) {
+		t.Fatal("a resend was refused after the first records expired")
+	}
+}
