@@ -634,9 +634,17 @@ func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksR
 		}
 		s.mu.Unlock()
 		for index, subscription := range updated {
-			if subscription != nil {
-				subscription.update(layerRequestFor(request.Tracks[index]))
+			if subscription == nil {
+				continue
 			}
+			track := request.Tracks[index]
+			next := layerRequestFor(track)
+			// Without a simulcast policy the update only pauses or resumes.
+			if track.Simulcast == nil {
+				next = subscription.currentRequest()
+				next.paused = track.Paused
+			}
+			subscription.update(next)
 		}
 		return response, nil
 	})

@@ -283,6 +283,10 @@ func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
 	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: viewer.answer(t, pulled.SessionDescription)}); err != nil {
 		t.Fatal(err)
 	}
+	low := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Simulcast: &protocol.Simulcast{PreferredRID: "l"}}
+	if _, err := subscriber.UpdateTracks(context.Background(), protocol.UpdateTracksRequest{OperationID: op(), Scope: subscriber.scope, Tracks: []protocol.Track{low}}); err != nil {
+		t.Fatal(err)
+	}
 	for _, paused := range []bool{true, false} {
 		track := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Paused: paused}
 		response, err := subscriber.UpdateTracks(context.Background(), protocol.UpdateTracksRequest{OperationID: op(), Scope: subscriber.scope, Tracks: []protocol.Track{track}})
@@ -290,10 +294,10 @@ func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
 			t.Fatalf("paused=%v update: %+v %v", paused, response, err)
 		}
 		subscriber.mu.Lock()
-		got := subscriber.subscribed[track.Mid].currentRequest().paused
+		got := subscriber.subscribed[track.Mid].currentRequest()
 		subscriber.mu.Unlock()
-		if got != paused {
-			t.Fatalf("paused = %v, want %v", got, paused)
+		if got.paused != paused || got.ceiling != "l" {
+			t.Fatalf("paused=%v update left paused %v and ceiling %q, want ceiling l", paused, got.paused, got.ceiling)
 		}
 	}
 }
