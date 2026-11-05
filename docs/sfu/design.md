@@ -1,7 +1,8 @@
 # Chalk SFU v1
 
 Status: implementation proposal. Scope: a second media provider, not a new call
-protocol. Singapore (`sgp1`) is the deployment region. This document does not
+protocol. Singapore (`sgp1`) is the deployment region, on small shared-CPU
+Droplets sized from the packet and memory budgets below. This document does not
 authorize provisioning or rollout. Follow [milestones](milestones.md).
 
 ## Decision and scope
@@ -16,6 +17,8 @@ The [Pion examples](https://github.com/pion/webrtc/blob/main/examples/README.md)
 cover forwarding, simulcast and ICE restart; the
 [interceptors](https://github.com/pion/interceptor) include NACK, TWCC and GCC.
 Pin reviewed module versions in M1 rather than copying versions from old research.
+Fork a Pion module only on profile evidence; see
+[Pion dependency and fork policy](#pion-dependency-and-fork-policy).
 
 Borrow narrowly from LiveKit's `pkg/sfu` layer selectors, RTP translation and
 stream allocator only when this is smaller than implementing them. It is
@@ -31,6 +34,12 @@ V1 goals:
   flow and bounded recovery. Browser and React Native clients share the SDK path.
 - Two-layer camera simulcast; independent subscriber quality; TWCC-controlled
   sending; bounded NACK/RTX recovery. No transcoding.
+- Adaptive quality: send each viewer the lowest layer that looks right at their
+  tile size and network, to lower egress cost and give a picture that follows
+  the viewer's network and latency. See [Adaptive quality](#adaptive-quality).
+- A small machine: a Basic shared-CPU Droplet in production ($18 a month) and in
+  staging ($6 a month), kept within measured packet, memory and steal budgets.
+  See [Hosting and budget](#hosting-and-budget).
 - One SFU node per environment; internal canaries before external adoption.
 - Initially at most **eight active Participants per own-SFU Episode**, enforced
   at admission, with a separate node-wide resource budget. Cloudflare retains
@@ -43,6 +52,43 @@ Do not select this provider for Spaces requiring recording or transcription;
 reject attempts to start either on an own-SFU Episode before reserving work.
 Supporting the separate capture port is a later milestone, not an implicit
 consequence of implementing live signaling.
+
+## Pion dependency and fork policy
+
+Start on **pinned upstream Pion modules** (`webrtc`, `interceptor`, `rtp`, `srtp`,
+`ice`, `transport` and what they pull in). M1 reviews and pins the versions, and
+later updates are deliberate, never floating. A fork is a response to a profile,
+not a plan.
+
+Fork a module only when a CPU or heap profile from the M6 harness (or a later
+production profile) shows a hotspot in that module and upstream cannot fix it in
+time: a fix is open and unmerged, maintainers have declined it, or the change is
+Linux-only and they will not take it.
+
+- **Where and how.** Fork into the Q9Labs GitHub organization and wire the fork
+  into `features/media/sfu/go.mod` with a `replace` directive pinned to a commit.
+  Only the SFU module uses it.
+- **Keep it small.** One patch per hotspot, rebased onto each upstream release we
+  adopt, and dropped when upstream ships an equivalent fix. Retain the upstream
+  license and headers.
+- **Send fixes upstream** whenever they could be accepted, to shrink what we carry.
+- **Record every patch** in **features/media/sfu/FORK_PATCHES.md** (planned): the
+  profile that justified it (function, share of CPU or allocation, SKU,
+  workload), the change, the before and after measurements, the upstream pull
+  request and the condition for removing it. A patch without a recorded profile
+  does not merge.
+
+Likely candidates, stated as hypotheses to check against the pinned versions, not
+as plans:
+
+- **Batched UDP sends** (`sendmmsg`, or UDP GSO where segments share a size and
+  destination) in `pion/transport` and the UDP mux in `pion/ice`, to replace one
+  system call per packet. An SFU fans out different packets to different
+  subscribers, so `sendmmsg` is likelier to help than GSO.
+- **Per-packet allocations** in the RTP and SRTP paths (`pion/rtp`, `pion/srtp`),
+  if the profile shows packet buffers allocated on each packet.
+
+Do not adopt LiveKit's separate Pion fork to get either change.
 
 ## Verified baseline and compatibility inventory
 
@@ -108,15 +154,17 @@ The SDK is now under `sdks/typescript/`, not `packages/`.
    simulcast offers retry without it. Camera pulls initially request `h`,
    `priorityOrdering: none`, `ridNotAvailable: asciibetical`; `h` sorts before `l`.
    That spelling is wire protocol. It prevents a frozen picture when the desired
-   RID is paused. Layer updates must not create SDP or a new track/MID.
+   RID is paused. (For the own provider the `h` is a ceiling and the server starts
+   a new pull on `l`; see [Adaptive quality](#adaptive-quality).) Layer updates must not create SDP or a new track/MID.
    Evidence: `sdks/typescript/client/src/media/client.ts:922`, `:937`, `:1233`,
    `:1329`; `apps/api/internal/adapters/cloudflare/sfu/adapter.go:420`.
 7. **Two independent quality loops.** SDK uplink policy may disable a camera
    encoding; viewer policy requests `h`/`l` from tile size, loss and freezes.
    Keep both. Own-SFU TWCC allocation needs one explicit extension: an advertised
    `serverLayerAdaptation: true` bootstrap capability makes preferred RID a
-   quality ceiling/goal, not Cloudflare's exact-live-RID promise. Under congestion
-   the server may choose lower, without changing the requested ceiling. Default
+   quality ceiling/goal, not Cloudflare's exact-live-RID promise. At pull start and
+   under congestion the server may choose lower, without changing the requested
+   ceiling. Default
    absent/false preserves Cloudflare semantics. Test this distinction; never
    silently reinterpret `priorityOrdering: none` for Cloudflare.
    Evidence: `sdks/typescript/client/src/media/camera-uplink.ts:1`,
@@ -233,7 +281,9 @@ and node capacity; never evict a live revoke watermark to admit more work.
   preserves subscriber-facing track identity. Translate sequence numbers,
   timestamps and codec picture identifiers across switches; rewrite negotiated
   header-extension IDs and SSRC mappings. Merely copying RTP between tracks is
-  not enough. Keep each subscriber's translation and retransmission history.
+  not enough. Keep each subscriber's translation state and a small outgoing
+  sequence map; keep the packet bytes once per ingress stream, shared by all
+  subscribers (see [Memory budget](#memory-budget)).
 - Generate ingress TWCC feedback to help the publisher's browser control uplink.
   Assign fresh transport-wide sequence numbers on each subscriber transport;
   consume its feedback in GCC and pace output. Do not forward a publisher's
@@ -241,15 +291,106 @@ and node capacity; never evict a live revoke watermark to admit more work.
   screen, then cameras within requested ceilings. Drop quality quickly, raise
   slowly with hysteresis; if even the lowest camera layer does not fit, pause
   video while retaining audio. RID absence fallback is separate from congestion.
+  [Adaptive quality](#adaptive-quality) defines the allocator's goals.
 - Use Pion NACK generation on ingress and NACK response on egress with negotiated
   RTX SSRC/PT mappings; verify real retransmissions rather than assuming default
   interceptor registration supplies an entire recovery policy. Read RTCP on all
-  senders. Cap packet age, bytes and retransmission rate; include repair traffic
+  senders. Cap packet age at one second and bytes per stream at the
+  [memory budget](#memory-budget); cap retransmission rate; include repair traffic
   in the congestion budget. Slow subscribers cannot block publisher readers.
 - Forward negotiated RFC 6464 audio-level metadata when present, without decoding
   or retaining audio. The current media SDK has no audio-level signaling call;
   participant speaking state comes through Sync (`sdks/typescript/client/src/sync/v1-client.ts:1137`).
   Do not add a competing SFU-owned presence/active-speaker authority in v1.
+
+## Adaptive quality
+
+Two goals drive this section. First, **lower egress**: egress above the included
+allowance is the largest variable cost (see [Cost scenarios](#cost-scenarios)), and
+packets forwarded are the main CPU cost on a small node. Second, **a picture that
+follows each viewer's network**: a viewer on a weak link gets a lower layer
+before the link queues and freezes, which keeps latency low. One mechanism serves
+both: send each viewer the lowest layer that looks right at their tile size and
+bandwidth.
+
+Cloudflare behavior stays unchanged. Items that need the own provider sit behind
+its `serverLayerAdaptation` capability or a sibling capability, absent for
+Cloudflare. Only item 3 is provider-neutral.
+
+1. **Per-subscriber bandwidth estimate picks layers (M5).** Each subscriber
+   transport has its own TWCC-based estimate. The allocator spends it on audio,
+   then screen, then cameras within requested ceilings, drops fast and raises
+   slowly (see Media path).
+2. **New own-provider pulls start on the low layer (M5).** A new pull has no
+   estimate yet, so today's `h`-first sends 2.5 Mbps unprobed into a link of
+   unknown size, wastes egress on tiles that turn out small, and is the likeliest
+   moment for a queue and a freeze. The allocator starts on the lowest layer the
+   ceiling allows and climbs to the next layer once the estimate and its feedback
+   age support it. The SDK still requests `h` as a ceiling. The cost is a picture
+   that sharpens over a few seconds; M5 measures that time and bounds it.
+   Cloudflare pulls stay `h`-first.
+3. **Subscribe to video only for visible tiles (M8).** Today the SDK pulls every
+   remote publication, visible or not. The viewer policy already measures tile
+   size, but only per received track (`setVideoRenderSize(track, size)`), so it
+   cannot decide whether to pull video not yet received. M8 adds a signal keyed by
+   publication: `setVideoTileVisibility(publicationId, {width, height} | null)`,
+   where `null` means hidden. It is local to the SDK and sends nothing to the
+   server. Until the UI reports, a publication is **unknown**: the SDK waits up to 250 ms for
+   the first report, then pulls an unknown tile as today (Cloudflare `h`-first, own provider low-first), so a UI that never calls
+   it keeps today's behavior and M8 is opt-in per UI. A hidden report pulls no
+   video. Once the track exists, `setVideoRenderSize` still feeds the layer
+   choice. The SDK pulls a remote camera or screen only while its tile is on
+   screen, closes the pull after a debounce when it leaves, and always keeps audio. This needs no SFU feature (it uses the
+   existing pull and close calls), so it **ships independently, applies to
+   Cloudflare today and cuts Cloudflare egress now.** A viewer who scrolls a tile
+   back pays a re-pull; the debounce and an early pull of the next page bound
+   that. On the own provider the SDK pauses and resumes a subscription in place
+   without SDP once M4's pause state and the capability exist (M5 wires it).
+4. **Dynacast (M9).** The publisher stops encoding a camera layer that no
+   subscriber has requested. Demand per source is the highest requested ceiling
+   across its subscribers (not the congestion-reduced effective layer, which keeps
+   headroom for recovery). The SFU returns demand in its lease-refresh and pull/update responses, the API relays it to the
+   publisher over the existing source-control path. Demand is information, not a
+   command: the SDK owns its encodings and combines three inputs. A layer is
+   enabled when it is demanded **and** the uplink policy
+   (`CameraUplinkPolicy`) allows it, with a **floor**: if that leaves nothing
+   enabled, the SDK enables the cheapest demanded layer anyway, and when nobody
+   demands the camera it keeps `l` on, so at least one layer is always enabled
+   and a first pull never waits for an encoder start. So demand `{l}` with a
+   1 Mbps uplink keeps `l` on (the policy would otherwise disable it), demand `{h}`
+   with a low uplink leaves `h` on and `l` off, and demand `{h, l}` follows the
+   uplink policy alone. Disabling waits a hold time after the last request;
+   enabling is urgent, and the SFU keeps forwarding the remaining layer until the
+   new one has a keyframe. This saves
+   publisher uplink and ingress packets, and it exists only behind an own-provider
+   capability.
+5. **Audio-only fallback under congestion (M5).** If the estimate cannot carry
+   the lowest camera layer after audio and screen, pause that viewer's video and
+   keep audio at its reserved budget. Resume video only after the estimate has held
+   above the lowest layer's rate for a hysteresis period. The SDK shows a "video
+   paused for network" state, distinct from frozen video, so a viewer is not left
+   guessing. The SDK learns of a server pause through a **subscription-state
+   read**, because the signaling path is request/response and has no server push.
+   The SFU's inspect result carries, per subscription, a state (`active` or
+   `paused`), a reason (`congestion`, `viewer` or `source_inactive`) and a
+   revision (M4 defines it; M5 exposes it through the API and SDK transport
+   behind a `subscriptionState` capability). When the receive-stall detector
+   (`sdks/typescript/client/src/media/receive-stall.ts`) would call a track stalled, an own-provider session first
+   reads that state: a `paused` track is shown as paused, not repulled, and is
+   re-read every five seconds until RTP advances or the state is `active`; a
+   higher revision wins over a late response. Without the capability the stall
+   path is unchanged. The SDK's own pauses are known locally and suppress the
+   stall check the same way.
+6. **A third, lower camera layer (decision in M4).** Today the camera has `h`
+   (2.5 Mbps) and `l` (0.65 Mbps). A third layer of about 0.15 Mbps (for example
+   320×180) would serve small tiles and weak links. As an upper bound, serving the
+   three small tiles of an eight-person adaptive call at 0.15 Mbps instead of 0.65
+   cuts egress from 46.08 to 31.68 Mbps (31%). It costs the publisher one more
+   encoding (its CPU is unmeasured) and 0.15 Mbps more uplink. M4 measures
+   publisher encode CPU and picture quality at that size, and decides to add it
+   only if the egress gain and the weak-link benefit outweigh the encode cost.
+   Adding it would be own-provider only and capability-gated, because the camera
+   RID spelling is wire protocol.
 
 ## Reconnect and authority
 
@@ -357,75 +498,309 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 
 ## Hosting and budget
 
-Public list prices checked **5 November 2026**, USD before tax. DigitalOcean's
-[availability matrix](https://docs.digitalocean.com/platform/regional-availability/)
-lists Basic and CPU-Optimized in Singapore `sgp1`; individual creation-time stock
-still needs checking. Use Regular CPUs for these estimates, not Premium pricing.
+The goal is the smallest machine that meets measured budgets. Because the SFU
+forwards packets and never transcodes, it needs far less CPU than a general media
+server, and the design below sizes it from packet rate and memory, not from a
+vendor's "media server" tier. Moving up a size is cheap (see
+[Resizing](#resizing)), so v1 starts small and grows on evidence.
 
-| Environment   | Droplet                       | CPU / RAM / disk                  | Included monthly outbound | Monthly compute |
-| ------------- | ----------------------------- | --------------------------------- | ------------------------- | --------------- |
-| Staging       | Basic Regular (`s-2vcpu-4gb`) | 2 shared vCPU / 4 GiB / 80 GiB    | 4,000 GiB                 | **$24**         |
-| Production v1 | CPU-Optimized Regular (`c-4`) | 4 dedicated vCPU / 8 GiB / 50 GiB | 5,000 GiB                 | **$84**         |
+Public list prices checked **5 November 2026**, USD before tax, Regular CPUs.
+DigitalOcean's [availability matrix](https://docs.digitalocean.com/platform/regional-availability/)
+lists Basic and CPU-Optimized in Singapore `sgp1`; creation-time stock was not
+checked and still needs a check when M6 creates the Droplets.
 
-Source: [Droplet pricing](https://www.digitalocean.com/pricing/droplets).
-No load balancer, managed disk or media backup is needed for this disposable
-node. Existing API/Sync/Postgres and observability bills are excluded. Inbound
-transfer is free; excess outbound is $0.01/GiB, with allowances pooled across the
-team, not reserved to this SFU ([bandwidth billing](https://docs.digitalocean.com/platform/billing/bandwidth/)).
+| Environment   | Droplet                       | CPU / RAM / disk               | Included monthly outbound | Monthly compute |
+| ------------- | ----------------------------- | ------------------------------ | ------------------------- | --------------- |
+| Staging       | Basic Regular (`s-1vcpu-1gb`) | 1 shared vCPU / 1 GiB / 25 GiB | 1,000 GiB                 | **$6**          |
+| Production v1 | Basic Regular (`s-2vcpu-2gb`) | 2 shared vCPU / 2 GiB / 60 GiB | 3,000 GiB                 | **$18**         |
+
+Source: [Droplet pricing](https://www.digitalocean.com/pricing/droplets). Both
+environments together cost $24 a month. No load balancer, managed disk or media backup is needed for this
+disposable node. Existing API/Sync/Postgres and observability bills are excluded.
+Inbound transfer is free; excess outbound is $0.01/GiB, with allowances pooled
+across the team, not reserved to this SFU ([bandwidth billing](https://docs.digitalocean.com/platform/billing/bandwidth/)).
 Do not count another workload's unused allowance as guaranteed SFU capacity.
 
-### Capacity hypothesis, not a benchmark
+### Why these sizes
 
-The durable admission ceiling is **500**, not a measured SFU capacity
-(`apps/api/internal/episodes/service.go:75`). The SDK subscribes to all other
-Participants' publications, not just visible video tiles (`sdks/typescript/client/src/media/client.ts:1792`).
-Camera encoding caps are 2.5 + 0.65 Mbps (`sdks/typescript/client/src/media/client.ts:927`). Therefore full
-mesh subscriptions grow as `N * (N - 1)`, even though publishers upload once.
+Production has two vCPUs because forwarding runs next to the Go garbage
+collector and the kernel's UDP and encryption work. On one shared vCPU all of
+that queues behind a single core that the host can take away. `s-2vcpu-2gb` is
+the smallest two-vCPU Basic size. Memory is not what limits it (see the
+[memory budget](#memory-budget)); CPU is.
+Staging runs the service and one four-person test call or one eight-person
+call held to its packet ceiling. One vCPU and 1 GiB are enough for that, and the memory budget
+below leaves about half of the 1 GiB free.
 
-For planning use a four-person call, camera plus microphone per Participant;
-eight-person and screen variants must also pass. This is a synthetic sizing
-fixture, **not observed customer traffic**. Budget audio at 50 kbps and add 20%
-for headers, RTCP and repair. Let `H=2.5`, `L=0.65`, `A=0.05` Mbps:
+### Packet-rate math (hypotheses, replaced by M6 measurements)
 
-- All-high egress: `1.2 * N * (N - 1) * (H + A)` Mbps. This is the conservative
-  default because every new camera pull initially requests high.
-- Mixed egress, one high remote camera and the rest low per viewer:
-  `1.2 * N * (H + (N - 2) * L + (N - 1) * A)` Mbps.
-- Ingress with both RIDs: `1.2 * N * (H + L + A)` Mbps.
-- Outbound RTP streams: `2 * N * (N - 1)`; ingress encodings: `3 * N`.
-  One 2 Mbps screen plus 50 kbps screen audio adds `N - 1` subscriptions of
-  each kind and `1.2 * (N - 1) * 2.05` Mbps egress. This screen rate is an
-  assumption, not an SDK-enforced cap; admission uses configured ceilings.
+CPU cost follows packets per second, not bits per second, because every packet
+costs one decrypt or encrypt, one system call and some scheduling. Use
+1,200-byte RTP payloads and the camera caps from the SDK (2.5 and 0.65 Mbps;
+`sdks/typescript/client/src/media/client.ts:927`). Today's SDK subscribes to all
+other Participants' publications, not only visible video tiles
+(`sdks/typescript/client/src/media/client.ts:1792`), so subscriptions grow as
+`N(N-1)` even though each publisher uploads once.
 
-| Participants | Outbound streams | Ingress Mbps | All-high / mixed egress Mbps | All-high / mixed GiB per call-hour |
-| ------------ | ---------------- | ------------ | ---------------------------- | ---------------------------------- |
-| 4            | 24               | 15.36        | 36.72 / 18.96                | 15.39 / 7.95                       |
-| 8            | 112              | 30.72        | 171.36 / 64.80               | 71.82 / 27.16                      |
+| Stream             | Rate      | Packets/s | Basis                                             |
+| ------------------ | --------- | --------- | ------------------------------------------------- |
+| Camera, high (`h`) | 2.5 Mbps  | 250       | 2.5 Mbps / 8 / 1,200 B is about 260               |
+| Camera, low (`l`)  | 0.65 Mbps | 70        | 0.65 Mbps / 8 / 1,200 B is about 68               |
+| Microphone         | 50 kbps   | 50        | Opus 20 ms frames: set by frame time, not bitrate |
+| Screen video       | 2 Mbps    | 210       | assumed rate, not an SDK cap                      |
 
-Start with an **unmeasured engineering target of 100 outbound RTP streams per
-dedicated vCPU** and reserve 50%: at most 200 on the production node. Also cap
-planned all-high egress at 250 Mbps and stop new admissions when sustained CPU
-exceeds 60%, queue delay exceeds 50 ms or retransmission memory is exhausted.
-The tightest budget wins. This permits roughly one eight-person call, or six
-four-person calls without screen sharing, not a throughput guarantee. Staging
-admits one four-person test call; shared CPUs are not a production benchmark.
-Validate packet rate, encryption, GC and TURN paths on the actual `c-4` in M6;
-lower admission limits if it misses the target. Never infer capacity from vCPU
-count alone or use codec bitrate caps as guaranteed actual traffic.
+For a call of `N` Participants, each with camera and microphone, three
+subscription profiles apply. In each, every viewer gets every remote microphone.
 
-For decimal Mbps, `GiB/hour = Mbps * 10^6 * 3600 / (8 * 2^30)`.
-At 10 four-person staging call-hours/month, direct egress is about 154 GiB and
-cost stays $24. At 500 production call-hours, all-high costs about 7,695 GiB:
-compute plus excess transfer is **about $111/month**; mixed quality is about
-3,973 GiB and stays **$84/month**. These are call-hours, not participant-hours.
-The 5,000 GiB allowance covers about 325 all-high or 629 mixed four-person hours.
+- **All-high:** every remote camera at `h`. This is what today's `h`-first pull
+  does, and it is the worst case.
+- **Mixed:** one remote camera at `h`, the others at `l`.
+- **Adaptive:** one remote camera at `h` (speaker or pinned tile), at most three
+  others at `l`, and the remaining cameras paused because they are not visible.
+  See [Adaptive quality](#adaptive-quality). With four people every tile is
+  visible, so adaptive equals mixed; the saving starts at larger calls.
 
-Add relay cost separately: if 10% of the all-high traffic is delivered via
-Cloudflare TURN, that is about 826 decimal GB/month, up to **$41/month** before
-any remaining shared Cloudflare free allowance. DO still charges its SFU egress
-to the relay. At that planning volume production is about **$152/month including
-relay**, not a flat $84. Real demand and shared allowance usage are unknown;
-replace these scenarios with existing call-stats/usage evidence before expansion.
+Egress packets/s are `N(N-1)·300` all-high, `N(250 + (N-2)·70 + (N-1)·50)` mixed,
+and `N(250 + min(N-2, 3)·70 + (N-1)·50)` adaptive. Ingress is `370·N`, because
+both camera layers and the microphone arrive from every Participant.
+
+| Participants | Ingress | Egress all-high / mixed / adaptive | Total in + out, all-high / mixed / adaptive |
+| ------------ | ------- | ---------------------------------- | ------------------------------------------- |
+| 4            | 1,480   | 3,600 / 2,160 / 2,160              | 5,080 / 3,640 / 3,640                       |
+| 8            | 2,960   | 8,560\* / 8,160 / 6,480            | 11,520\* / 11,120 / 9,440                   |
+
+\* An eight-person all-high call would demand 16,800 egress and 19,760 total
+packets/s, but the per-Episode ceiling of 11,520 (see below) stops that, so at most
+8,560 egress packets/s are forwarded (11,520 less 2,960 ingress). Mixed (11,120)
+and adaptive (9,440) fit under the ceiling without a screen share.
+Adaptive cuts eight-person egress packets by 24% against that capped worst case
+(6,480 against 8,560). That also cuts the CPU bill, not only the transfer bill.
+
+**CPU budget.** Assume **25 µs of CPU per packet** (one SRTP operation about
+2–3 µs with AES hardware support, one system call about 5–10 µs on a virtual
+machine, the rest Go scheduling, interceptors and garbage collection). That is an
+unmeasured guess for stock Pion without batching. It gives 40,000 packets/s per
+fully used vCPU. Halve it for shared-CPU steal risk, then halve again to stay at
+50% target utilization: **10,000 packets/s per vCPU**.
+
+| Budget                           | Staging (1 vCPU) | Production v1 (2 vCPU) |
+| -------------------------------- | ---------------- | ---------------------- |
+| Planned packets/s, in + out      | 10,000           | 20,000                 |
+| Active Participants (memory cap) | 8                | 16                     |
+| Packet ceiling for one Episode   | 10,000           | 11,520                 |
+
+**Admission reserves each Episode at its supported peak.** The supported peak is
+every remote camera on `h`, every microphone, and **one screen share** with its
+audio. The own provider allows one active screen share per Episode, because the
+reservation counts one. For an Episode with `n` active Participants this is
+`300·n(n-1) + 630·n` packets/s (the `n(n-1)` all-high term, plus `370·n` ingress
+and `260·n` for one screen and its audio): 1,860 at two, 6,120 at four, 9,150 at
+five and 21,840 at eight.
+
+That peak is more than one node can carry at eight Participants (21,840 against
+20,000), so the allocator **enforces a packet ceiling per Episode** and the
+reservation is the lower of the peak and the ceiling. The ceiling is 11,520, the
+eight-person adaptive profile with a screen share (6,480 egress, 2,960 ingress
+and 2,080 for the screen), or the node budget if that is smaller. When viewers'
+requested layers would exceed the ceiling, the allocator lowers the layers of the
+largest set of non-speaker tiles first and keeps audio and screen. Forwarding can
+then never exceed the reservation.
+
+A Participant join is refused if it would push the sum of reservations above the
+node budget, and a new Episode needs room for two Participants. The live steal
+and queue-delay signals below are a second gate, not a substitute for this one.
+Production therefore fits one Episode of up to eight (11,520) plus one
+four-person Episode (6,120) for 17,640, or three four-person Episodes (18,360),
+or two five-person Episodes (18,300). It does **not** fit two eight-person
+Episodes (23,040): the second is refused as it grows. Staging fits one
+four-person Episode (6,120) or one eight-person Episode held to 10,000. A
+reservation above typical use is deliberate headroom against steal; once M6 has
+measured real load, a later change may reserve measured use instead.
+
+The tightest of the packet, Participant, memory and live-signal budgets wins. These are
+not throughput guarantees. M6 measures the real cost per packet on
+the production SKU and lowers the budget if it misses the target.
+The durable admission ceiling is **500** Episode Participants, not an SFU
+capacity (`apps/api/internal/episodes/service.go:75`); the eight-Participant
+own-provider cap stays.
+
+### Memory budget
+
+Memory holds sessions and bounded packet history, so it stays small. The retransmit
+history is stored **once per ingress stream** and shared by all subscribers of
+that stream. A subscriber keeps only a small map from its outgoing sequence
+numbers to the stored packets, so a retransmission copies, re-translates and
+re-encrypts the stored packet. Keeping a full copy per subscriber would multiply the 880 KiB by up to
+seven subscribers, about 6 MiB per publisher and 98 MiB across 16 Participants.
+
+Cap each history at one second of its stream's maximum rate. One second covers a
+round trip of several hundred milliseconds plus a retry; an older loss is
+recovered with a keyframe request, not a retransmit. Per publisher the caps are
+`h` 400 KiB, `l` 128 KiB, microphone 16 KiB, screen 320 KiB, screen audio 16 KiB:
+**880 KiB**. Each subscriber transport has a pacer queue of at most 128 KiB, and
+each outgoing stream an 8 KiB sequence map.
+
+| Component                                  | Production (16 Participants) | Staging (8 Participants) |
+| ------------------------------------------ | ---------------------------- | ------------------------ |
+| Go runtime and binary                      | 40 MiB                       | 40 MiB                   |
+| PeerConnections at 2 MiB each (guess)      | 32 MiB                       | 16 MiB                   |
+| Packet history, 880 KiB per publisher      | 14 MiB                       | 7 MiB                    |
+| Pacer queues, 128 KiB per subscriber       | 2 MiB                        | 1 MiB                    |
+| Sequence maps, 8 KiB per outgoing stream   | 2 MiB                        | 1 MiB                    |
+| Control state, replay, tombstones (capped) | 8 MiB                        | 4 MiB                    |
+| **Live heap**                              | **about 100 MiB**            | **about 70 MiB**         |
+
+With `GOGC=200` the heap can reach three times the live size, so about 300 MiB
+in production and 210 MiB in staging. Add kernel UDP buffers (8 MiB) and an
+assumed 300 MiB for the operating system, agents and the telemetry exporter. The
+total is about 610 MiB of the production 2 GiB and about 520 MiB of the staging
+1 GiB. `GOMEMLIMIT` is 768 MiB in production and 384 MiB in staging, so the
+collector works harder before the kernel's out-of-memory killer acts. M6 replaces
+the 2 MiB per PeerConnection and 300 MiB guesses with measurements.
+
+### Shared-CPU risk
+
+Basic Droplets share physical cores with other customers. When the host is busy,
+the hypervisor withholds cycles from our vCPU (CPU steal). A real-time forwarder
+feels this as jitter: a 20 ms stall delays every queued packet on the node, so all
+calls get late media together, and the subscriber's TWCC estimator reads the delay
+as congestion and cuts bitrate. DigitalOcean's documentation I checked gives no
+bound for steal on Basic sizes, so treat it as unbounded until measured.
+
+The mitigation is to see it and stop adding load:
+
+- Export CPU steal (from `/proc/stat`), pacer queue delay and Go scheduler
+  latency (`runtime/metrics`).
+- Admission stops **new Episodes** when sustained steal exceeds 3% over 30 seconds
+  or pacer queue delay p95 exceeds 50 ms. These are initial values that M6 tunes.
+  Live calls keep running and the alarm pages an operator.
+- If admission closes for either reason in more than 1% of the minutes in a week,
+  move to dedicated CPUs (see [Resizing](#resizing)).
+
+### Resizing
+
+Moving up a size is a DigitalOcean resize. Drain the node (no new Episodes, wait for
+calls to end), power it off, resize **CPU and RAM only** (disk unchanged), power it
+on. DigitalOcean documents about one minute of downtime per GiB of used disk; this
+disk holds almost nothing. A CPU-and-RAM resize can go back down, because the
+disk is not grown. Resizing the disk is permanent, so never do it here.
+A resize ends live calls just like node loss; Participants rejoin through
+replacement, so do it outside calling hours. M6 rehearses a resize up and down on
+staging and records the downtime and whether the public address and firewall
+rules survive; DigitalOcean's resize page does not say.
+
+DigitalOcean allows a resize only to a plan whose disk is equal or larger
+([resize rules](https://docs.digitalocean.com/products/droplets/how-to/resize/)).
+So the Basic sizes below are resizes, and the dedicated-CPU step is a replacement
+node built by the same module, followed by a drain of the old one.
+
+| Trigger (production)                                                     | Next step                                    | Monthly |
+| ------------------------------------------------------------------------ | -------------------------------------------- | ------- |
+| Memory above 70% of RAM at the admitted peak, or any out-of-memory kill  | Resize to `s-2vcpu-4gb`                      | $24     |
+| Measured cost per packet is far above 25 µs and the profile shows no fix | Resize to `s-4vcpu-8gb` (still shared)       | $48     |
+| Steal or queue delay closes admission in over 1% of minutes in a week    | Replacement node `c-2` (2 dedicated vCPU)    | $42     |
+| Joins are routinely refused for the packet budget under real demand      | A second node, per the multi-node plan below | +$18    |
+| `c-2` fails the M6 harness                                               | Replacement node `c-4` (4 dedicated vCPU)    | $84     |
+
+For staging, memory pressure during the four-person proof moves it to
+`s-1vcpu-2gb` ($12), and flaky proofs that coincide with steal move it to
+`s-2vcpu-2gb` ($18). Optimize first when a profile shows a fixable hotspot
+(see [Efficiency](#efficiency-on-a-small-machine)); a bigger machine is the
+answer to a profile that has no hotspot left.
+
+### Cost scenarios
+
+The synthetic fixture is not observed customer traffic. Budget audio at 50 kbps
+and add 20% for headers, RTCP and repair. Let `H=2.5`, `L=0.65`, `A=0.05` Mbps:
+
+- All-high egress: `1.2 · N(N-1)(H + A)` Mbps.
+- Mixed egress: `1.2 · N(H + (N-2)L + (N-1)A)` Mbps.
+- Adaptive egress: `1.2 · N(H + min(N-2, 3)L + (N-1)A)` Mbps.
+- Ingress with both RIDs: `1.2 · N(H + L + A)` Mbps.
+- One 2 Mbps screen plus 50 kbps screen audio adds `1.2 · (N-1) · 2.05` Mbps of
+  egress, an assumption and not an SDK-enforced cap.
+
+| Participants | Ingress Mbps | Egress Mbps, all-high / mixed / adaptive | GiB per call-hour, all-high / mixed / adaptive |
+| ------------ | ------------ | ---------------------------------------- | ---------------------------------------------- |
+| 4            | 15.36        | 36.72 / 18.96 / 18.96                    | 15.39 / 7.95 / 7.95                            |
+| 8            | 30.72        | 72.48\* / 64.80 / 46.08                  | 30.38\* / 27.16 / 19.31                        |
+
+\* The eight-person all-high call is held to the 11,520 packets/s ceiling, so
+its worst case is: (11,520 − 2,960 ingress − 2,800 audio) = 5,760 video packets/s
+× 10,000 bits (2.5 Mbps / 250 packets/s) + 2.8 Mbps audio = 60.4 Mbps, × 1.2 =
+72.48 Mbps. The uncapped formula would give 171.36 Mbps (71.82 GiB/hour), which
+the ceiling makes impossible. The ceiling also counts screen packets, so this
+camera-only worst case spends all of it on cameras.
+
+For decimal Mbps, `GiB/hour = Mbps · 10^6 · 3600 / (8 · 2^30)`.
+At 10 four-person staging call-hours a month, direct egress is about 154 GiB,
+inside the 1,000 GiB allowance, so staging stays at $6.
+
+For production, 500 call-hours a month on `s-2vcpu-2gb` (3,000 GiB allowance)
+costs the following. These are call-hours, not participant-hours.
+
+| Scenario                                    | GiB at 500 call-hours | Over allowance | Compute + excess per month |
+| ------------------------------------------- | --------------------- | -------------- | -------------------------- |
+| Four-person, all-high                       | 7,695                 | 4,695          | **$65**                    |
+| Four-person, mixed                          | 3,973                 | 973            | **$28**                    |
+| Four-person, adaptive                       | 3,973                 | 973            | **$28**                    |
+| Eight-person, all-high, held to the ceiling | 15,188                | 12,188         | **$140**                   |
+| Eight-person, mixed                         | 13,580                | 10,580         | **$124**                   |
+| Eight-person, adaptive                      | 9,656                 | 6,656          | **$85**                    |
+
+Egress above the allowance costs more than the machine once calls grow, so
+adaptive quality saves more money than the Droplet size does: an eight-person
+adaptive call costs about 60% as much to serve as the worst case the ceiling
+allows ($85 against $140). The allowance covers
+about 195 all-high or 377 mixed four-person call-hours at this size.
+
+Add relay cost separately. If 10% of the traffic is delivered via Cloudflare TURN,
+that is about 826 decimal GB a month for the four-person all-high case, up to
+**$41/month**, and about 427 GB (**$21/month**) for mixed or adaptive, before any
+remaining shared Cloudflare free allowance. DigitalOcean still charges its SFU
+egress to the relay. With relay, the four-person production scenarios are about
+**$106** (all-high) and **$49** (mixed or adaptive) a month, not a flat $18.
+Real demand and shared allowance usage are unknown; replace these scenarios with
+existing call-stats/usage evidence before expansion.
+
+## Efficiency on a small machine
+
+A small node works only if CPU per packet stays low. Profile first: the M6 proof
+captures CPU and heap profiles (`pprof`, through the mTLS control listener or
+from the host, never a public listener) for each load profile on the production
+SKU. Every optimization below needs a profile that shows its cost before the change
+and one that shows the gain after. These are candidates ordered by expected
+return, not a backlog. Raw profiles stay out of Git; the PR records the function,
+its share of CPU or allocation, and the measured gain.
+
+- **Buffer pools, no per-packet allocation.** Take read buffers and outbound
+  packet buffers from a pool, and hold each packet's bytes once with a reference
+  count shared by the retransmit history, pacer queues and subscribers. The
+  steady-state forwarding path should show zero allocations per packet in a Go
+  benchmark. Evidence: allocation and garbage-collection share in the heap and
+  CPU profiles.
+- **Batched sends.** Write several packets per system call with `sendmmsg` on
+  Linux, since each unbatched packet costs one system call. Evidence: UDP writes
+  above a quarter of process CPU. This may need a [fork patch](#pion-dependency-and-fork-policy).
+- **Only the interceptors we use.** Register TWCC, NACK, RTCP reports and our own
+  allocator explicitly instead of Pion's full default set, and keep packet-dump
+  interceptors off. Every interceptor runs on every packet. This is a design
+  default, not an optimization that waits for a profile.
+- **One UDP mux.** One socket on UDP 50000 shared by all sessions, which means
+  fewer sockets, read loops and goroutines. Also a design default (see TURN,
+  network and deployment).
+- **Runtime settings for the SKU.** Set `GOMAXPROCS` to the SKU's vCPU count,
+  `GOMEMLIMIT` to the memory budget above and `GOGC` to 200 in validated service
+  configuration, because the live heap is small and the limit guards the rest.
+  Evidence for tuning: GC share and heap in the profiles.
+- **Profile-guided optimization.** Feed a merged CPU profile from the M6 load
+  runs into Go's profile-guided optimization (`default.pgo`) and keep it only if
+  the same load shows lower CPU per packet. Keep the profile as a build input
+  outside Git until someone has checked that it holds function names and counts
+  only.
+
+The largest lever is fewer packets, not faster packets: the adaptive-quality
+items cut eight-person egress packets by 24% against the ceiling-capped worst case.
 
 ## State, scaling and operations
 
@@ -456,8 +831,10 @@ through deferred cleanup. A provider session ID is not the device's `session.id`
 Export structured OTLP logs/spans using private runtime configuration.
 
 - Counters/gauges: active sessions/publications/subscriptions, requested/effective
-  RID, source lease expiry/revoke, packet/byte rates, repair hit/miss, PLI rate,
-  TWCC feedback age, estimated bitrate, pacer drops/queue delay, CPU/GC and memory.
+  RID, paused video, source lease expiry/revoke, packet/byte rates, repair hit/miss,
+  PLI rate, TWCC feedback age, estimated bitrate, pacer drops/queue delay, CPU
+  steal, Go scheduler latency, CPU/GC and memory, and the admission reason when
+  new Episodes are refused.
 - Histograms: control latency by operation/outcome, first RTP, ICE/replacement
   recovery time and time from revoke receipt to routing removal.
 - Metrics labels are bounded provider/codec/kind/RID/outcome; no Tenant, Episode,
