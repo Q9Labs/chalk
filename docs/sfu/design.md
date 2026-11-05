@@ -416,7 +416,8 @@ Cloudflare. Only item 3 is provider-neutral.
    guessing. The SDK learns of a server pause through a **subscription-state
    read**, because the signaling path is request/response and has no server push.
    The SFU's inspect result carries, per subscription, a state (`active` or
-   `paused`), a reason (`congestion`, `viewer` or `source_inactive`) and a
+   `paused`), a reason (`congestion`, `viewer`, `source_inactive` or
+   `source_unauthorized`, while the source has no live grant) and a
    revision (M4 defines it; M5 exposes it through the API and SDK transport
    behind a `subscriptionState` capability). When the receive-stall detector
    (`sdks/typescript/client/src/media/receive-stall.ts`) would call a track stalled, an own-provider session first
@@ -473,20 +474,24 @@ revision tombstone even without a track; remove routing before acknowledging
 revoke. A newer authorized grant alone can clear it. Preserve distinct scopes:
 a device's off/old-session close targets only its owned allocation; a host stop
 fences the Participant/source across allocations. Neither may let a late close
-kill another device's newer publication. The current provider
-executor's resume is a no-op and its cleanup is track-based
-(`apps/api/internal/providerbridge/sfu_executor.go:95` and `:153`); M3 must add
-source-level grant/revoke dispatch, including the no-track case.
+kill another device's newer publication. The provider executor dispatches
+grants and revokes as source controls to the Episode's pinned node at the
+operation's control revision, including the no-track case; a screen control also
+covers `screen_audio`, and a removal covers every source.
 
-Use short-lived forwarding leases (initial proposal: 15-second TTL, refresh every
-five seconds in bounded batches) backed by current durable authorization. Lost
+Use short-lived forwarding leases (15-second TTL, refreshed every five seconds in
+bounded batches) backed by current durable authorization. A source no control has
+named does not forward; there is no flag that lets it. The API renews the newest
+confirmed grant of each source while the Episode is live on the own SFU, the
+Participant is present with the source's capability, and no stop was decided at
+or after the grant's revision, whether or not that stop's revoke was delivered. Lost
 control connectivity then stops forwarding by expiry rather than preserving a
 muted orphan indefinitely. Do not extend from RTP receipt or SDK claims. Check
 expiry on the forwarding path, not solely a delayed GC ticker. Lease refresh,
 grant and revoke share the same revision order; a stale refresh cannot resurrect
 a revoked source. Transport loss therefore has a bounded mute-enforcement window,
 not a zero-window atomicity guarantee. Recheck the model with failing close,
-orphan cleanup and delayed lease/revoke delivery before enabling the flag.
+orphan cleanup and delayed lease/revoke delivery.
 
 **ICE restart:** support a client offer with new ICE credentials on an existing
 session through AddTracks, returning an answer without duplicating publications.
