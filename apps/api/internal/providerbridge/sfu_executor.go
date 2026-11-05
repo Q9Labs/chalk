@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"slices"
 	"sort"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -128,19 +127,8 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 			return providerExecutionFailure(err)
 		}
 	}
-	// The own SFU fences the source itself, so a revoke holds even when no track
-	// exists yet, and the track cleanup below closes only what the fence covers.
-	fenced := map[string]bool(nil)
 	if chalk != nil && input.Effect != provideroperations.EffectEndEpisode && input.ControlRevision > 0 {
-		applied, result := controlSources(ctx, chalk, input, mediaplane.SourceRevoke)
-		if result != nil {
-			return *result
-		}
-		if len(applied) == 0 {
-			// A newer grant superseded this revoke. Its publication is not ours to close.
-			return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
-		}
-		fenced = applied
+		return e.revokeSources(ctx, chalk, input)
 	}
 
 	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.EpisodeID)
@@ -151,13 +139,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	if result != nil {
 		return *result
 	}
-	if fenced != nil {
-		targets = slices.DeleteFunc(targets, func(target publicationTarget) bool { return !fenced[target.publication.Source] })
-	}
 	if len(targets) == 0 {
-		if fenced != nil {
-			return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
-		}
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
 	}
 	if closer == nil {
@@ -173,7 +155,7 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		connectionIDs = append(connectionIDs, connectionID)
 	}
 	sort.Strings(connectionIDs)
-	allAlreadyClosed := fenced == nil
+	allAlreadyClosed := true
 	for _, connectionID := range connectionIDs {
 		connectionTargets := connections[connectionID]
 		tracks := make([]mediaplane.CloseTrack, 0, len(connectionTargets))
@@ -210,6 +192,47 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 	}
 	if allAlreadyClosed {
 		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
+	}
+	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
+}
+
+// revokeSources fences the sources on the own SFU, which stops forwarding and closes
+// the publications admitted before the revoke. A track a newer grant admitted stays
+// open, so the executor records as closed only the tracks the node reports and never
+// follows the revoke with a close of its own. A record a lost response leaves open is
+// settled by remote track reconciliation.
+func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input provideroperations.OperationInput) ExecutionResult {
+	applied, closed, result := controlSources(ctx, chalk, input, mediaplane.SourceRevoke)
+	if result != nil {
+		return *result
+	}
+	if len(applied) == 0 {
+		// A newer grant superseded this revoke. Its publication is not ours to close.
+		return ExecutionResult{Outcome: provideroperations.OutcomeSatisfied}
+	}
+	if len(closed) == 0 {
+		return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
+	}
+	snapshot, err := e.publications.Latest(ctx, input.TenantID, input.EpisodeID)
+	if err != nil {
+		return ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
+	}
+	targets, failed := operationTargets(snapshot.Publications, input)
+	if failed != nil {
+		return *failed
+	}
+	for _, target := range targets {
+		if !closed[mediaplane.ClosedSourceTrack{ConnectionID: target.reference.ConnectionID, MID: target.reference.MID}] {
+			continue
+		}
+		if err := e.publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
+			TenantID: input.TenantID, EpisodeID: input.EpisodeID, ParticipantID: target.publication.ParticipantID,
+			ParticipantGeneration: target.reference.ParticipantGeneration, ConnectionID: target.reference.ConnectionID,
+			MID: target.reference.MID, Source: target.publication.Source, PublicationID: target.publication.PublicationID,
+		}); err != nil {
+			slog.WarnContext(ctx, "Provider media cleanup observation failed", "operation_id", input.OperationID, "effect", input.Effect, "stage", "record_closed_publication", "error_code", "observation_update_failed")
+			return ExecutionResult{Outcome: provideroperations.OutcomeAmbiguous, Reason: "observation_update_failed"}
+		}
 	}
 	return ExecutionResult{Outcome: provideroperations.OutcomeConfirmed}
 }
@@ -271,7 +294,7 @@ func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperat
 	if input.ControlRevision <= 0 {
 		return ExecutionResult{Outcome: provideroperations.OutcomeTerminalFailure, Reason: "control_revision_required"}
 	}
-	applied, result := controlSources(ctx, chalk, input, mediaplane.SourceGrant)
+	applied, _, result := controlSources(ctx, chalk, input, mediaplane.SourceGrant)
 	if result != nil {
 		return *result
 	}
@@ -285,7 +308,7 @@ func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperat
 
 // controlSources sends one action for every source the operation names at its
 // control revision, and returns the sources the node applied it to.
-func controlSources(ctx context.Context, chalk ChalkNode, input provideroperations.OperationInput, action mediaplane.SourceAction) (map[string]bool, *ExecutionResult) {
+func controlSources(ctx context.Context, chalk ChalkNode, input provideroperations.OperationInput, action mediaplane.SourceAction) (map[string]bool, map[mediaplane.ClosedSourceTrack]bool, *ExecutionResult) {
 	sources := []string{input.PublicationSource}
 	if input.Effect == provideroperations.EffectRemoveParticipant {
 		sources = []string{"microphone", "camera", "screen"}
@@ -302,15 +325,18 @@ func controlSources(ctx context.Context, chalk ChalkNode, input provideroperatio
 	if err != nil {
 		result := providerExecutionFailure(err)
 		slog.WarnContext(ctx, "Provider source control failed", "operation_id", input.OperationID, "effect", input.Effect, "action", action, "error_code", result.Reason)
-		return nil, &result
+		return nil, nil, &result
 	}
-	applied := map[string]bool{}
+	applied, closed := map[string]bool{}, map[mediaplane.ClosedSourceTrack]bool{}
 	for _, result := range results {
 		if result.Applied {
 			applied[result.Source] = true
 		}
+		for _, track := range result.Closed {
+			closed[track] = true
+		}
 	}
-	return applied, nil
+	return applied, closed, nil
 }
 
 type publicationTarget struct {

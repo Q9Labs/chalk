@@ -120,11 +120,17 @@ type wireSourceControlResponse struct {
 }
 
 type wireSourceControlResult struct {
-	ParticipantID string `json:"participantId"`
-	Source        string `json:"source"`
-	Action        string `json:"action"`
-	Revision      int64  `json:"revision"`
-	Applied       bool   `json:"applied"`
+	ParticipantID string                  `json:"participantId"`
+	Source        string                  `json:"source"`
+	Action        string                  `json:"action"`
+	Revision      int64                   `json:"revision"`
+	Applied       bool                    `json:"applied"`
+	Closed        []wireClosedSourceTrack `json:"closed,omitempty"`
+}
+
+type wireClosedSourceTrack struct {
+	SessionID string `json:"sessionId"`
+	Mid       string `json:"mid"`
 }
 
 type wireInspectRequest struct {

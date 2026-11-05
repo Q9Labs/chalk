@@ -452,7 +452,11 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 			return nil, fmt.Errorf("%w: source control results do not match the request", mediaplane.ErrProviderFailed)
 		}
 		for index, result := range response.Results {
-			results = append(results, mediaplane.SourceControlResult{SourceControl: batch[index], Applied: result.Applied})
+			closed := make([]mediaplane.ClosedSourceTrack, 0, len(result.Closed))
+			for _, track := range result.Closed {
+				closed = append(closed, mediaplane.ClosedSourceTrack{ConnectionID: track.SessionID, MID: track.Mid})
+			}
+			results = append(results, mediaplane.SourceControlResult{SourceControl: batch[index], Applied: result.Applied, Closed: closed})
 		}
 	}
 	return results, nil

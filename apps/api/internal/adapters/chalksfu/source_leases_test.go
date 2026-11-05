@@ -2,6 +2,7 @@ package chalksfu_test
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -107,5 +108,27 @@ func TestRenewalKeepsGrantsLiveAndADroppedRevokeStillStopsMedia(t *testing.T) {
 	time.Sleep(lease)
 	if flowing() {
 		t.Fatal("media resumed after the lease lapsed")
+	}
+}
+
+// A revoke closes the publications admitted before it and reports each by the
+// connection that published it, which is how the executor knows what to record.
+func TestARevokeReportsTheTracksItClosed(t *testing.T) {
+	box := startSFU(t, nil)
+	service := box.service(t)
+	alice := scopeOf("ep-revoke", "alice")
+	box.grant(t, alice)
+	connection, _ := join(t, service, alice)
+	_, mid, _ := publish(t, service, connection, alice, "alice-mic", "microphone")
+
+	results, err := box.adapterAt(t, box.controlURL).ControlSources(context.Background(), mediaplane.ControlSourcesInput{
+		TenantID: alice.TenantID, EpisodeID: alice.EpisodeID,
+		Controls: []mediaplane.SourceControl{{ParticipantID: alice.ParticipantID, Source: "microphone", Action: mediaplane.SourceRevoke, Revision: 2}},
+	})
+	if err != nil || len(results) != 1 || !results[0].Applied {
+		t.Fatalf("revoke = %+v, %v", results, err)
+	}
+	if want := []mediaplane.ClosedSourceTrack{{ConnectionID: connection, MID: mid}}; !slices.Equal(results[0].Closed, want) {
+		t.Fatalf("closed = %+v, want %+v", results[0].Closed, want)
 	}
 }

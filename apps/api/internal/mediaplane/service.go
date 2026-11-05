@@ -121,10 +121,18 @@ type ControlSourcesInput struct {
 }
 
 // SourceControlResult is one control's effect. Applied is false for a control
-// older than the plane's record, which changed nothing.
+// older than the plane's record, which changed nothing. Closed lists the tracks an
+// applied revoke closed, which are only those admitted before it.
 type SourceControlResult struct {
 	SourceControl
 	Applied bool
+	Closed  []ClosedSourceTrack
+}
+
+// ClosedSourceTrack is a published track a revoke closed, named by its connection and MID.
+type ClosedSourceTrack struct {
+	ConnectionID string
+	MID          string
 }
 
 type EpisodeUsageInput struct {

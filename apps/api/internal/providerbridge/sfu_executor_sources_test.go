@@ -22,10 +22,11 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 		return provideroperations.OperationInput{Effect: effect, TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, PublicationSource: source, ControlRevision: revision}
 	}
 	chalkBound := boundProvider{name: "chalk_sfu", node: "sfu-a"}
-	run := func(providers EpisodeProviders, chalk *chalkCleanupRecorder, published provideroperations.Publication, input provideroperations.OperationInput) (ExecutionResult, *executorTrackCloser) {
+	run := func(providers EpisodeProviders, chalk *chalkCleanupRecorder, published provideroperations.Publication, input provideroperations.OperationInput) (ExecutionResult, *executorTrackCloser, *executorPublicationRegistry) {
 		cloudflare := &executorTrackCloser{}
-		executor := NewSFUExecutor(&executorPublicationRegistry{publication: published}, cloudflare).WithChalkSFU(providers, nodes(map[string]*chalkCleanupRecorder{"sfu-a": chalk}))
-		return executor.Dispatch(context.Background(), input), cloudflare
+		registry := &executorPublicationRegistry{publication: published}
+		executor := NewSFUExecutor(registry, cloudflare).WithChalkSFU(providers, nodes(map[string]*chalkCleanupRecorder{"sfu-a": chalk}))
+		return executor.Dispatch(context.Background(), input), cloudflare, registry
 	}
 	want := func(t *testing.T, got []mediaplane.SourceControl, action mediaplane.SourceAction, revision int64, sources ...string) {
 		t.Helper()
@@ -43,7 +44,7 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("a grant reaches the bound node at its revision", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 7))
+		result, _, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 7))
 		if result.Outcome != provideroperations.OutcomeConfirmed {
 			t.Fatalf("result = %+v", result)
 		}
@@ -58,7 +59,7 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("a grant without a revision cannot be ordered and fails", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 0))
+		result, _, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 0))
 		if result.Outcome != provideroperations.OutcomeTerminalFailure || result.Reason != "control_revision_required" || len(chalk.controls) != 0 {
 			t.Fatalf("result = %+v controls = %+v", result, chalk.controls)
 		}
@@ -66,7 +67,7 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("a grant a newer revoke holds is not reported as done", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{stale: true}
-		result, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 3))
+		result, _, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 3))
 		if result.Outcome != provideroperations.OutcomeTerminalFailure || result.Reason != "source_revoked" {
 			t.Fatalf("result = %+v", result)
 		}
@@ -74,7 +75,7 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("a Cloudflare grant stays a no-op", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, cloudflare := run(boundProvider{}, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 7))
+		result, cloudflare, _ := run(boundProvider{}, chalk, provideroperations.Publication{}, operation(provideroperations.EffectGrantPublication, "camera", 7))
 		if result.Outcome != provideroperations.OutcomeConfirmed || len(chalk.controls) != 0 || cloudflare.calls != 0 {
 			t.Fatalf("result = %+v controls = %+v cloudflare = %d", result, chalk.controls, cloudflare.calls)
 		}
@@ -82,27 +83,39 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("a revoke with no track still fences the source", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectRevokePublication, "microphone", 5))
+		result, _, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectRevokePublication, "microphone", 5))
 		if result.Outcome != provideroperations.OutcomeConfirmed || chalk.calls != 0 {
 			t.Fatalf("result = %+v closes = %d", result, chalk.calls)
 		}
 		want(t, chalk.controls, mediaplane.SourceRevoke, 5, "microphone")
 	})
 
-	t.Run("a screen revoke fences tab audio and closes the screen track", func(t *testing.T) {
-		chalk := &chalkCleanupRecorder{}
+	t.Run("a screen revoke fences tab audio and records the track the node closed", func(t *testing.T) {
+		chalk := &chalkCleanupRecorder{closed: []mediaplane.ClosedSourceTrack{{ConnectionID: "publisher-connection", MID: "2"}}}
 		screen := provideroperations.Publication{ParticipantID: participantID, Source: "screen", Enabled: true, PublicationID: screenPublication}
-		result, _ := run(chalkBound, chalk, screen, operation(provideroperations.EffectRevokePublication, "screen", 6))
-		if result.Outcome != provideroperations.OutcomeConfirmed || chalk.calls != 1 {
-			t.Fatalf("result = %+v closes = %d", result, chalk.calls)
+		result, _, registry := run(chalkBound, chalk, screen, operation(provideroperations.EffectRevokePublication, "screen", 6))
+		if result.Outcome != provideroperations.OutcomeConfirmed || chalk.calls != 0 || registry.publication.PublicationID != "" {
+			t.Fatalf("result = %+v closes = %d publication = %+v", result, chalk.calls, registry.publication)
 		}
 		want(t, chalk.controls, mediaplane.SourceRevoke, 6, "screen", "screen_audio")
+	})
+
+	// After revoke@6 applies, an overlapping retry can release the fence and grant@7 can
+	// admit a new track before this execution reads the publications. The node keeps that
+	// track open, and the executor must not close it behind the node's back.
+	t.Run("a revoke leaves open a track a newer grant admitted", func(t *testing.T) {
+		chalk := &chalkCleanupRecorder{}
+		screen := provideroperations.Publication{ParticipantID: participantID, Source: "screen", Enabled: true, PublicationID: screenPublication}
+		result, _, registry := run(chalkBound, chalk, screen, operation(provideroperations.EffectRevokePublication, "screen", 6))
+		if result.Outcome != provideroperations.OutcomeConfirmed || chalk.calls != 0 || registry.publication.PublicationID != screenPublication {
+			t.Fatalf("result = %+v closes = %d publication = %+v", result, chalk.calls, registry.publication)
+		}
 	})
 
 	t.Run("a revoke a newer grant superseded leaves its publication alone", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{stale: true}
 		screen := provideroperations.Publication{ParticipantID: participantID, Source: "screen", Enabled: true, PublicationID: screenPublication}
-		result, _ := run(chalkBound, chalk, screen, operation(provideroperations.EffectRevokePublication, "screen", 6))
+		result, _, _ := run(chalkBound, chalk, screen, operation(provideroperations.EffectRevokePublication, "screen", 6))
 		if result.Outcome != provideroperations.OutcomeSatisfied || chalk.calls != 0 {
 			t.Fatalf("result = %+v closes = %d", result, chalk.calls)
 		}
@@ -110,7 +123,7 @@ func TestSourceControlsFollowTheDurableOperation(t *testing.T) {
 
 	t.Run("removing a Participant fences every source", func(t *testing.T) {
 		chalk := &chalkCleanupRecorder{}
-		result, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectRemoveParticipant, "", 8))
+		result, _, _ := run(chalkBound, chalk, provideroperations.Publication{}, operation(provideroperations.EffectRemoveParticipant, "", 8))
 		if result.Outcome != provideroperations.OutcomeConfirmed {
 			t.Fatalf("result = %+v", result)
 		}

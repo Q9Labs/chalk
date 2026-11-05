@@ -477,7 +477,10 @@ fences the Participant/source across allocations. Neither may let a late close
 kill another device's newer publication. The provider executor dispatches
 grants and revokes as source controls to the Episode's pinned node at the
 operation's control revision, including the no-track case; a screen control also
-covers `screen_audio`, and a removal covers every source.
+covers `screen_audio`, and a removal covers every source. The node's revoke
+closes only publications admitted before it, so the executor records the tracks
+the node reports closed and sends no close of its own, which could otherwise
+close a track a newer grant admitted.
 
 Use short-lived forwarding leases (15-second TTL, refreshed every five seconds in
 bounded batches) backed by current durable authorization. A source no control has
