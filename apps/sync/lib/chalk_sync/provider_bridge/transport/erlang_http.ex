@@ -6,7 +6,7 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
   def request(method, url, headers, body, options) when method in [:get, :post] do
     :inets.start()
     :ssl.start()
-    profile = Keyword.get(options, :profile, :default)
+    profile = Keyword.fetch!(options, :profile)
 
     request =
       case method do
@@ -38,13 +38,14 @@ defmodule ChalkSync.ProviderBridge.Transport.ErlangHTTP do
     :exit, reason -> {:error, reason}
   end
 
-  defp ensure_profile(:default), do: :ok
-
-  # httpc queues keep-alive requests behind active requests to the same origin.
-  # The fixed readiness profile owns separate sessions from provider operations.
+  # httpc reuses a warm persistent connection even while it serves another request, and queues the
+  # new request behind it (up to `max_keep_alive_length` deep). One slow provider call would then
+  # stall every other call to the API. With a queue length of 0, a busy connection is never
+  # reused, so each in-flight call gets its own connection. Each caller names its own profile so
+  # a slow call class cannot hold up another one's connections.
   defp ensure_profile(profile) do
     case :inets.start(:httpc, profile: profile) do
-      {:ok, _pid} -> :ok
+      {:ok, _pid} -> :httpc.set_options([max_keep_alive_length: 0], profile)
       {:error, {:already_started, _pid}} -> :ok
       {:error, reason} -> {:error, reason}
     end

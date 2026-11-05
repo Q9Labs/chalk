@@ -4,6 +4,12 @@
 
 - Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md).
 
+## 5.4.1
+
+- Add Cloudflare call timing logs for production diagnostics.
+- Answer every SFU offer and retry transient failed pulls within seconds.
+- Advance the seven synchronized Chalk SDK packages to 5.4.1.
+
 ## 5.4.0
 
 - Share Chalk board controls, notes, surfaces and Follow across web and mobile, including boards started on web and opened in a native tile.
