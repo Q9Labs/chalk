@@ -61,6 +61,9 @@ while IFS='|' read -r name check sources seq drops loss mutes cfails rule ui sfu
     cloudflare) sfu_consts="CloseCanFail = TRUE
   OrphansLinger = TRUE
   AtomicRevoke = FALSE" ;;
+    own-distributed) sfu_consts="CloseCanFail = TRUE
+  OrphansLinger = TRUE
+  AtomicRevoke = FALSE" ;;
     own) sfu_consts="CloseCanFail = FALSE
   OrphansLinger = FALSE
   AtomicRevoke = TRUE" ;;
