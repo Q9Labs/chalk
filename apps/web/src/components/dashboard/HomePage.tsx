@@ -111,13 +111,13 @@ export function HomePage() {
 
   async function startCall() {
     if (starting) return;
-    // The empty-state opener disappears when the first row is added.
-    startButton.current?.focus();
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
       const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
+      // The empty-state opener disappears when the first row is added.
+      startButton.current?.focus();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);

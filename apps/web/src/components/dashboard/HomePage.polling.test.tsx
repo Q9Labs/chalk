@@ -694,3 +694,17 @@ it("returns focus to the persistent Start a call button after the empty-state op
   });
   expect(document.activeElement).toBe(persistent);
 });
+
+it("keeps focus on the empty-state action when call creation fails", async () => {
+  serve({ calls: [], live: {} });
+  vi.mocked(act).mockRejectedValue(new Error("Call creation unavailable"));
+  await open();
+  const empty = screen.getAllByRole("button", { name: "Start a call", exact: true })[1];
+  if (!empty) throw new Error("Expected an empty-state call action");
+  empty.focus();
+  await reactAct(async () => {
+    fireEvent.click(empty);
+  });
+  expect(empty.isConnected).toBe(true);
+  expect(document.activeElement).toBe(empty);
+});
