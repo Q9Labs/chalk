@@ -196,7 +196,7 @@ function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: Final
   if (value.schemaVersion !== "transcript.v1") throw new AssignmentError("finalize schema drift");
   boundedText(value.jobId, "finalize source job ID");
   if (typeof value.episodeId !== "string" || value.episodeId.length === 0 || value.episodeId !== expectedEpisodeId) throw new AssignmentError("finalize identity metadata conflicts");
-  if (value.provider !== "deepinfra" && value.provider !== "cloudflare") throw new AssignmentError("finalize provider is invalid");
+  if (value.provider !== "deepinfra" && value.provider !== "cloudflare" && value.provider !== "openrouter") throw new AssignmentError("finalize provider is invalid");
   boundedText(value.model, "finalize model");
   boundedText(value.versionContract, "finalize version contract");
   if (!Number.isInteger(value.attempt) || value.attempt < 0) throw new AssignmentError("finalize attempt is invalid");
@@ -238,7 +238,7 @@ function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxText
   validateIdentity(cue.identity);
   boundedText(cue.displayNameSnapshot, "finalize display name", 256);
   if (typeof cue.overlap !== "boolean") throw new AssignmentError("finalize cue overlap is invalid");
-  if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare") throw new AssignmentError("finalize cue provider is invalid");
+  if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare" && cue.provider !== "openrouter") throw new AssignmentError("finalize cue provider is invalid");
   boundedText(cue.model, "finalize cue model");
   boundedText(cue.versionContract, "finalize cue version contract");
   if (!Number.isInteger(cue.attempt) || cue.attempt < 0) throw new AssignmentError("finalize cue attempt is invalid");

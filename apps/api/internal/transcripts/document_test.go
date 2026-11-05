@@ -23,6 +23,18 @@ func TestReadDocumentReturnsReaderFieldsFromTranscriptV1(t *testing.T) {
 	}
 }
 
+func TestReadDocumentAcceptsMAIArtifactAndRejectsUnrecognizedProvider(t *testing.T) {
+	body := strings.ReplaceAll(validDocumentJSON, `"deepinfra"`, `"openrouter"`)
+	body = strings.ReplaceAll(body, `openai/whisper-large-v3-turbo`, `microsoft/mai-transcribe-2`)
+	if _, err := ReadDocument(strings.NewReader(body), MaxDocumentBytes); err != nil {
+		t.Fatalf("MAI document must remain readable: %v", err)
+	}
+	body = strings.ReplaceAll(body, `"openrouter"`, `"unknown-provider"`)
+	if _, err := ReadDocument(strings.NewReader(body), MaxDocumentBytes); !errors.Is(err, ErrInvalidDocument) {
+		t.Fatalf("unknown provider error = %v", err)
+	}
+}
+
 func TestReadDocumentRejectsInvalidOrOversizedPersistedDocuments(t *testing.T) {
 	for _, test := range []struct {
 		name    string

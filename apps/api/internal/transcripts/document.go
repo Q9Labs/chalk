@@ -186,11 +186,11 @@ func (identity persistedIdentity) validate() error {
 }
 
 func validDocumentProvider(provider string) bool {
-	return provider == "deepinfra" || provider == "cloudflare" || provider == "mixed"
+	return provider == "deepinfra" || provider == "cloudflare" || provider == "openrouter" || provider == "mixed"
 }
 
 func validCueProvider(provider string) bool {
-	return provider == "deepinfra" || provider == "cloudflare"
+	return provider == "deepinfra" || provider == "cloudflare" || provider == "openrouter"
 }
 
 func validNonNegativeFloat(value *float64) bool {

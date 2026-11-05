@@ -30,7 +30,7 @@ export interface ProviderResult {
   providerReportedCostUsd?: number;
   segments: ProviderSegment[];
   words?: ProviderWord[];
-  provider: "deepinfra" | "cloudflare";
+  provider: "deepinfra" | "cloudflare" | "openrouter";
   model: string;
   versionContract: string;
   executionIdentity?: string;
@@ -65,7 +65,7 @@ export interface ProviderRequest {
 }
 
 export interface TranscriptionProvider {
-  readonly name: "deepinfra" | "cloudflare";
+  readonly name: "deepinfra" | "cloudflare" | "openrouter";
   transcribe(request: ProviderRequest): Promise<ProviderResult>;
 }
 
@@ -245,8 +245,8 @@ export interface ProviderPolicy {
 }
 
 export interface ReleaseConfig {
-  // No adapter is qualified yet. Runtime validation also rejects injected values.
-  codeswitchProvider?: never;
+  codeswitchProvider?: "mai";
+  openRouterToken?: string;
   environment: string;
   releaseId: string;
   controlApiAudience: string;

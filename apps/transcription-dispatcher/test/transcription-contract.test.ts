@@ -387,11 +387,21 @@ describe("provider segment timing contract", () => {
 });
 
 describe("dispatcher provider schema logging", () => {
-  it.each(["malformed", "overlap", "zero", "reversed"])("logs private-safe timing diagnostics and completes only repairable answers: %s", async (kind) => {
+  it.each(
+    ["malformed", "overlap", "zero", "reversed"].flatMap((kind) => [
+      { kind, auto: true },
+      { kind, auto: false },
+    ]),
+  )("logs private-safe timing diagnostics and completes only repairable answers: %j", async ({ kind, auto }) => {
     const audio = new Uint8Array(4096);
     const audioHash = createHash("sha256").update(audio).digest("hex");
     const manifest = JSON.stringify(sourceManifest(audioHash));
-    const claim = { ...assignment, chunk: { ...assignment.chunk, inputSha256: audioHash }, manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") } };
+    const claim = {
+      ...assignment,
+      transcriptLanguage: auto ? { mode: "auto" as const } : { mode: "fixed" as const, language: "en" as const },
+      chunk: { ...assignment.chunk, inputSha256: audioHash },
+      manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") },
+    };
     const policy: ProviderPolicy = { timeoutMs: 1000, maxAudioBytes: 8192, maxAudioSeconds: 900, maxResponseBytes: 8192, maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxRetries: 0, retryBaseDelayMs: 1, retryMaxDelayMs: 1, circuitFailureThreshold: 5, circuitCooldownMs: 1000 };
     const config: ReleaseConfig = {
       environment: "test",
@@ -426,7 +436,23 @@ describe("dispatcher provider schema logging", () => {
       { getRemainingTimeInMillis: () => 30000 },
       {
         config,
-        primary: provider,
+        ...(auto
+          ? {
+              codeswitch: provider,
+              primary: {
+                name: "deepinfra" as const,
+                transcribe: async () => {
+                  throw new Error("Auto reached Whisper primary");
+                },
+              },
+              fallback: {
+                name: "cloudflare" as const,
+                transcribe: async () => {
+                  throw new Error("Auto reached Whisper fallback");
+                },
+              },
+            }
+          : { primary: provider }),
         control: {
           claim: async () => ({ assignments: [claim] }),
           heartbeat: async () => undefined,
@@ -474,5 +500,66 @@ describe("dispatcher provider schema logging", () => {
       ]);
     expect(JSON.stringify(warnings)).not.toContain("PRIVATE");
     expect(retries).toEqual(repairable ? [] : [expect.objectContaining({ errorCode: "provider_schema_invalid", terminal: true })]);
+  });
+});
+
+describe("language provider isolation", () => {
+  it("continues fixed-language work after MAI opens its own circuit", async () => {
+    const audio = new Uint8Array(4096);
+    const hash = createHash("sha256").update(audio).digest("hex");
+    const manifest = JSON.stringify(sourceManifest(hash));
+    const shared = { ...assignment, chunk: { ...assignment.chunk, inputSha256: hash }, manifest: { ...assignment.manifest, sizeBytes: Buffer.byteLength(manifest), sha256: createHash("sha256").update(manifest).digest("hex") } };
+    const automatic = { ...shared, jobId: "job-auto", transcriptLanguage: { mode: "auto" as const } };
+    const fixed = { ...shared, jobId: "job-fixed", transcriptLanguage: { mode: "fixed" as const, language: "en" as const }, chunk: { ...shared.chunk, inputUrl: shared.chunk.inputUrl + "&fixed=1" } };
+    const failure = Promise.withResolvers<void>();
+    let fixedCalls = 0;
+    const config: ReleaseConfig = {
+      environment: "test",
+      releaseId: "release",
+      controlApiAudience: "test",
+      controlApiBaseUrl: "https://control.example",
+      maxBatch: 3,
+      concurrency: 3,
+      timeoutReserveMs: 1000,
+      privacyGateAccepted: true,
+      deepInfra: { enabled: true, model: "openai/whisper-large-v3-turbo" },
+      cloudflare: { enabled: false },
+      provider: { timeoutMs: 1000, maxAudioBytes: 8192, maxAudioSeconds: 900, maxResponseBytes: 8192, maxTextChars: 1024, maxSegments: 100, maxWords: 100, maxRetries: 0, retryBaseDelayMs: 1, retryMaxDelayMs: 1, circuitFailureThreshold: 1, circuitCooldownMs: 10000 },
+    };
+    const result = await runDispatcher(
+      { source: "wake" },
+      { getRemainingTimeInMillis: () => 30000 },
+      {
+        config,
+        codeswitch: {
+          name: "openrouter",
+          transcribe: async () => {
+            throw new ProviderError("MAI unavailable", "retryable", { status: 503 });
+          },
+        },
+        primary: {
+          name: "deepinfra",
+          transcribe: async () => {
+            fixedCalls++;
+            return { text: "fixed", segments: [{ startSeconds: 0, endSeconds: 1, text: "fixed" }], provider: "deepinfra", model: "whisper", versionContract: "test" };
+          },
+        },
+        control: {
+          claim: async () => ({ assignments: [automatic, fixed] }),
+          heartbeat: async () => undefined,
+          retry: async (input) => {
+            if (input.jobId === automatic.jobId) failure.resolve();
+          },
+          complete: async () => undefined,
+        },
+        fetch: async (url, init) => {
+          if (init?.method === "PUT") return new Response(null, { status: 200 });
+          if (String(url).includes("fixed=1")) await failure.promise;
+          return String(url) === assignment.manifest.inputUrl ? new Response(manifest, { headers: { "content-type": "application/json" } }) : new Response(audio, { headers: { "content-type": "audio/flac" } });
+        },
+      },
+    );
+    expect(result).toEqual({ claimed: 2, completed: 1, failed: 1 });
+    expect(fixedCalls).toBe(1);
   });
 });

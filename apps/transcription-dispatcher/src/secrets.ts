@@ -13,12 +13,14 @@ export interface SsmParameterClient {
 }
 
 export interface DispatcherSecrets {
+  openRouterToken?: string;
   deepInfraToken?: string;
   cloudflareAiToken?: string;
   workloadAuth: string;
 }
 
 export interface SecretParameterNames {
+  openRouterToken?: string;
   deepInfraToken?: string;
   cloudflareAiToken?: string;
   workloadAuth: string;
@@ -30,7 +32,7 @@ export interface SecretParameterNames {
  * serialized, or retained by this loader.
  */
 export async function loadDispatcherSecrets(client: SsmParameterClient, names: SecretParameterNames): Promise<DispatcherSecrets> {
-  const requested = [names.workloadAuth, ...(names.cloudflareAiToken ? [names.cloudflareAiToken] : []), ...(names.deepInfraToken ? [names.deepInfraToken] : [])];
+  const requested = [...(names.openRouterToken ? [names.openRouterToken] : []), names.workloadAuth, ...(names.cloudflareAiToken ? [names.cloudflareAiToken] : []), ...(names.deepInfraToken ? [names.deepInfraToken] : [])];
   if (requested.some((name) => !validParameterName(name))) throw new ConfigError("invalid SSM parameter ARN/name");
   if (new Set(requested).size !== requested.length) throw new ConfigError("SSM parameter names must be distinct");
   const response = await client.send({ input: { Names: requested, WithDecryption: true } });
@@ -48,7 +50,10 @@ export async function loadDispatcherSecrets(client: SsmParameterClient, names: S
   if (!workloadAuth || (names.cloudflareAiToken && !cloudflareAiToken)) throw new ConfigError("required transcription secret is unavailable");
   const deepInfraToken = names.deepInfraToken ? values.get(names.deepInfraToken) : undefined;
   if (names.deepInfraToken && !deepInfraToken) throw new ConfigError("required DeepInfra secret is unavailable");
+  const openRouterToken = names.openRouterToken ? values.get(names.openRouterToken) : undefined;
+  if (names.openRouterToken && !openRouterToken) throw new ConfigError("required OpenRouter secret is unavailable");
   return {
+    ...(openRouterToken === undefined ? {} : { openRouterToken }),
     ...(cloudflareAiToken === undefined ? {} : { cloudflareAiToken }),
     workloadAuth,
     ...(deepInfraToken === undefined ? {} : { deepInfraToken }),

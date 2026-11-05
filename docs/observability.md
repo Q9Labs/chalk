@@ -727,3 +727,16 @@ only the existing public API error code and message.
 The Postgres proof `TestMCPPostgresToolsAndPermissions` drives the official Go
 MCP client through Streamable HTTP. The MCP module's transport proof covers
 Origin rejection, bounded UTF-8 continuation, body limits, and disabled SSE.
+
+## Auto transcription provider
+
+Auto MAI requests retain the existing dispatcher/API transcript lifecycle and
+journey carrier. `dispatcher_completed` identifies `provider=openrouter`, fallback
+use and attempts. Provider HTTP/timeout failures keep the existing bounded
+`provider_*` retry reasons; malformed timing or Urdu conversion emits
+`provider_schema_invalid` with field/type metadata, never transcript text,
+provider bodies or audio. Silent Auto chunks complete with zero cues and zero
+provider cost, not a provider failure. Fixed-language requests remain Whisper.
+Provider word and segment timestamps are restored to the original source clock
+before manifest-based speaker attribution. The dispatcher tests exercise this
+mapping through a real synthetic FLAC decoder and a fake provider boundary.

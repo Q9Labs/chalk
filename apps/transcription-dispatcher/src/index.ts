@@ -1,3 +1,4 @@
+import { MaiTranscribeProvider } from "./mai-provider.js";
 import { loadReleaseConfig } from "./config.js";
 import { RecorderControlApiClient } from "./control-api.js";
 import { createLambdaHandler } from "./dispatcher.js";
@@ -54,6 +55,7 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
   return createLambdaHandler({
     config,
     control,
+    ...(config.codeswitchProvider === "mai" ? { codeswitch: new MaiTranscribeProvider({ fetch: fetchImpl, token: required(config.openRouterToken, "OpenRouter token"), policy: config.provider }) } : {}),
     ...(primary === undefined ? {} : { primary }),
     ...(fallback ? { fallback } : {}),
     fetch: fetchImpl,
@@ -67,6 +69,7 @@ export function buildHandler(env: NodeJS.ProcessEnv = process.env, secrets?: Dis
 export async function buildHandlerFromSsm(env: NodeJS.ProcessEnv, client: SsmParameterClient): Promise<ReturnType<typeof createLambdaHandler>> {
   const deepInfraEnabled = env.DEEPINFRA_ENABLED === "true";
   const secrets = await loadDispatcherSecrets(client, {
+    ...(env.CODESWITCH_PROVIDER === "mai" ? { openRouterToken: requiredEnv(env, "OPENROUTER_TOKEN_PARAMETER_ARN") } : {}),
     ...(deepInfraEnabled ? { deepInfraToken: requiredEnv(env, "DEEPINFRA_TOKEN_PARAMETER_ARN") } : {}),
     ...(env.CLOUDFLARE_AI_ENABLED === "true" ? { cloudflareAiToken: requiredEnv(env, "CLOUDFLARE_AI_TOKEN_PARAMETER_ARN") } : {}),
     workloadAuth: requiredEnv(env, "CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN"),

@@ -74,7 +74,7 @@ export async function transcribeWithFallback(options: { primary?: TranscriptionP
 
 async function invokeProvider(provider: TranscriptionProvider, request: ProviderRequest, policy: ProviderPolicy, runtime: RetryRuntime): Promise<ProviderResult> {
   const result = await provider.transcribe(request);
-  if (result.segments.length === 0) throw new ProviderError("provider returned no timings", "schema");
+  if (result.segments.length === 0 && result.text.trim().length > 0) throw new ProviderError("provider returned no timings", "schema");
   return result;
 }
 

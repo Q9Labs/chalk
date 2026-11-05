@@ -233,6 +233,11 @@ describe("provider selection", () => {
     expect(loadReleaseConfig({ ...env, CHALK_ENVIRONMENT: "production" }, secrets).controlApiBaseUrl).toBe(env.CONTROL_API_BASE_URL);
   });
 
+  it("loads only the qualified MAI slot with a separately resolved secret", () => {
+    expect(() => loadReleaseConfig({ ...env, CODESWITCH_PROVIDER: "mai" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/OpenRouter/);
+    expect(loadReleaseConfig({ ...env, CODESWITCH_PROVIDER: "mai" }, { workloadAuth: "test-key", deepInfraToken: "test-token", openRouterToken: "mai-token" })).toMatchObject({ codeswitchProvider: "mai", openRouterToken: "mai-token" });
+  });
+
   it("requires explicit fallback selection and qualification", () => {
     expect(() => loadReleaseConfig({ ...env, CLOUDFLARE_AI_ENABLED: "true" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/Cloudflare/);
     expect(() => loadReleaseConfig({ ...env, DEEPINFRA_CORPUS_DIGEST: "" }, { workloadAuth: "test-key", deepInfraToken: "test-token" })).toThrow(/CORPUS_DIGEST/);

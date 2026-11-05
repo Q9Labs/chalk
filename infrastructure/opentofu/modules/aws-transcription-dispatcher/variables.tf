@@ -515,3 +515,23 @@ variable "control_api_invoke_source_arn" {
   default     = null
   nullable    = true
 }
+
+variable "codeswitch_provider" {
+  description = "MAI Auto transcription; empty pauses Auto without falling back to Whisper."
+  type        = string
+  default     = ""
+  validation {
+    condition     = contains(["", "mai"], var.codeswitch_provider)
+    error_message = "Only the qualified MAI adapter or disabled Auto is supported."
+  }
+}
+
+variable "openrouter_token_parameter_arn" {
+  description = "Environment-scoped SecureString ARN for MAI and script conversion."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.openrouter_token_parameter_arn == "" || can(regex("^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/", var.openrouter_token_parameter_arn))
+    error_message = "OpenRouter secret must be a Chalk SSM parameter ARN."
+  }
+}
