@@ -51,12 +51,15 @@ type publication struct {
 	monitoring bool
 }
 
-func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) *publication {
-	authority, revision, revoked := session.node.authorityFor(session.scope, track.Source)
+func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
+	authority, revision, revoked, err := session.node.authorityFor(session.scope, track.Source)
+	if err != nil {
+		return nil, err
+	}
 	return &publication{
 		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
 		authority: authority, revision: revision, revoked: revoked,
-	}
+	}, nil
 }
 
 func (p *publication) video() bool { return p.kind == webrtc.RTPCodecTypeVideo }

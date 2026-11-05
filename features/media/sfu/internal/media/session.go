@@ -349,10 +349,14 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	if s.published[track.Mid] != nil || s.publishedByName(track.TrackName) != nil {
 		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
 	}
+	pub, err := newPublication(s, track, transceiver.Kind())
+	if err != nil {
+		return transceiver, protocol.TrackCodeLimitExceeded, "the node's source table is full"
+	}
 	if track.Source == sourceScreen && !s.node.claimScreen(s) {
 		return transceiver, protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
 	}
-	s.published[track.Mid] = newPublication(s, track, transceiver.Kind())
+	s.published[track.Mid] = pub
 	return transceiver, "", ""
 }
 

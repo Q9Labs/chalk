@@ -24,6 +24,24 @@ func freeAuthority() *sourceAuthority {
 	return authority
 }
 
+func authorityOf(t *testing.T, n *Node, scope protocol.Scope, source string) *sourceAuthority {
+	t.Helper()
+	authority, _, _, err := n.authorityFor(scope, source)
+	if err != nil {
+		t.Fatalf("admit %s: %v", source, err)
+	}
+	return authority
+}
+
+func admitPublication(t *testing.T, session *Session, track protocol.Track, kind webrtc.RTPCodecType) *publication {
+	t.Helper()
+	pub, err := newPublication(session, track, kind)
+	if err != nil {
+		t.Fatalf("publish %s: %v", track.TrackName, err)
+	}
+	return pub
+}
+
 func control(participant, source, action string, revision int64) protocol.SourceControlRequest {
 	return protocol.SourceControlRequest{TenantID: "tenant-1", EpisodeID: "episode-1", Controls: []protocol.SourceControl{
 		{ParticipantID: participant, Source: source, Action: action, Revision: revision},
@@ -52,7 +70,7 @@ func TestSourceControlsApplyInRevisionOrder(t *testing.T) {
 	n := leaseNode(t, time.Minute, true)
 	scope := testScope("alice", 1)
 	n.newTestSession(t, scope)
-	authority, _, _ := n.authorityFor(scope, "microphone")
+	authority := authorityOf(t, n, scope, "microphone")
 	now := func() bool { return authority.allows(monotonic(), monotonic()) }
 	if now() {
 		t.Fatal("a source forwards before any grant")
@@ -97,14 +115,14 @@ func TestARevokeWithoutAPublicationFencesALaterOne(t *testing.T) {
 	}
 	scope := testScope("dave", 1)
 	n.newTestSession(t, scope)
-	authority, _, _ := n.authorityFor(scope, "camera")
+	authority := authorityOf(t, n, scope, "camera")
 	if authority.allows(monotonic(), monotonic()) {
 		t.Fatal("a publication after the revoke forwards")
 	}
 	if result := apply(t, n, control("dave", "camera", protocol.SourceGrant, 6)); result.Applied {
 		t.Fatal("a delayed grant undid the revoke")
 	}
-	if microphone, _, _ := n.authorityFor(scope, "microphone"); !microphone.allows(monotonic(), monotonic()) {
+	if microphone := authorityOf(t, n, scope, "microphone"); !microphone.allows(monotonic(), monotonic()) {
 		t.Fatal("a source no control named stopped forwarding on a node that does not require grants")
 	}
 }
@@ -114,7 +132,7 @@ func TestALeaseLapsesWithoutRenewal(t *testing.T) {
 	n := leaseNode(t, 150*time.Millisecond, true)
 	scope := testScope("alice", 1)
 	n.newTestSession(t, scope)
-	authority, _, _ := n.authorityFor(scope, "microphone")
+	authority := authorityOf(t, n, scope, "microphone")
 	result := apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
 	if !authority.allows(monotonic(), monotonic()) || result.LeaseMillis <= 0 || result.LeaseMillis > 150 {
 		t.Fatalf("grant: %+v", result)
@@ -144,7 +162,7 @@ func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {
 	if !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a full table of live sources admitted a control: %v", err)
 	}
-	if microphone, _, _ := n.authorityFor(alice, "microphone"); microphone.allows(monotonic(), monotonic()) {
+	if microphone := authorityOf(t, n, alice, "microphone"); microphone.allows(monotonic(), monotonic()) {
 		t.Fatal("the live revoke was forgotten")
 	}
 
@@ -179,7 +197,7 @@ func TestAnEvictedRevokeStillFencesItsSource(t *testing.T) {
 				t.Fatalf("a grant older than the evicted revoke applied: %+v", result)
 			}
 			session := n.newTestSession(t, alice)
-			pub := newPublication(session, protocol.Track{Mid: "0", TrackName: "cam", Source: "camera"}, webrtc.RTPCodecTypeVideo)
+			pub := admitPublication(t, session, protocol.Track{Mid: "0", TrackName: "cam", Source: "camera"}, webrtc.RTPCodecTypeVideo)
 			if pub.authority.allows(monotonic(), monotonic()) {
 				t.Fatal("a publication after the evicted revoke forwards")
 			}
@@ -211,6 +229,34 @@ func TestSourceFloorsStayBounded(t *testing.T) {
 	}
 	if len(n.sources) != 1 || len(n.sourceFloors) != 1 {
 		t.Fatalf("table holds %d sources and %d floors, limit 1", len(n.sources), len(n.sourceFloors))
+	}
+}
+
+// Publication admission keeps the table at its limit when an entry can't be evicted. With
+// the only floor taken, bob's revision-2 entry in a second Episode would need a new floor,
+// so it stays, and each publish and close cycle must reclaim the previous cycle's entry
+// or refuse instead of growing the table.
+func TestPublicationAdmissionKeepsTheSourceTableBounded(t *testing.T) {
+	n := leaseNode(t, time.Minute, false)
+	n.sourceLimit = 1
+	in := func(episode, participant string, revision int64) protocol.SourceControlRequest {
+		request := control(participant, "camera", protocol.SourceGrant, revision)
+		request.EpisodeID = episode
+		return request
+	}
+	apply(t, n, in("episode-1", "alice", 1))
+	apply(t, n, in("episode-2", "bob", 2)) // evicts alice, so episode-1 takes the only floor
+	for cycle := range 40 {
+		scope := testScope(fmt.Sprintf("carol-%d", cycle), 1)
+		session := n.newTestSession(t, scope)
+		if _, err := newPublication(session, protocol.Track{Mid: "0", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio); err != nil && !errors.Is(err, ErrCapacityExceeded) {
+			t.Fatalf("cycle %d: %v", cycle, err)
+		}
+		session.Close()
+	}
+	if len(n.sources) > n.sourceLimit || len(n.sourceOrder) != len(n.sources) || len(n.sourceFloors) > n.sourceLimit {
+		t.Fatalf("after 40 publish and close cycles the table holds %d sources, %d in order and %d floors, limit %d",
+			len(n.sources), len(n.sourceOrder), len(n.sourceFloors), n.sourceLimit)
 	}
 }
 
@@ -298,7 +344,7 @@ func TestADelayedRevokeNeverClosesAPublicationOfANewerGrant(t *testing.T) {
 	reachRevision(n, key, 2)
 	granted := controlInBackground(n, control("alice", "microphone", protocol.SourceGrant, 3))
 	reachRevision(n, key, 3)
-	pub := newPublication(session, protocol.Track{Mid: "0", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
+	pub := admitPublication(t, session, protocol.Track{Mid: "0", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
 	session.published["0"] = pub
 	session.mu.Unlock()
 
@@ -320,13 +366,13 @@ func TestARevokesCleanupKeepsAPublicationAdmittedAfterTheRevoke(t *testing.T) {
 	session := n.newTestSession(t, scope)
 	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
 	key := sourceKey{keyOf(scope), "microphone"}
-	before := newPublication(session, protocol.Track{Mid: "0", TrackName: "old-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
+	before := admitPublication(t, session, protocol.Track{Mid: "0", TrackName: "old-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
 	session.published["0"] = before
 
 	session.mu.Lock() // the revoke's cleanup and the grant's keyframe request wait here
 	revoked := controlInBackground(n, control("alice", "microphone", protocol.SourceRevoke, 2))
 	reachRevision(n, key, 2)
-	pub := newPublication(session, protocol.Track{Mid: "1", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
+	pub := admitPublication(t, session, protocol.Track{Mid: "1", TrackName: "mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
 	session.published["1"] = pub
 	if pub.authority.allows(monotonic(), monotonic()) {
 		t.Fatal("a publication admitted while revoked has a lease")
@@ -346,7 +392,7 @@ func TestARevokesCleanupKeepsAPublicationAdmittedAfterTheRevoke(t *testing.T) {
 		t.Fatal("the revoke@2 cleanup closed a publication grant@3 lets forward")
 	}
 	// A revoke wins a tie, so revoke@3 closes what grant@3 admitted.
-	session.published["2"] = newPublication(session, protocol.Track{Mid: "2", TrackName: "new-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
+	session.published["2"] = admitPublication(t, session, protocol.Track{Mid: "2", TrackName: "new-mic", Source: "microphone"}, webrtc.RTPCodecTypeAudio)
 	if closed := apply(t, n, control("alice", "microphone", protocol.SourceRevoke, 3)).Closed; len(closed) != 2 || closed[1].Mid != "2" {
 		t.Fatalf("revoke@3 did not close the publications admitted under grant@3: %+v", closed)
 	}

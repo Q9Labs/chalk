@@ -13,7 +13,9 @@ import (
 
 // defaultSourceLimit bounds the source authority table. Live sessions hold at most four
 // sources each, far below it, so an entry is only ever evicted for a Participant with no
-// live session, and a live session's revoke is never forgotten to admit more work.
+// live session, and a live session's revoke is never forgotten to admit more work. The
+// table never goes over the limit, so making room never needs more than one eviction
+// per new source, and a push is refused only when nothing in the table can be dropped.
 //
 // An evicted entry raises its Episode's floor to its revision. Control revisions are
 // ordered across an Episode, so a control below the floor may be older than a revoke the
@@ -55,24 +57,26 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 
 // authorityFor returns the authority a new publication of the session's source
 // forwards under, creating it, and the control it is admitted under. A source
-// that no control has named forwards freely unless the node requires a grant. The
-// caller may hold the session's mutex.
-func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool) {
+// that no control has named forwards freely unless the node requires a grant. It
+// refuses a new source when every entry belongs to a live session or would need a
+// floor past the limit, so the table never holds more than its limit. The caller
+// may hold the session's mutex.
+func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := sourceKey{keyOf(scope), source}
 	if authority := n.sources[key]; authority != nil {
-		return authority, authority.revision, authority.revoked
+		return authority, authority.revision, authority.revoked, nil
+	}
+	if err := n.makeSourceRoom(1, nil); err != nil {
+		return nil, 0, false, err
 	}
 	initial := openWindow
 	if n.cfg.RequireSourceGrant {
 		initial = closedWindow
 	}
-	// With no room the table goes over its limit, by this live session's source. A refused
-	// push would take the source down, and a refusal here protects nothing.
-	_ = n.makeSourceRoom(1, nil)
 	authority := n.addSource(key, initial)
-	return authority, authority.revision, authority.revoked
+	return authority, authority.revision, authority.revoked, nil
 }
 
 // addSource records a source the table does not hold. Below its Episode's floor the node
