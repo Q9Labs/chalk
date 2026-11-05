@@ -14,7 +14,7 @@ Start with VP8/Opus passthrough on a Pion UDP mux. Scope every session/reference
 to Tenant/Episode/Participant/generation. Define the versioned wire DTOs in public
 `protocol/`; do not import `apps/api/internal`. Return stable track identity,
 correct SDP roles and normalized per-track errors. Add operation-ID replay for
-session creation and mutation. No SDK/API wiring, layer adaptation, deployment,
+session creation only; M2 adds it for the other mutations. No SDK/API wiring, layer adaptation, deployment,
 recording support or production authorization flag in this PR.
 
 **Files:** `features/media/sfu/{go.mod,go.sum,cmd/sfu/,protocol/,internal/}`,
@@ -29,6 +29,13 @@ absence; duplicate create returns one session; a wrong client certificate and
 cross-Tenant pull fail. All peers/listeners/goroutines close at test completion.
 The command runs from `features/media/sfu` on Instabox.
 
+A second check runs one headless Chromium peer against the same service. It
+pushes a fake camera and microphone through a plain `RTCPeerConnection`, using
+the SDK's SDP shape (BUNDLE, MID-named tracks, a server offer answered on pull),
+and pulls them back on a second connection; the test asserts decoded frames and
+audio packets. Pion-to-Pion can pass while browser SDP fails, so M1 finds that
+early instead of in M2 or M6.
+
 **Risk:** a forwarding demo can hide broken signaling or resource cleanup.
 Exercise HTTP and actual peers in the same test, not a mocked media writer.
 
@@ -37,7 +44,8 @@ Exercise HTTP and actual peers in the same test, not a mocked media writer.
 **Scope:** implement lifecycle and signaling ports in `adapters/chalksfu`; add
 `chalk_sfu` to provider schemas, authenticated media grants and SDK provider
 dispatch, reusing the existing media client. Complete negotiated/receive-only
-close and no-SDP track updates. Preserve partial responses and existing public
+close and no-SDP track updates. Add operation-ID replay for every mutation the
+adapter retries. Preserve partial responses and existing public
 route flow. Persist provider/application binding at Episode creation and resolve
 all subsequent operations from it, including refresh, cleanup and recorder
 exclusion. Add the default-off Tenant/Space selector, eight-Participant own-provider
@@ -194,7 +202,9 @@ failures or persistent listener-unpulled alarm and within M6 capacity limits.
 Rehearse flag rollback: new Episode uses Cloudflare, live own-SFU Episode stays
 pinned, explicit rejoin recovers a killed node and outstanding cleanup drains.
 
-**Risk:** selector rollback is not live-session migration; removing the old
+**Risk:** the canary runs on one node, so node loss ends every own-SFU call
+until Participants rejoin. That is accepted for internal Spaces only; general
+rollout needs a second node. Selector rollback is not live-session migration; removing the old
 adapter early strands calls and cleanup. Canary evidence does not establish
 500-Participant capacity or authorize general rollout.
 

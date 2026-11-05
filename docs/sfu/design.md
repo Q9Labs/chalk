@@ -50,15 +50,15 @@ References below describe commit `570a3d32a996fd273e75363f9ccd08421a2197ff`.
 Paths and line numbers are evidence for current behavior, not proposed APIs.
 The SDK is now under `sdks/typescript/`, not `packages/`.
 
-| Current seam | Evidence (`file:line`) | V1 obligation |
-| --- | --- | --- |
-| Lifecycle port: EnsureEpisode, CreateJoin, RemoveParticipant, EndEpisode, EpisodeUsage; optional ResumeJoin | `apps/api/internal/mediaplane/service.go:36` | Implement lifecycle as well as track signaling; retries cannot duplicate joins. |
-| AddTracks, Renegotiate, InspectSession, UpdateTracks, CloseTracks are separate optional ports | `apps/api/internal/mediaplane/signaling.go:101` | Implement all five. A basic push/pull example alone is insufficient. |
-| Only `cloudflare_sfu` is accepted by the current provider validator | `apps/api/internal/mediaplane/service.go:33`; `apps/api/internal/mediaplane/service.go:339` | Add `chalk_sfu` throughout authority and generated contracts; do not disguise our provider as Cloudflare. |
-| API authenticates the Participant's connection and proxies signaling | `apps/api/internal/httpapi/sfu_signaling.go:677` | Keep browser credentials at the API; extend the provider-aware authorization checks. |
-| Current signaling resolves the mutable Space selector | `apps/api/internal/httpapi/sfu_signaling.go:691` | Change own-provider routing to the Episode's frozen binding; never reroute a live connection after a flag flip. |
-| Binding freezes provider application, excluding credentials | `apps/api/internal/mediaplane/binding.go:20`; `apps/api/internal/adapters/mediaplaneproviders/binding.go:14` | Extend binding resolution and use it for joins, refresh, signaling and cleanup, not only capture. |
-| Separate recording adapter implements the capture protocol | `apps/api/internal/adapters/cloudflare/sfu/capture_plane.go:20` | Live-media parity does not supply recording parity. |
+| Current seam                                                                                                | Evidence (`file:line`)                                                                                       | V1 obligation                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Lifecycle port: EnsureEpisode, CreateJoin, RemoveParticipant, EndEpisode, EpisodeUsage; optional ResumeJoin | `apps/api/internal/mediaplane/service.go:36`                                                                 | Implement lifecycle as well as track signaling; retries cannot duplicate joins.                                 |
+| AddTracks, Renegotiate, InspectSession, UpdateTracks, CloseTracks are separate optional ports               | `apps/api/internal/mediaplane/signaling.go:101`                                                              | Implement all five. A basic push/pull example alone is insufficient.                                            |
+| Only `cloudflare_sfu` is accepted by the current provider validator                                         | `apps/api/internal/mediaplane/service.go:33`; `apps/api/internal/mediaplane/service.go:339`                  | Add `chalk_sfu` throughout authority and generated contracts; do not disguise our provider as Cloudflare.       |
+| API authenticates the Participant's connection and proxies signaling                                        | `apps/api/internal/httpapi/sfu_signaling.go:677`                                                             | Keep browser credentials at the API; extend the provider-aware authorization checks.                            |
+| Current signaling resolves the mutable Space selector                                                       | `apps/api/internal/httpapi/sfu_signaling.go:691`                                                             | Change own-provider routing to the Episode's frozen binding; never reroute a live connection after a flag flip. |
+| Binding freezes provider application, excluding credentials                                                 | `apps/api/internal/mediaplane/binding.go:20`; `apps/api/internal/adapters/mediaplaneproviders/binding.go:14` | Extend binding resolution and use it for joins, refresh, signaling and cleanup, not only capture.               |
+| Separate recording adapter implements the capture protocol                                                  | `apps/api/internal/adapters/cloudflare/sfu/capture_plane.go:20`                                              | Live-media parity does not supply recording parity.                                                             |
 
 ### Every Cloudflare-shaped SDK dependency to preserve or explicitly extend
 
@@ -186,25 +186,25 @@ not any certificate signed by the CA. Private networking is not authentication.
 The browser never receives a service secret and never calls this listener.
 Reuse the managed runtime's certificate delivery conventions, not its private
 addresses or credentials (`apps/sync/README.md:236`). Same-region hosting does
-not imply a shared VPC: the current application tier is on AWS
-(`infrastructure/managed-episode/README.md:4`). Establish a managed WireGuard
-overlay between the API host and the DO node; bind control to that overlay
-address. Firewall its UDP 51820 listener to configured API-host egress only.
-The overlay transports control/telemetry, not public media. M6 must prove routing,
-key rotation and recovery across the two clouds. No private route is assumed
-to exist merely because both hosts are in Singapore.
+not imply a shared VPC: the current application tier is one AWS node
+(`infrastructure/managed-episode/README.md:4`). Control therefore crosses the
+public internet with no tunnel or overlay. Mutual TLS is the authentication;
+the DigitalOcean cloud firewall additionally limits TCP 8443 to the API host's
+fixed Elastic IP, the same address the recorder worker firewalls already allow
+(`infrastructure/managed-episode/README.md:228`). M6 must prove certificate
+rotation and that every other source address is refused.
 
 The internal `/v1` protocol supports:
 
-| Operation | Required behavior |
-| --- | --- |
-| Ensure Episode / create or resume session | Scope to Tenant, Episode, Participant and generation; return opaque connection ID and ICE bootstrap. Creation uses an operation ID. Resume validates a live allocation; absent old allocation leads to explicit fresh join. |
-| Push / pull tracks | Use port track fields and SDP envelope above. Push answers client offer; pull returns server offer if negotiation is needed. Return per-track success/errors, never fictitious success. |
-| Renegotiate | Apply browser answer to the pending server offer; one serialized negotiation per session, with a bounded deadline. |
-| Update tracks | Update an existing remote subscription's ceiling/fallback in place; no SDP. |
-| Close / inspect | Forced or negotiated track close; idempotent teardown; inspect existence, direction, MID, track name and active state. |
-| Grant / revoke source; remove Participant; end Episode | Revision-fenced controls distinct from SDP. Revoke prevents later stale re-admission even if no publication existed. |
-| Usage | Bounded process counters for operational estimates; never fabricate a durable billing total after restart. |
+| Operation                                              | Required behavior                                                                                                                                                                                                           |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ensure Episode / create or resume session              | Scope to Tenant, Episode, Participant and generation; return opaque connection ID and ICE bootstrap. Creation uses an operation ID. Resume validates a live allocation; absent old allocation leads to explicit fresh join. |
+| Push / pull tracks                                     | Use port track fields and SDP envelope above. Push answers client offer; pull returns server offer if negotiation is needed. Return per-track success/errors, never fictitious success.                                     |
+| Renegotiate                                            | Apply browser answer to the pending server offer; one serialized negotiation per session, with a bounded deadline.                                                                                                          |
+| Update tracks                                          | Update an existing remote subscription's ceiling/fallback in place; no SDP.                                                                                                                                                 |
+| Close / inspect                                        | Forced or negotiated track close; idempotent teardown; inspect existence, direction, MID, track name and active state.                                                                                                      |
+| Grant / revoke source; remove Participant; end Episode | Revision-fenced controls distinct from SDP. Revoke prevents later stale re-admission even if no publication existed.                                                                                                        |
+| Usage                                                  | Bounded process counters for operational estimates; never fabricate a durable billing total after restart.                                                                                                                  |
 
 Attach API-verified scope, binding identity, node incarnation, connection generation,
 operation ID and, for grant/revoke, control revision. These are internal extensions:
@@ -217,7 +217,8 @@ Bound requests, tracks per batch, sessions, subscriptions and pending SDP. Keep
 one owner for session negotiation and one ordered source-control fence; packet
 loops read immutable routing snapshots and never hold a global lock on network
 I/O. Mutations use operation ID + body digest: identical replay returns the prior
-result, conflicting reuse fails. Bound replay storage by live-session lifetime
+result, conflicting reuse fails. Session creation gets this in M1; the other
+mutations get it in M2, where the API adapter starts retrying them. Bound replay storage by live-session lifetime
 and node capacity; never evict a live revoke watermark to admit more work.
 
 ## Media path
@@ -341,14 +342,13 @@ Pion UDP mux: **UDP 50000**, one public candidate shared across sessions. If M1
 uses a per-session range instead, reserve **UDP 50000–50100** and test exhaustion;
 choose one mode explicitly before staging, not both accidentally.
 
-| Firewall direction | Allow |
-| --- | --- |
-| Public inbound | UDP 50000 (or the configured range); no public SFU HTTP/debug endpoint. |
-| Control-overlay inbound | UDP 51820 only from configured API-host egress; no unrestricted management listener. |
-| Private inbound | TCP 8443 only from API workload identities/networks; readiness and metrics only from private operators/collectors. |
-| Administration | SSH only from the managed operator network. |
-| Outbound | UDP media/replies to clients and TURN allocations; DNS, time sync and HTTPS/OTLP to configured services. Allow outbound ephemeral destinations, not only inbound media ports. |
-| Client access to existing TURN | Outbound UDP/TCP 3478 and TCP 80/5349/443 as available; strict-network proof permits only TCP 443. |
+| Firewall direction             | Allow                                                                                                                                                                         |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public inbound                 | UDP 50000 (or the configured range); no public SFU HTTP/debug endpoint.                                                                                                       |
+| Control inbound                | TCP 8443 only from the API host's Elastic IP, with mutual TLS; readiness and metrics only from configured operators/collectors. No unrestricted management listener.          |
+| Administration                 | SSH only from the managed operator network.                                                                                                                                   |
+| Outbound                       | UDP media/replies to clients and TURN allocations; DNS, time sync and HTTPS/OTLP to configured services. Allow outbound ephemeral destinations, not only inbound media ports. |
+| Client access to existing TURN | Outbound UDP/TCP 3478 and TCP 80/5349/443 as available; strict-network proof permits only TCP 443.                                                                            |
 
 Restrict signaled ICE candidates to intended public media addresses; never expose
 VPC candidates to clients or let untrusted SDP turn the SFU into a private-network
@@ -362,10 +362,10 @@ Public list prices checked **5 November 2026**, USD before tax. DigitalOcean's
 lists Basic and CPU-Optimized in Singapore `sgp1`; individual creation-time stock
 still needs checking. Use Regular CPUs for these estimates, not Premium pricing.
 
-| Environment | Droplet | CPU / RAM / disk | Included monthly outbound | Monthly compute |
-| --- | --- | --- | --- | --- |
-| Staging | Basic Regular (`s-2vcpu-4gb`) | 2 shared vCPU / 4 GiB / 80 GiB | 4,000 GiB | **$24** |
-| Production v1 | CPU-Optimized Regular (`c-4`) | 4 dedicated vCPU / 8 GiB / 50 GiB | 5,000 GiB | **$84** |
+| Environment   | Droplet                       | CPU / RAM / disk                  | Included monthly outbound | Monthly compute |
+| ------------- | ----------------------------- | --------------------------------- | ------------------------- | --------------- |
+| Staging       | Basic Regular (`s-2vcpu-4gb`) | 2 shared vCPU / 4 GiB / 80 GiB    | 4,000 GiB                 | **$24**         |
+| Production v1 | CPU-Optimized Regular (`c-4`) | 4 dedicated vCPU / 8 GiB / 50 GiB | 5,000 GiB                 | **$84**         |
 
 Source: [Droplet pricing](https://www.digitalocean.com/pricing/droplets).
 No load balancer, managed disk or media backup is needed for this disposable
@@ -398,9 +398,9 @@ for headers, RTCP and repair. Let `H=2.5`, `L=0.65`, `A=0.05` Mbps:
   assumption, not an SDK-enforced cap; admission uses configured ceilings.
 
 | Participants | Outbound streams | Ingress Mbps | All-high / mixed egress Mbps | All-high / mixed GiB per call-hour |
-| --- | --- | --- | --- | --- |
-| 4 | 24 | 15.36 | 36.72 / 18.96 | 15.39 / 7.95 |
-| 8 | 112 | 30.72 | 171.36 / 64.80 | 71.82 / 27.16 |
+| ------------ | ---------------- | ------------ | ---------------------------- | ---------------------------------- |
+| 4            | 24               | 15.36        | 36.72 / 18.96                | 15.39 / 7.95                       |
+| 8            | 112              | 30.72        | 171.36 / 64.80               | 71.82 / 27.16                      |
 
 Start with an **unmeasured engineering target of 100 outbound RTP streams per
 dedicated vCPU** and reserve 50%: at most 200 on the production node. Also cap
@@ -436,6 +436,12 @@ written to disk. Graceful drain rejects new Episodes, allows existing calls to
 finish within an operator deadline, then triggers ordinary replacement. Readiness
 includes certificate/config validity, media listener availability and drain state;
 health endpoints disclose no identifiers.
+
+V1 runs one node, which is a single point of failure. This is accepted for the
+internal canary only: node loss ends every own-SFU call, Participants rejoin
+through replacement, and new Episodes can be pointed back at Cloudflare. General
+rollout beyond the canary needs at least two nodes with the per-Episode node
+assignment below.
 
 For multi-node, keep one Episode on one node first. Extend its durable binding
 with node assignment and boot incarnation; API routing uses that assignment for
