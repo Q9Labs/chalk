@@ -10,9 +10,6 @@ import { readOwnerSeat, writeOwnerSeat, type OwnerSeat } from "./owner-seats";
 import { DashboardError, json } from "./http";
 import type { CallAction, OwnerAccessDTO } from "../src/lib/dashboard/contracts";
 
-// The dashboard ships the current browser SDK, which runs both media providers.
-const mediaProviders = { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu" };
-
 // Domain-separated, Tenant/owner/Episode-bound retry identity. A deliberate new
 // join uses a new idempotency key and therefore gets a new seat.
 async function ownerParticipantId(tenantId: string, userId: string, spaceId: string, episodeId: string, idempotencyKey: string) {
@@ -35,14 +32,12 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
       engine.api.default
         .issueAccessGrant({
           params: grantParams,
-          headers: mediaProviders,
           payload: { participant_generation: seat.generation, replace_media_connection: action.currentMediaToken === undefined, current_media_token: action.currentMediaToken },
         })
         .pipe(
           Effect.catchTag("ParticipantConnectionSupersededError", () =>
             engine.api.default.issueAccessGrant({
               params: grantParams,
-              headers: mediaProviders,
               payload: { participant_generation: seat.generation, replace_media_connection: true },
             }),
           ),
@@ -56,7 +51,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   let episodeId = current?.id;
   if (!episodeId) {
     try {
-      episodeId = (await run(engine.api.episodes.createEpisode({ params, headers: { ...mediaProviders, "Idempotency-Key": action.idempotencyKey }, payload: {} }))).id;
+      episodeId = (await run(engine.api.episodes.createEpisode({ params, headers: { "Idempotency-Key": action.idempotencyKey }, payload: {} }))).id;
     } catch (error) {
       if (!(error instanceof DashboardError) || error.status !== 409) throw error;
       episodeId = (await live(engine, [action.spaceId]))[0]?.episode?.id;
@@ -66,7 +61,7 @@ export async function ownerAccess(request: Request, env: DashboardEnvironment, e
   const result = await run(
     engine.api.episodes.admitEpisodeParticipant({
       params: { ...params, episode_id: Schema.decodeUnknownSync(EpisodeIdSchema)(episodeId) },
-      headers: { ...mediaProviders, "Idempotency-Key": action.idempotencyKey },
+      headers: { "Idempotency-Key": action.idempotencyKey },
       payload: { admission: "direct", participant_id: await ownerParticipantId(engine.tenantId, person.userId, action.spaceId, episodeId, action.idempotencyKey), role: "owner", name: person.name || person.email },
     }),
   );

@@ -321,7 +321,6 @@ const defaultGroup = HttpApiGroup.make("default")
   .add(
     HttpApiEndpoint.post("issueAccessGrant", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/access-grant", {
       params: S.IssueAccessGrantPathParamsSchema,
-      headers: S.IssueAccessGrantRequestHeadersSchema,
       payload: S.IssueAccessGrantRequestBodySchema,
       success: S.IssueAccessGrantResponseSchema.pipe(HttpApiSchema.status(201)),
       error: [

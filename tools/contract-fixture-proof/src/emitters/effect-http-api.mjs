@@ -66,7 +66,7 @@ function collectOperations(document) {
         errors: errorResponses(operation.operationId, operation.responses),
         hasPathParams: hasParameters(operation.parameters, "path"),
         hasQueryParams: hasParameters(operation.parameters, "query"),
-        hasRequestHeaders: hasParameters(operation.parameters, "header"),
+        hasRequestHeaders: hasRequiredHeaders(operation.parameters),
         hasRequestBody: Boolean(operation.requestBody?.content?.["application/json"]?.schema),
       });
     }
@@ -178,6 +178,13 @@ function errorResponses(operationId, responses = {}) {
 
 function hasParameters(parameters = [], location) {
   return parameters.some((parameter) => parameter.in === location);
+}
+
+// The Effect client requires a typed headers field on every call, so an
+// operation whose headers are all optional takes none. Callers send optional
+// headers through the client's headers option.
+function hasRequiredHeaders(parameters = []) {
+  return parameters.some((parameter) => parameter.in === "header" && parameter.required === true);
 }
 
 function operationGroupName(operationId) {
