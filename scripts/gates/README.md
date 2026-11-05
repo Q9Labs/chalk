@@ -23,9 +23,10 @@ Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
 per lane group: `checks` (every lane that no other group names, including type
 checks), `tests` (non-browser workspaces), `browser-tests` (the web app and SDK
 consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboard against the real API),
-`call-performance` (call bundle
-budgets), `call-leaks` (call resource cleanup journeys), and
-`build` (with Publint and Are The Types Wrong, which read the build output).
+`call-leaks` (call resource cleanup journeys), and `build` (with the call bundle
+budget, Publint and Are The Types Wrong, which read the build output). The call
+bundle budget and the leak journeys run only when a file the call-states page
+imports changes (see `callUi` in `chalk-gate-plan.mjs`) or on a full gate.
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when every
 selected group passed; a job that the planner skips counts as passed. When the
