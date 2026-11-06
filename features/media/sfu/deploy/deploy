@@ -115,7 +115,8 @@ else
   gomemlimit=384MiB memory_limit=700m
 fi
 # The packet budget follows the CPU, about 70% of the load at which a node of that size starts to
-# drop video (a 3-person, 2-camera class reserves 7170 packets/s): 9 classes on 1 vCPU, 12 on 2.
+# drop video. A 3-person, 2-camera class reserves 7170 packets/s, so 45000 admits 6 classes and
+# 60000 admits 8. The load runs stayed clean up to 8 classes on 1 vCPU and 11 to 12 on 2.
 vcpus="$(remote nproc)"
 case "$vcpus" in
   1) budget=45000 ;;

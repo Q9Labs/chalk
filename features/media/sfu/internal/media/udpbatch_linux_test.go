@@ -319,7 +319,8 @@ func TestBatchConnKeepsOrderWhenTheQueueOverflows(t *testing.T) {
 		failed <- nil
 	}()
 	defer func() {
-		if err := <-failed; err != nil {
+		_ = conn.Close() // a failed read leaves the writer waiting on a full queue
+		if err := <-failed; err != nil && !errors.Is(err, net.ErrClosed) {
 			t.Error(err)
 		}
 	}()
