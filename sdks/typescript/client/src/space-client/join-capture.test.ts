@@ -242,6 +242,60 @@ describe("join with media on", () => {
     }
   });
 
+  it("retries the on after a failure while the call stays live, and keeps the source on", async () => {
+    const platform = createCoreTestPlatform();
+    const microphone = track("audio");
+    const accepted = { operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    const setMicrophoneEnabled = vi.fn(async () => {
+      if (setMicrophoneEnabled.mock.calls.length > 1) return accepted;
+      throw new V1SyncError("media_plane_unavailable", "retry_exhausted");
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+      expect(microphone.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("retries the on when its failure arrives after the call came back live", async () => {
+    const platform = createCoreTestPlatform();
+    const microphone = track("audio");
+    const accepted = { operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    let reject: (cause: unknown) => void = () => undefined;
+    const setMicrophoneEnabled = vi.fn(async () => {
+      if (setMicrophoneEnabled.mock.calls.length > 1) return accepted;
+      return new Promise<typeof accepted>((_resolve, fail) => {
+        reject = fail;
+      });
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(1));
+      const live = platform.sync.getSnapshot();
+      const media = { projectionId: "sync", sequence: 1, items: [{ participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "microphone-1" }] };
+      platform.emitSync({ ...live, connection: { phase: "reconnecting" } });
+      platform.emitSync({ ...live, media });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      reject(new V1SyncError("disconnected_before_delivery", "disconnected_before_delivery"));
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+      expect(microphone.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("keeps consent when the call is left before Sync answers the on", async () => {
     const platform = createCoreTestPlatform();
     const getUserMedia = vi.fn(async () => stream([track("audio")]));

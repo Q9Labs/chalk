@@ -38,7 +38,7 @@ type SourceWorker = {
   capturePause: "none" | "pending" | "announced";
   awaitingLive: number | null;
   /** A source the join published whose on Sync has not accepted yet. See `#announceInitialOn`. */
-  initialOn: { readonly revision: number; running: boolean } | null;
+  initialOn: { readonly revision: number; running: boolean; timer: unknown; delayMs: number } | null;
 };
 /*
  * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
@@ -334,6 +334,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   dispose(): void {
     this.#disposed = true;
     this.#cancelOffRetries();
+    this.#cancelInitialOnRetries();
     for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
     this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
@@ -741,11 +742,12 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const publishedSources = new Set(published.map((track) => (track.kind === "audio" ? "microphone" : "camera")));
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
+        this.#cancelInitialOnRetry(source);
         state.initialOn = null;
         if (state.desired.revision !== revisions[source]) continue;
         state.result = { revision: revisions[source], status: "confirmed" };
         if (!publishedSources.has(source)) continue;
-        state.initialOn = { revision: revisions[source], running: false };
+        state.initialOn = { revision: revisions[source], running: false, timer: null, delayMs: OFF_RETRY_INITIAL_MS };
         this.#announceInitialOn(source);
       }
     });
@@ -755,7 +757,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
    * A source published at join still needs Sync to accept its on: Chalk's own SFU forwards a source only under the
    * grant Sync makes for an accepted on. The join does not wait for it, because the call goes live only after the
    * join. The on stays owed until Sync answers: a lost connection or a left call keeps it owed and consent intact,
-   * and the next return to live resends it. Only Sync's refusal turns the source off, since it was off before this join.
+   * and the next return to live resends it. Any other failure while the call stays live is retried on the off-retry
+   * backoff. Only Sync's refusal turns the source off, since it was off before this join.
    */
   #announceInitialOn(source: MediaSource): void {
     if (source === "screen") return;
@@ -763,7 +766,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const owed = state.initialOn;
     const ports = this.#ports;
     if (!owed || owed.running || !ports) return;
-    if (state.desired.revision !== owed.revision) {
+    this.#cancelInitialOnRetry(source);
+    if (state.desired.revision !== owed.revision || !this.#hasConsent(source)) {
       state.initialOn = null;
       return;
     }
@@ -782,10 +786,30 @@ class MediaControllerRuntime implements MediaControllerEffects {
         Effect.ensuring(
           Effect.sync(() => {
             owed.running = false;
+            this.#scheduleInitialOnRetry(source);
           }),
         ),
       ),
     );
+  }
+  #scheduleInitialOnRetry(source: "microphone" | "camera"): void {
+    const owed = this.#sources[source].initialOn;
+    if (!owed || owed.running || owed.timer !== null || !this.#syncLive || this.#disposed) return;
+    owed.timer = this.#connection.scheduleUnsafe(() => {
+      owed.timer = null;
+      this.#announceInitialOn(source);
+    }, owed.delayMs);
+    owed.delayMs = Math.min(owed.delayMs * 2, OFF_RETRY_MAX_MS);
+  }
+  #cancelInitialOnRetry(source: "microphone" | "camera"): void {
+    const owed = this.#sources[source].initialOn;
+    if (!owed || owed.timer === null) return;
+    this.#connection.cancelScheduleUnsafe(owed.timer);
+    owed.timer = null;
+  }
+  #cancelInitialOnRetries(): void {
+    this.#cancelInitialOnRetry("microphone");
+    this.#cancelInitialOnRetry("camera");
   }
 
   #consentedTracks(tracks: readonly MediaStreamTrack[]): MediaStreamTrack[] {
@@ -822,6 +846,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#syncLive && !live) {
       this.#rememberRecoveryIntents();
       this.#cancelOffRetries();
+      this.#cancelInitialOnRetries();
     }
     const resumed = live && !this.#syncLive;
     this.#syncLive = live;
@@ -1328,6 +1353,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#projection.reset();
     this.#syncLive = false;
     this.#cancelOffRetries();
+    this.#cancelInitialOnRetries();
     this.#bindCamera(ports);
     if (!ports) {
       this.#resetObservations();
