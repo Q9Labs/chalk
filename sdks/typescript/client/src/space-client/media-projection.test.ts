@@ -60,6 +60,9 @@ function scenario(source: "microphone" | "camera" = "microphone", media: NonNull
     join: async () => {
       await peer.join({ microphone: false, camera: false });
       await client.join({ microphone: source === "microphone", camera: source === "camera" });
+      // The on a join sends for its own source is not a repair, so scenarios count commands after it.
+      await vi.waitFor(() => expect(command).toHaveBeenCalledExactlyOnceWith(true));
+      command.mockClear();
       project(false);
       observer.media.emit({ ...observer.media.getSnapshot(), remoteTracks: [{ ...publication, track: received }] });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });

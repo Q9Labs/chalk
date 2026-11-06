@@ -75,6 +75,9 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       return () => pauseListeners.delete(listener);
     },
     onDirectedRequest: () => () => undefined,
+    // Sync accepts every self-media target unless a test says otherwise.
+    setMicrophoneEnabled: async () => ({ operationId: "microphone-target", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
+    setCameraEnabled: async () => ({ operationId: "camera-target", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }),
   } as unknown as ConnectionSyncClient;
   return {
     whiteboardUrl: null,
