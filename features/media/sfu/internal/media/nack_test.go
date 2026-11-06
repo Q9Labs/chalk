@@ -147,3 +147,27 @@ func TestARepairThatNeverArrivesAsksForAKeyframe(t *testing.T) {
 		t.Fatalf("abandoned %d gaps, want 1", abandoned)
 	}
 }
+
+func TestTheLastRequestKeepsItsResponseWindowWhenAnotherPacketIsDue(t *testing.T) {
+	tracker, sent, keyframes := recordingTracker()
+	defer tracker.stop()
+	now := monotonic()
+	tracker.mu.Lock()
+	tracker.missing[0] = missingPacket{ext: 1<<16 + 1, due: now + int64(nackRetry), tries: nackTries}
+	tracker.missing[1] = missingPacket{ext: 1<<16 + 5, due: now}
+	tracker.mu.Unlock()
+	tracker.fire()
+	if seqs := nextRequest(t, sent, time.Second); !slices.Equal(seqs, []uint16{5}) {
+		t.Fatalf("requested %v, want only the due packet 5", seqs)
+	}
+	select {
+	case <-keyframes:
+		t.Fatal("asked for a keyframe while the last request's repair can still arrive")
+	default:
+	}
+	select {
+	case <-keyframes:
+	case <-time.After(3 * nackRetry):
+		t.Fatal("no keyframe once the last request's window passed")
+	}
+}

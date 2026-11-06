@@ -259,19 +259,12 @@ func TestConformanceOneScreenSharePerEpisode(t *testing.T) {
 }
 
 func TestConformanceAdmission(t *testing.T) {
-	t.Run("on the default 16000 budget the ninth Participant is refused", func(t *testing.T) {
-		// 150 + 50 packets/s per stream pair: 8 Participants reserve 14,400 and 9 reserve 18,000.
+	t.Run("on the default budget an Episode reserves at most its ceiling", func(t *testing.T) {
+		// 150 + 50 packets/s per stream pair: 9 Participants would reserve 18,000 nominally,
+		// but an Episode reserves at most its 11,520 ceiling, which the 16,000 budget holds.
 		service := startSFU(t, nil).service(t)
-		for index := 0; index < 8; index++ {
+		for index := 0; index < 9; index++ {
 			join(t, service, scopeOf("ep-full", "p"+strconv.Itoa(index)))
-		}
-		_, err := service.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
-			Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-full", "p8"),
-			Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-full"},
-			ParticipantName: "p8", ParticipantPreset: "contributor",
-		})
-		if !errors.Is(err, mediaplane.ErrProviderRateLimited) {
-			t.Fatalf("ninth join error = %v, want a capacity refusal", err)
 		}
 	})
 
@@ -296,10 +289,13 @@ func TestConformanceAdmission(t *testing.T) {
 		service := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1000", "SFU_VIDEO_STREAM_COST": "100", "SFU_AUDIO_STREAM_COST": "50"}).service(t)
 		join(t, service, scopeOf("ep-budget", "alice"))
 		join(t, service, scopeOf("ep-budget", "bob"))
+		// The Episode's 1,000 ceiling equals the budget, so a third Participant still fits it,
+		// and a second Episode's 900 does not.
+		join(t, service, scopeOf("ep-budget", "carol"))
 		_, err := service.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
-			Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-budget", "carol"),
-			Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-budget"},
-			ParticipantName: "carol", ParticipantPreset: "contributor",
+			Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-second", "dave"),
+			Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-second"},
+			ParticipantName: "dave", ParticipantPreset: "contributor",
 		})
 		if !errors.Is(err, mediaplane.ErrProviderRateLimited) {
 			t.Fatalf("over-budget join error = %v, want a capacity refusal", err)

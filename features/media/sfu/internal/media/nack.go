@@ -129,7 +129,8 @@ func (t *nackTracker) fire() {
 		if entry.ext == 0 {
 			continue
 		}
-		if entry.tries >= nackTries {
+		// The last request still gets its full response window before the keyframe fallback.
+		if entry.tries >= nackTries && entry.due <= now {
 			*entry = missingPacket{}
 			exhausted = true
 			continue
