@@ -45,7 +45,13 @@ type datagram struct {
 
 func newLink(t *testing.T) *link {
 	t.Helper()
-	conn, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	return newLinkOn(t, "127.0.0.1:0")
+}
+
+// newLinkOn listens on address, such as every interface for a live node.
+func newLinkOn(t *testing.T, address string) *link {
+	t.Helper()
+	conn, err := net.ListenPacket("udp4", address)
 	if err != nil {
 		t.Fatal(err)
 	}
