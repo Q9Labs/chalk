@@ -9,16 +9,17 @@ Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at t
 current monitor allowance. Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
-| Rule                         | Production source                        | Evaluation                                                                                                     |
-| ---------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Recording Capture failed     | `recording_jobs`                         | Terminal failure in the last 15 minutes                                                                        |
-| Recording stop stranded      | `sync_recordings`, `recording_pipelines` | Sync still `stopping` more than 2 minutes after capture completed                                              |
-| Export failed or overdue     | `recording_jobs`, Render kind            | Terminal failure in 15 minutes, or active for over 14 hours                                                    |
-| Transcript failed or overdue | `transcriptions`                         | Terminal failure in 15 minutes, or active for over 30 minutes                                                  |
-| Webhook retries exhausted    | `webhook_deliveries`                     | Exhausted in the last 15 minutes                                                                               |
-| API 5xx rate                 | Axiom API request logs                   | More than 15 server errors in 5 minutes, sustained for 5 evaluations                                           |
-| Sync connection failures     | Axiom Sync event spans                   | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations                    |
-| Sync stays unready           | Collector HTTP `/readyz` sample          | At least 4 distinct unready minute samples in 5 minutes; latest sample still unready and newer than 90 seconds |
+| Rule                         | Production source                        | Evaluation                                                                                                         |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Recording Capture failed     | `recording_jobs`                         | Terminal failure in the last 15 minutes                                                                            |
+| Recording stop stranded      | `sync_recordings`, `recording_pipelines` | Sync still `stopping` more than 2 minutes after capture completed                                                  |
+| Export failed or overdue     | `recording_jobs`, Render kind            | Terminal failure in 15 minutes, or active for over 14 hours                                                        |
+| Transcript failed or overdue | `transcriptions`                         | Terminal failure in 15 minutes, or active for over 30 minutes                                                      |
+| Webhook retries exhausted    | `webhook_deliveries`                     | Exhausted in the last 15 minutes                                                                                   |
+| API 5xx rate                 | Axiom API request logs                   | More than 15 server errors in 5 minutes, sustained for 5 evaluations                                               |
+| Sync connection failures     | Axiom Sync event spans                   | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations                        |
+| Sync stays unready           | Collector HTTP `/readyz` sample          | At least 4 distinct unready minute samples in 5 minutes; latest sample still unready and newer than 90 seconds     |
+| Own SFU stays unhealthy      | Collector mutual-TLS `/readyz` sample    | At least 4 distinct unhealthy minute samples in 5 minutes; latest sample still unhealthy and newer than 90 seconds |
 
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
@@ -40,7 +41,7 @@ shasum -a 256 collector
 ```
 
 The collector uses one connection, a read-only transaction and a five-second SQL
-timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. The global Sync readiness row brings coverage to six rules. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
+timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. The global Sync readiness row brings coverage to six rules. When the own SFU probe is enabled, one more global row is emitted (see below), but the freshness monitor does not count it. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
 partial ingest fails the service. The freshness monitor detects missing snapshots
 within five minutes. Latest values, not sums of repeated snapshots, drive alerts. Only snapshots newer than five minutes drive state alerts. The `recording-stop` rule counts completed captures even when the capture job succeeded. It clears when Sync no longer reports `stopping`.
 
@@ -66,6 +67,69 @@ proof of continued unreadiness; the freshness monitor now requires six rules.
 Install the updated collector and monitor definitions together. The independent
 uptime Worker remains separate and may report individual failed checks.
 
+### Own SFU readiness
+
+When `CHALK_ALERT_SFU_READY_URL` is set, the collector also emits one global
+`sfu-readiness` row per run. When it is unset, the collector emits no SFU row,
+so a host that has no SFU node behaves exactly as before. The SFU's `/readyz`
+sits on a mutual-TLS (TLS 1.3) listener and answers only to a client certificate
+that names the API's service identity. The collector reads that certificate, its
+key and the CA from files, so the operator reuses the API's SFU client
+certificate on the same host:
+
+| Variable                      | Meaning                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| `CHALK_ALERT_SFU_READY_URL`   | Full `https://` URL of the node's `/readyz`; leave unset to disable.                |
+| `CHALK_ALERT_SFU_CLIENT_CERT` | PEM file with the API's SFU client certificate.                                     |
+| `CHALK_ALERT_SFU_CLIENT_KEY`  | PEM file with its private key.                                                      |
+| `CHALK_ALERT_SFU_CA`          | PEM file with the CA that signed the SFU's server certificate.                      |
+| `CHALK_ALERT_SFU_SERVER_NAME` | Name in the SFU's certificate, `chalk-sfu`, as `CHALK_SFU_SERVER_NAME` for the API. |
+
+The probe has the same five-second bound as the Sync probe and does not follow
+redirects. HTTP 200 with admission open and spare budget emits zero with reason
+`ready`. Everything else emits one, with the first matching reason of
+`tls_config` (the URL is not `https://`, or a certificate, key or CA file is unset, unreadable or invalid),
+`unreachable` (connect, handshake or timeout failure), `draining` (503),
+`http_status` (any other non-200), `invalid_response` (body is not the expected
+shape), `admission_cpu_steal` or `admission_pacer_queue_delay` (the node refuses
+new Episodes), and `packet_budget` (reserved packets are at least 90% of the
+packet budget). A configured probe therefore fails closed: a missing file pages
+instead of silently turning the rule off. Only these reason codes are exported.
+No TLS or HTTP error text, response body, endpoint, node incarnation or other
+identifier leaves the probe.
+
+`sfu-readiness.apl` has the same shape as `sync-readiness.apl` and joins the
+first grouped monitor through `${SFU_READINESS_BRANCH}`, so the three-monitor
+allowance is unchanged. It alerts on at least four unhealthy minute samples in
+five minutes while the newest sample is unhealthy and newer than 90 seconds. That
+is the intent of alerting when admission has been closed for more than five
+minutes, or when a node sits above 90% of its packet budget. Live calls continue
+while only admission is closed, so the message says new calls may fail to start.
+
+The freshness monitor still expects six rules and does not list
+`sfu-readiness`. The SFU row exists only on hosts that enable the probe, so
+counting it would page every host without an SFU. Once enabled, the probe always
+emits a row (a failure is a value of one, never a missing row), so a stopped
+collector is still caught by the six existing rules and the SFU needs no
+freshness entry of its own.
+
+To enable it on the collector host:
+
+1. Copy or reference the API's SFU client certificate, key and CA at paths the
+   collector's User can read, with the key mode `0600`. Do not commit them or put
+   them in SSM command bodies.
+2. Add the four variables to the private `/etc/chalk-alerts/collector.env`.
+3. Run `collector --check` and confirm one `sfu-readiness` row with value 0 and
+   reason `ready`.
+4. Run `provision.py --apply` to reconcile the monitor, which already contains the
+   SFU branch. Until a row exists, the branch matches nothing and cannot alert.
+
+Roll out the collector before the SFU carries production traffic, and set the
+variables when the first production node is deployed. To disable the alert, remove
+`CHALK_ALERT_SFU_READY_URL` and restart the timer: the rows stop and the branch
+stays idle. For engineers, the alert message points at `/readyz` through the SFU
+deploy tunnel and the node's `media telemetry` journal lines.
+
 Install the binary at `/opt/chalk-alerts/collector` and the units in `/etc/systemd/system`.
 The service reuses `/run/chalk/env/api.env` under the existing runtime User. It reads
 `CHALK_DATABASE_URL` and derives its ingest token/dataset from
@@ -77,7 +141,7 @@ writes. Keep credentials out of SSM command bodies and CI output.
 
 Before enabling the timer, run `collector --check` with the private environment
 and verify the per-Tenant state counts against Postgres. Then run the service once,
-confirm all per-Tenant snapshots, five heartbeat rows, and the global Sync readiness row in Axiom, and enable `chalk-alert-state.timer`.
+confirm all per-Tenant snapshots, five heartbeat rows, the global Sync readiness row (and the SFU row when enabled) in Axiom, and enable `chalk-alert-state.timer`.
 Only install these alert files: do not run an application deployment controller.
 
 The next managed release targets the existing host: its controller replaces only

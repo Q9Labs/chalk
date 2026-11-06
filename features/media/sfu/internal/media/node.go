@@ -90,6 +90,10 @@ type Node struct {
 	// plans holds each Episode's latest plan change. Only the control loop touches it.
 	plans map[episodeKey]int64
 	stats atomic.Pointer[mediaStats]
+	// totals are the node's media counts since start. Only the control loop touches them.
+	totals nodeTotals
+	// refusals counts refused joins and screen shares by reason. n.mu guards it.
+	refusals map[string]uint64
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -142,6 +146,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sourceLimit:   defaultSourceLimit,
 		sourceFloors:  map[episodeKey]int64{},
 		plans:         map[episodeKey]int64{},
+		refusals:      map[string]uint64{},
 		fenceLimit:    defaultFenceLimit,
 		createLimit:   defaultClosedCreateLimit,
 	}
@@ -424,7 +429,7 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	// A draining node refuses only new Episodes: a live call on it keeps taking
 	// joins and reconnects, so it can run to its end before the restart.
 	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) {
-		return protocol.CreateSessionResponse{}, nil, ErrDraining
+		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedDraining, ErrDraining)
 	}
 	if record, ok := n.creates[operationID]; ok {
 		if record.digest != digest {
@@ -439,7 +444,7 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	}
 	evict, err := n.fenceVictim(keyOf(scope))
 	if err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
+		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedFences, err)
 	}
 	// A create with a new operation ID replaces the Participant's live session, also at the
 	// same generation: the API replaces a media connection that way, and its database has
@@ -450,7 +455,7 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 		live--
 	}
 	if live >= n.cfg.MaxSessions {
-		return protocol.CreateSessionResponse{}, nil, ErrCapacityExceeded
+		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedSessions, ErrCapacityExceeded)
 	}
 	if err := n.admit(scope, fenced); err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
@@ -530,6 +535,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 		}
 	}
 	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
+		n.refusals[RefusedScreenCeiling]++
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s

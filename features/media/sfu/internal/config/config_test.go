@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -86,5 +87,37 @@ func TestSourceLeaseOutlastsTwoRenewals(t *testing.T) {
 	}
 	if cfg, err := load("10s"); err != nil || cfg.SourceLeaseTTL != 10*time.Second {
 		t.Fatalf("a 10s lease = %v, %v", cfg.SourceLeaseTTL, err)
+	}
+}
+
+func TestTelemetrySettings(t *testing.T) {
+	base := map[string]string{"SFU_TLS_CERT_FILE": "c", "SFU_TLS_KEY_FILE": "k", "SFU_CLIENT_CA_FILE": "ca", "SFU_CLIENT_IDENTITY": "id"}
+	cases := []struct {
+		name     string
+		settings map[string]string
+		problem  string // empty when the settings load
+	}{
+		{"off by default", nil, ""},
+		{"https base URL", map[string]string{"SFU_OTLP_ENDPOINT": "https://otlp.example", "SFU_ENVIRONMENT": "production"}, ""},
+		{"plain HTTP locally", map[string]string{"SFU_OTLP_ENDPOINT": "http://127.0.0.1:4318", "SFU_OTLP_INSECURE": "true"}, ""},
+		{"plain HTTP in production", map[string]string{"SFU_OTLP_ENDPOINT": "http://otlp.example", "SFU_OTLP_INSECURE": "true", "SFU_ENVIRONMENT": "production"}, "SFU_OTLP_INSECURE"},
+		{"http without insecure", map[string]string{"SFU_OTLP_ENDPOINT": "http://otlp.example"}, "must use https"},
+		{"a path", map[string]string{"SFU_OTLP_ENDPOINT": "https://otlp.example/v1/metrics"}, "without a path"},
+		{"insecure without endpoint", map[string]string{"SFU_OTLP_INSECURE": "true"}, "requires SFU_OTLP_ENDPOINT"},
+		{"unknown environment", map[string]string{"SFU_ENVIRONMENT": "nightly"}, "SFU_ENVIRONMENT"},
+		{"interval too short", map[string]string{"SFU_OTLP_INTERVAL": "100ms"}, "SFU_OTLP_INTERVAL"},
+	}
+	for _, c := range cases {
+		settings := maps.Clone(base)
+		maps.Copy(settings, c.settings)
+		cfg, err := Load(lookupOf(settings))
+		switch {
+		case c.problem == "" && err != nil:
+			t.Errorf("%s: %v", c.name, err)
+		case c.problem != "" && (err == nil || !strings.Contains(err.Error(), c.problem)):
+			t.Errorf("%s: error %v, want one naming %q", c.name, err, c.problem)
+		case c.problem == "" && cfg.Telemetry.Interval != 10*time.Second:
+			t.Errorf("%s: interval %v, want 10s", c.name, cfg.Telemetry.Interval)
+		}
 	}
 }

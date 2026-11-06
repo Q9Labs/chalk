@@ -59,6 +59,7 @@ type ingressLayer struct {
 	meter    rateMeter     // every packet the publisher sent on the layer, repairs included
 	repaired atomic.Uint64 // packets that arrived as RTX repairs
 	nack     *nackTracker  // nil for audio
+	tallied  layerTallies  // the control loop's
 	// audioLevelID is the negotiated RFC 6464 extension ID of a microphone, or 0.
 	audioLevelID uint8
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -62,7 +63,9 @@ type Config struct {
 	// subscriber's pacer queue.
 	Memory Memory
 	// Guard closes admission of new Episodes while the host cannot serve them on time.
-	Guard              Guard
+	Guard Guard
+	// Telemetry exports the node's metrics.
+	Telemetry          Telemetry
 	NegotiationTimeout time.Duration
 	ConnectTimeout     time.Duration
 	ShutdownTimeout    time.Duration
@@ -74,6 +77,20 @@ type Memory struct {
 	HistoryLowBytes    int // camera "l" and any lower layer
 	HistoryScreenBytes int
 	PacerQueueBytes    int
+}
+
+// Telemetry exports the node's metrics over OTLP/HTTP, the way the API does. The exporter reads
+// its headers, which carry the token, from OTEL_EXPORTER_OTLP_METRICS_HEADERS.
+type Telemetry struct {
+	// OTLPEndpoint is the collector's base URL, without a path. Empty turns export off.
+	OTLPEndpoint string
+	// OTLPInsecure sends plain HTTP. Only a local environment may set it.
+	OTLPInsecure bool
+	// Environment is "local", "staging" or "production"; Version the source revision.
+	Environment string
+	Version     string
+	// Interval is how often the node exports.
+	Interval time.Duration
 }
 
 // Guard holds the host-health thresholds that close admission of new Episodes.
@@ -127,6 +144,13 @@ func Load(lookup Lookup) (Config, error) {
 			MaxQueueDelay:   r.duration("SFU_GUARD_MAX_QUEUE_DELAY", 50*time.Millisecond, 5*time.Millisecond, 5*time.Second),
 			Window:          r.duration("SFU_GUARD_WINDOW", 30*time.Second, 5*time.Second, 10*time.Minute),
 		},
+		Telemetry: Telemetry{
+			OTLPEndpoint: r.text("SFU_OTLP_ENDPOINT", ""),
+			OTLPInsecure: r.boolean("SFU_OTLP_INSECURE", false),
+			Environment:  r.text("SFU_ENVIRONMENT", "local"),
+			Version:      r.text("SFU_VERSION", "dev"),
+			Interval:     r.duration("SFU_OTLP_INTERVAL", 10*time.Second, time.Second, 5*time.Minute),
+		},
 		NegotiationTimeout: r.duration("SFU_NEGOTIATION_TIMEOUT", 10*time.Second, time.Second, time.Minute),
 		ConnectTimeout:     r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
 		ShutdownTimeout:    r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),
@@ -135,6 +159,9 @@ func Load(lookup Lookup) (Config, error) {
 		if net.ParseIP(ip) == nil {
 			r.fail("SFU_ANNOUNCE_IPS", fmt.Errorf("%q is not an IP address", ip))
 		}
+	}
+	if err := validateTelemetry(cfg.Telemetry); err != nil {
+		r.errs = append(r.errs, err)
 	}
 	if err := errors.Join(r.errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid SFU configuration: %w", err)
@@ -215,4 +242,33 @@ func (r *reader) duration(key string, fallback, minimum, maximum time.Duration) 
 		return fallback
 	}
 	return parsed
+}
+
+func validateTelemetry(t Telemetry) error {
+	switch t.Environment {
+	case "local", "staging", "production":
+	default:
+		return errors.New(`SFU_ENVIRONMENT: must be "local", "staging" or "production"`)
+	}
+	if t.OTLPEndpoint == "" {
+		if t.OTLPInsecure {
+			return errors.New("SFU_OTLP_INSECURE: requires SFU_OTLP_ENDPOINT")
+		}
+		return nil
+	}
+	if t.OTLPInsecure && t.Environment != "local" {
+		return errors.New("SFU_OTLP_INSECURE: only a local environment may send plain HTTP")
+	}
+	endpoint, err := url.Parse(t.OTLPEndpoint)
+	if err != nil || endpoint.Host == "" || endpoint.Path != "" && endpoint.Path != "/" || endpoint.RawQuery != "" {
+		return errors.New("SFU_OTLP_ENDPOINT: must be an absolute base URL without a path")
+	}
+	want := "https"
+	if t.OTLPInsecure {
+		want = "http"
+	}
+	if endpoint.Scheme != want {
+		return fmt.Errorf("SFU_OTLP_ENDPOINT: must use %s", want)
+	}
+	return nil
 }

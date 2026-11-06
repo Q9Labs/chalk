@@ -4,6 +4,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -65,7 +67,7 @@ func run() error {
 		}
 		snapshots = []snapshot{{Rule: "delivery-test", Value: value, Summary: "TEST: Chalk production alert delivery proof; no user failure was induced."}}
 	case "", "--check":
-		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"))
+		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"), sfuProbeFromEnv())
 	default:
 		return errors.New("unknown collector mode")
 	}
@@ -74,6 +76,9 @@ func run() error {
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID."
 		if snapshots[i].Rule == "sync-readiness" {
 			snapshots[i].Engineers = "For engineers: sync-readiness; inspect /readyz and sync.readiness.failed events, then systemctl status chalk-alert-state.timer chalk-alert-state.service."
+		}
+		if snapshots[i].Rule == "sfu-readiness" {
+			snapshots[i].Engineers = "For engineers: sfu-readiness; open /readyz on the node through the SFU deploy tunnel and read its media telemetry journal lines."
 		}
 		if snapshots[i].Time == "" {
 			snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
@@ -110,6 +115,8 @@ func message(rule string) (headline, impact, next string) {
 		return "A Recording has not finished stopping", "Capture finished more than two minutes ago, but Sync still reports stopping. This can block Episode end and another Episode in the same Space.", "An engineer must check capture-stopped callback delivery and pipeline maintenance now."
 	case "sync-readiness":
 		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
+	case "sfu-readiness":
+		return "The own SFU is refusing new calls or unreachable", "The own SFU was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU node's readiness, load and network now."
 	case "export":
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
 	case "transcript":
@@ -123,7 +130,7 @@ func message(rule string) (headline, impact, next string) {
 
 func formatMessage(item *snapshot) {
 	item.Headline, item.Summary, item.Next = message(item.Rule)
-	if item.Rule == "sync-readiness" {
+	if item.Rule == "sync-readiness" || item.Rule == "sfu-readiness" {
 		item.Summary += " Latest readiness reason: " + item.Reason + "."
 	}
 	if item.Tenant != "" {
@@ -142,13 +149,16 @@ func formatMessage(item *snapshot) {
 	}
 }
 
-func collectState(ctx context.Context, client *http.Client, databaseURL, readinessURL string) ([]snapshot, error) {
-	// Preserve the independent readiness observation even if the SQL snapshot fails.
-	readiness := collectReadiness(ctx, client, readinessURL)
+func collectState(ctx context.Context, client *http.Client, databaseURL, readinessURL string, sfu sfuProbe) ([]snapshot, error) {
+	// Preserve the independent readiness observations even if the SQL snapshot fails.
+	readiness := []snapshot{collectReadiness(ctx, client, readinessURL)}
+	if sfu.URL != "" {
+		readiness = append(readiness, collectSFUReadiness(ctx, sfu))
+	}
 	databaseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	snapshots, err := collect(databaseCtx, databaseURL)
-	return append(snapshots, readiness), err
+	return append(snapshots, readiness...), err
 }
 
 func collectReadiness(ctx context.Context, client *http.Client, endpoint string) snapshot {
@@ -200,6 +210,112 @@ func collectReadiness(ctx context.Context, client *http.Client, endpoint string)
 		}
 	}
 	return item
+}
+
+// sfuProbe locates the own SFU's readiness endpoint. An empty URL means the SFU
+// is not in production yet, so the collector emits no SFU row. ServerName is the
+// name in the node's certificate, which the API also verifies, because the URL
+// usually holds an address.
+type sfuProbe struct {
+	URL, ServerName, ClientCertFile, ClientKeyFile, CAFile string
+}
+
+func sfuProbeFromEnv() sfuProbe {
+	return sfuProbe{
+		URL:            os.Getenv("CHALK_ALERT_SFU_READY_URL"),
+		ClientCertFile: os.Getenv("CHALK_ALERT_SFU_CLIENT_CERT"),
+		ClientKeyFile:  os.Getenv("CHALK_ALERT_SFU_CLIENT_KEY"),
+		CAFile:         os.Getenv("CHALK_ALERT_SFU_CA"),
+		ServerName:     os.Getenv("CHALK_ALERT_SFU_SERVER_NAME"),
+	}
+}
+
+// sfuReadiness is the subset of the SFU /readyz body the alert reads. The node
+// incarnation and every other identifier are deliberately not decoded.
+type sfuReadiness struct {
+	PacketBudget    *int `json:"packetBudget"`
+	ReservedPackets *int `json:"reservedPackets"`
+	Host            struct {
+		AdmissionReason string `json:"admissionReason"`
+	} `json:"host"`
+}
+
+// collectSFUReadiness fails closed: every path that cannot prove readiness emits
+// value 1 with an allowlisted reason. It never exports error text or response
+// bodies, because TLS and HTTP errors can hold addresses and certificate names.
+func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
+	item := snapshot{Rule: "sfu-readiness", Value: 1, Reason: "tls_config", Time: time.Now().UTC().Format(time.RFC3339Nano)}
+	client, err := sfuClient(probe)
+	if err != nil {
+		return item
+	}
+	item.Reason = "unreachable"
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, probe.URL, nil)
+	if err != nil {
+		return item
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return item
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case http.StatusOK:
+	case http.StatusServiceUnavailable:
+		item.Reason = "draining"
+		return item
+	default:
+		item.Reason = "http_status"
+		return item
+	}
+	item.Reason = "invalid_response"
+	var ready sfuReadiness
+	if json.NewDecoder(io.LimitReader(response.Body, 32*1024)).Decode(&ready) != nil ||
+		ready.PacketBudget == nil || ready.ReservedPackets == nil || *ready.PacketBudget <= 0 || *ready.ReservedPackets < 0 {
+		return item
+	}
+	switch ready.Host.AdmissionReason {
+	case "":
+	case "cpu_steal", "pacer_queue_delay":
+		item.Reason = "admission_" + ready.Host.AdmissionReason
+		return item
+	default:
+		return item
+	}
+	if *ready.ReservedPackets*10 >= *ready.PacketBudget*9 {
+		item.Reason = "packet_budget"
+		return item
+	}
+	item.Value, item.Reason = 0, "ready"
+	return item
+}
+
+func sfuClient(probe sfuProbe) (*http.Client, error) {
+	if !strings.HasPrefix(probe.URL, "https://") {
+		return nil, fmt.Errorf("plaintext URL")
+	}
+	certificate, err := tls.LoadX509KeyPair(probe.ClientCertFile, probe.ClientKeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("client certificate")
+	}
+	caPEM, err := os.ReadFile(probe.CAFile)
+	if err != nil {
+		return nil, fmt.Errorf("certificate authority")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("certificate authority")
+	}
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{Certificates: []tls.Certificate{certificate}, RootCAs: roots, ServerName: probe.ServerName, MinVersion: tls.VersionTLS13},
+			DisableKeepAlives: true,
+		},
+		// A redirect must not turn a failed probe green.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}, nil
 }
 
 func safeTenantName(name string) string {

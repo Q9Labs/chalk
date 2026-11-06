@@ -85,6 +85,12 @@ func (s *Server) Addr() net.Addr { return s.listener.Addr() }
 // UDPPort is the shared media port.
 func (s *Server) UDPPort() int { return s.node.UDPPort() }
 
+// Incarnation identifies this process boot.
+func (s *Server) Incarnation() string { return s.node.Incarnation() }
+
+// Telemetry reports the node for metric export.
+func (s *Server) Telemetry() media.Telemetry { return s.node.Telemetry() }
+
 // Drain stops admission and keeps live sessions: readiness fails, so the API
 // places no new Episode here, and new sessions are refused. It returns how many
 // sessions are still live.

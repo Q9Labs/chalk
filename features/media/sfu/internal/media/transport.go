@@ -149,7 +149,9 @@ type transport struct {
 	// on the first, and the next takes over when it unbinds.
 	probeStreams []*egressBinding
 
-	counters    TransportCounters
+	counters TransportCounters
+	// tallied is the part of counters the node's totals already hold.
+	tallied     struct{ dropped, repairsCut counted }
 	dropsUnread bool         // the pacer dropped video since the allocator last read the estimate
 	writer      packetWriter // the drain goroutine's
 }
@@ -473,15 +475,18 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 
 // tick runs the transport's periodic work from the node's control loop: rate
 // meters and a probe whose feedback never came.
-func (t *transport) tick(now int64) {
+func (t *transport) tick(now int64) (growth transportGrowth) {
 	for class := range t.meters {
-		t.meters[class].sample(now)
+		growth.packets[class], growth.bytes[class] = t.meters[class].sample(now)
 	}
 	t.mu.Lock()
 	t.settleProbe(now)
 	t.refill(now)
 	t.setRates(now)
+	growth.dropped = t.tallied.dropped.take(t.counters.Dropped)
+	growth.repairsCut = t.tallied.repairsCut.take(t.counters.RepairsCut)
 	t.mu.Unlock()
+	return growth
 }
 
 // bind registers a video stream that can carry probe padding.

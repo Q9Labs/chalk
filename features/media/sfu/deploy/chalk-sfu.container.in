@@ -14,6 +14,7 @@ EnvironmentFile=%h/.config/chalk-sfu/sfu.env
 Secret=chalk-sfu-server-cert,type=mount,target=/run/chalk-sfu/server.crt,uid=65532,gid=65532,mode=0400
 Secret=chalk-sfu-server-key,type=mount,target=/run/chalk-sfu/server.key,uid=65532,gid=65532,mode=0400
 Secret=chalk-sfu-client-ca,type=mount,target=/run/chalk-sfu/client-ca.crt,uid=65532,gid=65532,mode=0400
+__OTLP_HEADERS_SECRET__
 User=65532
 Group=65532
 ReadOnly=true

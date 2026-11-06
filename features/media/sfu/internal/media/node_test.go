@@ -120,4 +120,7 @@ func TestADrainingNodeKeepsItsLiveCallsAndRefusesNewEpisodes(t *testing.T) {
 	if node.SessionCount() != 3 {
 		t.Fatalf("%d sessions, want alice, bob's replacement and carol", node.SessionCount())
 	}
+	if telemetry := node.Telemetry(); !telemetry.Draining || len(telemetry.Refusals) != 1 || telemetry.Refusals[RefusedDraining] != 1 {
+		t.Fatalf("telemetry draining %v refusals %v, want draining with one draining refusal", telemetry.Draining, telemetry.Refusals)
+	}
 }

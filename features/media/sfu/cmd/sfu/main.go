@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/control"
+	"github.com/q9labs/chalk/features/media/sfu/internal/telemetry"
 )
 
 func main() {
@@ -20,6 +22,9 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+// exportShutdown bounds the final export, inside the container's stop timeout.
+const exportShutdown = 3 * time.Second
 
 func run(log *slog.Logger) error {
 	cfg, err := config.Load(os.LookupEnv)
@@ -31,6 +36,18 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	log.Info("sfu listening", "control", server.Addr().String(), "udpPort", server.UDPPort())
+	exporter, err := telemetry.Start(context.Background(), cfg.Telemetry, server.Incarnation(), server.Telemetry, log)
+	if err != nil {
+		return errors.Join(err, server.Stop(context.Background()))
+	}
+	// Stopping last sends a final export that shows the node's sessions gone.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), exportShutdown)
+		defer cancel()
+		if err := exporter.Shutdown(ctx); err != nil {
+			log.Warn("telemetry shutdown failed", "error", err)
+		}
+	}()
 
 	signals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

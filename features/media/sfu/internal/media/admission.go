@@ -83,20 +83,20 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 	key := episodeOf(scope)
 	count := counts[key]
 	if count+1 > n.cfg.MaxEpisodeParticipants {
-		return errEpisodeFull
+		return n.refuse(RefusedEpisodeFull, errEpisodeFull)
 	}
 	// A replacement keeps its Participant's place, so only a new Episode meets the guard.
 	if count == 0 && replacing == nil {
 		if reason := n.guard.closedReason(); reason != "" {
-			return fmt.Errorf("%w: %s", errAdmissionClosed, reason)
+			return n.refuse(reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
 	}
 	if n.mandatoryPackets(count+1, n.screens[key] != nil) > n.episodeCeiling() {
-		return errMandatoryMedia
+		return n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
 	}
 	grown := total - n.episodeReservation(count) + n.episodeReservation(count+1)
 	if grown > n.cfg.PacketBudget {
-		return errNodeFull
+		return n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	return nil
 }
