@@ -157,9 +157,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 			if time.Now().After(deadline) {
 				// The retry starts a class of its own, so this one must not stay in the run.
 				why := fmt.Sprintf("class %d: a Participant missed a microphone or screen for 30 s: %s", index, class.describe(svc))
-				class.stop()
+				class.shutdown()
 				mu.Lock()
-				classes = slices.DeleteFunc(classes, func(c *liveClass) bool { return c == class })
+				classes = without(classes, class)
 				mu.Unlock()
 				_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
 				return why
@@ -202,22 +202,26 @@ func TestLiveSmokeClasses(t *testing.T) {
 			time.Sleep(10 * time.Second)
 		}
 	}
-	var first, previous liveSample
 	cpu := readHostCPU()
+	// The baseline comes before the first wait, so drops during that wait count.
+	mu.Lock()
+	live := slices.Clone(classes)
+	mu.Unlock()
+	first := takeSample(svc, live, &cpu)
+	first.Elapsed = "0s"
+	previous := first
 	started := time.Now()
 	nextStep := started.Add(load.step)
 	ticker := time.NewTicker(load.every)
 	defer ticker.Stop()
-	for count := 0; time.Since(started) < load.hold; count++ {
+	for time.Since(started) < load.hold {
 		<-ticker.C
 		mu.Lock()
-		live := classes
+		live := slices.Clone(classes)
 		mu.Unlock()
 		sample := takeSample(svc, live, &cpu)
 		sample.Elapsed = time.Since(started).Round(time.Second).String()
-		if count == 0 {
-			first = sample
-		} else if load.step > 0 {
+		if load.step > 0 {
 			sample.Broke = qualityBreak(previous, sample)
 		}
 		if load.step > 0 && sample.Broke == "" && !time.Now().Before(nextStep) {
@@ -286,6 +290,12 @@ func fixedRunFailures(first, last liveSample) []string {
 	return failures
 }
 
+// without returns classes minus one. It copies, because the renewal loop and the samples
+// iterate the old slice outside the lock and DeleteFunc would rewrite it under them.
+func without(classes []*liveClass, gone *liveClass) []*liveClass {
+	return slices.DeleteFunc(slices.Clone(classes), func(c *liveClass) bool { return c == gone })
+}
+
 // liveClass is one Episode of the run.
 type liveClass struct {
 	episode   string
@@ -299,6 +309,15 @@ type liveClass struct {
 	shareStart atomic.Int64
 	// stop ends the class's share goroutine.
 	stop context.CancelFunc
+}
+
+// shutdown ends the class's share goroutine and closes its peers, so its publishers stop
+// writing: a write on a closed peer fails and ends its loop.
+func (c *liveClass) shutdown() {
+	c.stop()
+	for _, person := range c.people {
+		_ = person.peer.pc.Close()
+	}
 }
 
 // sharingSince is when the current share stretch began, or the zero time while the screen is paused.
@@ -865,7 +884,7 @@ func (n *nodeTotals) add(inspected protocol.InspectResponse) {
 
 // qualityBreak names the first signal past the step-up's limits: the pacer
 // queue p95 over 20 ms, steal over 25%, closed admission, receive-buffer
-// drops, pacer drops or a new screen stall since the previous sample. A
+// drops, pacer drops or a new microphone or screen stall since the previous sample. A
 // camera stall is not a break, because the allocator may lower a camera.
 func qualityBreak(previous, sample liveSample) string {
 	ready := sample.Ready
@@ -883,6 +902,8 @@ func qualityBreak(previous, sample liveSample) string {
 		return fmt.Sprintf("%d receive-buffer drops", receiveErrors(sample)-receiveErrors(previous))
 	case sample.Node.PacerDropped > previous.Node.PacerDropped:
 		return fmt.Sprintf("%d pacer drops", sample.Node.PacerDropped-previous.Node.PacerDropped)
+	case sample.Peers.AudioStalls > previous.Peers.AudioStalls:
+		return fmt.Sprintf("%d microphone stalls", sample.Peers.AudioStalls-previous.Peers.AudioStalls)
 	case sample.Peers.ScreenStalls > previous.Peers.ScreenStalls:
 		return fmt.Sprintf("%d screen stalls", sample.Peers.ScreenStalls-previous.Peers.ScreenStalls)
 	}
