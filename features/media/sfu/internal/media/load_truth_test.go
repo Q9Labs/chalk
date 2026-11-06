@@ -308,3 +308,15 @@ func TestALargeCallReservesTheSmallTilesItShows(t *testing.T) {
 		t.Fatalf("a %d-person class reserves %d, want %d", class, got, want)
 	}
 }
+
+// A call that loses a Participant must never reserve more than it did before, or a departure could
+// push the node's total over its budget.
+func TestAnEpisodeNeverReservesMoreWhenItShrinks(t *testing.T) {
+	node := defaultsNode(t)
+	node.cfg.PacketBudget, node.cfg.EpisodePacketCeiling = 32_000, 32_000
+	for people := 2; people <= 16; people++ {
+		if smaller, larger := node.episodeReservation(people-1), node.episodeReservation(people); smaller > larger {
+			t.Fatalf("%d Participants reserve %d but %d reserve only %d", people-1, smaller, people, larger)
+		}
+	}
+}

@@ -137,7 +137,7 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 	return blocked
 }
 
-// reserveFloors sets each tile's reserve to what the tiles after it need at their lowest layer,
+// reserveFloors sets each tile's reserve to what the tiles after it, and the paused tiles before it, need at their lowest layer,
 // and returns what the paused tiles among them need to resume. Without it a tile early in the
 // order keeps a high layer while the tiles behind it pause for want of room, and they stay
 // paused because nothing ever gives the room back. Tiles whose lowest layers do not all fit the
@@ -163,9 +163,18 @@ func reserveFloors(tiles []tile, budget float64) (waiting float64) {
 			waiting += floor
 		}
 	}
+	// A playing tile also leaves room for the paused tiles before it, which resume first.
+	pausedBefore := make([]float64, len(tiles))
+	paused := 0.0
+	for index := range tiles {
+		pausedBefore[index] = paused
+		if tiles[index].state.paused {
+			paused += floors[index]
+		}
+	}
 	later := 0.0
 	for index := len(tiles) - 1; index >= 0; index-- {
-		tiles[index].after, later = later, later+floors[index]
+		tiles[index].after, later = later+pausedBefore[index], later+floors[index]
 	}
 	return waiting
 }

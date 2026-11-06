@@ -270,3 +270,18 @@ func TestAPausedTileResumesBecauseTheOthersMakeRoom(t *testing.T) {
 		t.Fatal("the paused tile never resumed while three others held h")
 	}
 }
+
+// A paused tile that comes back before a playing one in priority order must still get its room
+// from the playing tile's high layer.
+func TestAPausedTileBeforeAPlayingOneResumes(t *testing.T) {
+	paused := allocation{decided: true, paused: true, backoff: backoffMin}
+	playing := allocation{decided: true, rid: "h", backoff: backoffMin}
+	tiles := []tile{camera(&paused), camera(&playing)}
+	tiles[0].order, tiles[1].order = 0, 1
+	for step := range 20 {
+		allocate(tiles, estimateOf(1.5e6, 1.5e6), 0, 0, at(time.Duration(step)*500*time.Millisecond))
+	}
+	if paused.paused {
+		t.Fatal("the earlier paused tile never resumed while the later tile held h")
+	}
+}

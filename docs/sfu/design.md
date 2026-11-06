@@ -736,7 +736,8 @@ sent: ten Participants with two cameras each came to 69,400 against about 31,000
 Past that size `R(n)` bills one featured Participant's cameras at `d` and every other
 camera at `SFU_SMALL_TILE_STREAM_COST` (90, the `l` layer), and the Episode's ceiling is
 the node budget, because a class-sized ceiling cannot carry the call's audio and camera
-uplinks. A viewer who opens a large tile still gets `h` while the Episode stays under its
+uplinks. A large call never reserves less than a call at the threshold would, so a Participant
+leaving cannot raise the node's total. A viewer who opens a large tile still gets `h` while the Episode stays under its
 ceiling; the allocator lowers or pauses cameras beyond it as before. At two cameras each,
 ten Participants reserve 35,800, so on a 32,000 node the call fills the node; fewer cameras
 or a larger budget leave room for classes beside it.

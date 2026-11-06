@@ -31,7 +31,13 @@ func (n *Node) episodeReservation(participants int) int {
 	if participants <= 0 {
 		return 0
 	}
-	return min(n.nominalReservation(participants), n.episodeCeiling(participants))
+	reserved := min(n.nominalReservation(participants), n.episodeCeiling(participants))
+	if n.largeCall(participants) {
+		// A call that shrinks below the threshold must not reserve less than it did above it,
+		// so a departure never grows the node's total past its budget.
+		reserved = max(reserved, n.episodeReservation(n.cfg.LargeCallParticipants))
+	}
+	return reserved
 }
 
 // largeCall reports whether an Episode of that many Participants shows its cameras as small tiles.
