@@ -77,7 +77,7 @@ func TestConformanceSignaling(t *testing.T) {
 
 	aliceConn, joined := join(t, service, alice)
 	capabilities, _ := joined.ClientPayload["capabilities"].(map[string]any)
-	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != true || capabilities["subscriptionState"] != true || capabilities["iceRestart"] != false {
+	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != true || capabilities["subscriptionState"] != true || capabilities["iceRestart"] != true {
 		t.Fatalf("join payload advertises the wrong provider or capabilities: %+v", joined.ClientPayload)
 	}
 	bobConn, _ := join(t, service, bob)

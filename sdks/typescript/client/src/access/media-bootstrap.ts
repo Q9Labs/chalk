@@ -13,7 +13,11 @@ export function mediaBootstrap(media: ParticipantMediaAccess): CloudflareSFUBoot
       return {
         connectionId: media.clientPayload.connectionId,
         iceServers: media.clientPayload.iceServers,
-        capabilities: { serverLayerAdaptation: media.clientPayload.capabilities.serverLayerAdaptation, subscriptionState: media.clientPayload.capabilities.subscriptionState },
+        capabilities: {
+          serverLayerAdaptation: media.clientPayload.capabilities.serverLayerAdaptation,
+          subscriptionState: media.clientPayload.capabilities.subscriptionState,
+          iceRestart: media.clientPayload.capabilities.iceRestart,
+        },
       };
     default:
       return unsupportedProvider(media);

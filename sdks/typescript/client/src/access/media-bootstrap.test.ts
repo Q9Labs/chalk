@@ -10,7 +10,7 @@ describe("media bootstrap", () => {
     token: cloudflare.token,
     expiresAt: cloudflare.expiresAt,
     provider: "chalk_sfu",
-    clientPayload: { connectionId: "own-1", episodeRef: "episode-ref", iceServers: [], capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: false } },
+    clientPayload: { connectionId: "own-1", episodeRef: "episode-ref", iceServers: [], capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: true } },
   };
 
   it("keeps the Cloudflare bootstrap as it was", () => {
@@ -18,8 +18,8 @@ describe("media bootstrap", () => {
     expect(iceServersFor(mediaBootstrap(cloudflare))).toEqual([{ urls: "stun:stun.cloudflare.com:3478" }]);
   });
 
-  it("gives the own SFU no Cloudflare STUN server", () => {
-    expect(mediaBootstrap(chalk)).toEqual({ connectionId: "own-1", iceServers: [], capabilities: { serverLayerAdaptation: false, subscriptionState: true } });
+  it("gives the own SFU no Cloudflare STUN server, and passes its capabilities through", () => {
+    expect(mediaBootstrap(chalk)).toEqual({ connectionId: "own-1", iceServers: [], capabilities: { serverLayerAdaptation: false, subscriptionState: true, iceRestart: true } });
     expect(mediaBootstrap(cloudflare)).not.toHaveProperty("capabilities");
     expect(iceServersFor(mediaBootstrap(chalk))).toEqual([]);
     const withStun: ParticipantMediaAccess = { ...chalk, clientPayload: { ...chalk.clientPayload, iceServers: [{ urls: ["stun:own.test:3478"] }] } };

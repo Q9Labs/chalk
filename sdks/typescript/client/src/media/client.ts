@@ -50,6 +50,8 @@ type OwnedLocalPublication = {
   lifecycle: { kind: "pending" } | { kind: "confirmed"; handle: LocalPublicationHandle } | { kind: "retiring"; handle: LocalPublicationHandle | null; detached: boolean; cause: LocalPublicationRetirementCause } | { kind: "retired" };
 };
 type LocalPublicationHandle = { readonly publicationId: string; readonly mid: string };
+type IceRestart = { readonly connection: RTCPeerConnection; readonly connectionEpoch: number; state: "running" | "succeeded" | "failed" };
+type ConnectionObservation = ReturnType<typeof observeConnectionState>;
 type LocalRecovery = {
   readonly state: LocalTrackState;
   readonly deadPublicationId: string | null;
@@ -63,7 +65,7 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 type RemoteTrackEntry = readonly [string, CloudflareSFURemoteTrack];
-const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false });
+const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false });
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
@@ -75,6 +77,11 @@ const NEGOTIATION_TIMEOUT_MS = 35000;
 const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
+// An in-place ICE restart must reconnect within this budget, or the session is replaced.
+const ICE_RESTART_BUDGET_MS = 8000;
+// A path that stays disconnected this long restarts ICE before the browser declares it failed.
+const ICE_DISCONNECTED_RESTART_MS = 2000;
+const ICE_RESTART_FAILURE = Object.freeze({ code: "ice_connection_failed", recoverable: true } as const);
 const VIEWER_LAYER_BATCH_SIZE = 16;
 // Adaptation uses at most 12 of the participant's 60 call-control writes/minute.
 const VIEWER_LAYER_UPDATE_INTERVAL_MS = 5000;
@@ -140,6 +147,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #pollFailedPull = false;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
+  // The current connection's in-place ICE restart. One that failed leaves only session replacement.
+  #iceRestart: IceRestart | null = null;
   // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
   #localOffer: { readonly connection: RTCPeerConnection; readonly origin: LocalOfferOrigin; readonly at: number } | null = null;
   #retirement: Promise<void> = Promise.resolve();
@@ -1064,8 +1073,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     state.enabled = false;
     state.track.enabled = false;
   }
-  async #createLocalOffer(connection: RTCPeerConnection, origin: LocalOfferOrigin) {
-    const description = await createLocalOffer(connection);
+  async #createLocalOffer(connection: RTCPeerConnection, origin: LocalOfferOrigin, options?: RTCOfferOptions) {
+    const description = await createLocalOffer(connection, options);
     this.#localOffer = { connection, origin, at: Date.now() };
     return description;
   }
@@ -1710,6 +1719,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#disposeConnectionObservation?.();
     let disposed = false;
     let cameraTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    let disconnectedTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const cameraPolicy = new CameraUplinkPolicy();
     const viewerLayers = new ViewerLayerSelector({ followsNetwork: !this.#capabilities().serverLayerAdaptation });
     let observedCamera: LocalTrackState | undefined;
@@ -1742,15 +1752,31 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       disposed = true;
       this.#viewerLayerPending.clear();
       if (cameraTimer !== undefined) globalThis.clearTimeout(cameraTimer);
+      if (disconnectedTimer !== undefined) globalThis.clearTimeout(disconnectedTimer);
       connection.removeEventListener("connectionstatechange", capture);
       connection.removeEventListener("iceconnectionstatechange", capture);
       connection.removeEventListener("signalingstatechange", capture);
     };
     const observe = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
-      const observation = observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started);
+      const observation = this.#observeIceRecovery(connection, connectionEpoch, observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started));
       if (observation) this.#publishSnapshot(observation.phase, observation.failure);
       else this.#publishSnapshot();
+      watchDisconnected();
+    };
+    // A disconnected path often never reaches "failed" quickly, so restart ICE after a short wait.
+    const watchDisconnected = () => {
+      if (connection.iceConnectionState !== "disconnected" || !this.#restartsIceInPlace()) {
+        if (disconnectedTimer !== undefined) globalThis.clearTimeout(disconnectedTimer);
+        disconnectedTimer = undefined;
+        return;
+      }
+      disconnectedTimer ??= globalThis.setTimeout(() => {
+        disconnectedTimer = undefined;
+        if (disposed || connection.iceConnectionState !== "disconnected") return;
+        this.#beginIceRestart(connection, generation, connectionEpoch);
+        observe();
+      }, ICE_DISCONNECTED_RESTART_MS);
     };
     const capture = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
@@ -1763,6 +1789,81 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     connection.addEventListener("iceconnectionstatechange", capture);
     connection.addEventListener("signalingstatechange", capture);
     capture();
+  }
+  #restartsIceInPlace(): boolean {
+    return this.#started && this.#capabilities().iceRestart;
+  }
+  // On an SFU that restarts ICE in place, a failed path first restarts ICE on the same session.
+  // While that runs the phase stays recovering. Once it fails, every state but live reports
+  // the failure, so the lifecycle replaces the session instead of waiting for recovery.
+  #observeIceRecovery(connection: RTCPeerConnection, connectionEpoch: number, observation: ConnectionObservation): ConnectionObservation {
+    if (observation?.phase === "failed") this.#beginIceRestart(connection, this.#generation, connectionEpoch);
+    const restart = this.#iceRestartOf(connection, connectionEpoch);
+    if (!restart || connectionIsLive(connection)) return observation;
+    switch (restart.state) {
+      case "failed":
+        return { phase: "failed", failure: this.#snapshot.failure ?? ICE_RESTART_FAILURE };
+      case "running":
+        return { phase: "recovering", failure: null };
+      default:
+        return observation;
+    }
+  }
+  #iceRestartOf(connection: RTCPeerConnection, connectionEpoch: number): IceRestart | null {
+    const restart = this.#iceRestart;
+    return restart && restart.connection === connection && restart.connectionEpoch === connectionEpoch ? restart : null;
+  }
+  #beginIceRestart(connection: RTCPeerConnection, generation: number, connectionEpoch: number): void {
+    const previous = this.#iceRestartOf(connection, connectionEpoch);
+    if (!this.#restartsIceInPlace() || (previous && previous.state !== "succeeded")) return;
+    const restart: IceRestart = { connection, connectionEpoch, state: "running" };
+    this.#iceRestart = restart;
+    const current = () => this.#iceRestart === restart && connection === this.#connection && connectionEpoch === this.#connectionEpoch && generation === this.#generation && !this.#stopped;
+    void this.#restartIceWithinBudget(connection, generation, current).then(
+      () => {
+        restart.state = "succeeded";
+      },
+      (error: unknown) => {
+        restart.state = "failed";
+        if (current()) this.#setFailure(error, "ice_connection_failed");
+      },
+    );
+  }
+  async #restartIceWithinBudget(connection: RTCPeerConnection, generation: number, current: () => boolean): Promise<void> {
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const budget = new Promise<never>((_resolve, reject) => {
+      timer = globalThis.setTimeout(() => reject(new CloudflareSFUError("The ICE restart did not reconnect in time", "ice_connection_failed")), ICE_RESTART_BUDGET_MS);
+    });
+    try {
+      await Promise.race([this.#restartIce(connection, generation, current), budget]);
+    } finally {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+    }
+  }
+  // The restart offer keeps every media section, so the SFU keeps the session's publications and subscriptions.
+  async #restartIce(connection: RTCPeerConnection, generation: number, current: () => boolean): Promise<void> {
+    const connectionId = this.#bootstrap.connectionId;
+    const stale = () => new CloudflareSFUError("Stale media connection", "stale_generation");
+    await this.#serializeSDP(async () => {
+      if (!current()) throw stale();
+      const sessionDescription = await this.#createLocalOffer(connection, "ice_restart", { iceRestart: true });
+      try {
+        const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks: [] }), { generation, connectionId });
+        if (!current()) throw stale();
+        await this.#applyProviderDescription(response, connection, { generation, connectionId });
+      } catch (error) {
+        await this.#rollbackLocalOffer(connection);
+        throw error;
+      }
+    });
+    await waitFor(
+      () => {
+        if (!current()) throw stale();
+        return connectionIsLive(connection);
+      },
+      ICE_RESTART_BUDGET_MS,
+      "The ICE restart did not reconnect in time",
+    );
   }
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
     if (!this.#started || this.#negotiatedGeneration === generation || this.#replacementAttemptedGeneration === generation || !this.#replaceMediaConnection) return;
@@ -2171,8 +2272,8 @@ function remotePublicationEqual(left: CloudflareSFURemoteTrack, right: Cloudflar
   return right !== undefined && left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track;
 }
 type LocalOfferOrigin = Exclude<CloudflareSFULocalOfferDiagnostic["origin"], "outside_sdk">;
-async function createLocalOffer(connection: RTCPeerConnection) {
-  const offer = await connection.createOffer();
+async function createLocalOffer(connection: RTCPeerConnection, options?: RTCOfferOptions) {
+  const offer = await connection.createOffer(options);
   await connection.setLocalDescription(offer);
   return requireDescription(offer);
 }

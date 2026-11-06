@@ -27,6 +27,8 @@ export type SFUMediaCapabilities = {
   readonly serverLayerAdaptation: boolean;
   /** The SFU reports whether it delivers each remote video, and pauses one in place on request. */
   readonly subscriptionState: boolean;
+  /** The SFU answers an ICE restart offer on the existing session, so a lost path recovers without a new session. */
+  readonly iceRestart: boolean;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -142,7 +144,7 @@ export type CloudflareSFUSnapshot = {
 export type CloudflareSFULocalOfferDiagnostic = {
   readonly event: "local_offer_pending";
   readonly where: "sdp_operation_start" | "remote_offer";
-  readonly origin: "publish" | "publish_without_simulcast" | "close" | "outside_sdk";
+  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "outside_sdk";
   readonly pendingMs: number | null;
 };
 export type CloudflareSFUClientOptions = {

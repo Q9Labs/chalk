@@ -272,8 +272,8 @@ func (a *Adapter) metadata() map[string]string {
 
 // join builds the client payload. The SFU picks each subscriber's layer from its
 // own estimate and treats the SDK's layer as a ceiling, and it reports each
-// subscription's delivery state, so the SDK reads that before it repulls. It has
-// no ICE restart yet, so the SDK keeps that path off.
+// subscription's delivery state, so the SDK reads that before it repulls. It
+// restarts ICE in place, so the SDK tries that before it replaces the session.
 func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderChalkSFU,
@@ -283,7 +283,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": false},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true},
 		},
 		Metadata: a.metadata(),
 	}
@@ -345,6 +345,12 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 		return mediaplane.TracksResponse{}, err
 	}
 	return tracksResponseOf(input.ConnectionID, response), nil
+}
+
+// RestartICE sends the client's ICE restart offer as a push with no tracks. The
+// SFU renegotiates the connection in place and answers with new credentials.
+func (a *Adapter) RestartICE(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	return a.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: input.ConnectionID, Scope: input.Scope, SessionDescription: input.SessionDescription})
 }
 
 // UpdateTracks changes a subscription's layer ceiling or pauses and resumes it in
