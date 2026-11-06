@@ -4,6 +4,7 @@ package media
 
 import (
 	"encoding/binary"
+	"errors"
 	"net"
 	"net/netip"
 	"testing"
@@ -137,6 +138,27 @@ func TestBatchConnPlansOneTrainPerRunOfEqualSizeDatagrams(t *testing.T) {
 	}
 }
 
+func TestBatchConnKeepsTrainsUnderTheGSOPayloadLimit(t *testing.T) {
+	a := netip.MustParseAddrPort("127.0.0.1:4001")
+	conn := &batchConn{gso: true}
+	sizes := make([]int, gsoSegments)
+	for i := range sizes {
+		sizes[i] = 1100
+	}
+	messages := conn.plan(queueOf(a, sizes...))
+	datagrams := 0
+	for i := range messages {
+		count := int(conn.out[i].Hdr.Iovlen)
+		if count*1100 > gsoPayloadMax {
+			t.Errorf("message %d carries %d bytes, over the %d limit", i, count*1100, gsoPayloadMax)
+		}
+		datagrams += count
+	}
+	if messages < 2 || datagrams != gsoSegments {
+		t.Fatalf("%d messages carrying %d datagrams, want a split of %d", messages, datagrams, gsoSegments)
+	}
+}
+
 func queueOf(peer netip.AddrPort, sizes ...int) []queued {
 	out := make([]queued, len(sizes))
 	for i, size := range sizes {
@@ -170,6 +192,26 @@ func TestBatchConnReadsABurstWithSourceAddresses(t *testing.T) {
 	}
 }
 
+func TestBatchConnDropsAndCountsTruncatedDatagrams(t *testing.T) {
+	conn := newTestBatchConn(t, true)
+	sender := listenLoopback(t)
+	target := conn.LocalAddr().(*net.UDPAddr)
+	for _, size := range []int{receiveMax + 100, 300} {
+		if _, err := sender.WriteToUDP(datagram(0, uint32(size), size), target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buf := make([]byte, 2048)
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	n, _, err := conn.ReadFromAddrPort(buf)
+	if err != nil || n != 300 {
+		t.Fatalf("read %d bytes, %v, want the 300-byte datagram after the oversized one was dropped", n, err)
+	}
+	if _, truncated := conn.counters(); truncated != 1 {
+		t.Fatalf("%d truncated datagrams counted, want 1", truncated)
+	}
+}
+
 func TestBatchConnReadFailsAfterClose(t *testing.T) {
 	conn := newTestBatchConn(t, true)
 	errs := make(chan error, 1)
@@ -195,6 +237,70 @@ func TestBatchConnReadFailsAfterClose(t *testing.T) {
 }
 
 // A burst larger than the queue still arrives complete and in order.
+// A caller that finds the queue full waits without holding mu, which the writer needs to
+// take the queue, and Close wakes it.
+func TestBatchConnWaitsForQueueSpaceWithoutHoldingTheLock(t *testing.T) {
+	conn := newTestBatchConn(t, true)
+	peer := listenLoopback(t)
+	addr := peer.LocalAddr().(*net.UDPAddr).AddrPort()
+	conn.mu.Lock()
+	conn.count = batchRing
+	conn.mu.Unlock()
+
+	written := make(chan error, 1)
+	go func() {
+		_, err := conn.WriteToAddrPort(datagram(0, 1, 300), addr)
+		written <- err
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if conn.mu.TryLock() { // a waiter that held mu would make this fail forever
+			conn.mu.Unlock()
+			select {
+			case err := <-written:
+				t.Fatalf("a write returned %v while the queue was full", err)
+			case <-time.After(50 * time.Millisecond):
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the waiting write holds mu")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	conn.mu.Lock()
+	conn.count = 0
+	conn.space.Broadcast()
+	conn.mu.Unlock()
+	if err := <-written; err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 2048)
+	_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, _, err := peer.ReadFromUDPAddrPort(buf); err != nil || n != 300 {
+		t.Fatalf("queued datagram: %d bytes, %v", n, err)
+	}
+
+	conn.mu.Lock()
+	conn.count = batchRing
+	conn.mu.Unlock()
+	go func() {
+		_, err := conn.WriteToAddrPort(datagram(0, 2, 300), addr)
+		written <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	_ = conn.Close()
+	select {
+	case err := <-written:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("a write woken by Close returned %v, want net.ErrClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not wake the waiting write")
+	}
+}
+
 func TestBatchConnKeepsOrderWhenTheQueueOverflows(t *testing.T) {
 	conn := newTestBatchConn(t, true)
 	peer := listenLoopback(t)

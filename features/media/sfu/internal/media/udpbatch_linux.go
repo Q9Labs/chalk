@@ -38,8 +38,14 @@ const (
 	batchRing = 256
 	// gsoSegments is the kernel's limit of segments in one UDP_SEGMENT datagram.
 	gsoSegments = 64
-	// datagramMax is the largest datagram the queue holds. Larger ones are sent directly.
+	// gsoPayloadMax keeps a train under the 65507 bytes a UDP datagram can carry; a larger one
+	// fails with EINVAL, which would switch segmentation off for the socket.
+	gsoPayloadMax = 65000
+	// datagramMax is the largest datagram the send queue holds. Larger ones are sent directly.
 	datagramMax = 1500
+	// receiveMax is the read buffer for one datagram: any SRTP datagram on a 1500-byte path,
+	// with room for jumbo frames on loopback. Longer ones arrive truncated and are dropped.
+	receiveMax = 2048
 )
 
 type queued struct {
@@ -57,15 +63,17 @@ type batchConn struct {
 	*net.UDPConn
 	raw syscall.RawConn
 
+	// mu guards pending, count and closed. It is never held across a system call: callers
+	// that find the queue full wait on space, which releases it.
 	mu      sync.Mutex
-	pending *sendQueue // filled by callers, under mu
+	space   *sync.Cond // broadcast when the writer takes the queue, and on Close
+	pending *sendQueue // filled by callers
 	count   int
+	closed  bool
 	wake    chan struct{}
 	done    chan struct{}
-	closed  atomic.Bool
 
-	// Owned by whoever holds sendMu: the writer goroutine, or a caller that found the queue full.
-	sendMu  sync.Mutex
+	// Owned by the writer goroutine, the only one that sends from the queue.
 	sending *sendQueue
 	gso     bool
 	order   []int32
@@ -76,12 +84,14 @@ type batchConn struct {
 	// Datagrams the kernel refused. A refused datagram is lost like any UDP datagram;
 	// the subscriber's NACK recovers video.
 	refused atomic.Int64
+	// Datagrams larger than a read buffer, which the kernel cut short. They are dropped.
+	truncated atomic.Int64
 
 	// Owned by the reading goroutine.
 	rxHdr   [batchRecv]unix.Mmsghdr
 	rxIov   [batchRecv]unix.Iovec
 	rxNames [batchRecv]unix.RawSockaddrInet4
-	rxBufs  [batchRecv][datagramMax]byte
+	rxBufs  [batchRecv][receiveMax]byte
 	rxNext  int
 	rxCount int
 }
@@ -100,10 +110,11 @@ func newMediaConn(conn *net.UDPConn) net.PacketConn {
 	}
 	c := &batchConn{UDPConn: conn, raw: raw, pending: new(sendQueue), sending: new(sendQueue),
 		wake: make(chan struct{}, 1), done: make(chan struct{})}
+	c.space = sync.NewCond(&c.mu)
 	c.gso = supportsSegmentation(raw)
 	for i := range c.rxHdr {
 		c.rxIov[i] = unix.Iovec{Base: &c.rxBufs[i][0]}
-		c.rxIov[i].SetLen(datagramMax)
+		c.rxIov[i].SetLen(receiveMax)
 		c.rxHdr[i].Hdr.Name = (*byte)(unsafe.Pointer(&c.rxNames[i]))
 		c.rxHdr[i].Hdr.Iov = &c.rxIov[i]
 		c.rxHdr[i].Hdr.SetIovlen(1)
@@ -128,15 +139,26 @@ func portOf(name *unix.RawSockaddrInet4) netip.AddrPort {
 
 // ReadFromAddrPort returns the next datagram, calling recvmmsg when the last batch is used up.
 func (c *batchConn) ReadFromAddrPort(b []byte) (int, netip.AddrPort, error) {
-	if c.rxNext == c.rxCount {
-		if err := c.receive(); err != nil {
-			return 0, netip.AddrPort{}, err
+	for {
+		if c.rxNext == c.rxCount {
+			if err := c.receive(); err != nil {
+				return 0, netip.AddrPort{}, err
+			}
 		}
+		i := c.rxNext
+		c.rxNext++
+		if c.rxHdr[i].Hdr.Flags&unix.MSG_TRUNC != 0 {
+			c.truncated.Add(1)
+			continue
+		}
+		n := copy(b, c.rxBufs[i][:c.rxHdr[i].Len])
+		return n, portOf(&c.rxNames[i]), nil
 	}
-	i := c.rxNext
-	c.rxNext++
-	n := copy(b, c.rxBufs[i][:c.rxHdr[i].Len])
-	return n, portOf(&c.rxNames[i]), nil
+}
+
+// counters reports the datagrams the kernel refused to send and the ones cut short on receipt.
+func (c *batchConn) counters() (refused, truncated uint64) {
+	return uint64(c.refused.Load()), uint64(c.truncated.Load())
 }
 
 func (c *batchConn) ReadFrom(b []byte) (int, net.Addr, error) {
@@ -148,6 +170,7 @@ func (c *batchConn) receive() error {
 	for i := range c.rxHdr {
 		c.rxHdr[i].Hdr.Namelen = unix.SizeofSockaddrInet4
 		c.rxHdr[i].Len = 0
+		c.rxHdr[i].Hdr.Flags = 0
 	}
 	var count int
 	var errno syscall.Errno
@@ -175,10 +198,12 @@ func (c *batchConn) WriteToAddrPort(b []byte, addr netip.AddrPort) (int, error) 
 		return c.UDPConn.WriteToUDPAddrPort(b, addr)
 	}
 	c.mu.Lock()
-	for c.count == batchRing {
+	for c.count == batchRing && !c.closed {
+		c.space.Wait()
+	}
+	if c.closed {
 		c.mu.Unlock()
-		c.flushPending()
-		c.mu.Lock()
+		return 0, net.ErrClosed
 	}
 	entry := &c.pending[c.count]
 	entry.addr, entry.n = netip.AddrPortFrom(addr.Addr().Unmap(), addr.Port()), copy(entry.buf[:], b)
@@ -204,9 +229,13 @@ func (c *batchConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 
 // Close stops the writer, drops what is still queued, and closes the socket.
 func (c *batchConn) Close() error {
-	if c.closed.CompareAndSwap(false, true) {
+	c.mu.Lock()
+	if !c.closed {
+		c.closed = true
 		close(c.done)
+		c.space.Broadcast()
 	}
+	c.mu.Unlock()
 	return c.UDPConn.Close()
 }
 
@@ -220,21 +249,26 @@ func (c *batchConn) write() {
 		// Let the goroutines that are ready queue their datagrams first, so one
 		// system call carries more of them.
 		runtime.Gosched()
-		c.flushPending()
+		for c.sendQueued() {
+		}
 	}
 }
 
-// flushPending sends everything queued so far. Calls are serialized, so queues
-// leave in the order they filled.
-func (c *batchConn) flushPending() {
-	c.sendMu.Lock()
-	defer c.sendMu.Unlock()
+// sendQueued takes the queue and sends it with no lock held, so forwarders can fill the
+// other queue meanwhile. It reports whether there was anything to send.
+func (c *batchConn) sendQueued() bool {
 	c.mu.Lock()
-	c.pending, c.sending = c.sending, c.pending
 	n := c.count
+	if n == 0 || c.closed {
+		c.mu.Unlock()
+		return false
+	}
+	c.pending, c.sending = c.sending, c.pending
 	c.count = 0
+	c.space.Broadcast()
 	c.mu.Unlock()
 	c.flush(c.sending[:n])
+	return true
 }
 
 // setSegmentSize is the control message that makes one sendmsg carry size-byte datagrams.
@@ -296,7 +330,7 @@ func (c *batchConn) plan(entries []queued) int {
 		run := 1
 		if c.gso {
 			// The kernel splits a train into equal segments plus a shorter last one.
-			for i+run < len(c.order) && run < gsoSegments {
+			for i+run < len(c.order) && run < gsoSegments && (run+1)*first.n <= gsoPayloadMax {
 				next := &entries[c.order[i+run]]
 				if next.addr != first.addr || next.n > first.n || entries[c.order[i+run-1]].n != first.n {
 					break

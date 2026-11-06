@@ -148,6 +148,8 @@ func Register(meter metric.Meter, read Read) error {
 	refusals := counter("chalk.sfu.refusals", "{refusal}", "Joins and screen shares the node refused, by reason.")
 	udpErrors := counter("chalk.sfu.host.udp.receive_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full receive buffer.")
 	udpSendErrors := counter("chalk.sfu.host.udp.send_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full send buffer.")
+	sendRefused := counter("chalk.sfu.udp.send_refused", "{datagram}", "Datagrams the kernel refused to send on the media socket.")
+	receiveTruncated := counter("chalk.sfu.udp.receive_truncated", "{datagram}", "Datagrams cut short by the media socket's read buffer and dropped.")
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("create telemetry instruments: %w", err)
 	}
@@ -185,6 +187,8 @@ func Register(meter metric.Meter, read Read) error {
 		for reason, refused := range t.Refusals {
 			o.ObserveInt64(refusals, count(refused), metric.WithAttributes(attribute.String(keyReason, reason)))
 		}
+		o.ObserveInt64(sendRefused, count(t.UDPSendRefused))
+		o.ObserveInt64(receiveTruncated, count(t.UDPReceiveTruncated))
 		if t.UDPErrorsKnown {
 			o.ObserveInt64(udpErrors, count(t.UDPReceiveErrors))
 			o.ObserveInt64(udpSendErrors, count(t.UDPSendErrors))
@@ -198,7 +202,7 @@ func Register(meter metric.Meter, read Read) error {
 		return nil
 	}, sessions, episodes, draining, admission, budget, reserved, packetRate, bitrate, queueDelay, scheduler,
 		steal, busy, paused, plannerPaused, capped, pausedCameras, rss, cpu, packets, bytes, drops, cut, nacks, keyframes, rtx,
-		switches, refusals, udpErrors, udpSendErrors)
+		switches, refusals, udpErrors, udpSendErrors, sendRefused, receiveTruncated)
 	if err != nil {
 		return fmt.Errorf("register telemetry callback: %w", err)
 	}
