@@ -10,6 +10,12 @@ const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.j
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
+// A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
+function checkMediaPlane(grant, guest) {
+  if (mediaPlane !== "chalk_sfu") return;
+  check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`);
+}
+
 async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
   const result = await build({
     stdin: {
@@ -45,8 +51,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
-    // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
-    check(mediaPlane !== "chalk_sfu" || grant.media?.provider === "chalk_sfu", `Guest ${guest + 1} got media on ${grant.media?.provider}, not chalk_sfu`);
+    checkMediaPlane(grant, guest + 1);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
     const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
