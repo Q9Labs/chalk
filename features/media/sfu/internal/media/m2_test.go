@@ -139,6 +139,9 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	if _, err := node.CreateSession("create-c-p1", episodeScope("c", "p1")); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("new Episode c: %v, want capacity exceeded", err)
 	}
+	if refusals := node.Telemetry().Refusals; len(refusals) != 1 || refusals[RefusedNodeFull] != 2 {
+		t.Fatalf("telemetry refusals %v, want two for node_full", refusals)
+	}
 	budget, reserved := node.Budget()
 	if budget != 3600 || reserved != 3600 {
 		t.Fatalf("budget %d reserved %d, want 3600 and 3600", budget, reserved)

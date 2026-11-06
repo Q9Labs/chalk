@@ -12,7 +12,9 @@
 # running node, restarts it and checks readiness through an SSH tunnel with an
 # operator certificate. Running it twice converges on the same state. Without
 # --force it waits up to SFU_DRAIN_TIMEOUT seconds (default 3600) for live
-# calls to end. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>.
+# calls to end. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
+# turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
+# which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
 set -euo pipefail
 
 usage="usage: deploy <staging|production> <node address> [--force|--firewall-only]"
@@ -135,10 +137,23 @@ for pair in server-cert:server.crt server-key:server.key client-ca:ca.crt; do
   as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
   as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
 done
+otlp_endpoint="" otlp_secret="# Metrics export is off: the deploy found no otlp-headers."
+if [[ -f "${dir}/otlp-headers" ]]; then
+  replace=()
+  as_sfu podman secret inspect chalk-sfu-otlp-headers >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" chalk-sfu-otlp-headers - <"${dir}/otlp-headers" >/dev/null
+  otlp_endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}"
+  otlp_secret="Secret=chalk-sfu-otlp-headers,type=env,target=OTEL_EXPORTER_OTLP_METRICS_HEADERS"
+else
+  echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
+fi
 sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
-  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" "${deploy_dir}/sfu.env.in" |
+  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
+  -e "s|__ENVIRONMENT__|${environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
+  "${deploy_dir}/sfu.env.in" |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
-sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" "${deploy_dir}/chalk-sfu.container.in" |
+sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" \
+  "${deploy_dir}/chalk-sfu.container.in" |
   as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
 remote systemctl --user -M chalk-sfu@ daemon-reload
 

@@ -54,6 +54,8 @@ type subscription struct {
 	// until the switch's first packet is sent; switches counts the switches.
 	beforeSwitch translator
 	switches     uint64
+	// talliedSwitches is the part of switches the node's totals already hold.
+	talliedSwitches counted
 	// resent remembers recent resends by outgoing sequence number.
 	resent [resendMemory]resentPacket
 	// limit is how far the node holds this subscription below its request.
@@ -256,6 +258,13 @@ func (s *subscription) route(layer int, p *rtpPacket) (out outgoing, send, switc
 	out = t.begin(layer, p)
 	s.interest.Store(1 << layer)
 	return out, true, true
+}
+
+// takeSwitches returns the layer switches begun since the control loop last asked.
+func (s *subscription) takeSwitches() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.talliedSwitches.take(s.switches)
 }
 
 // abandonSwitch undoes a switch whose keyframe never went out, which happens

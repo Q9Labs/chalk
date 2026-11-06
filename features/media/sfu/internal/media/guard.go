@@ -79,7 +79,8 @@ func percentile(counts [queueDelayBuckets]uint64, p float64) time.Duration {
 }
 
 // cpuTimes is one /proc/stat reading of the host's CPU time, in clock ticks.
-type cpuTimes struct{ steal, total uint64 }
+// cpuTimes are the host's cumulative CPU ticks: stolen, idle (iowait included) and in total.
+type cpuTimes struct{ steal, idle, total uint64 }
 
 // stealReader reads the host's CPU times. It reports false where the host
 // does not expose them, and steal then reads as zero.
@@ -108,7 +109,10 @@ func readProcStat() (cpuTimes, bool) {
 			return cpuTimes{}, false
 		}
 		times.total += value
-		if index == 7 {
+		switch index {
+		case 3, 4:
+			times.idle += value
+		case 7:
 			times.steal = value
 		}
 	}
@@ -118,9 +122,12 @@ func readProcStat() (cpuTimes, bool) {
 // HostHealth is the guard's latest view of the host, for readiness and telemetry.
 type HostHealth struct {
 	// AdmissionReason is why new Episodes are refused, or empty while they are admitted.
-	AdmissionReason     string
-	StealPercent        float64
-	StealKnown          bool
+	AdmissionReason string
+	StealPercent    float64
+	StealKnown      bool
+	// BusyPercent is the host CPU time spent working over the window, steal and idle excluded,
+	// valid with StealKnown.
+	BusyPercent         float64
 	QueueDelayP95       time.Duration
 	SchedulerLatencyP99 time.Duration
 }
@@ -183,7 +190,9 @@ func (g *guard) tick() {
 	if health.StealKnown {
 		first, last := g.steal[0], g.steal[len(g.steal)-1]
 		if total := last.total - first.total; total > 0 {
-			health.StealPercent = 100 * float64(last.steal-first.steal) / float64(total)
+			steal, idle := last.steal-first.steal, last.idle-first.idle
+			health.StealPercent = 100 * float64(steal) / float64(total)
+			health.BusyPercent = 100 * float64(total-steal-idle) / float64(total)
 		}
 	}
 	var window [queueDelayBuckets]uint64

@@ -3,9 +3,18 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +75,7 @@ func TestReadinessSurvivesDatabaseCollectionFailure(t *testing.T) {
 		fmt.Fprint(w, `{"dependencies":{"reason":"database_unavailable"}}`)
 	}))
 	defer server.Close()
-	items, err := collectState(context.Background(), server.Client(), "", server.URL)
+	items, err := collectState(context.Background(), server.Client(), "", server.URL, sfuProbe{})
 	if err == nil || len(items) != 1 || items[0].Value != 1 || items[0].Reason != "database_unavailable" {
 		t.Fatalf("database failure hid the independent probe: %+v, %v", items, err)
 	}
@@ -403,5 +412,182 @@ func TestClosedMessagesPreserveTenantContext(t *testing.T) {
 	}
 	if outputs[0] == outputs[1] {
 		t.Fatal("different Tenants must not produce identical closure messages")
+	}
+}
+
+// sfuFixture is a throwaway CA, a server that requires a client certificate
+// signed by it over TLS 1.3, and the files the collector reads.
+type sfuFixture struct {
+	probe  sfuProbe
+	server *httptest.Server
+}
+
+func newSFUFixture(t *testing.T, handler http.HandlerFunc) sfuFixture {
+	t.Helper()
+	dir := t.TempDir()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test ca"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := func(serial int64, usage x509.ExtKeyUsage) tls.Certificate {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		template := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{usage}, KeyUsage: x509.KeyUsageDigitalSignature, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}}
+		der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+	}
+	write := func(name, kind string, der []byte) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: kind, Bytes: der}), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	client := issue(2, x509.ExtKeyUsageClientAuth)
+	clientKey, err := x509.MarshalPKCS8PrivateKey(client.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(caCert)
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{issue(3, x509.ExtKeyUsageServerAuth)}, ClientCAs: roots, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS13}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	return sfuFixture{server: server, probe: sfuProbe{
+		URL:            server.URL + "/readyz",
+		ClientCertFile: write("client.pem", "CERTIFICATE", client.Certificate[0]),
+		ClientKeyFile:  write("client-key.pem", "PRIVATE KEY", clientKey),
+		CAFile:         write("ca.pem", "CERTIFICATE", caDER),
+	}}
+}
+
+func sfuBody(reserved int, admission string) string {
+	reason := ""
+	if admission != "" {
+		reason = `"admissionReason":"` + admission + `",`
+	}
+	return fmt.Sprintf(`{"nodeIncarnation":"incarnation-private-test","sessions":3,"packetBudget":16000,"reservedPackets":%d,"newEpisodePackets":240,"host":{%s"queueDelayP95Ms":1.5,"schedulerLatencyP99Ms":2,"packetsPerSecond":900,"udpReceiveBufferBytes":8388608}}`, reserved, reason)
+}
+
+func TestSFUReadinessReasonsAndSafeExport(t *testing.T) {
+	for _, fixture := range []struct {
+		name, body, reason string
+		status             int
+		value              int64
+	}{
+		{"ready", sfuBody(100, ""), "ready", 200, 0},
+		{"below budget threshold", sfuBody(14399, ""), "ready", 200, 0},
+		{"budget at 90 percent", sfuBody(14400, ""), "packet_budget", 200, 1},
+		{"budget exhausted", sfuBody(16000, ""), "packet_budget", 200, 1},
+		{"draining", sfuBody(0, ""), "draining", 503, 1},
+		{"cpu steal closes admission", sfuBody(100, "cpu_steal"), "admission_cpu_steal", 200, 1},
+		{"pacer delay closes admission", sfuBody(100, "pacer_queue_delay"), "admission_pacer_queue_delay", 200, 1},
+		{"admission wins over budget", sfuBody(16000, "cpu_steal"), "admission_cpu_steal", 200, 1},
+		{"unknown admission reason", sfuBody(100, "private-test-reason"), "invalid_response", 200, 1},
+		{"other status", sfuBody(100, ""), "http_status", 500, 1},
+		{"invalid JSON", `private-test-payload`, "invalid_response", 200, 1},
+		{"missing budget", `{"sessions":1}`, "invalid_response", 200, 1},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			sfu := newSFUFixture(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/readyz" || r.TLS == nil || r.TLS.Version != tls.VersionTLS13 || len(r.TLS.PeerCertificates) != 1 {
+					t.Errorf("unexpected probe: %s %s", r.Method, r.URL.Path)
+				}
+				w.WriteHeader(fixture.status)
+				fmt.Fprint(w, fixture.body)
+			})
+			item := collectSFUReadiness(context.Background(), sfu.probe)
+			if item.Rule != "sfu-readiness" || item.Reason != fixture.reason || item.Value != fixture.value || item.Time == "" {
+				t.Fatalf("unexpected snapshot: %+v", item)
+			}
+			formatMessage(&item)
+			encoded, err := json.Marshal(item)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(item.Summary, fixture.reason) || strings.Contains(string(encoded), "private-test") || strings.Contains(string(encoded), sfu.server.URL) || !strings.Contains(item.Headline, "own SFU") {
+				t.Fatal(string(encoded))
+			}
+		})
+	}
+}
+
+func TestSFUReadinessFailsClosedWithoutLeakingErrors(t *testing.T) {
+	sfu := newSFUFixture(t, func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, sfuBody(0, "")) })
+	broken := func(mutate func(*sfuProbe)) sfuProbe {
+		probe := sfu.probe
+		mutate(&probe)
+		return probe
+	}
+	garbage := filepath.Join(t.TempDir(), "garbage.pem")
+	if err := os.WriteFile(garbage, []byte("private-test-garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	other := newSFUFixture(t, func(http.ResponseWriter, *http.Request) {})
+	for name, probe := range map[string]sfuProbe{
+		"missing client cert": broken(func(p *sfuProbe) { p.ClientCertFile = "/nonexistent/private-test" }),
+		"unset files":         {URL: sfu.probe.URL},
+		"invalid key":         broken(func(p *sfuProbe) { p.ClientKeyFile = garbage }),
+		"invalid CA":          broken(func(p *sfuProbe) { p.CAFile = garbage }),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "tls_config" {
+				t.Fatalf("unexpected snapshot: %+v", item)
+			}
+		})
+	}
+	t.Run("server the CA does not trust", func(t *testing.T) {
+		probe := sfu.probe
+		probe.CAFile = other.probe.CAFile
+		if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "unreachable" {
+			t.Fatalf("unexpected snapshot: %+v", item)
+		}
+	})
+	t.Run("client certificate from another CA", func(t *testing.T) {
+		probe := sfu.probe
+		probe.ClientCertFile, probe.ClientKeyFile = other.probe.ClientCertFile, other.probe.ClientKeyFile
+		if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "unreachable" {
+			t.Fatalf("unexpected snapshot: %+v", item)
+		}
+	})
+	t.Run("server down", func(t *testing.T) {
+		probe := sfu.probe
+		sfu.server.Close()
+		if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "unreachable" {
+			t.Fatalf("unexpected snapshot: %+v", item)
+		}
+	})
+}
+
+func TestSFUReadinessRowOnlyWhenConfigured(t *testing.T) {
+	sync := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer sync.Close()
+	items, _ := collectState(context.Background(), sync.Client(), "", sync.URL, sfuProbe{})
+	if len(items) != 1 || items[0].Rule != "sync-readiness" {
+		t.Fatalf("an unconfigured SFU must emit no row: %+v", items)
+	}
+	sfu := newSFUFixture(t, func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, sfuBody(0, "")) })
+	items, _ = collectState(context.Background(), sync.Client(), "", sync.URL, sfu.probe)
+	if len(items) != 2 || items[0].Rule != "sync-readiness" || items[1].Rule != "sfu-readiness" || items[1].Value != 0 {
+		t.Fatalf("a configured SFU emits one global row: %+v", items)
+	}
+	t.Setenv("CHALK_ALERT_SFU_READY_URL", "")
+	if sfuProbeFromEnv().URL != "" {
+		t.Fatal("an unset URL must disable the SFU probe")
 	}
 }

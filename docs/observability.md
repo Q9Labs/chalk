@@ -366,9 +366,45 @@ queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
 probes. The Episode block shows its packets/s against its ceiling. `/readyz`
 shows the host signals behind admission.
 
-The SFU is not yet deployed, so no monitor reads these lines. When it ships,
-alert on admission closed for more than five minutes, on a node above 90% of
-its packet budget, and on any `media readers still running after close`.
+The node also exports metrics over OTLP/HTTP to the API's metrics dataset, as
+`service.name=chalk-sfu` with `deployment.environment.name` and the node
+incarnation as `service.instance.id`, so call quality and host health are
+readable without SSH. They carry no Tenant, Episode, Participant, session or
+address. Their only attributes are `chalk.sfu.direction` (`in`, `out`),
+`chalk.sfu.media_kind` (`audio`, `video`, and `repair` and `probe` out),
+`chalk.sfu.refusal_reason` and `chalk.sfu.admission_reason`.
+`features/media/sfu/tests/telemetry_test.go` runs an impaired call and checks
+the export against `inspect` and for identities.
+
+- Load: `chalk.sfu.sessions`, `chalk.sfu.episodes`, `chalk.sfu.packet_budget`,
+  `chalk.sfu.packets.reserved`, and `chalk.sfu.packet_rate` and
+  `chalk.sfu.bitrate` over the last second by direction and kind.
+- Totals since start, as cumulative counters: `chalk.sfu.packets` and
+  `chalk.sfu.bytes` by direction and kind (RTX sent is `out`/`repair`),
+  `chalk.sfu.pacer.drops`, `chalk.sfu.repairs.cut`, `chalk.sfu.nack.requested`,
+  `chalk.sfu.keyframe_repairs`, `chalk.sfu.rtx.received`,
+  `chalk.sfu.layer.switches`, and `chalk.sfu.refusals` by reason (`draining`,
+  `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
+  `cpu_steal`, `pacer_queue_delay`, `screen_ceiling`).
+- Quality and host: `chalk.sfu.subscriptions.congestion_paused`,
+  `chalk.sfu.cameras.capped` and `.paused`, `chalk.sfu.pacer.queue_delay.p95`
+  and `chalk.sfu.scheduler.latency.p99` in seconds, and
+  `chalk.sfu.host.cpu.steal`, `chalk.sfu.host.cpu.utilization` (ratios over the
+  guard window) and `chalk.sfu.host.udp.receive_buffer_errors` where the host
+  reports them.
+- State and process: `chalk.sfu.draining` and `chalk.sfu.admission.closed`
+  (1 or 0, with the admission reason), `process.cpu.time` and
+  `process.memory.usage` (resident bytes, Linux).
+
+A rate from the totals is exact over any window. A stream that closes between two
+100 ms control ticks loses that tick's counts, so totals can run slightly under
+the sum of every session's `inspect`. A restart starts every total again from
+zero under a new `service.instance.id`.
+
+The alert collector samples the node's `/readyz` and alerts when it stays
+unreachable, draining, closed to new Episodes or above 90% of its packet budget;
+see [Alerts](#alerts). `media readers still running after close` stays a journal
+line and has no monitor, because it only happens while the process exits.
 The paused-for-network journey (SDK `subscriptionState`) lands with the API and
 SDK change, and adds its journey ledger entry then.
 
@@ -410,6 +446,14 @@ read-only synthetic Axiom query tests replay the blip and sustained window,
 recovery, duplicate/missing samples and a change of reason.
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
+The collector also samples the own SFU's `/readyz` over mutual TLS when
+`CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
+grouped monitor alerts on four unhealthy minute samples in five minutes: a
+draining or unreachable node, a node that refuses new Episodes for CPU steal or
+pacer queue delay, or reserved packets at 90% of the packet budget. Only
+allowlisted reason codes are exported, never TLS or HTTP error text, response
+bodies or node identifiers. The freshness monitor does not count this row, so
+hosts without an SFU stay quiet. See the production-alerts README for setup.
 
 ### Sync lifecycle readiness evidence
 

@@ -109,6 +109,17 @@ type mediaStats struct {
 	probe    float64
 	// congested counts video subscriptions paused for congestion.
 	congested int
+	// in and out are the node's media rates over the last second; totals its counts since start.
+	in     [ingressKinds]flowRate
+	out    [packetClasses]flowRate
+	totals nodeTotals
+}
+
+type flowRate struct{ pps, bps float64 }
+
+func (r *flowRate) add(pps, bps float64) {
+	r.pps += pps
+	r.bps += bps
 }
 
 // allocate runs one control tick. It samples every meter, plans each Episode
@@ -133,18 +144,24 @@ func (n *Node) allocate() {
 		episode.sessions = append(episode.sessions, session)
 		episode.subscriptions = append(episode.subscriptions, subscribed...)
 		for _, pub := range published {
+			kind := ingressAudio
+			if pub.video() {
+				kind = ingressVideo
+			}
 			for index := range pub.layers {
 				if layer := pub.layers[index].Load(); layer != nil {
-					layer.meter.sample(now)
-					pps, _ := layer.meter.rates()
+					n.tallyIngress(kind, layer, now)
+					pps, bps := layer.meter.rates()
+					stats.in[kind].add(pps, bps)
 					episode.base += pps
 					episode.measured += pps
 				}
 			}
 		}
-		session.transport.tick(now)
+		n.tallyEgress(session.transport.tick(now))
 		for class := range packetClasses {
-			pps, _ := session.transport.meters[class].rates()
+			pps, bps := session.transport.meters[class].rates()
+			stats.out[class].add(pps, bps)
 			episode.measured += pps
 			switch class {
 			case classRepair:
@@ -170,6 +187,7 @@ func (n *Node) allocate() {
 			}
 			limit = limit.capped(subscription.pub.plan)
 			subscription.setServerLimit(limit)
+			n.totals.counts.LayerSwitches += subscription.takeSwitches()
 			if limit.paused && subscription.pub.video() {
 				stats.congested++
 			}
@@ -179,6 +197,7 @@ func (n *Node) allocate() {
 		stats.packets += episode.measured
 	}
 	maps.DeleteFunc(n.plans, func(key episodeKey, _ int64) bool { return episodes[key] == nil })
+	stats.totals = n.totals
 	n.stats.Store(stats)
 }
 
