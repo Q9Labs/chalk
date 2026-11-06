@@ -270,21 +270,21 @@ export class ViewerLayerSelector {
         this.#views.delete(publicationId);
       }
     }
-    const changes: ViewerLayerChange[] = [];
-    for (const camera of cameras) {
-      const view = this.#view(camera);
-      // Its counters stand still while paused, so the reader takes a new baseline after the resume.
-      if (paused.has(camera.publicationId)) {
-        this.#reader.forget(camera.track.id);
-        continue;
-      }
-      const stats = this.#reader.read(rows, camera.track.id);
-      if (!stats) continue;
-      // Do not learn from l until the switch actually reached the receiver.
-      const layer = view.policy.layer === view.applied ? view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height }) : view.policy.layer;
-      if (layer !== view.applied && now >= view.retryAt) changes.push({ ...camera, layer });
+    return cameras.flatMap((camera) => this.#change(now, rows, camera, paused.has(camera.publicationId)) ?? []);
+  }
+
+  #change(now: number, rows: readonly ViewerStatsRow[], camera: ViewerLayerCamera, paused: boolean): ViewerLayerChange | undefined {
+    const view = this.#view(camera);
+    // Its counters stand still while paused, so the reader takes a new baseline after the resume.
+    if (paused) {
+      this.#reader.forget(camera.track.id);
+      return undefined;
     }
-    return changes;
+    const stats = this.#reader.read(rows, camera.track.id);
+    if (!stats) return undefined;
+    // Do not learn from l until the switch actually reached the receiver.
+    const layer = view.policy.layer === view.applied ? view.policy.sample({ ...stats, tileHeight: videoRenderSize(camera.track)?.height }) : view.policy.layer;
+    return layer !== view.applied && now >= view.retryAt ? { ...camera, layer } : undefined;
   }
 
   applied({ publicationId, track, layer }: ViewerLayerChange): void {
