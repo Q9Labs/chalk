@@ -6524,6 +6524,33 @@ describe("in-place ICE restart on the own SFU", () => {
     );
   });
 
+  it("drops a restart answer that arrives after the 8 s budget, so the path stays failed for replacement", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8100);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+        const applied = peer.descriptionLog.length;
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(applied)).not.toContain("setRemote:answer");
+        expect(peer.rollbackCalls).toBe(1);
+        expect(peer.connectionState).toBe("failed");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
   it("fails at once for replacement when the session is gone after node loss (HTTP 404)", async () => {
     await withTimedHarness(
       async (h) => {

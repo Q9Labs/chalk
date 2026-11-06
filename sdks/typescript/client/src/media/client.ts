@@ -1826,7 +1826,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const restart: IceRestart = { connection, connectionEpoch, state: "running" };
     this.#iceRestart = restart;
     const current = () => this.#iceRestart === restart && connection === this.#connection && connectionEpoch === this.#connectionEpoch && generation === this.#generation && !this.#stopped;
-    void this.#restartIceWithinBudget(connection, generation, current).then(
+    // Once the budget fails the attempt or the path recovers, every later step drops its result.
+    const pending = () => current() && restart.state === "running";
+    void this.#restartIceWithinBudget(connection, generation, pending).then(
       () => {
         restart.state = "succeeded";
       },
