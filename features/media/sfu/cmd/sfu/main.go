@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/control"
@@ -33,7 +34,30 @@ func run(log *slog.Logger) error {
 
 	signals, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	<-signals.Done()
-	log.Info("sfu draining")
-	return server.Stop(context.Background())
+	drain := make(chan os.Signal, 1)
+	signal.Notify(drain, syscall.SIGUSR1)
+	defer signal.Stop(drain)
+	ticker := time.NewTicker(time.Second)
+	ticker.Stop() // runs only while a drain waits for the last session
+	defer ticker.Stop()
+	waiting := false
+	for {
+		select {
+		case <-signals.Done():
+			log.Info("sfu stopping")
+			return server.Stop(context.Background())
+		case <-drain:
+			// SIGUSR1 drains without stopping, so an operator can wait for live
+			// calls to end before a restart. "sfu drained" marks the last one.
+			log.Info("sfu draining", "sessions", server.Drain())
+			waiting = true
+			ticker.Reset(time.Second)
+		case <-ticker.C:
+			if waiting && server.Drain() == 0 {
+				log.Info("sfu drained")
+				waiting = false
+				ticker.Stop()
+			}
+		}
+	}
 }

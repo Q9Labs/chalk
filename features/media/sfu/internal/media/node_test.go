@@ -99,3 +99,25 @@ func TestClosedCreateRecordsAreBounded(t *testing.T) {
 		t.Fatal("the oldest closed create record should be forgotten first")
 	}
 }
+
+func TestADrainingNodeKeepsItsLiveCallsAndRefusesNewEpisodes(t *testing.T) {
+	node := newTestNode(t, nil)
+	node.newTestSession(t, testScope("alice", 1))
+	node.newTestSession(t, testScope("bob", 1))
+	node.Drain()
+
+	if _, err := node.CreateSession("bob-reconnect", testScope("bob", 2)); err != nil {
+		t.Fatalf("reconnect into a live Episode while draining: %v", err)
+	}
+	if _, err := node.CreateSession("carol-joins", testScope("carol", 1)); err != nil {
+		t.Fatalf("join into a live Episode while draining: %v", err)
+	}
+	other := testScope("dave", 1)
+	other.EpisodeID = "episode-2"
+	if _, err := node.CreateSession("dave-new-episode", other); !errors.Is(err, ErrDraining) {
+		t.Fatalf("new Episode while draining: %v, want draining", err)
+	}
+	if node.SessionCount() != 3 {
+		t.Fatalf("%d sessions, want alice, bob's replacement and carol", node.SessionCount())
+	}
+}

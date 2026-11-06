@@ -65,11 +65,13 @@ type Node struct {
 	mux         io.Closer
 	guard       *guard
 	done        chan struct{} // closed by Close; stops the node's control loop
+	// receiveBuffer is the UDP receive buffer the kernel granted, zero when unknown.
+	receiveBuffer int
 
 	wg sync.WaitGroup
 
 	mu           sync.Mutex
-	draining     bool // refuses new sessions
+	draining     bool // refuses new Episodes
 	stopped      bool // refuses all work
 	sessions     map[string]*Session
 	participants map[participantKey]*Session
@@ -113,7 +115,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen on UDP %q: %w", cfg.UDPAddr, err)
 	}
-	sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
+	receiveBuffer := sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
 	mux := webrtc.NewICEUDPMux(nil, conn)
 	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
@@ -122,25 +124,26 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{
-		cfg:          cfg,
-		log:          log,
-		incarnation:  randomHex(4),
-		peers:        peers,
-		conn:         conn,
-		mux:          mux,
-		guard:        newGuard(cfg.Guard, log),
-		done:         make(chan struct{}),
-		sessions:     map[string]*Session{},
-		participants: map[participantKey]*Session{},
-		creates:      map[string]createRecord{},
-		fences:       map[participantKey]int64{},
-		screens:      map[episodeKey]*Session{},
-		sources:      map[sourceKey]*sourceAuthority{},
-		sourceLimit:  defaultSourceLimit,
-		sourceFloors: map[episodeKey]int64{},
-		plans:        map[episodeKey]int64{},
-		fenceLimit:   defaultFenceLimit,
-		createLimit:  defaultClosedCreateLimit,
+		cfg:           cfg,
+		log:           log,
+		incarnation:   randomHex(4),
+		peers:         peers,
+		conn:          conn,
+		mux:           mux,
+		guard:         newGuard(cfg.Guard, log),
+		receiveBuffer: receiveBuffer,
+		done:          make(chan struct{}),
+		sessions:      map[string]*Session{},
+		participants:  map[participantKey]*Session{},
+		creates:       map[string]createRecord{},
+		fences:        map[participantKey]int64{},
+		screens:       map[episodeKey]*Session{},
+		sources:       map[sourceKey]*sourceAuthority{},
+		sourceLimit:   defaultSourceLimit,
+		sourceFloors:  map[episodeKey]int64{},
+		plans:         map[episodeKey]int64{},
+		fenceLimit:    defaultFenceLimit,
+		createLimit:   defaultClosedCreateLimit,
 	}
 	n.wg.Go(n.run)
 	return n, nil
@@ -302,25 +305,28 @@ func (b feedbackBuffer) read(p []byte) {
 	}
 }
 
-// sizeReceiveBuffer requests the socket's receive buffer and logs what the
-// kernel granted. At the kernel's usual default of about 208 KiB a busy node
-// drops packets, so the host must allow the request through net.core.rmem_max.
-// A refused or reduced request still serves, with a warning. Zero keeps the
-// kernel's default.
-func sizeReceiveBuffer(conn *net.UDPConn, requested int, log *slog.Logger) {
-	if requested <= 0 {
-		return
+// sizeReceiveBuffer requests the socket's receive buffer, logs what the kernel
+// granted and returns it, zero when unknown. At the kernel's usual default of
+// about 208 KiB a busy node drops packets, so the host must allow the request
+// through net.core.rmem_max. A refused or reduced request still serves, with a
+// warning. A request of zero keeps the kernel's default.
+func sizeReceiveBuffer(conn *net.UDPConn, requested int, log *slog.Logger) int {
+	if requested > 0 {
+		if err := conn.SetReadBuffer(requested); err != nil {
+			log.Warn("cannot set the UDP receive buffer", "requestedBytes", requested, "error", err)
+		}
 	}
-	setErr := conn.SetReadBuffer(requested)
 	granted, err := receiveBufferSize(conn)
 	switch {
 	case err != nil:
 		log.Warn("cannot read the UDP receive buffer size", "requestedBytes", requested, "error", err)
-	case setErr != nil || granted < requested:
-		log.Warn("UDP receive buffer is below the request; raise net.core.rmem_max", "requestedBytes", requested, "grantedBytes", granted, "error", setErr)
+		return 0
+	case granted < requested:
+		log.Warn("UDP receive buffer is below the request; raise net.core.rmem_max", "requestedBytes", requested, "grantedBytes", granted)
 	default:
 		log.Info("UDP receive buffer", "requestedBytes", requested, "grantedBytes", granted)
 	}
+	return granted
 }
 
 func randomHex(bytes int) string {
@@ -356,6 +362,10 @@ func (n *Node) Host() protocol.HostState {
 		AdmissionReason:       health.AdmissionReason,
 		QueueDelayP95Ms:       milliseconds(health.QueueDelayP95),
 		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
+		UDPReceiveBufferBytes: n.receiveBuffer,
+	}
+	if errors, known := readUDPReceiveErrors(udpStatsPath); known {
+		state.UDPReceiveBufferErrors = &errors
 	}
 	if health.StealKnown {
 		steal := round2(health.StealPercent)
@@ -411,7 +421,9 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	digest := scopeDigest(scope)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.draining || n.stopped {
+	// A draining node refuses only new Episodes: a live call on it keeps taking
+	// joins and reconnects, so it can run to its end before the restart.
+	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) {
 		return protocol.CreateSessionResponse{}, nil, ErrDraining
 	}
 	if record, ok := n.creates[operationID]; ok {
@@ -458,6 +470,16 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	n.raiseFence(scope)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
 	return n.responseFor(session.id), fenced, nil
+}
+
+// hostsEpisode reports whether a live session belongs to the Episode. The caller holds n.mu.
+func (n *Node) hostsEpisode(key episodeKey) bool {
+	for _, session := range n.sessions {
+		if episodeOf(session.scope) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // fenceVictim finds the fence a new Participant would take the place of, or -1 when the table
@@ -601,7 +623,7 @@ func (n *Node) track(fn func()) bool {
 	return true
 }
 
-// Drain makes the node refuse new sessions while it finishes in-flight work.
+// Drain makes the node refuse new Episodes while its live calls finish.
 func (n *Node) Drain() {
 	n.mu.Lock()
 	n.draining = true

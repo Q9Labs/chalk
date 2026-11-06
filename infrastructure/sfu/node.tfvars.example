@@ -1,0 +1,3 @@
+environment       = "staging" # or "production"
+size              = "s-1vcpu-1gb"
+control_addresses = ["192.0.2.10/32"] # the API host's public address

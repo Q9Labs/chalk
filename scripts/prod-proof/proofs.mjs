@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
-import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { check, command, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
@@ -19,7 +19,7 @@ export async function prepareIntegration(run, webhooks) {
   run.ownership = { keyId: key.api_key.id };
   run.apiKey = key.secret;
   await saveOwnership(run);
-  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
+  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, run.signal);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
@@ -35,7 +35,7 @@ export async function createSpace(run) {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: "cf_sfu",
+    media_plane: process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu",
     recording_policy: "manual",
     transcription_policy: "on_demand",
     default_episode_duration_seconds: 1800,

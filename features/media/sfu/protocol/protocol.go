@@ -336,6 +336,14 @@ type HostState struct {
 	SchedulerLatencyP99Ms float64  `json:"schedulerLatencyP99Ms"`
 	// PacketsPerSecond is every Episode's measured media on the node.
 	PacketsPerSecond float64 `json:"packetsPerSecond"`
+	// UDPReceiveBufferBytes is the media socket's receive buffer as the kernel
+	// granted it, zero when unknown. Below the requested size, raise
+	// net.core.rmem_max on the host.
+	UDPReceiveBufferBytes int `json:"udpReceiveBufferBytes"`
+	// UDPReceiveBufferErrors counts the host's UDP datagrams dropped because a
+	// receive buffer was full, since boot (RcvbufErrors). It is absent where the
+	// host does not report it. A rising count means media loss on ingress.
+	UDPReceiveBufferErrors *uint64 `json:"udpReceiveBufferErrors,omitempty"`
 }
 
 type ErrorResponse struct {

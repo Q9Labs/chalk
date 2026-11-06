@@ -47,6 +47,9 @@ async function main() {
   const scopeB = { ...tenant, participantId: "browser-b" };
   const connectionA = (await control.post("/v1/sessions", { operationId: "browser-create-a", scope: scopeA })).body.connectionId;
   const connectionB = (await control.post("/v1/sessions", { operationId: "browser-create-b", scope: scopeB })).body.connectionId;
+  // The node forwards a source only while Sync's grant stands.
+  const controls = ["microphone", "camera"].map((source) => ({ participantId: scopeA.participantId, source, action: "grant", revision: 1 }));
+  expect((await control.post("/v1/episodes/sources", { tenantId: tenant.tenantId, episodeId: tenant.episodeId, controls })).status === 200, "grant browser-a's sources");
   const page = await openPage();
 
   await push(page, control, connectionA, scopeA);
@@ -190,6 +193,8 @@ async function startService(certs) {
       SFU_TLS_KEY_FILE: certs.server.key,
       SFU_CLIENT_CA_FILE: certs.ca,
       SFU_CLIENT_IDENTITY: identity,
+      // Sync renews source grants; this check grants once, so the lease must outlast it.
+      SFU_SOURCE_LEASE_TTL: "2m",
     },
   });
   children.push(sfu);
@@ -287,8 +292,10 @@ async function receivedMedia(page) {
     const pick = (kind) => inbound.find((entry) => entry.kind === kind) ?? {};
     return { video: { framesDecoded: pick("video").framesDecoded ?? 0, packets: pick("video").packetsReceived ?? 0 }, audio: { packets: pick("audio").packetsReceived ?? 0 } };
   });
+  lastMedia = stats;
   return stats.video.framesDecoded >= 30 && stats.audio.packets >= 50 ? stats : false;
 }
+let lastMedia;
 
 function createPki(directory) {
   const run = (...args) => execFileSync("openssl", args, { stdio: ["ignore", "ignore", "inherit"] });
@@ -352,7 +359,7 @@ async function waitFor(what, timeoutMs, probe) {
   for (;;) {
     const result = await probe();
     if (result) return result;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}; last media ${JSON.stringify(lastMedia)}`);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 }

@@ -15,9 +15,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,7 +42,37 @@ type Adapter struct {
 	client        *http.Client
 	applicationID string
 	iceServers    []mediaplane.ICEServer
+	relay         RelaySource
 	backoff       time.Duration
+}
+
+// RelaySource hands out TURN servers. The SFU has no TCP media, so a client
+// that can reach only TCP 443 joins through a relay.
+type RelaySource interface {
+	RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error)
+}
+
+// WithRelay returns the node's adapter with a TURN source for joins that allow
+// relay.
+func (a *Adapter) WithRelay(relay RelaySource) *Adapter {
+	withRelay := *a
+	withRelay.relay = relay
+	return &withRelay
+}
+
+// iceServersFor gives relay servers only to joins the caller allows to relay.
+// A TURN failure never fails a join: the client falls back to STUN.
+func (a *Adapter) iceServersFor(ctx context.Context, allowRelay bool) []mediaplane.ICEServer {
+	if !allowRelay || a.relay == nil {
+		return a.iceServers
+	}
+	servers, err := a.relay.RelayServers(ctx)
+	if err != nil {
+		slog.WarnContext(ctx, "TURN credentials unavailable; own-SFU clients use STUN only",
+			"event", "chalk_sfu.turn_credentials_failed", "node", a.node, "error", err.Error())
+		return a.iceServers
+	}
+	return append(slices.Clone(a.iceServers), servers...)
 }
 
 // newClient builds the mTLS client once for every node. The server certificate
@@ -242,7 +274,7 @@ func (a *Adapter) metadata() map[string]string {
 // own estimate and treats the SDK's layer as a ceiling, and it reports each
 // subscription's delivery state, so the SDK reads that before it repulls. It has
 // no ICE restart yet, so the SDK keeps that path off.
-func (a *Adapter) join(episodeRef, participantRef, connectionID string) mediaplane.Join {
+func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderChalkSFU,
 		ParticipantRef: participantRef,
@@ -250,7 +282,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string) mediapla
 			"connectionId": connectionID,
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
-			"iceServers":   a.iceServers,
+			"iceServers":   iceServers,
 			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": false},
 		},
 		Metadata: a.metadata(),
@@ -274,7 +306,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
-	return a.join(input.Episode.Ref, participantRef, created.ConnectionID), nil
+	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.AllowRelay)), nil
 }
 
 // ResumeJoin hands back the same connection when the SFU still holds it. The SFU
@@ -290,7 +322,7 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 	if !state.Found {
 		return mediaplane.Join{}, mediaplane.ErrConnectionNotFound
 	}
-	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
+	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.AllowRelay)), nil
 }
 
 func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
