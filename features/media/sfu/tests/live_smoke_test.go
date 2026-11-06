@@ -16,7 +16,7 @@ import (
 )
 
 // TestLiveSmokeClasses holds three-person classes on a deployed node: two
-// cameras each, the teacher sharing a screen, everyone pulling everyone, and
+// cameras each, one sharing a screen, everyone pulling everyone, and
 // reports what the node saw. It runs only against a live node:
 //
 //	SFU_LIVE_URL        the node's control URL, such as an SSH tunnel

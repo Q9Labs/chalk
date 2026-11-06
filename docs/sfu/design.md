@@ -47,8 +47,8 @@ Goals:
   cohorts. Bound packet queues and measure the complete M5 media path.
 - Today one `s-1vcpu-1gb` production node and one staging node of the same size
   in `sgp1`, **$12/month** total. Full cutover targets one Basic `s-2vcpu-2gb`
-  primary and one `s-1vcpu-1gb` degraded standby, **$24/month**, once Hasan
-  approves the larger tier. The primary carries the full admitted
+  primary and one `s-1vcpu-1gb` degraded standby, **$24/month**, once the
+  owner approves the larger tier. The primary carries the full admitted
   peak; standby carries a smaller, low-layer workload when primary is unhealthy,
   draining or full. Prove both envelopes separately. Drain keeps existing calls
   running but does not promise full new-call capacity on standby.
@@ -564,8 +564,8 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 ## Hosting and budget
 
 Chalk runs two Basic Regular `s-1vcpu-1gb` nodes in Singapore `sgp1`, one for
-staging and one for production, about $12/month, and keeps both (Hasan,
-6 November 2026). Production moves to one `s-2vcpu-2gb` only with Hasan's
+staging and one for production, about $12/month, and keeps both (decided
+6 November 2026). Production moves to one `s-2vcpu-2gb` only with the owner's
 approval, when measured load needs it. The starting capacity bar is six
 concurrent three-person classes on the $6 production node.
 
@@ -583,7 +583,7 @@ availability does not guarantee creation-time stock.
 | ----------------------------- | ---------------------------------------------------------- | ----------------------------- | -------------------------------------------- |
 | Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk   | 1,000 GiB per full-month node | **$6/month**                                 |
 | Staging node                  | One `s-1vcpu-1gb`                                          | 1,000 GiB per full-month node | **$6/month**                                 |
-| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk   | 3,000 GiB per full-month node | $18/month, only with Hasan's approval        |
+| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk   | 3,000 GiB per full-month node | $18/month, only with the owner's approval    |
 | Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench` | Prorated while created        | Free on Instabox; under $1 per run otherwise |
 
 SFU compute totals **$12/month** today.

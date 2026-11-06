@@ -10,8 +10,8 @@ not these docs alone.
 
 Run heavy Linux/browser/load checks on Instabox. Chalk runs two Basic `s-1vcpu-1gb`
 nodes in `sgp1`, one for staging and one for production, about $12/month, and
-keeps both. Production moves to the $18 `s-2vcpu-2gb` tier only with Hasan's
-approval, when measured load needs it. Real `sgp1` capacity proofs run on the
+keeps both. Production moves to the $18 `s-2vcpu-2gb` tier only with the
+owner's approval, when measured load needs it. Real `sgp1` capacity proofs run on the
 production node's size, not the Air. Chalk has no active users yet, so M6 and M7
 carry no rollback plan: M7 verifies the live media plane instead. The design
 identifies workload combinations that do not fit the initial reservation
@@ -255,8 +255,8 @@ process kill/restart and outbound-TCP-443-only relay. Replay #761 off-reason
 proof for the candidate and supported prior SDK sockets.
 
 The starting capacity bar is six concurrent three-person classes on the $6 node,
-in Tuition Highway's shape: two cameras, the teacher sharing a screen 65% of the
-time, one-hour evening classes and a rare ten-person call. Run that for an hour,
+in the target workload's shape: two cameras, a screen share 65% of the time,
+one-hour evening classes and a rare ten-person call. Run that for an hour,
 then step up to find the node's real envelope: more classes, an all-screens-on
 burst, the ten-person sparse-camera call and its all-high case (at or below
 11,520 packets/s with audio intact), and the 16-person ceiling case, which
@@ -421,7 +421,7 @@ generation/source fences, M5 budgets and M6 capacity evidence. Build in parallel
 with M10; final capacity acceptance includes M10 capture.
 
 **Scope:** operate one **$18 `s-2vcpu-2gb` primary** and one **$6 `s-1vcpu-1gb`
-standby**, $24/month total, once Hasan approves the $18 tier. New Episodes use primary unless it is unhealthy,
+standby**, $24/month total, once the owner approves the $18 tier. New Episodes use primary unless it is unhealthy,
 draining or full. Only then try standby in degraded mode: M5 holds camera layers
 low, protects audio/screen, bounds repair/queues and refuses admission at
 **16,000**, versus primary's **32,000** initial budget. This is not equal-node
