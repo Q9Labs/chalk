@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -38,6 +41,13 @@ type Session struct {
 	retired      map[string]bool          // MIDs of closed publications, never published again
 	pending      *pendingOffer
 	connectTimer *time.Timer
+
+	// transport paces and estimates everything this session receives.
+	transport *transport
+
+	// lastVoiced is the monotonic time this Participant's microphone last carried
+	// speech, or 0. The allocator keeps a recent speaker's camera longest.
+	lastVoiced atomic.Int64
 }
 
 // pendingOffer is a server offer waiting for the client's answer.
@@ -45,6 +55,7 @@ type pendingOffer struct {
 	timer *time.Timer
 }
 
+// newSession builds a session and starts its pacer. The caller holds n.mu.
 func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Session, error) {
 	pc, err := n.api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -55,7 +66,14 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
+		transport:  newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done),
 	}
+	if n.stopped {
+		s.transport.close()
+		_ = pc.Close()
+		return nil, ErrDraining
+	}
+	n.wg.Go(s.transport.drain)
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 			n.log.Warn("session never connected", "connectionId", id)
@@ -94,7 +112,7 @@ func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiv
 	var layer *ingressLayer
 	var monitor bool
 	if pub != nil {
-		layer, monitor = pub.attach(remote)
+		layer, monitor = pub.attach(remote, audioLevelID(receiver, pub.source))
 	}
 	if layer == nil {
 		s.node.track(func() { drain(remote) })
@@ -105,6 +123,27 @@ func (s *Session) onTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiv
 	}
 }
 
+// audioLevelID is the negotiated audio level extension of a microphone, or 0.
+// Screen audio never makes its publisher the speaker.
+func audioLevelID(receiver *webrtc.RTPReceiver, source string) uint8 {
+	if source != sourceMicrophone {
+		return 0
+	}
+	for _, extension := range receiver.GetParameters().HeaderExtensions {
+		if extension.URI == sdp.AudioLevelURI {
+			return uint8(extension.ID)
+		}
+	}
+	return 0
+}
+
+// media snapshots the session's publications and subscriptions.
+func (s *Session) media() ([]*publication, []*subscription) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
+}
+
 // Close tears the session down. It is idempotent.
 func (s *Session) Close() {
 	s.mu.Lock()
@@ -113,14 +152,7 @@ func (s *Session) Close() {
 		return
 	}
 	s.closed = true
-	published := make([]*publication, 0, len(s.published))
-	for _, pub := range s.published {
-		published = append(published, pub)
-	}
-	subscribed := make([]*subscription, 0, len(s.subscribed))
-	for _, subscription := range s.subscribed {
-		subscribed = append(subscribed, subscription)
-	}
+	published, subscribed := slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
 	if s.pending != nil {
 		s.pending.timer.Stop()
 		s.pending = nil
@@ -135,6 +167,7 @@ func (s *Session) Close() {
 		subscription.detach()
 	}
 	s.node.remove(s)
+	s.transport.close()
 	if err := s.pc.Close(); err != nil {
 		s.node.log.Warn("close peer connection", "connectionId", s.id, "error", err)
 	}
@@ -355,8 +388,10 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	if err != nil {
 		return transceiver, protocol.TrackCodeLimitExceeded, "the node's source table is full"
 	}
-	if track.Source == sourceScreen && !s.node.claimScreen(s) {
-		return transceiver, protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
+	if track.Source == sourceScreen {
+		if code, message := s.node.claimScreen(s); code != "" {
+			return transceiver, code, message
+		}
 	}
 	s.published[track.Mid] = pub
 	return transceiver, "", ""
@@ -483,7 +518,7 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
-	egress := newEgressTrack(pub)
+	egress := newEgressTrack(pub, s.transport)
 	transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
 	if err != nil {
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
@@ -692,7 +727,11 @@ func (s *Session) Inspect() (protocol.InspectResponse, error) {
 		return protocol.InspectResponse{}, ErrSessionGone
 	}
 	now := monotonic()
-	response := protocol.InspectResponse{Tracks: []protocol.InspectedTrack{}}
+	response := protocol.InspectResponse{
+		Tracks:    []protocol.InspectedTrack{},
+		Transport: s.transport.inspect(now),
+		Episode:   s.node.episodeState(episodeOf(s.scope)),
+	}
 	for mid, pub := range s.published {
 		response.Tracks = append(response.Tracks, protocol.InspectedTrack{
 			Location: protocol.LocationLocal, Mid: mid, TrackName: pub.name, Active: pub.active(now), Layers: pub.inspectLayers(now),

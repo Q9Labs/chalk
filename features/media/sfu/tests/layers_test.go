@@ -2,12 +2,14 @@ package tests
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/binary"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,11 +66,13 @@ func keyframe(frame []byte) bool { return frame[0]&0x01 == 0 }
 // every frame and puts each keyframe's first packet second, and ignores
 // keyframe requests, so a switch waits for the layer's next natural keyframe.
 type simulcastPublisher struct {
-	tracks   [2]*webrtc.TrackLocalStaticRTP
+	tracks   [2]*webrtc.TrackLocalStaticRTP // a single-encoding source leaves the second nil
 	fixtures [2]layerFixture
 	midID    uint8
-	ridID    uint8
+	ridID    uint8 // 0 for a single-encoding source
 	mid      string
+	chunks   [2]int        // payload bytes per packet of each layer; 0 is vp8Chunk
+	sent     *atomic.Int64 // counts every packet written, when set
 
 	mu      sync.Mutex
 	enabled [2]bool
@@ -87,8 +91,10 @@ func (p *simulcastPublisher) on(layer int) bool {
 }
 
 func (p *simulcastPublisher) run(ctx context.Context, done *sync.WaitGroup) {
-	for layer := range p.tracks {
-		done.Go(func() { p.send(ctx, layer) })
+	for layer, track := range p.tracks {
+		if track != nil {
+			done.Go(func() { p.send(ctx, layer) })
+		}
 	}
 }
 
@@ -96,6 +102,7 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 	ticker := time.NewTicker(time.Second / 30)
 	defer ticker.Stop()
 	fixture := p.fixtures[layer]
+	chunk := cmp.Or(p.chunks[layer], vp8Chunk)
 	seq := uint16(65500 - 100*layer)
 	timestamp := uint32(0xFFFFFFFF - 20*frameTicks)
 	pictureID := uint16(0x7FF0) // the 15-bit picture ID wraps too
@@ -110,8 +117,8 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 		// run on, and it resumes mid-GOP.
 		data := fixture.frames[frame%len(fixture.frames)]
 		var packets []*rtp.Packet
-		for start := 0; start < len(data); start += vp8Chunk {
-			end := min(start+vp8Chunk, len(data))
+		for start := 0; start < len(data); start += chunk {
+			end := min(start+chunk, len(data))
 			descriptor := []byte{0x80, 0xC0, 0x80 | byte(pictureID>>8), byte(pictureID), tl0}
 			if start == 0 {
 				descriptor[0] |= 0x10
@@ -121,7 +128,9 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 				Payload: append(descriptor, data[start:end]...),
 			}
 			_ = packet.Header.SetExtension(p.midID, []byte(p.mid))
-			_ = packet.Header.SetExtension(p.ridID, []byte(fixture.rid))
+			if p.ridID != 0 {
+				_ = packet.Header.SetExtension(p.ridID, []byte(fixture.rid))
+			}
 			packets = append(packets, packet)
 			seq++
 		}
@@ -132,6 +141,9 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 			for _, packet := range packets {
 				if err := p.tracks[layer].WriteRTP(packet); err != nil {
 					return
+				}
+				if p.sent != nil {
+					p.sent.Add(1)
 				}
 			}
 		}

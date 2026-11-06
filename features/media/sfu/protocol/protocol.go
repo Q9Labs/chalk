@@ -224,7 +224,8 @@ type InspectedTrack struct {
 	TrackName string `json:"trackName"`
 	SessionID string `json:"sessionId,omitempty"`
 	Active    bool   `json:"active"`
-	// Layers lists a local simulcast track's layers in RID order.
+	// Layers lists a local video track's ingress layers in RID order. A single
+	// encoding is one layer with an empty RID.
 	Layers []InspectedLayer `json:"layers,omitempty"`
 	// Subscription is the delivery state of a remote track.
 	Subscription *SubscriptionState `json:"subscription,omitempty"`
@@ -233,6 +234,10 @@ type InspectedTrack struct {
 type InspectedLayer struct {
 	RID    string `json:"rid"`
 	Active bool   `json:"active"`
+	// RequestedPackets counts the lost packets the node asked the publisher to
+	// resend, and RepairedPackets the resends that arrived over RTX.
+	RequestedPackets uint64 `json:"requestedPackets"`
+	RepairedPackets  uint64 `json:"repairedPackets"`
 }
 
 // SubscriptionState is how a subscription is delivered. Revision rises on every
@@ -263,6 +268,48 @@ const (
 
 type InspectResponse struct {
 	Tracks []InspectedTrack `json:"tracks"`
+	// Transport is how the node paces and estimates the session's downlink.
+	Transport TransportState `json:"transport"`
+	// Episode is the session's Episode against its packet ceiling.
+	Episode EpisodeState `json:"episode"`
+}
+
+// TransportState is one session's downlink as the node's pacer and estimator
+// see it. A subscriber that sends no transport-wide feedback has no feedback
+// age, and its video layers follow its requests and its Episode alone.
+type TransportState struct {
+	EstimateBps int64 `json:"estimateBps"`
+	// ProvenBps is what the downlink has shown it carries; layers rise only within it.
+	ProvenBps int64 `json:"provenBps"`
+	// FeedbackAgeMs is the age of the latest transport-wide feedback, absent before the first.
+	FeedbackAgeMs *int64 `json:"feedbackAgeMs,omitempty"`
+	QueuedBytes   int    `json:"queuedBytes"`
+	Probing       bool   `json:"probing"`
+	// Sent counts packets by class since the session opened.
+	Sent        PacketCounts `json:"sent"`
+	Dropped     uint64       `json:"dropped"`    // video the pacer dropped on a full queue
+	RepairsCut  uint64       `json:"repairsCut"` // retransmissions over the repair rate cap
+	Probes      uint64       `json:"probes"`
+	ProvedProbe uint64       `json:"provedProbes"`
+}
+
+type PacketCounts struct {
+	Audio  uint64 `json:"audio"`
+	Video  uint64 `json:"video"`
+	Repair uint64 `json:"repair"`
+	Probe  uint64 `json:"probe"`
+}
+
+// EpisodeState is an Episode's measured media against its packet ceiling, as
+// of the node's latest allocation.
+type EpisodeState struct {
+	// PacketsPerSecond counts ingress and egress, repairs and probes included.
+	PacketsPerSecond float64 `json:"packetsPerSecond"`
+	CeilingPackets   int     `json:"ceilingPackets"`
+	// CappedCameras and PausedCameras are cameras the Episode's plan holds at
+	// their lowest layer or pauses for every subscriber.
+	CappedCameras int `json:"cappedCameras"`
+	PausedCameras int `json:"pausedCameras"`
 }
 
 type ReadyResponse struct {
@@ -274,7 +321,21 @@ type ReadyResponse struct {
 	ReservedPackets int `json:"reservedPackets"`
 	// NewEpisodePackets is what a new Episode reserves at its first join. The API
 	// places a new Episode only on a node with at least this much budget left.
-	NewEpisodePackets int `json:"newEpisodePackets"`
+	NewEpisodePackets int       `json:"newEpisodePackets"`
+	Host              HostState `json:"host"`
+}
+
+// HostState is the host-health guard's view over its window.
+type HostState struct {
+	// AdmissionReason names why new Episodes are refused, absent while they are
+	// admitted: "cpu_steal" or "pacer_queue_delay". Existing Episodes continue.
+	AdmissionReason string `json:"admissionReason,omitempty"`
+	// StealPercent is absent where the host does not report steal.
+	StealPercent          *float64 `json:"stealPercent,omitempty"`
+	QueueDelayP95Ms       float64  `json:"queueDelayP95Ms"`
+	SchedulerLatencyP99Ms float64  `json:"schedulerLatencyP99Ms"`
+	// PacketsPerSecond is every Episode's measured media on the node.
+	PacketsPerSecond float64 `json:"packetsPerSecond"`
 }
 
 type ErrorResponse struct {

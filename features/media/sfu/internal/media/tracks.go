@@ -14,7 +14,10 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-const sourceScreen = "screen"
+const (
+	sourceScreen     = "screen"
+	sourceMicrophone = "microphone"
+)
 
 const (
 	// activeWindow is how recently RTP must have arrived for a track to count as active.
@@ -49,6 +52,10 @@ type publication struct {
 
 	mu         sync.Mutex // guards attaching layers and changing subscribers
 	monitoring bool
+
+	// Owned by the node's control loop.
+	order uint64
+	plan  uint8 // the Episode plan level of a camera
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
@@ -58,7 +65,7 @@ func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodec
 	}
 	return &publication{
 		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
-		authority: authority, revision: revision, revoked: revoked,
+		authority: authority, revision: revision, revoked: revoked, order: serials.Add(1),
 	}, nil
 }
 
@@ -67,7 +74,8 @@ func (p *publication) video() bool { return p.kind == webrtc.RTPCodecTypeVideo }
 // attach binds one incoming stream as a layer. It returns nil when the
 // publication is closed, already has the RID, or has no free layer; the caller
 // then drains the stream. The first layer starts the publication's monitor.
-func (p *publication) attach(remote *webrtc.TrackRemote) (*ingressLayer, bool) {
+// audioLevelID is the microphone's negotiated audio level extension, or 0.
+func (p *publication) attach(remote *webrtc.TrackRemote, audioLevelID uint8) (*ingressLayer, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed.Load() {
@@ -89,7 +97,13 @@ func (p *publication) attach(remote *webrtc.TrackRemote) (*ingressLayer, bool) {
 	if free < 0 {
 		return nil, false
 	}
-	layer := newIngressLayer(free, remote, p.source)
+	layer := newIngressLayer(free, remote, p.source, p.session.node.cfg.Memory)
+	layer.audioLevelID = audioLevelID
+	if layer.nack != nil {
+		pc, ssrc := p.session.pc, layer.ssrc
+		layer.nack.send = func(seqs []uint16) { _ = pc.WriteRTCP(nackPacket(ssrc, seqs)) }
+		layer.nack.gaveUp = func() { p.requestKeyframe(layer.index) }
+	}
 	p.layers[free].Store(layer)
 	startMonitor := !p.monitoring
 	p.monitoring = true
@@ -103,25 +117,38 @@ func (p *publication) read(layer *ingressLayer) {
 	writer := &packetWriter{}
 	var header rtp.Header
 	for {
-		n, _, err := layer.remote.Read(buffer)
+		n, attributes, err := layer.remote.Read(buffer)
 		if err != nil {
 			return
 		}
 		if !p.closed.Load() {
-			p.forward(layer, buffer[:n], &header, writer)
+			repaired := attributes.Get(webrtc.AttributeRtxSequenceNumber) != nil
+			p.forward(layer, buffer[:n], repaired, &header, writer)
 		}
 	}
 }
 
 // forward keeps one packet of layer in its history and hands it to every
-// subscription. The caller owns header and writer, so it allocates nothing.
-func (p *publication) forward(layer *ingressLayer, raw []byte, header *rtp.Header, writer *packetWriter) {
+// subscription. repaired marks a packet that arrived as an RTX repair. The
+// caller owns header and writer, so it allocates nothing.
+func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, header *rtp.Header, writer *packetWriter) {
+	layer.meter.add(len(raw))
 	packet, ok := parseRTP(header, raw, p.video())
 	if !ok {
 		return
 	}
+	if repaired {
+		layer.repaired.Add(1)
+	}
+	newest := layer.newest()
 	packet.extSeq = layer.extend(header.SequenceNumber)
 	packet.arrival = monotonic()
+	if layer.nack != nil {
+		layer.nack.observe(packet.extSeq, newest, packet.arrival)
+	}
+	if layer.audioLevelID != 0 {
+		p.readAudioLevel(layer, header, &packet)
+	}
 	resumed := !layer.active(packet.arrival)
 	if resumed {
 		// The monitor may have missed the gap, so end the live segments while
@@ -141,6 +168,23 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, header *rtp.Heade
 	}
 	for _, subscription := range *subscribers {
 		subscription.deliver(layer, &packet, writer)
+	}
+}
+
+// voicedLevel is the quietest RFC 6464 level, in -dBov, that counts as speech.
+// Room noise sits near 70 and silence at 127.
+const voicedLevel = 50
+
+// readAudioLevel copies a microphone packet's audio level for subscribers and
+// records the publisher as speaking when it is loud enough.
+func (p *publication) readAudioLevel(layer *ingressLayer, header *rtp.Header, packet *rtpPacket) {
+	extension := header.GetExtension(layer.audioLevelID)
+	if len(extension) < 1 {
+		return
+	}
+	packet.audioLevel, packet.hasAudioLevel = extension[0], true
+	if extension[0]&0x7f <= voicedLevel {
+		p.session.lastVoiced.Store(packet.arrival)
 	}
 }
 
@@ -264,6 +308,9 @@ func (p *publication) close() {
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil {
 			layer.history.Store(nil)
+			if layer.nack != nil {
+				layer.nack.stop()
+			}
 		}
 	}
 	p.reselect()
@@ -286,12 +333,20 @@ func (p *publication) active(now int64) bool {
 	return false
 }
 
-// inspectLayers lists a simulcast publication's layers in RID order.
+// inspectLayers lists a video publication's ingress layers in RID order; a
+// single encoding is one layer with an empty RID.
 func (p *publication) inspectLayers(now int64) []protocol.InspectedLayer {
+	if !p.video() {
+		return nil
+	}
 	var layers []protocol.InspectedLayer
 	for index := range p.layers {
-		if layer := p.layers[index].Load(); layer != nil && layer.rid != "" {
-			layers = append(layers, protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && p.authority.allows(now, now) && layer.active(now)})
+		if layer := p.layers[index].Load(); layer != nil {
+			inspected := protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && p.authority.allows(now, now) && layer.active(now), RepairedPackets: layer.repaired.Load()}
+			if layer.nack != nil {
+				inspected.RequestedPackets = layer.nack.requested.Load()
+			}
+			layers = append(layers, inspected)
 		}
 	}
 	slices.SortFunc(layers, func(a, b protocol.InspectedLayer) int { return strings.Compare(a.RID, b.RID) })

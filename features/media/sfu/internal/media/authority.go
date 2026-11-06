@@ -108,6 +108,8 @@ func (n *Node) evictSource(index int) {
 	if revision := n.sources[key].revision; revision > n.sourceFloors[sourceEpisode(key)] {
 		n.sourceFloors[sourceEpisode(key)] = revision
 	}
+	// Queued packets keep this authority, and a later revoke reaches only its replacement.
+	n.sources[key].window.Store(closedWindow)
 	delete(n.sources, key)
 	n.sourceOrder = slices.Delete(n.sourceOrder, index, index+1)
 }

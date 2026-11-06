@@ -275,7 +275,7 @@ func TestAPacketFromOutsideTheWindowIsNeverSent(t *testing.T) {
 		sent := len(recorder.sequences)
 		for range count {
 			stamp(packets[next%len(packets)], next)
-			pub.forward(layers[0], packets[next%len(packets)], &header, writer)
+			pub.forward(layers[0], packets[next%len(packets)], false, &header, writer)
 			next++
 		}
 		return len(recorder.sequences) - sent
@@ -460,7 +460,7 @@ func TestAWriteThatStallsPastTheLeaseStopsTheSendsAfterIt(t *testing.T) {
 		send = func(order ...int) {
 			for _, n := range order {
 				stamp(packets[n], n)
-				pub.forward(layers[0], packets[n], &header, writer)
+				pub.forward(layers[0], packets[n], false, &header, writer)
 			}
 		}
 		return viewers, writers, lapse, send
@@ -534,5 +534,68 @@ func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 	}
 	if len(n.sources) != 2 || n.sources[sourceKey{participantKey{"tenant-1", "episode-1", "alice"}, "camera"}] == nil {
 		t.Fatal("a refused batch changed the table")
+	}
+}
+
+func TestAPacketQueuedInThePacerWhenItsSourceIsRevokedIsNeverSent(t *testing.T) {
+	t.Run("revoked", func(t *testing.T) {
+		pacedPacketsOfAStoppedSource(t, func(*Node, *sourceAuthority) {}, func(authority *sourceAuthority) { authority.window.Store(closedWindow) })
+	})
+	// The publisher left, so the table may evict its source, and a later revoke reaches
+	// only the replacement entry.
+	t.Run("evicted", func(t *testing.T) {
+		pacedPacketsOfAStoppedSource(t, func(n *Node, authority *sourceAuthority) {
+			n.mu.Lock()
+			n.evictSource(slices.Index(n.sourceOrder, authority.key))
+			n.mu.Unlock()
+		}, func(*sourceAuthority) {})
+	})
+}
+
+func pacedPacketsOfAStoppedSource(t *testing.T, evict func(*Node, *sourceAuthority), revoke func(*sourceAuthority)) {
+	t.Helper()
+	n := leaseNode(t, time.Minute)
+	apply(t, n, control("alice", "camera", protocol.SourceGrant, 1))
+	authority := authorityOf(t, n, testScope("alice", 1), "camera")
+	pub, layers, _ := benchPublication(t)
+	pub.authority = authority
+	viewer := (*pub.subscribers.Load())[0]
+	wire := &wireWriter{}
+	viewer.track.binding.Store(&egressBinding{writer: wire, ssrc: 100, payloadType: 96, rtxSSRC: 101, rtxPayloadType: 97, twccID: 3})
+	layers[0].lastAsked.Store(monotonic() + int64(time.Hour)) // the test publication has no peer to ask
+	transport := viewer.transport
+	transport.mu.Lock()
+	transport.setRates(0) // the bench paces without bound
+	transport.refill(monotonic())
+	transport.tokens = -1e6 // the pacer holds everything that arrives
+	transport.mu.Unlock()
+
+	var header rtp.Header
+	writer := &packetWriter{}
+	for index, raw := range cameraPackets("h")[:benchPacketsPerFrame] {
+		stamp(raw, index)
+		pub.forward(layers[0], raw, false, &header, writer)
+	}
+	queued := transport.queues[classVideo]
+	if queued.empty() {
+		t.Fatal("no video waits in the pacer, so the test proves nothing")
+	}
+	first := queued.items[queued.head].packet.seq
+	viewer.retransmit(&rtcp.TransportLayerNack{Nacks: rtcp.NackPairsFromSequenceNumbers([]uint16{first})}, 64, writer)
+	if transport.queues[classRepair].empty() {
+		t.Fatal("no RTX repair waits in the pacer, so the test proves nothing")
+	}
+
+	evict(n, authority)
+	revoke(authority)
+	transport.mu.Lock()
+	transport.tokens = 1e9
+	transport.mu.Unlock()
+	transport.drainOnce()
+	if sent := wire.sent(); len(sent) != 0 {
+		t.Fatalf("the pacer sent %d packets of a revoked source, first %+v", len(sent), sent[0])
+	}
+	if transport.queuedBytes != 0 {
+		t.Fatalf("%d bytes of a revoked source still wait in the pacer", transport.queuedBytes)
 	}
 }

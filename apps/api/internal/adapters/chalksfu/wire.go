@@ -162,4 +162,8 @@ type wireReady struct {
 	ReservedPackets int    `json:"reservedPackets"`
 	// NewEpisodePackets is what a new Episode reserves at its first join.
 	NewEpisodePackets int `json:"newEpisodePackets"`
+	Host              struct {
+		// AdmissionReason is set while the node refuses new Episodes.
+		AdmissionReason string `json:"admissionReason"`
+	} `json:"host"`
 }

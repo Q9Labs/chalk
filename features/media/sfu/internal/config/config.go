@@ -50,9 +50,39 @@ type Config struct {
 	// MaxEpisodeParticipants caps live sessions in one Episode. It is a safety bound, not the
 	// admission rule: the packet budget refuses a large Episode first on today's node sizes.
 	MaxEpisodeParticipants int
-	NegotiationTimeout     time.Duration
-	ConnectTimeout         time.Duration
-	ShutdownTimeout        time.Duration
+	// EpisodePacketCeiling is the most packets/s, ingress plus egress including repair, that one
+	// Episode may use. The allocator lowers and pauses camera video to stay under it, so an
+	// Episode reserves at most this much. Audio and the screen share are never lowered, so a
+	// join or screen share whose mandatory media cannot fit under it is refused.
+	EpisodePacketCeiling int
+	// ScreenStreamCost is the packets/s one hop of the screen share's video is assumed to need when
+	// checking mandatory media. Screen video has no lower layer, so the allocator cannot reduce it.
+	ScreenStreamCost int
+	// Memory caps one ingress stream's retransmission history (one second at most) and one
+	// subscriber's pacer queue.
+	Memory Memory
+	// Guard closes admission of new Episodes while the host cannot serve them on time.
+	Guard              Guard
+	NegotiationTimeout time.Duration
+	ConnectTimeout     time.Duration
+	ShutdownTimeout    time.Duration
+}
+
+// Memory holds the per-stream byte caps of the design's memory budget.
+type Memory struct {
+	HistoryHighBytes   int // camera "h", or a camera without simulcast
+	HistoryLowBytes    int // camera "l" and any lower layer
+	HistoryScreenBytes int
+	PacerQueueBytes    int
+}
+
+// Guard holds the host-health thresholds that close admission of new Episodes.
+type Guard struct {
+	// MaxStealPercent is the CPU steal, over Window, above which new Episodes are refused.
+	MaxStealPercent float64
+	// MaxQueueDelay is the pacer queue delay p95, over Window, above which new Episodes are refused.
+	MaxQueueDelay time.Duration
+	Window        time.Duration
 }
 
 // Lookup reads one setting, like os.LookupEnv.
@@ -84,9 +114,22 @@ func Load(lookup Lookup) (Config, error) {
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 150, 1, 10000),
 		AudioStreamCost:            r.integer("SFU_AUDIO_STREAM_COST", 50, 1, 10000),
 		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 16, 1, 64),
-		NegotiationTimeout:         r.duration("SFU_NEGOTIATION_TIMEOUT", 10*time.Second, time.Second, time.Minute),
-		ConnectTimeout:             r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
-		ShutdownTimeout:            r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),
+		EpisodePacketCeiling:       r.integer("SFU_EPISODE_PACKET_CEILING", 11520, 1000, 1000000),
+		ScreenStreamCost:           r.integer("SFU_SCREEN_STREAM_COST", 210, 1, 10000),
+		Memory: Memory{
+			HistoryHighBytes:   r.integer("SFU_HISTORY_HIGH_BYTES", 400<<10, 16<<10, 4<<20),
+			HistoryLowBytes:    r.integer("SFU_HISTORY_LOW_BYTES", 128<<10, 16<<10, 4<<20),
+			HistoryScreenBytes: r.integer("SFU_HISTORY_SCREEN_BYTES", 320<<10, 16<<10, 4<<20),
+			PacerQueueBytes:    r.integer("SFU_PACER_QUEUE_BYTES", 128<<10, 16<<10, 4<<20),
+		},
+		Guard: Guard{
+			MaxStealPercent: float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", 3, 1, 100)),
+			MaxQueueDelay:   r.duration("SFU_GUARD_MAX_QUEUE_DELAY", 50*time.Millisecond, 5*time.Millisecond, 5*time.Second),
+			Window:          r.duration("SFU_GUARD_WINDOW", 30*time.Second, 5*time.Second, 10*time.Minute),
+		},
+		NegotiationTimeout: r.duration("SFU_NEGOTIATION_TIMEOUT", 10*time.Second, time.Second, time.Minute),
+		ConnectTimeout:     r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
+		ShutdownTimeout:    r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),
 	}
 	for _, ip := range cfg.AnnounceIPs {
 		if net.ParseIP(ip) == nil {

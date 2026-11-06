@@ -131,7 +131,7 @@ func (f *Fleet) Probe(ctx context.Context) {
 				delete(f.loads, node.node)
 				return
 			}
-			hasRoom := ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
+			hasRoom := ready.Host.AdmissionReason == "" && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
 			f.loads[node.node] = nodeLoad{hasRoom: hasRoom, at: time.Now()}
 		})
 	}

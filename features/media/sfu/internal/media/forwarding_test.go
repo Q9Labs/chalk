@@ -98,18 +98,24 @@ func TestPickLayer(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		request layerRequest
+		limit   string
 		layers  []layerView
 		want    int
 	}{
-		{"the wanted layer", layerRequest{ceiling: "h", fallback: true}, []layerView{l, h}, 1},
-		{"fallback takes the first active RID in ASCII order", layerRequest{ceiling: "q", fallback: true}, []layerView{l, h, off(layerView{rid: "q"})}, 1},
-		{"no fallback pauses", layerRequest{ceiling: "h"}, []layerView{l, off(h)}, -1},
-		{"a start RID below the ceiling", layerRequest{ceiling: "h", start: "l"}, []layerView{h, l}, 1},
-		{"a start RID above the ceiling is ignored", layerRequest{ceiling: "l", start: "h"}, []layerView{h, l}, 1},
-		{"a track without simulcast always serves", layerRequest{ceiling: "h"}, []layerView{{rid: "", active: true}}, 0},
-		{"nothing active", layerRequest{ceiling: "h", fallback: true}, []layerView{off(h), off(l)}, -1},
+		{"the wanted layer", layerRequest{ceiling: "h", fallback: true}, "", []layerView{l, h}, 1},
+		{"fallback takes the first active RID in ASCII order", layerRequest{ceiling: "q", fallback: true}, "", []layerView{l, h, off(layerView{rid: "q"})}, 1},
+		{"no fallback pauses", layerRequest{ceiling: "h"}, "", []layerView{l, off(h)}, -1},
+		{"a start RID below the ceiling", layerRequest{ceiling: "h", start: "l"}, "", []layerView{h, l}, 1},
+		{"a start RID above the ceiling is ignored", layerRequest{ceiling: "l", start: "h"}, "", []layerView{h, l}, 1},
+		{"a track without simulcast always serves", layerRequest{ceiling: "h"}, lowestLayer, []layerView{{rid: "", active: true}}, 0},
+		{"nothing active", layerRequest{ceiling: "h", fallback: true}, "l", []layerView{off(h), off(l)}, -1},
+		{"a limit lowers the wanted layer", layerRequest{ceiling: "h"}, "l", []layerView{h, l}, 1},
+		{"the lowest layer limit", layerRequest{ceiling: "h"}, lowestLayer, []layerView{h, l}, 1},
+		{"a limit never raises", layerRequest{ceiling: "l"}, "h", []layerView{h, l}, 1},
+		{"a missing layer still follows the request", layerRequest{ceiling: "h"}, "h", []layerView{l, off(h)}, -1},
+		{"a limit with only a better layer left keeps it", layerRequest{ceiling: "h"}, "l", []layerView{h, off(l)}, 0},
 	} {
-		if got := pickLayer(c.request, c.layers); got != c.want {
+		if got := pickLayer(c.request, c.limit, c.layers); got != c.want {
 			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
 		}
 	}
@@ -481,7 +487,7 @@ func TestALayerThatResumesBetweenMonitorTicksWaitsForAKeyframe(t *testing.T) {
 	send := func(from, to int) {
 		for n := from; n < to; n++ {
 			stamp(packets[n], n)
-			pub.forward(layers[0], packets[n], &header, writer)
+			pub.forward(layers[0], packets[n], false, &header, writer)
 		}
 	}
 	send(0, 2*benchPacketsPerFrame)
@@ -510,7 +516,7 @@ func TestRetransmissionStopsWhilePausedAndOnceTheSourceCloses(t *testing.T) {
 	writer := &packetWriter{}
 	for n := range 2 * benchPacketsPerFrame {
 		stamp(packets[n], n)
-		pub.forward(layers[0], packets[n], &header, writer)
+		pub.forward(layers[0], packets[n], false, &header, writer)
 	}
 	// nack reports a packet s was sent as lost and returns how many s got again.
 	nack := func(s *subscription) int {
@@ -552,5 +558,30 @@ func TestASubscriptionClosedBeforeItStartsNeverJoins(t *testing.T) {
 	s.start()
 	if got := len(*pub.subscribers.Load()); got != before {
 		t.Fatalf("a closed subscription joined its publication: %d subscribers, want %d", got, before)
+	}
+}
+
+func TestAFullNACKReportRepeatedAtOnceResendsNothing(t *testing.T) {
+	var s subscription
+	start := int64(time.Second)
+	for seq := range uint16(maxRetransmitsPerFeedback) {
+		if s.recentlyResent(seq, start) {
+			t.Fatalf("packet %d refused on its first resend", seq)
+		}
+	}
+	for seq := range uint16(maxRetransmitsPerFeedback) {
+		if !s.recentlyResent(seq, start+int64(10*time.Millisecond)) {
+			t.Fatalf("packet %d resent again 10 ms after the same report", seq)
+		}
+	}
+	// A table full of recent resends refuses a new one until a record expires.
+	for seq := maxRetransmitsPerFeedback; seq < resendMemory; seq++ {
+		s.recentlyResent(uint16(seq), start+int64(20*time.Millisecond))
+	}
+	if !s.recentlyResent(1000, start+int64(30*time.Millisecond)) {
+		t.Fatal("a resend went out while every record was recent")
+	}
+	if s.recentlyResent(1000, start+int64(resendSpacing)) {
+		t.Fatal("a resend was refused after the first records expired")
 	}
 }

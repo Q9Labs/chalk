@@ -2,6 +2,7 @@ package media
 
 import (
 	"encoding/binary"
+	"math"
 	"testing"
 
 	"github.com/pion/interceptor"
@@ -101,16 +102,20 @@ func benchPublication(tb testing.TB) (*publication, [2]*ingressLayer, *discardWr
 	pub := &publication{kind: webrtc.RTPCodecTypeVideo, source: "camera", done: make(chan struct{}), authority: freeAuthority()}
 	var layers [2]*ingressLayer
 	for index, rid := range []string{"h", "l"} {
-		layers[index] = &ingressLayer{index: index, rid: rid}
-		layers[index].history.Store(newHistory(historyBytes(pub.kind, pub.source, rid), historySlots))
+		layers[index] = &ingressLayer{index: index, rid: rid, nack: &nackTracker{}}
+		layers[index].history.Store(newHistory(historyBytes(testMemory, pub.kind, pub.source, rid), historySlots))
 		layers[index].lastRTP.Store(monotonic())
 		pub.layers[index].Store(layers[index])
 	}
 	writer := &discardWriter{}
 	for index, rid := range []string{"h", "h", "l"} {
-		track := &egressTrack{codec: vp8Capability, kind: pub.kind}
-		track.binding.Store(&egressBinding{writer: writer, ssrc: uint32(100 + index), payloadType: 96})
-		s := &subscription{pub: pub, track: track, request: layerRequest{ceiling: rid, fallback: true}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
+		// Each viewer paces with transport-wide feedback, as a browser does. The pace
+		// is unbounded so the benchmark measures forwarding, not the pacer's wait.
+		transport := newTransport(&delayHistogram{}, testMemory.PacerQueueBytes, nil)
+		transport.pace = math.Inf(1)
+		track := &egressTrack{codec: vp8Capability, kind: pub.kind, transport: transport}
+		track.binding.Store(&egressBinding{writer: writer, ssrc: uint32(100 + index), payloadType: 96, twccID: 3})
+		s := &subscription{pub: pub, transport: transport, track: track, request: layerRequest{ceiling: rid, fallback: true}, target: -1, revision: 1, translator: translator{clockRate: 90000}}
 		pub.addSubscriber(s)
 		views := pub.views(monotonic())
 		s.reselect(views[:])
@@ -149,7 +154,7 @@ func BenchmarkForwardLayers(b *testing.B) {
 	for n := 0; b.Loop(); n++ {
 		raw := packets[n%len(packets)]
 		stamp(raw, n)
-		pub.forward(layers[0], raw, &header, writer)
+		pub.forward(layers[0], raw, false, &header, writer)
 	}
 }
 
@@ -164,7 +169,7 @@ func TestForwardingAllocatesNothing(t *testing.T) {
 	allocs := testing.AllocsPerRun(1000, func() {
 		raw := packets[n%len(packets)]
 		stamp(raw, n)
-		pub.forward(layers[0], raw, &header, writer)
+		pub.forward(layers[0], raw, false, &header, writer)
 		n++
 	})
 	if allocs != 0 {

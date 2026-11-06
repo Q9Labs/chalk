@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/ice/v4"
@@ -28,6 +30,7 @@ import (
 const (
 	opusPayloadType = 111
 	vp8PayloadType  = 96
+	rtxPayloadType  = 97
 )
 
 var (
@@ -48,6 +51,9 @@ const (
 	rtcpBufferLimit = 32 << 10
 )
 
+// closeWait bounds how long Close waits for the node's goroutines.
+const closeWait = 5 * time.Second
+
 // Node is one SFU process. All its peers share one UDP socket.
 type Node struct {
 	cfg         config.Config
@@ -56,6 +62,8 @@ type Node struct {
 	api         *webrtc.API
 	conn        *net.UDPConn
 	mux         io.Closer
+	guard       *guard
+	done        chan struct{} // closed by Close; stops the node's control loop
 
 	wg sync.WaitGroup
 
@@ -75,6 +83,10 @@ type Node struct {
 	sourceOrder  []sourceKey                    // insertion order, oldest first
 	sourceLimit  int                            // bounds sources, and sourceFloors apart from it
 	sourceFloors map[episodeKey]int64           // highest revision of a source evicted per Episode
+
+	// plans holds each Episode's latest plan change. Only the control loop touches it.
+	plans map[episodeKey]int64
+	stats atomic.Pointer[mediaStats]
 }
 
 // defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
@@ -108,13 +120,15 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	return &Node{
+	n := &Node{
 		cfg:          cfg,
 		log:          log,
 		incarnation:  randomHex(4),
 		api:          api,
 		conn:         conn,
 		mux:          mux,
+		guard:        newGuard(cfg.Guard, log),
+		done:         make(chan struct{}),
 		sessions:     map[string]*Session{},
 		participants: map[participantKey]*Session{},
 		creates:      map[string]createRecord{},
@@ -123,9 +137,12 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sources:      map[sourceKey]*sourceAuthority{},
 		sourceLimit:  defaultSourceLimit,
 		sourceFloors: map[episodeKey]int64{},
+		plans:        map[episodeKey]int64{},
 		fenceLimit:   defaultFenceLimit,
 		createLimit:  defaultClosedCreateLimit,
-	}, nil
+	}
+	n.wg.Go(n.run)
+	return n, nil
 }
 
 // newAPI negotiates only the codecs the node forwards: Opus and VP8. Feedback
@@ -140,6 +157,20 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	if err := engine.RegisterCodec(vp8, webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, fmt.Errorf("register VP8: %w", err)
 	}
+	// Repairs travel over RTX in both directions, so a resend never looks like
+	// fresh media to loss accounting and bandwidth probes can reuse it.
+	rtx := webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90000, SDPFmtpLine: fmt.Sprintf("apt=%d", vp8PayloadType)},
+		PayloadType:        rtxPayloadType,
+	}
+	if err := engine.RegisterCodec(rtx, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, fmt.Errorf("register RTX: %w", err)
+	}
+	// The node reads a microphone's audio level to keep a speaker's camera
+	// longest under congestion, and forwards it so subscribers see who speaks.
+	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.AudioLevelURI}, webrtc.RTPCodecTypeAudio); err != nil {
+		return nil, fmt.Errorf("register audio level header extension: %w", err)
+	}
 	for _, kind := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeAudio, webrtc.RTPCodecTypeVideo} {
 		if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESMidURI}, kind); err != nil {
 			return nil, fmt.Errorf("register MID header extension: %w", err)
@@ -150,10 +181,21 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
 		return nil, fmt.Errorf("register RID header extension: %w", err)
 	}
+	// A simulcast publisher signals no SSRCs, so its RTX streams name their layer
+	// with the repaired RID. Without it the node drops every uplink repair.
+	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRepairRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, fmt.Errorf("register repaired RID header extension: %w", err)
+	}
 
 	registry := &interceptor.Registry{}
 	if err := webrtc.ConfigureRTCPReports(registry); err != nil {
 		return nil, fmt.Errorf("configure RTCP reports: %w", err)
+	}
+	// Publishers estimate their uplink from the node's transport-wide feedback.
+	// This also negotiates the transport sequence extension the node writes on
+	// egress for its own estimate of each subscriber.
+	if err := webrtc.ConfigureTWCCSender(engine, registry); err != nil {
+		return nil, fmt.Errorf("configure transport-wide feedback: %w", err)
 	}
 
 	settings := webrtc.SettingEngine{}
@@ -249,6 +291,34 @@ func (n *Node) Budget() (budget, reserved int) {
 	defer n.mu.Unlock()
 	return n.cfg.PacketBudget, n.reservedPackets()
 }
+
+// Host reports the host-health guard and the node's measured media for readiness.
+func (n *Node) Host() protocol.HostState {
+	health := n.guard.snapshot()
+	state := protocol.HostState{
+		AdmissionReason:       health.AdmissionReason,
+		QueueDelayP95Ms:       milliseconds(health.QueueDelayP95),
+		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
+	}
+	if health.StealKnown {
+		steal := round2(health.StealPercent)
+		state.StealPercent = &steal
+	}
+	if stats := n.stats.Load(); stats != nil {
+		state.PacketsPerSecond = math.Round(stats.packets)
+	}
+	return state
+}
+
+// episodeState is the Episode's state as of the latest allocation.
+func (n *Node) episodeState(key episodeKey) protocol.EpisodeState {
+	if stats := n.stats.Load(); stats != nil {
+		return stats.episodes[key]
+	}
+	return protocol.EpisodeState{}
+}
+
+func milliseconds(d time.Duration) float64 { return round2(float64(d) / float64(time.Millisecond)) }
 
 // SessionCount is the number of live sessions.
 func (n *Node) SessionCount() int {
@@ -363,18 +433,28 @@ func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
 	return protocol.CreateSessionResponse{ConnectionID: id, NodeIncarnation: n.incarnation}
 }
 
-// claimScreen reserves the Episode's one screen share for the session. It reports false when
-// another publication already holds it, including one of the same session. The caller may hold
-// the session's own mutex: nothing takes it while holding n.mu.
-func (n *Node) claimScreen(s *Session) bool {
+// claimScreen reserves the Episode's one screen share for the session. It returns a track error
+// code when another publication already holds it, including one of the same session, or when the
+// Episode's microphones and a screen share together would exceed its packet ceiling. The caller
+// may hold the session's own mutex: nothing takes it while holding n.mu.
+func (n *Node) claimScreen(s *Session) (code, message string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := episodeOf(s.scope)
 	if n.screens[key] != nil {
-		return false
+		return protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
+	}
+	participants := 0
+	for _, session := range n.sessions {
+		if episodeOf(session.scope) == key {
+			participants++
+		}
+	}
+	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
+		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s
-	return true
+	return "", ""
 }
 
 // releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
@@ -474,6 +554,9 @@ func (n *Node) Drain() {
 // Close refuses new work, closes every session and releases the UDP socket.
 func (n *Node) Close() {
 	n.mu.Lock()
+	if !n.stopped {
+		close(n.done)
+	}
 	n.stopped = true
 	sessions := make([]*Session, 0, len(n.sessions))
 	for _, session := range n.sessions {
@@ -483,7 +566,20 @@ func (n *Node) Close() {
 	for _, session := range sessions {
 		session.Close()
 	}
-	n.wg.Wait()
+	// When a publisher sends a second SSRC under a RID it already sent, such as
+	// RTX packets that carry the RID instead of the repaired RID, Pion rebinds
+	// the layer and never closes the first stream. That layer's reader may then
+	// never return, so the wait is bounded.
+	waited := make(chan struct{})
+	go func() {
+		n.wg.Wait()
+		close(waited)
+	}()
+	select {
+	case <-waited:
+	case <-time.After(closeWait):
+		n.log.Error("media readers still running after close", "wait", closeWait)
+	}
 	_ = n.mux.Close()
 	_ = n.conn.Close()
 }

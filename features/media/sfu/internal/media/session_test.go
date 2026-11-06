@@ -29,6 +29,9 @@ func testScope(participant string, generation int64) protocol.Scope {
 	return protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: participant, Generation: generation}
 }
 
+// testMemory is the design memory budget.
+var testMemory = config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10}
+
 func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 	t.Helper()
 	cfg := config.Config{
@@ -43,6 +46,10 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		VideoStreamCost:            150,
 		AudioStreamCost:            50,
 		MaxEpisodeParticipants:     16,
+		EpisodePacketCeiling:       1 << 20,
+		ScreenStreamCost:           210,
+		Memory:                     testMemory,
+		Guard:                      config.Guard{MaxStealPercent: 3, MaxQueueDelay: 50 * time.Millisecond, Window: 30 * time.Second},
 		NegotiationTimeout:         5 * time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,

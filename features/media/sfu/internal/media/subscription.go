@@ -1,10 +1,13 @@
 package media
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
@@ -17,6 +20,11 @@ const (
 	maxRetransmitsPerFeedback = 64
 	// maxFlushAfterSwitch bounds how many already-arrived packets a switch replays.
 	maxFlushAfterSwitch = 64
+	// resendSpacing is how soon one packet may be resent again, about a round
+	// trip, so repeated NACKs for a repair still in flight cost nothing.
+	resendSpacing = 100 * time.Millisecond
+	// resendMemory holds two full reports' resends within one spacing.
+	resendMemory = 2 * maxRetransmitsPerFeedback
 )
 
 // subscription is one session's pull of a publication. It chooses which of the
@@ -24,6 +32,7 @@ const (
 // continuous stream for its own sender.
 type subscription struct {
 	pub         *publication
+	transport   *transport // the subscriber session's
 	transceiver *webrtc.RTPTransceiver
 	sender      *webrtc.RTPSender
 	track       *egressTrack
@@ -45,6 +54,41 @@ type subscription struct {
 	// until the switch's first packet is sent; switches counts the switches.
 	beforeSwitch translator
 	switches     uint64
+	// resent remembers recent resends by outgoing sequence number.
+	resent [resendMemory]resentPacket
+	// limit is how far the node holds this subscription below its request.
+	limit serverLimit
+
+	// Owned by the node's control loop.
+	order uint64
+	alloc allocation
+}
+
+// serverLimit is the node's own cap on a subscription, from its transport's
+// estimate and its Episode's packet ceiling. rid is the best layer it may
+// forward, "" for any; paused stops its video for congestion.
+type serverLimit struct {
+	rid    string
+	paused bool
+}
+
+// capped applies an Episode plan level on top of the transport's limit.
+func (l serverLimit) capped(level uint8) serverLimit {
+	switch level {
+	case planLowest:
+		l.rid = lowestLayer
+	case planPaused:
+		l.paused = true
+	}
+	return l
+}
+
+// serials orders publications and subscriptions by age for the allocator's tie-breaks.
+var serials atomic.Uint64
+
+type resentPacket struct {
+	seq uint16
+	at  int64 // monotonic; 0 marks a free slot
 }
 
 func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest) *subscription {
@@ -53,13 +97,21 @@ func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track
 		clockRate = 48000
 	}
 	return &subscription{
-		pub: pub, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
+		order: serials.Add(1),
 	}
 }
 
-// start joins the publication's forwarding and chooses the first layer.
+// start joins the publication's forwarding and chooses the first layer. A
+// camera starts on its lowest layer, and the allocator raises it as the
+// subscriber's estimate allows.
 func (s *subscription) start() {
+	if s.pub.video() && s.pub.source != sourceScreen {
+		s.mu.Lock()
+		s.limit = serverLimit{rid: lowestLayer}
+		s.mu.Unlock()
+	}
 	s.pub.addSubscriber(s)
 	// A session that closed between pull and start already detached it.
 	if s.closed.Load() {
@@ -101,10 +153,15 @@ func (s *subscription) reselect(views []layerView) int {
 		views = closed[:]
 	}
 	target, reason := -1, ""
-	if s.request.paused {
+	switch {
+	case s.request.paused:
 		reason = protocol.PauseViewer
-	} else if target = pickLayer(s.request, views); target < 0 {
-		reason = protocol.PauseSourceInactive
+	case s.limit.paused:
+		reason = protocol.PauseCongestion
+	default:
+		if target = pickLayer(s.request, s.limit.rid, views); target < 0 {
+			reason = protocol.PauseSourceInactive
+		}
 	}
 	if reason != s.reason {
 		s.reason = reason
@@ -135,6 +192,21 @@ func (s *subscription) reselect(views []layerView) int {
 	return target
 }
 
+// setServerLimit applies the node's limit and switches layers if it changed.
+func (s *subscription) setServerLimit(limit serverLimit) {
+	s.mu.Lock()
+	changed := s.limit != limit
+	s.limit = limit
+	s.mu.Unlock()
+	if !changed {
+		return
+	}
+	views := s.pub.views(monotonic())
+	if layer := s.reselect(views[:]); layer >= 0 {
+		s.pub.requestKeyframe(layer)
+	}
+}
+
 // pendingLayer is the layer this subscription waits to switch to, or -1.
 func (s *subscription) pendingLayer() int {
 	s.mu.Lock()
@@ -158,7 +230,7 @@ func (s *subscription) deliver(layer *ingressLayer, p *rtpPacket, w *packetWrite
 	if !send {
 		return
 	}
-	if !s.write(w, p, out) {
+	if !s.send(p, out, s.class(), false, w) {
 		if switched {
 			s.abandonSwitch(switches)
 		}
@@ -227,15 +299,44 @@ func (s *subscription) flush(layer *ingressLayer, from uint64, w *packetWriter) 
 		if !send {
 			return
 		}
-		s.write(w, &stored, out)
+		s.send(&stored, out, classVideo, false, w)
 	}
 }
 
-// write sends one translated packet if the source may still forward it. It reads the
-// clock at each write, because an earlier write, to this subscriber or another, can
-// stall past the lease.
-func (s *subscription) write(w *packetWriter, p *rtpPacket, out outgoing) bool {
-	return s.pub.authority.allows(p.arrival, monotonic()) && w.write(s.track, p, out)
+func (s *subscription) class() packetClass {
+	if s.pub.video() {
+		return classVideo
+	}
+	return classAudio
+}
+
+// send hands one translated packet to the subscriber's transport, which checks
+// the source's lease when it writes the packet. A repair goes on the RTX stream
+// when the subscriber negotiated one.
+func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repair bool, w *packetWriter) bool {
+	binding := s.track.binding.Load()
+	if binding == nil {
+		return false
+	}
+	packet := egressPacket{
+		binding: binding, authority: s.pub.authority, arrival: p.arrival,
+		class: class, marker: p.marker, padding: p.paddingSize,
+		seq: out.seq, timestamp: out.timestamp, payload: p.payload,
+		audioLevel: p.audioLevel, hasAudioLevel: p.hasAudioLevel,
+	}
+	offset := 0
+	if repair && binding.rtxSSRC != 0 {
+		binary.BigEndian.PutUint16(w.payload[:2], out.seq)
+		packet.rtx, packet.seq, offset = true, uint16(binding.rtxSeq.Add(1)), 2
+	}
+	if offset > 0 || (p.hasVP8 && out.vp8.differs(&p.vp8)) {
+		n := copy(w.payload[offset:], p.payload)
+		if p.hasVP8 {
+			out.vp8.apply(&p.vp8, w.payload[offset:offset+n])
+		}
+		packet.payload = w.payload[:offset+n]
+	}
+	return s.transport.send(&packet, w)
 }
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
@@ -248,17 +349,33 @@ func (s *subscription) readFeedback() {
 		if err != nil {
 			return
 		}
-		if s.closed.Load() {
-			continue
+		if !s.closed.Load() {
+			s.handleFeedback(packets, writer)
 		}
-		budget := maxRetransmitsPerFeedback
-		for _, packet := range packets {
-			switch packet := packet.(type) {
-			case *rtcp.PictureLossIndication, *rtcp.FullIntraRequest:
+	}
+}
+
+// handleFeedback acts on one RTCP read. Pion hands a compound packet to every
+// sender it names, so feedback about another sender's stream is ignored.
+func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWriter) {
+	budget := maxRetransmitsPerFeedback
+	binding := s.track.binding.Load()
+	for _, packet := range packets {
+		switch packet := packet.(type) {
+		case *rtcp.PictureLossIndication:
+			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				s.requestKeyframe()
-			case *rtcp.TransportLayerNack:
+			}
+		case *rtcp.FullIntraRequest:
+			if binding != nil && slices.ContainsFunc(packet.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == binding.ssrc }) {
+				s.requestKeyframe()
+			}
+		case *rtcp.TransportLayerNack:
+			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				budget = s.retransmit(packet, budget, writer)
 			}
+		case *rtcp.TransportLayerCC:
+			s.transport.onFeedback(packet)
 		}
 	}
 }
@@ -296,7 +413,7 @@ func (s *subscription) retransmit(nack *rtcp.TransportLayerNack, budget int, w *
 // belonged to may be a reference the viewer can't decode without.
 func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 	s.mu.Lock()
-	if s.reason != "" || s.closed.Load() {
+	if s.reason != "" || s.closed.Load() || s.recentlyResent(seq, now) {
 		s.mu.Unlock()
 		return
 	}
@@ -327,7 +444,30 @@ func (s *subscription) resend(seq uint16, now int64, w *packetWriter) {
 		return
 	}
 	stored.vp8, stored.hasVP8 = parseVP8(stored.payload)
-	s.write(w, &stored, seg.translate(&stored))
+	s.send(&stored, seg.translate(&stored), classRepair, true, w)
+}
+
+// recentlyResent reports whether seq went out again within resendSpacing, and
+// records it otherwise. A record is reused only once it expires, so a table
+// full of recent resends refuses the resend. The caller holds s.mu.
+func (s *subscription) recentlyResent(seq uint16, now int64) bool {
+	free := -1
+	for index, entry := range s.resent {
+		if entry.at == 0 || now-entry.at >= int64(resendSpacing) {
+			if free < 0 {
+				free = index
+			}
+			continue
+		}
+		if entry.seq == seq {
+			return true
+		}
+	}
+	if free < 0 {
+		return true
+	}
+	s.resent[free] = resentPacket{seq: seq, at: now}
+	return false
 }
 
 // state reports the subscription's delivery for inspection. The source's lease is

@@ -38,6 +38,25 @@ type service struct {
 	baseURL string
 	client  *http.Client
 	stop    func()
+	logs    *logBuffer // everything the service logged, at every level
+}
+
+// logBuffer collects a service's log output for scanning.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 var operations atomic.Int64
@@ -76,6 +95,10 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		PacketBudget:               1 << 20,
 		VideoStreamCost:            150,
 		AudioStreamCost:            50,
+		ScreenStreamCost:           210,
+		EpisodePacketCeiling:       1 << 20,
+		Memory:                     config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10},
+		Guard:                      config.Guard{MaxStealPercent: 3, MaxQueueDelay: 50 * time.Millisecond, Window: 30 * time.Second},
 		MaxEpisodeParticipants:     16,
 		MaxPublishedPerSession:     4,
 		MaxSubscriptionsPerSession: 8,
@@ -85,16 +108,17 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		ShutdownTimeout:            5 * time.Second,
 		SourceLeaseTTL:             time.Hour,
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	for _, apply := range configure {
 		apply(&cfg)
 	}
+	logs := &logBuffer{}
+	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		t.Fatalf("start service: %v", err)
 	}
 	var once sync.Once
-	svc := &service{server: server, baseURL: "https://" + server.Addr().String()}
+	svc := &service{server: server, baseURL: "https://" + server.Addr().String(), logs: logs}
 	svc.stop = func() {
 		once.Do(func() {
 			if err := server.Stop(context.Background()); err != nil {
