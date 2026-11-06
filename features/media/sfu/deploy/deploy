@@ -72,7 +72,11 @@ loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.openconta
 
 echo "==> installing certificates, settings and unit"
 for pair in server-cert:server.crt server-key:server.key client-ca:ca.crt; do
-  as_sfu podman secret create --replace "chalk-sfu-${pair%%:*}" - <"${dir}/${pair#*:}" >/dev/null
+  name="chalk-sfu-${pair%%:*}"
+  replace=()
+  # Podman 4.9 refuses --replace for a secret that does not exist yet.
+  as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
 done
 sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
   -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" "${deploy_dir}/sfu.env.in" |
