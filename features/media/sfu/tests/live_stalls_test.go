@@ -141,3 +141,27 @@ func TestALateFirstScreenFrameKeepsItsStartupStall(t *testing.T) {
 		t.Fatalf("a first frame after 1 s counts %d stalls", prompt.stalls)
 	}
 }
+
+// A failed readiness sample must not skip the peers' checks, and it fails the run itself.
+func TestFixedRunJudgesPeersEvenWhenReadinessFailed(t *testing.T) {
+	ready := protocol.ReadyResponse{}
+	good := liveSample{Ready: &ready}
+	bad := liveSample{ReadyErr: "connection refused"}
+	bad.Peers.AudioStalls, bad.Peers.ScreenStalls = 2, 1
+
+	failures := strings.Join(fixedRunFailures(good, bad), "; ")
+	for _, want := range []string{"final sample has no readiness data: connection refused", "microphones stalled", "screen shares stalled"} {
+		if !strings.Contains(failures, want) {
+			t.Errorf("failures %q lack %q", failures, want)
+		}
+	}
+	if failures := fixedRunFailures(bad, good); len(failures) != 1 || !strings.Contains(failures[0], "first sample") {
+		t.Errorf("a failed first sample gave %q, want one failure naming it", failures)
+	}
+	if failures := fixedRunFailures(liveSample{}, good); len(failures) != 1 || !strings.Contains(failures[0], "no sample was taken") {
+		t.Errorf("a missing first sample gave %q", failures)
+	}
+	if failures := fixedRunFailures(good, good); len(failures) != 0 {
+		t.Errorf("a clean run failed: %q", failures)
+	}
+}

@@ -147,13 +147,22 @@ func TestLiveSmokeClasses(t *testing.T) {
 		if load.shareOn() > 0 {
 			class.shareStart.Store(time.Now().UnixNano())
 		}
-		go class.shareInStretches(sharing, load, time.Duration(index)*load.sharePeriod/5)
+		var classCtx context.Context
+		classCtx, class.stop = context.WithCancel(sharing)
+		go class.shareInStretches(classCtx, load, time.Duration(index)*load.sharePeriod/5)
 		mu.Lock()
 		classes = append(classes, class)
 		mu.Unlock()
 		for deadline := time.Now().Add(30 * time.Second); !class.flowing(); time.Sleep(100 * time.Millisecond) {
 			if time.Now().After(deadline) {
-				return fmt.Sprintf("class %d: a Participant missed a microphone for 30 s: %s", index, class.describe(svc))
+				// The retry starts a class of its own, so this one must not stay in the run.
+				why := fmt.Sprintf("class %d: a Participant missed a microphone or screen for 30 s: %s", index, class.describe(svc))
+				class.stop()
+				mu.Lock()
+				classes = slices.DeleteFunc(classes, func(c *liveClass) bool { return c == class })
+				mu.Unlock()
+				_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
+				return why
 			}
 		}
 		return ""
@@ -241,21 +250,40 @@ func TestLiveSmokeClasses(t *testing.T) {
 		}
 	}
 	mu.Unlock()
-	if previous.Ready == nil || first.Ready == nil || load.step > 0 {
+	if load.step > 0 {
 		return
 	}
 	// A last sample at the end of the window, so a track that went quiet after the previous
 	// one still counts.
-	last := takeSample(svc, classes, &cpu)
-	if drops := receiveErrors(last) - receiveErrors(first); drops > 0 {
-		t.Errorf("the node dropped %d datagrams for a full receive buffer", drops)
+	for _, failure := range fixedRunFailures(first, takeSample(svc, classes, &cpu)) {
+		t.Error(failure)
+	}
+}
+
+// fixedRunFailures judges a fixed-load run from its first and final samples. A sample
+// without readiness data fails the run, and the peers' stalls are judged either way.
+func fixedRunFailures(first, last liveSample) []string {
+	var failures []string
+	for _, missing := range []struct {
+		name   string
+		sample liveSample
+	}{{"first", first}, {"final", last}} {
+		if missing.sample.Ready == nil {
+			failures = append(failures, fmt.Sprintf("the %s sample has no readiness data: %s", missing.name, cmp.Or(missing.sample.ReadyErr, "no sample was taken")))
+		}
+	}
+	if first.Ready != nil && last.Ready != nil {
+		if drops := receiveErrors(last) - receiveErrors(first); drops > 0 {
+			failures = append(failures, fmt.Sprintf("the node dropped %d datagrams for a full receive buffer", drops))
+		}
 	}
 	if stalls := last.Peers.AudioStalls; stalls > 0 {
-		t.Errorf("microphones stalled over %v %d times", liveStall, stalls)
+		failures = append(failures, fmt.Sprintf("microphones stalled over %v %d times", liveStall, stalls))
 	}
 	if stalls := last.Peers.ScreenStalls; stalls > 0 {
-		t.Errorf("screen shares stalled or never reached a viewer %d times", stalls)
+		failures = append(failures, fmt.Sprintf("screen shares stalled or never reached a viewer %d times", stalls))
 	}
+	return failures
 }
 
 // liveClass is one Episode of the run.
@@ -269,6 +297,8 @@ type liveClass struct {
 	// shareStart is when the screen's current share stretch began, in Unix nanoseconds, or 0
 	// while it is paused.
 	shareStart atomic.Int64
+	// stop ends the class's share goroutine.
+	stop context.CancelFunc
 }
 
 // sharingSince is when the current share stretch began, or the zero time while the screen is paused.
