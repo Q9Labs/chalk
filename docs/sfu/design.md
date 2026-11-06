@@ -741,9 +741,8 @@ cannot fit a fixed 11,520 ceiling by pausing cameras. M5 must refuse admission o
 source activation when mandatory media cannot fit, or use a separately validated
 higher configurable Episode ceiling within the node budget. Every camera's
 uplink stays in that mandatory base, because the plan lowers only what
-subscribers receive, so at the defaults admission refuses the fourteenth
-Participant is refused at the defaults (two cameras each), or the ninth with a
-screen share ([#836](https://github.com/Q9Labs/chalk/pull/836)). Never claim sixteen
+subscribers receive, so at the defaults (two cameras each) admission refuses the
+tenth Participant, or the ninth with a screen share ([#836](https://github.com/Q9Labs/chalk/pull/836)). Never claim sixteen
 all-audio Participants fit the default ceiling, or silently sacrifice audio.
 
 **Primary acceptance:** prove the full admitted workload on the $18 node alone,

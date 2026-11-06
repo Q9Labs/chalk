@@ -73,7 +73,6 @@ go run ./cmd/sfu
 | `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                             |
 | `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                      |
 | `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; set `32000` on `s-2vcpu-2gb`.       |
-| `SFU_VIDEO_STREAM_COST`                 | `150`           | Reserved packets/s of one video stream.               |
 | `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.               |
 | `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.               |
 | `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.        |
