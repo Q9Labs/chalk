@@ -66,7 +66,7 @@ type Totals struct {
 	NACKRequested, KeyframeRepairs uint64
 	// RTXReceived is the packets publishers resent as RTX repairs.
 	RTXReceived uint64
-	// LayerSwitches is the simulcast layer switches subscriptions began.
+	// LayerSwitches is the layer switches video subscriptions began, each one's first layer included.
 	LayerSwitches uint64
 }
 

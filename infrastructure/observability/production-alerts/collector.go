@@ -213,9 +213,11 @@ func collectReadiness(ctx context.Context, client *http.Client, endpoint string)
 }
 
 // sfuProbe locates the own SFU's readiness endpoint. An empty URL means the SFU
-// is not in production yet, so the collector emits no SFU row.
+// is not in production yet, so the collector emits no SFU row. ServerName is the
+// name in the node's certificate, which the API also verifies, because the URL
+// usually holds an address.
 type sfuProbe struct {
-	URL, ClientCertFile, ClientKeyFile, CAFile string
+	URL, ServerName, ClientCertFile, ClientKeyFile, CAFile string
 }
 
 func sfuProbeFromEnv() sfuProbe {
@@ -224,6 +226,7 @@ func sfuProbeFromEnv() sfuProbe {
 		ClientCertFile: os.Getenv("CHALK_ALERT_SFU_CLIENT_CERT"),
 		ClientKeyFile:  os.Getenv("CHALK_ALERT_SFU_CLIENT_KEY"),
 		CAFile:         os.Getenv("CHALK_ALERT_SFU_CA"),
+		ServerName:     os.Getenv("CHALK_ALERT_SFU_SERVER_NAME"),
 	}
 }
 
@@ -290,6 +293,9 @@ func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
 }
 
 func sfuClient(probe sfuProbe) (*http.Client, error) {
+	if !strings.HasPrefix(probe.URL, "https://") {
+		return nil, fmt.Errorf("plaintext URL")
+	}
 	certificate, err := tls.LoadX509KeyPair(probe.ClientCertFile, probe.ClientKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("client certificate")
@@ -304,7 +310,7 @@ func sfuClient(probe sfuProbe) (*http.Client, error) {
 	}
 	return &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig:   &tls.Config{Certificates: []tls.Certificate{certificate}, RootCAs: roots, MinVersion: tls.VersionTLS13},
+			TLSClientConfig:   &tls.Config{Certificates: []tls.Certificate{certificate}, RootCAs: roots, ServerName: probe.ServerName, MinVersion: tls.VersionTLS13},
 			DisableKeepAlives: true,
 		},
 		// A redirect must not turn a failed probe green.

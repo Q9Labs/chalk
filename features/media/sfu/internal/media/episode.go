@@ -187,9 +187,11 @@ func (n *Node) allocate() {
 			}
 			limit = limit.capped(subscription.pub.plan)
 			subscription.setServerLimit(limit)
-			n.totals.counts.LayerSwitches += subscription.takeSwitches()
-			if limit.paused && subscription.pub.video() {
-				stats.congested++
+			if subscription.pub.video() {
+				n.totals.counts.LayerSwitches += subscription.takeSwitches()
+				if limit.paused {
+					stats.congested++
+				}
 			}
 		}
 		episode.state.PacketsPerSecond = math.Round(episode.measured)

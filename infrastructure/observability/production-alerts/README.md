@@ -77,17 +77,18 @@ that names the API's service identity. The collector reads that certificate, its
 key and the CA from files, so the operator reuses the API's SFU client
 certificate on the same host:
 
-| Variable                      | Meaning                                                              |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `CHALK_ALERT_SFU_READY_URL`   | Full `https://` URL of the node's `/readyz`; leave unset to disable. |
-| `CHALK_ALERT_SFU_CLIENT_CERT` | PEM file with the API's SFU client certificate.                      |
-| `CHALK_ALERT_SFU_CLIENT_KEY`  | PEM file with its private key.                                       |
-| `CHALK_ALERT_SFU_CA`          | PEM file with the CA that signed the SFU's server certificate.       |
+| Variable                      | Meaning                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| `CHALK_ALERT_SFU_READY_URL`   | Full `https://` URL of the node's `/readyz`; leave unset to disable.                |
+| `CHALK_ALERT_SFU_CLIENT_CERT` | PEM file with the API's SFU client certificate.                                     |
+| `CHALK_ALERT_SFU_CLIENT_KEY`  | PEM file with its private key.                                                      |
+| `CHALK_ALERT_SFU_CA`          | PEM file with the CA that signed the SFU's server certificate.                      |
+| `CHALK_ALERT_SFU_SERVER_NAME` | Name in the SFU's certificate, `chalk-sfu`, as `CHALK_SFU_SERVER_NAME` for the API. |
 
 The probe has the same five-second bound as the Sync probe and does not follow
 redirects. HTTP 200 with admission open and spare budget emits zero with reason
 `ready`. Everything else emits one, with the first matching reason of
-`tls_config` (a certificate, key or CA file is unset, unreadable or invalid),
+`tls_config` (the URL is not `https://`, or a certificate, key or CA file is unset, unreadable or invalid),
 `unreachable` (connect, handshake or timeout failure), `draining` (503),
 `http_status` (any other non-200), `invalid_response` (body is not the expected
 shape), `admission_cpu_steal` or `admission_pacer_queue_delay` (the node refuses

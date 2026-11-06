@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"math/big"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -443,7 +442,7 @@ func newSFUFixture(t *testing.T, handler http.HandlerFunc) sfuFixture {
 		if err != nil {
 			t.Fatal(err)
 		}
-		template := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{usage}, KeyUsage: x509.KeyUsageDigitalSignature, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}}
+		template := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{usage}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu"}}
 		der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
 		if err != nil {
 			t.Fatal(err)
@@ -470,6 +469,7 @@ func newSFUFixture(t *testing.T, handler http.HandlerFunc) sfuFixture {
 	t.Cleanup(server.Close)
 	return sfuFixture{server: server, probe: sfuProbe{
 		URL:            server.URL + "/readyz",
+		ServerName:     "chalk-sfu",
 		ClientCertFile: write("client.pem", "CERTIFICATE", client.Certificate[0]),
 		ClientKeyFile:  write("client-key.pem", "PRIVATE KEY", clientKey),
 		CAFile:         write("ca.pem", "CERTIFICATE", caDER),
@@ -544,6 +544,7 @@ func TestSFUReadinessFailsClosedWithoutLeakingErrors(t *testing.T) {
 		"unset files":         {URL: sfu.probe.URL},
 		"invalid key":         broken(func(p *sfuProbe) { p.ClientKeyFile = garbage }),
 		"invalid CA":          broken(func(p *sfuProbe) { p.CAFile = garbage }),
+		"plaintext URL":       broken(func(p *sfuProbe) { p.URL = strings.Replace(p.URL, "https://", "http://", 1) }),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "tls_config" {
@@ -554,6 +555,13 @@ func TestSFUReadinessFailsClosedWithoutLeakingErrors(t *testing.T) {
 	t.Run("server the CA does not trust", func(t *testing.T) {
 		probe := sfu.probe
 		probe.CAFile = other.probe.CAFile
+		if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "unreachable" {
+			t.Fatalf("unexpected snapshot: %+v", item)
+		}
+	})
+	t.Run("address URL without the certificate's server name", func(t *testing.T) {
+		probe := sfu.probe
+		probe.ServerName = ""
 		if item := collectSFUReadiness(context.Background(), probe); item.Value != 1 || item.Reason != "unreachable" {
 			t.Fatalf("unexpected snapshot: %+v", item)
 		}
