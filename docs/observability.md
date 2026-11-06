@@ -456,8 +456,8 @@ failures directly to Discord.
 The collector also samples the own SFU's `/readyz` over mutual TLS when
 `CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
 grouped monitor alerts on four unhealthy minute samples in five minutes: a
-draining or unreachable node, a node that refuses new Episodes for CPU steal or
-pacer queue delay, or reserved packets at 90% of the packet budget. Only
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
+queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
 allowlisted reason codes are exported, never TLS or HTTP error text, response
 bodies or node identifiers. The freshness monitor does not count this row, so
 hosts without an SFU stay quiet. See the production-alerts README for setup.
