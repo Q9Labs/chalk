@@ -85,6 +85,14 @@ func (s *Server) Addr() net.Addr { return s.listener.Addr() }
 // UDPPort is the shared media port.
 func (s *Server) UDPPort() int { return s.node.UDPPort() }
 
+// Drain stops admission and keeps live sessions: readiness fails, so the API
+// places no new Episode here, and new sessions are refused. It returns how many
+// sessions are still live.
+func (s *Server) Drain() int {
+	s.node.Drain()
+	return s.node.SessionCount()
+}
+
 // Stop drains the service: readiness fails, in-flight requests finish, then
 // every session closes and the sockets are released.
 func (s *Server) Stop(ctx context.Context) error {
