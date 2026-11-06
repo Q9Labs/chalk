@@ -105,6 +105,9 @@ PY
 RECONCILE
 [[ "$mode" == --firewall-only ]] && exit 0
 
+# A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
+remote "printf 'net.core.wmem_max = 8388608\nnet.core.wmem_default = 8388608\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
+
 memory_kib="$(remote grep MemTotal /proc/meminfo | tr -dc 0-9)"
 if ((memory_kib > 1536 * 1024)); then
   budget=32000 gomemlimit=768MiB memory_limit=1400m
@@ -192,3 +195,6 @@ done
 granted="$(jq -r '.host.udpReceiveBufferBytes' <<<"$ready")"
 echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .packetBudget <<<"$ready"), receive buffer ${granted} bytes, receive-buffer drops $(jq -r '.host.udpReceiveBufferErrors // "unknown"' <<<"$ready")"
 ((granted >= 8388608)) || { echo "the receive buffer is below 8 MiB; check net.core.rmem_max" >&2; exit 1; }
+sent="$(jq -r '.host.udpSendBufferBytes' <<<"$ready")"
+echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferErrors // "unknown"' <<<"$ready")"
+((sent >= 8388608)) || { echo "the send buffer is below 8 MiB; check net.core.wmem_max" >&2; exit 1; }
