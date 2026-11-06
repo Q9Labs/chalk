@@ -391,11 +391,10 @@ type probeSend struct {
 // probeFeedbackWait after it ended. It reports done and, when the path carried
 // the target, the rate it proved.
 //
-// Feedback can be lost without any media loss: a receiver names the SSRC of
-// its latest packet in each feedback, and Pion drops RTCP for the RTX SSRC that
-// carries probe padding. So the verdict needs only part of the cluster
-// reported. The reported packets must have arrived as fast as they left, which
-// a queue would have prevented, and the proved rate is what the transport sent.
+// Feedback travels as RTCP that can be lost without any media loss, so the
+// verdict needs only part of the cluster reported. The reported packets must
+// have arrived as fast as they left, which a queue would have prevented, and
+// the proved rate is what the transport sent.
 func (e *bandwidthEstimator) probeOutcome(sent probeSend, now int64) (done bool, proved float64) {
 	cluster := &e.probe
 	if cluster.id == 0 || !cluster.ended {

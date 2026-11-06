@@ -42,8 +42,7 @@ type simulation struct {
 	pending   []packetAck
 	debt      float64
 	probe     probeSend // what was sent in a probe
-	// loseFeedback drops every other feedback, as a receiver that names the
-	// probe's RTX SSRC does.
+	// loseFeedback drops every other feedback, as a lossy return path may.
 	loseFeedback bool
 	feedbacks    int
 }

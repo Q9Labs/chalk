@@ -457,12 +457,7 @@ func TestOneConstrainedSubscriberAdaptsAlone(t *testing.T) {
 		return track.Subscription.State == protocol.SubscriptionActive && track.Subscription.EffectiveRID != ""
 	})
 	resumed := time.Since(opened)
-	// Probes fail while carol is starved, and each failure doubles the wait. At
-	// worst, a probe that starts while the starved queue still drains fails too,
-	// then the longest backoff and the probe that proves the path run before the
-	// resume hold.
-	drain := time.Duration(starvedQueue * 8 * float64(time.Second) / starvedRate)
-	bound := drain + media.ProbeSettle + media.ProbeBackoffMax + media.ProbeSettle + media.ResumeHold + time.Second
+	bound := resumeBound(starvedRate, starvedQueue)
 	t.Logf("resume: carol's video back %v after the link opened, bound %v", resumed.Round(time.Millisecond), bound)
 	if resumed < media.ResumeHold || resumed > bound {
 		t.Fatalf("video resumed %v after the link opened, want between the %v resume hold and %v", resumed, media.ResumeHold, bound)
@@ -477,6 +472,56 @@ func TestOneConstrainedSubscriberAdaptsAlone(t *testing.T) {
 	frames, _ := reassemble(t, "bob", bob.media.videoPackets(camera), fixtures)
 	assertDecodable(t, "bob", frames, fixtures)
 	decodeWithFFmpeg(t, "bob", frames)
+}
+
+// resumeBound is the longest a congestion-paused subscription may take to
+// resume once a starved link opens. Probes fail while the link is starved, and
+// each failure doubles the wait. At worst, a probe that starts while the starved
+// queue still drains fails too, then the longest backoff and the probe that
+// proves the path run before the resume hold.
+func resumeBound(rate float64, queueBytes int) time.Duration {
+	drain := time.Duration(float64(queueBytes) * 8 * float64(time.Second) / rate)
+	return drain + media.ProbeSettle + media.ProbeBackoffMax + media.ProbeSettle + media.ResumeHold + time.Second
+}
+
+// TestVideoOnlySubscriberResumesAfterStarvation pauses a subscriber that
+// receives no audio, so once its video pauses only probe padding on the RTX
+// SSRC reaches it, and its feedback names that SSRC. Its video must still
+// resume when the link opens.
+func TestVideoOnlySubscriberResumesAfterStarvation(t *testing.T) {
+	ca := newAuthority(t, "chalk test CA")
+	svc := startService(t, ca)
+	alice := joinEpisode(t, svc, "episode-1", "alice", false)
+	alice.publish(t, svc, publishing{camera: true})
+	carol := joinEpisode(t, svc, "episode-1", "carol", false)
+	carol.pull(t, svc, []protocol.Track{remote(alice, cameraName)})
+	eventually(t, "carol receives video", 15*time.Second, func() bool {
+		track, _ := carol.subscription(t, svc, alice, cameraName)
+		return track.Subscription.State == protocol.SubscriptionActive && track.Subscription.EffectiveRID != ""
+	})
+
+	const starvedRate, starvedQueue = 100_000, 12_000 // bits/s, bytes; below the lowest layer
+	carol.link.shape(starvedRate, starvedQueue, 20*time.Millisecond, 0, 0)
+	eventually(t, "carol paused for congestion", 10*time.Second, func() bool {
+		track, _ := carol.subscription(t, svc, alice, cameraName)
+		return track.Subscription.State == protocol.SubscriptionPaused && track.Subscription.Reason == protocol.PauseCongestion
+	})
+	time.Sleep(2 * time.Second) // only probes reach carol now
+
+	opened := time.Now()
+	carol.link.shape(0, 0, 0, 0, 0)
+	bound := resumeBound(starvedRate, starvedQueue)
+	eventually(t, "carol's video resumes", bound+5*time.Second, func() bool {
+		track, _ := carol.subscription(t, svc, alice, cameraName)
+		return track.Subscription.State == protocol.SubscriptionActive && track.Subscription.EffectiveRID != ""
+	})
+	resumed := time.Since(opened)
+	_, inspected := carol.subscription(t, svc, alice, cameraName)
+	t.Logf("resume: video back %v after the link opened, bound %v; probes %d proved %d",
+		resumed.Round(time.Millisecond), bound, inspected.Transport.Probes, inspected.Transport.ProvedProbe)
+	if resumed < media.ResumeHold || resumed > bound {
+		t.Fatalf("video resumed %v after the link opened, want between the %v resume hold and %v", resumed, media.ResumeHold, bound)
+	}
 }
 
 func deref(value *int64) int64 {

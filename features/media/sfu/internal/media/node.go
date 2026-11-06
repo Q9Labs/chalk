@@ -19,6 +19,7 @@ import (
 
 	"github.com/pion/ice/v4"
 	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/transport/v5/packetio"
 	"github.com/pion/webrtc/v4"
@@ -59,7 +60,7 @@ type Node struct {
 	cfg         config.Config
 	log         *slog.Logger
 	incarnation string
-	api         *webrtc.API
+	peers       *peerFactory
 	conn        *net.UDPConn
 	mux         io.Closer
 	guard       *guard
@@ -114,7 +115,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	}
 	sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
 	mux := webrtc.NewICEUDPMux(nil, conn)
-	api, err := newAPI(cfg, mux)
+	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
 		_ = mux.Close()
 		_ = conn.Close()
@@ -124,7 +125,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		cfg:          cfg,
 		log:          log,
 		incarnation:  randomHex(4),
-		api:          api,
+		peers:        peers,
 		conn:         conn,
 		mux:          mux,
 		guard:        newGuard(cfg.Guard, log),
@@ -145,9 +146,34 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	return n, nil
 }
 
-// newAPI negotiates only the codecs the node forwards: Opus and VP8. Feedback
-// is limited to the keyframe requests the node relays to the publisher.
-func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
+// peerFactory builds each session's peer connection from settings every
+// session shares.
+type peerFactory struct {
+	engine   *webrtc.MediaEngine
+	registry *interceptor.Registry
+	settings webrtc.SettingEngine
+}
+
+// newPeer builds a peer connection whose RTCP stream buffers hand every
+// transport-wide feedback report to feedback. Each peer connection gets its own
+// API because the buffer factory is the only place Pion passes every stream's
+// RTCP through, and it has no other way to tell peer connections apart.
+func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, error) {
+	settings := f.settings
+	settings.BufferFactory = func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser {
+		buffer := boundedBuffer(packetType, ssrc)
+		if packetType != packetio.RTCPBufferPacket {
+			return buffer
+		}
+		return feedbackBuffer{packetBuffer: buffer, transport: feedback}
+	}
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(f.engine), webrtc.WithInterceptorRegistry(f.registry), webrtc.WithSettingEngine(settings))
+	return api.NewPeerConnection(webrtc.Configuration{})
+}
+
+// newPeerFactory negotiates only the codecs the node forwards: Opus and VP8.
+// Feedback is limited to the keyframe requests the node relays to the publisher.
+func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
 	engine := &webrtc.MediaEngine{}
 	opus := webrtc.RTPCodecParameters{RTPCodecCapability: opusCapability, PayloadType: opusPayloadType}
 	vp8 := webrtc.RTPCodecParameters{RTPCodecCapability: vp8Capability, PayloadType: vp8PayloadType}
@@ -199,7 +225,6 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	}
 
 	settings := webrtc.SettingEngine{}
-	settings.BufferFactory = boundedBuffer
 	settings.SetICEUDPMux(mux)
 	settings.SetLite(true)
 	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
@@ -211,11 +236,11 @@ func newAPI(cfg config.Config, mux ice.UDPMux) (*webrtc.API, error) {
 	if err := settings.SetAnsweringDTLSRole(webrtc.DTLSRoleServer); err != nil {
 		return nil, fmt.Errorf("set DTLS answering role: %w", err)
 	}
-	return webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithInterceptorRegistry(registry), webrtc.WithSettingEngine(settings)), nil
+	return &peerFactory{engine: engine, registry: registry, settings: settings}, nil
 }
 
 // boundedBuffer replaces Pion's per-stream buffer, which allows 1 MB of RTP, with a smaller limit.
-func boundedBuffer(packetType packetio.BufferPacketType, _ uint32) io.ReadWriteCloser {
+func boundedBuffer(packetType packetio.BufferPacketType, _ uint32) packetBuffer {
 	buffer := packetBuffer{packetio.NewBuffer()}
 	switch packetType {
 	case packetio.RTPBufferPacket:
@@ -243,6 +268,38 @@ func (b packetBuffer) ReadWithAttributes(p []byte, attributes packetio.Attribute
 
 func (b packetBuffer) WriteWithAttributes(p []byte, attributes packetio.Attributes) (int, error) {
 	return b.Buffer.Write(p, attributes)
+}
+
+// feedbackBuffer is an RTCP stream buffer that also reads the transport-wide
+// feedback written to it. A receiver addresses each report to the SSRC of the
+// latest packet it got, which is the RTX SSRC while only probe padding flows,
+// and Pion reads no RTCP for an RTX SSRC. SRTP writes each RTCP packet of a
+// compound to the buffer of every stream it names, so the transport ignores the
+// copies.
+type feedbackBuffer struct {
+	packetBuffer
+	transport *transport
+}
+
+func (b feedbackBuffer) Write(p []byte) (int, error) {
+	b.read(p)
+	return b.packetBuffer.Write(p)
+}
+
+func (b feedbackBuffer) WriteWithAttributes(p []byte, attributes packetio.Attributes) (int, error) {
+	b.read(p)
+	return b.packetBuffer.WriteWithAttributes(p, attributes)
+}
+
+// read hands p to the transport when it is one transport-wide feedback report.
+func (b feedbackBuffer) read(p []byte) {
+	if len(p) < 4 || rtcp.PacketType(p[1]) != rtcp.TypeTransportSpecificFeedback || p[0]&0x1f != rtcp.FormatTCC {
+		return
+	}
+	var report rtcp.TransportLayerCC
+	if report.Unmarshal(p) == nil {
+		b.transport.onFeedback(&report)
+	}
 }
 
 // sizeReceiveBuffer requests the socket's receive buffer and logs what the
