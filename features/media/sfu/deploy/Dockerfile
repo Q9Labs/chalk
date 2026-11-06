@@ -24,6 +24,8 @@ LABEL org.opencontainers.image.description="Chalk SFU media node" \
       org.opencontainers.image.source="https://github.com/q9labs/chalk" \
       org.opencontainers.image.title="chalk-sfu"
 
+# Root CAs, so the node can verify its OTLP endpoint over TLS.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/chalk-sfu /usr/local/bin/chalk-sfu
 
 USER 65532:65532
