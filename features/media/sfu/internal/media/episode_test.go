@@ -121,3 +121,27 @@ func TestProbePaddingTakesRoomButDoesNotPauseCameras(t *testing.T) {
 		}
 	}
 }
+
+// The first tick of a join as a bench node logged it: three Participants, six cameras, ceiling
+// 7,170, and a base of 7,472.6 packets/s of which 4,131.5 were probe padding. With the padding in
+// the base the plan paused all six cameras; the cameras then came back one every two seconds.
+// Each camera's open cost is the logged 2,346 packets/s of camera video divided by six; the
+// lowest-layer cost is assumed.
+func TestAJoinTimeBurstOfProbesLeavesTheCamerasOpen(t *testing.T) {
+	const ceiling = 7170
+	episode := &episodeTick{base: 3341.2} // the logged base without its probes
+	episode.addEgress(classProbe, 4131.4)
+	cameras := make([]*plannedCamera, 6)
+	for index := range cameras {
+		cameras[index] = &plannedCamera{order: uint64(index), cost: [planLevels]float64{planOpen: 391, planLowest: 130}}
+	}
+	planEpisode(cameras, episode.base, ceiling, true)
+	for index, camera := range cameras {
+		if camera.level != planOpen {
+			t.Fatalf("camera %d is at plan level %d, want open: its Episode's probes fill %.0f of the %d ceiling", index, camera.level, episode.probing, ceiling)
+		}
+	}
+	if episode.measured < 4131 {
+		t.Fatalf("the probes measure %.0f packets/s, want the padding measured", episode.measured)
+	}
+}
