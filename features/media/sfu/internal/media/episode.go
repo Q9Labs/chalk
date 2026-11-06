@@ -100,6 +100,16 @@ type episodeTick struct {
 	state         protocol.EpisodeState
 }
 
+// addEgress counts one transport's packets/s of a class. Repairs join the base the plan cannot
+// lower. A probe does not: it is the allocator's own 400 ms of padding, and lowering cameras to
+// make room for a measurement would freeze video at every join.
+func (e *episodeTick) addEgress(class packetClass, pps float64) {
+	e.measured += pps
+	if class == classRepair {
+		e.base += pps
+	}
+}
+
 // mediaStats is the control loop's latest view of the node's media, published
 // for inspection and telemetry after every tick.
 type mediaStats struct {
@@ -163,15 +173,12 @@ func (n *Node) allocate() {
 		for class := range packetClasses {
 			pps, bps := session.transport.meters[class].rates()
 			stats.out[class].add(pps, bps)
-			episode.measured += pps
+			episode.addEgress(class, pps)
 			switch class {
 			case classRepair:
 				stats.repair += pps
 			case classProbe:
 				stats.probe += pps
-			}
-			if class == classRepair || class == classProbe {
-				episode.base += pps
 			}
 		}
 	}

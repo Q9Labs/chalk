@@ -97,3 +97,14 @@ func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
 		t.Fatal("a camera with fallback lists no layers")
 	}
 }
+
+// Probe padding is measured load but not load the plan must fit. Counting it in the base put a
+// burst of probes at a join over the ceiling, and the plan paused every camera for seconds.
+func TestProbePaddingIsMeasuredButNotPlanned(t *testing.T) {
+	var episode episodeTick
+	episode.addEgress(classRepair, 100)
+	episode.addEgress(classProbe, 4000)
+	if episode.base != 100 || episode.measured != 4100 {
+		t.Fatalf("base %.0f and measured %.0f, want 100 and 4100", episode.base, episode.measured)
+	}
+}
