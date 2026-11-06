@@ -14,11 +14,11 @@ func newLiveTrack(kind string) *liveTrack {
 	return &liveTrack{kind: kind, clock: 48000, frames: map[string]int64{}}
 }
 
-func deliver(track *liveTrack, packets int, from time.Time, every time.Duration) time.Time {
+func deliver(track *liveTrack, packets int, from time.Time, every time.Duration, since time.Time) time.Time {
 	at := from
 	for seq := range packets {
 		at = from.Add(time.Duration(seq) * every)
-		track.observe(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(seq), Timestamp: uint32(seq) * 960}}, at, 0)
+		track.observe(&rtp.Packet{Header: rtp.Header{SequenceNumber: uint16(seq), Timestamp: uint32(seq) * 960}}, at, 0, since)
 	}
 	return at
 }
@@ -28,7 +28,7 @@ func deliver(track *liveTrack, packets int, from time.Time, every time.Duration)
 func TestAMicrophoneThatGoesSilentShowsAStallAtSampling(t *testing.T) {
 	start := time.Now()
 	track := newLiveTrack("audio")
-	last := deliver(track, 50, start, 20*time.Millisecond)
+	last := deliver(track, 50, start, 20*time.Millisecond, time.Time{})
 	if stalls, _ := track.stallsAt(last.Add(liveStall/2), time.Time{}); stalls != 0 {
 		t.Fatalf("a microphone quiet for half the stall limit counts %d stalls", stalls)
 	}
@@ -59,7 +59,7 @@ func TestAScreenThatNeverReachesAViewerStallsOnlyWhileShared(t *testing.T) {
 func TestAScreenThatGoesQuietMidStretchStalls(t *testing.T) {
 	start := time.Now()
 	track := newLiveTrack("screen")
-	last := deliver(track, 30, start, 33*time.Millisecond)
+	last := deliver(track, 30, start, 33*time.Millisecond, start)
 	if stalls, _ := track.stallsAt(last.Add(liveStall/2), start); stalls != 0 {
 		t.Fatalf("a flowing screen counts %d stalls", stalls)
 	}
@@ -83,5 +83,61 @@ func TestAScreenStallBreaksAStepUpAndACameraStallDoesNot(t *testing.T) {
 	previous.Peers.ScreenStalls = 1
 	if reason := qualityBreak(previous, sample); reason != "" {
 		t.Fatalf("an old screen stall broke the step-up again: %q", reason)
+	}
+}
+
+// A microphone that went quiet before a share began is still quiet 500 ms into it, with no
+// startup grace, because the grace belongs to the screen.
+func TestAMicrophoneOutageAcrossAShareStartGetsNoStartupGrace(t *testing.T) {
+	start := time.Now()
+	track := newLiveTrack("audio")
+	last := deliver(track, 50, start, 20*time.Millisecond, time.Time{})
+	shareStart := last.Add(time.Second)
+	if stalls, _ := track.stallsAt(shareStart.Add(2*liveStall), shareStart); stalls != 1 {
+		t.Fatalf("a microphone silent across a share start counts %d stalls, want 1", stalls)
+	}
+}
+
+// A viewer with no screen track at all is a stall at the end of a stretch, because no track
+// exists to be visited. The sharer, who receives no screen, is not counted.
+func TestAViewerWithNoScreenTrackStalls(t *testing.T) {
+	start := time.Now()
+	class := &liveClass{}
+	viewer := &liveReceiver{class: class, tracks: map[string]*liveTrack{}}
+	sharer := &liveReceiver{class: class, tracks: map[string]*liveTrack{}}
+	class.receivers = []*liveReceiver{sharer, viewer}
+	class.shareStart.Store(start.UnixNano())
+	class.endStretch(start.Add(time.Minute))
+	if viewer.missedScreens != 1 || sharer.missedScreens != 0 {
+		t.Fatalf("missed screens: viewer %d, sharer %d; want 1 and 0", viewer.missedScreens, sharer.missedScreens)
+	}
+	viewer.tracks["mic"] = newLiveTrack("audio")
+	if len(viewer.screens()) != 0 {
+		t.Fatal("a microphone counted as a screen")
+	}
+	viewer.tracks["screen"] = newLiveTrack("screen")
+	class.endStretch(start.Add(2 * time.Minute))
+	if viewer.missedScreens != 1 {
+		t.Fatalf("a viewer with a screen track missed %d stretches, want the earlier 1", viewer.missedScreens)
+	}
+}
+
+// The first frame of a stretch that arrives after the startup limit is a stall at once, so a
+// sample taken later still counts it.
+func TestALateFirstScreenFrameKeepsItsStartupStall(t *testing.T) {
+	start := time.Now()
+	track := newLiveTrack("screen")
+	packet := &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, Timestamp: 1}}
+	track.observe(packet, start.Add(liveShareStartup+time.Second), 1, start)
+	if track.stalls != 1 || track.longest < liveShareStartup {
+		t.Fatalf("a first frame %v late stored %d stalls, longest %v; want 1", liveShareStartup+time.Second, track.stalls, track.longest)
+	}
+	if stalls, _ := track.stallsAt(start.Add(liveShareStartup+time.Second+100*time.Millisecond), start); stalls != 1 {
+		t.Fatalf("a sample after the late frame counts %d stalls, want 1", stalls)
+	}
+	prompt := newLiveTrack("screen")
+	prompt.observe(packet, start.Add(time.Second), 1, start)
+	if prompt.stalls != 0 {
+		t.Fatalf("a first frame after 1 s counts %d stalls", prompt.stalls)
 	}
 }

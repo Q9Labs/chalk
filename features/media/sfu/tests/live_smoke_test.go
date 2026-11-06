@@ -48,6 +48,11 @@ type liveLoad struct {
 	samples                        string
 }
 
+// shareOn is how long one share stretch lasts.
+func (l liveLoad) shareOn() time.Duration {
+	return time.Duration(l.shareDuty * float64(l.sharePeriod))
+}
+
 func liveLoadFromEnv(t *testing.T) liveLoad {
 	t.Helper()
 	load := liveLoad{classes: 2, participants: 3, cameras: 2, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
@@ -138,6 +143,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 		class, refused := joinClass(t, svc, load, run, index)
 		if refused != "" {
 			return refused
+		}
+		if load.shareOn() > 0 {
+			class.shareStart.Store(time.Now().UnixNano())
 		}
 		go class.shareInStretches(sharing, load, time.Duration(index)*load.sharePeriod/5)
 		mu.Lock()
@@ -280,8 +288,10 @@ func (c *liveClass) endStretch(now time.Time) {
 			continue
 		}
 		receiver.mu.Lock()
-		for _, track := range receiver.tracks {
-			if track.kind == "screen" {
+		if screens := receiver.screens(); len(screens) == 0 {
+			receiver.missedScreens++
+		} else {
+			for _, track := range screens {
 				track.closeStretch(now, since)
 			}
 		}
@@ -304,7 +314,7 @@ func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) 
 		p := &participant{name: fmt.Sprintf("c%dp%d", index, person), link: through,
 			scope: protocol.Scope{TenantID: liveTenant, EpisodeID: class.episode, ParticipantID: fmt.Sprintf("p%d", person), Generation: 1}}
 		p.peer = newMediaPeer(t, through, true)
-		receiver := receiveLive(p.peer, &class.shareEpoch)
+		receiver := receiveLive(p.peer, class)
 		var created protocol.CreateSessionResponse
 		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: op(), Scope: p.scope}, &created); status >= 300 {
 			_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
@@ -345,14 +355,13 @@ func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) 
 // duty share of every period, starting phase into its first stretch.
 func (c *liveClass) shareInStretches(ctx context.Context, load liveLoad, phase time.Duration) {
 	screen := c.people[0].screen
-	on := time.Duration(load.shareDuty * float64(load.sharePeriod))
+	on := load.shareOn()
 	off := load.sharePeriod - on
 	if on <= 0 {
 		c.shareEpoch.Add(1)
 		screen.enable(0, false)
 		return
 	}
-	c.shareStart.Store(time.Now().UnixNano())
 	if off <= 0 {
 		return
 	}
@@ -435,13 +444,15 @@ func (c *liveClass) renewGrants(svc *service) {
 
 // liveReceiver keeps one peer's per-track delivery statistics.
 type liveReceiver struct {
-	shareEpoch *atomic.Int64
-	mu         sync.Mutex
-	tracks     map[string]*liveTrack
+	class  *liveClass
+	mu     sync.Mutex
+	tracks map[string]*liveTrack
+	// missedScreens counts share stretches that ended with no screen track at this viewer.
+	missedScreens int64
 }
 
-func receiveLive(p *peer, shareEpoch *atomic.Int64) *liveReceiver {
-	r := &liveReceiver{shareEpoch: shareEpoch, tracks: map[string]*liveTrack{}}
+func receiveLive(p *peer, class *liveClass) *liveReceiver {
+	r := &liveReceiver{class: class, tracks: map[string]*liveTrack{}}
 	p.pc.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		stats := &liveTrack{kind: "audio", clock: float64(track.Codec().ClockRate), frames: map[string]int64{}}
 		switch {
@@ -459,9 +470,9 @@ func receiveLive(p *peer, shareEpoch *atomic.Int64) *liveReceiver {
 				if err != nil {
 					return
 				}
-				at, epoch := time.Now(), r.shareEpoch.Load()
+				at, epoch, since := time.Now(), r.class.shareEpoch.Load(), r.class.sharingSince()
 				r.mu.Lock()
-				stats.observe(packet, at, epoch)
+				stats.observe(packet, at, epoch, since)
 				r.mu.Unlock()
 			}
 		}()
@@ -480,6 +491,17 @@ func (r *liveReceiver) microphones() int {
 		}
 	}
 	return count
+}
+
+// screens lists the screen tracks received. The caller holds r.mu.
+func (r *liveReceiver) screens() []*liveTrack {
+	var found []*liveTrack
+	for _, track := range r.tracks {
+		if track.kind == "screen" {
+			found = append(found, track)
+		}
+	}
+	return found
 }
 
 // sawScreen reports whether a screen frame arrived.
@@ -523,7 +545,7 @@ type liveTrack struct {
 	hasPrev bool
 }
 
-func (s *liveTrack) observe(packet *rtp.Packet, at time.Time, epoch int64) {
+func (s *liveTrack) observe(packet *rtp.Packet, at time.Time, epoch int64, since time.Time) {
 	if s.kind == "screen" && epoch != s.epoch && s.started {
 		s.closeRange()
 	}
@@ -537,12 +559,12 @@ func (s *liveTrack) observe(packet *rtp.Packet, at time.Time, epoch int64) {
 	s.prevAt, s.prevTS, s.hasPrev = at, packet.Timestamp, true
 
 	if s.kind == "audio" {
-		s.gap(at, epoch)
+		s.gap(at, epoch, since)
 		s.frames["audio"]++
 		return
 	}
 	if s.lastAt.IsZero() || int32(packet.Timestamp-s.lastTS) > 0 {
-		s.gap(at, epoch)
+		s.gap(at, epoch, since)
 		s.lastTS = packet.Timestamp
 	}
 	var vp8 codecs.VP8Packet
@@ -565,14 +587,24 @@ func (s *liveTrack) observe(packet *rtp.Packet, at time.Time, epoch int64) {
 }
 
 // gap counts a stall when media stopped for longer than liveStall while the
-// source was meant to send.
-func (s *liveTrack) gap(at time.Time, epoch int64) {
-	if !s.lastAt.IsZero() && epoch == s.epoch {
+// source was meant to send. The first frame of a share stretch has liveShareStartup
+// instead, counted when it arrives, so a late start stays in the count.
+func (s *liveTrack) gap(at time.Time, epoch int64, since time.Time) {
+	var quiet time.Duration
+	switch {
+	case s.kind == "screen" && !since.IsZero() && s.lastAt.Before(since):
+		if delay := at.Sub(since); delay > liveShareStartup {
+			quiet = delay
+		}
+	case !s.lastAt.IsZero() && epoch == s.epoch:
 		if gap := at.Sub(s.lastAt); gap > liveStall {
-			s.stalls++
-			if gap > s.longest {
-				s.longest, s.longestAt = gap, at
-			}
+			quiet = gap
+		}
+	}
+	if quiet > 0 {
+		s.stalls++
+		if quiet > s.longest {
+			s.longest, s.longestAt = quiet, at
 		}
 	}
 	s.lastAt, s.epoch = at, epoch
@@ -582,7 +614,9 @@ func (s *liveTrack) gap(at time.Time, epoch int64) {
 // microphone or camera is meant to send from its first packet on. A screen is meant to send
 // from since, the start of its share stretch, and not at all while since is zero.
 func (s *liveTrack) silence(now, since time.Time) time.Duration {
-	if s.kind == "screen" && since.IsZero() {
+	if s.kind != "screen" {
+		since = time.Time{}
+	} else if since.IsZero() {
 		return 0
 	}
 	from, limit := s.lastAt, liveStall
@@ -725,6 +759,14 @@ func takeSample(svc *service, classes []*liveClass, cpu *hostCPU) liveSample {
 			receiver := class.receivers[index]
 			since := class.sharingSince()
 			receiver.mu.Lock()
+			if index > 0 {
+				// Every viewer is meant to have a screen track in each share stretch.
+				peers.ScreenStalls += receiver.missedScreens
+				if len(receiver.screens()) == 0 && !since.IsZero() && now.Sub(since) > liveShareStartup {
+					peers.ScreenStalls++
+					peers.LongestStallMs = max(peers.LongestStallMs, now.Sub(since).Milliseconds())
+				}
+			}
 			for _, track := range receiver.tracks {
 				stalls, longest := track.stallsAt(now, since)
 				for layer, frames := range track.frames {

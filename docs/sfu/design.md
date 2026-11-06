@@ -720,13 +720,13 @@ Participants for a new Episode. M5 bounds the supported reservation by the per-E
 M2 must not claim that a smaller reservation bounds actual media. A second RID,
 hotter video, retransmissions and capture still need measured headroom.
 
-| Reservation                                            | Packets/s                                       |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| One three-person Episode, two cameras each             | 7,170                                           |
-| One three-person Episode, one camera each              | 4,200                                           |
-| A new Episode's first join (two Participants)          | 3,480                                           |
-| Two three-person Episodes on a 16,000 budget           | 14,340                                          |
-| One Episode of four or more, two cameras each          | capped at 11,520 by M5 enforcement              |
+| Reservation                                   | Packets/s                          |
+| --------------------------------------------- | ---------------------------------- |
+| One three-person Episode, two cameras each    | 7,170                              |
+| One three-person Episode, one camera each     | 4,200                              |
+| A new Episode's first join (two Participants) | 3,480                              |
+| Two three-person Episodes on a 16,000 budget  | 14,340                             |
+| One Episode of four or more, two cameras each | capped at 11,520 by M5 enforcement |
 
 Reject a join or new Episode if its reservation would exceed the selected
 node's budget. Replacement must not double-count the same Participant.
