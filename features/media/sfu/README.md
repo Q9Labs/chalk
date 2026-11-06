@@ -47,7 +47,7 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - The node refuses new Episodes when CPU steal exceeds `SFU_GUARD_MAX_STEAL_PERCENT` or the pacer queue delay p95 exceeds `SFU_GUARD_MAX_QUEUE_DELAY` over `SFU_GUARD_WINDOW`. Live Episodes still admit their Participants. `/readyz` reports steal, scheduler latency, queue delay and the admission reason.
   - Inspect reports each subscriber's transport (estimate, proven rate, feedback age, queued bytes, packets sent per class, pacer drops, repairs cut, probes), its Episode's packets/s, ceiling and capped or paused cameras, and how many packets each ingress layer asked for again and got back over RTX.
 
-Not yet built: the API's source-control dispatch and lease renewal, the API and SDK `subscriptionState` capability, certificate rotation and deployment.
+Not yet built: exporting the node's logs and load to the observability path. The node logs JSON to stderr, which the deployment keeps in the host journal, and reports its load on `/readyz`.
 
 ## Run it
 
@@ -95,7 +95,12 @@ go run ./cmd/sfu
 
 Set `net.core.rmem_max` and `net.core.rmem_default` to 8 MiB (`8388608`) on the host, for example in `/etc/sysctl.d/90-chalk-sfu.conf`. The kernel caps a socket's receive buffer at `rmem_max`, and Linux defaults it to about 208 KiB, which a burst of video from many publishers overflows as UDP receive errors. At start the node logs the size it requested and the size the kernel granted, and warns when it got less. `/readyz` reports the granted size as `host.udpReceiveBufferBytes` and the host's `RcvbufErrors` as `host.udpReceiveBufferErrors`, so a rising count shows ingress loss from a full buffer.
 
-SIGINT or SIGTERM drains the node: `/readyz` fails, new sessions are refused, in-flight requests finish, then every session, the control listener and the UDP socket close.
+SIGUSR1 drains the node and keeps it running: `/readyz` fails, so the API places no new Episode on it, new sessions are refused, and live calls continue. The node logs `sfu drained` when the last session ends. SIGINT or SIGTERM stops it: in-flight requests finish, then every session, the control listener and the UDP socket close.
+
+[`infra/`](infra) is the OpenTofu module for one DigitalOcean node: the Droplet, tagged `chalk-sfu` and `chalk-sfu-staging` or `chalk-sfu-prod`, a cloud firewall that opens media UDP to everyone and the control port only to the API's addresses, and a first-boot script that sets the receive buffer, a matching host firewall and a rootless `chalk-sfu` user. [`infrastructure/sfu`](../../../infrastructure/sfu) applies it per environment. [`deploy/`](deploy) holds the image, the Quadlet unit and two scripts:
+
+- `deploy/certs <staging|production> <ca|server|api|operator>` issues certificates from the environment's service CA. The CA key lives in 1Password; issued files go to `~/.config/chalk-sfu/<env>`, never into Git. The API's certificate keeps its key and names and adds the identity the SFU requires, `spiffe://chalkmeet.com/environment/<env>/api`, with client auth. Rotate a certificate by issuing it again and redeploying; the server certificate lasts 180 days and the API's 365.
+- `deploy/deploy <staging|production> <node address> [--force]` builds the image at the current commit, loads it into the node's Podman, installs the certificates as Podman secrets, renders the settings for the node's memory (`SFU_PACKET_BUDGET` 16000 and `GOMEMLIMIT=384MiB` on 1 GiB, 32000 and 768 MiB on 2 GiB), drains the running node until its calls end, restarts it and checks `/readyz` through an SSH tunnel. It fails when the granted receive buffer is below 8 MiB. Running it twice converges on the same state.
 
 ## Tests
 

@@ -45,8 +45,10 @@ Goals:
 - Low latency at the real peak, not just a successful forwarding demo. Compare
   rendered-media latency, freezes, join and recovery against matched Cloudflare
   cohorts. Bound packet queues and measure the complete M5 media path.
-- One production Basic `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` degraded
-  standby in `sgp1`, **$24/month** total. The primary carries the full admitted
+- Today one `s-1vcpu-1gb` production node and one staging node of the same size
+  in `sgp1`, **$12/month** total. Full cutover targets one Basic `s-2vcpu-2gb`
+  primary and one `s-1vcpu-1gb` degraded standby, **$24/month**, once Hasan
+  approves the larger tier. The primary carries the full admitted
   peak; standby carries a smaller, low-layer workload when primary is unhealthy,
   draining or full. Prove both envelopes separately. Drain keeps existing calls
   running but does not promise full new-call capacity on standby.
@@ -371,7 +373,8 @@ Cloudflare. Only item 3 is provider-neutral.
    moment for a queue and a freeze. The allocator starts on the lowest layer the
    ceiling allows and climbs to the next layer once the estimate and its feedback
    age support it. The SDK still requests `h` as a ceiling. The cost is a picture
-   that sharpens over a few seconds; M5 measures that time and bounds it.
+   that sharpens over a few seconds; M5 measures that time, including the
+   keyframe interval each climb waits for, and bounds it.
    Cloudflare pulls stay `h`-first.
 3. **Subscribe to video only for visible tiles (M8).** Today the SDK pulls every
    remote publication, visible or not. The viewer policy already measures tile
@@ -492,8 +495,8 @@ control connectivity then stops forwarding by expiry rather than preserving a
 muted orphan indefinitely. Do not extend from RTP receipt or SDK claims. Check
 expiry on the forwarding path, not solely a delayed GC ticker. Lease refresh,
 grant and revoke share the same revision order; a stale refresh cannot resurrect
-a revoked source. Transport loss therefore has a bounded mute-enforcement window,
-not a zero-window atomicity guarantee. Recheck the model with failing close,
+a revoked source. Transport loss therefore has a bounded mute-enforcement window of at most the
+15-second source lease, not a zero-window atomicity guarantee. Recheck the model with failing close,
 orphan cleanup and delayed lease/revoke delivery.
 
 **ICE restart:** support a client offer with new ICE credentials on an existing
@@ -560,27 +563,33 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 
 ## Hosting and budget
 
-Use one Basic Regular `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` standby in
-Singapore `sgp1`. The primary is preferred for new Episodes. The standby takes
-new Episodes only when the primary is unhealthy, draining or full, with M5
-holding camera layers low and refusing admission at the smaller packet budget.
-This is a full-capacity primary with a **degraded standby**, not two equal nodes
-or a guarantee that failover preserves every peak call at full quality.
+Chalk runs two Basic Regular `s-1vcpu-1gb` nodes in Singapore `sgp1`, one for
+staging and one for production, about $12/month, and keeps both (Hasan,
+6 November 2026). Production moves to one `s-2vcpu-2gb` only with Hasan's
+approval, when measured load needs it. The starting capacity bar is six
+concurrent three-person classes on the $6 production node.
+
+The full-cutover target is one `s-2vcpu-2gb` primary and one `s-1vcpu-1gb`
+standby. The primary is preferred for new Episodes. The standby takes new
+Episodes only when the primary is unhealthy, draining or full, with M5 holding
+camera layers low and refusing admission at the smaller packet budget. That is a
+full-capacity primary with a **degraded standby**, not two equal nodes or a
+guarantee that failover preserves every peak call at full quality.
 
 Public list prices checked **5 November 2026**, USD before tax. Regional SKU
 availability does not guarantee creation-time stock.
 
-| Use                     | Layout                                                   | Included monthly outbound     | Compute                                                     |
-| ----------------------- | -------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
-| Production primary      | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk | 3,000 GiB per full-month node | **$18/month**                                               |
-| Production standby      | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk | 1,000 GiB per full-month node | **$6/month**                                                |
-| Functional test run     | Disposable `s-1vcpu-1gb`                                 | Prorated while created        | $0.00893/hour equivalent, $6 monthly cap                    |
-| Capacity/drain test run | Disposable primary or primary/standby pair               | Prorated while created        | $0.02679/hour primary plus $0.00893/hour standby equivalent |
+| Use                           | Layout                                                     | Included monthly outbound     | Compute                                      |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------------- | -------------------------------------------- |
+| Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk   | 1,000 GiB per full-month node | **$6/month**                                 |
+| Staging node                  | One `s-1vcpu-1gb`                                          | 1,000 GiB per full-month node | **$6/month**                                 |
+| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk   | 3,000 GiB per full-month node | $18/month, only with Hasan's approval        |
+| Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench` | Prorated while created        | Free on Instabox; under $1 per run otherwise |
 
-Production compute totals **$24/month**, with no permanent staging node.
+SFU compute totals **$12/month** today.
 
 DigitalOcean bills per second with a minimum charge. Stopped Droplets still cost
-money; destroy test nodes after collecting sanitized results. No media load
+money; delete load generators after collecting sanitized results. No media load
 balancer, media disk backup or replicated packet store is required. Existing
 API/Sync/Postgres, recorder compute/storage and observability costs are excluded.
 Sources: [Droplet pricing](https://www.digitalocean.com/pricing/droplets),
@@ -697,7 +706,8 @@ sends 150 packets/s. Keep one active screen share per Episode.
 
 The nominal all-source reservation counts one camera and microphone per
 Participant plus the screen and its audio on every hop:
-`R(n) = (150 + 50) · n · (n + 1)`. Reserve at least two Participants for a new
+`R(n) = (150 + 50) · n · (n + 1)`. The node reserves a screen share at
+`SFU_SCREEN_STREAM_COST`, about 210 packets/s. Reserve at least two Participants for a new
 Episode. M5 bounds the supported reservation by the per-Episode ceiling:
 `min(R(n), 11,520, node budget)`. Before M5's enforcing allocator is enabled,
 M2 must not claim that a smaller reservation bounds actual media. A second RID,
@@ -721,7 +731,12 @@ packets/s, sixteen microphones alone cost `50 · 16² = 12,800` in plus out;
 one screen and its audio raise that to **16,960**, before camera ingress. They
 cannot fit a fixed 11,520 ceiling by pausing cameras. M5 must refuse admission or
 source activation when mandatory media cannot fit, or use a separately validated
-higher configurable Episode ceiling within the node budget. Never claim sixteen
+higher configurable Episode ceiling within the node budget. Every camera's
+uplink stays in that mandatory base, because the plan lowers only what
+subscribers receive, so at the defaults admission refuses the fourteenth
+Participant, or the twelfth with a screen share
+([#836](https://github.com/Q9Labs/chalk/pull/836)); ten with a screen share fit
+at 9,100. Never claim sixteen
 all-audio Participants fit the default ceiling, or silently sacrifice audio.
 
 **Primary acceptance:** prove the full admitted workload on the $18 node alone,
@@ -839,8 +854,8 @@ At the observed **103 decimal GB/month**, Cloudflare SFU costs **$0**, inside it
 shared 1,000 GB allowance; it then charges **$0.05/GB**. Replacing it is a control,
 quality and product-completeness decision, not a saving at present usage.
 
-The $18 primary and $6 standby cost **$24/month** before tax, plus disposable
-test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
+The two $6 nodes Chalk runs today cost **$12/month** before tax. The full-cutover
+$18 primary and $6 standby would cost **$24/month**, plus disposable test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
 to the team pool. 103 GB is about **95.9 GiB**, even all through one node below that
 node's 3,000 GiB. DigitalOcean ingress is free and excess outbound is $0.01/GiB.
 The own-SFU egress estimate stays $0 at this volume if other team workloads have
