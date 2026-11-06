@@ -733,12 +733,30 @@ class MediaControllerRuntime implements MediaControllerEffects {
           ),
         ),
       );
+      const ports = this.#ports;
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
-        if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
+        if (state.desired.revision !== revisions[source]) continue;
+        state.result = { revision: revisions[source], status: "confirmed" };
+        if (ports && this.#hasConsent(source)) this.#announceInitialOn(ports, source, state.desired);
       }
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
+  }
+  /**
+   * A source published at join still needs Sync to accept its on: Chalk's own SFU forwards a source only under the
+   * grant Sync makes for an accepted on. The join does not wait for it, because the call goes live only after the
+   * join. A refused on turns the source off, since it was off before this join.
+   */
+  #announceInitialOn(ports: ConnectionPorts, source: "microphone" | "camera", intent: MediaIntent): void {
+    const joined = { ...intent, previousEnabled: false };
+    const send = this.#serialize(source, this.#send(ports, source, joined, true));
+    this.#fork(
+      this.#waitForLive(source, joined.revision, ports).pipe(
+        Effect.andThen(send),
+        Effect.catch((cause) => this.#failRevision(ports, source, joined, cause)),
+      ),
+    );
   }
 
   #consentedTracks(tracks: readonly MediaStreamTrack[]): MediaStreamTrack[] {

@@ -4429,6 +4429,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
   const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
   try {
     await client.join({ microphone: true, camera: false });
+    await vi.waitFor(() => expect(command).toHaveBeenCalledWith(true));
     if (scenario !== "rapid") {
       await client.media.setMicrophoneEnabled(false);
       expect(track.enabled).toBe(false);

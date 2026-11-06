@@ -4,6 +4,7 @@ import { createBrowserMediaDevices } from "../connection/media-devices";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 import type { ClientFailure } from "./types";
+import { V1SyncError } from "../sync/v1-error";
 
 describe("join with unavailable capture devices", () => {
   it("refreshes cameras after private preview permission without publishing or enabling the camera", async () => {
@@ -161,6 +162,71 @@ describe("join with unavailable capture devices", () => {
       await expect(client.join()).rejects.toThrow(/media capture is unavailable/i);
       expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: { code: "environment.unsupported", recoverable: false } });
       expect(getAccess).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+});
+
+describe("join with media on", () => {
+  const joinWith = (setMicrophoneEnabled: ReturnType<typeof vi.fn>, setCameraEnabled: ReturnType<typeof vi.fn>, tracks = [track("audio"), track("video")]) => {
+    const platform = createCoreTestPlatform();
+    return createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { getUserMedia: async () => stream(tracks), enumerateDevices: async () => [] },
+          createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }),
+        },
+      },
+    );
+  };
+
+  // Chalk's own SFU forwards a source only under a grant, and Sync grants it only for an on it has accepted.
+  it("asks Sync to turn on each source it published at join", async () => {
+    const accepted = async () => ({ operationId: "on", name: "set_camera_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
+    const setMicrophoneEnabled = vi.fn(accepted);
+    const setCameraEnabled = vi.fn(accepted);
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled);
+    try {
+      await client.join({ microphone: true, camera: true });
+      await vi.waitFor(() => {
+        expect(setMicrophoneEnabled).toHaveBeenCalledWith(true);
+        expect(setCameraEnabled).toHaveBeenCalledWith(true);
+      });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("does not ask Sync to turn on a source joined off", async () => {
+    const accepted = async () => ({ operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
+    const setMicrophoneEnabled = vi.fn(accepted);
+    const setCameraEnabled = vi.fn(accepted);
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled);
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true));
+      expect(setCameraEnabled).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("turns a source off when Sync refuses its on at join", async () => {
+    const setMicrophoneEnabled = vi.fn(async () => ({ operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const }));
+    const setCameraEnabled = vi.fn(async () => {
+      throw new V1SyncError("camera refused", "terminal_failure");
+    });
+    const [microphone, camera] = [track("audio"), track("video")];
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled, [microphone, camera]);
+    try {
+      await client.join({ microphone: true, camera: true });
+      await vi.waitFor(() => expect(camera.enabled).toBe(false));
+      expect(setMicrophoneEnabled).toHaveBeenCalledWith(true);
+      expect(microphone.enabled).toBe(true);
     } finally {
       client.dispose();
     }
