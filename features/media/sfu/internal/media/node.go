@@ -121,7 +121,11 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	}
 	receiveBuffer := receiveSocketBuffer.size(conn, cfg.UDPReceiveBuffer, log)
 	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
-	mux := webrtc.NewICEUDPMux(nil, conn)
+	var media net.PacketConn = conn
+	if cfg.UDPBatch {
+		media = newMediaConn(conn)
+	}
+	mux := webrtc.NewICEUDPMux(nil, media)
 	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
 		_ = mux.Close()
