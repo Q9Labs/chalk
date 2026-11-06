@@ -6,28 +6,37 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-// An Episode reserves its supported peak. Each Participant publishes one camera and one
-// microphone and receives both from every other Participant, and one screen share with its audio
-// runs. With a stream cost of c = video + audio per hop, n Participants need
+// An Episode reserves its supported peak. Each Participant publishes up to
+// CamerasPerParticipant simulcast cameras and one microphone, and receives every other
+// Participant's cameras at their top layer and microphone, and one screen share with its audio
+// runs. A camera costs u packets/s on its uplink, because the publisher sends every layer, and
+// d to each subscriber, one layer. With m cameras, audio a and a screen share of s per hop, n
+// Participants need
 //
-//	n·c (uplinks) + n·(n-1)·c (downlinks) + c (screen uplink) + (n-1)·c (screen downlinks)
-//	  = c·n·(n+1) packets/s.
+//	n·(m·u + a) (uplinks) + n·(n-1)·(m·d + a) (downlinks) + n·(s + a) (the screen share's
+//	uplink and its n-1 downlinks, audio included) packets/s.
 //
 // The allocator holds every Episode under its packet ceiling by lowering and pausing camera
-// video, so an Episode reserves the lower of that peak and the ceiling. An Episode needs room for
-// two Participants from its first join, so a lone Participant reserves what two would. A join is
-// refused when it would push the sum above the node budget.
+// downlinks, so an Episode reserves the lower of that peak and the ceiling. Admission keeps the
+// mandatory part, which the allocator cannot lower, under the ceiling, so the allocator never
+// has to pause a camera the reservation promised. An Episode needs room for two Participants
+// from its first join, so a lone Participant reserves what two would. A join is refused when it
+// would push the sum above the node budget.
 func (n *Node) episodeReservation(participants int) int {
 	if participants <= 0 {
 		return 0
 	}
-	return min(nominalReservation(participants, n.streamCost()), n.episodeCeiling())
+	return min(n.nominalReservation(participants), n.episodeCeiling())
 }
 
-// nominalReservation is c·n·(n+1) for at least two Participants, before the ceiling applies.
-func nominalReservation(participants, streamCost int) int {
-	count := max(participants, 2)
-	return streamCost * count * (count + 1)
+// nominalReservation is the peak above for at least two Participants, before the ceiling applies.
+func (n *Node) nominalReservation(participants int) int {
+	cfg, count := n.cfg, max(participants, 2)
+	cameras := cfg.CamerasPerParticipant
+	uplink := cameras*cfg.CameraUplinkCost + cfg.AudioStreamCost
+	downlink := cameras*cfg.VideoStreamCost + cfg.AudioStreamCost
+	screen := cfg.ScreenStreamCost + cfg.AudioStreamCost
+	return count*uplink + count*(count-1)*downlink + count*screen
 }
 
 // episodeCeiling is the most packets/s one Episode may use: the configured ceiling, never more
@@ -38,9 +47,10 @@ func (n *Node) episodeCeiling() int { return min(n.cfg.EpisodePacketCeiling, n.c
 // Participant, n·n audio hops, each camera's uplink, because the plan lowers only what
 // subscribers receive, and the screen share's video and audio to all n when one runs.
 func (n *Node) mandatoryPackets(participants int, screen bool) int {
-	packets := n.cfg.AudioStreamCost*participants*participants + n.cfg.VideoStreamCost*participants
+	cfg := n.cfg
+	packets := cfg.AudioStreamCost*participants*participants + cfg.CameraUplinkCost*cfg.CamerasPerParticipant*participants
 	if screen {
-		packets += (n.cfg.ScreenStreamCost + n.cfg.AudioStreamCost) * participants
+		packets += (cfg.ScreenStreamCost + cfg.AudioStreamCost) * participants
 	}
 	return packets
 }
@@ -48,8 +58,6 @@ func (n *Node) mandatoryPackets(participants int, screen bool) int {
 type episodeKey struct{ tenant, episode string }
 
 func episodeOf(scope protocol.Scope) episodeKey { return episodeKey{scope.TenantID, scope.EpisodeID} }
-
-func (n *Node) streamCost() int { return n.cfg.VideoStreamCost + n.cfg.AudioStreamCost }
 
 // NewEpisodePackets is the reservation of an Episode's first join: room for two Participants.
 func (n *Node) NewEpisodePackets() int { return n.episodeReservation(1) }

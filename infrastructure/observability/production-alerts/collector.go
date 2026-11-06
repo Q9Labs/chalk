@@ -278,7 +278,7 @@ func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
 	}
 	switch ready.Host.AdmissionReason {
 	case "":
-	case "cpu_steal", "pacer_queue_delay":
+	case "cpu_steal", "cpu_busy", "pacer_queue_delay", "pacer_drops", "udp_buffer_errors":
 		item.Reason = "admission_" + ready.Host.AdmissionReason
 		return item
 	default:

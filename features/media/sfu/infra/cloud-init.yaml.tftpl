@@ -1,6 +1,6 @@
 #cloud-config
 # Prepares an own-SFU node: rootless Podman for the chalk-sfu user, an 8 MiB
-# UDP receive buffer and a host firewall that matches the cloud firewall. It
+# UDP receive and send buffer and a host firewall that matches the cloud firewall. It
 # carries no secrets; `deploy` installs the image, certificates and settings.
 package_update: true
 packages:
@@ -12,6 +12,9 @@ write_files:
       # A burst of video from many publishers overflows the default ~208 KiB.
       net.core.rmem_max = 8388608
       net.core.rmem_default = 8388608
+      # The pacers send in bursts; a full send buffer drops outgoing media.
+      net.core.wmem_max = 8388608
+      net.core.wmem_default = 8388608
   - path: /etc/ssh/sshd_config.d/90-chalk-sfu.conf
     content: |
       PasswordAuthentication no

@@ -241,7 +241,10 @@ func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 	}
 	seq := t.assign(packet.class, size, now)
 	t.mu.Unlock()
-	t.delays.record(0)
+	// Audio never queues, so counting it would dilute the queue signal with zeros.
+	if packet.class != classAudio {
+		t.delays.record(0)
+	}
 	return w.transmit(packet, seq)
 }
 
@@ -259,12 +262,15 @@ func (t *transport) sendsNow(class packetClass) bool {
 }
 
 // enqueue copies a packet into the queue. A full queue drops fresh video,
-// which the allocator reads as congestion. The caller holds t.mu.
+// which the allocator reads as congestion. A drop counts as the time a packet
+// would have waited behind the queue, so a pacer that drops reads as slow. The
+// caller holds t.mu.
 func (t *transport) enqueue(packet *egressPacket, size int, now int64) bool {
 	if t.queuedBytes+size > t.queueLimit {
 		if packet.class == classVideo {
 			t.counters.Dropped++
 			t.dropsUnread = true
+			t.delays.record(time.Duration(float64(t.queuedBytes) * 8 / t.pace * float64(time.Second)))
 		}
 		return false
 	}

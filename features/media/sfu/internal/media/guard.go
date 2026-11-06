@@ -18,7 +18,11 @@ import (
 // Admission reasons the guard reports while it refuses new Episodes.
 const (
 	reasonCPUSteal        = "cpu_steal"
+	reasonCPUBusy         = "cpu_busy"
 	reasonPacerQueueDelay = "pacer_queue_delay"
+	reasonPacerDrops      = "pacer_drops"
+	reasonUDPBufferErrors = "udp_buffer_errors"
+	minGuardPacerDrops    = 100 // drops in a window below which the drop share is noise
 )
 
 // queueDelayBounds are the upper bounds of the pacer queue delay histogram. A
@@ -130,26 +134,48 @@ type HostHealth struct {
 	BusyPercent         float64
 	QueueDelayP95       time.Duration
 	SchedulerLatencyP99 time.Duration
+	// PacerDrops is the video the pacers dropped over the window, and PacerDropPercent its share of
+	// the video they dropped or sent.
+	PacerDrops       uint64
+	PacerDropPercent float64
+	// UDPReceiveErrorsPerSecond and UDPSendErrorsPerSecond are the host's datagrams dropped for a
+	// full socket buffer, averaged over the window. They read zero where the host reports none.
+	UDPReceiveErrorsPerSecond, UDPSendErrorsPerSecond float64
 }
 
+// pacerLoad is the node's cumulative video the pacers dropped and sent, since start.
+type pacerLoad struct{ dropped, sent uint64 }
+
 // guard closes admission of new Episodes while the host cannot serve them on
-// time: CPU steal above its threshold, or pacer queue delay p95 above its
-// threshold, each over the guard window. Existing Episodes keep running.
+// time: CPU steal or busy time, pacer queue delay p95, the share of video the
+// pacers drop, or UDP socket buffer errors above their thresholds, each over the
+// guard window. Existing Episodes keep running.
 type guard struct {
 	cfg       config.Guard
 	log       *slog.Logger
 	readSteal stealReader
+	readUDP   func() (udpErrors, bool)
 	delays    delayHistogram
 
 	mu        sync.Mutex
 	steal     []cpuTimes // one reading a second, oldest first, at most one window plus one
+	udp       []udpErrors
+	pacer     []pacerLoad
+	latest    pacerLoad // the node's latest counts, handed over by observePacer
 	delayRing [][queueDelayBuckets]uint64
 	sched     []metrics.Float64Histogram
 	health    HostHealth
 }
 
 func newGuard(cfg config.Guard, log *slog.Logger) *guard {
-	return &guard{cfg: cfg, log: log, readSteal: readProcStat}
+	return &guard{cfg: cfg, log: log, readSteal: readProcStat, readUDP: func() (udpErrors, bool) { return readUDPErrors(udpStatsPath) }}
+}
+
+// observePacer hands the guard the node's cumulative pacer counts for its next tick.
+func (g *guard) observePacer(load pacerLoad) {
+	g.mu.Lock()
+	g.latest = load
+	g.mu.Unlock()
 }
 
 // slots is how many one-second samples the window holds.
@@ -171,6 +197,7 @@ func (g *guard) snapshot() HostHealth {
 // tick takes one second's sample and reevaluates admission. The node calls it once a second.
 func (g *guard) tick() {
 	times, known := g.readSteal()
+	udp, udpKnown := g.readUDP()
 	delays := g.delays.collect()
 	sched := readSchedulerLatencies()
 
@@ -181,6 +208,12 @@ func (g *guard) tick() {
 	} else {
 		g.steal = g.steal[:0]
 	}
+	if udpKnown {
+		g.udp = appendBounded(g.udp, udp, slots+1)
+	} else {
+		g.udp = g.udp[:0]
+	}
+	g.pacer = appendBounded(g.pacer, g.latest, slots+1)
 	g.delayRing = appendBounded(g.delayRing, delays, slots)
 	if sched != nil {
 		g.sched = appendBounded(g.sched, *sched, slots+1)
@@ -202,15 +235,35 @@ func (g *guard) tick() {
 		}
 	}
 	health.QueueDelayP95 = percentile(window, 0.95)
+	if len(g.udp) > slots {
+		first, last := g.udp[0], g.udp[len(g.udp)-1]
+		seconds := float64(len(g.udp) - 1)
+		health.UDPReceiveErrorsPerSecond = float64(last.receive-first.receive) / seconds
+		health.UDPSendErrorsPerSecond = float64(last.send-first.send) / seconds
+	}
+	if len(g.pacer) > slots {
+		first, last := g.pacer[0], g.pacer[len(g.pacer)-1]
+		health.PacerDrops = last.dropped - first.dropped
+		if total := health.PacerDrops + last.sent - first.sent; total > 0 {
+			health.PacerDropPercent = 100 * float64(health.PacerDrops) / float64(total)
+		}
+	}
 	if len(g.sched) > 1 {
 		health.SchedulerLatencyP99 = histogramDeltaPercentile(g.sched[0], g.sched[len(g.sched)-1], 0.99)
 	}
-	// Steal needs a full window, so one busy second at boot never closes admission.
+	// Every rate needs a full window, so one busy second at boot never closes admission.
+	fullWindow := len(g.steal) > slots
 	switch {
-	case health.StealKnown && len(g.steal) > slots && health.StealPercent > g.cfg.MaxStealPercent:
+	case health.StealKnown && fullWindow && health.StealPercent > g.cfg.MaxStealPercent:
 		health.AdmissionReason = reasonCPUSteal
+	case health.StealKnown && fullWindow && health.BusyPercent > g.cfg.MaxBusyPercent:
+		health.AdmissionReason = reasonCPUBusy
 	case health.QueueDelayP95 > g.cfg.MaxQueueDelay:
 		health.AdmissionReason = reasonPacerQueueDelay
+	case health.PacerDrops >= minGuardPacerDrops && health.PacerDropPercent > g.cfg.MaxPacerDropPercent:
+		health.AdmissionReason = reasonPacerDrops
+	case max(health.UDPReceiveErrorsPerSecond, health.UDPSendErrorsPerSecond) > float64(g.cfg.MaxUDPErrorsPerSecond):
+		health.AdmissionReason = reasonUDPBufferErrors
 	}
 	previous := g.health.AdmissionReason
 	g.health = health
@@ -219,7 +272,11 @@ func (g *guard) tick() {
 	if health.AdmissionReason != previous {
 		attributes := []any{
 			"reason", health.AdmissionReason, "previousReason", previous,
-			"stealPercent", round2(health.StealPercent), "queueDelayP95Ms", health.QueueDelayP95.Milliseconds(),
+			"stealPercent", round2(health.StealPercent), "busyPercent", round2(health.BusyPercent),
+			"queueDelayP95Ms", health.QueueDelayP95.Milliseconds(),
+			"pacerDrops", health.PacerDrops, "pacerDropPercent", round2(health.PacerDropPercent),
+			"udpReceiveErrorsPerSecond", round2(health.UDPReceiveErrorsPerSecond),
+			"udpSendErrorsPerSecond", round2(health.UDPSendErrorsPerSecond),
 		}
 		if health.AdmissionReason != "" {
 			g.log.Warn("new Episodes refused", attributes...)

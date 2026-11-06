@@ -70,8 +70,8 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 			AdmissionReason: media.RefusedCPUSteal, StealKnown: true, StealPercent: 30, BusyPercent: 40,
 			QueueDelayP95: 20 * time.Millisecond, SchedulerLatencyP99: time.Millisecond,
 		},
-		UDPReceiveErrors: 7, UDPReceiveErrorsKnown: true,
-		CongestionPaused: 2, CappedCameras: 1, PausedCameras: 1,
+		UDPReceiveErrors: 7, UDPSendErrors: 3, UDPErrorsKnown: true,
+		CongestionPaused: 2, PlannerPaused: 1, CappedCameras: 1, PausedCameras: 1,
 		In:  []media.Flow{{Kind: "audio", PacketsPerSecond: 50, BitsPerSecond: 40000, Packets: 500, Bytes: 50000}},
 		Out: []media.Flow{{Kind: "repair", PacketsPerSecond: 5, BitsPerSecond: 6000, Packets: 11, Bytes: 13000}},
 		Totals: media.Totals{
@@ -86,10 +86,10 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 		"chalk.sfu.packet_budget": 16000, "chalk.sfu.packets.reserved": 2400,
 		"chalk.sfu.pacer.queue_delay.p95": 0.02, "chalk.sfu.scheduler.latency.p99": 0.001,
 		"chalk.sfu.host.cpu.steal": 0.3, "chalk.sfu.host.cpu.utilization": 0.4,
-		"chalk.sfu.subscriptions.congestion_paused": 2, "chalk.sfu.cameras.capped": 1, "chalk.sfu.cameras.paused": 1,
+		"chalk.sfu.subscriptions.congestion_paused": 2, "chalk.sfu.subscriptions.planner_paused": 1, "chalk.sfu.cameras.capped": 1, "chalk.sfu.cameras.paused": 1,
 		"chalk.sfu.pacer.drops": 4, "chalk.sfu.repairs.cut": 5, "chalk.sfu.nack.requested": 6,
 		"chalk.sfu.keyframe_repairs": 8, "chalk.sfu.rtx.received": 9, "chalk.sfu.layer.switches": 10,
-		"chalk.sfu.host.udp.receive_buffer_errors": 7,
+		"chalk.sfu.host.udp.receive_buffer_errors": 7, "chalk.sfu.host.udp.send_buffer_errors": 3,
 	}
 	for name, value := range want {
 		got := points[name]

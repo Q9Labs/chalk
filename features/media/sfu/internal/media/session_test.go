@@ -44,16 +44,21 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		MaxRequestBytes:            256 << 10,
 		PacketBudget:               1 << 20,
 		VideoStreamCost:            150,
+		CameraUplinkCost:           150,
+		CamerasPerParticipant:      1,
 		AudioStreamCost:            50,
 		MaxEpisodeParticipants:     16,
 		EpisodePacketCeiling:       1 << 20,
 		ScreenStreamCost:           210,
 		Memory:                     testMemory,
-		Guard:                      config.Guard{MaxStealPercent: 3, MaxQueueDelay: 50 * time.Millisecond, Window: 30 * time.Second},
-		NegotiationTimeout:         5 * time.Second,
-		ConnectTimeout:             30 * time.Second,
-		ShutdownTimeout:            5 * time.Second,
-		SourceLeaseTTL:             time.Hour,
+		Guard: config.Guard{
+			MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond,
+			MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second,
+		},
+		NegotiationTimeout: 5 * time.Second,
+		ConnectTimeout:     30 * time.Second,
+		ShutdownTimeout:    5 * time.Second,
+		SourceLeaseTTL:     time.Hour,
 	}
 	if mutate != nil {
 		mutate(&cfg)

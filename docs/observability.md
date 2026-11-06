@@ -348,12 +348,15 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
 `features/media/sfu/tests/impairment_test.go` scans the logs of impaired calls for those.
 
 - `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
-  the repair and probe parts of it, subscriptions paused for congestion, cameras
+  the repair and probe parts of it, subscriptions paused for congestion, subscriptions
+  the Episode plan pauses to hold its ceiling (`plannerPaused`), cameras
   the Episode ceilings cap or pause, pacer queue delay p95, Go scheduler latency
   p99, CPU steal where the host reports it, and the admission reason.
 - `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
-  the admission reason changes to or from `cpu_steal` or `pacer_queue_delay`,
-  with the steal and queue delay that decided it. Live Episodes keep admitting
+  the admission reason changes to or from `cpu_steal`, `cpu_busy`,
+  `pacer_queue_delay`, `pacer_drops` or `udp_buffer_errors`, with the readings
+  that decided it. Every refused join or screen share logs a `refused` warning
+  with its reason. Live Episodes keep admitting
   their Participants while new ones are refused.
 - `media readers still running after close` (error) when shutdown gave up
   waiting for a stream reader. A publisher that sent a second SSRC under a RID
@@ -361,7 +364,8 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
 
 To follow one subscriber, call the session's `inspect`. Each subscription shows
 its requested and effective RID, `state` and `reason` (`congestion` for a
-network pause), and its transport shows the estimate, proven rate, feedback age,
+network pause; the wire reason of a pause by the Episode plan is `congestion` too,
+and only `plannerPaused` and the metrics tell the two apart), and its transport shows the estimate, proven rate, feedback age,
 queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
 probes. The Episode block shows its packets/s against its ceiling. `/readyz`
 shows the host signals behind admission.
@@ -385,13 +389,16 @@ the export against `inspect` and for identities.
   `chalk.sfu.keyframe_repairs`, `chalk.sfu.rtx.received`,
   `chalk.sfu.layer.switches`, and `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
-  `cpu_steal`, `pacer_queue_delay`, `screen_ceiling`).
-- Quality and host: `chalk.sfu.subscriptions.congestion_paused`,
+  `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
+  `udp_buffer_errors`, `screen_ceiling`, `cameras`).
+- Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
+  only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
+  ceiling),
   `chalk.sfu.cameras.capped` and `.paused`, `chalk.sfu.pacer.queue_delay.p95`
   and `chalk.sfu.scheduler.latency.p99` in seconds, and
   `chalk.sfu.host.cpu.steal`, `chalk.sfu.host.cpu.utilization` (ratios over the
-  guard window) and `chalk.sfu.host.udp.receive_buffer_errors` where the host
-  reports them.
+  guard window) and `chalk.sfu.host.udp.receive_buffer_errors` and `.send_buffer_errors`
+  where the host reports them.
 - State and process: `chalk.sfu.draining` and `chalk.sfu.admission.closed`
   (1 or 0, with the admission reason), `process.cpu.time` and
   `process.memory.usage` (resident bytes, Linux).
@@ -449,8 +456,8 @@ failures directly to Discord.
 The collector also samples the own SFU's `/readyz` over mutual TLS when
 `CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
 grouped monitor alerts on four unhealthy minute samples in five minutes: a
-draining or unreachable node, a node that refuses new Episodes for CPU steal or
-pacer queue delay, or reserved packets at 90% of the packet budget. Only
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
+queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
 allowlisted reason codes are exported, never TLS or HTTP error text, response
 bodies or node identifiers. The freshness monitor does not count this row, so
 hosts without an SFU stay quiet. See the production-alerts README for setup.

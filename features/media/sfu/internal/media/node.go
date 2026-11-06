@@ -65,8 +65,8 @@ type Node struct {
 	mux         io.Closer
 	guard       *guard
 	done        chan struct{} // closed by Close; stops the node's control loop
-	// receiveBuffer is the UDP receive buffer the kernel granted, zero when unknown.
-	receiveBuffer int
+	// receiveBuffer and sendBuffer are the UDP socket buffers the kernel granted, zero when unknown.
+	receiveBuffer, sendBuffer int
 
 	wg sync.WaitGroup
 
@@ -119,7 +119,8 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen on UDP %q: %w", cfg.UDPAddr, err)
 	}
-	receiveBuffer := sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
+	receiveBuffer := receiveSocketBuffer.size(conn, cfg.UDPReceiveBuffer, log)
+	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
 	mux := webrtc.NewICEUDPMux(nil, conn)
 	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
@@ -136,6 +137,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		mux:           mux,
 		guard:         newGuard(cfg.Guard, log),
 		receiveBuffer: receiveBuffer,
+		sendBuffer:    sendBuffer,
 		done:          make(chan struct{}),
 		sessions:      map[string]*Session{},
 		participants:  map[participantKey]*Session{},
@@ -310,30 +312,6 @@ func (b feedbackBuffer) read(p []byte) {
 	}
 }
 
-// sizeReceiveBuffer requests the socket's receive buffer, logs what the kernel
-// granted and returns it, zero when unknown. At the kernel's usual default of
-// about 208 KiB a busy node drops packets, so the host must allow the request
-// through net.core.rmem_max. A refused or reduced request still serves, with a
-// warning. A request of zero keeps the kernel's default.
-func sizeReceiveBuffer(conn *net.UDPConn, requested int, log *slog.Logger) int {
-	if requested > 0 {
-		if err := conn.SetReadBuffer(requested); err != nil {
-			log.Warn("cannot set the UDP receive buffer", "requestedBytes", requested, "error", err)
-		}
-	}
-	granted, err := receiveBufferSize(conn)
-	switch {
-	case err != nil:
-		log.Warn("cannot read the UDP receive buffer size", "requestedBytes", requested, "error", err)
-		return 0
-	case granted < requested:
-		log.Warn("UDP receive buffer is below the request; raise net.core.rmem_max", "requestedBytes", requested, "grantedBytes", granted)
-	default:
-		log.Info("UDP receive buffer", "requestedBytes", requested, "grantedBytes", granted)
-	}
-	return granted
-}
-
 func randomHex(bytes int) string {
 	buffer := make([]byte, bytes)
 	if _, err := rand.Read(buffer); err != nil {
@@ -368,9 +346,10 @@ func (n *Node) Host() protocol.HostState {
 		QueueDelayP95Ms:       milliseconds(health.QueueDelayP95),
 		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
 		UDPReceiveBufferBytes: n.receiveBuffer,
+		UDPSendBufferBytes:    n.sendBuffer,
 	}
-	if errors, known := readUDPReceiveErrors(udpStatsPath); known {
-		state.UDPReceiveBufferErrors = &errors
+	if errs, known := readUDPErrors(udpStatsPath); known {
+		state.UDPReceiveBufferErrors, state.UDPSendBufferErrors = &errs.receive, &errs.send
 	}
 	if health.StealKnown {
 		steal := round2(health.StealPercent)
@@ -535,11 +514,19 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 		}
 	}
 	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
-		n.refusals[RefusedScreenCeiling]++
+		_ = n.refuse(RefusedScreenCeiling, nil)
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s
 	return "", ""
+}
+
+// refuseCamera counts a camera push over the Participant's reserved cameras. The caller may hold
+// the session's own mutex: nothing takes it while holding n.mu.
+func (n *Node) refuseCamera() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	_ = n.refuse(RefusedCameras, nil)
 }
 
 // releaseScreen frees the Episode's screen share when the session that holds it stops sharing.

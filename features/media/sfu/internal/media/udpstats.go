@@ -9,13 +9,17 @@ import (
 
 const udpStatsPath = "/proc/net/snmp"
 
-// readUDPReceiveErrors reads RcvbufErrors from the Udp lines of /proc/net/snmp:
-// a header line of field names, then a line of values. It reports false where
-// the host has no such file or field.
-func readUDPReceiveErrors(path string) (uint64, bool) {
+// udpErrors are the host's cumulative counts of UDP datagrams dropped because a socket buffer
+// was full, since boot.
+type udpErrors struct{ receive, send uint64 }
+
+// readUDPErrors reads RcvbufErrors and SndbufErrors from the Udp lines of /proc/net/snmp: a
+// header line of field names, then a line of values. It reports false where the host has no
+// such file or field.
+func readUDPErrors(path string) (udpErrors, bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return 0, false
+		return udpErrors{}, false
 	}
 	defer func() { _ = file.Close() }()
 	var names []string
@@ -29,13 +33,28 @@ func readUDPReceiveErrors(path string) (uint64, bool) {
 			names = fields
 			continue
 		}
+		var errs udpErrors
+		found := 0
 		for index, name := range names {
-			if name == "RcvbufErrors" && index < len(fields) {
-				value, err := strconv.ParseUint(fields[index], 10, 64)
-				return value, err == nil
+			if index >= len(fields) {
+				break
+			}
+			switch name {
+			case "RcvbufErrors":
+				errs.receive = parseCounter(fields[index], &found)
+			case "SndbufErrors":
+				errs.send = parseCounter(fields[index], &found)
 			}
 		}
-		return 0, false
+		return errs, found == 2
 	}
-	return 0, false
+	return udpErrors{}, false
+}
+
+func parseCounter(field string, found *int) uint64 {
+	value, err := strconv.ParseUint(field, 10, 64)
+	if err == nil {
+		*found++
+	}
+	return value
 }

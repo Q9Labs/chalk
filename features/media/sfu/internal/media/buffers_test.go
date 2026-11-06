@@ -50,20 +50,29 @@ func TestReadinessReportsTheGrantedReceiveBuffer(t *testing.T) {
 	}
 }
 
-func TestUDPReceiveErrorsReadTheRcvbufErrorsField(t *testing.T) {
+// The pacers send in bursts, so readiness also reports the send buffer the kernel granted.
+func TestReadinessReportsTheGrantedSendBuffer(t *testing.T) {
+	const requested = 64 << 10 // below every kernel's default wmem_max
+	node := newTestNode(t, func(cfg *config.Config) { cfg.UDPSendBuffer = requested })
+	if got := node.Host().UDPSendBufferBytes; got < requested {
+		t.Fatalf("readiness reports a %d-byte send buffer, want at least the %d requested", got, requested)
+	}
+}
+
+func TestUDPErrorsReadTheBufferErrorFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "snmp")
 	snmp := "Ip: Forwarding DefaultTTL\nIp: 1 64\n" +
 		"Udp: InDatagrams NoPorts InErrors OutDatagrams RcvbufErrors SndbufErrors InCsumErrors IgnoredMulti MemErrors\n" +
-		"Udp: 9120 3 41 8800 37 0 0 0 0\n" +
+		"Udp: 9120 3 41 8800 37 12 0 0 0\n" +
 		"UdpLite: InDatagrams NoPorts InErrors OutDatagrams RcvbufErrors SndbufErrors InCsumErrors IgnoredMulti MemErrors\n" +
-		"UdpLite: 0 0 0 0 5 0 0 0 0\n"
+		"UdpLite: 0 0 0 0 5 6 0 0 0\n"
 	if err := os.WriteFile(path, []byte(snmp), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, ok := readUDPReceiveErrors(path); !ok || got != 37 {
-		t.Fatalf("RcvbufErrors = %d, %v; want 37 from the Udp line", got, ok)
+	if got, ok := readUDPErrors(path); !ok || got != (udpErrors{receive: 37, send: 12}) {
+		t.Fatalf("UDP errors = %+v, %v; want receive 37 and send 12 from the Udp line", got, ok)
 	}
-	if _, ok := readUDPReceiveErrors(filepath.Join(t.TempDir(), "absent")); ok {
-		t.Fatal("a host without /proc/net/snmp must report the count as unknown")
+	if _, ok := readUDPErrors(filepath.Join(t.TempDir(), "absent")); ok {
+		t.Fatal("a host without /proc/net/snmp must report the counts as unknown")
 	}
 }

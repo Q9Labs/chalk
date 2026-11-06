@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -66,13 +67,14 @@ func keyframe(frame []byte) bool { return frame[0]&0x01 == 0 }
 // every frame and puts each keyframe's first packet second, and ignores
 // keyframe requests, so a switch waits for the layer's next natural keyframe.
 type simulcastPublisher struct {
-	tracks   [2]*webrtc.TrackLocalStaticRTP // a single-encoding source leaves the second nil
-	fixtures [2]layerFixture
-	midID    uint8
-	ridID    uint8 // 0 for a single-encoding source
-	mid      string
-	chunks   [2]int        // payload bytes per packet of each layer; 0 is vp8Chunk
-	sent     *atomic.Int64 // counts every packet written, when set
+	tracks     [2]*webrtc.TrackLocalStaticRTP // a single-encoding source leaves the second nil
+	fixtures   [2]layerFixture
+	midID      uint8
+	ridID      uint8 // 0 for a single-encoding source
+	mid        string
+	chunks     [2]int        // payload bytes per packet of each layer; 0 is vp8Chunk
+	frameBytes [2]int        // pads each layer's frames to at least this size; 0 keeps them
+	sent       *atomic.Int64 // counts every packet written, when set
 
 	mu      sync.Mutex
 	enabled [2]bool
@@ -102,6 +104,9 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 	ticker := time.NewTicker(time.Second / 30)
 	defer ticker.Stop()
 	fixture := p.fixtures[layer]
+	if size := p.frameBytes[layer]; size > 0 {
+		fixture.frames = padFrames(fixture.frames, size)
+	}
 	chunk := cmp.Or(p.chunks[layer], vp8Chunk)
 	seq := uint16(65500 - 100*layer)
 	timestamp := uint32(0xFFFFFFFF - 20*frameTicks)
@@ -151,6 +156,15 @@ func (p *simulcastPublisher) send(ctx context.Context, layer int) {
 		pictureID = (pictureID + 1) & 0x7FFF
 		tl0++
 	}
+}
+
+// padFrames returns the frames with zeros appended to at least size bytes.
+func padFrames(frames [][]byte, size int) [][]byte {
+	padded := make([][]byte, len(frames))
+	for index, frame := range frames {
+		padded[index] = append(slices.Clone(frame), make([]byte, max(0, size-len(frame)))...)
+	}
+	return padded
 }
 
 // videoReceiver keeps every video packet one subscriber receives, and the

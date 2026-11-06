@@ -107,8 +107,9 @@ type mediaStats struct {
 	packets  float64 // every Episode's measured packets/s
 	repair   float64 // retransmitted packets/s across subscriber transports
 	probe    float64
-	// congested counts video subscriptions paused for congestion.
-	congested int
+	// congested counts video subscriptions their own downlink pauses; plannerPaused those an
+	// Episode plan pauses to hold its packet ceiling, however good the downlink is.
+	congested, plannerPaused int
 	// in and out are the node's media rates over the last second; totals its counts since start.
 	in     [ingressKinds]flowRate
 	out    [packetClasses]flowRate
@@ -181,16 +182,19 @@ func (n *Node) allocate() {
 			allocateSession(session, episode.room, now)
 		}
 		for _, subscription := range episode.subscriptions {
-			limit := subscription.alloc.limit()
+			link := subscription.alloc.limit()
 			if !subscription.pub.video() {
-				limit = serverLimit{}
+				link = serverLimit{}
 			}
-			limit = limit.capped(subscription.pub.plan)
+			limit := link.capped(subscription.pub.plan)
 			subscription.setServerLimit(limit)
 			if subscription.pub.video() {
 				n.totals.counts.LayerSwitches += subscription.takeSwitches()
-				if limit.paused {
+				switch {
+				case link.paused:
 					stats.congested++
+				case limit.paused:
+					stats.plannerPaused++
 				}
 			}
 		}

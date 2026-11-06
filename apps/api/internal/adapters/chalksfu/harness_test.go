@@ -180,6 +180,12 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 		// A source forwards only under a grant. The longest lease outlasts a test that
 		// grants once, and a test of lapses sets its own.
 		"SFU_SOURCE_LEASE_TTL=2m",
+		// One camera per Participant at 150 packets/s a hop, so a stream pair costs 200 and the
+		// budget tests below can count in whole pairs. A test sets its own costs after these.
+		"SFU_CAMERAS_PER_PARTICIPANT=1",
+		"SFU_CAMERA_UPLINK_COST=150",
+		"SFU_VIDEO_STREAM_COST=150",
+		"SFU_SCREEN_STREAM_COST=150",
 	)
 	for key, value := range settings {
 		env = append(env, key+"="+value)
