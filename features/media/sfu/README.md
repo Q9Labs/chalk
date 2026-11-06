@@ -7,7 +7,7 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
 ## What it does
 
 - **Control** on TCP 8443 over mutual TLS (TLS 1.3). The server certificate and the client CA come from files. The client certificate must also name the expected service (`SFU_CLIENT_IDENTITY`, a DNS or URI SAN), so a certificate from the right CA but another service gets 403. The listener binds all interfaces by default, because the service is public: mutual TLS and the cloud firewall guard it. Set `SFU_CONTROL_ADDR` to bind elsewhere.
-- **Health**: `GET /healthz` (process is up, no identifiers) and `GET /readyz` (node incarnation, session count, packet budget, reserved packets and what a new Episode would reserve; 503 while draining). Both sit on the same mutual-TLS listener, and `/readyz` also needs the service identity, like `/v1`.
+- **Health**: `GET /healthz` (process is up, no identifiers) and `GET /readyz` (node incarnation, session count, packet budget, reserved packets and what a new Episode would reserve, the UDP receive buffer the kernel granted and the host's receive-buffer drops; 503 while draining). Both sit on the same mutual-TLS listener, and `/readyz` also needs the service identity, like `/v1`.
 - **Sessions** under `/v1`, each scoped to Tenant, Episode, Participant and generation:
   - `POST /v1/sessions` creates a session. The operation ID makes a retry return the same connection ID, also after that session closed, and reusing it with another body fails with 409. The node keeps the create records of the last 4096 closed sessions. A create with a new operation ID closes the Participant's live session and replaces it, at a newer or the same generation, because the API replaces a media connection that way; an older generation is refused.
   - `POST /v1/sessions/{id}/tracks` pushes local tracks (client offer, SFU answer) or pulls remote tracks (no SDP, SFU offer). A request is all local or all remote. Failed tracks return per-track errors while the rest succeed. A push with an offer and no tracks renegotiates the connection in place, so a client's ICE restart gets an answer with the new credentials and keeps its publications and subscriptions.
@@ -93,7 +93,7 @@ go run ./cmd/sfu
 
 ## Deploy
 
-Set `net.core.rmem_max` and `net.core.rmem_default` to 8 MiB (`8388608`) on the host, for example in `/etc/sysctl.d/90-chalk-sfu.conf`. The kernel caps a socket's receive buffer at `rmem_max`, and Linux defaults it to about 208 KiB, which a burst of video from many publishers overflows as UDP receive errors. At start the node logs the size it requested and the size the kernel granted, and warns when it got less.
+Set `net.core.rmem_max` and `net.core.rmem_default` to 8 MiB (`8388608`) on the host, for example in `/etc/sysctl.d/90-chalk-sfu.conf`. The kernel caps a socket's receive buffer at `rmem_max`, and Linux defaults it to about 208 KiB, which a burst of video from many publishers overflows as UDP receive errors. At start the node logs the size it requested and the size the kernel granted, and warns when it got less. `/readyz` reports the granted size as `host.udpReceiveBufferBytes` and the host's `RcvbufErrors` as `host.udpReceiveBufferErrors`, so a rising count shows ingress loss from a full buffer.
 
 SIGINT or SIGTERM drains the node: `/readyz` fails, new sessions are refused, in-flight requests finish, then every session, the control listener and the UDP socket close.
 
