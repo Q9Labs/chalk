@@ -307,11 +307,22 @@ func TestBatchConnKeepsOrderWhenTheQueueOverflows(t *testing.T) {
 	_ = peer.SetReadBuffer(4 << 20)
 	addr := peer.LocalAddr().(*net.UDPAddr).AddrPort()
 	const total = 3*batchRing + 5
-	for i := range total {
-		if _, err := conn.WriteToAddrPort(datagram(0, uint32(i), 300+i%7), addr); err != nil {
-			t.Fatal(err)
+	// The peer reads while the writes go on: the whole run would overflow its receive buffer.
+	failed := make(chan error, 1)
+	go func() {
+		for i := range total {
+			if _, err := conn.WriteToAddrPort(datagram(0, uint32(i), 300+i%7), addr); err != nil {
+				failed <- err
+				return
+			}
 		}
-	}
+		failed <- nil
+	}()
+	defer func() {
+		if err := <-failed; err != nil {
+			t.Error(err)
+		}
+	}()
 	buf := make([]byte, 2048)
 	for i := range total {
 		_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
