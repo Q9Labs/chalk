@@ -33,9 +33,13 @@ const (
 	// batchRecv is the datagrams one recvmmsg returns at most.
 	batchRecv = 32
 	// batchRing is the datagrams queued for the writer. A caller that finds the
-	// queue full sends it first, so a slow socket pushes back on forwarders and
-	// no datagram overtakes an earlier one.
-	batchRing = 256
+	// queue full waits, so a slow socket pushes back on forwarders and no
+	// datagram overtakes an earlier one. The one writer's sendmmsg sometimes
+	// stalls for 5 to 25 ms, mostly when the host steals its vCPU. Every
+	// forwarder on the node stops for that long once the queue is full, which
+	// 256 datagrams were (5 ms at 50,000 packets/s). 2048 hold a 25 ms stall at
+	// 80,000 packets/s, which is as much as a 2 vCPU node carries.
+	batchRing = 2048
 	// gsoSegments is the kernel's limit of segments in one UDP_SEGMENT datagram.
 	gsoSegments = 64
 	// gsoPayloadMax keeps a train under the 65507 bytes a UDP datagram can carry; a larger one
