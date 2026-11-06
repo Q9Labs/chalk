@@ -11,7 +11,7 @@ export function toActiveScreenShare(participants: readonly Participant[]): Parti
 }
 
 export function toVideoParticipants(participants: readonly SpaceParticipant[], remoteMedia: readonly RemoteMedia[], localId: string, displayName: string, localMedia: Readonly<Record<MediaSource, LocalMedia>>): Participant[] {
-  const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>>>();
+  const remoteByParticipant = new Map<string, Partial<Record<"camera" | "screen", MediaStreamTrack>> & { cameraPausedForNetwork?: true }>();
   const stateByParticipant = new Map(participants.map((participant) => [participant.participantId, participant.media]));
   for (const publication of remoteMedia) {
     if (publication.source === "microphone" || publication.source === "screen_audio") continue;
@@ -19,6 +19,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     if (!state || (publication.source === "camera" ? state.camera : state.screenShare) !== "active") continue;
     const media = remoteByParticipant.get(publication.participantId) ?? {};
     media[publication.source] = publication.track;
+    if (publication.source === "camera" && publication.pausedForNetwork) media.cameraPausedForNetwork = true;
     remoteByParticipant.set(publication.participantId, media);
   }
   const localFromSync = participants.find((participant) => participant.participantId === localId);
@@ -52,6 +53,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isVideoEnabled: participant.media.camera === "active" && Boolean(media?.camera),
       isScreenSharing: participant.media.screenShare === "active" && Boolean(media?.screen),
       isHandRaised: participant.handRaised,
+      ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
       videoTrack: media?.camera,
       screenShareTrack: media?.screen,
       videoPublicationId: participant.media.cameraPublicationId,

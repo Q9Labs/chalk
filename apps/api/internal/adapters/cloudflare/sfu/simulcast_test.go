@@ -3,6 +3,7 @@ package sfu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -88,5 +89,22 @@ func TestUpdateTracksSurfacesPerTrackProviderErrors(t *testing.T) {
 	}})
 	if err == nil {
 		t.Fatal("a rejected layer switch must not look applied")
+	}
+}
+
+func TestUpdateTracksRefusesPauseInPlace(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	defer server.Close()
+	adapter, err := NewAdapterWithClient(config.CloudflareRealtimeConfig{RealtimeAppID: "test-app", RealtimeAppSecret: "test-secret", RequestTimeout: time.Second}, server.Client(), server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paused := true
+	_, err = adapter.UpdateTracks(context.Background(), mediaplane.UpdateTracksRequest{ConnectionID: "viewer", Tracks: []mediaplane.Track{
+		{Location: "remote", Mid: "3", TrackName: "camera", SessionID: "publisher", Paused: &paused},
+	}})
+	if !errors.Is(err, mediaplane.ErrInvalidSignalRequest) || called {
+		t.Fatalf("Cloudflare must refuse a pause in place before calling the provider: err=%v called=%v", err, called)
 	}
 }

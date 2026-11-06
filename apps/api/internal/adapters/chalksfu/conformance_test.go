@@ -76,7 +76,7 @@ func TestConformanceSignaling(t *testing.T) {
 
 	aliceConn, joined := join(t, service, alice)
 	capabilities, _ := joined.ClientPayload["capabilities"].(map[string]any)
-	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != false || capabilities["iceRestart"] != false {
+	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != true || capabilities["subscriptionState"] != true || capabilities["iceRestart"] != false {
 		t.Fatalf("join payload advertises the wrong provider or capabilities: %+v", joined.ClientPayload)
 	}
 	bobConn, _ := join(t, service, bob)
@@ -152,6 +152,45 @@ func TestConformanceSignaling(t *testing.T) {
 		if err != nil || updated.RequiresImmediateRenegotiation || updated.SessionDescription != nil || len(updated.TrackErrors) != 0 {
 			t.Fatalf("layer update = %+v, %v", updated, err)
 		}
+	})
+
+	t.Run("a pause in place stops delivery, keeps the MID and reports its state", func(t *testing.T) {
+		paused, resumed := true, false
+		subscription := mediaplane.Track{Location: "remote", Mid: bobMid, TrackName: "alice-mic", SessionID: aliceConn}
+		read := func() mediaplane.SubscriptionState {
+			t.Helper()
+			states, err := service.SubscriptionStates(ctx, mediaplane.SubscriptionStatesRequest{ConnectionID: bobConn, Scope: bob})
+			if err != nil || len(states) != 1 || states[0].Mid != bobMid || states[0].SessionID != aliceConn || states[0].TrackName != "alice-mic" {
+				t.Fatalf("subscription states = %+v, %v", states, err)
+			}
+			return states[0]
+		}
+		before := read()
+		if before.State != mediaplane.SubscriptionActive || before.Reason != "" {
+			t.Fatalf("flowing subscription = %+v", before)
+		}
+		subscription.Paused = &paused
+		updated, err := service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: bobConn, Scope: bob, Tracks: []mediaplane.Track{subscription}})
+		if err != nil || updated.RequiresImmediateRenegotiation || updated.SessionDescription != nil || len(updated.TrackErrors) != 0 {
+			t.Fatalf("pause = %+v, %v", updated, err)
+		}
+		during := read()
+		if during.State != mediaplane.SubscriptionPaused || during.Reason != mediaplane.PauseViewer || during.Revision <= before.Revision {
+			t.Fatalf("paused subscription = %+v after %+v", during, before)
+		}
+		held := subscriber.received.Load()
+		time.Sleep(300 * time.Millisecond)
+		if delivered := subscriber.received.Load() - held; delivered > 2 {
+			t.Fatalf("a paused subscription still delivered %d packets", delivered)
+		}
+		subscription.Paused = &resumed
+		if _, err := service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: bobConn, Scope: bob, Tracks: []mediaplane.Track{subscription}}); err != nil {
+			t.Fatalf("resume: %v", err)
+		}
+		if after := read(); after.State != mediaplane.SubscriptionActive || after.Revision <= during.Revision {
+			t.Fatalf("resumed subscription = %+v", after)
+		}
+		eventually(t, "media to resume", 10*time.Second, func() bool { return subscriber.received.Load() >= held+20 })
 	})
 
 	t.Run("inspect sees own and peer sessions and a gone one as absent", func(t *testing.T) {
@@ -460,5 +499,44 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 	binding, err := registry.ResolveBinding(tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, ownSFUClients)
 	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderChalkSFU) {
 		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
+	}
+}
+
+// Against the real SFU binary: a subscription to a source without a live grant reads
+// paused with source_unauthorized, and the read still reports the granted one.
+func TestSubscriptionStatesReportAnUngrantedSource(t *testing.T) {
+	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "200000"})
+	service := box.service(t)
+	ctx := context.Background()
+	alice, carol, bob := scopeOf("ep-unauthorized", "alice"), scopeOf("ep-unauthorized", "carol"), scopeOf("ep-unauthorized", "bob")
+	box.grant(t, alice)
+	aliceConn, _ := join(t, service, alice)
+	carolConn, _ := join(t, service, carol)
+	bobConn, _ := join(t, service, bob)
+	publish(t, service, aliceConn, alice, "alice-mic", "microphone")
+	publish(t, service, carolConn, carol, "carol-mic", "microphone")
+	subscriber := newPeer(t)
+	pulled, err := service.AddTracks(ctx, mediaplane.TracksRequest{
+		ConnectionID: bobConn, Scope: bob,
+		Tracks: []mediaplane.Track{{Location: "remote", SessionID: aliceConn, TrackName: "alice-mic"}, {Location: "remote", SessionID: carolConn, TrackName: "carol-mic"}},
+	})
+	if err != nil || len(pulled.Tracks) != 2 {
+		t.Fatalf("pull = %+v, %v", pulled, err)
+	}
+	if err := service.Renegotiate(ctx, mediaplane.RenegotiateRequest{ConnectionID: bobConn, Scope: bob, SessionDescription: subscriber.answer(t, pulled.SessionDescription)}); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+
+	states, err := service.SubscriptionStates(ctx, mediaplane.SubscriptionStatesRequest{ConnectionID: bobConn, Scope: bob})
+	if err != nil {
+		t.Fatalf("an ungranted source must not fail the whole read: %v", err)
+	}
+	reasons := map[string]string{}
+	for _, state := range states {
+		reasons[state.TrackName] = state.State + "/" + state.Reason
+	}
+	unauthorized := mediaplane.SubscriptionPaused + "/" + mediaplane.PauseSourceUnauthorized
+	if len(states) != 2 || reasons["carol-mic"] != unauthorized || reasons["alice-mic"] == unauthorized {
+		t.Fatalf("subscription states = %+v", states)
 	}
 }

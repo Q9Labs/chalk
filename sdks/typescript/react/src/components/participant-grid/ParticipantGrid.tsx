@@ -23,6 +23,8 @@ export interface Participant {
   isMuted?: boolean;
   /** Camera on. Screen sharing is reported separately via `isScreenSharing`. */
   isVideoEnabled?: boolean;
+  /** The SFU stopped this camera because the viewer's link is too slow. It returns on its own. */
+  isVideoPausedForNetwork?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
   handRaiseOrder?: number;

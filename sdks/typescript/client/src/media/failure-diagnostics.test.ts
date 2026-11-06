@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyMediaFailure, markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
-import { CloudflareSFUError } from "./types";
+import { CloudflareSFUError, type CloudflareSFUSignalingTransport } from "./types";
 import { createCloudflareSFUHTTPTransport } from "./transport";
 
 describe("media failure diagnostics", () => {
@@ -20,7 +20,7 @@ describe("media failure diagnostics", () => {
     await expect(transport.listPublications()).rejects.toBe(error);
     expect(classifyMediaFailure(new Error("wrapper", { cause: error }), "peer_connection")).toEqual({ media_error_kind: "network", media_error_step: "sfu_publications" });
   });
-  it.each(["tracks", "close_tracks", "renegotiate", "publications"] as const)("preserves error identity and identifies the SFU %s call", async (operation) => {
+  it.each(["tracks", "close_tracks", "renegotiate", "publications", "subscriptions"] as const)("preserves error identity and identifies the SFU %s call", async (operation) => {
     const error = new TypeError("private URL and token");
     const transport = createCloudflareSFUHTTPTransport({
       apiBaseURL: "https://private.test",
@@ -40,9 +40,28 @@ describe("media failure diagnostics", () => {
           ? transport.closeTracks({ connectionId: "private", tracks: [], force: true })
           : operation === "renegotiate"
             ? transport.renegotiate({ connectionId: "private", sessionDescription: { type: "answer", sdp: "private" } })
-            : transport.listPublications();
+            : operation === "subscriptions"
+              ? listSubscriptions(transport)
+              : transport.listPublications();
     await expect(pending).rejects.toBe(error);
     expect(classifyMediaFailure(error, "peer_connection")).toEqual({ media_error_kind: "network", media_error_step: `sfu_${operation}` });
+  });
+  it("reads subscription state from the participant's media route and maps it to the SDK's names", async () => {
+    const requests: string[] = [];
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "https://api.test/",
+      bearerToken: "token",
+      tenantId: "t",
+      spaceId: "s",
+      episodeId: "e",
+      participantId: "p",
+      fetch: async (url) => {
+        requests.push(String(url));
+        return Response.json({ subscriptions: [{ mid: "2", session_id: "publisher", track_name: "camera", state: "paused", reason: "congestion", revision: 4, requested_rid: "h" }] });
+      },
+    });
+    await expect(listSubscriptions(transport)).resolves.toEqual([{ mid: "2", sessionId: "publisher", trackName: "camera", state: "paused", reason: "congestion", revision: 4, requestedRid: "h" }]);
+    expect(requests).toEqual(["https://api.test/v1/tenants/t/spaces/s/episodes/e/participants/p/media/sfu/subscriptions"]);
   });
   it.each(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError"])("allowlists %s without its private message", (name) => {
     expect(classifyMediaFailure(new DOMException("private device label", name), "local_capture")).toEqual({ media_error_kind: name, media_error_step: "local_capture" });
@@ -71,3 +90,8 @@ describe("media failure diagnostics", () => {
     expect(classifyMediaFailure(new CloudflareSFUError("private", "signaling_failed", { status: 999 }), "sfu_tracks")).not.toHaveProperty("http_status");
   });
 });
+
+function listSubscriptions(transport: CloudflareSFUSignalingTransport) {
+  if (!transport.listSubscriptions) throw new Error("the HTTP transport reads subscription state");
+  return transport.listSubscriptions();
+}

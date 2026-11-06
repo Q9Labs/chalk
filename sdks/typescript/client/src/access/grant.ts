@@ -22,7 +22,10 @@ export type ParticipantSyncAccess = {
 };
 /** What the own SFU can do for this connection. A flag the server does not send as `true` is off. */
 export type ChalkSFUCapabilities = {
+  /** The SFU picks each subscriber's layer under the requested one, so a requested layer is a ceiling. */
   readonly serverLayerAdaptation: boolean;
+  /** The SFU reports whether it delivers each remote video, and pauses one in place on request. */
+  readonly subscriptionState: boolean;
   readonly iceRestart: boolean;
 };
 export type CloudflareSFUClientPayload = {
@@ -209,7 +212,7 @@ function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): Chalk
 }
 function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
   const flags = isRecord(value) ? value : {};
-  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, iceRestart: flags.iceRestart === true };
+  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true };
 }
 function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
   if (!Array.isArray(value)) throw new AccessGrantError();

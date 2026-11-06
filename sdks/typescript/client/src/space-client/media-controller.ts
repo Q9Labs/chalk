@@ -13,7 +13,7 @@ import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 const OFF_RETRY_INITIAL_MS = 1000;
@@ -1510,7 +1510,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       camera: this.#confirmedLocal("camera"),
       screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
-    const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
+    const pausedForNetwork = new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
+    const remote = Object.freeze(
+      (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
+    );
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
@@ -1585,7 +1588,11 @@ function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlic
   return left.source === right.source && left.state === right.state && left.track === right.track;
 }
 function sameRemoteMedia(left: MediaSlice["remote"], right: MediaSlice["remote"]): boolean {
-  return left.length === right.length && left.every((track, index) => track.participantId === right[index]?.participantId && track.source === right[index]?.source && track.publicationId === right[index]?.publicationId && track.track === right[index]?.track);
+  return left.length === right.length && left.every((track, index) => sameRemoteTrack(track, right[index]));
+}
+function sameRemoteTrack(left: RemoteMedia, right: RemoteMedia | undefined): boolean {
+  if (!right) return false;
+  return left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track && left.pausedForNetwork === right.pausedForNetwork;
 }
 function sameRequests(left: MediaSlice["incomingRequests"], right: MediaSlice["incomingRequests"]): boolean {
   return left.length === right.length && left.every((request, index) => sameRequest(request, right[index]));

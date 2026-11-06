@@ -814,6 +814,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List s f u subscriptions */
+    get: operations["listSFUSubscriptions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks": {
     parameters: {
       query?: never;
@@ -1365,6 +1382,7 @@ export interface components {
         recv_height?: number | null;
         recv_jitter_ms?: number | null;
         recv_loss_pct?: number | null;
+        recv_paused_videos?: number | null;
         /** @enum {string} */
         relay_protocol?: "udp" | "tcp" | "tls";
         /** @enum {string} */
@@ -1458,6 +1476,7 @@ export interface components {
       tracks: {
         location: string;
         mid?: string;
+        paused?: boolean | null;
         publication_id?: string;
         sessionId?: string;
         simulcast?: {
@@ -1483,6 +1502,7 @@ export interface components {
       tracks?: {
         location: string;
         mid?: string;
+        paused?: boolean | null;
         publication_id?: string;
         sessionId?: string;
         simulcast?: {
@@ -1499,6 +1519,7 @@ export interface components {
       tracks: {
         location: string;
         mid?: string;
+        paused?: boolean | null;
         publication_id?: string;
         sessionId?: string;
         simulcast?: {
@@ -1575,7 +1596,7 @@ export interface components {
         /** @enum {string} */
         media_error_kind?: "NotAllowedError" | "NotReadableError" | "NotFoundError" | "OverconstrainedError" | "AbortError" | "SecurityError" | "InvalidStateError" | "OperationError" | "NotSupportedError" | "CloudflareSFUError" | "network" | "timeout" | "unknown";
         /** @enum {string} */
-        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications";
+        media_error_step?: "local_capture" | "peer_connection" | "access_refresh" | "sfu_tracks" | "sfu_close_tracks" | "sfu_renegotiate" | "sfu_publications" | "sfu_subscriptions";
         /** @enum {string} */
         outcome?: "started" | "succeeded" | "failed" | "cancelled";
         /** @enum {string} */
@@ -2205,6 +2226,20 @@ export interface components {
       previous_secret_expires_at: components["schemas"]["DateTimeString"] | null;
       revision: number;
       secret: string;
+    };
+    SFUSubscriptionsResponse: {
+      subscriptions: {
+        effective_rid?: string;
+        mid: string;
+        /** @enum {string} */
+        reason?: "congestion" | "viewer" | "source_inactive" | "source_unauthorized";
+        requested_rid?: string;
+        revision: number;
+        session_id: string;
+        /** @enum {string} */
+        state: "active" | "paused";
+        track_name: string;
+      }[];
     };
     SetEpisodeDeadlineRequest: {
       deadline_at: components["schemas"]["DateTimeString"];
@@ -8217,6 +8252,97 @@ export interface operations {
       };
       /** @description Request Entity Too Large */
       413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  listSFUSubscriptions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SFUSubscriptionsResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

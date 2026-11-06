@@ -38,6 +38,11 @@ type Track struct {
 	SessionID     string     `json:"sessionId,omitempty"`
 	Source        string     `json:"source,omitempty"`
 	PublicationID string     `json:"publication_id,omitempty"`
+	// Paused, on an update of a remote subscription, stops or resumes its video in
+	// place: the MID and track stay, and no SDP moves. An update that carries only a
+	// simulcast policy also resumes, so a client keeps paused tracks out of layer
+	// updates. Only a plane that reports subscription state accepts it.
+	Paused *bool `json:"paused,omitempty"`
 }
 
 type TracksRequest struct {
@@ -120,6 +125,44 @@ type SessionState struct {
 	Tracks []SessionTrack
 }
 
+// Subscription delivery states and the reasons for a pause, as the own SFU reports them.
+const (
+	SubscriptionActive  = "active"
+	SubscriptionPaused  = "paused"
+	PauseCongestion     = "congestion"
+	PauseViewer         = "viewer"
+	PauseSourceInactive = "source_inactive"
+	// PauseSourceUnauthorized: the source has no live grant, so the SFU forwards none of it.
+	PauseSourceUnauthorized = "source_unauthorized"
+)
+
+// SubscriptionState is how the plane delivers one remote subscription of the
+// caller's connection. Revision rises on every change of State or Reason, so a
+// reader keeps the highest it has seen. EffectiveRID is the layer being
+// forwarded: empty while paused, before the first keyframe, or for a track
+// without layers.
+type SubscriptionState struct {
+	Mid          string
+	SessionID    string
+	TrackName    string
+	State        string
+	Reason       string
+	Revision     uint64
+	RequestedRID string
+	EffectiveRID string
+}
+
+type SubscriptionStatesRequest struct {
+	ConnectionID string
+	Scope        Scope
+}
+
+// SubscriptionReportingPlane reports how it delivers each remote subscription,
+// such as a video it paused because the subscriber's downlink cannot carry it.
+type SubscriptionReportingPlane interface {
+	SubscriptionStates(context.Context, SubscriptionStatesRequest) ([]SubscriptionState, error)
+}
+
 type SignalingPlane interface {
 	AddTracks(context.Context, TracksRequest) (TracksResponse, error)
 	Renegotiate(context.Context, RenegotiateRequest) error
@@ -185,6 +228,18 @@ func (s Service) InspectSession(ctx context.Context, input InspectSessionRequest
 	return inspecting.InspectSession(ctx, input)
 }
 
+func (s Service) SubscriptionStates(ctx context.Context, input SubscriptionStatesRequest) ([]SubscriptionState, error) {
+	reporting, ok := s.plane.(SubscriptionReportingPlane)
+	if !ok {
+		return nil, ErrUnsupportedOperation
+	}
+	trimmed := strings.TrimSpace(input.ConnectionID)
+	if trimmed == "" || trimmed != input.ConnectionID {
+		return nil, ErrInvalidSignalRequest
+	}
+	return reporting.SubscriptionStates(ctx, input)
+}
+
 func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) error {
 	signaling, ok := s.plane.(SignalingPlane)
 	if !ok {
@@ -212,7 +267,7 @@ func requireTracksRequest(input *TracksRequest) error {
 		if err := requireSimulcastPolicy(track.Simulcast); err != nil {
 			return err
 		}
-		if track.Simulcast != nil && track.Location != "remote" {
+		if (track.Simulcast != nil && track.Location != "remote") || track.Paused != nil {
 			return ErrInvalidSignalRequest
 		}
 		if track.TrackName == "" || (track.Location != "local" && track.Location != "remote") {
@@ -234,7 +289,8 @@ func requireTracksRequest(input *TracksRequest) error {
 }
 
 // requireUpdateTracksRequest accepts only a remote subscription that names its
-// receiving MID and carries a simulcast policy; local publications cannot change.
+// receiving MID and carries a simulcast policy, a pause state or both; local
+// publications cannot change.
 func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
 	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
@@ -247,7 +303,7 @@ func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 		track.Mid = strings.TrimSpace(track.Mid)
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
-		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || track.Simulcast == nil {
+		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || (track.Simulcast == nil && track.Paused == nil) {
 			return ErrInvalidSignalRequest
 		}
 		if err := requireSimulcastPolicy(track.Simulcast); err != nil {

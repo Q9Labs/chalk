@@ -73,10 +73,16 @@ Episode, a hashed participant ID, and these fields: `connection_type` (`udp`,
 `tcp`, `turn`, `unknown`), `rtt_ms`, `send_loss_pct`, `recv_loss_pct`,
 `send_jitter_ms`, `recv_jitter_ms`, `send_bitrate_kbps`, `recv_bitrate_kbps`,
 `send_layer` (`h`, `m`, `l`: the highest layer that sent during the window),
-`recv_height`, `freeze_count`, and `freeze_ms`. Candidate types come from the
+`recv_height`, `freeze_count`, `freeze_ms`, and `recv_paused_videos` (own SFU
+only: remote videos the SFU paused for this device's network at the end of the
+window, 0 to 64). Candidate types come from the
 selected candidate pair. The body has no IP address, SDP, or free text. The API
 adds `country` (the edge's country code), `client_family`, and `client_os` from
 the request, so calls compare by region and platform without storing an address.
+It also adds `provider` (`cloudflare_sfu` or `chalk_sfu`) and
+`provider_session_id`, the media connection ID from the participant's media
+credential. That ID is the session the own SFU names in its logs and in
+`/inspect`, so one device's stats join the SFU's view of the same connection.
 
 ```apl
 ['<api-log-dataset>']
@@ -94,6 +100,47 @@ the request, so calls compare by region and platform without storing an address.
 Add `by ['attributes.country']` to compare regions. Field paths follow the
 dataset's log mapping, so match them to how `sdk.connection_report` appears there.
 Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
+### Own-SFU video paused for network
+
+On the own SFU (`chalk_sfu`), the SFU picks each viewer's simulcast layer under
+the one the SDK requests, and pauses a remote video when the viewer's link cannot
+carry even the lowest layer. Audio keeps flowing. The join sends the
+`serverLayerAdaptation` and `subscriptionState` capabilities, and the SDK then
+changes three things. Its own layer policy only caps the layer at the tile size,
+so the SDK and the SFU do not run competing upswitch loops. A remote video that
+has been quiet for 2 s makes the SDK read
+`GET .../participants/{participant_id}/media/sfu/subscriptions`, which returns
+each of the caller's subscriptions with `state`, `reason` (`congestion`,
+`viewer`, `source_inactive`, `source_unauthorized`), `revision`,
+`requested_rid`, and `effective_rid`.
+The route reads only the credential's own connection, and a Cloudflare Episode
+answers 400. While the SFU reports a pause, the stall check leaves that video
+out, so the SDK does not repull it after the 7 s window, and the tile shows
+"Video paused for network" until RTP returns or a read says the SFU resumed it.
+A read that says the video is active, or a read that fails, gives the video back
+to normal stall recovery. Off-screen video is paused in place with a
+`tracks/update` that carries `paused` and no simulcast, and is resumed the same
+way, so it needs no close, pull, or renegotiation. The Cloudflare adapter refuses
+`paused`, and the Cloudflare path keeps its `h`-first pulls and receive-only
+closes.
+
+To follow one device, find its `provider_session_id` in `sdk.call_stats` and
+match it to the session in the SFU's logs. A rising `recv_paused_videos` with low
+`recv_bitrate_kbps` means the SFU is protecting audio on a slow link, not a
+receive stall. A failed subscriptions read appears in connection reports as
+`media_error_step` `sfu_subscriptions`.
+
+A congestion pause is transient delivery that the client observes. It changes no
+durable journey boundary: the Episode, the participant, and the publication stay
+as they were. So it adds no journey-ledger event, and its evidence is the call
+stats and the SFU's own state. Proof is in
+`sdks/typescript/client/src/media/cloudflare-sfu.test.ts` (the "own-SFU
+subscription state" tests), `sdks/typescript/client/src/media/subscription-delivery.test.ts`,
+`sdks/typescript/client/src/media/call-stats.test.ts`,
+`apps/api/internal/httpapi/sfu_subscriptions_test.go`,
+`apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
+`apps/api/internal/adapters/chalksfu/conformance_test.go`.
 
 ### Interrupted recording stops and missing provider tracks
 
@@ -580,8 +627,8 @@ session; only another binding's takeover returns the terminal superseded code.
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
 `network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
-`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`, or
-`sfu_publications`). SFU HTTP failures also carry `http_status` (400–599).
+`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`,
+`sfu_publications`, or `sfu_subscriptions`). SFU HTTP failures also carry `http_status` (400–599).
 `network` identifies a fetch rejection or browser NetworkError, not an arbitrary
 TypeError. `granted_audio` and `granted_video` are `granted`, `not_granted`, or
 `unknown`: live tracks returned by acquisition, regardless of mute state, not

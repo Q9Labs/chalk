@@ -30,6 +30,7 @@ type wireTrack struct {
 	SessionID string         `json:"sessionId,omitempty"`
 	Source    string         `json:"source,omitempty"`
 	Simulcast *wireSimulcast `json:"simulcast,omitempty"`
+	Paused    bool           `json:"paused,omitempty"`
 }
 
 type wireCreateRequest struct {
@@ -139,10 +140,20 @@ type wireInspectRequest struct {
 }
 
 type wireInspectedTrack struct {
-	Location  string `json:"location"`
-	Mid       string `json:"mid"`
-	TrackName string `json:"trackName"`
-	Active    bool   `json:"active"`
+	Location     string                 `json:"location"`
+	Mid          string                 `json:"mid"`
+	TrackName    string                 `json:"trackName"`
+	SessionID    string                 `json:"sessionId,omitempty"`
+	Active       bool                   `json:"active"`
+	Subscription *wireSubscriptionState `json:"subscription,omitempty"`
+}
+
+type wireSubscriptionState struct {
+	State        string `json:"state"`
+	Reason       string `json:"reason,omitempty"`
+	Revision     uint64 `json:"revision"`
+	RequestedRID string `json:"requestedRid,omitempty"`
+	EffectiveRID string `json:"effectiveRid,omitempty"`
 }
 
 type wireInspectResponse struct {
