@@ -326,12 +326,32 @@ func TestAnEpisodeNeverReservesMoreWhenItShrinks(t *testing.T) {
 // ceiling cannot carry the threshold's mandatory media is refused at start, because the call's
 // admitted media would then outgrow its reservation.
 func TestALargeCallThresholdThatTheClassCeilingCannotCarryIsRefused(t *testing.T) {
-	cfg := config.Config{
-		UDPAddr: "127.0.0.1:0", PacketBudget: 14_000, EpisodePacketCeiling: 7_000, CamerasPerParticipant: 2,
-		VideoStreamCost: 300, CameraUplinkCost: 390, AudioStreamCost: 50, ScreenStreamCost: 210,
-		LargeCallParticipants: 6, SmallTileStreamCost: 90,
-	}
-	if _, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil || !strings.Contains(err.Error(), "SFU_LARGE_CALL_PARTICIPANTS") {
-		t.Fatalf("a 7,000 ceiling under 8,040 mandatory packets/s gave %v, want a refusal naming the setting", err)
+	// Six Participants need 8,040 mandatory packets/s with a screen share; the class ceiling is 7,000.
+	for _, test := range []struct {
+		name    string
+		maximum int
+		refused bool
+	}{
+		{"a maximum that lets a call cross the threshold", 16, true},
+		{"a maximum one above the threshold", 7, true},
+		{"a maximum equal to the threshold", 6, false},
+		{"a maximum below the threshold", 3, false},
+	} {
+		cfg := config.Config{
+			UDPAddr: "127.0.0.1:0", PacketBudget: 14_000, EpisodePacketCeiling: 7_000, CamerasPerParticipant: 2,
+			VideoStreamCost: 300, CameraUplinkCost: 390, AudioStreamCost: 50, ScreenStreamCost: 210,
+			LargeCallParticipants: 6, SmallTileStreamCost: 90, MaxEpisodeParticipants: test.maximum,
+		}
+		node, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if test.refused {
+			if err == nil || !strings.Contains(err.Error(), "SFU_LARGE_CALL_PARTICIPANTS") {
+				t.Fatalf("%s gave %v, want a refusal naming the setting", test.name, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s gave %v, want a node that starts: no call can cross the threshold", test.name, err)
+		}
+		node.Close()
 	}
 }
