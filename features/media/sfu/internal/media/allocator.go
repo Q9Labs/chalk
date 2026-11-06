@@ -59,6 +59,7 @@ type tile struct {
 	order  uint64      // stable tie-break: older subscriptions first
 	layers []layerRate // active layers within the subscriber's ceiling, best first
 	state  *allocation
+	after  float64 // bits/s the tiles after this one need at their lowest layer
 }
 
 // allocate decides every tile of one transport. It returns the total bits/s a
@@ -82,7 +83,9 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 	}
 	provenBudget := min(allocHeadroom*estimate.proven-audio-repair, budget)
 
-	// Keep what fits and drop at once what no longer does.
+	// Keep what fits and drop at once what no longer does. A tile keeps a layer
+	// above its lowest only if the tiles after it keep room for their lowest.
+	waiting := reserveFloors(tiles, budget)
 	used := 0.0
 	for index := range tiles {
 		used += hold(&tiles[index], estimate, budget-used, now)
@@ -92,6 +95,9 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 	}
 
 	// Raise one step, or resume one tile, within what the transport has proven.
+	// A raise the proof cannot carry asks for a probe but does not hide the
+	// paused tiles behind it, which are worse off than any tile that is playing.
+	blocked := 0.0
 	for index := range tiles {
 		t := &tiles[index]
 		if len(t.layers) == 0 {
@@ -116,22 +122,65 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 			return 0
 		}
 		current := layerIndex(t.layers, state.rid)
-		if current == 0 || now < state.holdUntil {
+		if blocked > 0 || current == 0 || now < state.holdUntil {
 			continue
 		}
 		delta := t.layers[current-1].bps - t.layers[current].bps
-		if used+delta > provenBudget {
-			return probeTotal(used+delta, audio, repair)
+		if used+delta+waiting > provenBudget {
+			blocked = probeTotal(used+delta+waiting, audio, repair)
+			continue
 		}
 		state.rid = t.layers[current-1].rid
 		state.holdUntil = now + int64(upgradeHold)
 		return 0
 	}
-	return 0
+	return blocked
+}
+
+// reserveFloors sets each tile's reserve to what the tiles after it, and the paused tiles before it, need at their lowest layer,
+// and returns what the paused tiles among them need to resume. Without it a tile early in the
+// order keeps a high layer while the tiles behind it pause for want of room, and they stay
+// paused because nothing ever gives the room back. Tiles whose lowest layers do not all fit the
+// budget are left out, because they would pause either way.
+func reserveFloors(tiles []tile, budget float64) (waiting float64) {
+	floors := make([]float64, len(tiles))
+	total := 0.0
+	for index := range tiles {
+		t := &tiles[index]
+		if len(t.layers) == 0 {
+			continue
+		}
+		floor := t.layers[len(t.layers)-1].bps
+		if t.state.paused {
+			floor *= resumeMargin
+		}
+		total += floor
+		if total > budget {
+			break
+		}
+		floors[index] = floor
+		if t.state.paused {
+			waiting += floor
+		}
+	}
+	// A playing tile also leaves room for the paused tiles before it, which resume first.
+	pausedBefore := make([]float64, len(tiles))
+	paused := 0.0
+	for index := range tiles {
+		pausedBefore[index] = paused
+		if tiles[index].state.paused {
+			paused += floors[index]
+		}
+	}
+	later := 0.0
+	for index := len(tiles) - 1; index >= 0; index-- {
+		tiles[index].after, later = later+pausedBefore[index], later+floors[index]
+	}
+	return waiting
 }
 
 // hold keeps one tile at its layer, or the best lower one that fits the room
-// left, and returns the bits/s it takes. Before any feedback a tile keeps its
+// left less the tile's reserve, and returns the bits/s it takes. Before any feedback a tile keeps its
 // layer, because the estimate has nothing to judge by yet. A tile whose lowest
 // layer does not fit pauses only after pauseHold, and only once the path stops
 // delivering.
@@ -154,7 +203,7 @@ func hold(t *tile, estimate transportEstimate, room float64, now int64) float64 
 	}
 	current := layerIndex(t.layers, state.rid)
 	dropped := false
-	for warm && current < floor && t.layers[current].bps > room {
+	for warm && current < floor && t.layers[current].bps+t.after > room {
 		current++
 		dropped = true
 	}

@@ -71,6 +71,12 @@ type Config struct {
 	// Episode reserves at most this much. Audio, the screen share and camera uplinks are never
 	// lowered, so a join or screen share whose mandatory media cannot fit under it is refused.
 	EpisodePacketCeiling int
+	// LargeCallParticipants is the Episode size past which a subscriber is assumed to show
+	// cameras as small tiles, which the SDK requests at the low layer. 0 turns that off. Past it
+	// admission reserves SmallTileStreamCost, the low layer's packets/s to one subscriber, for
+	// every camera but one featured Participant's, and the Episode's ceiling is the node budget.
+	LargeCallParticipants int
+	SmallTileStreamCost   int
 	// ScreenStreamCost is the packets/s one hop of the screen share's video is assumed to need.
 	// Screen video has no lower layer, so the allocator cannot reduce it.
 	ScreenStreamCost int
@@ -160,6 +166,8 @@ func Load(lookup Lookup) (Config, error) {
 		AudioStreamCost:            r.integer("SFU_AUDIO_STREAM_COST", 50, 1, 10000),
 		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 16, 1, 64),
 		EpisodePacketCeiling:       r.integer("SFU_EPISODE_PACKET_CEILING", 11520, 1000, 1000000),
+		LargeCallParticipants:      r.integer("SFU_LARGE_CALL_PARTICIPANTS", 6, 0, 64),
+		SmallTileStreamCost:        r.integer("SFU_SMALL_TILE_STREAM_COST", 90, 1, 10000),
 		ScreenStreamCost:           r.integer("SFU_SCREEN_STREAM_COST", 210, 1, 10000),
 		Memory: Memory{
 			HistoryHighBytes:   r.integer("SFU_HISTORY_HIGH_BYTES", 400<<10, 16<<10, 4<<20),

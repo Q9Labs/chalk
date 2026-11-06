@@ -38,6 +38,9 @@ func TestAdmissionDefaults(t *testing.T) {
 	if cfg.EpisodePacketCeiling != 11520 {
 		t.Errorf("Episode ceiling %d, want 11520", cfg.EpisodePacketCeiling)
 	}
+	if cfg.LargeCallParticipants != 6 || cfg.SmallTileStreamCost != 90 {
+		t.Errorf("large call past %d Participants at %d packets/s per small tile, want 6 and 90", cfg.LargeCallParticipants, cfg.SmallTileStreamCost)
+	}
 	want := Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10}
 	if cfg.Memory != want {
 		t.Errorf("memory caps %+v, want the design's budget %+v", cfg.Memory, want)

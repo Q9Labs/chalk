@@ -112,6 +112,15 @@ type createRecord struct {
 
 // NewNode binds the shared UDP socket and builds the Pion API.
 func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
+	// A call that shrinks to the threshold takes the class ceiling back, so a class at the threshold
+	// must fit it with a screen share, or its admitted media would outgrow its reservation. When
+	// admission caps an Episode at the threshold or below, no call ever crosses it and the check
+	// would only refuse a node that never needs it.
+	limits := &Node{cfg: cfg}
+	crossable := cfg.LargeCallParticipants > 0 && cfg.LargeCallParticipants < cfg.MaxEpisodeParticipants
+	if mandatory, ceiling := limits.mandatoryPackets(cfg.LargeCallParticipants, true), limits.episodeCeiling(cfg.LargeCallParticipants); crossable && mandatory > ceiling {
+		return nil, fmt.Errorf("SFU_LARGE_CALL_PARTICIPANTS: %d Participants need %d mandatory packets/s with a screen share but the Episode ceiling is %d", cfg.LargeCallParticipants, mandatory, ceiling)
+	}
 	address, err := net.ResolveUDPAddr("udp4", cfg.UDPAddr)
 	if err != nil {
 		return nil, fmt.Errorf("resolve UDP address %q: %w", cfg.UDPAddr, err)
@@ -519,7 +528,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 			participants++
 		}
 	}
-	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
+	if n.mandatoryPackets(participants, true) > n.episodeCeiling(participants) {
 		_ = n.refuse(RefusedScreenCeiling, nil)
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}

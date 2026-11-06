@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"math"
 	"strings"
@@ -39,6 +40,7 @@ func defaultsNode(t *testing.T) *Node {
 		cfg.VideoStreamCost, cfg.CameraUplinkCost = defaults.VideoStreamCost, defaults.CameraUplinkCost
 		cfg.AudioStreamCost, cfg.ScreenStreamCost = defaults.AudioStreamCost, defaults.ScreenStreamCost
 		cfg.CamerasPerParticipant, cfg.MaxSessions = defaults.CamerasPerParticipant, 64
+		cfg.LargeCallParticipants, cfg.SmallTileStreamCost = defaults.LargeCallParticipants, defaults.SmallTileStreamCost
 	})
 }
 
@@ -275,5 +277,81 @@ func TestEveryRefusalLogsItsReason(t *testing.T) {
 	node.mu.Unlock()
 	if !strings.Contains(logs.String(), "reason=node_full") {
 		t.Fatalf("refusal log %q names no reason", logs.String())
+	}
+}
+
+// A ten-person call shows its Participants as small tiles, so each viewer receives one featured
+// Participant's two cameras at 300 and the other eight Participants' at 90. The all-top-layer
+// reservation was 69,400 and the Episode ceiling refused the ninth Participant on audio and camera
+// uplinks alone. A large call takes the node budget as its ceiling and a class keeps its own.
+func TestALargeCallReservesTheSmallTilesItShows(t *testing.T) {
+	node := defaultsNode(t)
+	node.cfg.PacketBudget = 32_000
+	const people = 10
+	uplinks := people * (2*(sdkCameraH+sdkCameraL) + 50)
+	downlinks := people * ((people-1)*50 + 2*sdkCameraH + (people-2)*2*sdkCameraL)
+	screen := people * (210 + 50)
+	if got, want := node.nominalReservation(people), uplinks+downlinks+screen; got != want {
+		t.Fatalf("a ten-person call reserves %d packets/s, want %d", got, want)
+	}
+	if got := node.episodeReservation(people); got != 32_000 {
+		t.Fatalf("the call reserves %d, want the 32,000 budget as its ceiling", got)
+	}
+	if mandatory := node.mandatoryPackets(people, true); mandatory > node.episodeCeiling(people) {
+		t.Fatalf("the call's %d mandatory packets/s do not fit its ceiling %d", mandatory, node.episodeCeiling(people))
+	}
+	if got := node.episodeCeiling(node.cfg.LargeCallParticipants); got != defaultsNode(t).cfg.EpisodePacketCeiling {
+		t.Fatalf("an Episode at the threshold has ceiling %d, want the class ceiling", got)
+	}
+	// A class at the threshold still reserves every camera at the top layer.
+	class := node.cfg.LargeCallParticipants
+	if got, want := node.nominalReservation(class), class*(2*(sdkCameraH+sdkCameraL)+50)+class*((class-1)*(2*sdkCameraH+50))+class*260; got != want {
+		t.Fatalf("a %d-person class reserves %d, want %d", class, got, want)
+	}
+}
+
+// A call that loses a Participant must never reserve more than it did before, or a departure could
+// push the node's total over its budget.
+func TestAnEpisodeNeverReservesMoreWhenItShrinks(t *testing.T) {
+	node := defaultsNode(t)
+	node.cfg.PacketBudget, node.cfg.EpisodePacketCeiling = 32_000, 32_000
+	for people := 2; people <= 16; people++ {
+		if smaller, larger := node.episodeReservation(people-1), node.episodeReservation(people); smaller > larger {
+			t.Fatalf("%d Participants reserve %d but %d reserve only %d", people-1, smaller, people, larger)
+		}
+	}
+}
+
+// A call that shrinks to the threshold takes the class ceiling back. A configuration whose class
+// ceiling cannot carry the threshold's mandatory media is refused at start, because the call's
+// admitted media would then outgrow its reservation.
+func TestALargeCallThresholdThatTheClassCeilingCannotCarryIsRefused(t *testing.T) {
+	// Six Participants need 8,040 mandatory packets/s with a screen share; the class ceiling is 7,000.
+	for _, test := range []struct {
+		name    string
+		maximum int
+		refused bool
+	}{
+		{"a maximum that lets a call cross the threshold", 16, true},
+		{"a maximum one above the threshold", 7, true},
+		{"a maximum equal to the threshold", 6, false},
+		{"a maximum below the threshold", 3, false},
+	} {
+		cfg := config.Config{
+			UDPAddr: "127.0.0.1:0", PacketBudget: 14_000, EpisodePacketCeiling: 7_000, CamerasPerParticipant: 2,
+			VideoStreamCost: 300, CameraUplinkCost: 390, AudioStreamCost: 50, ScreenStreamCost: 210,
+			LargeCallParticipants: 6, SmallTileStreamCost: 90, MaxEpisodeParticipants: test.maximum,
+		}
+		node, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if test.refused {
+			if err == nil || !strings.Contains(err.Error(), "SFU_LARGE_CALL_PARTICIPANTS") {
+				t.Fatalf("%s gave %v, want a refusal naming the setting", test.name, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s gave %v, want a node that starts: no call can cross the threshold", test.name, err)
+		}
+		node.Close()
 	}
 }
