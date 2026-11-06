@@ -112,6 +112,11 @@ for example, `api_url` maps to `CHALK_PROOF_API_URL`. Missing required fields fa
 before creating resources. Redacted or wrong-namespace API keys fail before any
 HTTP request. Local runs still default to 1Password.
 
+The proof Space uses Cloudflare. Set `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` to run
+it on the own SFU where the API's switch is on, as on nightly. The proof's
+clients declare both media providers, so the Episode binds the Space's choice.
+Recording and export need Cloudflare, so use `camera-share` for the own SFU.
+
 ### One-time webhook setup (each environment)
 
 Using the existing bootstrap key, create **one** disabled endpoint named after

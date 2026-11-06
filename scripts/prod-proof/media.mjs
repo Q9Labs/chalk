@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mjs";
-import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, mediaProviders } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
 
@@ -35,7 +35,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
-  const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0" }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
+  const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0", ...mediaProviders }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
   const pages = [];
   const reopen = [];
   const close = [];
