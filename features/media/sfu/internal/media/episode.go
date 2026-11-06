@@ -97,16 +97,21 @@ type episodeTick struct {
 	cameras       map[*publication]*plannedCamera
 	room          bool    // the Episode can afford a probe
 	measured      float64 // packets/s its publishers and transports sent in the last second
+	probing       float64 // packets/s of probe padding its transports sent, which counts toward room only
 	state         protocol.EpisodeState
 }
 
 // addEgress counts one transport's packets/s of a class. Repairs join the base the plan cannot
 // lower. A probe does not: it is the allocator's own 400 ms of padding, and lowering cameras to
-// make room for a measurement would freeze video at every join.
+// make room for a measurement would freeze video at every join. It still takes room, so the
+// Episode starts no further probe while its probes and video fill the ceiling.
 func (e *episodeTick) addEgress(class packetClass, pps float64) {
 	e.measured += pps
-	if class == classRepair {
+	switch class {
+	case classRepair:
 		e.base += pps
+	case classProbe:
+		e.probing += pps
 	}
 }
 
@@ -257,7 +262,7 @@ func (n *Node) plan(key episodeKey, episode *episodeTick, now int64) {
 			episode.state.PausedCameras++
 		}
 	}
-	episode.room = predicted <= planRaiseShare*ceiling
+	episode.room = predicted+episode.probing <= planRaiseShare*ceiling
 }
 
 // packetRate is the packets/s this subscription would forward under limit. A

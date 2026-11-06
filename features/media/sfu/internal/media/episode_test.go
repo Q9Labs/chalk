@@ -98,13 +98,26 @@ func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
 	}
 }
 
-// Probe padding is measured load but not load the plan must fit. Counting it in the base put a
-// burst of probes at a join over the ceiling, and the plan paused every camera for seconds.
-func TestProbePaddingIsMeasuredButNotPlanned(t *testing.T) {
-	var episode episodeTick
-	episode.addEgress(classRepair, 100)
-	episode.addEgress(classProbe, 4000)
-	if episode.base != 100 || episode.measured != 4100 {
-		t.Fatalf("base %.0f and measured %.0f, want 100 and 4100", episode.base, episode.measured)
+// Probe padding is not load the plan must fit: counting it in the base put a burst of probes at
+// a join over the ceiling, and the plan paused every camera for seconds. It still takes room, so
+// an Episode whose probes and video fill its ceiling starts no further probe.
+func TestProbePaddingTakesRoomButDoesNotPauseCameras(t *testing.T) {
+	node := newTestNode(t, func(cfg *config.Config) { cfg.EpisodePacketCeiling = 1000 })
+	for _, probing := range []float64{0, 600} {
+		granted, ungranted := grantedAndUngranted(t, 1.2e6, 300_000, 300)
+		episode := &episodeTick{
+			sessions:      []*Session{granted.pub.session, ungranted.pub.session, {}, {}},
+			subscriptions: []*subscription{granted},
+			cameras:       map[*publication]*plannedCamera{},
+		}
+		episode.addEgress(classRepair, 100)
+		episode.addEgress(classProbe, probing)
+		node.plan(episodeKey{}, episode, monotonic())
+		if granted.pub.plan != planOpen {
+			t.Fatalf("with %.0f probe packets/s the camera's plan is %d, want open", probing, granted.pub.plan)
+		}
+		if want := probing == 0; episode.room != want {
+			t.Fatalf("with %.0f probe packets/s room is %v, want %v", probing, episode.room, want)
+		}
 	}
 }
