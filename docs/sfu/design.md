@@ -726,7 +726,20 @@ hotter video, retransmissions and capture still need measured headroom.
 | One three-person Episode, one camera each     | 4,200                              |
 | A new Episode's first join (two Participants) | 3,480                              |
 | Two three-person Episodes on a 16,000 budget  | 14,340                             |
-| One Episode of four or more, two cameras each | capped at 11,520 by M5 enforcement |
+| One Episode of four to six, two cameras each | capped at 11,520 by M5 enforcement |
+| One Episode of seven or more, two cameras each | 35,800 for ten, capped at the node budget |
+
+**Large calls.** A call of more than `SFU_LARGE_CALL_PARTICIPANTS` (6) Participants
+shows its cameras as small tiles, and the SDK asks the low layer for a tile of 400 px
+or less. Reserving every downlink at the top layer then bills about four times what is
+sent: ten Participants with two cameras each came to 69,400 against about 31,000 sent.
+Past that size `R(n)` bills one featured Participant's cameras at `d` and every other
+camera at `SFU_SMALL_TILE_STREAM_COST` (90, the `l` layer), and the Episode's ceiling is
+the node budget, because a class-sized ceiling cannot carry the call's audio and camera
+uplinks. A viewer who opens a large tile still gets `h` while the Episode stays under its
+ceiling; the allocator lowers or pauses cameras beyond it as before. At two cameras each,
+ten Participants reserve 35,800, so on a 32,000 node the call fills the node; fewer cameras
+or a larger budget leave room for classes beside it.
 
 Reject a join or new Episode if its reservation would exceed the selected
 node's budget. Replacement must not double-count the same Participant.
@@ -741,8 +754,10 @@ cannot fit a fixed 11,520 ceiling by pausing cameras. M5 must refuse admission o
 source activation when mandatory media cannot fit, or use a separately validated
 higher configurable Episode ceiling within the node budget. Every camera's
 uplink stays in that mandatory base, because the plan lowers only what
-subscribers receive, so at the defaults (two cameras each) admission refuses the
-tenth Participant, or the ninth with a screen share ([#836](https://github.com/Q9Labs/chalk/pull/836)). Never claim sixteen
+subscribers receive, so for a class-sized Episode at the defaults (two cameras each)
+admission would refuse the tenth Participant, or the ninth with a screen share
+([#836](https://github.com/Q9Labs/chalk/pull/836)). A large call (above) takes the node
+budget as its ceiling, so there the mandatory media is checked against the budget. Never claim sixteen
 all-audio Participants fit the default ceiling, or silently sacrifice audio.
 
 **Primary acceptance:** prove the full admitted workload on the $18 node alone,

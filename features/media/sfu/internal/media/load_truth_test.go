@@ -39,6 +39,7 @@ func defaultsNode(t *testing.T) *Node {
 		cfg.VideoStreamCost, cfg.CameraUplinkCost = defaults.VideoStreamCost, defaults.CameraUplinkCost
 		cfg.AudioStreamCost, cfg.ScreenStreamCost = defaults.AudioStreamCost, defaults.ScreenStreamCost
 		cfg.CamerasPerParticipant, cfg.MaxSessions = defaults.CamerasPerParticipant, 64
+		cfg.LargeCallParticipants, cfg.SmallTileStreamCost = defaults.LargeCallParticipants, defaults.SmallTileStreamCost
 	})
 }
 
@@ -275,5 +276,35 @@ func TestEveryRefusalLogsItsReason(t *testing.T) {
 	node.mu.Unlock()
 	if !strings.Contains(logs.String(), "reason=node_full") {
 		t.Fatalf("refusal log %q names no reason", logs.String())
+	}
+}
+
+// A ten-person call shows its Participants as small tiles, so each viewer receives one featured
+// Participant's two cameras at 300 and the other eight Participants' at 90. The all-top-layer
+// reservation was 69,400 and the Episode ceiling refused the ninth Participant on audio and camera
+// uplinks alone. A large call takes the node budget as its ceiling and a class keeps its own.
+func TestALargeCallReservesTheSmallTilesItShows(t *testing.T) {
+	node := defaultsNode(t)
+	node.cfg.PacketBudget = 32_000
+	const people = 10
+	uplinks := people * (2*(sdkCameraH+sdkCameraL) + 50)
+	downlinks := people * ((people-1)*50 + 2*sdkCameraH + (people-2)*2*sdkCameraL)
+	screen := people * (210 + 50)
+	if got, want := node.nominalReservation(people), uplinks+downlinks+screen; got != want {
+		t.Fatalf("a ten-person call reserves %d packets/s, want %d", got, want)
+	}
+	if got := node.episodeReservation(people); got != 32_000 {
+		t.Fatalf("the call reserves %d, want the 32,000 budget as its ceiling", got)
+	}
+	if mandatory := node.mandatoryPackets(people, true); mandatory > node.episodeCeiling(people) {
+		t.Fatalf("the call's %d mandatory packets/s do not fit its ceiling %d", mandatory, node.episodeCeiling(people))
+	}
+	if got := node.episodeCeiling(node.cfg.LargeCallParticipants); got != defaultsNode(t).cfg.EpisodePacketCeiling {
+		t.Fatalf("an Episode at the threshold has ceiling %d, want the class ceiling", got)
+	}
+	// A class at the threshold still reserves every camera at the top layer.
+	class := node.cfg.LargeCallParticipants
+	if got, want := node.nominalReservation(class), class*(2*(sdkCameraH+sdkCameraL)+50)+class*((class-1)*(2*sdkCameraH+50))+class*260; got != want {
+		t.Fatalf("a %d-person class reserves %d, want %d", class, got, want)
 	}
 }

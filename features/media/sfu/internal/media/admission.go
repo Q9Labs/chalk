@@ -22,11 +22,21 @@ import (
 // has to pause a camera the reservation promised. An Episode needs room for two Participants
 // from its first join, so a lone Participant reserves what two would. A join is refused when it
 // would push the sum above the node budget.
+//
+// A call of more than LargeCallParticipants shows its Participants as small tiles, which the SDK
+// asks at the low layer, so a subscriber's camera downlinks are reserved at SmallTileStreamCost,
+// except one featured Participant's cameras at the top-layer cost. Its ceiling is the node
+// budget, because a call that large carries more audio than a class-sized ceiling leaves room for.
 func (n *Node) episodeReservation(participants int) int {
 	if participants <= 0 {
 		return 0
 	}
-	return min(n.nominalReservation(participants), n.episodeCeiling())
+	return min(n.nominalReservation(participants), n.episodeCeiling(participants))
+}
+
+// largeCall reports whether an Episode of that many Participants shows its cameras as small tiles.
+func (n *Node) largeCall(participants int) bool {
+	return n.cfg.LargeCallParticipants > 0 && participants > n.cfg.LargeCallParticipants
 }
 
 // nominalReservation is the peak above for at least two Participants, before the ceiling applies.
@@ -34,14 +44,23 @@ func (n *Node) nominalReservation(participants int) int {
 	cfg, count := n.cfg, max(participants, 2)
 	cameras := cfg.CamerasPerParticipant
 	uplink := cameras*cfg.CameraUplinkCost + cfg.AudioStreamCost
-	downlink := cameras*cfg.VideoStreamCost + cfg.AudioStreamCost
+	cameraDownlinks := (count - 1) * cameras * cfg.VideoStreamCost
+	if n.largeCall(count) {
+		cameraDownlinks = cameras*cfg.VideoStreamCost + (count-2)*cameras*cfg.SmallTileStreamCost
+	}
+	downlink := (count-1)*cfg.AudioStreamCost + cameraDownlinks
 	screen := cfg.ScreenStreamCost + cfg.AudioStreamCost
-	return count*uplink + count*(count-1)*downlink + count*screen
+	return count*uplink + count*downlink + count*screen
 }
 
-// episodeCeiling is the most packets/s one Episode may use: the configured ceiling, never more
-// than the node's whole budget.
-func (n *Node) episodeCeiling() int { return min(n.cfg.EpisodePacketCeiling, n.cfg.PacketBudget) }
+// episodeCeiling is the most packets/s an Episode of that many Participants may use: the configured
+// ceiling, or the node's whole budget for a large call, and never more than the budget.
+func (n *Node) episodeCeiling(participants int) int {
+	if n.largeCall(participants) {
+		return n.cfg.PacketBudget
+	}
+	return min(n.cfg.EpisodePacketCeiling, n.cfg.PacketBudget)
+}
 
 // mandatoryPackets is the media the allocator can never lower: every microphone to every
 // Participant, n·n audio hops, each camera's uplink, because the plan lowers only what
@@ -99,7 +118,7 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 			return n.refuse(reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
 	}
-	if n.mandatoryPackets(count+1, n.screens[key] != nil) > n.episodeCeiling() {
+	if n.mandatoryPackets(count+1, n.screens[key] != nil) > n.episodeCeiling(count+1) {
 		return n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
 	}
 	grown := total - n.episodeReservation(count) + n.episodeReservation(count+1)

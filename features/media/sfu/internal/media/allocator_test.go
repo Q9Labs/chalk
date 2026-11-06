@@ -221,3 +221,52 @@ func TestAPausedTileWaitsOutItsDropBackoffBeforeResuming(t *testing.T) {
 		t.Fatalf("state %+v after the backoff on a fitting estimate, want resumed", state)
 	}
 }
+
+// Ten cameras that all hold h need 12 Mbit/s. When the estimate falls to 5, the
+// early tiles must step down to l so the later ones keep flowing, rather than
+// the later ones pausing for good behind tiles that never give room back.
+func TestAnEstimateDipLowersEarlyTilesInsteadOfPausingLateOnes(t *testing.T) {
+	states := make([]allocation, 10)
+	tiles := make([]tile, len(states))
+	for index := range states {
+		states[index] = allocation{decided: true, rid: "h", backoff: backoffMin}
+		tiles[index] = camera(&states[index])
+		tiles[index].order = uint64(index)
+	}
+	for step := range 8 {
+		allocate(tiles, estimateOf(5e6, 5e6), 0, 0, at(time.Duration(step)*500*time.Millisecond))
+	}
+	high := 0
+	for index := range states {
+		if states[index].paused {
+			t.Fatalf("tile %d paused on a 5 Mbit/s estimate that carries ten tiles at l", index)
+		}
+		if states[index].rid == "h" {
+			high++
+		}
+	}
+	if high > 1 {
+		t.Fatalf("%d tiles stayed on h, but 5 Mbit/s carries 3 Mbit/s of l plus one step up at most", high)
+	}
+}
+
+// A paused tile gets its room back when the others hold more than their lowest
+// layers, so a tile paused in a dip resumes once the estimate recovers.
+func TestAPausedTileResumesBecauseTheOthersMakeRoom(t *testing.T) {
+	states := make([]allocation, 4)
+	tiles := make([]tile, len(states))
+	for index := range states {
+		states[index] = allocation{decided: true, rid: "h", backoff: backoffMin}
+		tiles[index] = camera(&states[index])
+		tiles[index].order = uint64(index)
+	}
+	states[3] = allocation{decided: true, paused: true, backoff: backoffMin}
+	// Three tiles on h take 3.6 Mbit/s of a 4.5 Mbit/s estimate: the fourth's
+	// 345 kbit/s fits only if one of them steps down.
+	for step := range 12 {
+		allocate(tiles, estimateOf(4.1e6, 4.1e6), 0, 0, at(time.Duration(step)*500*time.Millisecond))
+	}
+	if states[3].paused {
+		t.Fatal("the paused tile never resumed while three others held h")
+	}
+}

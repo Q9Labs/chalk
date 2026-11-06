@@ -519,7 +519,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 			participants++
 		}
 	}
-	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
+	if n.mandatoryPackets(participants, true) > n.episodeCeiling(participants) {
 		_ = n.refuse(RefusedScreenCeiling, nil)
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}

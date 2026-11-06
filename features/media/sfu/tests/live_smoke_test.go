@@ -42,6 +42,7 @@ const (
 // liveLoad is the shape of a live run.
 type liveLoad struct {
 	classes, participants, cameras int
+	smallTiles                     int    // classes larger than this ask for l, except one featured Participant's cameras
 	cameraKbps                     [2]int // h and l
 	shareDuty                      float64
 	sharePeriod, hold, step, every time.Duration
@@ -62,6 +63,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		target any
 	}{
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
+		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
 		{"SFU_LIVE_HOLD", &load.hold}, {"SFU_LIVE_STEP", &load.step}, {"SFU_LIVE_SAMPLE", &load.every},
 	}
@@ -103,6 +105,9 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_CLASSES       classes to hold (default 2)
 //	SFU_LIVE_PARTICIPANTS  Participants per class (default 3)
 //	SFU_LIVE_CAMERAS       cameras per Participant (default 2)
+//	SFU_LIVE_SMALL_TILES   in a class of more Participants than this, every viewer asks for the
+//	                       low layer of all cameras but the next Participant's, as the SDK does
+//	                       for tiles of 400 px or less (default 0, which asks for the top layer)
 //	SFU_LIVE_CAMERA_KBPS   the cameras' h and l bitrates (default 2500,650)
 //	SFU_LIVE_SHARE_DUTY    the part of the time each class shares (default 0.65)
 //	SFU_LIVE_SHARE_PERIOD  one share stretch and one pause (default 4m)
@@ -379,15 +384,21 @@ func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) 
 		class.people = append(class.people, p)
 		class.receivers = append(class.receivers, receiver)
 	}
-	for _, person := range class.people {
+	for index, person := range class.people {
 		var tracks []protocol.Track
+		featured := class.people[(index+1)%len(class.people)]
 		for _, other := range class.people {
 			if other == person {
 				continue
 			}
 			tracks = append(tracks, remote(other, micName))
+			small := load.smallTiles > 0 && load.participants > load.smallTiles && other != featured
 			for camera := range load.cameras {
-				tracks = append(tracks, remote(other, cameraTrack(camera)))
+				track := remote(other, cameraTrack(camera))
+				if small {
+					track.Simulcast.PreferredRID = "l"
+				}
+				tracks = append(tracks, track)
 			}
 			if other.screen != nil {
 				tracks = append(tracks, remote(other, screenName))
