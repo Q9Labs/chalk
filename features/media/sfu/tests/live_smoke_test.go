@@ -299,10 +299,10 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 			rate := float64(load.capKbps) * 1000
 			if capped%2 == 1 {
 				person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
-				t.Logf("capped: %s downlink limited to %d kbit/s", person.name, load.capKbps)
+				t.Logf("capped: %s downlink limited to %d kbit/s at %s", person.name, load.capKbps, time.Now().Format(time.TimeOnly))
 			} else {
 				person.link.shape(0, 0, 0, 0, 0)
-				t.Logf("capped: %s downlink lifted", person.name)
+				t.Logf("capped: %s downlink lifted at %s", person.name, time.Now().Format(time.TimeOnly))
 			}
 			switchAt = since + load.capEvery
 		}
