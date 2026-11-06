@@ -112,7 +112,8 @@ so the SDK and the SFU do not run competing upswitch loops. A remote video that
 has been quiet for 2 s makes the SDK read
 `GET .../participants/{participant_id}/media/sfu/subscriptions`, which returns
 each of the caller's subscriptions with `state`, `reason` (`congestion`,
-`viewer`, `source_inactive`), `revision`, `requested_rid`, and `effective_rid`.
+`viewer`, `source_inactive`, `source_unauthorized`), `revision`,
+`requested_rid`, and `effective_rid`.
 The route reads only the credential's own connection, and a Cloudflare Episode
 answers 400. While the SFU reports a pause, the stall check leaves that video
 out, so the SDK does not repull it after the 7 s window, and the tile shows

@@ -767,7 +767,7 @@ func fieldEnum(schemaName string, fieldName string) []string {
 		case "state":
 			return []string{mediaplane.SubscriptionActive, mediaplane.SubscriptionPaused}
 		case "reason":
-			return []string{mediaplane.PauseCongestion, mediaplane.PauseViewer, mediaplane.PauseSourceInactive}
+			return []string{mediaplane.PauseCongestion, mediaplane.PauseViewer, mediaplane.PauseSourceInactive, mediaplane.PauseSourceUnauthorized}
 		}
 	}
 	switch fieldName {

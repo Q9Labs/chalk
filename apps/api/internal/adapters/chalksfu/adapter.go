@@ -452,7 +452,7 @@ func knownSubscriptionState(state, reason string) bool {
 	case mediaplane.SubscriptionActive:
 		return reason == ""
 	case mediaplane.SubscriptionPaused:
-		return reason == mediaplane.PauseCongestion || reason == mediaplane.PauseViewer || reason == mediaplane.PauseSourceInactive
+		return reason == mediaplane.PauseCongestion || reason == mediaplane.PauseViewer || reason == mediaplane.PauseSourceInactive || reason == mediaplane.PauseSourceUnauthorized
 	default:
 		return false
 	}

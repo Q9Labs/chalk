@@ -132,6 +132,8 @@ const (
 	PauseCongestion     = "congestion"
 	PauseViewer         = "viewer"
 	PauseSourceInactive = "source_inactive"
+	// PauseSourceUnauthorized: the source has no live grant, so the SFU forwards none of it.
+	PauseSourceUnauthorized = "source_unauthorized"
 )
 
 // SubscriptionState is how the plane delivers one remote subscription of the

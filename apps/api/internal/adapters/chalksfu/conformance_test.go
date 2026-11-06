@@ -501,3 +501,42 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 		t.Fatalf("binding = %+v, err = %v, want chalk_sfu", binding, err)
 	}
 }
+
+// Against the real SFU binary: a subscription to a source without a live grant reads
+// paused with source_unauthorized, and the read still reports the granted one.
+func TestSubscriptionStatesReportAnUngrantedSource(t *testing.T) {
+	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "200000"})
+	service := box.service(t)
+	ctx := context.Background()
+	alice, carol, bob := scopeOf("ep-unauthorized", "alice"), scopeOf("ep-unauthorized", "carol"), scopeOf("ep-unauthorized", "bob")
+	box.grant(t, alice)
+	aliceConn, _ := join(t, service, alice)
+	carolConn, _ := join(t, service, carol)
+	bobConn, _ := join(t, service, bob)
+	publish(t, service, aliceConn, alice, "alice-mic", "microphone")
+	publish(t, service, carolConn, carol, "carol-mic", "microphone")
+	subscriber := newPeer(t)
+	pulled, err := service.AddTracks(ctx, mediaplane.TracksRequest{
+		ConnectionID: bobConn, Scope: bob,
+		Tracks: []mediaplane.Track{{Location: "remote", SessionID: aliceConn, TrackName: "alice-mic"}, {Location: "remote", SessionID: carolConn, TrackName: "carol-mic"}},
+	})
+	if err != nil || len(pulled.Tracks) != 2 {
+		t.Fatalf("pull = %+v, %v", pulled, err)
+	}
+	if err := service.Renegotiate(ctx, mediaplane.RenegotiateRequest{ConnectionID: bobConn, Scope: bob, SessionDescription: subscriber.answer(t, pulled.SessionDescription)}); err != nil {
+		t.Fatalf("answer: %v", err)
+	}
+
+	states, err := service.SubscriptionStates(ctx, mediaplane.SubscriptionStatesRequest{ConnectionID: bobConn, Scope: bob})
+	if err != nil {
+		t.Fatalf("an ungranted source must not fail the whole read: %v", err)
+	}
+	reasons := map[string]string{}
+	for _, state := range states {
+		reasons[state.TrackName] = state.State + "/" + state.Reason
+	}
+	unauthorized := mediaplane.SubscriptionPaused + "/" + mediaplane.PauseSourceUnauthorized
+	if len(states) != 2 || reasons["carol-mic"] != unauthorized || reasons["alice-mic"] == unauthorized {
+		t.Fatalf("subscription states = %+v", states)
+	}
+}

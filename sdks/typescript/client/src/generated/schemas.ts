@@ -1186,7 +1186,7 @@ export const SFUSubscriptionsResponseSchema = /* @__PURE__ */ (() =>
       Schema.Struct({
         effective_rid: Schema.optional(Schema.String),
         mid: Schema.String,
-        reason: Schema.optional(Schema.Literals(["congestion", "viewer", "source_inactive"])),
+        reason: Schema.optional(Schema.Literals(["congestion", "viewer", "source_inactive", "source_unauthorized"])),
         requested_rid: Schema.optional(Schema.String),
         revision: Schema.Number,
         session_id: Schema.String,

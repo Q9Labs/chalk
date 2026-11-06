@@ -16344,7 +16344,7 @@
                   "type": "string"
                 },
                 "reason": {
-                  "enum": ["congestion", "viewer", "source_inactive"],
+                  "enum": ["congestion", "viewer", "source_inactive", "source_unauthorized"],
                   "type": "string"
                 },
                 "requested_rid": {

@@ -2232,7 +2232,7 @@ export interface components {
         effective_rid?: string;
         mid: string;
         /** @enum {string} */
-        reason?: "congestion" | "viewer" | "source_inactive";
+        reason?: "congestion" | "viewer" | "source_inactive" | "source_unauthorized";
         requested_rid?: string;
         revision: number;
         session_id: string;

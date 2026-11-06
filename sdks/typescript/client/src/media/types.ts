@@ -34,8 +34,8 @@ export type SFUSubscriptionState = {
   readonly sessionId: string;
   readonly trackName: string;
   readonly state: "active" | "paused";
-  /** congestion: the link cannot carry the lowest layer. viewer: this client paused it. source_inactive: the publisher sends nothing. */
-  readonly reason?: "congestion" | "viewer" | "source_inactive";
+  /** congestion: the link cannot carry the lowest layer. viewer: this client paused it. source_inactive: the publisher sends nothing. source_unauthorized: the publisher has no live grant for it. */
+  readonly reason?: "congestion" | "viewer" | "source_inactive" | "source_unauthorized";
   readonly revision: number;
   readonly requestedRid?: string;
   readonly effectiveRid?: string;
