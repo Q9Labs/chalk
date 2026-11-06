@@ -294,3 +294,90 @@ func TestAnotherBoundStreamCarriesProbesWhenTheFirstUnbinds(t *testing.T) {
 		t.Fatalf("probe streams %v after the first unbound, want the second to carry probes", transport.probeStreams)
 	}
 }
+
+func TestThePacerQueueRidesOutAStallAtTheRateTheSubscriberGets(t *testing.T) {
+	// A subscriber getting 4 Mbit/s of video sees a 400 ms stall of the node as
+	// 200 kB of video arriving at once; a 64 kB queue would drop most of it.
+	transport, video, _, _ := pacedTransport(t, 64<<10)
+	for _, at := range []int64{at(0), at(time.Second)} {
+		transport.meters[classVideo].sample(at)
+		transport.meters[classVideo].add(500_000)
+	}
+	var w packetWriter
+	payload := make([]byte, 1000)
+	for seq := range uint16(190) {
+		transport.send(&egressPacket{binding: video, class: classVideo, seq: seq, payload: payload}, &w)
+	}
+	if transport.counters.Dropped != 0 {
+		t.Fatalf("dropped %d video packets of a 190 kB burst at 4 Mbit/s", transport.counters.Dropped)
+	}
+	for seq := uint16(190); seq < 2000; seq++ {
+		transport.send(&egressPacket{binding: video, class: classVideo, seq: seq, payload: payload}, &w)
+	}
+	if transport.queuedBytes > queueMaxGrowth*(64<<10) {
+		t.Fatalf("queue holds %d bytes over %d times its configured size", transport.queuedBytes, queueMaxGrowth)
+	}
+	if transport.counters.Dropped == 0 {
+		t.Fatal("an endless burst was never dropped")
+	}
+}
+
+// probingTransport has a probe of target bits/s running since now.
+func probingTransport(t *testing.T, target float64, now int64) *transport {
+	t.Helper()
+	transport, video, _, _ := pacedTransport(t, 128<<10)
+	transport.bind(video)
+	transport.mu.Lock()
+	transport.tokens = 1e9
+	transport.refilled = now
+	transport.mu.Unlock()
+	if !transport.probe(target, now) {
+		t.Fatal("the probe did not start")
+	}
+	return transport
+}
+
+func TestAProbeEndsWithoutABackoffWhileTheNodeIsStalled(t *testing.T) {
+	start := monotonic()
+	transport := probingTransport(t, 4e6, start)
+	transport.pressure(start + int64(time.Second))
+	// The node tells the transport before its control tick can settle the probe.
+	late := start + int64(time.Second)
+	transport.tick(late)
+	transport.mu.Lock()
+	probing, sent, next := transport.probeID != 0, transport.counters.Probes, transport.probeNext
+	transport.mu.Unlock()
+	if probing || sent != 0 || next != 0 {
+		t.Fatalf("probing %v, sent %d padding packets, next probe at %d: a stalled node must drop the probe without a verdict", probing, sent, next)
+	}
+	if estimate := transport.estimate(start + int64(10*time.Millisecond)); !estimate.pressured || estimate.probing {
+		t.Fatalf("estimate %+v does not show a pressured node without a probe", estimate)
+	}
+}
+
+func TestAPacerQueueHoldsBackProbes(t *testing.T) {
+	transport, video, _, _ := pacedTransport(t, 128<<10)
+	transport.bind(video)
+	var w packetWriter
+	transport.send(&egressPacket{binding: video, class: classVideo, seq: 1, payload: make([]byte, 1000)}, &w)
+	if transport.estimate(monotonic()).probeReady {
+		t.Fatal("a transport with video waiting in its pacer asks to probe")
+	}
+	if transport.probe(4e6, monotonic()) {
+		t.Fatal("a probe started over video that queued after the estimate was read")
+	}
+}
+
+func TestAReadingNamesTheEstimateAndTheHostPressure(t *testing.T) {
+	transport, _, _, _ := pacedTransport(t, 128<<10)
+	now := monotonic()
+	transport.estimator.estimate = 2e6
+	transport.pressure(now + int64(time.Second))
+	reading := transport.reading(now)
+	if reading.current != 2e6 || reading.delivered != 1 || !reading.pressured || reading.probing {
+		t.Fatalf("reading %+v, want a 2 Mbit/s estimate, full delivery, pressure and no probe", reading)
+	}
+	if transport.reading(now + int64(2*time.Second)).pressured {
+		t.Fatal("pressure outlived its end")
+	}
+}

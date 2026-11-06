@@ -178,6 +178,20 @@ func (g *guard) observePacer(load pacerLoad) {
 	g.mu.Unlock()
 }
 
+// recentSteal is the steal, as a percent, over the latest second sampled, or 0.
+func (g *guard) recentSteal() float64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if len(g.steal) < 2 {
+		return 0
+	}
+	first, last := g.steal[len(g.steal)-2], g.steal[len(g.steal)-1]
+	if last.total <= first.total {
+		return 0
+	}
+	return 100 * float64(last.steal-first.steal) / float64(last.total-first.total)
+}
+
 // slots is how many one-second samples the window holds.
 func (g *guard) slots() int { return max(int(g.cfg.Window/time.Second), 1) }
 

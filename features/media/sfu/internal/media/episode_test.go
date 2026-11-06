@@ -73,7 +73,7 @@ func TestAnUngrantedSourceTakesNoShareOfTheDownlink(t *testing.T) {
 	transport.mu.Unlock()
 	granted.transport, ungranted.transport = transport, transport
 	session := &Session{transport: transport, subscribed: map[string]*subscription{"0": granted, "1": ungranted}}
-	allocateSession(session, false, now)
+	allocateSession(session, false, &probeBudget{slots: maxProbes}, now)
 	if granted.alloc.rid != "h" {
 		t.Fatalf("the granted camera is on %q, want h: a source without a grant took the downlink", granted.alloc.rid)
 	}
@@ -143,5 +143,30 @@ func TestAJoinTimeBurstOfProbesLeavesTheCamerasOpen(t *testing.T) {
 	}
 	if episode.measured < 4131 {
 		t.Fatalf("the probes measure %.0f packets/s, want the padding measured", episode.measured)
+	}
+}
+
+func TestTheNodeLetsOnlyAFewTransportsProbeAtOnce(t *testing.T) {
+	probeOf := func(slots int) bool {
+		granted, ungranted := grantedAndUngranted(t, 1.2e6, 300_000, 300)
+		granted.alloc = allocation{decided: true, rid: "l", backoff: backoffMin}
+		ungranted.alloc = allocation{decided: true, rid: "l", backoff: backoffMin}
+		transport := granted.transport
+		video := &egressBinding{ssrc: 1, rtxSSRC: 2, twccID: 3}
+		transport.bind(video)
+		transport.mu.Lock()
+		// A path the estimate calls fast but that has carried almost nothing: a raise needs a probe.
+		transport.estimator.feedbacks, transport.estimator.estimate = 1, 5e6
+		transport.mu.Unlock()
+		ungranted.transport = transport
+		session := &Session{transport: transport, subscribed: map[string]*subscription{"0": granted, "1": ungranted}}
+		allocateSession(session, true, &probeBudget{slots: slots}, monotonic())
+		return transport.probing()
+	}
+	if !probeOf(1) {
+		t.Fatal("the control case never probes, so the budget test proves nothing")
+	}
+	if probeOf(0) {
+		t.Fatal("a transport probed with no probe slot left on the node")
 	}
 }

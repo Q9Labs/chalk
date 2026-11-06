@@ -244,10 +244,24 @@ type bandwidthEstimator struct {
 	probe      probeCluster
 	probeFloor float64
 	probeUntil int64
+
+	// pressured is set while the node itself is stalled: its late sends and late
+	// feedback say nothing about the path, so they cannot lower the estimate.
+	pressured bool
 }
 
 func newBandwidthEstimator() bandwidthEstimator {
 	return bandwidthEstimator{estimate: initialEstimate}
+}
+
+// pressure tells the estimator whether the node is stalled. While it is, the
+// delay-based decrease waits; loss still counts. The trend restarts when the
+// stall ends, so delays the stall made do not carry into the samples after it.
+func (e *bandwidthEstimator) pressure(on bool) {
+	if e.pressured && !on {
+		e.trend = trendline{threshold: e.trend.threshold, thresholdAt: e.trend.thresholdAt}
+	}
+	e.pressured = on
 }
 
 // warm reports whether feedback has arrived yet.
@@ -283,7 +297,7 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.reportLen = min(e.reportLen+1, len(e.reports))
 	}
 	// A queue that grows means the path is full: back off below what got through.
-	if e.trend.signal == signalOveruse && now-e.decreased > int64(decreaseSpacing) {
+	if e.trend.signal == signalOveruse && !e.pressured && now-e.decreased > int64(decreaseSpacing) {
 		acked := e.ackedOver(decreaseSpan)
 		if acked == 0 {
 			acked = e.acked()

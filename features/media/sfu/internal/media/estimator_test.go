@@ -231,3 +231,50 @@ func TestHeavyLossCutsTheEstimate(t *testing.T) {
 		t.Fatalf("estimate %.0f after a second of two-thirds loss", estimate)
 	}
 }
+
+// overuse feeds the estimator packets whose delay grows 3 ms per packet and returns the estimate.
+func overuse(e *bandwidthEstimator, from int64) float64 {
+	now := from
+	for step := range 60 {
+		var acks []packetAck
+		for index := range 5 {
+			sent := now + int64(index)*int64(10*time.Millisecond)
+			delay := int64(20*time.Millisecond) + int64(step*5+index)*int64(3*time.Millisecond)
+			acks = append(acks, packetAck{sent: sent, arrival: sent + delay, size: 1000, received: true})
+		}
+		now += int64(50 * time.Millisecond)
+		e.onFeedback(acks, now)
+	}
+	return e.current()
+}
+
+func TestAStalledNodeDoesNotReadItsOwnDelayAsCongestion(t *testing.T) {
+	warmed := func() bandwidthEstimator {
+		run := newSimulation(&bottleneck{capacity: 20e6, queueBytes: 1 << 20, delay: int64(20 * time.Millisecond)})
+		run.run(20*time.Second, steady(3e6), 0)
+		return run.estimator
+	}
+	healthy := warmed()
+	before := healthy.current()
+	if after := overuse(&healthy, int64(30*time.Second)); after >= 0.9*before {
+		t.Fatalf("a growing delay left the estimate at %.0f of %.0f: the control case sees no congestion", after, before)
+	}
+	stalled := warmed()
+	stalled.pressure(true)
+	if after := overuse(&stalled, int64(30*time.Second)); after < before {
+		t.Fatalf("estimate %.0f after a stall, want at least the %.0f it had", after, before)
+	}
+	stalled.pressure(false)
+	if stalled.trend.points != 0 || stalled.trend.signal != signalNormal {
+		t.Fatal("the delay trend kept samples from before the stall")
+	}
+	loss := []packetAck{}
+	for range 40 {
+		loss = append(loss, packetAck{sent: int64(40 * time.Second), size: 1000})
+	}
+	stalled.pressure(true)
+	stalled.onFeedback(loss, int64(41*time.Second))
+	if stalled.current() >= before {
+		t.Fatal("loss during a stall no longer lowers the estimate")
+	}
+}

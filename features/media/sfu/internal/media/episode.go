@@ -146,6 +146,10 @@ func (n *Node) allocate() {
 	n.mu.Lock()
 	sessions := slices.Collect(maps.Values(n.sessions))
 	n.mu.Unlock()
+	if from, stalled := n.pressure.controlTick(now); stalled {
+		n.log.Warn("control loop stalled", "stallMs", time.Duration(now-from).Milliseconds())
+	}
+	probes := n.shareHostState(sessions, now)
 
 	episodes := map[episodeKey]*episodeTick{}
 	stats := &mediaStats{episodes: make(map[episodeKey]protocol.EpisodeState, len(sessions))}
@@ -191,7 +195,7 @@ func (n *Node) allocate() {
 	for key, episode := range episodes {
 		n.plan(key, episode, now)
 		for _, session := range episode.sessions {
-			allocateSession(session, episode.room, now)
+			allocateSession(session, episode.room, &probes, now)
 		}
 		for _, subscription := range episode.subscriptions {
 			link := subscription.alloc.limit()
@@ -202,6 +206,7 @@ func (n *Node) allocate() {
 			subscription.setServerLimit(limit)
 			if subscription.pub.video() {
 				n.totals.counts.LayerSwitches += subscription.takeSwitches()
+				n.logCongestionPause(subscription, link.paused, now)
 				switch {
 				case link.paused:
 					stats.congested++
@@ -217,6 +222,40 @@ func (n *Node) allocate() {
 	maps.DeleteFunc(n.plans, func(key episodeKey, _ int64) bool { return episodes[key] == nil })
 	stats.totals = n.totals
 	n.stats.Store(stats)
+}
+
+// shareHostState tells every transport whether the node is under pressure, before
+// any of them settles feedback or a probe, and returns the probe slots left after
+// the probes already running. Receivers that go quiet together raise the pressure.
+func (n *Node) shareHostState(sessions []*Session, now int64) probeBudget {
+	until := n.pressure.end(now)
+	budget := probeBudget{slots: maxProbes}
+	for _, session := range sessions {
+		if until != 0 {
+			session.transport.pressure(until)
+		}
+		if session.transport.probing() {
+			budget.slots--
+		}
+	}
+	return budget
+}
+
+// logCongestionPause logs a subscription's congestion pause when it starts and
+// when it ends, with the estimate that decided it. It names no Tenant, Episode or
+// Participant.
+func (n *Node) logCongestionPause(s *subscription, paused bool, now int64) {
+	if paused == s.pauseLogged {
+		return
+	}
+	s.pauseLogged = paused
+	reading := s.transport.reading(now)
+	message := "subscription resumed after a congestion pause"
+	if paused {
+		message = "subscription paused for congestion"
+	}
+	n.log.Info(message, "estimateBps", math.Round(reading.current), "provenBps", math.Round(reading.proven),
+		"deliveredShare", round2(reading.delivered), "probing", reading.probing, "hostPressure", reading.pressured)
 }
 
 // plan predicts the Episode's packets/s from what its publishers send and
@@ -285,7 +324,7 @@ func (s *subscription) packetRate(limit serverLimit, now int64) float64 {
 // subscriber without transport-wide feedback gets no bandwidth limit, as
 // before the allocator, and its Episode's plan alone applies. A source whose
 // lease is closed gets no share until a grant opens it.
-func allocateSession(session *Session, room bool, now int64) {
+func allocateSession(session *Session, room bool, probes *probeBudget, now int64) {
 	transport := session.transport
 	estimate := transport.estimate(now)
 	_, audio := transport.meters[classAudio].rates()
@@ -311,7 +350,7 @@ func allocateSession(session *Session, room bool, now int64) {
 			layers: subscription.allocatable(request, now), state: &subscription.alloc,
 		})
 	}
-	if target := allocate(tiles, estimate, audio, repair, now); target > 0 && room && estimate.probeReady {
+	if target := allocate(tiles, estimate, audio, repair, now); target > 0 && room && estimate.probeReady && probes.take() {
 		transport.probe(target, now)
 	}
 }

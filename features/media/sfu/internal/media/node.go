@@ -65,6 +65,7 @@ type Node struct {
 	media       net.PacketConn // conn, or the batching wrapper around it
 	mux         io.Closer
 	guard       *guard
+	pressure    hostPressure  // the control loop's
 	done        chan struct{} // closed by Close; stops the node's control loop
 	// receiveBuffer and sendBuffer are the UDP socket buffers the kernel granted, zero when unknown.
 	receiveBuffer, sendBuffer int

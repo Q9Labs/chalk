@@ -285,3 +285,29 @@ func TestAPausedTileBeforeAPlayingOneResumes(t *testing.T) {
 		t.Fatal("the earlier paused tile never resumed while the later tile held h")
 	}
 }
+
+func TestAStalledNodeNeitherDropsNorPausesATile(t *testing.T) {
+	// The estimate fell to 100 kbit/s because the node stalled for 400 ms, so no layer fits.
+	stalled := estimateOf(100_000, 100_000)
+	stalled.pressured = true
+	var state allocation
+	tiles := []tile{camera(&state)}
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, at(0))
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, at(600*time.Millisecond))
+	if state.rid != "h" {
+		t.Fatalf("rid %q on a proven 5 Mbit/s path, want h", state.rid)
+	}
+	for tick := range 40 { // four seconds of a node that keeps the estimate low
+		if probe := allocate(tiles, stalled, 0, 0, at(time.Second+time.Duration(tick)*100*time.Millisecond)); probe != 0 {
+			t.Fatalf("asked for a probe of %.0f while the node was stalled", probe)
+		}
+	}
+	if state.rid != "h" || state.paused {
+		t.Fatalf("rid %q paused %v after a stall, want h and flowing", state.rid, state.paused)
+	}
+	// The same low estimate on a healthy node is real congestion and still drops the tile.
+	allocate(tiles, estimateOf(100_000, 100_000), 0, 0, at(5*time.Second))
+	if state.rid != "l" {
+		t.Fatalf("rid %q on a real 100 kbit/s estimate, want l", state.rid)
+	}
+}

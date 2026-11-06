@@ -40,6 +40,11 @@ const (
 	repairShare   = 0.25
 	minRepairRate = 100_000 // bits/s
 	repairBurst   = 100 * time.Millisecond
+	// queueRide is how much of a subscriber's video the pacer queue can hold, so a
+	// stall of the node of that long does not drop video. queueMaxGrowth bounds
+	// the queue to a multiple of the configured size.
+	queueRide      = 500 * time.Millisecond
+	queueMaxGrowth = 4
 
 	probeDuration   = 400 * time.Millisecond
 	probeTick       = 5 * time.Millisecond
@@ -148,6 +153,9 @@ type transport struct {
 	// probeStreams are the bound video streams with RTX. Probe padding travels
 	// on the first, and the next takes over when it unbinds.
 	probeStreams []*egressBinding
+	// pressureUntil is when the node's latest stall stops excusing its late
+	// sends and feedback, on the monotonic clock.
+	pressureUntil int64
 
 	counters TransportCounters
 	// tallied is the part of counters the node's totals already hold.
@@ -266,7 +274,7 @@ func (t *transport) sendsNow(class packetClass) bool {
 // would have waited behind the queue, so a pacer that drops reads as slow. The
 // caller holds t.mu.
 func (t *transport) enqueue(packet *egressPacket, size int, now int64) bool {
-	if t.queuedBytes+size > t.queueLimit {
+	if t.queuedBytes+size > t.queueCapacity() {
 		if packet.class == classVideo {
 			t.counters.Dropped++
 			t.dropsUnread = true
@@ -281,6 +289,16 @@ func (t *transport) enqueue(packet *egressPacket, size int, now int64) bool {
 	t.queues[packet.class].push(item)
 	t.queuedBytes += size
 	return true
+}
+
+// queueCapacity is the bytes the pacer queue may hold: the configured size, or
+// queueRide of the video this subscriber is getting when that is more, up to
+// queueMaxGrowth times the configured size. The queue drains at a pace raised to
+// empty it within queueTarget, so a larger queue does not hold packets longer.
+func (t *transport) queueCapacity() int {
+	_, bps := t.meters[classVideo].rates()
+	ride := int(bps / 8 * queueRide.Seconds())
+	return min(max(t.queueLimit, ride), queueMaxGrowth*t.queueLimit)
 }
 
 // assign gives a packet the next transport sequence number and logs it for
@@ -419,7 +437,7 @@ func (t *transport) probeWait(now int64) time.Duration {
 func (t *transport) probe(target float64, now int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.closed || t.probeID != 0 || now < t.probeNext || len(t.probeStreams) == 0 {
+	if t.closed || t.probeID != 0 || now < t.probeNext || len(t.probeStreams) == 0 || t.queuedBytes != 0 {
 		return false
 	}
 	t.probeID++
@@ -431,6 +449,24 @@ func (t *transport) probe(target float64, now int64) bool {
 	t.estimator.startProbe(t.probeID, target)
 	t.signal()
 	return true
+}
+
+// abandonProbe ends a running probe without a verdict and without a backoff,
+// because the node, not the path, kept it from finishing. The caller holds t.mu.
+func (t *transport) abandonProbe() {
+	t.probeID = 0
+	t.estimator.probe = probeCluster{}
+}
+
+// pressure tells the transport that the node is stalled until the given time.
+func (t *transport) pressure(until int64) {
+	t.mu.Lock()
+	t.pressureUntil = max(t.pressureUntil, until)
+	if t.probeID != 0 {
+		// A stalled node cannot prove the path, and padding adds to its load.
+		t.abandonProbe()
+	}
+	t.mu.Unlock()
 }
 
 // settleProbe reads an ended probe's outcome. The caller holds t.mu.
@@ -471,6 +507,7 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 	t.seenNext = (t.seenNext + 1) % feedbackSeen
 	now := monotonic()
 	t.acks = walkFeedback(report, t.log[:], t.acks[:0])
+	t.estimator.pressure(now < t.pressureUntil)
 	t.estimator.onFeedback(t.acks, now)
 	t.feedback = now
 	t.counters.Feedback++
@@ -486,6 +523,7 @@ func (t *transport) tick(now int64) (growth transportGrowth) {
 		growth.packets[class], growth.bytes[class] = t.meters[class].sample(now)
 	}
 	t.mu.Lock()
+	t.estimator.pressure(now < t.pressureUntil)
 	t.settleProbe(now)
 	t.refill(now)
 	t.setRates(now)
@@ -540,19 +578,45 @@ type transportEstimate struct {
 	delivering bool
 	probing    bool
 	probeReady bool // a probe may start now
+	// pressured means the node is stalled, so the estimate and the pacer's drops
+	// describe the node and not the path.
+	pressured bool
 }
 
 func (t *transport) estimate(now int64) transportEstimate {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	congested := t.dropsUnread
+	congested := t.dropsUnread && now >= t.pressureUntil
 	t.dropsUnread = false
 	return transportEstimate{
-		warm: t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
+		pressured: now < t.pressureUntil,
+		warm:      t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
-		probeReady: t.probeID == 0 && now >= t.probeNext && len(t.probeStreams) > 0,
+		probeReady: t.probeID == 0 && now >= t.probeNext && len(t.probeStreams) > 0 && t.queuedBytes == 0,
 	}
+}
+
+// estimateReading is the estimator state that explains an allocator decision in a log line.
+type estimateReading struct {
+	current, proven, delivered float64
+	probing, pressured         bool
+}
+
+func (t *transport) reading(now int64) estimateReading {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return estimateReading{
+		current: t.estimator.current(), proven: t.estimator.proven(now), delivered: t.estimator.delivered(now),
+		probing: t.probeID != 0, pressured: now < t.pressureUntil,
+	}
+}
+
+// probing reports whether a probe is running.
+func (t *transport) probing() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.probeID != 0
 }
 
 // inspect reports the transport for the control API.
