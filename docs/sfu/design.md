@@ -815,8 +815,11 @@ production size, never extrapolated from staging.
 ### Shared CPU, drain and resizing
 
 Export CPU steal from `/proc/stat`, pacer queue delay and Go scheduler latency.
-Initially stop new Episodes when steal exceeds 3% over 30 seconds or pacer queue
-p95 exceeds 50 ms. Keep existing media running and alert on the bounded reason.
+Stop new Episodes when pacer queue p95 exceeds 50 ms or steal exceeds a
+threshold over 30 seconds. The code defaults steal to 3%, but the sgp1 $6 nodes
+run at 25%: with two live classes their shared vCPU showed 10-21% steal while
+pacer queue p95 stayed at 2 ms, so 3% refused a third class long before media
+suffered. Keep existing media running and alert on the bounded reason.
 If these guards close admission in more than 1% of minutes in a week, compare a
 measured dedicated-CPU replacement rather than accepting persistent freezes.
 The unexplained M1 packet ceiling still applies until diagnosed.
