@@ -1796,25 +1796,20 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     return this.#started && this.#capabilities().iceRestart;
   }
   // On an SFU that restarts ICE in place, a failed path first restarts ICE on the same session.
-  // While that runs the phase stays recovering. Once it fails, every state but live reports
-  // the failure, so the lifecycle replaces the session instead of waiting for recovery.
+  // While that runs the phase stays recovering. Once it fails, every state, live included, reports
+  // the failure until replacement: the attempt dropped an answer the SFU may have applied, so the
+  // session's ICE credentials can no longer be trusted.
   #observeIceRecovery(connection: RTCPeerConnection, connectionEpoch: number, observation: ConnectionObservation): ConnectionObservation {
     if (observation?.phase === "failed") this.#beginIceRestart(connection, this.#generation, connectionEpoch);
     const restart = this.#iceRestartOf(connection, connectionEpoch);
     if (!restart) return observation;
+    if (restart.state === "failed") return { phase: "failed", failure: this.#snapshot.failure ?? ICE_RESTART_FAILURE };
     if (connectionIsLive(connection)) {
       // A path that reconnects on its own settles the restart, so its budget cannot fail it later.
       if (restart.state === "running") restart.state = "succeeded";
       return observation;
     }
-    switch (restart.state) {
-      case "failed":
-        return { phase: "failed", failure: this.#snapshot.failure ?? ICE_RESTART_FAILURE };
-      case "running":
-        return { phase: "recovering", failure: null };
-      default:
-        return observation;
-    }
+    return restart.state === "running" ? { phase: "recovering", failure: null } : observation;
   }
   #iceRestartOf(connection: RTCPeerConnection, connectionEpoch: number): IceRestart | null {
     const restart = this.#iceRestart;

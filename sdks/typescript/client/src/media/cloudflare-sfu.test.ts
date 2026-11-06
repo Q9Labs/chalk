@@ -6582,6 +6582,36 @@ describe("in-place ICE restart on the own SFU", () => {
     );
   });
 
+  it("keeps a restart the budget failed failed when the path recovers by itself just after 8 s, so replacement runs", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8001);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        peer.setStates("connected", "connected");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.rollbackCalls).toBe(1);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        await h.client.restart(ownBootstrap("connection-2"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.peers).toHaveLength(2);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
   it("fails at once for replacement when the session is gone after node loss (HTTP 404)", async () => {
     await withTimedHarness(
       async (h) => {
