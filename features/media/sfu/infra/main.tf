@@ -32,6 +32,8 @@ resource "digitalocean_droplet" "node" {
   }
 }
 
+# The node's ufw mirrors these control and SSH sources: first boot sets it, and
+# features/media/sfu/deploy/deploy matches it to this firewall after every change.
 resource "digitalocean_firewall" "node" {
   name        = local.name
   droplet_ids = [digitalocean_droplet.node.id]
