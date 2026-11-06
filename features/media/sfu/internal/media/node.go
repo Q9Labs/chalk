@@ -112,6 +112,12 @@ type createRecord struct {
 
 // NewNode binds the shared UDP socket and builds the Pion API.
 func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
+	// A call that shrinks to the threshold takes the class ceiling back, so a class at the threshold
+	// must fit it with a screen share, or its admitted media would outgrow its reservation.
+	limits := &Node{cfg: cfg}
+	if mandatory, ceiling := limits.mandatoryPackets(cfg.LargeCallParticipants, true), limits.episodeCeiling(cfg.LargeCallParticipants); cfg.LargeCallParticipants > 0 && mandatory > ceiling {
+		return nil, fmt.Errorf("SFU_LARGE_CALL_PARTICIPANTS: %d Participants need %d mandatory packets/s with a screen share but the Episode ceiling is %d", cfg.LargeCallParticipants, mandatory, ceiling)
+	}
 	address, err := net.ResolveUDPAddr("udp4", cfg.UDPAddr)
 	if err != nil {
 		return nil, fmt.Errorf("resolve UDP address %q: %w", cfg.UDPAddr, err)

@@ -77,7 +77,7 @@ go run ./cmd/sfu
 | `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.                               |
 | `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.                        |
 | `SFU_EPISODE_PACKET_CEILING`            | `11520`         | Most packets/s one Episode may carry.                                 |
-| `SFU_LARGE_CALL_PARTICIPANTS`           | `6`             | 0 to 64. Past this size a call shows small tiles; 0 turns that off.   |
+| `SFU_LARGE_CALL_PARTICIPANTS`           | `6`             | 0 to 64. Past this size a call shows small tiles; 0 turns that off. The node refuses to start if a call of this size with a screen share needs more than the Episode ceiling. |
 | `SFU_SMALL_TILE_STREAM_COST`            | `90`            | Reserved packets/s of one low-layer camera to one subscriber.         |
 | `SFU_HISTORY_HIGH_BYTES`                | `409600`        | Repair history of `h` and of a camera without RIDs.                   |
 | `SFU_HISTORY_LOW_BYTES`                 | `131072`        | Repair history of other camera layers.                                |

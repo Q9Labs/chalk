@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"math"
 	"strings"
@@ -318,5 +319,19 @@ func TestAnEpisodeNeverReservesMoreWhenItShrinks(t *testing.T) {
 		if smaller, larger := node.episodeReservation(people-1), node.episodeReservation(people); smaller > larger {
 			t.Fatalf("%d Participants reserve %d but %d reserve only %d", people-1, smaller, people, larger)
 		}
+	}
+}
+
+// A call that shrinks to the threshold takes the class ceiling back. A configuration whose class
+// ceiling cannot carry the threshold's mandatory media is refused at start, because the call's
+// admitted media would then outgrow its reservation.
+func TestALargeCallThresholdThatTheClassCeilingCannotCarryIsRefused(t *testing.T) {
+	cfg := config.Config{
+		UDPAddr: "127.0.0.1:0", PacketBudget: 14_000, EpisodePacketCeiling: 7_000, CamerasPerParticipant: 2,
+		VideoStreamCost: 300, CameraUplinkCost: 390, AudioStreamCost: 50, ScreenStreamCost: 210,
+		LargeCallParticipants: 6, SmallTileStreamCost: 90,
+	}
+	if _, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil))); err == nil || !strings.Contains(err.Error(), "SFU_LARGE_CALL_PARTICIPANTS") {
+		t.Fatalf("a 7,000 ceiling under 8,040 mandatory packets/s gave %v, want a refusal naming the setting", err)
 	}
 }
