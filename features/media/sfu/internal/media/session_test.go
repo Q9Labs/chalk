@@ -36,6 +36,7 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 	t.Helper()
 	cfg := config.Config{
 		UDPAddr:                    "127.0.0.1:0",
+		UDPBatch:                   true,
 		AnnounceIPs:                []string{"127.0.0.1"},
 		IncludeLoopback:            true,
 		MaxSessions:                8,

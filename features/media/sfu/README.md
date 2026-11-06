@@ -59,43 +59,44 @@ SFU_ANNOUNCE_IPS=203.0.113.10 \
 go run ./cmd/sfu
 ```
 
-| Setting                                 | Default         | Meaning                                               |
-| --------------------------------------- | --------------- | ----------------------------------------------------- |
-| `SFU_CONTROL_ADDR`                      | `:8443`         | Control listener.                                     |
-| `SFU_UDP_ADDR`                          | `:50000`        | The one UDP socket every peer shares.                 |
-| `SFU_ANNOUNCE_IPS`                      | host interfaces | Addresses placed in ICE candidates (comma-separated). |
-| `SFU_ICE_LOOPBACK`                      | `false`         | Offer loopback candidates; local runs only.           |
-| `SFU_TLS_CERT_FILE`, `SFU_TLS_KEY_FILE` | required        | Server identity.                                      |
-| `SFU_CLIENT_CA_FILE`                    | required        | CA that signs the API's client certificate.           |
-| `SFU_CLIENT_IDENTITY`                   | required        | DNS or URI SAN the API's certificate must carry.      |
-| `SFU_MAX_SESSIONS`                      | `64`            | 1 to 1024.                                            |
-| `SFU_MAX_PUBLISHED_PER_SESSION`         | `8`             | 1 to 32.                                              |
-| `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                             |
-| `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                      |
-| `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; set `32000` on `s-2vcpu-2gb`.       |
-| `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.               |
-| `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.               |
-| `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.        |
-| `SFU_EPISODE_PACKET_CEILING`            | `11520`         | Most packets/s one Episode may carry.                 |
-| `SFU_HISTORY_HIGH_BYTES`                | `409600`        | Repair history of `h` and of a camera without RIDs.   |
-| `SFU_HISTORY_LOW_BYTES`                 | `131072`        | Repair history of other camera layers.                |
-| `SFU_HISTORY_SCREEN_BYTES`              | `327680`        | Repair history of a screen share.                     |
-| `SFU_PACER_QUEUE_BYTES`                 | `131072`        | Video one subscriber's pacer may hold.                |
-| `SFU_GUARD_MAX_STEAL_PERCENT`           | `3`             | CPU steal that closes admission to new Episodes.      |
-| `SFU_GUARD_MAX_QUEUE_DELAY`             | `50ms`          | Pacer queue delay p95 that closes admission.          |
-| `SFU_GUARD_WINDOW`                      | `30s`           | Window both guard signals are measured over.          |
-| `SFU_NEGOTIATION_TIMEOUT`               | `10s`           | How long a server offer waits for its answer.         |
-| `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.           |
-| `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
-| `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.  |
-| `SFU_UDP_SEND_BUFFER`                   | `8388608`       | Socket send buffer to request, 256 KiB to 64 MiB.     |
-| `SFU_VIDEO_STREAM_COST`                 | `300`           | Packets/s of a camera's top layer to one subscriber.  |
-| `SFU_CAMERA_UPLINK_COST`                | `390`           | Packets/s of a camera's uplink, every layer.          |
-| `SFU_CAMERAS_PER_PARTICIPANT`           | `2`             | Cameras one Participant may publish, 1 to 8.          |
-| `SFU_GUARD_MAX_BUSY_PERCENT`            | `90`            | Host CPU busy time that closes admission.             |
-| `SFU_GUARD_MAX_PACER_DROP_PERCENT`      | `5`             | Share of dropped video that closes admission.         |
-| `SFU_GUARD_MAX_UDP_ERRORS_PER_SECOND`   | `5`             | UDP buffer errors a second that close admission.      |
-| `SFU_SOURCE_LEASE_TTL`                  | `15s`           | How long a grant lets a source forward, 10s to 2m.    |
+| Setting                                 | Default         | Meaning                                                               |
+| --------------------------------------- | --------------- | --------------------------------------------------------------------- |
+| `SFU_CONTROL_ADDR`                      | `:8443`         | Control listener.                                                     |
+| `SFU_UDP_ADDR`                          | `:50000`        | The one UDP socket every peer shares.                                 |
+| `SFU_ANNOUNCE_IPS`                      | host interfaces | Addresses placed in ICE candidates (comma-separated).                 |
+| `SFU_ICE_LOOPBACK`                      | `false`         | Offer loopback candidates; local runs only.                           |
+| `SFU_TLS_CERT_FILE`, `SFU_TLS_KEY_FILE` | required        | Server identity.                                                      |
+| `SFU_CLIENT_CA_FILE`                    | required        | CA that signs the API's client certificate.                           |
+| `SFU_CLIENT_IDENTITY`                   | required        | DNS or URI SAN the API's certificate must carry.                      |
+| `SFU_MAX_SESSIONS`                      | `64`            | 1 to 1024.                                                            |
+| `SFU_MAX_PUBLISHED_PER_SESSION`         | `8`             | 1 to 32.                                                              |
+| `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                                             |
+| `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                                      |
+| `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; set `32000` on `s-2vcpu-2gb`.                       |
+| `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.                               |
+| `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.                               |
+| `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.                        |
+| `SFU_EPISODE_PACKET_CEILING`            | `11520`         | Most packets/s one Episode may carry.                                 |
+| `SFU_HISTORY_HIGH_BYTES`                | `409600`        | Repair history of `h` and of a camera without RIDs.                   |
+| `SFU_HISTORY_LOW_BYTES`                 | `131072`        | Repair history of other camera layers.                                |
+| `SFU_HISTORY_SCREEN_BYTES`              | `327680`        | Repair history of a screen share.                                     |
+| `SFU_PACER_QUEUE_BYTES`                 | `131072`        | Video one subscriber's pacer may hold.                                |
+| `SFU_GUARD_MAX_STEAL_PERCENT`           | `3`             | CPU steal that closes admission to new Episodes.                      |
+| `SFU_GUARD_MAX_QUEUE_DELAY`             | `50ms`          | Pacer queue delay p95 that closes admission.                          |
+| `SFU_GUARD_WINDOW`                      | `30s`           | Window both guard signals are measured over.                          |
+| `SFU_NEGOTIATION_TIMEOUT`               | `10s`           | How long a server offer waits for its answer.                         |
+| `SFU_CONNECT_TIMEOUT`                   | `60s`           | How long a new session may take to connect.                           |
+| `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                                 |
+| `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.                  |
+| `SFU_UDP_SEND_BUFFER`                   | `8388608`       | Socket send buffer to request, 256 KiB to 64 MiB.                     |
+| `SFU_UDP_BATCH`                         | `true`          | Batch media socket reads and writes (Linux). `false` is the rollback. |
+| `SFU_VIDEO_STREAM_COST`                 | `300`           | Packets/s of a camera's top layer to one subscriber.                  |
+| `SFU_CAMERA_UPLINK_COST`                | `390`           | Packets/s of a camera's uplink, every layer.                          |
+| `SFU_CAMERAS_PER_PARTICIPANT`           | `2`             | Cameras one Participant may publish, 1 to 8.                          |
+| `SFU_GUARD_MAX_BUSY_PERCENT`            | `90`            | Host CPU busy time that closes admission.                             |
+| `SFU_GUARD_MAX_PACER_DROP_PERCENT`      | `5`             | Share of dropped video that closes admission.                         |
+| `SFU_GUARD_MAX_UDP_ERRORS_PER_SECOND`   | `5`             | UDP buffer errors a second that close admission.                      |
+| `SFU_SOURCE_LEASE_TTL`                  | `15s`           | How long a grant lets a source forward, 10s to 2m.                    |
 
 ## Deploy
 

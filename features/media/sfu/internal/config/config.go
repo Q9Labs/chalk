@@ -28,6 +28,9 @@ type Config struct {
 	// UDPSendBuffer is the SO_SNDBUF size requested for the UDP socket. The kernel grants at most
 	// net.core.wmem_max, so the host must raise it too. A full send buffer drops outgoing media.
 	UDPSendBuffer int
+	// UDPBatch sends and receives media datagrams in batches (recvmmsg, sendmmsg, UDP
+	// segmentation) instead of one system call each. Off is the rollback.
+	UDPBatch bool
 
 	TLSCertFile    string
 	TLSKeyFile     string
@@ -140,6 +143,7 @@ func Load(lookup Lookup) (Config, error) {
 		IncludeLoopback:            r.boolean("SFU_ICE_LOOPBACK", false),
 		UDPReceiveBuffer:           r.integer("SFU_UDP_RECEIVE_BUFFER", 8<<20, 256<<10, 64<<20),
 		UDPSendBuffer:              r.integer("SFU_UDP_SEND_BUFFER", 8<<20, 256<<10, 64<<20),
+		UDPBatch:                   r.boolean("SFU_UDP_BATCH", true),
 		TLSCertFile:                r.required("SFU_TLS_CERT_FILE"),
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),

@@ -62,6 +62,7 @@ type Node struct {
 	incarnation string
 	peers       *peerFactory
 	conn        *net.UDPConn
+	media       net.PacketConn // conn, or the batching wrapper around it
 	mux         io.Closer
 	guard       *guard
 	done        chan struct{} // closed by Close; stops the node's control loop
@@ -121,7 +122,11 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	}
 	receiveBuffer := receiveSocketBuffer.size(conn, cfg.UDPReceiveBuffer, log)
 	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
-	mux := webrtc.NewICEUDPMux(nil, conn)
+	var media net.PacketConn = conn
+	if cfg.UDPBatch {
+		media = newMediaConn(conn)
+	}
+	mux := webrtc.NewICEUDPMux(nil, media)
 	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
 		_ = mux.Close()
@@ -134,6 +139,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		incarnation:   randomHex(4),
 		peers:         peers,
 		conn:          conn,
+		media:         media,
 		mux:           mux,
 		guard:         newGuard(cfg.Guard, log),
 		receiveBuffer: receiveBuffer,

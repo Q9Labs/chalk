@@ -387,7 +387,10 @@ the export against `inspect` and for identities.
   `chalk.sfu.bytes` by direction and kind (RTX sent is `out`/`repair`),
   `chalk.sfu.pacer.drops`, `chalk.sfu.repairs.cut`, `chalk.sfu.nack.requested`,
   `chalk.sfu.keyframe_repairs`, `chalk.sfu.rtx.received`,
-  `chalk.sfu.layer.switches`, and `chalk.sfu.refusals` by reason (`draining`,
+  `chalk.sfu.layer.switches`, `chalk.sfu.udp.send_refused` and
+  `chalk.sfu.udp.receive_truncated` (datagrams the media socket's kernel calls
+  refused or cut short; both stay 0 when `SFU_UDP_BATCH` is off), and
+  `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
   `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
   `udp_buffer_errors`, `screen_ceiling`, `cameras`).
