@@ -22,6 +22,7 @@ func TestStealAboveThresholdRefusesNewEpisodesAndKeepsExistingOnes(t *testing.T)
 	host := &fakeSteal{}
 	node.guard.readSteal = host.read
 	existing := node.newTestSession(t, episodeScope("live", "alice"))
+	node.newTestSession(t, episodeScope("solo", "dave"))
 
 	// 3% is allowed; a full 30-second window at 3% leaves admission open.
 	for range 31 {
@@ -43,6 +44,10 @@ func TestStealAboveThresholdRefusesNewEpisodesAndKeepsExistingOnes(t *testing.T)
 	_, err := node.CreateSession("create-new-episode", episodeScope("new", "bob"))
 	if !errors.Is(err, errAdmissionClosed) || !strings.Contains(err.Error(), reasonCPUSteal) {
 		t.Fatalf("new Episode under steal: %v, want admission closed for cpu_steal", err)
+	}
+	// A lone Participant replacing their own connection is not a new Episode.
+	if _, err := node.CreateSession("create-replace-dave", episodeScope("solo", "dave")); err != nil {
+		t.Fatalf("a lone Participant's reconnect under steal: %v, want admitted", err)
 	}
 	// The live Episode still admits its own Participants and its session stays up.
 	node.newTestSession(t, episodeScope("live", "carol"))

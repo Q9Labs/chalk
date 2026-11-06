@@ -84,7 +84,8 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 	if count+1 > n.cfg.MaxEpisodeParticipants {
 		return errEpisodeFull
 	}
-	if count == 0 {
+	// A replacement keeps its Participant's place, so only a new Episode meets the guard.
+	if count == 0 && replacing == nil {
 		if reason := n.guard.closedReason(); reason != "" {
 			return fmt.Errorf("%w: %s", errAdmissionClosed, reason)
 		}

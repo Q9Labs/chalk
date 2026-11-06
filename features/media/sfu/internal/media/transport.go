@@ -2,6 +2,7 @@ package media
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -144,8 +145,9 @@ type transport struct {
 	probeLast   int64 // when the probe's last packet left
 	probeNext   int64
 	backoff     time.Duration
-	// probeStream is a bound video stream with RTX, which probe padding travels on.
-	probeStream *egressBinding
+	// probeStreams are the bound video streams with RTX. Probe padding travels
+	// on the first, and the next takes over when it unbinds.
+	probeStreams []*egressBinding
 
 	counters    TransportCounters
 	dropsUnread bool         // the pacer dropped video since the allocator last read the estimate
@@ -385,7 +387,10 @@ func (t *transport) probeWait(now int64) time.Duration {
 		t.estimator.endProbe(now)
 		return 0
 	}
-	stream := t.probeStream
+	var stream *egressBinding
+	if len(t.probeStreams) > 0 {
+		stream = t.probeStreams[0]
+	}
 	owed := t.probeTarget/8*time.Duration(now-t.probeStart).Seconds() - float64(t.probeBytes)
 	for sent := 0; owed > 0 && sent < 16 && stream != nil && t.tokens >= 0; sent++ {
 		packet := egressPacket{binding: stream, class: classProbe, rtx: true, padding: probePadding, seq: uint16(stream.rtxSeq.Add(1))}
@@ -406,7 +411,7 @@ func (t *transport) probeWait(now int64) time.Duration {
 func (t *transport) probe(target float64, now int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.closed || t.probeID != 0 || now < t.probeNext || t.probeStream == nil {
+	if t.closed || t.probeID != 0 || now < t.probeNext || len(t.probeStreams) == 0 {
 		return false
 	}
 	t.probeID++
@@ -482,18 +487,14 @@ func (t *transport) bind(binding *egressBinding) {
 		return
 	}
 	t.mu.Lock()
-	if t.probeStream == nil {
-		t.probeStream = binding
-	}
+	t.probeStreams = append(t.probeStreams, binding)
 	t.mu.Unlock()
 }
 
 // unbind forgets a stream that no longer sends.
 func (t *transport) unbind(binding *egressBinding) {
 	t.mu.Lock()
-	if t.probeStream == binding {
-		t.probeStream = nil
-	}
+	t.probeStreams = slices.DeleteFunc(t.probeStreams, func(bound *egressBinding) bool { return bound == binding })
 	t.mu.Unlock()
 }
 
@@ -536,7 +537,7 @@ func (t *transport) estimate(now int64) transportEstimate {
 		warm: t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
-		probeReady: t.probeID == 0 && now >= t.probeNext && t.probeStream != nil,
+		probeReady: t.probeID == 0 && now >= t.probeNext && len(t.probeStreams) > 0,
 	}
 }
 

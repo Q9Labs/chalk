@@ -279,3 +279,18 @@ func TestPacketsWithoutTransportFeedbackAreCountedAndTheirRepairsCapped(t *testi
 		t.Fatalf("%d packets on the wire, want the audio and %d repairs", sent, repairs)
 	}
 }
+
+func TestAnotherBoundStreamCarriesProbesWhenTheFirstUnbinds(t *testing.T) {
+	transport, video, _, _ := pacedTransport(t, 128<<10)
+	first := &egressBinding{ssrc: 201, rtxSSRC: 202, twccID: video.twccID}
+	second := &egressBinding{ssrc: 203, rtxSSRC: 204, twccID: video.twccID}
+	transport.unbind(video)
+	transport.bind(first)
+	transport.bind(second)
+	transport.unbind(first)
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	if len(transport.probeStreams) == 0 || transport.probeStreams[0] != second {
+		t.Fatalf("probe streams %v after the first unbound, want the second to carry probes", transport.probeStreams)
+	}
+}
