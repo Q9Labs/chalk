@@ -37,6 +37,8 @@ type SourceWorker = {
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
   awaitingLive: number | null;
+  /** A source the join published whose on Sync has not accepted yet. See `#announceInitialOn`. */
+  initialOn: { readonly revision: number; running: boolean } | null;
 };
 /*
  * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
@@ -68,6 +70,7 @@ function sourceWorker(enabled: boolean): SourceWorker {
     pausedPublicationId: null,
     capturePause: "none",
     awaitingLive: null,
+    initialOn: null,
   };
 }
 /** Joining/offline actions never hold a worker while waiting on the lifecycle queue. */
@@ -721,6 +724,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const publish = foreign(async () => {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = this.#consentedTracks(stream.getTracks());
+      let published = tracks;
       await media.start(streamFromTracks(tracks), () =>
         Effect.runPromise(
           waitForSync.pipe(
@@ -728,17 +732,21 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const snapshot = this.#ports?.sync.getSnapshot();
               this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot, this.#store.getSnapshot().participants.roster));
               if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
-              return streamFromTracks(this.#consentedTracks(tracks));
+              published = this.#consentedTracks(tracks);
+              return streamFromTracks(published);
             }),
           ),
         ),
       );
-      const ports = this.#ports;
+      const publishedSources = new Set(published.map((track) => (track.kind === "audio" ? "microphone" : "camera")));
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
+        state.initialOn = null;
         if (state.desired.revision !== revisions[source]) continue;
         state.result = { revision: revisions[source], status: "confirmed" };
-        if (ports && this.#hasConsent(source)) this.#announceInitialOn(ports, source, state.desired);
+        if (!publishedSources.has(source)) continue;
+        state.initialOn = { revision: revisions[source], running: false };
+        this.#announceInitialOn(source);
       }
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
@@ -746,15 +754,36 @@ class MediaControllerRuntime implements MediaControllerEffects {
   /**
    * A source published at join still needs Sync to accept its on: Chalk's own SFU forwards a source only under the
    * grant Sync makes for an accepted on. The join does not wait for it, because the call goes live only after the
-   * join. A refused on turns the source off, since it was off before this join.
+   * join. The on stays owed until Sync answers: a lost connection or a left call keeps it owed and consent intact,
+   * and the next return to live resends it. Only Sync's refusal turns the source off, since it was off before this join.
    */
-  #announceInitialOn(ports: ConnectionPorts, source: "microphone" | "camera", intent: MediaIntent): void {
-    const joined = { ...intent, previousEnabled: false };
-    const send = this.#serialize(source, this.#send(ports, source, joined, true));
+  #announceInitialOn(source: MediaSource): void {
+    if (source === "screen") return;
+    const state = this.#sources[source];
+    const owed = state.initialOn;
+    const ports = this.#ports;
+    if (!owed || owed.running || !ports) return;
+    if (state.desired.revision !== owed.revision) {
+      state.initialOn = null;
+      return;
+    }
+    owed.running = true;
+    const intent = { ...state.desired, previousEnabled: false };
+    const settle = Effect.sync(() => {
+      if (state.initialOn === owed) state.initialOn = null;
+    });
     this.#fork(
-      this.#waitForLive(source, joined.revision, ports).pipe(
-        Effect.andThen(send),
-        Effect.catch((cause) => this.#failRevision(ports, source, joined, cause)),
+      this.#waitForLive(source, owed.revision, ports).pipe(
+        Effect.andThen(this.#serialize(source, this.#send(ports, source, intent, true))),
+        Effect.matchEffect({
+          onSuccess: () => settle,
+          onFailure: (cause) => (refusedBySync(cause) ? settle.pipe(Effect.andThen(this.#failRevision(ports, source, intent, cause))) : Effect.void),
+        }),
+        Effect.ensuring(
+          Effect.sync(() => {
+            owed.running = false;
+          }),
+        ),
       ),
     );
   }
@@ -810,6 +839,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       // Screen share replays its unfinished stop; every source repays an owed off. Pending user enables own their readiness wait.
       if (source === "screen" && !owesRemoteOff(this.#sources[source])) this.#runWork(source);
       else this.#resendOwedOff(source);
+      this.#announceInitialOn(source);
     }
   }
   /** After a reconnect, Sync's snapshot decides: a source the device turned off but Sync still shows on, with the publication the device paused, is an off to resend. */
@@ -1558,6 +1588,10 @@ function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boole
   if (convergence) return convergence;
   if (!live && track && liveTrack(track)) return "requesting";
   return confirmed ? "enabled" : pending ? "requesting" : "disabled";
+}
+/** Sync answered the on with a refusal; a lost connection, a left call or a timeout is not one. */
+function refusedBySync(cause: unknown): boolean {
+  return cause instanceof V1SyncError && cause.code === "terminal_failure";
 }
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
