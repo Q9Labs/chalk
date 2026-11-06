@@ -19,6 +19,10 @@ resource "digitalocean_droplet" "node" {
   monitoring = true
   ipv6       = false
   backups    = false
+
+  # Resize CPU and RAM only. A grown disk cannot shrink, and the tier must stay reversible.
+  resize_disk = false
+
   user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     control_addresses = var.control_addresses
     ssh_addresses     = var.ssh_addresses

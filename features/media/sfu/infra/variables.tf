@@ -15,7 +15,7 @@ variable "region" {
 }
 
 variable "size" {
-  description = "Droplet size. Moving production to s-2vcpu-2gb needs the owner's approval."
+  description = "Droplet size. Production runs s-2vcpu-2gb; staging stays on s-1vcpu-1gb. Resizing changes CPU and RAM only, never the disk."
   type        = string
   default     = "s-1vcpu-1gb"
 
