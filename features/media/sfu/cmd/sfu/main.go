@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +32,10 @@ func run(log *slog.Logger) error {
 	cfg, err := config.Load(os.LookupEnv)
 	if err != nil {
 		return err
+	}
+	if addr, ok := os.LookupEnv("SFU_PPROF_ADDR"); ok && addr != "" {
+		// Profiling build only: never merged.
+		go func() { log.Info("pprof stopped", "error", http.ListenAndServe(addr, nil)) }()
 	}
 	server, err := control.Start(cfg, log)
 	if err != nil {

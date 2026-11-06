@@ -120,7 +120,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		return nil, fmt.Errorf("listen on UDP %q: %w", cfg.UDPAddr, err)
 	}
 	receiveBuffer := sizeReceiveBuffer(conn, cfg.UDPReceiveBuffer, log)
-	mux := webrtc.NewICEUDPMux(nil, conn)
+	mux := webrtc.NewICEUDPMux(nil, newMuxConn(conn))
 	peers, err := newPeerFactory(cfg, mux)
 	if err != nil {
 		_ = mux.Close()
