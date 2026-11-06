@@ -25,6 +25,9 @@ type Config struct {
 	// UDPReceiveBuffer is the SO_RCVBUF size requested for the UDP socket. The
 	// kernel grants at most net.core.rmem_max, so the host must raise it too.
 	UDPReceiveBuffer int
+	// UDPSendBuffer is the SO_SNDBUF size requested for the UDP socket. The kernel grants at most
+	// net.core.wmem_max, so the host must raise it too. A full send buffer drops outgoing media.
+	UDPSendBuffer int
 
 	TLSCertFile    string
 	TLSKeyFile     string
@@ -44,10 +47,19 @@ type Config struct {
 	// per node size: 16000 on s-1vcpu-1gb, 32000 on s-2vcpu-2gb. A join that would
 	// push the Episodes' reservations above it is refused.
 	PacketBudget int
-	// VideoStreamCost and AudioStreamCost are the reserved packets/s of one
-	// video or audio stream, per hop (a publisher's uplink or one subscriber's downlink).
-	VideoStreamCost int
-	AudioStreamCost int
+	// VideoStreamCost is the reserved packets/s of one camera sent to one subscriber, at its top
+	// layer. CameraUplinkCost is what the camera's publisher sends the node: every simulcast
+	// layer, because publishers keep sending all of them. AudioStreamCost is one microphone's
+	// packets/s per hop. The defaults come from the SDK's camera encodings (h 2.5 Mbit/s and
+	// l 650 kbit/s at 30 frames/s, 1,150-byte payloads): a frame takes ceil(bytes/1150) packets,
+	// so h sends 30·10 = 300 and l sends 30·3 = 90 packets/s, 390 on the uplink. Real SDK
+	// cameras measured about 300 and 90.
+	VideoStreamCost  int
+	CameraUplinkCost int
+	AudioStreamCost  int
+	// CamerasPerParticipant is the most cameras one Participant publishes. Admission reserves
+	// for that many, and a push of one more is refused.
+	CamerasPerParticipant int
 	// MaxEpisodeParticipants caps live sessions in one Episode. It is a safety bound, not the
 	// admission rule: the packet budget refuses a large Episode first on today's node sizes.
 	MaxEpisodeParticipants int
@@ -56,8 +68,8 @@ type Config struct {
 	// Episode reserves at most this much. Audio, the screen share and camera uplinks are never
 	// lowered, so a join or screen share whose mandatory media cannot fit under it is refused.
 	EpisodePacketCeiling int
-	// ScreenStreamCost is the packets/s one hop of the screen share's video is assumed to need when
-	// checking mandatory media. Screen video has no lower layer, so the allocator cannot reduce it.
+	// ScreenStreamCost is the packets/s one hop of the screen share's video is assumed to need.
+	// Screen video has no lower layer, so the allocator cannot reduce it.
 	ScreenStreamCost int
 	// Memory caps one ingress stream's retransmission history (one second at most) and one
 	// subscriber's pacer queue.
@@ -97,9 +109,18 @@ type Telemetry struct {
 type Guard struct {
 	// MaxStealPercent is the CPU steal, over Window, above which new Episodes are refused.
 	MaxStealPercent float64
+	// MaxBusyPercent is the host CPU time spent working, steal and idle excluded, over Window,
+	// above which new Episodes are refused.
+	MaxBusyPercent float64
 	// MaxQueueDelay is the pacer queue delay p95, over Window, above which new Episodes are refused.
 	MaxQueueDelay time.Duration
-	Window        time.Duration
+	// MaxPacerDropPercent is the share of video the pacers dropped for a full queue, over Window,
+	// above which new Episodes are refused.
+	MaxPacerDropPercent float64
+	// MaxUDPErrorsPerSecond is the host's UDP datagrams dropped per second for a full receive or
+	// send buffer, over Window, above which new Episodes are refused.
+	MaxUDPErrorsPerSecond int
+	Window                time.Duration
 }
 
 // Lookup reads one setting, like os.LookupEnv.
@@ -118,6 +139,7 @@ func Load(lookup Lookup) (Config, error) {
 		AnnounceIPs:                r.list("SFU_ANNOUNCE_IPS"),
 		IncludeLoopback:            r.boolean("SFU_ICE_LOOPBACK", false),
 		UDPReceiveBuffer:           r.integer("SFU_UDP_RECEIVE_BUFFER", 8<<20, 256<<10, 64<<20),
+		UDPSendBuffer:              r.integer("SFU_UDP_SEND_BUFFER", 8<<20, 256<<10, 64<<20),
 		TLSCertFile:                r.required("SFU_TLS_CERT_FILE"),
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
@@ -128,7 +150,9 @@ func Load(lookup Lookup) (Config, error) {
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
 		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 256<<10, 4<<10, 1<<20)),
 		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
-		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 150, 1, 10000),
+		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 300, 1, 10000),
+		CameraUplinkCost:           r.integer("SFU_CAMERA_UPLINK_COST", 390, 1, 10000),
+		CamerasPerParticipant:      r.integer("SFU_CAMERAS_PER_PARTICIPANT", 2, 1, 8),
 		AudioStreamCost:            r.integer("SFU_AUDIO_STREAM_COST", 50, 1, 10000),
 		MaxEpisodeParticipants:     r.integer("SFU_MAX_EPISODE_PARTICIPANTS", 16, 1, 64),
 		EpisodePacketCeiling:       r.integer("SFU_EPISODE_PACKET_CEILING", 11520, 1000, 1000000),
@@ -140,9 +164,12 @@ func Load(lookup Lookup) (Config, error) {
 			PacerQueueBytes:    r.integer("SFU_PACER_QUEUE_BYTES", 128<<10, 16<<10, 4<<20),
 		},
 		Guard: Guard{
-			MaxStealPercent: float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", 3, 1, 100)),
-			MaxQueueDelay:   r.duration("SFU_GUARD_MAX_QUEUE_DELAY", 50*time.Millisecond, 5*time.Millisecond, 5*time.Second),
-			Window:          r.duration("SFU_GUARD_WINDOW", 30*time.Second, 5*time.Second, 10*time.Minute),
+			MaxStealPercent:       float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", 3, 1, 100)),
+			MaxBusyPercent:        float64(r.integer("SFU_GUARD_MAX_BUSY_PERCENT", 90, 1, 100)),
+			MaxQueueDelay:         r.duration("SFU_GUARD_MAX_QUEUE_DELAY", 50*time.Millisecond, 5*time.Millisecond, 5*time.Second),
+			MaxPacerDropPercent:   float64(r.integer("SFU_GUARD_MAX_PACER_DROP_PERCENT", 5, 1, 100)),
+			MaxUDPErrorsPerSecond: r.integer("SFU_GUARD_MAX_UDP_ERRORS_PER_SECOND", 5, 1, 1000000),
+			Window:                r.duration("SFU_GUARD_WINDOW", 30*time.Second, 5*time.Second, 10*time.Minute),
 		},
 		Telemetry: Telemetry{
 			OTLPEndpoint: r.text("SFU_OTLP_ENDPOINT", ""),

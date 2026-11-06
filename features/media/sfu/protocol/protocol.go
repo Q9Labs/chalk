@@ -328,7 +328,8 @@ type ReadyResponse struct {
 // HostState is the host-health guard's view over its window.
 type HostState struct {
 	// AdmissionReason names why new Episodes are refused, absent while they are
-	// admitted: "cpu_steal" or "pacer_queue_delay". Existing Episodes continue.
+	// admitted: "cpu_steal", "cpu_busy", "pacer_queue_delay", "pacer_drops" or
+	// "udp_buffer_errors". Existing Episodes continue.
 	AdmissionReason string `json:"admissionReason,omitempty"`
 	// StealPercent is absent where the host does not report steal.
 	StealPercent          *float64 `json:"stealPercent,omitempty"`
@@ -344,6 +345,14 @@ type HostState struct {
 	// receive buffer was full, since boot (RcvbufErrors). It is absent where the
 	// host does not report it. A rising count means media loss on ingress.
 	UDPReceiveBufferErrors *uint64 `json:"udpReceiveBufferErrors,omitempty"`
+	// UDPSendBufferBytes is the media socket's send buffer as the kernel granted
+	// it, zero when unknown. Below the requested size, raise net.core.wmem_max
+	// on the host.
+	UDPSendBufferBytes int `json:"udpSendBufferBytes"`
+	// UDPSendBufferErrors counts the host's UDP datagrams dropped because a send
+	// buffer was full, since boot (SndbufErrors). It is absent where the host
+	// does not report it. A rising count means media loss on egress.
+	UDPSendBufferErrors *uint64 `json:"udpSendBufferErrors,omitempty"`
 }
 
 type ErrorResponse struct {

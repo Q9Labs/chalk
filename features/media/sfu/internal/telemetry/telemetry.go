@@ -129,7 +129,8 @@ func Register(meter metric.Meter, read Read) error {
 	scheduler := ratio("chalk.sfu.scheduler.latency.p99", "s", "99th percentile of Go scheduler latency over the guard window.")
 	steal := ratio("chalk.sfu.host.cpu.steal", "1", "Share of host CPU time stolen by the hypervisor over the guard window.")
 	busy := ratio("chalk.sfu.host.cpu.utilization", "1", "Share of host CPU time spent working over the guard window, steal excluded.")
-	paused := gauge("chalk.sfu.subscriptions.congestion_paused", "{subscription}", "Video subscriptions paused for congestion.")
+	paused := gauge("chalk.sfu.subscriptions.congestion_paused", "{subscription}", "Video subscriptions paused because their own downlink cannot carry the lowest layer.")
+	plannerPaused := gauge("chalk.sfu.subscriptions.planner_paused", "{subscription}", "Video subscriptions an Episode plan pauses to hold its packet ceiling.")
 	capped := gauge("chalk.sfu.cameras.capped", "{camera}", "Cameras an Episode ceiling lowers.")
 	pausedCameras := gauge("chalk.sfu.cameras.paused", "{camera}", "Cameras an Episode ceiling pauses.")
 	rss := gauge("process.memory.usage", "By", "Resident memory of the SFU process.")
@@ -146,6 +147,7 @@ func Register(meter metric.Meter, read Read) error {
 	switches := counter("chalk.sfu.layer.switches", "{switch}", "Simulcast layer switches subscriptions began.")
 	refusals := counter("chalk.sfu.refusals", "{refusal}", "Joins and screen shares the node refused, by reason.")
 	udpErrors := counter("chalk.sfu.host.udp.receive_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full receive buffer.")
+	udpSendErrors := counter("chalk.sfu.host.udp.send_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full send buffer.")
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("create telemetry instruments: %w", err)
 	}
@@ -171,6 +173,7 @@ func Register(meter metric.Meter, read Read) error {
 			o.ObserveFloat64(busy, t.Health.BusyPercent/100)
 		}
 		o.ObserveInt64(paused, int64(t.CongestionPaused))
+		o.ObserveInt64(plannerPaused, int64(t.PlannerPaused))
 		o.ObserveInt64(capped, int64(t.CappedCameras))
 		o.ObserveInt64(pausedCameras, int64(t.PausedCameras))
 		o.ObserveInt64(drops, count(t.Totals.PacerDrops))
@@ -182,8 +185,9 @@ func Register(meter metric.Meter, read Read) error {
 		for reason, refused := range t.Refusals {
 			o.ObserveInt64(refusals, count(refused), metric.WithAttributes(attribute.String(keyReason, reason)))
 		}
-		if t.UDPReceiveErrorsKnown {
+		if t.UDPErrorsKnown {
 			o.ObserveInt64(udpErrors, count(t.UDPReceiveErrors))
+			o.ObserveInt64(udpSendErrors, count(t.UDPSendErrors))
 		}
 		if seconds, ok := processCPUSeconds(); ok {
 			o.ObserveFloat64(cpu, seconds)
@@ -193,8 +197,8 @@ func Register(meter metric.Meter, read Read) error {
 		}
 		return nil
 	}, sessions, episodes, draining, admission, budget, reserved, packetRate, bitrate, queueDelay, scheduler,
-		steal, busy, paused, capped, pausedCameras, rss, cpu, packets, bytes, drops, cut, nacks, keyframes, rtx,
-		switches, refusals, udpErrors)
+		steal, busy, paused, plannerPaused, capped, pausedCameras, rss, cpu, packets, bytes, drops, cut, nacks, keyframes, rtx,
+		switches, refusals, udpErrors, udpSendErrors)
 	if err != nil {
 		return fmt.Errorf("register telemetry callback: %w", err)
 	}

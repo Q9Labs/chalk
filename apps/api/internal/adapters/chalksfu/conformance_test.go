@@ -326,7 +326,7 @@ func TestConformanceAdmission(t *testing.T) {
 
 	t.Run("a join that exceeds the packet budget is refused", func(t *testing.T) {
 		// One stream pair costs 150 packets/s: two Participants reserve 900, three reserve 1,800.
-		service := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1000", "SFU_VIDEO_STREAM_COST": "100", "SFU_AUDIO_STREAM_COST": "50"}).service(t)
+		service := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1000", "SFU_CAMERA_UPLINK_COST": "100", "SFU_VIDEO_STREAM_COST": "100", "SFU_SCREEN_STREAM_COST": "100", "SFU_AUDIO_STREAM_COST": "50"}).service(t)
 		join(t, service, scopeOf("ep-budget", "alice"))
 		join(t, service, scopeOf("ep-budget", "bob"))
 		// The Episode's 1,000 ceiling equals the budget, so a third Participant still fits it,

@@ -12,8 +12,12 @@ const (
 	RefusedMandatoryMedia = "mandatory_media"
 	RefusedNodeFull       = "node_full"
 	RefusedScreenCeiling  = "screen_ceiling"
+	RefusedCameras        = "cameras"
 	RefusedCPUSteal       = reasonCPUSteal
+	RefusedCPUBusy        = reasonCPUBusy
 	RefusedPacerQueue     = reasonPacerQueueDelay
+	RefusedPacerDrops     = reasonPacerDrops
+	RefusedUDPErrors      = reasonUDPBufferErrors
 )
 
 // Ingress kinds split what publishers send by media.
@@ -34,13 +38,14 @@ type Telemetry struct {
 	Draining                      bool
 	PacketBudget, ReservedPackets int
 	Health                        HostHealth
-	// UDPReceiveErrors is the host's count of UDP datagrams dropped for a full receive buffer,
-	// valid only where UDPReceiveErrorsKnown.
-	UDPReceiveErrors      uint64
-	UDPReceiveErrorsKnown bool
-	// CongestionPaused counts video subscriptions paused for congestion; CappedCameras and
-	// PausedCameras the cameras the Episode ceilings lower or pause.
-	CongestionPaused, CappedCameras, PausedCameras int
+	// UDPReceiveErrors and UDPSendErrors are the host's counts of UDP datagrams dropped for a full
+	// receive or send buffer, valid only where UDPErrorsKnown.
+	UDPReceiveErrors, UDPSendErrors uint64
+	UDPErrorsKnown                  bool
+	// CongestionPaused counts video subscriptions a subscriber's own downlink pauses, and
+	// PlannerPaused those an Episode plan pauses to hold its ceiling. CappedCameras and
+	// PausedCameras are the cameras the Episode ceilings lower or pause.
+	CongestionPaused, PlannerPaused, CappedCameras, PausedCameras int
 	// In is what publishers send the node, by kind; Out is what the node sends subscribers, by
 	// packet class. Each flow has its rate over the last second and its total since start.
 	In, Out []Flow
@@ -92,9 +97,11 @@ func (c *counted) take(total uint64) uint64 {
 	return grown
 }
 
-// refuse counts a refused join or screen share and returns its error. The caller holds n.mu.
+// refuse counts a refused join or screen share, logs why and returns its error. The reason is
+// a closed set and the log names no Tenant, Episode or Participant. The caller holds n.mu.
 func (n *Node) refuse(reason string, err error) error {
 	n.refusals[reason]++
+	n.log.Warn("refused", "reason", reason, "sessions", len(n.sessions))
 	return err
 }
 
@@ -109,14 +116,16 @@ func (n *Node) Telemetry() Telemetry {
 	}
 	n.mu.Unlock()
 	telemetry.Health = n.guard.snapshot()
-	telemetry.UDPReceiveErrors, telemetry.UDPReceiveErrorsKnown = readUDPReceiveErrors(udpStatsPath)
+	if errs, known := readUDPErrors(udpStatsPath); known {
+		telemetry.UDPReceiveErrors, telemetry.UDPSendErrors, telemetry.UDPErrorsKnown = errs.receive, errs.send, true
+	}
 
 	stats := n.stats.Load()
 	if stats == nil {
 		stats = &mediaStats{}
 	}
 	telemetry.Episodes = len(stats.episodes)
-	telemetry.CongestionPaused = stats.congested
+	telemetry.CongestionPaused, telemetry.PlannerPaused = stats.congested, stats.plannerPaused
 	for _, episode := range stats.episodes {
 		telemetry.CappedCameras += episode.CappedCameras
 		telemetry.PausedCameras += episode.PausedCameras

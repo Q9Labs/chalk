@@ -699,27 +699,34 @@ uncapped. Do not use the 65% screen duty to discount these peak requirements.
 
 ### Admission and the single-node envelope
 
-M2 owns configurable costs of **150 packets/s per video stream** and **50 per
-audio stream**, node budgets of **16,000** and **32,000**, a configurable Episode
-Participant limit defaulting to **16**, and an Episode binding that records the
-selected node. These are reservations, not a claim that every video physically
-sends 150 packets/s. Keep one active screen share per Episode.
+M2 owns configurable costs, node budgets of **16,000** and **32,000**, a
+configurable Episode Participant limit defaulting to **16**, and an Episode
+binding that records the selected node. The costs come from the SDK's camera
+encodings (`h` at 2.5 Mbit/s, `l` at 650 kbit/s, 30 frames/s, a frame needing
+`ceil(bytes/1150)` packets): **300 packets/s** for the `h` layer one subscriber
+receives, **390** for a camera's uplink because a publisher sends every layer, and
+**50** per audio stream. A deployed node measured 300 and 90 from real SDK
+cameras. A Participant may publish `SFU_CAMERAS_PER_PARTICIPANT` cameras, 2 by
+default, and a push of one more is refused, so the reservation is an upper bound
+and admission, not a blanket pause, is the gate. Keep one active screen share per
+Episode.
 
-The nominal all-source reservation counts one camera and microphone per
-Participant plus the screen and its audio on every hop:
-`R(n) = (150 + 50) · n · (n + 1)`. The node reserves a screen share at
-`SFU_SCREEN_STREAM_COST`, about 210 packets/s. Reserve at least two Participants for a new
-Episode. M5 bounds the supported reservation by the per-Episode ceiling:
+The nominal all-source reservation, with `m` cameras of uplink `u` and downlink
+`d`, microphone `a` and screen `s` per Participant, counts every hop:
+`R(n) = n·(m·u + a) + n·(n-1)·(m·d + a) + n·(s + a)`. The node reserves a screen
+share at `SFU_SCREEN_STREAM_COST`, about 210 packets/s. Reserve at least two
+Participants for a new Episode. M5 bounds the supported reservation by the per-Episode ceiling:
 `min(R(n), 11,520, node budget)`. Before M5's enforcing allocator is enabled,
 M2 must not claim that a smaller reservation bounds actual media. A second RID,
 hotter video, retransmissions and capture still need measured headroom.
 
 | Reservation                                            | Packets/s                                       |
 | ------------------------------------------------------ | ----------------------------------------------- |
-| One three-person Episode                               | 2,400                                           |
-| 10 / 12 three-person Episodes                          | 24,000 / 28,800                                 |
-| One ten-person Episode                                 | 22,000 nominal; 11,520 only with M5 enforcement |
-| Twelve three-person Episodes plus the capped rare call | **40,320**                                      |
+| One three-person Episode, two cameras each             | 7,170                                           |
+| One three-person Episode, one camera each              | 4,200                                           |
+| A new Episode's first join (two Participants)          | 3,480                                           |
+| Two three-person Episodes on a 16,000 budget           | 14,340                                          |
+| One Episode of four or more, two cameras each          | capped at 11,520 by M5 enforcement              |
 
 Reject a join or new Episode if its reservation would exceed the selected
 node's budget. Replacement must not double-count the same Participant.
@@ -735,9 +742,8 @@ source activation when mandatory media cannot fit, or use a separately validated
 higher configurable Episode ceiling within the node budget. Every camera's
 uplink stays in that mandatory base, because the plan lowers only what
 subscribers receive, so at the defaults admission refuses the fourteenth
-Participant, or the twelfth with a screen share
-([#836](https://github.com/Q9Labs/chalk/pull/836)); ten with a screen share fit
-at 9,100. Never claim sixteen
+Participant is refused at the defaults (two cameras each), or the ninth with a
+screen share ([#836](https://github.com/Q9Labs/chalk/pull/836)). Never claim sixteen
 all-audio Participants fit the default ceiling, or silently sacrifice audio.
 
 **Primary acceptance:** prove the full admitted workload on the $18 node alone,
@@ -758,10 +764,10 @@ the unsupported shape rather than pretend to downscale it. Screen is
 single-encoding, so a low camera RID does not lower screen bitrate. Any lower
 screen/uplink cap needs a separately proven publisher policy.
 
-At unchanged 150/50 reservation costs, standby admits **six three-person
-Episodes** at 14,400, not seven at 16,800. Alternatively it admits a capped
-10-person Episode at 11,520 plus one three-person Episode at 2,400, total
-13,920. Six realistic classes at the conservative screen-on rate use about
+Under the earlier 150/50 reservation costs, which undercounted real SDK cameras,
+standby would have admitted six three-person Episodes at 14,400. At the SDK-derived
+costs it admits **two** three-person Episodes with two cameras each (14,340), or
+**three** with one camera each (12,600). Six realistic classes at the conservative screen-on rate use about
 **10,620 actual packets/s** before repair/capture, with subscribers held on
 `l`. One realistic rare call held on `l` uses 10,640. These are realistic admitted workloads, not a promise of the full
 twelve-class peak. Twelve realistic classes are 20,760 before repair, and their

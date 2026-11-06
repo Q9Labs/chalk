@@ -31,6 +31,7 @@ func (n *Node) run() {
 		case <-allocate.C:
 			n.allocate()
 		case <-health.C:
+			n.guard.observePacer(pacerLoad{dropped: n.totals.counts.PacerDrops, sent: n.totals.out[classVideo].packets})
 			n.guard.tick()
 		case <-telemetry.C:
 			n.logTelemetry()
@@ -54,7 +55,7 @@ func (n *Node) logTelemetry() {
 	attributes := []any{
 		"sessions", n.SessionCount(), "episodes", len(stats.episodes),
 		"packetsPerSecond", math.Round(stats.packets), "repairPerSecond", math.Round(stats.repair),
-		"probePerSecond", math.Round(stats.probe), "congestionPaused", stats.congested,
+		"probePerSecond", math.Round(stats.probe), "congestionPaused", stats.congested, "plannerPaused", stats.plannerPaused,
 		"cappedCameras", capped, "pausedCameras", paused,
 		"queueDelayP95Ms", host.QueueDelayP95Ms, "schedulerLatencyP99Ms", host.SchedulerLatencyP99Ms,
 		"admissionReason", host.AdmissionReason,

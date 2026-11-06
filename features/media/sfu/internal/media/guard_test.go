@@ -13,6 +13,7 @@ type fakeSteal struct{ times cpuTimes }
 func (f *fakeSteal) advance(percent uint64) {
 	f.times.total += 100
 	f.times.steal += percent
+	f.times.idle += 100 - percent
 }
 
 func (f *fakeSteal) read() (cpuTimes, bool) { return f.times, true }

@@ -115,23 +115,26 @@ func itoa(value int) string {
 }
 
 func TestEpisodeReservationFormula(t *testing.T) {
-	cases := []struct{ participants, want int }{{0, 0}, {1, 1200}, {2, 1200}, {4, 4000}, {8, 14400}}
+	// One camera at 150 packets/s each way, audio 50 and a screen share of 210: 200n² + 260n.
+	node := newTestNode(t, nil)
+	cases := []struct{ participants, want int }{{0, 0}, {1, 1320}, {2, 1320}, {4, 4240}, {8, 14880}}
 	for _, test := range cases {
-		if got := nominalReservation(max(test.participants, 1), 200) * min(test.participants, 1); got != test.want {
-			t.Errorf("nominalReservation(%d, 200) = %d, want %d", test.participants, got, test.want)
+		if got := node.nominalReservation(max(test.participants, 1)) * min(test.participants, 1); got != test.want {
+			t.Errorf("nominalReservation(%d) = %d, want %d", test.participants, got, test.want)
 		}
 	}
 }
 
 func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
-	// 150 + 50 packets/s per stream: one two-person Episode reserves 1200, a third person 2400.
-	node := newTestNode(t, func(cfg *config.Config) { cfg.PacketBudget = 3600 })
+	// One camera and a microphone at 200 packets/s per hop, and a 260 screen share: a two-person
+	// Episode reserves 1320, a third person 2580.
+	node := newTestNode(t, func(cfg *config.Config) { cfg.PacketBudget = 3900 })
 	node.newTestSession(t, episodeScope("a", "p1"))
 	node.newTestSession(t, episodeScope("a", "p2"))
-	third := node.newTestSession(t, episodeScope("a", "p3")) // 2400 reserved
+	third := node.newTestSession(t, episodeScope("a", "p3")) // 2580 reserved
 	_ = third
 
-	// A new Episode needs room for two: 2400 + 1200 = 3600 fits exactly.
+	// A new Episode needs room for two: 2580 + 1320 = 3900 fits exactly.
 	node.newTestSession(t, episodeScope("b", "p1"))
 	if _, err := node.CreateSession("create-a-p4", episodeScope("a", "p4")); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("fourth Participant of Episode a: %v, want capacity exceeded", err)
@@ -143,11 +146,11 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 		t.Fatalf("telemetry refusals %v, want two for node_full", refusals)
 	}
 	budget, reserved := node.Budget()
-	if budget != 3600 || reserved != 3600 {
-		t.Fatalf("budget %d reserved %d, want 3600 and 3600", budget, reserved)
+	if budget != 3900 || reserved != 3900 {
+		t.Fatalf("budget %d reserved %d, want 3900 and 3900", budget, reserved)
 	}
-	if cost := node.NewEpisodePackets(); cost != 1200 {
-		t.Fatalf("a new Episode costs %d packets/s, want 1200", cost)
+	if cost := node.NewEpisodePackets(); cost != 1320 {
+		t.Fatalf("a new Episode costs %d packets/s, want 1320", cost)
 	}
 
 	// A reconnect replaces its own session and does not count twice.

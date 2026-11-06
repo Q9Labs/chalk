@@ -386,6 +386,10 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	if s.published[track.Mid] != nil || s.publishedByName(track.TrackName) != nil {
 		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
 	}
+	if transceiver.Kind() == webrtc.RTPCodecTypeVideo && track.Source != sourceScreen && s.cameras() >= s.node.cfg.CamerasPerParticipant {
+		s.node.refuseCamera()
+		return transceiver, protocol.TrackCodeLimitExceeded, "the Participant already publishes the cameras this node reserves for"
+	}
 	pub, err := newPublication(s, track, transceiver.Kind())
 	if err != nil {
 		return transceiver, protocol.TrackCodeLimitExceeded, "the node's source table is full"
@@ -397,6 +401,17 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 	}
 	s.published[track.Mid] = pub
 	return transceiver, "", ""
+}
+
+// cameras counts the session's camera publications. The caller holds s.mu.
+func (s *Session) cameras() int {
+	count := 0
+	for _, pub := range s.published {
+		if pub.video() && pub.source != sourceScreen {
+			count++
+		}
+	}
+	return count
 }
 
 // receiveTransceiver finds the section where the client sends to the SFU.

@@ -165,7 +165,7 @@ func TestTelemetryExportsTheCountersTheNodeTracks(t *testing.T) {
 	}
 
 	alice := joinEpisode(t, svc, "episode-telemetry", "alice", false)
-	alice.publish(t, svc, publishing{camera: true})
+	alice.publish(t, svc, publishing{cameras: 1})
 	bob := joinEpisode(t, svc, "episode-telemetry", "bob", true)
 	carol := joinEpisode(t, svc, "episode-telemetry", "carol", true)
 	tracks := []protocol.Track{remote(alice, cameraName), remote(alice, micName)}

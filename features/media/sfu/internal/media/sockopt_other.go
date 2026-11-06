@@ -2,4 +2,4 @@
 
 package media
 
-const receiveBufferScale = 1
+const socketBufferScale = 1

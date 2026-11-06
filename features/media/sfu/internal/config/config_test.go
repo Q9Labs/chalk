@@ -26,8 +26,8 @@ func TestAdmissionDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.VideoStreamCost != 150 || cfg.AudioStreamCost != 50 {
-		t.Errorf("stream costs %d video and %d audio, want 150 and 50", cfg.VideoStreamCost, cfg.AudioStreamCost)
+	if cfg.VideoStreamCost != 300 || cfg.CameraUplinkCost != 390 || cfg.AudioStreamCost != 50 {
+		t.Errorf("stream costs %d video, %d camera uplink and %d audio, want 300, 390 and 50", cfg.VideoStreamCost, cfg.CameraUplinkCost, cfg.AudioStreamCost)
 	}
 	if cfg.PacketBudget != 16000 {
 		t.Errorf("packet budget %d, want 16000 for the smallest node", cfg.PacketBudget)
@@ -44,6 +44,42 @@ func TestAdmissionDefaults(t *testing.T) {
 	}
 	if cfg.Guard.MaxStealPercent != 3 || cfg.Guard.MaxQueueDelay != 50*time.Millisecond || cfg.Guard.Window != 30*time.Second {
 		t.Errorf("guard %+v, want 3%% steal or 50 ms queue delay over 30 s", cfg.Guard)
+	}
+}
+
+// The camera costs are the packets/s of the SDK's simulcast encodings, from
+// sdks/typescript/client/src/media/client.ts: h at 2.5 Mbit/s and l at 650 kbit/s, 30 frames/s.
+// A frame takes ceil(bytes/1150) packets. Real cameras measured 300 and 90 on a deployed node.
+func TestCameraCostsFollowTheSDKEncodings(t *testing.T) {
+	const framesPerSecond, payloadBytes = 30, 1150
+	packets := func(bitsPerSecond int) int {
+		frameBytes := bitsPerSecond / 8 / framesPerSecond
+		return framesPerSecond * ((frameBytes + payloadBytes - 1) / payloadBytes)
+	}
+	cfg, err := Load(lookupOf(required))
+	if err != nil {
+		t.Fatal(err)
+	}
+	high, low := packets(2_500_000), packets(650_000)
+	if high != 300 || low != 90 {
+		t.Fatalf("the encodings need %d and %d packets/s, want the measured 300 and 90", high, low)
+	}
+	if cfg.VideoStreamCost != high || cfg.CameraUplinkCost != high+low {
+		t.Errorf("camera costs %d downlink and %d uplink, want %d and %d", cfg.VideoStreamCost, cfg.CameraUplinkCost, high, high+low)
+	}
+}
+
+func TestGuardDefaults(t *testing.T) {
+	cfg, err := Load(lookupOf(required))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
+	if cfg.Guard != want {
+		t.Errorf("guard %+v, want %+v", cfg.Guard, want)
+	}
+	if cfg.UDPSendBuffer != 8<<20 || cfg.UDPReceiveBuffer != 8<<20 {
+		t.Errorf("socket buffers %d send and %d receive, want 8 MiB each", cfg.UDPSendBuffer, cfg.UDPReceiveBuffer)
 	}
 }
 
