@@ -40,7 +40,7 @@ try {
     name: run.label,
     slug: `web-proof-${randomUUID()}`,
     metadata: { proof_run_id: runId },
-    media_plane: "cf_sfu",
+    media_plane: process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu",
     recording_policy: "manual",
     transcription_policy: "on_demand",
     default_episode_duration_seconds: 1800,

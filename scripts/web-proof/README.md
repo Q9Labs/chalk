@@ -21,6 +21,8 @@ Use the environment variables documented in [the proof kit](../prod-proof/README
 and set `CHALK_PROOF_CONFIG_SOURCE=env`. `CHALK_PROOF_WEB_URL` selects the deployed
 web base URL; its build must target the same API as `CHALK_PROOF_API_URL`.
 The same test runs on nightly and production without changing selectors.
+The Space uses Cloudflare unless `CHALK_PROOF_MEDIA_PLANE` names another media
+plane the environment allows, such as `chalk_sfu` for the own SFU on nightly.
 The API must be ready, but recording and transcription can be disabled: this
 proof tests the live web call, not media processing. The separate recording and
 transcript proofs still require both media capabilities before a nightly can hold.
