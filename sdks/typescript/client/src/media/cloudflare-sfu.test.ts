@@ -6345,6 +6345,33 @@ describe("own-SFU subscription state", () => {
     }
   });
 
+  it("sends no layer update behind a pause still in flight, which would resume the camera", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join } = tileCall("m5-inflight", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      sampleMedia(h, () => true);
+      let releasePause: () => void = () => undefined;
+      const updateTracks = h.transport.updateTracks.bind(h.transport);
+      vi.spyOn(h.transport, "updateTracks").mockImplementation(async (input) => {
+        if (input.tracks.some((track) => track.paused)) await new Promise<void>((resolve) => void (releasePause = resolve));
+        return updateTracks(input);
+      });
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      // The layer policy wants l while the pause is still waiting for the SFU.
+      setVideoRenderSize(camera(h).track, { width: 480, height: 270 });
+      await vi.advanceTimersByTimeAsync(6000);
+      releasePause();
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks).map((track) => track.paused ?? track.simulcast?.preferredRid)).toEqual([true]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes an off-screen camera when the SFU refuses to pause it", async () => {
     vi.useFakeTimers();
     const { harness: h, cameraId, join } = tileCall("m5-refused", own);

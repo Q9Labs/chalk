@@ -1169,8 +1169,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #pauseVideoInPlace(hidden: readonly RemoteTrackEntry[], generation: number): Promise<readonly RemoteTrackEntry[]> {
     if (!hidden.length || !this.#pausesInPlace()) return [];
     const pausing = hidden.filter(([, publication]) => !this.#viewerPaused.has(publication.publicationId));
+    // Marked before the request: a layer update queued behind it would resume the subscription.
+    for (const [, publication] of pausing) this.#viewerPaused.add(publication.publicationId);
     const failed = await this.#setVideoPaused(pausing, true, generation);
-    for (const [, publication] of pausing) if (!failed.has(publication.publicationId)) this.#viewerPaused.add(publication.publicationId);
+    for (const [, publication] of pausing) if (failed.has(publication.publicationId)) this.#viewerPaused.delete(publication.publicationId);
     return hidden.filter(([, publication]) => this.#viewerPaused.has(publication.publicationId));
   }
   // Returns the wanted video the SFU would not resume. Closing it lets this poll pull it again.
