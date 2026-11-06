@@ -278,3 +278,41 @@ func TestAStalledNodeDoesNotReadItsOwnDelayAsCongestion(t *testing.T) {
 		t.Fatal("loss during a stall no longer lowers the estimate")
 	}
 }
+
+func TestADecreaseWaitsForTheNodesVerdictOnAStall(t *testing.T) {
+	// Feedback made by a stall can reach the estimator before the control loop
+	// has noticed the stall. The first read of overuse must not lower the estimate.
+	run := newSimulation(&bottleneck{capacity: 20e6, queueBytes: 1 << 20, delay: int64(20 * time.Millisecond)})
+	run.run(20*time.Second, steady(3e6), 0)
+	e := run.estimator
+	before := e.current()
+	now := int64(30 * time.Second)
+	step := 0
+	feed := func() {
+		var acks []packetAck
+		for index := range 5 {
+			sent := now + int64(index)*int64(10*time.Millisecond)
+			delay := int64(20*time.Millisecond) + int64(step*5+index)*int64(3*time.Millisecond)
+			acks = append(acks, packetAck{sent: sent, arrival: sent + delay, size: 1000, received: true})
+		}
+		now += int64(50 * time.Millisecond)
+		step++
+		e.onFeedback(acks, now)
+	}
+	for e.trend.signal != signalOveruse {
+		feed()
+		if step > 60 {
+			t.Fatal("a growing delay never read as overuse")
+		}
+	}
+	if e.current() < before {
+		t.Fatalf("estimate %.0f fell at the first read of overuse, from %.0f", e.current(), before)
+	}
+	e.pressure(true) // the control loop's verdict arrives
+	for range 20 {
+		feed()
+	}
+	if e.current() < before {
+		t.Fatalf("estimate %.0f after a stall that began as early feedback, want at least %.0f", e.current(), before)
+	}
+}

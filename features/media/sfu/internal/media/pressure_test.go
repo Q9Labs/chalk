@@ -49,6 +49,22 @@ func TestStealRaisesPressureAndSustainedStealCannotFreezeForever(t *testing.T) {
 	}
 }
 
+func TestTheNodeCountsHowLongPressureHeld(t *testing.T) {
+	var p hostPressure
+	p.controlTick(at(0))
+	p.controlTick(at(450 * time.Millisecond)) // a stall: pressure from 0 to 450 ms plus the hold
+	if got := p.settle(at(time.Minute)); got != 450*time.Millisecond+pressureHold {
+		t.Fatalf("one stall held pressure for %v, want %v", got, 450*time.Millisecond+pressureHold)
+	}
+	// Steal for a long stretch counts to the cap and no further.
+	for second := range 30 {
+		p.stealSample(at(10*time.Second+time.Duration(second)*time.Second), 20)
+	}
+	if got := p.settle(at(time.Minute)); got != 450*time.Millisecond+pressureHold+pressureMax {
+		t.Fatalf("30 s of steal added %v, want the cap %v", got-450*time.Millisecond-pressureHold, pressureMax)
+	}
+}
+
 func TestOnlyTheFirstFewTransportsProbeAtOnce(t *testing.T) {
 	budget := probeBudget{slots: maxProbes}
 	granted := 0

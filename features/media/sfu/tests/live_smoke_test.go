@@ -47,6 +47,8 @@ type liveLoad struct {
 	shareDuty                      float64
 	sharePeriod, hold, step, every time.Duration
 	samples                        string
+	capKbps                        int           // caps the first Participant's downlink, 0 for none
+	capAfter                       time.Duration // after this long in the hold
 }
 
 // shareOn is how long one share stretch lasts.
@@ -57,7 +59,7 @@ func (l liveLoad) shareOn() time.Duration {
 func liveLoadFromEnv(t *testing.T) liveLoad {
 	t.Helper()
 	load := liveLoad{classes: 2, participants: 3, cameras: 2, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
-		sharePeriod: 4 * time.Minute, hold: 5 * time.Minute, every: time.Minute, samples: os.Getenv("SFU_LIVE_SAMPLES")}
+		sharePeriod: 4 * time.Minute, hold: 5 * time.Minute, every: time.Minute, capAfter: time.Minute, samples: os.Getenv("SFU_LIVE_SAMPLES")}
 	settings := []struct {
 		name   string
 		target any
@@ -65,6 +67,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
 		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
+		{"SFU_LIVE_CAP_KBPS", &load.capKbps}, {"SFU_LIVE_CAP_AFTER", &load.capAfter},
 		{"SFU_LIVE_HOLD", &load.hold}, {"SFU_LIVE_STEP", &load.step}, {"SFU_LIVE_SAMPLE", &load.every},
 	}
 	for _, setting := range settings {
@@ -111,6 +114,8 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_CAMERA_KBPS   the cameras' h and l bitrates (default 2500,650)
 //	SFU_LIVE_SHARE_DUTY    the part of the time each class shares (default 0.65)
 //	SFU_LIVE_SHARE_PERIOD  one share stretch and one pause (default 4m)
+//	SFU_LIVE_CAP_KBPS      cap the first Participant's downlink at this rate, to see the node back off (default none)
+//	SFU_LIVE_CAP_AFTER     how long into the hold the cap starts (default 1m)
 //	SFU_LIVE_HOLD          how long to hold them (default 5m)
 //	SFU_LIVE_STEP          add a class at this interval until the node refuses
 //	                       one or a quality signal breaks (default off)
@@ -207,6 +212,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 			time.Sleep(10 * time.Second)
 		}
 	}
+	if load.capKbps > 0 {
+		go capFirstParticipant(t, svc, sharing, classes[0].people[0], load)
+	}
 	cpu := readHostCPU()
 	// The baseline comes before the first wait, so drops during that wait count.
 	mu.Lock()
@@ -266,6 +274,41 @@ func TestLiveSmokeClasses(t *testing.T) {
 	// one still counts.
 	for _, failure := range fixedRunFailures(first, takeSample(svc, classes, &cpu)) {
 		t.Error(failure)
+	}
+}
+
+// capFirstParticipant squeezes one Participant's downlink after a while and
+// logs, every two seconds, what the node thinks of it: the estimate and what
+// its subscriptions forward. Its audio stalls show in the final report.
+func capFirstParticipant(t *testing.T, svc *service, ctx context.Context, person *participant, load liveLoad) {
+	started := time.Now()
+	capped := false
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if !capped && time.Since(started) >= load.capAfter {
+			rate := float64(load.capKbps) * 1000
+			person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
+			capped = true
+			t.Logf("capped: %s downlink limited to %d kbit/s", person.name, load.capKbps)
+		}
+		var inspected protocol.InspectResponse
+		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
+			continue
+		}
+		forwarded := map[string]int{}
+		for _, track := range inspected.Tracks {
+			if sub := track.Subscription; sub != nil {
+				forwarded[cmp.Or(sub.EffectiveRID, sub.State+"/"+sub.Reason)]++
+			}
+		}
+		transport := inspected.Transport
+		t.Logf("capped: +%v %s estimate %d proven %d queued %d dropped %d forwarding %v", time.Since(started).Round(time.Second), person.name, transport.EstimateBps, transport.ProvenBps, transport.QueuedBytes, transport.Dropped, forwarded)
 	}
 }
 

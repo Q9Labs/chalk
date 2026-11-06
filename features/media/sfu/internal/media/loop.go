@@ -61,6 +61,7 @@ func (n *Node) logTelemetry() {
 		"queueDelayP95Ms", host.QueueDelayP95Ms, "schedulerLatencyP99Ms", host.SchedulerLatencyP99Ms,
 		"admissionReason", host.AdmissionReason,
 		"controlStalls", n.pressure.stalls, "controlStallMaxMs", n.pressure.takeLongest().Milliseconds(),
+		"hostPressureMs", n.pressure.settle(monotonic()).Milliseconds(),
 	}
 	if host.StealPercent != nil {
 		attributes = append(attributes, "stealPercent", *host.StealPercent)

@@ -248,6 +248,11 @@ type bandwidthEstimator struct {
 	// pressured is set while the node itself is stalled: its late sends and late
 	// feedback say nothing about the path, so they cannot lower the estimate.
 	pressured bool
+	// overusingSince is when the delay trend first read as overuse and has since
+	// stayed there. A stall can end with feedback that reaches the estimator
+	// before the control loop has noticed the stall, so a decrease waits one
+	// control tick for the node's verdict.
+	overusingSince int64
 }
 
 func newBandwidthEstimator() bandwidthEstimator {
@@ -296,8 +301,13 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.reportNext = (e.reportNext + 1) % len(e.reports)
 		e.reportLen = min(e.reportLen+1, len(e.reports))
 	}
+	if e.trend.signal != signalOveruse {
+		e.overusingSince = 0
+	} else if e.overusingSince == 0 {
+		e.overusingSince = now
+	}
 	// A queue that grows means the path is full: back off below what got through.
-	if e.trend.signal == signalOveruse && !e.pressured && now-e.decreased > int64(decreaseSpacing) {
+	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) {
 		acked := e.ackedOver(decreaseSpan)
 		if acked == 0 {
 			acked = e.acked()

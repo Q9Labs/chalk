@@ -31,6 +31,9 @@ type hostPressure struct {
 	since    int64 // start of the current run of pressure
 	until    int64 // pressure lasts to here
 
+	counted  int64         // pressure up to here is already in underFor
+	underFor time.Duration // how long pressure has held since start
+
 	stalls       uint64        // control-loop stalls since start
 	longestStall time.Duration // the longest since the last takeLongest
 }
@@ -64,10 +67,22 @@ func (p *hostPressure) stealSample(now int64, percent float64) {
 }
 
 func (p *hostPressure) raise(from, now int64) {
+	p.settle(now)
 	if now >= p.until {
 		p.since = from
 	}
 	p.until = now + int64(pressureHold)
+}
+
+// settle adds the pressure held up to now to underFor, so telemetry can say
+// what share of the time the signal is on.
+func (p *hostPressure) settle(now int64) time.Duration {
+	end := min(now, p.until, p.since+int64(pressureMax))
+	if start := max(p.counted, p.since); end > start {
+		p.underFor += time.Duration(end - start)
+	}
+	p.counted = max(p.counted, end)
+	return p.underFor
 }
 
 // active reports whether the node has shown pressure recently.

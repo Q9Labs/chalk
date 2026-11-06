@@ -83,7 +83,7 @@ go run ./cmd/sfu
 | `SFU_HISTORY_HIGH_BYTES`                | `409600`        | Repair history of `h` and of a camera without RIDs.                   |
 | `SFU_HISTORY_LOW_BYTES`                 | `131072`        | Repair history of other camera layers.                                |
 | `SFU_HISTORY_SCREEN_BYTES`              | `327680`        | Repair history of a screen share.                                     |
-| `SFU_PACER_QUEUE_BYTES`                 | `131072`        | Video one subscriber's pacer may hold at least.                               |
+| `SFU_PACER_QUEUE_BYTES`                 | `131072`        | Video one subscriber's pacer may hold at least.                       |
 | `SFU_GUARD_MAX_STEAL_PERCENT`           | `3`             | CPU steal that closes admission to new Episodes.                      |
 | `SFU_GUARD_MAX_QUEUE_DELAY`             | `50ms`          | Pacer queue delay p95 that closes admission.                          |
 | `SFU_GUARD_WINDOW`                      | `30s`           | Window both guard signals are measured over.                          |
