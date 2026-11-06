@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -44,6 +45,9 @@ type participant struct {
 	link  *link
 	media *mediaReceiver
 	sent  atomic.Int64 // RTP packets published
+	// screen is the screen publisher, when the participant shares one, so a
+	// test can stop and resume it as a browser's share does.
+	screen *simulcastPublisher
 }
 
 func joinEpisode(t *testing.T, svc *service, episode, name string, keepVideo bool) *participant {
@@ -64,9 +68,23 @@ func joinWith(t *testing.T, svc *service, episode, name string, keepVideo, brows
 
 // publishing is what one participant sends.
 type publishing struct {
-	camera bool
-	screen bool
-	chunks [2]int // camera payload bytes per packet of h and l
+	cameras int // simulcast cameras, named cam, cam2, cam3…
+	screen  bool
+	chunks  [2]int // camera payload bytes per packet of h and l
+	// frameBytes pads each frame of the camera's h and l and of the screen to
+	// at least this size, so the fixtures can carry a browser's bitrate. Padded
+	// frames keep their headers but no longer decode. Zero keeps the fixture.
+	frameBytes [3]int
+	// screenChunk is the screen's payload bytes per packet; 0 is 160.
+	screenChunk int
+}
+
+// cameraTrack names a participant's camera by its index.
+func cameraTrack(index int) string {
+	if index == 0 {
+		return cameraName
+	}
+	return fmt.Sprintf("%s%d", cameraName, index+1)
 }
 
 // publish pushes the participant's sources and starts sending until the test ends.
@@ -79,10 +97,11 @@ func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 		rtp       *webrtc.RTPSender
 	}
 	var video []sender
-	if what.camera {
-		camera := &simulcastPublisher{fixtures: [2]layerFixture{{rid: "h", frames: high}, {rid: "l", frames: low}}, enabled: [2]bool{true, true}, chunks: what.chunks, sent: &p.sent}
+	for index := range what.cameras {
+		camera := &simulcastPublisher{fixtures: [2]layerFixture{{rid: "h", frames: high}, {rid: "l", frames: low}}, enabled: [2]bool{true, true}, chunks: what.chunks,
+			frameBytes: [2]int{what.frameBytes[0], what.frameBytes[1]}, sent: &p.sent}
 		for layer, fixture := range camera.fixtures {
-			track, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, cameraName, p.name, webrtc.WithRTPStreamID(fixture.rid))
+			track, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, cameraTrack(index), p.name, webrtc.WithRTPStreamID(fixture.rid))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -98,7 +117,9 @@ func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 		video = append(video, sender{camera, rtpSender})
 	}
 	if what.screen {
-		screen := &simulcastPublisher{fixtures: [2]layerFixture{{frames: high}}, enabled: [2]bool{true}, chunks: [2]int{160}, sent: &p.sent}
+		screen := &simulcastPublisher{fixtures: [2]layerFixture{{frames: high}}, enabled: [2]bool{true}, chunks: [2]int{cmp.Or(what.screenChunk, 160)},
+			frameBytes: [2]int{what.frameBytes[2]}, sent: &p.sent}
+		p.screen = screen
 		track, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, screenName, p.name)
 		if err != nil {
 			t.Fatal(err)
@@ -126,9 +147,9 @@ func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 	pushOffer := p.peer.complete(t, offer)
 	for _, v := range video {
 		v.publisher.mid = p.peer.mid(t, v.publisher.tracks[0])
-		source, name := "camera", cameraName
+		source, name := "camera", v.publisher.tracks[0].ID()
 		if v.publisher.tracks[1] == nil {
-			source, name = "screen", screenName
+			source = "screen"
 		}
 		tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: v.publisher.mid, TrackName: name, Source: source})
 	}
@@ -214,7 +235,7 @@ func (p *participant) pull(t *testing.T, svc *service, tracks []protocol.Track) 
 
 func remote(publisher *participant, name string) protocol.Track {
 	track := protocol.Track{Location: protocol.LocationRemote, SessionID: publisher.conn, TrackName: name}
-	if name == cameraName {
+	if strings.HasPrefix(name, cameraName) {
 		pull := cameraPull
 		track.Simulcast = &pull
 	}
@@ -343,7 +364,7 @@ func TestOneConstrainedSubscriberAdaptsAlone(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	alice := joinEpisode(t, svc, "episode-1", "alice", false)
-	alice.publish(t, svc, publishing{camera: true})
+	alice.publish(t, svc, publishing{cameras: 1})
 	bob, carol := joinEpisode(t, svc, "episode-1", "bob", true), joinEpisode(t, svc, "episode-1", "carol", true)
 	camera, mic := trackKey(alice, cameraName), trackKey(alice, micName)
 
@@ -492,7 +513,7 @@ func TestVideoOnlySubscriberResumesAfterStarvation(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	alice := joinEpisode(t, svc, "episode-1", "alice", false)
-	alice.publish(t, svc, publishing{camera: true})
+	alice.publish(t, svc, publishing{cameras: 1})
 	carol := joinEpisode(t, svc, "episode-1", "carol", false)
 	carol.pull(t, svc, []protocol.Track{remote(alice, cameraName)})
 	eventually(t, "carol receives video", 15*time.Second, func() bool {
@@ -539,7 +560,7 @@ func TestLossOnEachLegIsRepairedOverRTX(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	alice := joinEpisode(t, svc, "episode-1", "alice", false)
-	alice.publish(t, svc, publishing{camera: true, screen: true})
+	alice.publish(t, svc, publishing{cameras: 1, screen: true})
 	bob := joinEpisode(t, svc, "episode-1", "bob", true)
 	bob.pull(t, svc, []protocol.Track{remote(alice, cameraName), remote(alice, micName), remote(alice, screenName)})
 	camera := trackKey(alice, cameraName)
@@ -593,7 +614,7 @@ func TestAPublisherThatSendsRTXUnderItsRIDCannotHangShutdown(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	alice := joinWith(t, svc, "episode-1", "alice", false, false)
-	alice.publish(t, svc, publishing{camera: true})
+	alice.publish(t, svc, publishing{cameras: 1})
 	alice.link.shape(0, 0, 0, 0, 0.05)
 	time.Sleep(3 * time.Second) // the SFU asks for lost packets and alice answers over RTX
 
@@ -632,7 +653,7 @@ func TestTenPersonCallWithAScreenShareStaysUnderTheEpisodeCeiling(t *testing.T) 
 	for index := range people {
 		people[index] = joinEpisode(t, svc, "episode-big", fmt.Sprintf("p%d", index), false)
 		// 120-byte packets put h near the 281 packets/s worst case.
-		people[index].publish(t, svc, publishing{camera: true, screen: index == 0, chunks: [2]int{120, 300}})
+		people[index].publish(t, svc, publishing{cameras: 1, screen: index == 0, chunks: [2]int{120, 300}})
 	}
 	for _, person := range people {
 		var tracks []protocol.Track
@@ -720,7 +741,7 @@ func TestImpairedCallsLogNothingForbidden(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	alice := joinEpisode(t, svc, "episode-1", "alice", false)
-	alice.publish(t, svc, publishing{camera: true})
+	alice.publish(t, svc, publishing{cameras: 1})
 	bob := joinEpisode(t, svc, "episode-1", "bob", false)
 	bob.pull(t, svc, []protocol.Track{remote(alice, cameraName), remote(alice, micName)})
 	eventually(t, "bob receives video", 10*time.Second, func() bool { return bob.media.videoCount(trackKey(alice, cameraName)) > 50 })
