@@ -1556,7 +1556,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // A video paused in place sends nothing on purpose.
     const received = [...this.#remoteTracks.values()].filter((publication) => !this.#viewerPaused.has(publication.publicationId));
     const reads = this.#readsSubscriptions();
-    const { stalled, advanced } = this.#receiveProgress.sample(now, connection, report, received, reads ? (id) => this.#delivery.held(id) : undefined);
+    const { stalled, advanced } = this.#receiveProgress.sample(now, connection, report, received, reads ? (id) => this.#delivery.held(id, now) : undefined);
     for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
     if (reads) this.#observeDelivery(now, connection, received, new Set(advanced), current);
     this.#publishSnapshot();

@@ -17,11 +17,11 @@ describe("subscription delivery", () => {
     delivery.observe(0, [video], flowing);
     read(delivery, 0, [state("active", 1, { effectiveRid: "h" })]);
     delivery.observe(1000, [video], quiet);
-    expect(delivery.held(video.publicationId)).toBe(true);
     expect(delivery.needsRead(1000 + SUBSCRIPTION_READ_AFTER_QUIET_MS - 1)).toBe(false);
     expect(delivery.needsRead(1000 + SUBSCRIPTION_READ_AFTER_QUIET_MS)).toBe(true);
+    expect(delivery.held(video.publicationId, 3000)).toBe(true);
     read(delivery, 3000, [state("active", 1, { effectiveRid: "h" })]);
-    expect(delivery.held(video.publicationId)).toBe(false);
+    expect(delivery.held(video.publicationId, 4000)).toBe(false);
   });
 
   it("keeps a congestion pause held and shown until the SFU resumes it, and reports the resume", () => {
@@ -31,7 +31,7 @@ describe("subscription delivery", () => {
     expect(delivery.deliveries).toEqual([{ publicationId: video.publicationId, state: "paused_for_network" }]);
     expect(delivery.pausedForNetwork).toBe(1);
     for (let now = 3000; now < 60_000; now += 1000) delivery.observe(now, [video], quiet);
-    expect(delivery.held(video.publicationId)).toBe(true);
+    expect(delivery.held(video.publicationId, 60_000)).toBe(true);
     expect(delivery.needsRead(2000 + PAUSED_REREAD_MS)).toBe(true);
     expect(read(delivery, 60_000, [state("active", 3, { effectiveRid: "l" })])).toEqual([video.publicationId]);
     expect(delivery.deliveries).toEqual([{ publicationId: video.publicationId, state: "flowing", layer: "l" }]);
@@ -42,7 +42,6 @@ describe("subscription delivery", () => {
     delivery.observe(0, [video], quiet);
     read(delivery, 2000, [state("paused", 5, { reason: "congestion" })]);
     delivery.observe(3000, [video], flowing);
-    expect(delivery.held(video.publicationId)).toBe(false);
     expect(delivery.deliveries).toMatchObject([{ state: "flowing" }]);
     read(delivery, 4000, [state("paused", 4, { reason: "congestion" })]);
     expect(delivery.deliveries).toMatchObject([{ state: "flowing" }]);
@@ -61,10 +60,11 @@ describe("subscription delivery", () => {
   it("releases quiet videos to stall recovery after a failed read and waits before the next", () => {
     const delivery = new SubscriptionDelivery();
     delivery.observe(0, [video], quiet);
+    expect(delivery.held(video.publicationId, 2000)).toBe(true);
     const startedAt = delivery.begin(2000);
     expect(delivery.needsRead(2500)).toBe(false);
     delivery.failed(startedAt, 2500);
-    expect(delivery.held(video.publicationId)).toBe(false);
+    expect(delivery.held(video.publicationId, 3000)).toBe(false);
     expect(delivery.needsRead(2500 + PAUSED_REREAD_MS - 1)).toBe(false);
   });
 

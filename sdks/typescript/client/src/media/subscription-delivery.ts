@@ -27,6 +27,8 @@ export type DeliveredVideo = {
 type Entry = {
   video: DeliveredVideo;
   quietSince: number | undefined;
+  // When stall recovery first asked to act on this quiet video.
+  stalledSince: number | undefined;
   // When the newest completed read started. A read that started before a quiet began says nothing about it.
   verifiedAt: number | undefined;
   revision: number;
@@ -67,23 +69,29 @@ export class SubscriptionDelivery {
         continue;
       }
       entry.quietSince = undefined;
+      entry.stalledSince = undefined;
       // Packets prove delivery, whatever an older read said.
       if (entry.state?.state === "paused") entry.state = { ...entry.state, state: "active" };
     }
     this.#publish();
   }
 
-  /** True while a stall verdict for this publication would be wrong or premature. */
-  held(publicationId: string): boolean {
+  /**
+   * Asked only about a publication the stall detector calls stalled. True while the verdict would be wrong or premature:
+   * the SFU may have paused the video since the last read, so only a read that started once the stall was due releases it.
+   */
+  held(publicationId: string, now: number): boolean {
     const entry = this.#entries.get(publicationId);
     if (!entry) return false;
-    return entry.state?.state === "paused" || awaitsRead(entry);
+    if (entry.state?.state === "paused") return true;
+    entry.stalledSince ??= now;
+    return !verifiedSince(entry, entry.stalledSince);
   }
 
   needsRead(now: number): boolean {
     if (this.#reading || now < this.#nextReadAt || this.#entries.size === 0) return false;
     const sinceRead = now - this.#lastReadAt;
-    return sinceRead >= LAYER_REREAD_MS || [...this.#entries.values()].some((entry) => (entry.state?.state === "paused" ? sinceRead >= PAUSED_REREAD_MS : awaitsRead(entry) && now - (entry.quietSince ?? now) >= SUBSCRIPTION_READ_AFTER_QUIET_MS));
+    return sinceRead >= LAYER_REREAD_MS || [...this.#entries.values()].some((entry) => (entry.state?.state === "paused" ? sinceRead >= PAUSED_REREAD_MS : awaitsStallRead(entry) || (awaitsRead(entry) && now - (entry.quietSince ?? now) >= SUBSCRIPTION_READ_AFTER_QUIET_MS)));
   }
 
   /** Returns the read's start time, which `applied` and `failed` take back. */
@@ -130,7 +138,7 @@ export class SubscriptionDelivery {
   #entry(video: DeliveredVideo): Entry {
     const previous = this.#entries.get(video.publicationId);
     if (previous && previous.video.trackId === video.trackId && previous.video.mid === video.mid) return previous;
-    const entry: Entry = { video, quietSince: undefined, verifiedAt: undefined, revision: -1, state: undefined };
+    const entry: Entry = { video, quietSince: undefined, stalledSince: undefined, verifiedAt: undefined, revision: -1, state: undefined };
     this.#entries.set(video.publicationId, entry);
     return entry;
   }
@@ -148,7 +156,15 @@ export class SubscriptionDelivery {
 
 // A read that started before the quiet began says nothing about it.
 function awaitsRead(entry: Entry): boolean {
-  return entry.quietSince !== undefined && (entry.verifiedAt === undefined || entry.verifiedAt < entry.quietSince);
+  return entry.quietSince !== undefined && !verifiedSince(entry, entry.quietSince);
+}
+
+function awaitsStallRead(entry: Entry): boolean {
+  return entry.stalledSince !== undefined && !verifiedSince(entry, entry.stalledSince);
+}
+
+function verifiedSince(entry: Entry, since: number): boolean {
+  return entry.verifiedAt !== undefined && entry.verifiedAt >= since;
 }
 
 function deliveryEqual(left: RemoteVideoDelivery, right: RemoteVideoDelivery | undefined): boolean {

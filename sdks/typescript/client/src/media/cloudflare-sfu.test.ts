@@ -6194,6 +6194,30 @@ describe("own-SFU subscription state", () => {
     );
   });
 
+  it("reads again when a stall is due, so a pause after an active read is not repulled", async () => {
+    await withTimedHarness(
+      async (h) => {
+        let sfu: SFUSubscriptionState[] = [];
+        h.transport.listSubscriptions = async () => sfu;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "active", 1)];
+        flowing = false;
+        // The quiet read says active; the SFU pauses the camera just after it.
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "paused", 2, "congestion")];
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+        expect(remotePullCount(h)).toBe(1);
+        expect(h.client.getSnapshot().remoteDelivery).toMatchObject([{ state: "paused_for_network" }]);
+      },
+      { bootstrap: own },
+    );
+  });
+
   it("falls back to stall recovery when the subscription read fails", async () => {
     await withTimedHarness(
       async (h) => {
