@@ -1723,10 +1723,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const cameraPolicy = new CameraUplinkPolicy();
     const viewerLayers = new ViewerLayerSelector({ followsNetwork: !this.#capabilities().serverLayerAdaptation });
     let observedCamera: LocalTrackState | undefined;
-    const current = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "failed" && connection.connectionState !== "closed";
+    const observed = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed";
+    const current = () => observed() && connection.connectionState !== "failed";
+    // Sampling skips a failed path but keeps its schedule, so an ICE restart on the same connection resumes it.
     const adaptCamera = async () => {
-      if (!current()) return;
       try {
+        if (!current()) return;
         const state = this.#localTracks.get("camera");
         if (state !== observedCamera) {
           cameraPolicy.reset();
@@ -1744,7 +1746,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         // Stats and optional sender controls must never break publication.
         cameraPolicy.reset();
       } finally {
-        if (current()) cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
+        if (observed()) cameraTimer = globalThis.setTimeout(adaptCamera, 1000);
       }
     };
     const dispose = () => {
@@ -1799,7 +1801,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #observeIceRecovery(connection: RTCPeerConnection, connectionEpoch: number, observation: ConnectionObservation): ConnectionObservation {
     if (observation?.phase === "failed") this.#beginIceRestart(connection, this.#generation, connectionEpoch);
     const restart = this.#iceRestartOf(connection, connectionEpoch);
-    if (!restart || connectionIsLive(connection)) return observation;
+    if (!restart) return observation;
+    if (connectionIsLive(connection)) {
+      // A path that reconnects on its own settles the restart, so its budget cannot fail it later.
+      if (restart.state === "running") restart.state = "succeeded";
+      return observation;
+    }
     switch (restart.state) {
       case "failed":
         return { phase: "failed", failure: this.#snapshot.failure ?? ICE_RESTART_FAILURE };
@@ -1824,6 +1831,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         restart.state = "succeeded";
       },
       (error: unknown) => {
+        if (restart.state !== "running") return;
         restart.state = "failed";
         if (current()) this.#setFailure(error, "ice_connection_failed");
       },
@@ -1846,6 +1854,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const stale = () => new CloudflareSFUError("Stale media connection", "stale_generation");
     await this.#serializeSDP(async () => {
       if (!current()) throw stale();
+      // The path reconnected while earlier SDP work held the queue, so it needs no new credentials.
+      if (connectionIsLive(connection)) return;
       const sessionDescription = await this.#createLocalOffer(connection, "ice_restart", { iceRestart: true });
       try {
         const response = await this.#signal(() => this.#addTracks({ connectionId, sessionDescription, tracks: [] }), { generation, connectionId });

@@ -6544,6 +6544,35 @@ describe("in-place ICE restart on the own SFU", () => {
     await withTimedHarness(
       async (h) => {
         const { peer } = await publishingAndPulling(h);
+        // The earlier pull fails once released, so the path is still down when the restart takes the queue.
+        const release = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) await release.promise;
+          return addTracks(input);
+        });
+        h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
+        const pulling = h.client.refreshRemotePublications().catch(() => undefined);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.transport.addInputs.at(-1)?.tracks.every((track) => track.location === "remote")).toBe(true);
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(0);
+        release.reject(new CloudflareSFUError("pull failed", "signaling_failed"));
+        await vi.advanceTimersByTimeAsync(40);
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        await pulling;
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a path that reconnects while the restart waits for the queue live, and skips the restart offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
         const release = Promise.withResolvers<void>();
         const addTracks = h.transport.addTracks.bind(h.transport);
         vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
@@ -6553,16 +6582,48 @@ describe("in-place ICE restart on the own SFU", () => {
         h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
         const pulling = h.client.refreshRemotePublications();
         await vi.advanceTimersByTimeAsync(0);
-        expect(h.transport.addInputs.at(-1)?.tracks.every((track) => track.location === "remote")).toBe(true);
-        peer.setNextRemoteDescriptionStates("connected", "connected");
-        peer.setStates("failed", "failed");
-        await vi.advanceTimersByTimeAsync(0);
-        expect(restartRequests(h)).toHaveLength(0);
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(2040);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
         release.resolve();
         await vi.advanceTimersByTimeAsync(40);
-        expect(restartRequests(h)).toHaveLength(1);
-        expect(h.client.getSnapshot().connection.phase).toBe("live");
         await pulling;
+        expect(restartRequests(h)).toHaveLength(0);
+        expect(peer.offerOptions.some((options) => options?.iceRestart)).toBe(false);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps sampling stats on the same connection after a restart that spans a sampling tick", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const stats = vi.spyOn(peer, "getStats");
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(40);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        const before = stats.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(stats.mock.calls.length - before).toBeGreaterThanOrEqual(2);
+        expect(h.peerConnectionFactory).toHaveBeenCalledTimes(1);
       },
       { bootstrap: ownBootstrap("connection-1") },
     );
