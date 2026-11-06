@@ -6551,6 +6551,37 @@ describe("in-place ICE restart on the own SFU", () => {
     );
   });
 
+  it("applies the answer the SFU sent when the path recovers on its own while that answer is in flight", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          // The SFU accepts the restart offer and changes its credentials before the answer comes back.
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(1);
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(-2)).toEqual(["setLocal:offer", "setRemote:answer"]);
+        expect(peer.rollbackCalls).toBe(0);
+        expect(peer.signalingState).toBe("stable");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
   it("fails at once for replacement when the session is gone after node loss (HTTP 404)", async () => {
     await withTimedHarness(
       async (h) => {

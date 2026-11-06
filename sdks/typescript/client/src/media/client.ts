@@ -1826,8 +1826,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const restart: IceRestart = { connection, connectionEpoch, state: "running" };
     this.#iceRestart = restart;
     const current = () => this.#iceRestart === restart && connection === this.#connection && connectionEpoch === this.#connectionEpoch && generation === this.#generation && !this.#stopped;
-    // Once the budget fails the attempt or the path recovers, every later step drops its result.
-    const pending = () => current() && restart.state === "running";
+    // Once the budget fails the attempt, every later step drops its result. A path that recovered on
+    // its own still applies an answer the SFU sent, so both sides keep the same ICE credentials.
+    const pending = () => current() && restart.state !== "failed";
     void this.#restartIceWithinBudget(connection, generation, pending).then(
       () => {
         restart.state = "succeeded";
