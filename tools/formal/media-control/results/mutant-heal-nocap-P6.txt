@@ -1,6 +1,6 @@
-TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+TLC2 Version 2026.11.06.005304 (rev: 3ec1cc4)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-11-01 04:07:21.
+Finished computing initial states: 1 distinct state generated at 2026-11-06 08:32:07.
 Error: Invariant P6_RetrySpacing is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -583,10 +583,10 @@ State 10: <Next line 431, col 39 to line 431, col 68 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 11: <Next line 439, col 22 to line 439, col 45 of module MediaHeal>
+State 11: <Next line 432, col 39 to line 432, col 68 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
-/\ sfu = {}
+/\ sfu = {1}
 /\ pulled = (l1 :> {})
 /\ offSt = "none"
 /\ syncUp = TRUE
@@ -616,7 +616,7 @@ State 11: <Next line 439, col 22 to line 439, col 45 of module MediaHeal>
 /\ recovering = -1
 /\ cap = TRUE
 /\ ver = 2
-/\ bud = [ pl |-> 1,
+/\ bud = [ pl |-> 0,
   ll |-> 0,
   pf |-> 1,
   rd |-> 0,
@@ -635,13 +635,13 @@ State 11: <Next line 439, col 22 to line 439, col 45 of module MediaHeal>
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
 /\ pair = ( l1 :>
-      << [fails |-> 1, wait |-> 1, flat |-> 0],
+      << [fails |-> 1, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 12: <Next line 432, col 39 to line 432, col 68 of module MediaHeal>
+State 12: <Next line 439, col 22 to line 439, col 45 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -931,6 +931,6 @@ State 16: <Next line 430, col 39 to line 430, col 65 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-135938 states generated, 37401 distinct states found, 9483 states left on queue.
+137535 states generated, 37532 distinct states found, 9178 states left on queue.
 The depth of the complete state graph search is 16.
-Finished in 01s at (2026-11-01 04:07:22)
+Finished in 01s at (2026-11-06 08:32:09)

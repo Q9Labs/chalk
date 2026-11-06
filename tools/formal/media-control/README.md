@@ -116,7 +116,7 @@ DEEP=1 ./run.sh          # plus the multi-source runs
 node trace-diff.mjs results/cf-current-P2-1src.txt   # a counterexample, one line per step
 ```
 
-It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. The release URL is a moving tag, so the checksum in `run.sh` is what pins the tool; the results were produced with TLC 2026.10.30 (rev 090e85c). Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
+It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. The release URL is a moving tag, so the checksum in `run.sh` is what pins the tool; the results were produced with TLC 2026.11.06 (rev 3ec1cc4). Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
 
 Files:
 

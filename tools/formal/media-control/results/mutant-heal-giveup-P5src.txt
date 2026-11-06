@@ -1,10 +1,10 @@
-TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+TLC2 Version 2026.11.06.005304 (rev: 3ec1cc4)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 19:10:29.
-Checking temporal properties for the current state space with 21120 total distinct states at (2026-10-31 19:10:32)
-Finished checking temporal properties in 00s at 2026-10-31 19:10:32
-Checking temporal properties for the complete state space with 329442 total distinct states at (2026-10-31 19:10:56)
+Finished computing initial states: 1 distinct state generated at 2026-11-06 08:31:34.
+Checking temporal properties for the current state space with 23305 total distinct states at (2026-11-06 08:31:37)
+Finished checking temporal properties in 00s at 2026-11-06 08:31:37
+Checking temporal properties for the complete state space with 388519 total distinct states at (2026-11-06 08:32:06)
 Error: Temporal property P5src_MicrophoneHeard was violated.
 
 Error: The following behavior constitutes a counter-example:
@@ -67,7 +67,7 @@ State 1: <Initial predicate>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 2: <Next line 410, col 6 to line 410, col 20 of module MediaHeal>
+State 2: <Next line 412, col 6 to line 412, col 20 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -125,7 +125,7 @@ State 2: <Next line 410, col 6 to line 410, col 20 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = FALSE
 
-State 3: <Next line 419, col 6 to line 419, col 24 of module MediaHeal>
+State 3: <Next line 421, col 6 to line 421, col 24 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -183,7 +183,7 @@ State 3: <Next line 419, col 6 to line 419, col 24 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 4: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
+State 4: <Next line 425, col 28 to line 425, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -241,7 +241,7 @@ State 4: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 5: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
+State 5: <Next line 419, col 28 to line 419, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -299,7 +299,7 @@ State 5: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 6: <Next line 414, col 6 to line 414, col 27 of module MediaHeal>
+State 6: <Next line 416, col 6 to line 416, col 27 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = TRUE
 /\ sfu = {}
@@ -357,7 +357,7 @@ State 6: <Next line 414, col 6 to line 414, col 27 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 7: <Next line 421, col 6 to line 421, col 19 of module MediaHeal>
+State 7: <Next line 423, col 6 to line 423, col 19 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {1}
@@ -415,7 +415,7 @@ State 7: <Next line 421, col 6 to line 421, col 19 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 8: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
+State 8: <Next line 425, col 28 to line 425, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {1}
@@ -424,10 +424,68 @@ State 8: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
 /\ syncUp = TRUE
 /\ offSlot = 0
 /\ rmsg = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"none", "none", "none", "none">>,
+        ver |-> 1,
+        ack |-> 1 ] )
+/\ view = ( l1 :>
       [ grant |-> FALSE,
         list |-> <<"none", "none", "none", "none">>,
-        ver |-> -1,
+        ver |-> 0,
         ack |-> 0 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"none", "none", "none", "none">>,
+        ver |-> 1,
+        ack |-> 1 ] )
+/\ lastSeq = 1
+/\ pubGen = 1
+/\ recovering = -1
+/\ cap = TRUE
+/\ ver = 2
+/\ bud = [ pl |-> 0,
+  ll |-> 0,
+  pf |-> 0,
+  rd |-> 0,
+  pd |-> 0,
+  sr |-> 0,
+  loss |-> 0,
+  hm |-> 0 ]
+/\ list = <<"on", "none", "none", "none">>
+/\ deadMsg = {}
+/\ stale = {}
+/\ onSlot = 1
+/\ pubSfuUp = TRUE
+/\ nextGen = 2
+/\ obs = <<0, 0, 0, 0>>
+/\ subLost = (l1 :> {})
+/\ want = TRUE
+/\ recvUp = (l1 :> TRUE)
+/\ pair = ( l1 :>
+      << [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
+/\ grant = TRUE
+
+State 9: <Next line 425, col 28 to line 425, col 47 of module MediaHeal>
+/\ seq = 1
+/\ pubReq = FALSE
+/\ sfu = {1}
+/\ pulled = (l1 :> {})
+/\ offSt = "none"
+/\ syncUp = TRUE
+/\ offSlot = 0
+/\ rmsg = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
   pub :>
       [ grant |-> TRUE,
         list |-> <<"on", "none", "none", "none">>,
@@ -473,7 +531,7 @@ State 8: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 9: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
+State 10: <Next line 419, col 28 to line 419, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {1}
@@ -482,24 +540,24 @@ State 9: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
 /\ syncUp = TRUE
 /\ offSlot = 0
 /\ rmsg = ( l1 :>
-      [ grant |-> FALSE,
-        list |-> <<"none", "none", "none", "none">>,
-        ver |-> -1,
-        ack |-> 0 ] @@
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
   pub :>
       [ grant |-> TRUE,
         list |-> <<"on", "none", "none", "none">>,
         ver |-> 2,
         ack |-> 1 ] )
 /\ view = ( l1 :>
-      [ grant |-> FALSE,
-        list |-> <<"none", "none", "none", "none">>,
-        ver |-> 0,
-        ack |-> 0 ] @@
-  pub :>
       [ grant |-> TRUE,
         list |-> <<"on", "none", "none", "none">>,
         ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"none", "none", "none", "none">>,
+        ver |-> 1,
         ack |-> 1 ] )
 /\ lastSeq = 1
 /\ pubGen = 1
@@ -531,10 +589,10 @@ State 9: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 10: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
+State 11: <Next line 439, col 22 to line 439, col 45 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
-/\ sfu = {1}
+/\ sfu = {}
 /\ pulled = (l1 :> {})
 /\ offSt = "none"
 /\ syncUp = TRUE
@@ -550,21 +608,21 @@ State 10: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
         ver |-> 2,
         ack |-> 1 ] )
 /\ view = ( l1 :>
-      [ grant |-> FALSE,
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
         list |-> <<"none", "none", "none", "none">>,
-        ver |-> 0,
-        ack |-> 0 ] @@
-  pub :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
+        ver |-> 1,
         ack |-> 1 ] )
 /\ lastSeq = 1
 /\ pubGen = 1
 /\ recovering = -1
 /\ cap = TRUE
 /\ ver = 2
-/\ bud = [ pl |-> 0,
+/\ bud = [ pl |-> 1,
   ll |-> 0,
   pf |-> 0,
   rd |-> 0,
@@ -589,123 +647,7 @@ State 10: <Next line 423, col 28 to line 423, col 47 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 11: <Next line 417, col 28 to line 417, col 47 of module MediaHeal>
-/\ seq = 1
-/\ pubReq = FALSE
-/\ sfu = {1}
-/\ pulled = (l1 :> {})
-/\ offSt = "none"
-/\ syncUp = TRUE
-/\ offSlot = 0
-/\ rmsg = ( l1 :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] )
-/\ view = ( l1 :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] )
-/\ lastSeq = 1
-/\ pubGen = 1
-/\ recovering = -1
-/\ cap = TRUE
-/\ ver = 2
-/\ bud = [ pl |-> 0,
-  ll |-> 0,
-  pf |-> 0,
-  rd |-> 0,
-  pd |-> 0,
-  sr |-> 0,
-  loss |-> 0,
-  hm |-> 0 ]
-/\ list = <<"on", "none", "none", "none">>
-/\ deadMsg = {}
-/\ stale = {}
-/\ onSlot = 1
-/\ pubSfuUp = TRUE
-/\ nextGen = 2
-/\ obs = <<0, 0, 0, 0>>
-/\ subLost = (l1 :> {})
-/\ want = TRUE
-/\ recvUp = (l1 :> TRUE)
-/\ pair = ( l1 :>
-      << [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
-/\ grant = TRUE
-
-State 12: <Next line 429, col 39 to line 429, col 68 of module MediaHeal>
-/\ seq = 1
-/\ pubReq = FALSE
-/\ sfu = {1}
-/\ pulled = (l1 :> {})
-/\ offSt = "none"
-/\ syncUp = TRUE
-/\ offSlot = 0
-/\ rmsg = ( l1 :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] )
-/\ view = ( l1 :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] @@
-  pub :>
-      [ grant |-> TRUE,
-        list |-> <<"on", "none", "none", "none">>,
-        ver |-> 2,
-        ack |-> 1 ] )
-/\ lastSeq = 1
-/\ pubGen = 1
-/\ recovering = -1
-/\ cap = TRUE
-/\ ver = 2
-/\ bud = [ pl |-> 0,
-  ll |-> 0,
-  pf |-> 1,
-  rd |-> 0,
-  pd |-> 0,
-  sr |-> 0,
-  loss |-> 0,
-  hm |-> 0 ]
-/\ list = <<"on", "none", "none", "none">>
-/\ deadMsg = {}
-/\ stale = {}
-/\ onSlot = 1
-/\ pubSfuUp = TRUE
-/\ nextGen = 2
-/\ obs = <<0, 0, 0, 0>>
-/\ subLost = (l1 :> {})
-/\ want = TRUE
-/\ recvUp = (l1 :> TRUE)
-/\ pair = ( l1 :>
-      << [fails |-> 1, wait |-> 1, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0],
-         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
-/\ grant = TRUE
-
-State 13: <Next line 437, col 22 to line 437, col 45 of module MediaHeal>
+State 12: <Next line 419, col 28 to line 419, col 47 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -740,7 +682,7 @@ State 13: <Next line 437, col 22 to line 437, col 45 of module MediaHeal>
 /\ ver = 2
 /\ bud = [ pl |-> 1,
   ll |-> 0,
-  pf |-> 1,
+  pf |-> 0,
   rd |-> 0,
   pd |-> 0,
   sr |-> 0,
@@ -757,13 +699,13 @@ State 13: <Next line 437, col 22 to line 437, col 45 of module MediaHeal>
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
 /\ pair = ( l1 :>
-      << [fails |-> 1, wait |-> 1, flat |-> 0],
+      << [fails |-> 0, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0],
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 14: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
+State 13: <Next line 430, col 39 to line 430, col 65 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -798,7 +740,7 @@ State 14: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ ver = 2
 /\ bud = [ pl |-> 1,
   ll |-> 0,
-  pf |-> 1,
+  pf |-> 0,
   rd |-> 0,
   pd |-> 0,
   sr |-> 0,
@@ -810,7 +752,65 @@ State 14: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ onSlot = 1
 /\ pubSfuUp = TRUE
 /\ nextGen = 2
-/\ obs = <<0, 0, 0, 0>>
+/\ obs = <<1, 0, 0, 0>>
+/\ subLost = (l1 :> {})
+/\ want = TRUE
+/\ recvUp = (l1 :> TRUE)
+/\ pair = ( l1 :>
+      << [fails |-> 1, wait |-> 1, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
+/\ grant = TRUE
+
+State 14: <Next line 432, col 39 to line 432, col 68 of module MediaHeal>
+/\ seq = 1
+/\ pubReq = FALSE
+/\ sfu = {}
+/\ pulled = (l1 :> {})
+/\ offSt = "none"
+/\ syncUp = TRUE
+/\ offSlot = 0
+/\ rmsg = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ view = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ lastSeq = 1
+/\ pubGen = 1
+/\ recovering = -1
+/\ cap = TRUE
+/\ ver = 2
+/\ bud = [ pl |-> 1,
+  ll |-> 0,
+  pf |-> 0,
+  rd |-> 0,
+  pd |-> 0,
+  sr |-> 0,
+  loss |-> 0,
+  hm |-> 0 ]
+/\ list = <<"on", "none", "none", "none">>
+/\ deadMsg = {}
+/\ stale = {}
+/\ onSlot = 1
+/\ pubSfuUp = TRUE
+/\ nextGen = 2
+/\ obs = <<1, 0, 0, 0>>
 /\ subLost = (l1 :> {})
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
@@ -821,7 +821,7 @@ State 14: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 15: <Next line 428, col 39 to line 428, col 65 of module MediaHeal>
+State 15: <Next line 430, col 39 to line 430, col 65 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -856,19 +856,19 @@ State 15: <Next line 428, col 39 to line 428, col 65 of module MediaHeal>
 /\ ver = 2
 /\ bud = [ pl |-> 1,
   ll |-> 0,
-  pf |-> 1,
+  pf |-> 0,
   rd |-> 0,
   pd |-> 0,
   sr |-> 0,
   loss |-> 0,
   hm |-> 0 ]
 /\ list = <<"on", "none", "none", "none">>
-/\ deadMsg = {}
+/\ deadMsg = {1}
 /\ stale = {}
 /\ onSlot = 1
 /\ pubSfuUp = TRUE
 /\ nextGen = 2
-/\ obs = <<1, 0, 0, 0>>
+/\ obs = <<2, 0, 0, 0>>
 /\ subLost = (l1 :> {})
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
@@ -879,7 +879,7 @@ State 15: <Next line 428, col 39 to line 428, col 65 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 16: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
+State 16: <Next line 444, col 6 to line 444, col 18 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -914,11 +914,11 @@ State 16: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ ver = 2
 /\ bud = [ pl |-> 1,
   ll |-> 0,
-  pf |-> 1,
+  pf |-> 0,
   rd |-> 0,
   pd |-> 0,
   sr |-> 0,
-  loss |-> 0,
+  loss |-> 1,
   hm |-> 0 ]
 /\ list = <<"on", "none", "none", "none">>
 /\ deadMsg = {}
@@ -926,7 +926,65 @@ State 16: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ onSlot = 1
 /\ pubSfuUp = TRUE
 /\ nextGen = 2
-/\ obs = <<1, 0, 0, 0>>
+/\ obs = <<2, 0, 0, 0>>
+/\ subLost = (l1 :> {})
+/\ want = TRUE
+/\ recvUp = (l1 :> TRUE)
+/\ pair = ( l1 :>
+      << [fails |-> 2, wait |-> 2, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0],
+         [fails |-> 0, wait |-> 0, flat |-> 0] >> )
+/\ grant = TRUE
+
+State 17: <Next line 432, col 39 to line 432, col 68 of module MediaHeal>
+/\ seq = 1
+/\ pubReq = FALSE
+/\ sfu = {}
+/\ pulled = (l1 :> {})
+/\ offSt = "none"
+/\ syncUp = TRUE
+/\ offSlot = 0
+/\ rmsg = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ view = ( l1 :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] @@
+  pub :>
+      [ grant |-> TRUE,
+        list |-> <<"on", "none", "none", "none">>,
+        ver |-> 2,
+        ack |-> 1 ] )
+/\ lastSeq = 1
+/\ pubGen = 1
+/\ recovering = -1
+/\ cap = TRUE
+/\ ver = 2
+/\ bud = [ pl |-> 1,
+  ll |-> 0,
+  pf |-> 0,
+  rd |-> 0,
+  pd |-> 0,
+  sr |-> 0,
+  loss |-> 1,
+  hm |-> 0 ]
+/\ list = <<"on", "none", "none", "none">>
+/\ deadMsg = {}
+/\ stale = {}
+/\ onSlot = 1
+/\ pubSfuUp = TRUE
+/\ nextGen = 2
+/\ obs = <<2, 0, 0, 0>>
 /\ subLost = (l1 :> {})
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
@@ -937,7 +995,7 @@ State 16: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 17: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
+State 18: <Next line 432, col 39 to line 432, col 68 of module MediaHeal>
 /\ seq = 1
 /\ pubReq = FALSE
 /\ sfu = {}
@@ -972,11 +1030,11 @@ State 17: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ ver = 2
 /\ bud = [ pl |-> 1,
   ll |-> 0,
-  pf |-> 1,
+  pf |-> 0,
   rd |-> 0,
   pd |-> 0,
   sr |-> 0,
-  loss |-> 0,
+  loss |-> 1,
   hm |-> 0 ]
 /\ list = <<"on", "none", "none", "none">>
 /\ deadMsg = {}
@@ -984,7 +1042,7 @@ State 17: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
 /\ onSlot = 1
 /\ pubSfuUp = TRUE
 /\ nextGen = 2
-/\ obs = <<1, 0, 0, 0>>
+/\ obs = <<2, 0, 0, 0>>
 /\ subLost = (l1 :> {})
 /\ want = TRUE
 /\ recvUp = (l1 :> TRUE)
@@ -995,8 +1053,8 @@ State 17: <Next line 430, col 39 to line 430, col 68 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-State 18: Stuttering
-Finished checking temporal properties in 00s at 2026-10-31 19:10:56
-1595397 states generated, 329442 distinct states found, 0 states left on queue.
-The depth of the complete state graph search is 42.
-Finished in 27s at (2026-10-31 19:10:56)
+State 19: Stuttering
+Finished checking temporal properties in 00s at 2026-11-06 08:32:07
+1969712 states generated, 388519 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 45.
+Finished in 33s at (2026-11-06 08:32:07)
