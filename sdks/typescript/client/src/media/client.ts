@@ -1493,9 +1493,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #adaptViewerLayers(connection: RTCPeerConnection, report: RTCStatsReport, selector: ViewerLayerSelector, current: () => boolean): void {
     if (!this.#transport?.updateTracks || !this.#canObserveReceiveProgress(connection)) return;
     const now = performance.now();
-    // A layer update also resumes, so a camera paused in place gets none.
-    const cameras = [...this.#remoteTracks.values()].filter(({ source, track, publicationId }) => source === "camera" && track.readyState === "live" && !this.#viewerPaused.has(publicationId));
-    this.#queueViewerLayers(selector.sample(now, report, cameras));
+    // A layer update also resumes, so a camera paused in place gets none, but the selector keeps its ceiling.
+    const cameras = [...this.#remoteTracks.values()].filter(({ source, track }) => source === "camera" && track.readyState === "live");
+    this.#queueViewerLayers(selector.sample(now, report, cameras, this.#viewerPaused));
     if (this.#viewerLayerUpdating || now < this.#viewerLayerUpdateAt) return;
     const batch = [...this.#viewerLayerPending.values()]
       .filter((change) => !this.#viewerPaused.has(change.publicationId))

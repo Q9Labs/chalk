@@ -248,6 +248,8 @@ const MAX_RETRY_DELAY_MS = 60_000;
 type CameraView = { readonly policy: ViewerLayerPolicy; track: MediaStreamTrack; applied: ViewerLayer; retryAt: number; failures: number };
 
 /** One per peer connection: owns a policy for each remote camera and reports the switches still to apply. */
+const NOTHING_PAUSED: ReadonlySet<string> = new Set();
+
 export class ViewerLayerSelector {
   readonly #views = new Map<string, CameraView>();
   readonly #reader = new ViewerStatsReader();
@@ -258,7 +260,8 @@ export class ViewerLayerSelector {
     this.#followsNetwork = options.followsNetwork ?? true;
   }
 
-  sample(now: number, report: RTCStatsReport, cameras: readonly ViewerLayerCamera[]): readonly ViewerLayerChange[] {
+  /** A camera in `paused` keeps its view, so its resume starts from the ceiling the SFU still holds, and gets no change. */
+  sample(now: number, report: RTCStatsReport, cameras: readonly ViewerLayerCamera[], paused: ReadonlySet<string> = NOTHING_PAUSED): readonly ViewerLayerChange[] {
     const rows = [...report.values()] as ViewerStatsRow[];
     const active = new Set(cameras.map((camera) => camera.publicationId));
     for (const [publicationId, view] of this.#views) {
@@ -270,6 +273,11 @@ export class ViewerLayerSelector {
     const changes: ViewerLayerChange[] = [];
     for (const camera of cameras) {
       const view = this.#view(camera);
+      // Its counters stand still while paused, so the reader takes a new baseline after the resume.
+      if (paused.has(camera.publicationId)) {
+        this.#reader.forget(camera.track.id);
+        continue;
+      }
       const stats = this.#reader.read(rows, camera.track.id);
       if (!stats) continue;
       // Do not learn from l until the switch actually reached the receiver.

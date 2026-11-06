@@ -6284,6 +6284,30 @@ describe("own-SFU subscription state", () => {
     }
   });
 
+  it("keeps the layer ceiling across a pause in place, so a resume into a large tile asks for h", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join } = tileCall("m5-ceiling", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      sampleMedia(h, () => true);
+      setVideoRenderSize(camera(h).track, { width: 480, height: 270 });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks)).toMatchObject([{ simulcast: { preferredRid: "l" } }]);
+
+      setVideoTileVisibility(cameraId, null);
+      // The stats loop runs while the camera is paused.
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 3000);
+      setVideoRenderSize(camera(h).track, { width: 1280, height: 720 });
+      setVideoTileVisibility(cameraId, { width: 1280, height: 720 });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks).map((track) => track.paused ?? track.simulcast?.preferredRid)).toEqual(["l", true, false, "h"]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes an off-screen camera when the SFU refuses to pause it", async () => {
     vi.useFakeTimers();
     const { harness: h, cameraId, join } = tileCall("m5-refused", own);
