@@ -27,11 +27,19 @@ and 1Password.
    SFU_SSH_KEY=~/.ssh/chalk-sfu-operator_ed25519 features/media/sfu/deploy/deploy staging "$(cat ~/.config/chalk-sfu/staging/address)"
    ```
 
-To change `control_addresses` or `ssh_addresses`, apply, then run
-`deploy <env> <address> --firewall-only`. Apply changes only the cloud firewall;
-the node's own firewall follows it on that run and on every deploy, without a
-restart. Run it before you retire an old API address, or control traffic from
-the new one stays blocked.
+To change `control_addresses` or `ssh_addresses`, widen first and narrow
+second, because the cloud firewall and the node's own firewall both filter SSH
+and only a deploy run brings the node's firewall into line:
+
+1. Apply with the old and the new addresses both listed, then run
+   `deploy <env> <address> --firewall-only`.
+2. Check the node is reachable from the new address (SSH, and the API's control
+   calls for `control_addresses`).
+3. Apply with the old address removed, then run `--firewall-only` again.
+
+Applying a straight swap locks out both: the cloud firewall drops the old
+address while the node's firewall still drops the new one, so no run can reach
+the node to fix it. `--firewall-only` changes no running calls.
 
 To replace a broken node, taint the Droplet, apply, update `CHALK_SFU_NODES` in
 the API's settings if the address changed, and deploy. The node ID the API
