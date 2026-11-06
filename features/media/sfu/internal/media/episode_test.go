@@ -103,7 +103,7 @@ func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
 // an Episode whose probes and video fill its ceiling starts no further probe.
 func TestProbePaddingTakesRoomButDoesNotPauseCameras(t *testing.T) {
 	node := newTestNode(t, func(cfg *config.Config) { cfg.EpisodePacketCeiling = 1000 })
-	for _, probing := range []float64{0, 600} {
+	for _, probing := range []float64{0, 600, 800} {
 		granted, ungranted := grantedAndUngranted(t, 1.2e6, 300_000, 300)
 		episode := &episodeTick{
 			sessions:      []*Session{granted.pub.session, ungranted.pub.session, {}, {}},
