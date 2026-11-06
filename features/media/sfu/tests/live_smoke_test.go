@@ -129,7 +129,10 @@ func TestLiveSmokeClasses(t *testing.T) {
 	var mu sync.Mutex
 	var classes []*liveClass
 	join := func() string {
-		index := len(classes)
+		index, joining := len(classes), time.Now()
+		defer func() {
+			t.Logf("class %d joined at %s in %v", index, joining.UTC().Format(time.TimeOnly), time.Since(joining).Round(time.Millisecond))
+		}()
 		class, refused := joinClass(t, svc, load, run, index)
 		if refused != "" {
 			return refused
@@ -165,9 +168,19 @@ func TestLiveSmokeClasses(t *testing.T) {
 		}
 	}()
 
+	// The guard may close admission for a few seconds while classes join, so a
+	// fixed run retries a refused class as a client would, and logs each refusal.
 	for range load.classes {
-		if refused := join(); refused != "" {
-			t.Fatalf("the node refused class %d: %s", len(classes), refused)
+		for attempt := 1; ; attempt++ {
+			refused := join()
+			if refused == "" {
+				break
+			}
+			if attempt == 6 {
+				t.Fatalf("the node refused class %d %d times: %s", len(classes), attempt, refused)
+			}
+			t.Logf("refused, retrying in 10 s: %s", refused)
+			time.Sleep(10 * time.Second)
 		}
 	}
 	var first, previous liveSample
@@ -206,6 +219,17 @@ func TestLiveSmokeClasses(t *testing.T) {
 	}
 	mu.Lock()
 	t.Logf("first class at the end:%s", classes[0].describe(svc))
+	for _, class := range classes {
+		for index, receiver := range class.receivers {
+			receiver.mu.Lock()
+			for key, track := range receiver.tracks {
+				if track.stalls > 0 {
+					t.Logf("stalled: %s %s %s: %d stalls, longest %v ending %s, frames %v", class.people[index].name, key, track.kind, track.stalls, track.longest, track.longestAt.Format(time.TimeOnly), track.frames)
+				}
+			}
+			receiver.mu.Unlock()
+		}
+	}
 	mu.Unlock()
 	if previous.Ready == nil || first.Ready == nil || load.step > 0 {
 		return
@@ -246,7 +270,11 @@ func joinClass(t *testing.T, svc *service, load liveLoad, run int64, index int) 
 		receiver := receiveLive(p.peer, &class.shareEpoch)
 		var created protocol.CreateSessionResponse
 		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: op(), Scope: p.scope}, &created); status >= 300 {
-			return class, fmt.Sprintf("class %d Participant %d: %d %s", index, person, status, code)
+			_, _ = svc.call(t, "/v1/episodes/end", protocol.EndEpisodeRequest{TenantID: liveTenant, EpisodeID: class.episode}, nil)
+			var ready protocol.ReadyResponse
+			_ = get(svc, "/readyz", &ready)
+			return class, fmt.Sprintf("class %d Participant %d: %d %s (admission %q, steal %.1f%%, queue p95 %.1f ms)",
+				index, person, status, code, ready.Host.AdmissionReason, *cmp.Or(ready.Host.StealPercent, new(float64)), ready.Host.QueueDelayP95Ms)
 		}
 		p.conn = created.ConnectionID
 		svc.grantSources(t, p.scope)
@@ -416,9 +444,11 @@ type liveTrack struct {
 	switches int64
 	stalls   int64
 	longest  time.Duration
-	lastAt   time.Time // the latest frame start, or audio packet
-	lastTS   uint32
-	epoch    int64
+	// longestAt is when the longest stall ended.
+	longestAt time.Time
+	lastAt    time.Time // the latest frame start, or audio packet
+	lastTS    uint32
+	epoch     int64
 	// Loss counts unique sequence numbers against the extended range; a share
 	// pause starts a new range, because the sender's counters run on through it.
 	started            bool
@@ -480,7 +510,9 @@ func (s *liveTrack) gap(at time.Time, epoch int64) {
 	if !s.lastAt.IsZero() && epoch == s.epoch {
 		if gap := at.Sub(s.lastAt); gap > liveStall {
 			s.stalls++
-			s.longest = max(s.longest, gap)
+			if gap > s.longest {
+				s.longest, s.longestAt = gap, at
+			}
 		}
 	}
 	s.lastAt, s.epoch = at, epoch
