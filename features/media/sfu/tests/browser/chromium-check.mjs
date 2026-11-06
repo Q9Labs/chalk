@@ -359,7 +359,7 @@ async function waitFor(what, timeoutMs, probe) {
   for (;;) {
     const result = await probe();
     if (result) return result;
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}; last media ${JSON.stringify(lastMedia ?? null)}`);
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}; last media ${JSON.stringify(lastMedia)}`);
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 }
