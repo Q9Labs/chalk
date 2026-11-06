@@ -57,8 +57,10 @@ type pendingOffer struct {
 
 // newSession builds a session and starts its pacer. The caller holds n.mu.
 func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Session, error) {
-	pc, err := n.api.NewPeerConnection(webrtc.Configuration{})
+	transport := newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done)
+	pc, err := n.peers.newPeer(transport)
 	if err != nil {
+		transport.close()
 		return nil, fmt.Errorf("create peer connection: %w", err)
 	}
 	s := &Session{
@@ -66,7 +68,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
-		transport:  newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done),
+		transport:  transport,
 	}
 	if n.stopped {
 		s.transport.close()

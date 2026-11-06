@@ -35,9 +35,10 @@ func nominalReservation(participants, streamCost int) int {
 func (n *Node) episodeCeiling() int { return min(n.cfg.EpisodePacketCeiling, n.cfg.PacketBudget) }
 
 // mandatoryPackets is the media the allocator can never lower: every microphone to every
-// Participant, n·n audio hops, and the screen share's video and audio to all n when one runs.
+// Participant, n·n audio hops, each camera's uplink, because the plan lowers only what
+// subscribers receive, and the screen share's video and audio to all n when one runs.
 func (n *Node) mandatoryPackets(participants int, screen bool) int {
-	packets := n.cfg.AudioStreamCost * participants * participants
+	packets := n.cfg.AudioStreamCost*participants*participants + n.cfg.VideoStreamCost*participants
 	if screen {
 		packets += (n.cfg.ScreenStreamCost + n.cfg.AudioStreamCost) * participants
 	}

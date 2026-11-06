@@ -341,7 +341,9 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 
 // readFeedback serves the subscriber's RTCP until its sender stops: keyframe
 // requests go to the publisher's forwarded layer, and lost packets are resent
-// from the layer's shared history. Pion also needs this read to run its RTCP interceptors.
+// from the layer's shared history. Pion also needs this read to run its RTCP
+// interceptors. Transport-wide feedback reaches the transport from the
+// session's RTCP buffers instead, whichever SSRC it names.
 func (s *subscription) readFeedback() {
 	writer := &packetWriter{}
 	for {
@@ -374,8 +376,6 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				budget = s.retransmit(packet, budget, writer)
 			}
-		case *rtcp.TransportLayerCC:
-			s.transport.onFeedback(packet)
 		}
 	}
 }

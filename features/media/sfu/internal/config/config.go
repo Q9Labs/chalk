@@ -52,8 +52,8 @@ type Config struct {
 	MaxEpisodeParticipants int
 	// EpisodePacketCeiling is the most packets/s, ingress plus egress including repair, that one
 	// Episode may use. The allocator lowers and pauses camera video to stay under it, so an
-	// Episode reserves at most this much. Audio and the screen share are never lowered, so a
-	// join or screen share whose mandatory media cannot fit under it is refused.
+	// Episode reserves at most this much. Audio, the screen share and camera uplinks are never
+	// lowered, so a join or screen share whose mandatory media cannot fit under it is refused.
 	EpisodePacketCeiling int
 	// ScreenStreamCost is the packets/s one hop of the screen share's video is assumed to need when
 	// checking mandatory media. Screen video has no lower layer, so the allocator cannot reduce it.

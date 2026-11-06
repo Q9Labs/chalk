@@ -47,7 +47,7 @@ const (
 	probeBackoffMin = time.Second
 	probeBackoffMax = 8 * time.Second
 	// feedbackSeen bounds the feedback reports remembered to ignore the copies
-	// Pion hands every sender named in the same compound packet.
+	// SRTP writes to every stream named in the same compound packet.
 	feedbackSeen = 16
 )
 
@@ -451,6 +451,9 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 	key := uint32(report.FbPktCount)<<16 | uint32(report.BaseSequenceNumber)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.closed {
+		return
+	}
 	for _, seen := range t.seen {
 		if seen == key+1 {
 			return

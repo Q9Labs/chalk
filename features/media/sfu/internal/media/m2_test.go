@@ -161,7 +161,7 @@ func TestJoinIsRefusedAtThePacketBudget(t *testing.T) {
 	}
 }
 
-func TestTheEpisodeCeilingCapsTheReservationAndMandatoryAudioRefusesTheSixteenth(t *testing.T) {
+func TestTheEpisodeCeilingCapsTheReservationAndMandatoryMediaRefusesTheFourteenth(t *testing.T) {
 	// Nine Participants nominally reserve 18000, but the allocator holds an Episode at its
 	// 11520 ceiling, so the Episode reserves 11520 and fits a 16000 node.
 	node := newTestNode(t, func(cfg *config.Config) {
@@ -169,20 +169,21 @@ func TestTheEpisodeCeilingCapsTheReservationAndMandatoryAudioRefusesTheSixteenth
 		cfg.PacketBudget = 16000
 		cfg.EpisodePacketCeiling = 11520
 	})
-	for index := range 15 {
+	for index := range 13 {
 		node.newTestSession(t, episodeScope("a", "p"+itoa(index)))
 	}
 	if _, reserved := node.Budget(); reserved != 11520 {
-		t.Fatalf("15 Participants reserve %d, want the 11520 ceiling", reserved)
+		t.Fatalf("13 Participants reserve %d, want the 11520 ceiling", reserved)
 	}
-	// Sixteen microphones alone are 50·16² = 12800 packets/s, which no camera pause can make fit.
-	if _, err := node.CreateSession("create-sixteenth", episodeScope("a", "p15")); !errors.Is(err, errMandatoryMedia) {
-		t.Fatalf("sixteenth Participant under an 11520 ceiling: %v, want mandatory media refused", err)
+	// Fourteen microphones to everyone are 50·14² = 9800 packets/s and fourteen camera uplinks
+	// 150·14 = 2100 more. Pausing what subscribers receive lowers neither.
+	if _, err := node.CreateSession("create-fourteenth", episodeScope("a", "p13")); !errors.Is(err, errMandatoryMedia) {
+		t.Fatalf("fourteenth Participant under an 11520 ceiling: %v, want mandatory media refused", err)
 	}
 	// The ceiling is the Episode's, not the node's: room left on the node admits a new Episode.
 	node.newTestSession(t, episodeScope("b", "p0"))
 
-	// A higher ceiling, validated separately, admits the sixteenth.
+	// A higher ceiling, validated separately, admits sixteen: 12800 + 2400 fits 16000.
 	higher := newTestNode(t, func(cfg *config.Config) {
 		cfg.MaxSessions = 32
 		cfg.PacketBudget = 32000
@@ -194,22 +195,23 @@ func TestTheEpisodeCeilingCapsTheReservationAndMandatoryAudioRefusesTheSixteenth
 }
 
 func TestAScreenShareThatMandatoryMediaCannotCarryIsRefused(t *testing.T) {
-	// Thirteen microphones are 8450 packets/s; a screen share adds (210 + 50)·13 = 3380, above 11520.
+	// Twelve microphones and cameras are 50·12² + 150·12 = 9000 packets/s; a screen share adds
+	// (210 + 50)·12 = 3120, above 11520. For eleven it is 7700 + 2860 = 10560, which fits.
 	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 32; cfg.EpisodePacketCeiling = 11520 })
-	sessions := make([]*Session, 0, 13)
-	for index := range 13 {
+	sessions := make([]*Session, 0, 12)
+	for index := range 12 {
 		sessions = append(sessions, node.newTestSession(t, episodeScope("a", "p"+itoa(index))))
 	}
 	if code, _ := node.claimScreen(sessions[0]); code != protocol.TrackCodeLimitExceeded {
-		t.Fatalf("screen share for 13: code %q, want %q", code, protocol.TrackCodeLimitExceeded)
+		t.Fatalf("screen share for 12: code %q, want %q", code, protocol.TrackCodeLimitExceeded)
 	}
-	sessions[12].Close()
+	sessions[11].Close()
 	if code, message := node.claimScreen(sessions[0]); code != "" {
-		t.Fatalf("screen share for 12: %s %s", code, message)
+		t.Fatalf("screen share for 11: %s %s", code, message)
 	}
-	// With the screen share running, a thirteenth join no longer fits either.
-	if _, err := node.CreateSession("create-again", episodeScope("a", "p12")); !errors.Is(err, errMandatoryMedia) {
-		t.Fatalf("thirteenth join with a screen share: %v, want mandatory media refused", err)
+	// With the screen share running, a twelfth join no longer fits either.
+	if _, err := node.CreateSession("create-again", episodeScope("a", "p11")); !errors.Is(err, errMandatoryMedia) {
+		t.Fatalf("twelfth join with a screen share: %v, want mandatory media refused", err)
 	}
 }
 
