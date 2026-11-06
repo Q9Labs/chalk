@@ -298,7 +298,7 @@ No token, raw participant or user identity, error text, or media payload is adde
 
 The own SFU (`features/media/sfu`) logs structured JSON with no Tenant, Episode,
 Participant, address, SDP, certificate or payload in its node-wide lines.
-`tests/impairment_test.go` scans the logs of impaired calls for those.
+`features/media/sfu/tests/impairment_test.go` scans the logs of impaired calls for those.
 
 - `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
   the repair and probe parts of it, subscriptions paused for congestion, cameras

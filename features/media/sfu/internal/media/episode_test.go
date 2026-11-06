@@ -78,3 +78,22 @@ func TestAnUngrantedSourceTakesNoShareOfTheDownlink(t *testing.T) {
 		t.Fatalf("the granted camera is on %q, want h: a source without a grant took the downlink", granted.alloc.rid)
 	}
 }
+
+func TestAMissingLayerWithoutFallbackTakesNoShareOfTheDownlink(t *testing.T) {
+	strict, other := grantedAndUngranted(t, 1.2e6, 300_000, 300)
+	now := monotonic()
+	for index := range strict.pub.layers {
+		if layer := strict.pub.layers[index].Load(); layer != nil && layer.rid == "h" {
+			layer.lastRTP.Store(0)
+		}
+	}
+	strict.mu.Lock()
+	strict.request = layerRequest{ceiling: "h"}
+	strict.mu.Unlock()
+	if layers := strict.allocatable(strict.currentRequest(), now); layers != nil {
+		t.Fatalf("a missing h without fallback lists %+v, want nothing: it sends nothing", layers)
+	}
+	if layers := other.allocatable(other.currentRequest(), now); len(layers) == 0 {
+		t.Fatal("a camera with fallback lists no layers")
+	}
+}

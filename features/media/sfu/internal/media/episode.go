@@ -295,6 +295,10 @@ func (s *subscription) allocatable(request layerRequest, now int64) []layerRate 
 		layers = append(layers, layerRate{rid: layer.rid, bps: bps})
 	}
 	slices.SortFunc(layers, func(a, b layerRate) int { return cmp.Compare(a.rid, b.rid) })
+	// Without fallback a missing requested layer sends nothing, so it costs nothing.
+	if !request.fallback && len(layers) > 0 && layers[0].rid != "" && layers[0].rid != request.wanted() {
+		return nil
+	}
 	if s.pub.plan == planLowest && len(layers) > 1 {
 		layers = layers[len(layers)-1:]
 	}
