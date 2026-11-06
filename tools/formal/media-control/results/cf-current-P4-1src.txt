@@ -1,8 +1,8 @@
-TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+TLC2 Version 2026.11.06.005304 (rev: 3ec1cc4)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 14:17:15.
-Checking temporal properties for the complete state space with 362 total distinct states at (2026-10-31 14:17:15)
+Finished computing initial states: 1 distinct state generated at 2026-11-06 07:30:54.
+Checking temporal properties for the complete state space with 362 total distinct states at (2026-11-06 07:30:54)
 Error: Temporal property P4_Converges was violated.
 
 Error: The following behavior constitutes a counter-example:
@@ -147,7 +147,7 @@ State 4: <Next line 294, col 25 to line 294, col 43 of module MediaControl>
 /\ mutes = 0
 /\ grant = (mic :> TRUE)
 
-State 5: <Next line 297, col 25 to line 297, col 46 of module MediaControl>
+State 5: <Next line 302, col 25 to line 302, col 40 of module MediaControl>
 /\ viewHm = (mic :> FALSE)
 /\ viewGranted = (mic :> FALSE)
 /\ seq = (mic :> 2)
@@ -162,7 +162,7 @@ State 5: <Next line 297, col 25 to line 297, col 46 of module MediaControl>
         granted |-> FALSE,
         shown |-> FALSE,
         hm |-> FALSE ] )
-/\ offSlot = (mic :> 2)
+/\ offSlot = (mic :> 0)
 /\ drops = 0
 /\ lastSeq = (mic :> 1)
 /\ intent = (mic :> FALSE)
@@ -172,17 +172,17 @@ State 5: <Next line 297, col 25 to line 297, col 46 of module MediaControl>
 /\ viewVer = (mic :> 0)
 /\ onSlot = (mic :> 1)
 /\ viewAck = (mic :> 0)
-/\ loss = 0
+/\ loss = 1
 /\ cfails = 0
 /\ reconciled = TRUE
 /\ hostMute = (mic :> FALSE)
 /\ want = (mic :> FALSE)
 /\ viewShown = (mic :> FALSE)
-/\ offState = (mic :> "failed")
+/\ offState = (mic :> "sent")
 /\ mutes = 0
 /\ grant = (mic :> TRUE)
 
-State 6: <Next line 301, col 25 to line 301, col 44 of module MediaControl>
+State 6: <Next line 297, col 25 to line 297, col 46 of module MediaControl>
 /\ viewHm = (mic :> FALSE)
 /\ viewGranted = (mic :> FALSE)
 /\ seq = (mic :> 2)
@@ -191,8 +191,13 @@ State 6: <Next line 301, col 25 to line 301, col 44 of module MediaControl>
 /\ pubReq = (mic :> -1)
 /\ reconnected = FALSE
 /\ syncUp = TRUE
-/\ snap = (mic :> [ver |-> 1, ack |-> 1, granted |-> TRUE, shown |-> FALSE, hm |-> FALSE])
-/\ offSlot = (mic :> 2)
+/\ snap = ( mic :>
+      [ ver |-> -1,
+        ack |-> 0,
+        granted |-> FALSE,
+        shown |-> FALSE,
+        hm |-> FALSE ] )
+/\ offSlot = (mic :> 0)
 /\ drops = 0
 /\ lastSeq = (mic :> 1)
 /\ intent = (mic :> FALSE)
@@ -202,7 +207,7 @@ State 6: <Next line 301, col 25 to line 301, col 44 of module MediaControl>
 /\ viewVer = (mic :> 0)
 /\ onSlot = (mic :> 1)
 /\ viewAck = (mic :> 0)
-/\ loss = 0
+/\ loss = 1
 /\ cfails = 0
 /\ reconciled = TRUE
 /\ hostMute = (mic :> FALSE)
@@ -212,7 +217,7 @@ State 6: <Next line 301, col 25 to line 301, col 44 of module MediaControl>
 /\ mutes = 0
 /\ grant = (mic :> TRUE)
 
-State 7: <Next line 302, col 25 to line 302, col 40 of module MediaControl>
+State 7: <Next line 301, col 25 to line 301, col 44 of module MediaControl>
 /\ viewHm = (mic :> FALSE)
 /\ viewGranted = (mic :> FALSE)
 /\ seq = (mic :> 2)
@@ -273,7 +278,7 @@ State 8: <Next line 303, col 6 to line 303, col 28 of module MediaControl>
 /\ grant = (mic :> TRUE)
 
 State 9: Stuttering
-Finished checking temporal properties in 00s at 2026-10-31 14:17:15
+Finished checking temporal properties in 00s at 2026-11-06 07:30:54
 1128 states generated, 362 distinct states found, 0 states left on queue.
 The depth of the complete state graph search is 15.
-Finished in 00s at (2026-10-31 14:17:15)
+Finished in 00s at (2026-11-06 07:30:54)

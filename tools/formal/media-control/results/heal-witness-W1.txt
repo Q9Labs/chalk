@@ -1,6 +1,6 @@
-TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+TLC2 Version 2026.11.06.005304 (rev: 3ec1cc4)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-11-01 04:07:23.
+Finished computing initial states: 1 distinct state generated at 2026-11-06 08:42:55.
 Error: Invariant W1_Heard is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -583,6 +583,6 @@ State 10: <Next line 429, col 39 to line 429, col 63 of module MediaHeal>
          [fails |-> 0, wait |-> 0, flat |-> 0] >> )
 /\ grant = TRUE
 
-18776 states generated, 5594 distinct states found, 1834 states left on queue.
+17580 states generated, 5305 distinct states found, 1801 states left on queue.
 The depth of the complete state graph search is 11.
-Finished in 00s at (2026-11-01 04:07:23)
+Finished in 00s at (2026-11-06 08:42:55)

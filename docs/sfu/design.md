@@ -501,12 +501,13 @@ orphan cleanup and delayed lease/revoke delivery.
 
 **ICE restart:** support a client offer with new ICE credentials on an existing
 session through AddTracks, returning an answer without duplicating publications.
-There is no SDK `restartIce()`/`iceRestart` call in this baseline; current recovery
-replaces the connection (`sdks/typescript/client/src/media/client.ts:1543`). Add an own-provider-capability
-gated restart attempt in the shared SDK, serialized with other SDP, with one
-eight-second budget before using existing replacement. Restart preserves consent
-and off debt; it does not imply media on. Failed restart or missing session gets
-a fresh bootstrap, generation and PeerConnection. Never reuse a DTLS association
+When the own SFU advertises the `iceRestart` capability, the shared SDK restarts
+ICE in place: a failed path, or one still disconnected after two seconds, sends an
+`iceRestart` offer as a push with no tracks, serialized with other SDP, with one
+eight-second budget before the existing replacement. The API accepts a push with no
+tracks only as an offer to a plane that restarts in place, so Cloudflare is unchanged.
+Restart preserves consent and off debt; it does not imply media on. Failed restart
+or missing session gets a fresh bootstrap, generation and PeerConnection. Never reuse a DTLS association
 across a node incarnation change. Prove Wi-Fi/mobile-style address changes and
 TURN/TLS-only recovery independently of the Sync reconnect tests.
 

@@ -1,39 +1,35 @@
-TLC2 Version 2026.10.30.154139 (rev: 090e85c)
+TLC2 Version 2026.11.06.005304 (rev: 3ec1cc4)
 Implied-temporal checking--satisfiability problem has 1 branches.
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-31 18:37:56.
-Checking temporal properties for the current state space with 7816 total distinct states at (2026-10-31 18:37:59)
-Finished checking temporal properties in 00s at 2026-10-31 18:37:59
-Checking temporal properties for the current state space with 660541 total distinct states at (2026-10-31 18:38:59)
-Finished checking temporal properties in 02s at 2026-10-31 18:39:01
-Checking temporal properties for the current state space with 1277327 total distinct states at (2026-10-31 18:40:01)
-Finished checking temporal properties in 05s at 2026-10-31 18:40:06
-Checking temporal properties for the current state space with 1892863 total distinct states at (2026-10-31 18:41:06)
-Finished checking temporal properties in 07s at 2026-10-31 18:41:14
-Checking temporal properties for the current state space with 2514961 total distinct states at (2026-10-31 18:42:14)
-Finished checking temporal properties in 10s at 2026-10-31 18:42:25
-Checking temporal properties for the current state space with 3118727 total distinct states at (2026-10-31 18:43:25)
-Finished checking temporal properties in 12s at 2026-10-31 18:43:38
-Checking temporal properties for the current state space with 3733176 total distinct states at (2026-10-31 18:44:38)
-Finished checking temporal properties in 16s at 2026-10-31 18:44:54
-Checking temporal properties for the current state space with 4314850 total distinct states at (2026-10-31 18:45:54)
-Finished checking temporal properties in 18s at 2026-10-31 18:46:13
-Checking temporal properties for the current state space with 4884510 total distinct states at (2026-10-31 18:47:13)
-Finished checking temporal properties in 21s at 2026-10-31 18:47:34
-Checking temporal properties for the current state space with 5439209 total distinct states at (2026-10-31 18:48:34)
-Finished checking temporal properties in 24s at 2026-10-31 18:48:59
-Checking temporal properties for the current state space with 5992984 total distinct states at (2026-10-31 18:49:59)
-Finished checking temporal properties in 27s at 2026-10-31 18:50:26
-Checking temporal properties for the current state space with 7129970 total distinct states at (2026-10-31 18:52:26)
-Finished checking temporal properties in 29s at 2026-10-31 18:52:56
-Checking temporal properties for the complete state space with 7516309 total distinct states at (2026-10-31 18:53:33)
-Finished checking temporal properties in 31s at 2026-10-31 18:54:04
+Finished computing initial states: 1 distinct state generated at 2026-11-06 07:53:13.
+Checking temporal properties for the current state space with 32528 total distinct states at (2026-11-06 07:53:16)
+Finished checking temporal properties in 00s at 2026-11-06 07:53:16
+Checking temporal properties for the current state space with 781392 total distinct states at (2026-11-06 07:54:16)
+Finished checking temporal properties in 04s at 2026-11-06 07:54:20
+Checking temporal properties for the current state space with 1511555 total distinct states at (2026-11-06 07:55:20)
+Finished checking temporal properties in 07s at 2026-11-06 07:55:28
+Checking temporal properties for the current state space with 2249085 total distinct states at (2026-11-06 07:56:28)
+Finished checking temporal properties in 12s at 2026-11-06 07:56:40
+Checking temporal properties for the current state space with 2995831 total distinct states at (2026-11-06 07:57:40)
+Finished checking temporal properties in 16s at 2026-11-06 07:57:56
+Checking temporal properties for the current state space with 3590830 total distinct states at (2026-11-06 07:58:56)
+Finished checking temporal properties in 21s at 2026-11-06 07:59:18
+Checking temporal properties for the current state space with 4234844 total distinct states at (2026-11-06 08:00:18)
+Finished checking temporal properties in 22s at 2026-11-06 08:00:40
+Checking temporal properties for the current state space with 4906634 total distinct states at (2026-11-06 08:01:40)
+Finished checking temporal properties in 27s at 2026-11-06 08:02:08
+Checking temporal properties for the current state space with 5827082 total distinct states at (2026-11-06 08:04:08)
+Finished checking temporal properties in 59s at 2026-11-06 08:05:07
+Checking temporal properties for the current state space with 7124658 total distinct states at (2026-11-06 08:09:07)
+Finished checking temporal properties in 54s at 2026-11-06 08:10:02
+Checking temporal properties for the complete state space with 8017371 total distinct states at (2026-11-06 08:11:39)
+Finished checking temporal properties in 54s at 2026-11-06 08:12:33
 Model checking completed. No error has been found.
   Estimates of the probability that TLC did not check all reachable states
   because two distinct states had the same fingerprint:
-  calculated (optimistic):  val = 1.5E-5
-  based on the actual fingerprints:  val = 6.9E-7
-43534550 states generated, 7516309 distinct states found, 0 states left on queue.
+  calculated (optimistic):  val = 1.7E-5
+  based on the actual fingerprints:  val = 8.1E-7
+47140461 states generated, 8017371 distinct states found, 0 states left on queue.
 The depth of the complete state graph search is 67.
 The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 14 and the 95th percentile is 3).
-Finished in 16min 09s at (2026-10-31 18:54:05)
+Finished in 19min 21s at (2026-11-06 08:12:34)

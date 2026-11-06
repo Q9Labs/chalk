@@ -139,6 +139,9 @@ type sfu struct {
 	ca         *authority
 	controlURL string
 	dir        string
+	binary     string
+	env        []string
+	stop       func()
 }
 
 func freePort(t *testing.T) string {
@@ -165,8 +168,7 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 	dir := t.TempDir()
 	serverCert, serverKey := ca.issue(t, "localhost", x509.ExtKeyUsageServerAuth)
 	controlPort, udpPort := freePort(t), freePort(t)
-	command := exec.Command(binary)
-	command.Env = append(os.Environ(),
+	env := append(os.Environ(),
 		"SFU_CONTROL_ADDR=127.0.0.1:"+controlPort,
 		"SFU_UDP_ADDR=127.0.0.1:"+udpPort,
 		"SFU_ANNOUNCE_IPS=127.0.0.1",
@@ -180,31 +182,44 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 		"SFU_SOURCE_LEASE_TTL=2m",
 	)
 	for key, value := range settings {
-		command.Env = append(command.Env, key+"="+value)
+		env = append(env, key+"="+value)
 	}
+	service := &sfu{ca: ca, controlURL: "https://127.0.0.1:" + controlPort, dir: dir, binary: binary, env: env}
+	service.launch(t)
+	return service
+}
+
+// launch starts the node process and waits until it answers /healthz.
+func (s *sfu) launch(t *testing.T) {
+	t.Helper()
+	command := exec.Command(s.binary)
+	command.Env = s.env
 	if err := command.Start(); err != nil {
 		t.Fatalf("start sfu: %v", err)
 	}
 	exited := make(chan struct{})
 	go func() { _ = command.Wait(); close(exited) }()
-	t.Cleanup(func() {
-		_ = command.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-exited:
-		case <-time.After(10 * time.Second):
-			_ = command.Process.Kill()
-			<-exited
-		}
-	})
-	service := &sfu{ca: ca, controlURL: "https://127.0.0.1:" + controlPort, dir: dir}
-	probe := service.httpClient(t, ca, clientIdentity)
+	var once sync.Once
+	s.stop = func() {
+		once.Do(func() {
+			_ = command.Process.Signal(syscall.SIGTERM)
+			select {
+			case <-exited:
+			case <-time.After(10 * time.Second):
+				_ = command.Process.Kill()
+				<-exited
+			}
+		})
+	}
+	t.Cleanup(s.stop)
+	probe := s.httpClient(t, s.ca, clientIdentity)
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		response, err := probe.Get(service.controlURL + "/healthz")
+		response, err := probe.Get(s.controlURL + "/healthz")
 		if err == nil {
 			response.Body.Close()
 			if response.StatusCode == http.StatusOK {
-				return service
+				return
 			}
 		}
 		select {
@@ -217,6 +232,14 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// restart loses the node: every session, publication and source control goes,
+// and a new process with a new incarnation answers on the same addresses.
+func (s *sfu) restart(t *testing.T) {
+	t.Helper()
+	s.stop()
+	s.launch(t)
 }
 
 func (s *sfu) httpClient(t *testing.T, clientCA *authority, identity string) *http.Client {

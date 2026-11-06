@@ -4830,7 +4830,9 @@ class FakePeerConnection extends EventTarget {
   activeTransceiverCount(): number {
     return this.#activeTransceivers.size;
   }
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
+  readonly offerOptions: (RTCOfferOptions | undefined)[] = [];
+  async createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit> {
+    this.offerOptions.push(options);
     if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#transceivers.map((transceiver) => transceiver.mid).join(" ")}\r\n` };
   }
@@ -6408,5 +6410,330 @@ describe("own-SFU subscription state", () => {
       h.client.stop();
       vi.useRealTimers();
     }
+  });
+});
+
+describe("in-place ICE restart on the own SFU", () => {
+  const OWN_SFU = { serverLayerAdaptation: false, subscriptionState: false, iceRestart: true } as const;
+  function ownBootstrap(connectionId: string, iceRestart = true): CloudflareSFUBootstrap {
+    return { connectionId, iceServers: [], capabilities: { ...OWN_SFU, iceRestart } };
+  }
+  function restartRequests(h: ReturnType<typeof createHarness>) {
+    return h.transport.addInputs.filter((input) => input.tracks.length === 0);
+  }
+  async function publishingAndPulling(h: ReturnType<typeof createHarness>) {
+    await h.client.start(fakeStream(new FakeTrack("microphone", "audio"), new FakeTrack("camera", "video")));
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone-a" }] };
+    await h.client.refreshRemotePublications();
+    const peer = h.peers[0]!;
+    expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, remoteTracks: [{ publicationId: "remote-connection|microphone-a" }] });
+    const remote = h.client.getSnapshot().remoteTracks[0]!.track;
+    return { peer, remote, publications: h.client.getSnapshot().localTracks.map((track) => track.publicationId), adds: h.transport.addInputs.length };
+  }
+
+  it.each(["failed", "disconnected"] as const)("restarts ICE on the same session when the path is %s, keeping its publication and subscription", async (state) => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer, remote, publications, adds } = await publishingAndPulling(h);
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates(state, state);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        if (state === "disconnected") {
+          await vi.advanceTimersByTimeAsync(1999);
+          expect(restartRequests(h)).toHaveLength(0);
+          expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        }
+        await vi.advanceTimersByTimeAsync(40);
+
+        expect(restartRequests(h)).toEqual([{ connectionId: "connection-1", sessionDescription: expect.objectContaining({ type: "offer" }), tracks: [], replacementCause: undefined }]);
+        expect(peer.offerOptions.at(-1)).toEqual({ iceRestart: true });
+        expect(peer.descriptionLog.slice(-2)).toEqual(["setLocal:offer", "setRemote:answer"]);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null, remoteTracks: [{ publicationId: "remote-connection|microphone-a", track: remote }] });
+        expect(h.client.getSnapshot().localTracks.map((track) => track.publicationId)).toEqual(publications);
+        expect(h.transport.addInputs).toHaveLength(adds + 1);
+        expect(h.transport.closeInputs).toHaveLength(0);
+        expect(h.peerConnectionFactory).toHaveBeenCalledTimes(1);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("restarts again when a later path fails after a restart that worked", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          peer.setNextRemoteDescriptionStates("connected", "connected");
+          peer.setStates("failed", "failed");
+          await vi.advanceTimersByTimeAsync(40);
+          expect(restartRequests(h)).toHaveLength(attempt);
+          expect(h.client.getSnapshot().connection.phase).toBe("live");
+        }
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a muted microphone muted and unpublished through a restart", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const microphone = h.client.getSnapshot().localTracks.find((track) => track.source === "microphone")!.track as unknown as FakeTrack;
+        await expect(h.client.setLocalPublicationTarget({ operationId: "mute", participantId: "participant-1", source: "microphone", enabled: false })).resolves.toMatchObject({ errorCode: null });
+        const microphoneAdds = localAddCount(h, "microphone");
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        expect(microphone.enabled).toBe(false);
+        expect(h.client.getSnapshot().localTracks.find((track) => track.source === "microphone")).toMatchObject({ enabled: false });
+        expect(localAddCount(h, "microphone")).toBe(microphoneAdds);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("reports a recoverable failure when the restart does not reconnect within 8 s, and replacement leaves one publication per source", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(7900);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        await vi.advanceTimersByTimeAsync(200);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+        // The lifecycle must not read a later disconnect as recovery in progress.
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(h.client.getSnapshot().connection.phase).toBe("failed");
+        expect(restartRequests(h)).toHaveLength(1);
+
+        await h.client.restart(ownBootstrap("connection-2"));
+        await vi.advanceTimersByTimeAsync(0);
+        const fresh = h.client.getSnapshot();
+        expect(fresh.connection.phase).toBe("live");
+        expect(h.peers).toHaveLength(2);
+        expect(fresh.localTracks.map((track) => parseCloudflareSFUPublicationID(track.publicationId!).connectionId)).toEqual(["connection-2", "connection-2"]);
+        // The SFU drops the old session when the fresh one is created, so each source publishes once, on the fresh session.
+        const freshPublishes = h.transport.addInputs.filter((input) => input.connectionId === "connection-2").flatMap((input) => input.tracks.filter((track) => track.location === "local").map((track) => track.source));
+        expect(freshPublishes.sort()).toEqual(["camera", "microphone"]);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("drops a restart answer that arrives after the 8 s budget, so the path stays failed for replacement", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8100);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+        const applied = peer.descriptionLog.length;
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(applied)).not.toContain("setRemote:answer");
+        expect(peer.rollbackCalls).toBe(1);
+        expect(peer.connectionState).toBe("failed");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("applies the answer the SFU sent when the path recovers on its own while that answer is in flight", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          // The SFU accepts the restart offer and changes its credentials before the answer comes back.
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(1);
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(-2)).toEqual(["setLocal:offer", "setRemote:answer"]);
+        expect(peer.rollbackCalls).toBe(0);
+        expect(peer.signalingState).toBe("stable");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a restart the budget failed failed when the path recovers by itself just after 8 s, so replacement runs", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8001);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        peer.setStates("connected", "connected");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.rollbackCalls).toBe(1);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        await h.client.restart(ownBootstrap("connection-2"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.peers).toHaveLength(2);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("fails at once for replacement when the session is gone after node loss (HTTP 404)", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        h.transport.nextLocalPublishFailure = new CloudflareSFUError("media connection not found", "signaling_failed", { status: 404 });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
+        expect(peer.rollbackCalls).toBe(1);
+        expect(peer.signalingState).toBe("stable");
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("waits for earlier SDP work before it sends the restart offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        // The earlier pull fails once released, so the path is still down when the restart takes the queue.
+        const release = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) await release.promise;
+          return addTracks(input);
+        });
+        h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
+        const pulling = h.client.refreshRemotePublications().catch(() => undefined);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.transport.addInputs.at(-1)?.tracks.every((track) => track.location === "remote")).toBe(true);
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(0);
+        release.reject(new CloudflareSFUError("pull failed", "signaling_failed"));
+        await vi.advanceTimersByTimeAsync(40);
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        await pulling;
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a path that reconnects while the restart waits for the queue live, and skips the restart offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const release = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) await release.promise;
+          return addTracks(input);
+        });
+        h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
+        const pulling = h.client.refreshRemotePublications();
+        await vi.advanceTimersByTimeAsync(0);
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(2040);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+        release.resolve();
+        await vi.advanceTimersByTimeAsync(40);
+        await pulling;
+        expect(restartRequests(h)).toHaveLength(0);
+        expect(peer.offerOptions.some((options) => options?.iceRestart)).toBe(false);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps sampling stats on the same connection after a restart that spans a sampling tick", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const stats = vi.spyOn(peer, "getStats");
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(40);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        const before = stats.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(stats.mock.calls.length - before).toBeGreaterThanOrEqual(2);
+        expect(h.peerConnectionFactory).toHaveBeenCalledTimes(1);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it.each([
+    { name: "Cloudflare", bootstrap: bootstrap("connection-1") },
+    { name: "an own SFU without the capability", bootstrap: ownBootstrap("connection-1", false) },
+  ])("$name still reports a failed path at once and never restarts ICE", async ({ bootstrap: initial }) => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "peer_connection_failed", recoverable: true } });
+        expect(restartRequests(h)).toHaveLength(0);
+        expect(peer.offerOptions.every((options) => options === undefined)).toBe(true);
+      },
+      { bootstrap: initial },
+    );
   });
 });

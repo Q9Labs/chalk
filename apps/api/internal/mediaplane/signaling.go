@@ -182,10 +182,19 @@ type TrackClosingPlane interface {
 	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
 
+// ICERestartingPlane answers a client offer with new ICE credentials on the
+// existing connection, so its publications and subscriptions stay.
+type ICERestartingPlane interface {
+	RestartICE(context.Context, TracksRequest) (TracksResponse, error)
+}
+
 func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResponse, error) {
 	signaling, ok := s.plane.(SignalingPlane)
 	if !ok {
 		return TracksResponse{}, ErrUnsupportedOperation
+	}
+	if len(input.Tracks) == 0 {
+		return s.restartICE(ctx, input)
 	}
 	if err := requireTracksRequest(&input); err != nil {
 		return TracksResponse{}, err
@@ -249,6 +258,24 @@ func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) erro
 		return err
 	}
 	return signaling.Renegotiate(ctx, input)
+}
+
+// restartICE accepts a request with no tracks only as an offer to a plane that
+// restarts ICE in place. Other planes still refuse it as an invalid request.
+func (s Service) restartICE(ctx context.Context, input TracksRequest) (TracksResponse, error) {
+	restarting, ok := s.plane.(ICERestartingPlane)
+	if !ok {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	connectionID, err := requiredString(input.ConnectionID)
+	if err != nil || input.SessionDescription == nil {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	if err := requireSessionDescription(input.SessionDescription); err != nil || input.SessionDescription.Type != "offer" {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	input.ConnectionID = connectionID
+	return restarting.RestartICE(ctx, input)
 }
 
 func requireTracksRequest(input *TracksRequest) error {
