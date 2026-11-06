@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
-import { check, command, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
@@ -30,7 +30,6 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
-const mediaPlane = process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu";
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
 export async function createSpace(run) {

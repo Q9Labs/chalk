@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
 import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mjs";
-import { check, save, waitFor, maskCredentials, mediaProviders } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
 
@@ -45,6 +45,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
+    // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
+    check(mediaPlane !== "chalk_sfu" || grant.media?.provider === "chalk_sfu", `Guest ${guest + 1} got media on ${grant.media?.provider}, not chalk_sfu`);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
     const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
