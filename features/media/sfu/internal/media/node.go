@@ -71,7 +71,7 @@ type Node struct {
 	wg sync.WaitGroup
 
 	mu           sync.Mutex
-	draining     bool // refuses new sessions
+	draining     bool // refuses new Episodes
 	stopped      bool // refuses all work
 	sessions     map[string]*Session
 	participants map[participantKey]*Session
@@ -421,7 +421,9 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	digest := scopeDigest(scope)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.draining || n.stopped {
+	// A draining node refuses only new Episodes: a live call on it keeps taking
+	// joins and reconnects, so it can run to its end before the restart.
+	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) {
 		return protocol.CreateSessionResponse{}, nil, ErrDraining
 	}
 	if record, ok := n.creates[operationID]; ok {
@@ -468,6 +470,16 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	n.raiseFence(scope)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
 	return n.responseFor(session.id), fenced, nil
+}
+
+// hostsEpisode reports whether a live session belongs to the Episode. The caller holds n.mu.
+func (n *Node) hostsEpisode(key episodeKey) bool {
+	for _, session := range n.sessions {
+		if episodeOf(session.scope) == key {
+			return true
+		}
+	}
+	return false
 }
 
 // fenceVictim finds the fence a new Participant would take the place of, or -1 when the table
@@ -611,7 +623,7 @@ func (n *Node) track(fn func()) bool {
 	return true
 }
 
-// Drain makes the node refuse new sessions while it finishes in-flight work.
+// Drain makes the node refuse new Episodes while its live calls finish.
 func (n *Node) Drain() {
 	n.mu.Lock()
 	n.draining = true

@@ -37,6 +37,13 @@ new_key() {
 }
 
 # sign <csr> <extensions file> <days> <certificate out>
+# install_pair moves a new key and the certificate signed for it into place
+# together, so a failed signing leaves the deployed pair as it was.
+install_pair() {
+  mv "${work}/$1.key" "${dir}/$1.key"
+  mv "${work}/$1.crt" "${dir}/$1.crt"
+}
+
 sign() {
   if [[ ! -f "${dir}/ca.crt" ]]; then
     echo "no ${dir}/ca.crt; run: certs ${environment} ca" >&2
@@ -68,11 +75,12 @@ case "$command" in
     echo "service CA ${dir}/ca.crt; key in 1Password as \"${ca_title}\""
     ;;
   server)
-    new_key "${dir}/server.key"
-    "$openssl" req -new -key "${dir}/server.key" -subj "/CN=chalk-sfu" -out "${work}/server.csr"
+    new_key "${work}/server.key"
+    "$openssl" req -new -key "${work}/server.key" -subj "/CN=chalk-sfu" -out "${work}/server.csr"
     printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
       "extendedKeyUsage=serverAuth" "subjectAltName=DNS:chalk-sfu" >"${work}/server.ext"
-    sign "${work}/server.csr" "${work}/server.ext" 180 "${dir}/server.crt"
+    sign "${work}/server.csr" "${work}/server.ext" 180 "${work}/server.crt"
+    install_pair server
     ;;
   api)
     key="${3:?usage: certs <env> api <the API key file> <the API current certificate>}"
@@ -87,11 +95,12 @@ case "$command" in
     sign "${work}/api.csr" "${work}/api.ext" 365 "${dir}/api.crt"
     ;;
   operator)
-    new_key "${dir}/operator.key"
-    "$openssl" req -new -key "${dir}/operator.key" -subj "/CN=chalk-${spiffe_environment}-sfu-operator" -out "${work}/operator.csr"
+    new_key "${work}/operator.key"
+    "$openssl" req -new -key "${work}/operator.key" -subj "/CN=chalk-${spiffe_environment}-sfu-operator" -out "${work}/operator.csr"
     printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
       "extendedKeyUsage=clientAuth" "subjectAltName=URI:${api_identity}" >"${work}/operator.ext"
-    sign "${work}/operator.csr" "${work}/operator.ext" 1 "${dir}/operator.crt"
+    sign "${work}/operator.csr" "${work}/operator.ext" 1 "${work}/operator.crt"
+    install_pair operator
     ;;
   *)
     echo "$usage" >&2
