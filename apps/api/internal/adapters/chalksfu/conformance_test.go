@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -538,5 +539,53 @@ func TestSubscriptionStatesReportAnUngrantedSource(t *testing.T) {
 	unauthorized := mediaplane.SubscriptionPaused + "/" + mediaplane.PauseSourceUnauthorized
 	if len(states) != 2 || reasons["carol-mic"] != unauthorized || reasons["alice-mic"] == unauthorized {
 		t.Fatalf("subscription states = %+v", states)
+	}
+}
+
+type fakeRelay struct{ err error }
+
+func (f fakeRelay) RelayServers(context.Context) ([]mediaplane.ICEServer, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return []mediaplane.ICEServer{{URLs: []string{"turns:turn.example:443?transport=tcp"}, Username: "u", Credential: "c"}}, nil
+}
+
+// The SFU has no TCP media, so a client limited to TCP 443 needs TURN. Only
+// joins the caller allows to relay get it, and a TURN failure leaves STUN.
+func TestConformanceRelayOnlyForAllowedJoins(t *testing.T) {
+	s := startSFU(t, nil)
+	relayed := func(adapter *chalksfu.Adapter, scope mediaplane.Scope, allow bool) bool {
+		t.Helper()
+		service := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, adapter)
+		joined, err := service.CreateJoin(context.Background(), mediaplane.CreateJoinInput{
+			Provider: mediaplane.ProviderChalkSFU, Scope: scope,
+			Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: scope.EpisodeID},
+			ParticipantName: scope.ParticipantID, ExternalParticipantID: scope.ParticipantID, ParticipantPreset: "contributor",
+			AllowRelay: allow,
+		})
+		if err != nil {
+			t.Fatalf("join %s: %v", scope.ParticipantID, err)
+		}
+		servers, _ := joined.ClientPayload["iceServers"].([]mediaplane.ICEServer)
+		for _, server := range servers {
+			for _, u := range server.URLs {
+				if strings.HasPrefix(u, "turns:") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	plain := s.adapter(t, s.ca, clientIdentity)
+	withRelay := plain.WithRelay(fakeRelay{})
+	if !relayed(withRelay, scopeOf("ep-relay", "allowed"), true) {
+		t.Fatal("an allowed join got no TURN server")
+	}
+	if relayed(withRelay, scopeOf("ep-relay", "denied"), false) {
+		t.Fatal("a join that may not relay got a TURN server")
+	}
+	if relayed(plain.WithRelay(fakeRelay{err: errors.New("mint failed")}), scopeOf("ep-relay", "fallback"), true) {
+		t.Fatal("a failed mint still produced a TURN server")
 	}
 }

@@ -341,6 +341,10 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
 		}
+		// A nil TURN source would be a typed nil inside the interface.
+		if r.turn != nil {
+			bound = bound.WithRelay(r.turn)
+		}
 		plane = bound
 	default:
 		return nil, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, provider)
