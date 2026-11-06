@@ -49,6 +49,7 @@ type liveLoad struct {
 	samples                        string
 	capKbps                        int           // caps the first Participant's downlink, 0 for none
 	capAfter                       time.Duration // after this long in the hold
+	capEvery                       time.Duration // lift and restore the cap at this interval, 0 to keep it
 }
 
 // shareOn is how long one share stretch lasts.
@@ -67,7 +68,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
 		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
-		{"SFU_LIVE_CAP_KBPS", &load.capKbps}, {"SFU_LIVE_CAP_AFTER", &load.capAfter},
+		{"SFU_LIVE_CAP_KBPS", &load.capKbps}, {"SFU_LIVE_CAP_AFTER", &load.capAfter}, {"SFU_LIVE_CAP_EVERY", &load.capEvery},
 		{"SFU_LIVE_HOLD", &load.hold}, {"SFU_LIVE_STEP", &load.step}, {"SFU_LIVE_SAMPLE", &load.every},
 	}
 	for _, setting := range settings {
@@ -116,6 +117,7 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_SHARE_PERIOD  one share stretch and one pause (default 4m)
 //	SFU_LIVE_CAP_KBPS      cap the first Participant's downlink at this rate, to see the node back off (default none)
 //	SFU_LIVE_CAP_AFTER     how long into the hold the cap starts (default 1m)
+//	SFU_LIVE_CAP_EVERY     lift the cap and restore it at this interval, to see the node back off again (default keep it)
 //	SFU_LIVE_HOLD          how long to hold them (default 5m)
 //	SFU_LIVE_STEP          add a class at this interval until the node refuses
 //	                       one or a quality signal breaks (default off)
@@ -213,7 +215,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 		}
 	}
 	if load.capKbps > 0 {
-		go capFirstParticipant(t, svc, sharing, classes[0].people[0], load)
+		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load)
 	}
 	cpu := readHostCPU()
 	// The baseline comes before the first wait, so drops during that wait count.
@@ -280,9 +282,10 @@ func TestLiveSmokeClasses(t *testing.T) {
 // capFirstParticipant squeezes one Participant's downlink after a while and
 // logs, every two seconds, what the node thinks of it: the estimate and what
 // its subscriptions forward. Its audio stalls show in the final report.
-func capFirstParticipant(t *testing.T, svc *service, ctx context.Context, person *participant, load liveLoad) {
+func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad) {
 	started := time.Now()
-	capped := false
+	capped := 0 // cap changes so far: odd while the cap is on
+	var switchAt time.Duration
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -291,11 +294,17 @@ func capFirstParticipant(t *testing.T, svc *service, ctx context.Context, person
 			return
 		case <-ticker.C:
 		}
-		if !capped && time.Since(started) >= load.capAfter {
+		if since := time.Since(started); since >= load.capAfter && (capped == 0 || load.capEvery > 0 && since >= switchAt) {
+			capped++
 			rate := float64(load.capKbps) * 1000
-			person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
-			capped = true
-			t.Logf("capped: %s downlink limited to %d kbit/s", person.name, load.capKbps)
+			if capped%2 == 1 {
+				person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
+				t.Logf("capped: %s downlink limited to %d kbit/s", person.name, load.capKbps)
+			} else {
+				person.link.shape(0, 0, 0, 0, 0)
+				t.Logf("capped: %s downlink lifted", person.name)
+			}
+			switchAt = since + load.capEvery
 		}
 		var inspected protocol.InspectResponse
 		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
