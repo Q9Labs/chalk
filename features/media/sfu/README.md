@@ -89,6 +89,7 @@ go run ./cmd/sfu
 | `SFU_SHUTDOWN_TIMEOUT`                  | `15s`           | Graceful stop budget.                                 |
 | `SFU_UDP_RECEIVE_BUFFER`                | `8388608`       | Socket receive buffer to request, 256 KiB to 64 MiB.  |
 | `SFU_UDP_SEND_BUFFER`                   | `8388608`       | Socket send buffer to request, 256 KiB to 64 MiB.     |
+| `SFU_UDP_BATCH`                         | `true`          | Batch media socket reads and writes (Linux). `false` is the rollback. |
 | `SFU_VIDEO_STREAM_COST`                 | `300`           | Packets/s of a camera's top layer to one subscriber.  |
 | `SFU_CAMERA_UPLINK_COST`                | `390`           | Packets/s of a camera's uplink, every layer.          |
 | `SFU_CAMERAS_PER_PARTICIPANT`           | `2`             | Cameras one Participant may publish, 1 to 8.          |
