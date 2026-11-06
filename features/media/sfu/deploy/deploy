@@ -110,10 +110,18 @@ remote "printf 'net.core.wmem_max = 8388608\nnet.core.wmem_default = 8388608\n' 
 
 memory_kib="$(remote grep MemTotal /proc/meminfo | tr -dc 0-9)"
 if ((memory_kib > 1536 * 1024)); then
-  budget=32000 gomemlimit=768MiB memory_limit=1400m
+  gomemlimit=768MiB memory_limit=1400m
 else
-  budget=16000 gomemlimit=384MiB memory_limit=700m
+  gomemlimit=384MiB memory_limit=700m
 fi
+# The packet budget follows the CPU, about 70% of the load at which a node of that size starts to
+# drop video (a 3-person, 2-camera class reserves 7170 packets/s): 9 classes on 1 vCPU, 12 on 2.
+vcpus="$(remote nproc)"
+case "$vcpus" in
+  1) budget=45000 ;;
+  2) budget=60000 ;;
+  *) echo "no measured packet budget for ${vcpus} vCPUs; load-test the size and add it here" >&2; exit 1 ;;
+esac
 
 revision="$(git -C "$sfu_root" rev-parse HEAD)"
 if [[ -n "$(git -C "$sfu_root" status --porcelain -- .)" ]]; then
