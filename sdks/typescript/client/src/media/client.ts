@@ -1098,6 +1098,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pruneRemotePullState(advertised);
     const desired = this.#visibleRemotePublications(advertised);
     this.#pollFailedPull = true;
+    const epoch = this.#connectionEpoch;
     const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
     const parked = await this.#pauseVideoInPlace(hidden, generation);
     const unresumed = await this.#resumeVideoInPlace(desired, generation);
@@ -1107,7 +1108,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const pulled = await this.#pullWithRecovery(desired, cursor, generation);
     if (pulled === null) return;
     this.#requireGeneration(generation);
-    this.#commitRemoteTracks(desired, pulled, unclosed, parked, cursor, inputRevision);
+    // A replacement during the pull dropped the old receivers, so keeping their entries would keep ended tracks.
+    const replaced = epoch !== this.#connectionEpoch;
+    this.#commitRemoteTracks(desired, pulled, replaced ? [] : unclosed, replaced ? [] : parked, cursor, inputRevision);
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));

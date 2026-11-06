@@ -6308,6 +6308,43 @@ describe("own-SFU subscription state", () => {
     }
   });
 
+  it("drops a camera paused in place when a replacement in the same pull removes its receiver", async () => {
+    vi.useFakeTimers();
+    const replaceMediaConnection = vi.fn(async () => ({ ...own, connectionId: "own-connection-2" }));
+    const h = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, bootstrap: own, replaceMediaConnection });
+    h.transport.uniqueRemoteMids = true;
+    const cameraId = versionedPublicationID("m5-replaced-0", "1", "camera");
+    const publications = [{ participantId: "m5-replaced-person", source: "camera" as const, publicationId: cameraId }];
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await h.client.start(fakeStream());
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      await h.client.refreshRemotePublications();
+      const pulled = camera(h).track;
+      // The pull that runs with the pause fails on the old connection, so the client replaces it.
+      const addTracks = h.transport.addTracks.bind(h.transport);
+      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+        if (input.connectionId === own.connectionId) throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+        return addTracks(input);
+      });
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS - 500);
+      // A new publication arrives, so the poll that pauses the camera also pulls.
+      h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...publications, { participantId: "m5-replaced-other", source: "microphone", publicationId: versionedPublicationID("m5-replaced-1", "0", "microphone") }] };
+      await vi.advanceTimersByTimeAsync(501);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks)).toMatchObject([{ paused: true }]);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+
+      setVideoTileVisibility(cameraId, onScreen);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(camera(h).track).not.toBe(pulled);
+      expect(camera(h).track.readyState).toBe("live");
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("closes an off-screen camera when the SFU refuses to pause it", async () => {
     vi.useFakeTimers();
     const { harness: h, cameraId, join } = tileCall("m5-refused", own);
