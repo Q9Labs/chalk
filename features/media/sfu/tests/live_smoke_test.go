@@ -35,6 +35,8 @@ const (
 	liveScreenKbps = 1500
 	// liveStall is the gap between frames, or between microphone packets, that a viewer sees as a freeze.
 	liveStall = 500 * time.Millisecond
+	// liveShareStartup is how long a share stretch may take to deliver its first frame to a viewer.
+	liveShareStartup = 5 * time.Second
 )
 
 // liveLoad is the shape of a live run.
@@ -223,8 +225,8 @@ func TestLiveSmokeClasses(t *testing.T) {
 		for index, receiver := range class.receivers {
 			receiver.mu.Lock()
 			for key, track := range receiver.tracks {
-				if track.stalls > 0 {
-					t.Logf("stalled: %s %s %s: %d stalls, longest %v ending %s, frames %v", class.people[index].name, key, track.kind, track.stalls, track.longest, track.longestAt.Format(time.TimeOnly), track.frames)
+				if stalls, longest := track.stallsAt(time.Now(), class.sharingSince()); stalls > 0 {
+					t.Logf("stalled: %s %s %s: %d stalls, longest %v ending %s, frames %v", class.people[index].name, key, track.kind, stalls, longest, track.longestAt.Format(time.TimeOnly), track.frames)
 				}
 			}
 			receiver.mu.Unlock()
@@ -234,11 +236,17 @@ func TestLiveSmokeClasses(t *testing.T) {
 	if previous.Ready == nil || first.Ready == nil || load.step > 0 {
 		return
 	}
-	if drops := receiveErrors(previous) - receiveErrors(first); drops > 0 {
+	// A last sample at the end of the window, so a track that went quiet after the previous
+	// one still counts.
+	last := takeSample(svc, classes, &cpu)
+	if drops := receiveErrors(last) - receiveErrors(first); drops > 0 {
 		t.Errorf("the node dropped %d datagrams for a full receive buffer", drops)
 	}
-	if stalls := previous.Peers.AudioStalls; stalls > 0 {
+	if stalls := last.Peers.AudioStalls; stalls > 0 {
 		t.Errorf("microphones stalled over %v %d times", liveStall, stalls)
+	}
+	if stalls := last.Peers.ScreenStalls; stalls > 0 {
+		t.Errorf("screen shares stalled or never reached a viewer %d times", stalls)
 	}
 }
 
@@ -250,6 +258,35 @@ type liveClass struct {
 	// shareEpoch rises at every share start and stop, so a viewer can tell a
 	// pause from a stall.
 	shareEpoch atomic.Int64
+	// shareStart is when the screen's current share stretch began, in Unix nanoseconds, or 0
+	// while it is paused.
+	shareStart atomic.Int64
+}
+
+// sharingSince is when the current share stretch began, or the zero time while the screen is paused.
+func (c *liveClass) sharingSince() time.Time {
+	if start := c.shareStart.Load(); start != 0 {
+		return time.Unix(0, start)
+	}
+	return time.Time{}
+}
+
+// endStretch checks every viewer's screen at the end of a share stretch, so a viewer that
+// got nothing or went quiet before the end shows a stall even though no later packet exposes it.
+func (c *liveClass) endStretch(now time.Time) {
+	since := c.sharingSince()
+	for index, receiver := range c.receivers {
+		if index == 0 {
+			continue
+		}
+		receiver.mu.Lock()
+		for _, track := range receiver.tracks {
+			if track.kind == "screen" {
+				track.closeStretch(now, since)
+			}
+		}
+		receiver.mu.Unlock()
+	}
 }
 
 // joinClass joins one class and pulls everyone's media to everyone. It
@@ -315,6 +352,7 @@ func (c *liveClass) shareInStretches(ctx context.Context, load liveLoad, phase t
 		screen.enable(0, false)
 		return
 	}
+	c.shareStart.Store(time.Now().UnixNano())
 	if off <= 0 {
 		return
 	}
@@ -326,20 +364,30 @@ func (c *liveClass) shareInStretches(ctx context.Context, load liveLoad, phase t
 		case <-time.After(wait):
 		}
 		live = !live
+		if !live {
+			c.endStretch(time.Now())
+			c.shareStart.Store(0)
+		}
 		c.shareEpoch.Add(1)
 		screen.enable(0, live)
 		wait = off
 		if live {
+			c.shareStart.Store(time.Now().UnixNano())
 			wait = on
 		}
 	}
 }
 
-// flowing reports whether every Participant hears everyone else. Which
-// cameras it sees is the allocator's call, so the samples report that.
+// flowing reports whether every Participant hears everyone else and, while the
+// screen is shared, every other viewer sees it. Which cameras it sees is the
+// allocator's call, so the samples report that.
 func (c *liveClass) flowing() bool {
-	for _, receiver := range c.receivers {
+	sharing := !c.sharingSince().IsZero()
+	for index, receiver := range c.receivers {
 		if receiver.microphones() < len(c.people)-1 {
+			return false
+		}
+		if sharing && index > 0 && !receiver.sawScreen() {
 			return false
 		}
 	}
@@ -434,6 +482,18 @@ func (r *liveReceiver) microphones() int {
 	return count
 }
 
+// sawScreen reports whether a screen frame arrived.
+func (r *liveReceiver) sawScreen() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, track := range r.tracks {
+		if track.kind == "screen" && track.frames["screen"] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // liveTrack is one received track: frames per layer, stalls, loss and jitter.
 type liveTrack struct {
 	kind  string // audio, camera or screen
@@ -518,6 +578,46 @@ func (s *liveTrack) gap(at time.Time, epoch int64) {
 	s.lastAt, s.epoch = at, epoch
 }
 
+// silence is how long the track has been quiet at now when that is a stall, or zero. A
+// microphone or camera is meant to send from its first packet on. A screen is meant to send
+// from since, the start of its share stretch, and not at all while since is zero.
+func (s *liveTrack) silence(now, since time.Time) time.Duration {
+	if s.kind == "screen" && since.IsZero() {
+		return 0
+	}
+	from, limit := s.lastAt, liveStall
+	if from.Before(since) {
+		from, limit = since, liveShareStartup
+	}
+	if from.IsZero() {
+		return 0
+	}
+	if quiet := now.Sub(from); quiet > limit {
+		return quiet
+	}
+	return 0
+}
+
+// stallsAt is the stalls so far plus the one in progress, which no packet has ended yet.
+func (s *liveTrack) stallsAt(now, since time.Time) (stalls int64, longest time.Duration) {
+	stalls, longest = s.stalls, s.longest
+	if quiet := s.silence(now, since); quiet > 0 {
+		stalls++
+		longest = max(longest, quiet)
+	}
+	return stalls, longest
+}
+
+// closeStretch counts the end of a share stretch as a stall when the screen had gone quiet.
+func (s *liveTrack) closeStretch(now, since time.Time) {
+	if quiet := s.silence(now, since); quiet > 0 {
+		s.stalls++
+		if quiet > s.longest {
+			s.longest, s.longestAt = quiet, now
+		}
+	}
+}
+
 // sequence records a sequence number and reports whether it is new.
 func (s *liveTrack) sequence(seq uint16) bool {
 	if !s.started {
@@ -591,7 +691,8 @@ type nodeTotals struct {
 type peerTotals struct {
 	Frames           map[string]int64 `json:"frames"` // h, l and screen frames, audio packets
 	Switches         int64            `json:"layerSwitches"`
-	VideoStalls      int64            `json:"videoStalls"`
+	VideoStalls      int64            `json:"videoStalls"` // cameras, which may adapt
+	ScreenStalls     int64            `json:"screenStalls"`
 	AudioStalls      int64            `json:"audioStalls"`
 	LongestStallMs   int64            `json:"longestStallMs"`
 	Expected         int64            `json:"expected"`
@@ -602,7 +703,8 @@ type peerTotals struct {
 }
 
 func takeSample(svc *service, classes []*liveClass, cpu *hostCPU) liveSample {
-	sample := liveSample{At: time.Now().UTC(), Classes: len(classes)}
+	now := time.Now()
+	sample := liveSample{At: now.UTC(), Classes: len(classes)}
 	var ready protocol.ReadyResponse
 	if err := get(svc, "/readyz", &ready); err != nil {
 		sample.ReadyErr = err.Error()
@@ -621,23 +723,29 @@ func takeSample(svc *service, classes []*liveClass, cpu *hostCPU) liveSample {
 				node.add(inspected)
 			}
 			receiver := class.receivers[index]
+			since := class.sharingSince()
 			receiver.mu.Lock()
 			for _, track := range receiver.tracks {
+				stalls, longest := track.stallsAt(now, since)
 				for layer, frames := range track.frames {
 					peers.Frames[layer] += frames
 				}
 				peers.Switches += track.switches
 				if track.kind == "audio" {
-					peers.AudioStalls += track.stalls
+					peers.AudioStalls += stalls
 					peers.AudioJitterMs += track.jitter * 1000
 					peers.MaxAudioJitterMs = max(peers.MaxAudioJitterMs, track.jitter*1000)
 					audioTracks++
 				} else {
-					peers.VideoStalls += track.stalls
+					if track.kind == "screen" {
+						peers.ScreenStalls += stalls
+					} else {
+						peers.VideoStalls += stalls
+					}
 					peers.VideoJitterMs += track.jitter * 1000
 					videoTracks++
 				}
-				peers.LongestStallMs = max(peers.LongestStallMs, track.longest.Milliseconds())
+				peers.LongestStallMs = max(peers.LongestStallMs, longest.Milliseconds())
 				expected, received := track.totals()
 				peers.Expected += expected
 				peers.Received += received
@@ -685,7 +793,8 @@ func (n *nodeTotals) add(inspected protocol.InspectResponse) {
 
 // qualityBreak names the first signal past the step-up's limits: the pacer
 // queue p95 over 20 ms, steal over 25%, closed admission, receive-buffer
-// drops or pacer drops since the previous sample.
+// drops, pacer drops or a new screen stall since the previous sample. A
+// camera stall is not a break, because the allocator may lower a camera.
 func qualityBreak(previous, sample liveSample) string {
 	ready := sample.Ready
 	if ready == nil {
@@ -702,6 +811,8 @@ func qualityBreak(previous, sample liveSample) string {
 		return fmt.Sprintf("%d receive-buffer drops", receiveErrors(sample)-receiveErrors(previous))
 	case sample.Node.PacerDropped > previous.Node.PacerDropped:
 		return fmt.Sprintf("%d pacer drops", sample.Node.PacerDropped-previous.Node.PacerDropped)
+	case sample.Peers.ScreenStalls > previous.Peers.ScreenStalls:
+		return fmt.Sprintf("%d screen stalls", sample.Peers.ScreenStalls-previous.Peers.ScreenStalls)
 	}
 	return ""
 }
@@ -725,9 +836,9 @@ func (s liveSample) line() string {
 	if s.Peers.Expected > 0 {
 		loss = 100 * float64(s.Peers.Expected-s.Peers.Received) / float64(s.Peers.Expected)
 	}
-	return fmt.Sprintf("%s classes %d sessions %d: %.0f pps, pacer p95 %.1f ms, steal %.1f%%, reserved %d/%d, admission %q; pacer drops %d, rcvbuf %d; peers h %d l %d screen %d, switches %d, stalls video %d audio %d (longest %d ms), loss %.3f%%; generator cpu %.0f%%",
+	return fmt.Sprintf("%s classes %d sessions %d: %.0f pps, pacer p95 %.1f ms, steal %.1f%%, reserved %d/%d, admission %q; pacer drops %d, rcvbuf %d; peers h %d l %d screen %d, switches %d, stalls camera %d screen %d audio %d (longest %d ms), loss %.3f%%; generator cpu %.0f%%",
 		s.Elapsed, s.Classes, s.Ready.Sessions, s.Ready.Host.PacketsPerSecond, s.Ready.Host.QueueDelayP95Ms, steal, s.Ready.ReservedPackets, s.Ready.PacketBudget, s.Ready.Host.AdmissionReason,
-		s.Node.PacerDropped, receiveErrors(s), s.Peers.Frames["h"], s.Peers.Frames["l"], s.Peers.Frames["screen"], s.Peers.Switches, s.Peers.VideoStalls, s.Peers.AudioStalls, s.Peers.LongestStallMs, loss, s.Generator.CPUPercent)
+		s.Node.PacerDropped, receiveErrors(s), s.Peers.Frames["h"], s.Peers.Frames["l"], s.Peers.Frames["screen"], s.Peers.Switches, s.Peers.VideoStalls, s.Peers.ScreenStalls, s.Peers.AudioStalls, s.Peers.LongestStallMs, loss, s.Generator.CPUPercent)
 }
 
 // hostSample is the generator host's own load, so a run can show the
