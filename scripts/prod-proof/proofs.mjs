@@ -30,12 +30,15 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
+const mediaPlane = process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu";
+// Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
+const recordable = mediaPlane === "cf_sfu";
 export async function createSpace(run) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: process.env.CHALK_PROOF_MEDIA_PLANE ?? "cf_sfu",
+    media_plane: mediaPlane,
     recording_policy: "manual",
     transcription_policy: "on_demand",
     default_episode_duration_seconds: 1800,
@@ -76,6 +79,7 @@ async function createEpisode(run, space) {
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
+  if (!recordable) return;
   const started = await pages[0].evaluate(() => window.proofClient.recording.start());
   check(started.recordingId, "Recording start returned no Recording");
   run.recordingId = started.recordingId;
@@ -184,6 +188,7 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   return { seconds: observed.seconds, failure };
 }
 async function finalizedSource(run) {
+  if (!recordable) return null;
   const recording = await waitFor(
     "Recording source",
     async () => {
@@ -234,8 +239,8 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
   checkMediaProgress(refreshedBefore, refreshedAfter);
-  // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
-  console.log("Ending own Episode and its active Recording");
+  // End the active Episode once; its lifecycle stops any Capture and finalizes the Recording.
+  console.log("Ending own Episode");
   await end();
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();
