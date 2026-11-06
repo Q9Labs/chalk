@@ -508,7 +508,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 		}
 	}
 	if n.mandatoryPackets(participants, true) > n.episodeCeiling() {
-		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone would exceed the Episode's packet ceiling"
+		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s
 	return "", ""
