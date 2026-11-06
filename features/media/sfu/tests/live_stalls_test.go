@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
@@ -65,6 +67,19 @@ func TestAScreenThatGoesQuietMidStretchStalls(t *testing.T) {
 	}
 	if stalls, _ := track.stallsAt(last.Add(2*liveStall), start); stalls != 1 {
 		t.Fatalf("a screen quiet for %v counts %d stalls, want 1", 2*liveStall, stalls)
+	}
+}
+
+func TestAMicrophoneStallBreaksAStepUp(t *testing.T) {
+	ready := protocol.ReadyResponse{}
+	previous, sample := liveSample{Ready: &ready}, liveSample{Ready: &ready}
+	sample.Peers.AudioStalls = 1
+	if reason := qualityBreak(previous, sample); !strings.Contains(reason, "microphone stall") {
+		t.Fatalf("a new microphone stall gave %q, want a microphone stall break", reason)
+	}
+	previous.Peers.AudioStalls = 1
+	if reason := qualityBreak(previous, sample); reason != "" {
+		t.Fatalf("an old microphone stall broke the step-up again: %q", reason)
 	}
 }
 
@@ -163,5 +178,39 @@ func TestFixedRunJudgesPeersEvenWhenReadinessFailed(t *testing.T) {
 	}
 	if failures := fixedRunFailures(good, good); len(failures) != 0 {
 		t.Errorf("a clean run failed: %q", failures)
+	}
+}
+
+// Taking a class out of the run leaves the slice a sampler or the renewal loop is iterating
+// as it was.
+func TestRemovingAClassLeavesTheSnapshotAlone(t *testing.T) {
+	a, b, c := &liveClass{episode: "a"}, &liveClass{episode: "b"}, &liveClass{episode: "c"}
+	classes := []*liveClass{a, b, c}
+	snapshot := classes
+	left := without(classes, b)
+	if len(left) != 2 || left[0] != a || left[1] != c {
+		t.Fatalf("classes left: %v", left)
+	}
+	if snapshot[0] != a || snapshot[1] != b || snapshot[2] != c {
+		t.Fatalf("the old slice changed: %v", snapshot)
+	}
+}
+
+// A class that is shut down stops its share goroutine and closes its peers, so their
+// publishers stop.
+func TestShuttingDownAClassClosesItsPeers(t *testing.T) {
+	ctx, stop := context.WithCancel(context.Background())
+	class := &liveClass{stop: stop}
+	for range 2 {
+		class.people = append(class.people, &participant{peer: newPeer(t)})
+	}
+	class.shutdown()
+	if ctx.Err() == nil {
+		t.Fatal("the share goroutine was not stopped")
+	}
+	for _, person := range class.people {
+		if state := person.peer.pc.ConnectionState(); state != webrtc.PeerConnectionStateClosed {
+			t.Fatalf("a peer is %s after shutdown, want closed", state)
+		}
 	}
 }
