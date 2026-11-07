@@ -25,6 +25,9 @@ import (
 
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -34,6 +37,15 @@ const (
 )
 
 var ErrMissingConfig = errors.New("missing chalk sfu config")
+
+// turnMintFailures counts joins that went out without TURN. A client that can
+// reach only TCP 443 cannot connect media after one, so it is the signal to watch.
+// Its only attribute is the media plane: an Episode id would make it unbounded.
+var turnMintFailures, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
+	"chalk.sfu.turn_mint_failures",
+	metric.WithDescription("Joins that got STUN only because minting TURN credentials failed"),
+	metric.WithUnit("{join}"),
+)
 
 // Adapter is the media plane of one SFU node. Fleet builds one per configured node.
 type Adapter struct {
@@ -62,14 +74,15 @@ func (a *Adapter) WithRelay(relay RelaySource) *Adapter {
 
 // iceServersFor gives relay servers only to joins the caller allows to relay.
 // A TURN failure never fails a join: the client falls back to STUN.
-func (a *Adapter) iceServersFor(ctx context.Context, allowRelay bool) []mediaplane.ICEServer {
+func (a *Adapter) iceServersFor(ctx context.Context, episodeID string, allowRelay bool) []mediaplane.ICEServer {
 	if !allowRelay || a.relay == nil {
 		return a.iceServers
 	}
 	servers, err := a.relay.RelayServers(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "TURN credentials unavailable; own-SFU clients use STUN only",
-			"event", "chalk_sfu.turn_credentials_failed", "node", a.node, "error", err.Error())
+			"event", "chalk_sfu.turn_credentials_failed", "node", a.node, "episode_id", episodeID, "error", err.Error())
+		turnMintFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU))))
 		return a.iceServers
 	}
 	return append(slices.Clone(a.iceServers), servers...)
@@ -306,7 +319,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
-	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.AllowRelay)), nil
+	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }
 
 // ResumeJoin hands back the same connection when the SFU still holds it. The SFU
@@ -322,7 +335,7 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 	if !state.Found {
 		return mediaplane.Join{}, mediaplane.ErrConnectionNotFound
 	}
-	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.AllowRelay)), nil
+	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }
 
 func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
