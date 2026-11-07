@@ -48,7 +48,10 @@ func NewMCPHandler(options Options) http.Handler {
 		for _, s := range principal.Scopes {
 			scopes = append(scopes, string(s))
 		}
-		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: scopes, Delegated: principal.Kind == authentication.PrincipalOAuth})
+		if principal.Kind == authentication.PrincipalAPIKey && principal.HasScope(authentication.ScopeTenantsRead) {
+			scopes = append(scopes, mcpapi.TenantSettingsScope)
+		}
+		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: scopes})
 		quota := mcpQuota{key: rateLimitKey(r, options.RateLimit.ClientIP), options: options.RateLimit}
 		ctx = context.WithValue(ctx, mcpQuotaKey{}, quota)
 		ctx = context.WithValue(ctx, writeBudgetContextKey{}, func() error { return quota.allow(ctx, authenticatedWriteRateLimit) })
