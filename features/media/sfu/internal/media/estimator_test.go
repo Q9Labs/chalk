@@ -339,3 +339,44 @@ func TestHeavyLossIsThePathsOwnEvidenceAndLightLossIsNot(t *testing.T) {
 		t.Fatal("loss evidence outlived the hold")
 	}
 }
+
+func TestADecreaseAlreadyMadeDoesNotLetTheNextOveruseSkipTheWait(t *testing.T) {
+	run := newSimulation(&bottleneck{capacity: 20e6, queueBytes: 1 << 20, delay: int64(20 * time.Millisecond)})
+	run.run(20*time.Second, steady(3e6), 0)
+	e := run.estimator
+	now := int64(30 * time.Second)
+	step := 0
+	feed := func() {
+		var acks []packetAck
+		for index := range 5 {
+			sent := now + int64(index)*int64(10*time.Millisecond)
+			delay := int64(20*time.Millisecond) + int64(step*5+index)*int64(3*time.Millisecond)
+			acks = append(acks, packetAck{sent: sent, arrival: sent + delay, size: 1000, received: true})
+		}
+		now += int64(50 * time.Millisecond)
+		step++
+		e.onFeedback(acks, now)
+	}
+	before := e.current()
+	for e.current() >= before {
+		feed()
+		if step > 60 {
+			t.Fatal("a growing delay never lowered the estimate")
+		}
+	}
+	lowered := e.current()
+	// A stall passes; the delay keeps growing, and the next feedback reads overuse again.
+	now += int64(400 * time.Millisecond)
+	for e.trend.signal != signalOveruse {
+		feed()
+		if step > 120 {
+			t.Fatal("the delay never read as overuse again")
+		}
+		if e.current() < lowered {
+			t.Fatalf("estimate fell from %.0f to %.0f on the first new read of overuse", lowered, e.current())
+		}
+	}
+	if e.current() < lowered {
+		t.Fatalf("estimate fell from %.0f to %.0f on the first new read of overuse", lowered, e.current())
+	}
+}

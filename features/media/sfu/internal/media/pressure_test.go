@@ -128,3 +128,13 @@ func TestRunningProbesCountAgainstTheNodesProbeBudget(t *testing.T) {
 		t.Fatal("an idle node must give out exactly maxProbes slots")
 	}
 }
+
+func TestAStallThatBeginsBeforeTheRunItFollowsStillCountsItsWholeSpan(t *testing.T) {
+	var p hostPressure
+	p.controlTick(at(time.Second))
+	p.stealSample(at(3*time.Second), 20) // pressure from 2 s to 5 s
+	p.controlTick(at(6 * time.Second))   // a stall that began at 1 s: pressure from 1 s to 8 s
+	if got := p.settle(at(9 * time.Second)); got != 7*time.Second {
+		t.Fatalf("pressure counted %v, want the 7 s from 1 s to 8 s", got)
+	}
+}

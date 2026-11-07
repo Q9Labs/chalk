@@ -437,7 +437,7 @@ func (t *transport) probeWait(now int64) time.Duration {
 func (t *transport) probe(target float64, now int64) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.closed || t.probeID != 0 || now < t.probeNext || len(t.probeStreams) == 0 || t.queuedBytes != 0 {
+	if t.closed || t.probeID != 0 || now < t.probeNext || now < t.pressureUntil || len(t.probeStreams) == 0 || t.queuedBytes != 0 {
 		return false
 	}
 	t.probeID++
@@ -601,7 +601,7 @@ func (t *transport) estimate(now int64) transportEstimate {
 		warm:      t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
-		probeReady: t.probeID == 0 && now >= t.probeNext && len(t.probeStreams) > 0 && t.queuedBytes == 0,
+		probeReady: t.probeID == 0 && now >= t.probeNext && now >= t.pressureUntil && len(t.probeStreams) > 0 && t.queuedBytes == 0,
 	}
 }
 

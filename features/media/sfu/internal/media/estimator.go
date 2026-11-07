@@ -323,6 +323,7 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.estimate = math.Max(decreaseFactor*math.Max(acked, minEstimate), minEstimate)
 		e.decreased, e.holding = now, true
 		e.trend.signal = signalNormal
+		e.overusingSince = 0
 	}
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)

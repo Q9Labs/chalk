@@ -400,3 +400,26 @@ func TestHeavyLossEndsTheStallsExcuseOnATransport(t *testing.T) {
 		t.Fatal("a stalled node still excused a transport whose receiver reports a quarter of its packets lost")
 	}
 }
+
+func TestNoProbeStartsWhileTheNodeIsStalledEvenIfLossEndsItsExcuse(t *testing.T) {
+	transport, video, _, _ := pacedTransport(t, 128<<10)
+	transport.bind(video)
+	now := monotonic()
+	if !transport.estimate(now).probeReady {
+		t.Fatal("a quiet transport with an RTX stream is not ready to probe: the control case is broken")
+	}
+	transport.pressure(now + int64(2*time.Second))
+	var acks []packetAck
+	for index := range 40 {
+		acks = append(acks, packetAck{sent: now, arrival: now, size: 1000, received: index >= 10})
+	}
+	transport.mu.Lock()
+	transport.estimator.onFeedback(acks, now)
+	transport.mu.Unlock()
+	if transport.estimate(now).pressured {
+		t.Fatal("heavy loss did not end the stall's excuse: the test does not reach the case")
+	}
+	if transport.estimate(now).probeReady || transport.probe(4e6, now) {
+		t.Fatal("a probe may start while the node's next tick would abandon it again")
+	}
+}

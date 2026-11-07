@@ -69,6 +69,10 @@ func (p *hostPressure) stealSample(now int64, percent float64) {
 func (p *hostPressure) raise(from, now int64) {
 	p.settle(now)
 	if now >= p.until {
+		if p.until != 0 && from < p.since {
+			// A late tick starts its stall before the run it follows.
+			p.underFor += time.Duration(p.since - from)
+		}
 		p.since = from
 	}
 	p.until = now + int64(pressureHold)
