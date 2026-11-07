@@ -166,7 +166,7 @@ overrides:
   '@q9labsai/cli': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
   '@q9labsai/config-depcruise': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-  '@q9labsai/gates': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
+  '@q9labsai/gates': 0.4.1
   '@babel/core': ^7.29.7
   '@tanstack/start-server-core': 1.169.39
   '@vitest/browser': ^4.1.12
@@ -252,8 +252,8 @@ importers:
         specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
         version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)
       '@q9labsai/gates':
-        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
-        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
+        specifier: 0.4.1
+        version: 0.4.1
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.0
@@ -330,10 +330,10 @@ importers:
         specifier: ^15.0.2
         version: 15.1.1(expo-font@55.0.4(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7))(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(react@19.2.7)
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/client
       '@q9labsai/chalk-react-native':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/react-native
       '@react-native-async-storage/async-storage':
         specifier: ^2.2.0
@@ -436,7 +436,7 @@ importers:
         specifier: 1.0.9
         version: 1.0.9
       '@q9labsai/chalk-react':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/react
       '@q9labsai/recording-presentation':
         specifier: workspace:^0.1.1
@@ -504,16 +504,16 @@ importers:
         specifier: ^1.43.0
         version: 1.43.0(@types/node@22.19.15)(vite@8.1.6(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.1)(tsx@4.21.0)(yaml@2.9.0))(workerd@1.20260903.1)(wrangler@4.107.0(@cloudflare/workers-types@4.20260702.1)(@types/node@22.19.15))
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/client
       '@q9labsai/chalk-react':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/react
       '@q9labsai/chalk-ui':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../packages/ui
       '@q9labsai/chalk-whiteboard':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../packages/whiteboard
       '@tanstack/react-router':
         specifier: 1.170.41
@@ -677,7 +677,7 @@ importers:
         specifier: ^1.0.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@q9labsai/chalk-assets':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../assets
       class-variance-authority:
         specifier: ^0.7.1
@@ -726,10 +726,10 @@ importers:
         specifier: 0.18.1
         version: 0.18.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/client
       '@q9labsai/facehash':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../facehash
       mathjax:
         specifier: 4.1.3
@@ -788,16 +788,16 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9(react@19.2.7)
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../client
       '@q9labsai/chalk-ui':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../../packages/ui
       '@q9labsai/chalk-whiteboard':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../../packages/whiteboard
       '@q9labsai/facehash':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../../packages/facehash
       '@q9labsai/recording-presentation':
         specifier: workspace:^0.1.1
@@ -840,13 +840,13 @@ importers:
         specifier: ~125.0.1 || ~125.0.3
         version: 125.0.3(expo@55.0.9)(react-native@0.83.2(@babel/core@7.29.7(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.7)(supports-color@10.2.2))(supports-color@10.2.2)
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../client
       '@q9labsai/chalk-whiteboard':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../../packages/whiteboard
       '@q9labsai/facehash':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../../packages/facehash
       react:
         specifier: 19.2.7
@@ -921,13 +921,13 @@ importers:
   tools/sdk-web-consumer-e2e:
     dependencies:
       '@q9labsai/chalk-client':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/client
       '@q9labsai/chalk-react':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../sdks/typescript/react
       '@q9labsai/chalk-ui':
-        specifier: workspace:^5.4.1
+        specifier: workspace:^5.5.0
         version: link:../../packages/ui
       esbuild:
         specifier: 0.28.2
@@ -3514,9 +3514,8 @@ packages:
     peerDependencies:
       dependency-cruiser: ^18.2.0
 
-  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
-    resolution: {integrity: sha512-rPDbhzhuBHIEr2XT/lq+1CxtUBwXKcbNsoH2DtnW2Y4h0v0FEkGXIA67AIxsfomPDrHk6MiojAl5v7b8oQEb4g==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz}
-    version: 0.3.0
+  '@q9labsai/gates@0.4.1':
+    resolution: {integrity: sha512-VxecE2dlelZMDf4rIu01WMBmwlTedNmuf9rEwNeUkvbTWaPmkfxXNr1f7+0975f/SolOveccJAnHDsFv5xeTMQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -9484,6 +9483,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -12205,7 +12207,7 @@ snapshots:
     dependencies:
       dependency-cruiser: 18.2.0
 
-  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
+  '@q9labsai/gates@0.4.1':
     dependencies:
       cac: 7.0.0
       execa: 10.0.1
@@ -12214,7 +12216,7 @@ snapshots:
       picocolors: 1.1.1
       semver: 7.8.5
       smol-toml: 1.9.0
-      zod: 4.6.7
+      zod: 4.6.6
 
   '@radix-ui/primitive@1.0.0':
     dependencies:
@@ -19242,6 +19244,8 @@ snapshots:
       youch-core: 0.3.3
 
   zod@3.25.76: {}
+
+  zod@4.6.6: {}
 
   zod@4.6.7: {}
 
