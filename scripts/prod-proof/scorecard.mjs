@@ -1,0 +1,168 @@
+// @ts-check
+// The Chalk performance scorecard, draft v1: one file per media plane per run. History is public, so a file
+// holds no host, IP, URL, Tenant, Space or other resource id.
+
+export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
+
+/** @typedef {"chalk_sfu" | "cf_sfu"} MediaPlane */
+/** @typedef {"pr" | "nightly" | "promote" | "manual"} Tier */
+/** @typedef {"ci" | "staging" | "production"} Environment */
+/**
+ * @typedef {object} ScorecardClient
+ * @property {"browser" | "sdk"} kind
+ * @property {string} browser  Engine and version, for example "chromium/151.0.7922.34".
+ * @property {string} region   Where the client ran, for example "do-sgp1".
+ * @property {string} size     The client machine, for example "s-4vcpu-8gb".
+ */
+/**
+ * @typedef {object} ScorecardRun
+ * @property {string} id
+ * @property {string} commit  The full SHA the run measured.
+ * @property {Tier} tier
+ * @property {Environment} environment
+ * @property {string} startedAt  ISO 8601.
+ * @property {ScorecardClient} client
+ */
+/**
+ * @typedef {object} ScorecardMetric
+ * @property {MetricId} id
+ * @property {"ms"} unit
+ * @property {number} n  Samples behind the percentiles; dropped samples are not counted.
+ * @property {number | null} p50  Null only when n is 0.
+ * @property {number | null} p95
+ * @property {string} source  The kit that measured it.
+ */
+/**
+ * @typedef {object} ScorecardDrop
+ * @property {MetricId} metric
+ * @property {string} reason  A snake_case code, never free text.
+ * @property {number} count
+ */
+/**
+ * @typedef {object} Scorecard
+ * @property {typeof SCORECARD_SCHEMA} schema
+ * @property {ScorecardRun} run
+ * @property {MediaPlane} mediaPlane
+ * @property {ScorecardMetric[]} metrics
+ * @property {ScorecardDrop[]} dropped
+ */
+
+// Stable metric ids. Renaming one breaks history, so add a new id instead.
+export const METRICS = /** @type {const} */ ({
+  "action.spinup_ms": "Episode create, first admit, and the first join() until live with a connected peer connection",
+  "action.join.first_audio_ms": "join() until the first audio packet from a remote",
+  "action.join.first_video_ms": "join() until the first decoded video frame from a remote",
+  "action.camera_toggle.on_ms": "Camera on until the remote's roster shows it active",
+  "action.camera_toggle.off_ms": "Camera off until the remote's roster shows it inactive",
+  "action.mic_toggle.on_ms": "Microphone on until the remote's roster shows it active",
+  "action.mic_toggle.off_ms": "Microphone off until the remote's roster shows it inactive",
+  "action.publish.first_frame_ms": "Camera on until the remote decodes the first new frame",
+  "action.publish.first_audio_ms": "Microphone on until the remote receives the first new audio packet",
+  "action.unpublish.removed_ms": "Camera off until the remote no longer holds a live camera track",
+  "action.unpublish.audio_removed_ms": "Microphone off until the remote no longer holds a live microphone track",
+  "action.screenshare.start_ms": "Screen share start until the remote decodes the first share frame",
+  "action.screenshare.stop_ms": "Screen share stop until the remote no longer holds a live share track",
+  "action.screenshare.start_signal_ms": "Screen share start until the remote's roster shows it active",
+  "action.screenshare.stop_signal_ms": "Screen share stop until the remote's roster shows it inactive",
+  "action.leave_ms": "leave() until the remote's roster drops the Participant",
+  "action.leave_ack_ms": "leave() until Sync acknowledges it",
+  "action.leave_media_removed_ms": "leave() until the remote holds no live track from the Participant",
+});
+/** @typedef {keyof typeof METRICS} MetricId */
+
+const tiers = ["pr", "nightly", "promote", "manual"];
+const environments = ["ci", "staging", "production"];
+const planes = ["chalk_sfu", "cf_sfu"];
+const clientKinds = ["browser", "sdk"];
+const label = /^[a-z0-9][a-z0-9./_-]*$/;
+const forbidden = [
+  ["an IP address", /\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|[0-9a-f]*::[0-9a-f]/i],
+  ["a URL", /:\/\//],
+  ["a resource id", /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i],
+  ["a host name", /\b[a-z0-9-]+\.(?:com|net|org|io|dev|app|ai|cloud|internal|local)\b/i],
+];
+
+/**
+ * scorecardProblems lists every way a value breaks the v1 shape or leaks an identifier; empty means valid.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+export function scorecardProblems(value) {
+  const problems = [];
+  const fail = (/** @type {string} */ problem) => problems.push(problem);
+  const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
+  if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
+  const run = card?.run;
+  if (typeof run?.id !== "string" || !/^[A-Za-z0-9._-]+$/.test(run.id)) fail("run.id must be a plain run label");
+  if (typeof run?.commit !== "string" || !/^[0-9a-f]{40}$/.test(run.commit)) fail("run.commit must be a full SHA");
+  if (!tiers.includes(run?.tier)) fail(`run.tier must be one of ${tiers.join(", ")}`);
+  if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
+  if (typeof run?.startedAt !== "string" || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be an ISO time");
+  if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
+  for (const field of ["browser", "region", "size"]) if (typeof run?.client?.[field] !== "string" || !label.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
+  if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
+  metricProblems(card?.metrics, fail);
+  dropProblems(card?.dropped, fail);
+  leakProblems(card, fail);
+  return problems;
+}
+
+/**
+ * @param {any} metrics
+ * @param {(problem: string) => void} fail
+ */
+function metricProblems(metrics, fail) {
+  if (!Array.isArray(metrics)) return fail("metrics must be an array");
+  const seen = new Set();
+  for (const metric of metrics) {
+    const name = metric?.id;
+    if (!(name in METRICS)) fail(`metrics: unknown id ${name}`);
+    if (seen.has(name)) fail(`metrics: ${name} appears twice`);
+    seen.add(name);
+    if (metric?.unit !== "ms") fail(`${name}: unit must be ms`);
+    if (!Number.isInteger(metric?.n) || metric.n < 0) fail(`${name}: n must be a whole number`);
+    if (typeof metric?.source !== "string" || !label.test(metric.source)) fail(`${name}: source must be a lowercase label`);
+    const percentiles = [metric?.p50, metric?.p95];
+    if (metric?.n === 0 && percentiles.some((value) => value !== null)) fail(`${name}: p50 and p95 must be null without samples`);
+    if (metric?.n > 0 && !percentiles.every((value) => typeof value === "number" && value >= 0)) fail(`${name}: p50 and p95 must be non-negative numbers`);
+    if (metric?.n > 0 && metric.p50 > metric.p95) fail(`${name}: p50 is above p95`);
+  }
+}
+
+/**
+ * @param {any} dropped
+ * @param {(problem: string) => void} fail
+ */
+function dropProblems(dropped, fail) {
+  if (!Array.isArray(dropped)) return fail("dropped must be an array");
+  for (const drop of dropped) {
+    if (!(drop?.metric in METRICS)) fail(`dropped: unknown metric ${drop?.metric}`);
+    if (typeof drop?.reason !== "string" || !/^[a-z][a-z_]*$/.test(drop.reason)) fail(`dropped: ${drop?.metric} reason must be a snake_case code`);
+    if (!Number.isInteger(drop?.count) || drop.count < 1) fail(`dropped: ${drop?.metric} count must be a positive whole number`);
+  }
+}
+
+/**
+ * @param {any} card
+ * @param {(problem: string) => void} fail
+ */
+function leakProblems(card, fail) {
+  const visit = (/** @type {unknown} */ node, /** @type {string} */ path) => {
+    if (typeof node === "string") {
+      for (const [kind, pattern] of forbidden) if (pattern.test(node)) fail(`${path} looks like ${kind}`);
+    } else if (Array.isArray(node)) node.forEach((item, index) => visit(item, `${path}[${index}]`));
+    else if (node && typeof node === "object") for (const [key, item] of Object.entries(node)) visit(item, path ? `${path}.${key}` : key);
+  };
+  const { id: _runId, ...run } = card?.run ?? {}; // The run id is checked as a plain label above.
+  visit({ ...card, run }, "");
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Scorecard}
+ */
+export function parseScorecard(value) {
+  const problems = scorecardProblems(value);
+  if (problems.length) throw new Error(`Invalid scorecard:\n- ${problems.join("\n- ")}`);
+  return /** @type {Scorecard} */ (value); // Every field was checked by scorecardProblems.
+}
