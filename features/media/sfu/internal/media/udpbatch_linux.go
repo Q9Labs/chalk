@@ -28,6 +28,12 @@ import (
 //     sendmmsg. Datagrams for one peer that are the same size (a video frame's
 //     packets) leave as one UDP_SEGMENT train, which the kernel splits after it
 //     has routed and queued them once.
+//
+// Both batch calls are raw system calls. They never block (MSG_DONTWAIT; EAGAIN
+// parks on the poller), and a plain system call tells the scheduler it may block:
+// it wakes the runtime's monitor thread, which then polls every 20 µs for a while
+// to take the processor back. On a one-vCPU node those wakeups cost more CPU than
+// the handoff could ever save.
 
 const (
 	// batchRecv is the datagrams one recvmmsg returns at most.
@@ -179,7 +185,7 @@ func (c *batchConn) receive() error {
 	var count int
 	var errno syscall.Errno
 	err := c.raw.Read(func(fd uintptr) bool {
-		r, _, e := unix.Syscall6(unix.SYS_RECVMMSG, fd, uintptr(unsafe.Pointer(&c.rxHdr[0])), batchRecv, unix.MSG_DONTWAIT, 0, 0)
+		r, _, e := unix.RawSyscall6(unix.SYS_RECVMMSG, fd, uintptr(unsafe.Pointer(&c.rxHdr[0])), batchRecv, unix.MSG_DONTWAIT, 0, 0)
 		if e == unix.EAGAIN {
 			return false
 		}
@@ -362,7 +368,7 @@ func (c *batchConn) plan(entries []queued) int {
 // sendmmsg sends messages and returns how many went out; errno is set when the first one failed.
 func (c *batchConn) sendmmsg(messages []unix.Mmsghdr) (sent int, errno syscall.Errno) {
 	err := c.raw.Write(func(fd uintptr) bool {
-		r, _, e := unix.Syscall6(unix.SYS_SENDMMSG, fd, uintptr(unsafe.Pointer(&messages[0])), uintptr(len(messages)), 0, 0, 0)
+		r, _, e := unix.RawSyscall6(unix.SYS_SENDMMSG, fd, uintptr(unsafe.Pointer(&messages[0])), uintptr(len(messages)), unix.MSG_DONTWAIT, 0, 0)
 		if e == unix.EAGAIN {
 			return false
 		}
