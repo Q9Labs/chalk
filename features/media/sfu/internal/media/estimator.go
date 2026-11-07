@@ -244,10 +244,38 @@ type bandwidthEstimator struct {
 	probe      probeCluster
 	probeFloor float64
 	probeUntil int64
+
+	// pressured is set while the node itself is stalled: its late sends and late
+	// feedback say nothing about the path, so they cannot lower the estimate.
+	pressured bool
+	// overusingSince is when the delay trend first read as overuse and has since
+	// stayed there. A stall can end with feedback that reaches the estimator
+	// before the control loop has noticed the stall, so a decrease waits one
+	// control tick for the node's verdict.
+	overusingSince int64
+	// lossAt is when the receiver last reported heavy loss. A stalled node delays
+	// packets but does not lose them, so heavy loss is the path's own evidence.
+	lossAt int64
 }
 
 func newBandwidthEstimator() bandwidthEstimator {
 	return bandwidthEstimator{estimate: initialEstimate}
+}
+
+// pressure tells the estimator whether the node is stalled. While it is, the
+// delay-based decrease waits; loss still counts. The trend restarts when the
+// stall ends, so delays the stall made do not carry into the samples after it.
+func (e *bandwidthEstimator) pressure(on bool) {
+	if e.pressured && !on {
+		e.trend = trendline{threshold: e.trend.threshold, thresholdAt: e.trend.thresholdAt}
+		e.overusingSince = 0
+	}
+	e.pressured = on
+}
+
+// lossy reports whether the receiver reported heavy loss within the last pressureHold.
+func (e *bandwidthEstimator) lossy(now int64) bool {
+	return e.lossAt != 0 && now-e.lossAt < int64(pressureHold)
 }
 
 // warm reports whether feedback has arrived yet.
@@ -282,8 +310,13 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.reportNext = (e.reportNext + 1) % len(e.reports)
 		e.reportLen = min(e.reportLen+1, len(e.reports))
 	}
+	if e.trend.signal != signalOveruse {
+		e.overusingSince = 0
+	} else if e.overusingSince == 0 {
+		e.overusingSince = now
+	}
 	// A queue that grows means the path is full: back off below what got through.
-	if e.trend.signal == signalOveruse && now-e.decreased > int64(decreaseSpacing) {
+	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) {
 		acked := e.ackedOver(decreaseSpan)
 		if acked == 0 {
 			acked = e.acked()
@@ -291,9 +324,13 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.estimate = math.Max(decreaseFactor*math.Max(acked, minEstimate), minEstimate)
 		e.decreased, e.holding = now, true
 		e.trend.signal = signalNormal
+		e.overusingSince = 0
 	}
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)
+		if loss > lossHigh {
+			e.lossAt = now
+		}
 		switch {
 		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
 			e.estimate = math.Max(e.estimate*(1-0.5*loss), minEstimate)

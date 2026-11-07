@@ -11,6 +11,8 @@ export const DevCommand = Object.freeze({
   LOGS: "logs",
   STOP: "stop",
   RESET: "reset",
+  DOCTOR: "doctor",
+  DOWN: "down",
   HELP: "help",
 });
 
@@ -96,6 +98,22 @@ export function parseArguments(argv = []) {
   return { command, profile, service, fresh, yes, ready };
 }
 
+// PUBLIC_ORIGIN is the one address the outside world uses: the token issuer, CORS, and the Sync URL the browser dials.
+function publicOriginFromEnv(env) {
+  const raw = env.PUBLIC_ORIGIN?.trim();
+  if (!raw) return undefined;
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw failure(FailureKind.CONFIG, "PUBLIC_ORIGIN must be an absolute http(s) origin", { stage: "config" });
+  }
+  if (!["http:", "https:"].includes(url.protocol) || url.pathname !== "/" || url.search || url.hash || url.username) {
+    throw failure(FailureKind.CONFIG, "PUBLIC_ORIGIN must be an origin with no path, query, fragment or credentials", { stage: "config" });
+  }
+  return url.origin;
+}
+
 function numberFromEnv(env, name, fallback) {
   const raw = env[name];
   if (raw === undefined || raw === "") return fallback;
@@ -132,6 +150,8 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     redis: redisPort,
     providerBridge: numberFromEnv(env, "CHALK_DEV_PROVIDER_BRIDGE_PORT", defaultPorts.providerBridge),
   };
+  const publicOrigin = publicOriginFromEnv(env);
+  const hasEnvSfuCredential = Boolean(env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim() && env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim());
   const sourceRoots = [join(checkoutRoot, "apps", "api"), join(checkoutRoot, "apps", "sync")];
   if (profile === "mobile") sourceRoots.push(join(checkoutRoot, "apps", "mobile"));
   return {
@@ -146,9 +166,10 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     ownerPath: join(stateRoot, "owner.json"),
     lockPath: join(stateRoot, "lock"),
     manifestPath: join(runtimeRoot, "manifest.json"),
+    seedPath: join(runtimeRoot, "seed.json"),
     identity: identityPaths({ runtimeRoot }),
     auth: {
-      issuer: env.CHALK_SYNC_TOKEN_ISSUER || "http://chalk.local",
+      issuer: env.CHALK_SYNC_TOKEN_ISSUER || publicOrigin || "http://chalk.local",
       audience: env.CHALK_SYNC_TOKEN_AUDIENCE || "chalk-sync",
       keyId: env.CHALK_SYNC_TOKEN_KEY_ID || "local-dev",
       trustDomain: env.CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN || "chalk.local",
@@ -168,13 +189,16 @@ export function resolveDevConfig({ cwd = process.cwd(), root = cwd, env = proces
     // Outside `ports`: preflight must not fail the core profile, or the optional Metro, on a busy 8081.
     metro: { port: numberFromEnv(env, "RCT_METRO_PORT", 8081) },
     ports,
+    publicOrigin,
     urls: {
       api: `http://127.0.0.1:${ports.api}`,
       sync: `http://127.0.0.1:${ports.sync}`,
       web: `http://127.0.0.1:${ports.web}`,
+      // What a browser outside this box opens; the local web URL when PUBLIC_ORIGIN is unset.
+      public: publicOrigin ?? `http://127.0.0.1:${ports.web}`,
     },
     sourceRoots,
-    requiredTools: requiredTools || toolByProfile[profile],
+    requiredTools: requiredTools || (hasEnvSfuCredential ? toolByProfile[profile].filter((tool) => tool !== "op") : toolByProfile[profile]),
     allowBusyPorts: new Set(allowBusyPorts),
     timeouts: {
       readinessMs: durationFromEnv(env, "CHALK_DEV_READINESS_TIMEOUT_MS", 120000),

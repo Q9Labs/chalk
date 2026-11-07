@@ -1,0 +1,121 @@
+name: Boot smoke
+
+# Starts the whole dev stack (web, API, Sync, Postgres, Redis) from an empty machine with `pnpm dev`, checks it with
+# `pnpm dev:doctor`, drives one call with fake media through the non-production Cloudflare SFU, and tears it down.
+# It does not run for docs-only changes or for changes that only touch features/media/sfu.
+on:
+  pull_request:
+    paths:
+      - apps/web/**
+      - apps/api/**
+      - apps/sync/**
+      - scripts/dev/**
+      - scripts/deploy/**
+      - scripts/web-proof/**
+      - packages/**
+      - sdks/typescript/**
+      - .agents/skills/verify-chalk/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .tool-versions
+      - .github/workflows/boot-smoke.yml
+      - "!**/*.md"
+  push:
+    branches:
+      - master
+    paths:
+      - apps/web/**
+      - apps/api/**
+      - apps/sync/**
+      - scripts/dev/**
+      - scripts/deploy/**
+      - scripts/web-proof/**
+      - packages/**
+      - sdks/typescript/**
+      - .agents/skills/verify-chalk/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .tool-versions
+      - .github/workflows/boot-smoke.yml
+      - "!**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boot-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boot:
+    # Pull requests from forks get no secrets, so the stack cannot reach the SFU there.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CHALK_CLOUDFLARE_REALTIME_APP_ID: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_ID }}
+      CHALK_CLOUDFLARE_REALTIME_APP_SECRET: ${{ secrets.CHALK_CLOUDFLARE_REALTIME_APP_SECRET }}
+      PUBLIC_ORIGIN: http://localhost:3070
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+
+      - name: Start the stack from empty
+        run: |
+          mkdir -p .verify/ci
+          started=$(date +%s)
+          nohup pnpm dev > .verify/ci/up.log 2>&1 &
+          up=$!
+          until grep -aq "Chalk dev ready" .verify/ci/up.log; do
+            kill -0 "$up" 2>/dev/null || { echo "pnpm dev exited before it was ready"; exit 1; }
+            [ $(( $(date +%s) - started )) -lt 480 ] || { echo "pnpm dev was not ready after 8 minutes"; exit 1; }
+            sleep 2
+          done
+          echo "ready_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
+
+      - name: Doctor
+        run: |
+          started=$(date +%s)
+          pnpm dev:doctor | tee .verify/ci/doctor.json
+          echo "doctor_seconds=$(( $(date +%s) - started ))" | tee -a "$GITHUB_STEP_SUMMARY" .verify/ci/timing.txt
+
+      - name: Join a call with fake media through the SFU
+        run: node .agents/skills/verify-chalk/scripts/join-call.mjs "ci-${GITHUB_RUN_ID}"
+
+      - name: Tear down
+        if: always()
+        run: |
+          mkdir -p .verify/ci
+          cp -r .logs .verify/ci/logs 2>/dev/null || true
+          pnpm dev:down
+
+      - name: Upload evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-smoke-evidence-${{ github.run_id }}
+          # The runtime directory holds the system token, so only evidence and the copied service logs are uploaded.
+          path: .verify/
+          if-no-files-found: warn

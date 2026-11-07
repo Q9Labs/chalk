@@ -45,7 +45,8 @@ export type LiveOptions = {
   readonly board?: boolean;
   readonly recording?: boolean;
   readonly chat?: readonly ChatMessage[];
-  readonly admission?: boolean;
+  /** How many people are waiting to be let in; `true` is one. */
+  readonly admission?: boolean | number;
   readonly lastError?: SpaceSnapshot["connection"]["lastError"];
   readonly offlinePending?: boolean;
   readonly mediaRequest?: boolean;
@@ -71,7 +72,9 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
     self: { ...base.self, participantId: SELF_ID, displayName: SELF_NAME, role: capabilities === HOST ? "host" : "guest", handRaised: self.handRaised ?? false },
     participants: {
       roster,
-      admissionQueue: options.admission ? [{ requestId: "req-1", participantId: "guest-1", displayName: "Rania Aziz", initialRole: "guest", eligibleRoles: ["guest"], expiresAt: new Date(now + 60_000).toISOString() }] : [],
+      admissionQueue: ["Rania Aziz", "Omar Haddad", "Lena Fischer"]
+        .slice(0, options.admission === true ? 1 : options.admission || 0)
+        .map((displayName, index) => ({ requestId: `req-${index + 1}`, participantId: `guest-${index + 1}`, displayName, initialRole: "guest" as const, eligibleRoles: ["guest" as const], expiresAt: new Date(now + 60_000).toISOString() })),
     },
     media: {
       ...base.media,

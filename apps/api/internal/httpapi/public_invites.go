@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -167,6 +168,7 @@ type publicInviteArrivalRequest struct {
 	LegacyInviteLink  bool
 	AccountID         utilities.ID
 	AccountAuthorized bool
+	MediaClients      mediaplane.ClientProviders
 }
 
 type publicInviteStatusRequest struct {
@@ -174,6 +176,7 @@ type publicInviteStatusRequest struct {
 	GuestCredential string
 	AccountID       utilities.ID
 	Native          bool
+	MediaClients    mediaplane.ClientProviders
 }
 
 type publicInviteRefreshRequest struct {
@@ -183,6 +186,7 @@ type publicInviteRefreshRequest struct {
 	ReplaceMediaConnection bool
 	AccountID              utilities.ID
 	Native                 bool
+	MediaClients           mediaplane.ClientProviders
 }
 
 type publicInviteLeaveRequest struct {
@@ -372,13 +376,13 @@ func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Han
 		if service == nil {
 			return publicSpaceCreatedResponse{}, apiErrorServiceUnavailable
 		}
-		created, err := service.CreatePublicSpace(ctx, publicinvites.CreatePublicSpaceInput{DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, Native: request.Native, LegacyInviteLink: request.LegacyInviteLink})
+		created, err := service.CreatePublicSpace(ctx, publicinvites.CreatePublicSpaceInput{DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, Native: request.Native, LegacyInviteLink: request.LegacyInviteLink, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicSpaceCreatedResponse{}, err
 		}
 		return newPublicSpaceCreatedResponse(created), nil
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(idempotencyKeyParameter()).RequestBody("CreatePublicSpaceRequest", struct {
+		Parameters(idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("CreatePublicSpaceRequest", struct {
 		DisplayName string `json:"display_name"`
 	}{}).Responds(http.StatusCreated, "PublicSpaceCreated", publicSpaceCreatedResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).WriteWith(writePublicSpaceCreated).Middleware(noStoreResponses, publicInviteTelemetry("public.create"))
@@ -393,13 +397,13 @@ func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
-		arrival, err := service.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: request.Body.SpaceInviteToken, DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, AccountAuthorized: request.AccountAuthorized, Native: request.Native})
+		arrival, err := service.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: request.Body.SpaceInviteToken, DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, AccountAuthorized: request.AccountAuthorized, Native: request.Native, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(idempotencyKeyParameter(), APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: false}).RequestBody("SpacePublicInviteArrivalRequest", struct {
+		Parameters(idempotencyKeyParameter(), APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: false}, mediaProvidersParameter()).RequestBody("SpacePublicInviteArrivalRequest", struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
 	}{}).Responds(http.StatusCreated, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
@@ -415,13 +419,13 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
-		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native}, func() error { return chargeWriteBudget(ctx) })
+		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaClients: request.MediaClients}, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
 	}).RateLimit(authenticatedReadRateLimit).
-		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
+		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}, mediaProvidersParameter()).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.status"))
 }
 
@@ -430,13 +434,13 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 		if service == nil {
 			return publicAccessGrantResponse{}, apiErrorServiceUnavailable
 		}
-		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof, ReplaceMediaConnection: request.ReplaceMediaConnection})
+		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof, ReplaceMediaConnection: request.ReplaceMediaConnection, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicAccessGrantResponse{}, err
 		}
 		return newPublicAccessGrantResponse(grant), nil
 	}).RateLimit(authenticatedWriteRateLimit).
-		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
+		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}, mediaProvidersParameter()).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
 		MediaProof             string `json:"media_proof"`
 		ReplaceMediaConnection bool   `json:"replace_media_connection"`
 	}{}).Responds(http.StatusCreated, "AccessGrant", publicAccessGrantResponse{}).
@@ -548,7 +552,7 @@ func decodePublicSpaceCreateRequest(r *http.Request) (publicInviteArrivalRequest
 	return publicInviteArrivalRequest{Body: struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
-	}{DisplayName: body.DisplayName}, RequestKey: requestKey, Native: isNativePublicRequest(r), LegacyInviteLink: isNativePublicRequest(r) && !strings.EqualFold(strings.TrimSpace(r.Header.Get(publicInviteFormatHeader)), "code")}, nil
+	}{DisplayName: body.DisplayName}, RequestKey: requestKey, Native: isNativePublicRequest(r), LegacyInviteLink: isNativePublicRequest(r) && !strings.EqualFold(strings.TrimSpace(r.Header.Get(publicInviteFormatHeader)), "code"), MediaClients: mediaClients(r)}, nil
 }
 
 func decodePublicInviteArrivalRequest(r *http.Request) (publicInviteArrivalRequest, error) {
@@ -570,7 +574,7 @@ func decodePublicInviteArrivalRequest(r *http.Request) (publicInviteArrivalReque
 		return publicInviteArrivalRequest{}, apiErrorInvalidRequestKey
 	}
 	arrivalHandle := strings.TrimSpace(r.Header.Get(publicInviteTokenHeader))
-	request := publicInviteArrivalRequest{Body: body, RequestKey: requestKey, ArrivalHandle: arrivalHandle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, arrivalHandle)}
+	request := publicInviteArrivalRequest{Body: body, RequestKey: requestKey, ArrivalHandle: arrivalHandle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, arrivalHandle), MediaClients: mediaClients(r)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 		request.AccountAuthorized = true
@@ -583,7 +587,7 @@ func decodePublicInviteStatusRequest(r *http.Request) (publicInviteStatusRequest
 	if handle == "" {
 		return publicInviteStatusRequest{}, apiErrorInvalidArrivalHandle
 	}
-	request := publicInviteStatusRequest{ArrivalHandle: handle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
+	request := publicInviteStatusRequest{ArrivalHandle: handle, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle), MediaClients: mediaClients(r)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 	}
@@ -605,7 +609,7 @@ func decodePublicInviteRefreshRequest(r *http.Request) (publicInviteRefreshReque
 	if handle == "" {
 		return publicInviteRefreshRequest{}, apiErrorInvalidArrivalHandle
 	}
-	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, ReplaceMediaConnection: body.ReplaceMediaConnection, Native: isNativePublicRequest(r), GuestCredential: guestCredentialFromRequest(r, handle)}
+	request := publicInviteRefreshRequest{ArrivalHandle: handle, MediaProof: body.MediaProof, ReplaceMediaConnection: body.ReplaceMediaConnection, Native: isNativePublicRequest(r), MediaClients: mediaClients(r), GuestCredential: guestCredentialFromRequest(r, handle)}
 	if principal, ok := authentication.PrincipalFromContext(r.Context()); ok && principal.Kind == authentication.PrincipalUser {
 		request.AccountID = principal.UserID
 	}
@@ -629,7 +633,7 @@ func publicInviteManagementErrors() []APIError {
 }
 
 func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
 func publicInviteRefreshErrors() []APIError {
@@ -652,6 +656,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorAdmissionRequestNotFound, true
 	case errors.Is(err, publicinvites.ErrArrivalNotFound), errors.Is(err, publicinvites.ErrArrivalUnavailable), errors.Is(err, publicinvites.ErrCredentialMismatch), errors.Is(err, publicinvites.ErrInvalidCredential):
 		return apiErrorArrivalUnavailable, true
+	case errors.Is(err, mediaplane.ErrClientUnsupported):
+		return apiErrorMediaClientUnsupported, true
 	case errors.Is(err, publicinvites.ErrMediaProofExpired):
 		return apiErrorMediaProofExpired, true
 	case errors.Is(err, publicinvites.ErrMediaProofRejected):
@@ -964,6 +970,18 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 			"connectionId": grant.ClientPayload.ConnectionID,
 			"stunServer":   grant.ClientPayload.StunServer,
 			"iceServers":   grant.ClientPayload.ICEServers,
+		}
+	case publicinvites.PublicProviderChalkSFU:
+		return map[string]any{
+			"connectionId": grant.ClientPayload.ConnectionID,
+			"provider":     publicinvites.PublicProviderChalkSFU,
+			"episodeRef":   grant.ClientPayload.EpisodeRef,
+			"iceServers":   grant.ClientPayload.ICEServers,
+			"capabilities": map[string]any{
+				"serverLayerAdaptation": grant.ClientPayload.Capabilities.ServerLayerAdaptation,
+				"subscriptionState":     grant.ClientPayload.Capabilities.SubscriptionState,
+				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
+			},
 		}
 
 	default:

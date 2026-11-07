@@ -93,7 +93,16 @@
   "frames": {
     "hello": {
       "exactFields": ["type", "protocol", "token", "cursor"],
-      "extendedExactFields": ["type", "protocol", "token", "cursor", "extensions"]
+      "extendedExactFields": ["type", "protocol", "token", "cursor", "extensions"],
+      "optionalFields": {
+        "baggage": {
+          "kind": "string",
+          "minBytes": 47,
+          "maxBytes": 47,
+          "format": "w3c-baggage-session-id",
+          "pattern": "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      }
     },
     "submitUpdate": {
       "exactFields": ["type", "operation_id", "scene_id", "sync_all", "elements"]
