@@ -78,9 +78,9 @@ const tiers = ["pr", "nightly", "promote", "manual"];
 const environments = ["ci", "staging", "production"];
 const planes = ["chalk_sfu", "cf_sfu"];
 const clientKinds = ["browser", "sdk"];
-const label = /^[a-z0-9][a-z0-9./_-]*$/;
-// Free-form client labels may hold a version like chromium/151.0.1 but never dotted words, whatever the top-level domain.
-const hostShaped = /[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*/;
+// Free-form fields allow only these shapes. None holds a dot outside a browser version, so no host name fits, whatever its top-level domain.
+const label = /^[a-z0-9][a-z0-9_-]*$/;
+const clientLabels = { browser: /^[a-z][a-z0-9_-]*(?:\/\d+(?:\.\d+){0,3})?$/, region: label, size: label };
 const forbidden = [
   ["an IP address", /\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|[0-9a-f]*::[0-9a-f]/i],
   ["a URL", /:\/\//],
@@ -105,7 +105,7 @@ export function scorecardProblems(value) {
   if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
   if (typeof run?.startedAt !== "string" || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be an ISO time");
   if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
-  for (const field of ["browser", "region", "size"]) if (typeof run?.client?.[field] !== "string" || !label.test(run.client[field]) || hostShaped.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
+  for (const [field, shape] of Object.entries(clientLabels)) if (typeof run?.client?.[field] !== "string" || !shape.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
   dropProblems(card?.dropped, fail);
@@ -122,7 +122,7 @@ function metricProblems(metrics, fail) {
   const seen = new Set();
   for (const metric of metrics) {
     const name = metric?.id;
-    if (!(name in METRICS)) fail(`metrics: unknown id ${name}`);
+    if (!Object.hasOwn(METRICS, name)) fail(`metrics: unknown id ${name}`);
     if (seen.has(name)) fail(`metrics: ${name} appears twice`);
     seen.add(name);
     const expected = METRICS[/** @type {MetricId} */ (name)]?.unit;
@@ -131,7 +131,7 @@ function metricProblems(metrics, fail) {
     if (typeof metric?.source !== "string" || !label.test(metric.source)) fail(`${name}: source must be a lowercase label`);
     const percentiles = [metric?.p50, metric?.p95];
     if (metric?.n === 0 && percentiles.some((value) => value !== null)) fail(`${name}: p50 and p95 must be null without samples`);
-    if (metric?.n > 0 && !percentiles.every((value) => typeof value === "number" && value >= 0)) fail(`${name}: p50 and p95 must be non-negative numbers`);
+    if (metric?.n > 0 && !percentiles.every((value) => Number.isFinite(value) && value >= 0)) fail(`${name}: p50 and p95 must be non-negative numbers`);
     if (metric?.n > 0 && metric.p50 > metric.p95) fail(`${name}: p50 is above p95`);
   }
 }
@@ -143,7 +143,7 @@ function metricProblems(metrics, fail) {
 function dropProblems(dropped, fail) {
   if (!Array.isArray(dropped)) return fail("dropped must be an array");
   for (const drop of dropped) {
-    if (!(drop?.metric in METRICS)) fail(`dropped: unknown metric ${drop?.metric}`);
+    if (!Object.hasOwn(METRICS, drop?.metric)) fail(`dropped: unknown metric ${drop?.metric}`);
     if (typeof drop?.reason !== "string" || !/^[a-z][a-z_]*$/.test(drop.reason)) fail(`dropped: ${drop?.metric} reason must be a snake_case code`);
     if (!Number.isInteger(drop?.count) || drop.count < 1) fail(`dropped: ${drop?.metric} count must be a positive whole number`);
   }

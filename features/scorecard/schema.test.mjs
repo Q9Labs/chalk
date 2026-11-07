@@ -33,7 +33,7 @@ test("unknown or repeated ids, a unit other than the registry's, and impossible 
 });
 
 test("hosts, IPs, URLs and resource ids are refused anywhere but the run id", () => {
-  for (const leak of ["10.0.0.4", "fd00:1:2:3:4::5", "https://example", "sfu.example.com", "sfu.example.co.uk", "3d474782-c768-4dba-91f4-0123456789ab"]) {
+  for (const leak of ["10.0.0.4", "fd00:1:2:3:4::5", "https://example", "sfu.example.com", "sfu.example.co.uk", "123.uk", "3d474782-c768-4dba-91f4-0123456789ab"]) {
     const card = valid();
     card.dropped[0].reason = "timeout";
     card.run.client.region = leak;
@@ -50,4 +50,15 @@ test("free-text drop reasons and a missing environment fail", () => {
   card.dropped[0].reason = "Guest 1 got media on cloudflare_sfu";
   delete card.run.environment;
   assert.throws(() => parseScorecard(card), /run\.environment must be one of[\s\S]*reason must be a snake_case code/);
+});
+
+test("free-form fields, inherited names and non-finite percentiles fail", () => {
+  const card = valid();
+  card.metrics[0].source = "sfu.example.co.uk";
+  card.metrics.push({ id: "constructor", unit: "ms", n: 1, p50: 1, p95: 1, source: "latency-kit" });
+  card.metrics[0].p95 = Infinity;
+  const problems = scorecardProblems(card);
+  assert.ok(problems.includes(`${card.metrics[0].id}: source must be a lowercase label`), problems.join("; "));
+  assert.ok(problems.includes("metrics: unknown id constructor"), problems.join("; "));
+  assert.ok(problems.includes(`${card.metrics[0].id}: p50 and p95 must be non-negative numbers`), problems.join("; "));
 });
