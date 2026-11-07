@@ -77,6 +77,7 @@ export const METRICS = /** @type {const} */ ({
 const tiers = ["pr", "nightly", "promote", "manual"];
 const environments = ["ci", "staging", "production"];
 const planes = ["chalk_sfu", "cf_sfu"];
+const isoTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const clientKinds = ["browser", "sdk"];
 // Free-form fields allow only these shapes. None holds a dot outside a browser version, so no host name fits, whatever its top-level domain.
 const label = /^[a-z0-9][a-z0-9_-]*$/;
@@ -99,11 +100,14 @@ export function scorecardProblems(value) {
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
   const run = card?.run;
-  if (typeof run?.id !== "string" || !/^[A-Za-z0-9._-]+$/.test(run.id)) fail("run.id must be a plain run label");
+  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "dropped"], "scorecard", fail);
+  exactKeys(run, ["id", "commit", "tier", "environment", "startedAt", "client"], "run", fail);
+  exactKeys(run?.client, ["kind", "browser", "region", "size"], "run.client", fail);
+  if (typeof run?.id !== "string" || !/^[A-Za-z0-9_-]+$/.test(run.id)) fail("run.id must be a plain run label");
   if (typeof run?.commit !== "string" || !/^[0-9a-f]{40}$/.test(run.commit)) fail("run.commit must be a full SHA");
   if (!tiers.includes(run?.tier)) fail(`run.tier must be one of ${tiers.join(", ")}`);
   if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
-  if (typeof run?.startedAt !== "string" || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be an ISO time");
+  if (typeof run?.startedAt !== "string" || !isoTime.test(run.startedAt) || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be a UTC ISO time");
   if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
   for (const [field, shape] of Object.entries(clientLabels)) if (typeof run?.client?.[field] !== "string" || !shape.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
@@ -111,6 +115,18 @@ export function scorecardProblems(value) {
   dropProblems(card?.dropped, fail);
   leakProblems(card, fail);
   return problems;
+}
+
+/**
+ * exactKeys fails on any field outside the shape, because a spare field is a place for an identifier to hide.
+ * @param {any} object
+ * @param {string[]} keys
+ * @param {string} where
+ * @param {(problem: string) => void} fail
+ */
+function exactKeys(object, keys, where, fail) {
+  if (!object || typeof object !== "object") return;
+  for (const key of Object.keys(object)) if (!keys.includes(key)) fail(`${where}: unknown field ${key}`);
 }
 
 /**
@@ -122,6 +138,7 @@ function metricProblems(metrics, fail) {
   const seen = new Set();
   for (const metric of metrics) {
     const name = metric?.id;
+    exactKeys(metric, ["id", "unit", "n", "p50", "p95", "source"], `metrics ${name}`, fail);
     if (!Object.hasOwn(METRICS, name)) fail(`metrics: unknown id ${name}`);
     if (seen.has(name)) fail(`metrics: ${name} appears twice`);
     seen.add(name);
@@ -143,6 +160,7 @@ function metricProblems(metrics, fail) {
 function dropProblems(dropped, fail) {
   if (!Array.isArray(dropped)) return fail("dropped must be an array");
   for (const drop of dropped) {
+    exactKeys(drop, ["metric", "reason", "count"], `dropped ${drop?.metric}`, fail);
     if (!Object.hasOwn(METRICS, drop?.metric)) fail(`dropped: unknown metric ${drop?.metric}`);
     if (typeof drop?.reason !== "string" || !/^[a-z][a-z_]*$/.test(drop.reason)) fail(`dropped: ${drop?.metric} reason must be a snake_case code`);
     if (!Number.isInteger(drop?.count) || drop.count < 1) fail(`dropped: ${drop?.metric} count must be a positive whole number`);

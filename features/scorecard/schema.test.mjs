@@ -62,3 +62,17 @@ test("free-form fields, inherited names and non-finite percentiles fail", () => 
   assert.ok(problems.includes("metrics: unknown id constructor"), problems.join("; "));
   assert.ok(problems.includes(`${card.metrics[0].id}: p50 and p95 must be non-negative numbers`), problems.join("; "));
 });
+
+test("spare fields, dotted run ids and loose start times fail", () => {
+  const card = valid();
+  card.run.id = "sfu.example.co.uk";
+  card.run.startedAt = "Nov 7 2026 (sfu.example.co.uk)";
+  card.run.client.host = "sfu.example.co.uk";
+  card.extra = "x";
+  card.metrics[0].note = "x";
+  card.dropped[0].note = "x";
+  const problems = scorecardProblems(card);
+  for (const expected of ["run.id must be a plain run label", "run.startedAt must be a UTC ISO time", "run.client: unknown field host", "scorecard: unknown field extra", "metrics action.join.first_video_ms: unknown field note", "dropped action.join.first_video_ms: unknown field note"]) {
+    assert.ok(problems.includes(expected), `${expected} :: ${problems.join("; ")}`);
+  }
+});
