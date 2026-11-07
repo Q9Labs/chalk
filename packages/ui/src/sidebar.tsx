@@ -229,7 +229,7 @@ function SidebarGroupLabel({ className, ...props }: React.ComponentPropsWithRef<
       data-slot="sidebar-group-label"
       data-sidebar="group-label"
       className={cn(
-        "text-sidebar-foreground/55 flex h-8 shrink-0 items-center rounded-md px-2 font-mono text-[10px] tracking-[0.09em] uppercase transition-[margin,opacity] duration-200 ease-linear",
+        "text-sidebar-foreground/55 flex h-8 shrink-0 items-center rounded-md px-2 font-mono text-(length:--type-micro) tracking-[0.09em] uppercase transition-[margin,opacity] duration-200 ease-linear",
         "group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
         className,
       )}

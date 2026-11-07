@@ -83,7 +83,11 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
         transition: reducedMotion ? "none" : "opacity 220ms cubic-bezier(.2,.8,.2,1)",
       }}
     >
-      <div data-part={active ? "limbo-message" : undefined} style={{ borderRadius: 16 }} className={cn("flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-[22px] text-center", stacked && "w-[340px] py-8", className)}>
+      <div
+        data-part={active ? "limbo-message" : undefined}
+        style={{ borderRadius: "var(--corner-2xl)" }}
+        className={cn("flex max-w-full flex-col items-center gap-2 rounded-2xl border border-[var(--chalk-line)] bg-[var(--chalk-surface)] px-7 py-(--space-6) text-center", stacked && "w-[340px] py-8", className)}
+      >
         {stacked ? (
           <span aria-hidden="true" className="mb-1 flex h-8 items-center text-[var(--chalk-soft-text)] [&>svg]:h-8 [&>svg]:w-8">
             {stacked === "name" ? <CallEventIcon kind="host" /> : null}
@@ -92,7 +96,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
           </span>
         ) : null}
         {message ? (
-          <p role={active ? "status" : undefined} className={cn("flex items-center gap-2.5 font-semibold", stacked ? "text-[18px]" : "text-[17px]")}>
+          <p role={active ? "status" : undefined} className={cn("flex items-center gap-2.5 font-semibold", stacked ? "text-(length:--type-lead)" : "text-(length:--type-lead)")}>
             {message.endsWith("…") && !stacked ? <span aria-hidden="true" className="h-[18px] w-[18px] animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
             {message}
           </p>
@@ -124,7 +128,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
   );
   if (overlay) return layer;
   return (
-    <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}>
+    <div data-chalk data-chalk-theme={theme?.colorScheme ?? "dark"} className="chalk-root relative h-full min-h-0 w-full overflow-hidden bg-[var(--chalk-app-canvas)]" style={{ ...chalkThemeStyle(theme), fontSize: "var(--type-body)", lineHeight: 1.4 }}>
       <div aria-hidden="true" className="absolute left-5 top-5 text-sm font-medium text-[var(--chalk-muted-text)]">
         {spaceName}
       </div>

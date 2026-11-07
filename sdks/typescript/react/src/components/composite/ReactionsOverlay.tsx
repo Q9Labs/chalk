@@ -88,7 +88,7 @@ function TileReaction({ reaction, root }: { readonly reaction: ActiveReaction; r
       </span>
       {host
         ? createPortal(
-            <span ref={emoji} aria-hidden="true" className="pointer-events-none absolute bottom-[28%] left-1/2 z-40 text-[44px] leading-[1.4]" style={{ transform: "translateX(-50%)" }}>
+            <span ref={emoji} aria-hidden="true" className="pointer-events-none absolute bottom-[28%] left-1/2 z-40 text-(length:--type-display) leading-[1.4]" style={{ transform: "translateX(-50%)" }}>
               {reaction.reaction}
             </span>,
             host,

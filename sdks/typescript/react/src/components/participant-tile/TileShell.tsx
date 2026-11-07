@@ -34,7 +34,7 @@ export function TileShell({ label, participantId, accentColor, pinned = false, r
       data-part="stage-tile"
       data-participant-id={participantId}
       className={cn(
-        "group/tile relative overflow-clip rounded-[12px] bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-[14px] motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out]",
+        "group/tile relative overflow-clip rounded-(--corner-xl) bg-[var(--chalk-app-tile-base)] max-[640px]:rounded-(--corner-xl) motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-[ease-out]",
         onClick && lift && "min-[641px]:[@media(hover:hover)]:hover:-translate-y-0.5",
         className,
       )}
@@ -61,12 +61,15 @@ export function TileShell({ label, participantId, accentColor, pinned = false, r
         aria-hidden="true"
         data-part="speaking-ring"
         className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] motion-safe:transition-opacity motion-safe:duration-[90ms] motion-safe:ease-linear"
-        style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "inset 0 0 0 3px color-mix(in srgb, var(--chalk-on-overlay) 90%, transparent), inset 0 0 0 4px var(--chalk-scrim)" }}
+        style={{ opacity: speaking ? 0.3 + 0.7 * audioLevel : 0, boxShadow: "var(--elevation-speaking-band)" }}
       />
-      {ring ? <div aria-hidden="true" data-part="follow-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] shadow-[inset_0_0_0_2px_var(--chalk-text)]" /> : null}
+      {ring ? <div aria-hidden="true" data-part="follow-ring" className="pointer-events-none absolute inset-0 z-30 rounded-[inherit] shadow-(--elevation-focus-ring-inset)" /> : null}
       {corner}
       {chip ? (
-        <div data-part="tile-tag" className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-[5px] rounded-[6px] bg-[var(--chalk-overlay)] px-2 text-[12px] leading-[1.4] font-medium text-[var(--chalk-on-overlay)]">
+        <div
+          data-part="tile-tag"
+          className="pointer-events-none absolute bottom-2 left-2 z-30 flex h-6 max-w-[calc(100%_-_16px)] items-center gap-(--space-1-5) rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 text-(length:--type-caption) leading-[1.4] font-medium text-[var(--chalk-on-overlay)]"
+        >
           {chip}
         </div>
       ) : null}

@@ -279,7 +279,7 @@ export const ChatPanelSurface = React.memo(
       <div className={cn("relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-transparent text-[var(--chalk-app-text)]", className)} role="complementary" aria-label="Chat panel">
         <CallCardStyles />
         {variant === "sidebar" ? (
-          <header className=" flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-[18px]">
+          <header className=" flex items-center justify-between border-b border-[var(--chalk-app-line)] bg-[var(--chalk-app-panel)] px-5 py-(--space-4)">
             <h2 className="text-xl font-semibold tracking-[-0.025em] text-[var(--chalk-app-text)]">{title}</h2>
             {onClose ? (
               <button
