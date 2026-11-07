@@ -14,6 +14,55 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   @participant_id "20000000-0000-4000-8000-000000000002"
   @scene_id "10000000-0000-4000-8000-000000000001"
+  @session_id "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c"
+
+  test "hello baggage is propagated to authenticated and closed observability events" do
+    owner = self()
+    handler = "whiteboard-session-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event in ["sync.websocket.authenticated", "sync.websocket.closed"] do
+          send(owner, {:whiteboard_observed, metadata.event, metadata.session_id})
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    assert Task.async(fn -> authenticate_hello("session.id=#{@session_id}") end)
+           |> Task.await() == :live
+
+    assert_receive {:whiteboard_observed, "sync.websocket.authenticated", @session_id}
+    assert_receive {:whiteboard_observed, "sync.websocket.closed", @session_id}
+  end
+
+  test "invalid hello baggage does not prevent authentication" do
+    owner = self()
+    handler = "whiteboard-invalid-session-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler,
+      [:chalk_sync, :observability, :event],
+      fn _, _, metadata, _ ->
+        if metadata.event in ["sync.websocket.authenticated", "sync.websocket.closed"] do
+          send(owner, {:whiteboard_observed, metadata.event, metadata.session_id})
+        end
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    assert Task.async(fn -> authenticate_hello("session.id=invalid") end)
+           |> Task.await() == :live
+
+    assert_receive {:whiteboard_observed, "sync.websocket.authenticated", nil}
+    assert_receive {:whiteboard_observed, "sync.websocket.closed", nil}
+  end
 
   defmodule Repository do
     def connect(identity) do
@@ -1849,6 +1898,29 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       revision: revision,
       elements: [element()]
     }
+  end
+
+  defp authenticate_hello(baggage) do
+    identity = identity()
+    {:ok, initial} = SocketWhiteboardV1.init(%{})
+
+    frame = %{
+      "type" => "hello",
+      "protocol" => "whiteboard-v1",
+      "token" => token(identity),
+      "cursor" => nil,
+      "baggage" => baggage
+    }
+
+    case SocketWhiteboardV1.handle_in({JSON.encode!(frame), [opcode: :text]}, initial) do
+      {:push, {:text, _welcome}, state} ->
+        phase = state.phase
+        SocketWhiteboardV1.terminate(:normal, state)
+        phase
+
+      other ->
+        other
+    end
   end
 
   defp token(identity) do

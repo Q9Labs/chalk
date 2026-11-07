@@ -17,9 +17,14 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-type publicJoinPolicyBinding struct{ binding mediaplane.Binding }
+type publicJoinPolicyBinding struct {
+	binding mediaplane.Binding
+	// clients records what the resolver was asked to bind for.
+	clients *mediaplane.ClientProviders
+}
 
-func (s publicJoinPolicyBinding) ResolveBinding(tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+func (s publicJoinPolicyBinding) ResolveBinding(_ tenants.Tenant, _ spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	*s.clients = clients
 	return &s.binding, nil
 }
 
@@ -75,8 +80,9 @@ func TestPublicJoinFreezesRecordingPolicyAndMediaBinding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repository := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, publicJoinPolicyBinding{binding: binding})
-	episode, created, _, err := repository.ensurePublicLiveEpisode(ctx, queries, tx, tenantID, spaceID, space)
+	var asked mediaplane.ClientProviders
+	repository := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, publicJoinPolicyBinding{binding: binding, clients: &asked})
+	episode, created, _, err := repository.ensurePublicLiveEpisode(ctx, queries, tx, tenantID, spaceID, space, mediaplane.AllClientProviders())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +92,9 @@ func TestPublicJoinFreezesRecordingPolicyAndMediaBinding(t *testing.T) {
 	}
 	if err := json.Unmarshal(episode.ConfigSnapshot, &snapshot); err != nil {
 		t.Fatal(err)
+	}
+	if !asked.Runs(mediaplane.ProviderChalkSFU) {
+		t.Fatal("the public join did not pass the guest's declared providers to the media binding")
 	}
 	if !created || snapshot.Policy.Recording.Mode != artifactpolicy.RecordingAutomatic || snapshot.Policy.Transcription.Mode != artifactpolicy.TranscriptionAutomatic || snapshot.Binding != binding {
 		t.Fatalf("public join lost immutable policy: created=%v snapshot=%+v", created, snapshot)

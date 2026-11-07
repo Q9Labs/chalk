@@ -67,6 +67,7 @@ const (
 
 const (
 	PublicProviderCloudflareSFU = "cloudflare_sfu"
+	PublicProviderChalkSFU      = "chalk_sfu"
 
 	ProviderCloudflareSFU = PublicProviderCloudflareSFU
 )
@@ -273,6 +274,8 @@ type CreateAdmissionRequestInput struct {
 	ArrivalHandle utilities.ID
 	DisplayName   string
 	ExpiresAt     time.Time
+	// MediaClients is what the knocking guest's SDK can run. Its request creates the Episode when none is live.
+	MediaClients mediaplane.ClientProviders
 }
 
 type DecideAdmissionRequestInput struct {
@@ -331,6 +334,8 @@ type PublicAccessInput struct {
 	Arrival                Arrival
 	MediaProof             string
 	ReplaceMediaConnection bool
+	// MediaClients is what the guest's SDK can run.
+	MediaClients mediaplane.ClientProviders
 }
 
 type PublicSpaceCreated struct {
@@ -381,6 +386,16 @@ type PublicAccessClientPayload struct {
 	ICEServers      []mediaplane.ICEServer
 	ProviderSubject string
 	Token           string
+	// EpisodeRef, ICEServers and Capabilities describe the own SFU. Cloudflare sets none of them but ICEServers.
+	EpisodeRef   string
+	Capabilities PublicAccessCapabilities
+}
+
+// PublicAccessCapabilities is what the own SFU can do for one connection.
+type PublicAccessCapabilities struct {
+	ServerLayerAdaptation bool
+	SubscriptionState     bool
+	ICERestart            bool
 }
 
 type SpacePublicInvite = ManagedInvite
@@ -427,6 +442,7 @@ type CreatePublicSpaceInput struct {
 	Native      bool
 	// LegacyInviteLink supports shipped native builds that predate invite codes.
 	LegacyInviteLink bool
+	MediaClients     mediaplane.ClientProviders
 }
 
 type PublicInviteArrivalInput struct {
@@ -440,6 +456,7 @@ type PublicInviteArrivalInput struct {
 	AccountID         utilities.ID
 	AccountAuthorized bool
 	Native            bool
+	MediaClients      mediaplane.ClientProviders
 }
 
 type PublicInviteArrivalStatusInput struct {
@@ -447,6 +464,7 @@ type PublicInviteArrivalStatusInput struct {
 	GuestCredential string
 	AccountID       utilities.ID
 	Native          bool
+	MediaClients    mediaplane.ClientProviders
 }
 
 type PublicInviteRefreshInput struct {
@@ -456,6 +474,7 @@ type PublicInviteRefreshInput struct {
 	Native                 bool
 	MediaProof             string
 	ReplaceMediaConnection bool
+	MediaClients           mediaplane.ClientProviders
 }
 
 type PublicInviteLeaveInput struct {

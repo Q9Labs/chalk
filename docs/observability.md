@@ -59,7 +59,9 @@ Deploy the API and Sync before the SDK. The API must allow the `Baggage` header 
 CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
 frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
-later reconnects. The whiteboard socket does not carry the ID yet.
+later reconnects. The whiteboard client sends the same baggage member beside its
+presenter-view extensions, then retries without baggage after a 1009 close from
+an older server.
 
 ### Compare call quality by connection type
 
@@ -141,6 +143,14 @@ subscription state" tests), `sdks/typescript/client/src/media/subscription-deliv
 `apps/api/internal/httpapi/sfu_subscriptions_test.go`,
 `apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
 `apps/api/internal/adapters/chalksfu/conformance_test.go`.
+
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
 
 ### Interrupted recording stops and missing provider tracks
 
