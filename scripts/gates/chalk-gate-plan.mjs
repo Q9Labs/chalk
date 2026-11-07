@@ -12,10 +12,11 @@ const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", "
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
 const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
-// q9gate matches these by basename and directory anywhere in the tree; matching at least as much keeps the CI job
-// selection from skipping a job that q9gate would run in full mode.
-const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
+// q9gate matches these by basename and directory anywhere in the tree. The CI job selection matches the same names,
+// except for the data files below, which only the always-selected checks lane reads.
+const gateDefinitionNames = new Set([".dependency-cruiser.cjs", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
+const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -79,6 +80,7 @@ function startsWithAny(file, prefixes) {
 }
 
 function isGateDefinition(file) {
+  if (gateDataFiles.has(file)) return false;
   return gateDefinitionPaths.has(file) || gateDefinitionNames.has(path.posix.basename(file)) || gateDefinitionDirectories.some((directory) => file.startsWith(directory) || file.includes(`/${directory}`));
 }
 
@@ -388,7 +390,9 @@ export function createGatePlan(files, options = {}) {
   const serviceGates = servicesExternal ? [] : [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
   const base = options.base ?? "origin/master";
   const scope = options.scope ?? "staged";
-  const fallowCommand = explicitFull ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
+  // A changed Fallow configuration is not source, but only a whole-repository audit exercises it.
+  const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
+  const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
@@ -426,7 +430,7 @@ export function createGatePlan(files, options = {}) {
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
-    task("fallow", "Changed-code analysis", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, fallowCommand),
+    task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
     task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
       "pnpm",
@@ -558,7 +562,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["call-performance", "build", "publint", "attw"] };
+const rootLaneGroups = { "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["call-performance", "build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";

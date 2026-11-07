@@ -11,22 +11,25 @@ import (
 )
 
 func bindMCPEpisodeTools(server *mcp.Server, o Options) {
-	bindMCPEndpoint(server, mcpapi.ListEpisodes, listEpisodesEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpacePageInput) listEpisodesRequest {
-		return listEpisodesRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), Page: b.page(i.PageInput)}
-	})
-	mcpapi.Bind(server, mcpapi.InspectEpisode, func(ctx context.Context, i mcpapi.EpisodeInput) (json.RawMessage, error) {
+	mcpapi.Bind(server, mcpapi.InspectEpisodes, func(ctx context.Context, i mcpapi.EpisodesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
-		request := getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)}
-		if i.View == "attendance" {
-			return mcpInvoke(b, getEpisodeAttendanceEndpoint(o.Episodes, o.TenantAuthz), request)
+		switch i.View {
+		case "episode":
+			return mcpInvoke(b, getEpisodeEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
+		case "attendance":
+			return mcpInvoke(b, getEpisodeAttendanceEndpoint(o.Episodes, o.TenantAuthz), getEpisodeRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID)})
+		case "live":
+			return mcpInvoke(b, listSpaceLiveEpisodesEndpoint(o.Episodes, o.TenantAuthz), listSpaceLiveEpisodesRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumLiveEpisodeSpaces)})
+		case "activity":
+			return mcpInvoke(b, listSpaceActivityEndpoint(o.Episodes, o.TenantAuthz), listSpaceActivityRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumActivitySpaces)})
+		case "admissions":
+			return mcpInvoke(b, listPublicAdmissionRequestsEndpoint(o.PublicInvites, o.TenantAuthz), listPublicAdmissionRequestsRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), State: i.State})
+		default:
+			return mcpInvoke(b, listEpisodesEndpoint(o.Episodes, o.TenantAuthz), listEpisodesRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), Page: b.page(i.PageInput)})
 		}
-		return mcpInvoke(b, getEpisodeEndpoint(o.Episodes, o.TenantAuthz), request)
 	})
 	bindMCPEndpoint(server, mcpapi.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
 		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, Body: i.Body}
-	})
-	bindMCPEndpoint(server, mcpapi.ListLiveEpisodes, listSpaceLiveEpisodesEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpaceSetInput) listSpaceLiveEpisodesRequest {
-		return listSpaceLiveEpisodesRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumLiveEpisodeSpaces)}
 	})
 	bindMCPEndpoint(server, mcpapi.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.EpisodeInput) endEpisodeEndpointRequest {
 		return endEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey}
@@ -37,9 +40,6 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 			b.err = apiErrorInvalidRequest
 		}
 		return setDeadlineEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey, Body: setDeadlineRequest{DeadlineAt: deadline}}
-	})
-	bindMCPEndpoint(server, mcpapi.ListAdmissionRequests, listPublicAdmissionRequestsEndpoint(o.PublicInvites, o.TenantAuthz), func(b *mcpRequest, i mcpapi.AdmissionsInput) listPublicAdmissionRequestsRequest {
-		return listPublicAdmissionRequestsRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), State: i.State}
 	})
 	mcpapi.Bind(server, mcpapi.DecideAdmissionRequest, func(ctx context.Context, i mcpapi.AdmissionDecisionInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)

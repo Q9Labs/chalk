@@ -27,9 +27,9 @@ class HarnessTests(unittest.TestCase):
 
     def test_stream_accounts_all_models_and_detects_unwanted_tools(self):
         stream = [
-            {"type": "system", "subtype": "init", "tools": ["Bash", "mcp__chalk__chalk_list_spaces"]},
+            {"type": "system", "subtype": "init", "tools": ["Bash", "mcp__chalk__chalk_inspect_spaces"]},
             {"type": "assistant", "message": {"model": MODEL, "content": [
-                {"type": "tool_use", "id": "one", "name": "mcp__chalk__chalk_list_spaces", "input": {}}]}},
+                {"type": "tool_use", "id": "one", "name": "mcp__chalk__chalk_inspect_spaces", "input": {}}]}},
             {"type": "user", "message": {"content": [{"type": "tool_result", "is_error": True}]}},
             {"type": "result", "num_turns": 2, "total_cost_usd": 0.12, "modelUsage": {
                 MODEL: {"inputTokens": 10, "outputTokens": 20, "cacheReadInputTokens": 30, "cacheCreationInputTokens": 40},
@@ -62,7 +62,7 @@ class HarnessTests(unittest.TestCase):
 
     def test_scope_grader_requires_the_requested_operation_and_rejection(self):
         task = Task("missing-scope", "attempt rename", {"changed": False, "missing_scope": "tenants:write"})
-        unrelated = {"server_outcomes": {"chalk_inspect_space:auth.forbidden": 1}}
+        unrelated = {"server_outcomes": {"chalk_inspect_spaces:auth.forbidden": 1}}
         self.assertFalse(grade(task, task.expected, None, unrelated)[0])
         requested = {"server_outcomes": {"chalk_update_tenant:auth.forbidden": 1}}
         self.assertTrue(grade(task, task.expected, None, requested)[0])

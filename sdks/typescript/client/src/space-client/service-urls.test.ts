@@ -17,6 +17,7 @@ describe("default Sync address", () => {
     ["http://localhost:14100", "ws://localhost:14100/v1/sync"],
     ["https://custom.example.test/prefix", "wss://custom.example.test/v1/sync"],
     ["https://apiary.example.test", "wss://apiary.example.test/v1/sync"],
+    ["https://api.example.test/proxy?source=mobile#config", "wss://sync.example.test/v1/sync"],
   ])("routes %s to %s", (api, sync) => {
     expect(defaultSyncUrl(api)).toBe(sync);
   });

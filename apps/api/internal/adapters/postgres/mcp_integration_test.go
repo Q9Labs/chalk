@@ -175,13 +175,13 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, admissionProofLinks{})
+	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, mcpInviteLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	transcriptRepo := NewTranscriptRepositoryWithPool(q, pool)
 	storage := objectstorage.NewService(mcpDownloadStore{key: objectKey})
-	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
+	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), TranscriptTextMetadata: NewTranscriptTextRepository(q), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
 	options.RateLimit.DisableAuthenticated = true
 	options.LocalSystemToken = "mcp-system-fixture"
 	options.MCP = httpapi.NewMCPHandler(options)
@@ -243,6 +243,39 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 			}
 		})
 	}
+	// Every view of a multi-view read tool needs its own scope and fields. The
+	// transcript fixture has no artifact, so reading its content must refuse as not ready.
+	for _, view := range []mcpToolCase{
+		{"inspect_webhooks", fmt.Sprintf(`{"view":"endpoint","endpoint_id":%q}`, hook.Endpoint.ID), ""},
+		{"inspect_webhooks", fmt.Sprintf(`{"view":"deliveries","endpoint_id":%q}`, hook.Endpoint.ID), ""},
+		{"inspect_spaces", fmt.Sprintf(`{"view":"settings","space_id":%q}`, spaceID), ""},
+		{"inspect_spaces", fmt.Sprintf(`{"view":"invite","space_id":%q}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"episode","space_id":%q,"episode_id":%q}`, spaceID, episodeID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"attendance","space_id":%q,"episode_id":%q}`, spaceID, episodeID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"live","space_ids":[%q]}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"activity","space_ids":[%q]}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"admissions","space_id":%q}`, spaceID), ""},
+		{"inspect_recordings", fmt.Sprintf(`{"view":"recording","recording_id":%q}`, recordingID), ""},
+		{"inspect_recordings", fmt.Sprintf(`{"view":"download_url","recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},
+		{"inspect_tenant", `{"view":"settings"}`, ""},
+		{"inspect_tenant", `{"view":"memberships"}`, ""},
+		{"inspect_tenant", `{"view":"api_keys"}`, ""},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"metadata","transcript_id":%q}`, transcriptID), ""},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"text","transcript_id":%q}`, transcriptID), "not_ready"},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"document","transcript_id":%q}`, transcriptID), "not_ready"},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"download_url","transcript_id":%q,"expires_in_seconds":60}`, transcriptID), "not_ready"},
+	} {
+		result := callMCP(t, fullSession, view.name, view.args)
+		if view.wantError == "" && result.IsError || view.wantError != "" && (!result.IsError || !strings.Contains(mcpText(result), view.wantError)) {
+			t.Fatalf("%s %s: error=%v %s", view.name, view.args, result.IsError, mcpText(result))
+		}
+	}
+	settings := mcpText(callMCP(t, fullSession, "inspect_tenant", `{}`))
+	for _, field := range []string{"cors_allowed_origins", "recording_retention_seconds", "default_media_plane", "transcription_default_mode"} {
+		if !strings.Contains(settings, field) {
+			t.Fatalf("tenant settings view lacks %s: %s", field, settings)
+		}
+	}
 	// Exhaust the public HTTP write budget with invalid bodies, then prove MCP
 	// cannot evade that same per-key bucket. Read tools must remain usable.
 	limitedOptions := options
@@ -265,7 +298,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if !result.IsError || !strings.Contains(mcpText(result), "rate_limited") {
 		t.Fatalf("MCP escaped the HTTP write quota: %s", mcpText(result))
 	}
-	result = callMCP(t, limitedSession, "list_spaces", `{}`)
+	result = callMCP(t, limitedSession, "inspect_spaces", `{}`)
 	if result.IsError {
 		t.Fatal("exhausting writes also denied reads")
 	}
@@ -281,7 +314,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 			if result.IsError || !ok || profile["id"] != tenantID.String() || profile["name"] != "MCP changed" || !strings.Contains(mcpText(result), "tenants:read") {
 				t.Fatal("profile identity changed after reconnection or tenant rename, or lost its scopes")
 			}
-			result = callMCP(t, session, "inspect_space", fmt.Sprintf(`{"space_id":%q}`, foreignSpace))
+			result = callMCP(t, session, "inspect_spaces", fmt.Sprintf(`{"view":"settings","space_id":%q}`, foreignSpace))
 			if !result.IsError || strings.Contains(mcpText(result), "MCP foreign private") {
 				t.Fatal("foreign identifier escaped tenant isolation")
 			}
@@ -304,7 +337,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	// Schema validation must reject tenant selection and missing destructive
 	// action fields before any operation can execute.
 	for _, attempt := range []mcpToolCase{
-		{name: "list_spaces", args: fmt.Sprintf(`{"tenant_id":%q}`, foreignTenant)},
+		{name: "inspect_spaces", args: fmt.Sprintf(`{"tenant_id":%q}`, foreignTenant)},
 		{name: "configure_space", args: fmt.Sprintf(`{"action":"invite","space_id":%q}`, spaceID)},
 		{name: "configure_webhook", args: fmt.Sprintf(`{"action":"delete","endpoint_id":%q}`, hook.Endpoint.ID)},
 	} {
@@ -332,4 +365,11 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if _, err := deniedSession.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_get_connection", Arguments: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("revoked key retained an initialized MCP connection")
 	}
+}
+
+// mcpInviteLinks gives the invite view a canonical URL; the shared proof stub has no links.
+type mcpInviteLinks struct{ publicinvites.Links }
+
+func (mcpInviteLinks) InviteURL(code string) (string, error) {
+	return "https://invite.example/" + code, nil
 }

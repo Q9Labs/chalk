@@ -14,31 +14,14 @@ type BodyInput[B any] struct {
 	Body       B      `json:"body"`
 	RequestKey string `json:"request_key,omitempty"`
 }
-type SpaceInput struct {
-	ReadInput
-	SpaceID string `json:"space_id"`
-	View    string `json:"view,omitempty"`
-}
 type SpaceBodyInput[B any] struct {
 	SpaceID    string `json:"space_id"`
 	Body       B      `json:"body"`
 	RequestKey string `json:"request_key,omitempty"`
 }
-type SpacesInput struct {
-	PageInput
-	Archived *bool `json:"archived,omitempty"`
-}
-type SpaceSetInput struct {
-	ReadInput
-	SpaceIDs []string `json:"space_ids"`
-}
 type ArchiveInput struct {
 	SpaceID  string `json:"space_id"`
 	Archived bool   `json:"archived"`
-}
-type SpacePageInput struct {
-	PageInput
-	SpaceID string `json:"space_id"`
 }
 type EpisodeInput struct {
 	ReadInput
@@ -56,40 +39,35 @@ type RemovalInput struct {
 	ParticipantID         string `json:"participant_id"`
 	ParticipantGeneration int64  `json:"participant_generation"`
 }
-type AdmissionsInput struct {
-	SpaceInput
-	State string `json:"state,omitempty"`
-}
 type AdmissionDecisionInput struct {
 	SpaceID       string `json:"space_id"`
 	RequestHandle string `json:"request_handle"`
 	Decision      string `json:"decision"`
 	RequestKey    string `json:"request_key,omitempty"`
 }
-type RecordingsInput struct {
-	PageInput
-	SpaceID   string `json:"space_id,omitempty"`
-	EpisodeID string `json:"episode_id,omitempty"`
-}
 type RecordingInput struct {
 	ReadInput
 	RecordingID string `json:"recording_id"`
 }
-type RecordingDownloadInput struct {
-	ReadInput
-	RecordingID      string `json:"recording_id"`
-	ExpiresInSeconds int    `json:"expires_in_seconds"`
-	Download         bool   `json:"download,omitempty"`
-}
-type TranscriptsInput struct {
+type TenantViewInput struct {
 	PageInput
-	RecordingID string `json:"recording_id,omitempty"`
+	View string `json:"view,omitempty"`
 }
-type TranscriptInput struct {
-	ReadInput
-	TranscriptID     string `json:"transcript_id"`
+type TranscriptViewInput struct {
+	PageInput
 	View             string `json:"view,omitempty"`
+	RecordingID      string `json:"recording_id,omitempty"`
+	TranscriptID     string `json:"transcript_id,omitempty"`
 	ExpiresInSeconds int    `json:"expires_in_seconds,omitempty"`
+}
+type TranscriptIDInput struct {
+	TranscriptID string `json:"transcript_id"`
+}
+type TranscriptRequestInput struct {
+	RecordingID string   `json:"recording_id"`
+	Language    string   `json:"language,omitempty"`
+	Languages   []string `json:"languages,omitempty"`
+	RequestKey  string   `json:"request_key"`
 }
 type MembershipInput[C, U any] struct {
 	Action       string `json:"action"`
@@ -107,10 +85,6 @@ type KeyInput[C, R any] struct {
 type KeyIDInput struct {
 	APIKeyID string `json:"api_key_id"`
 }
-type WebhookInspectInput struct {
-	PageInput
-	EndpointID string `json:"endpoint_id,omitempty"`
-}
 type WebhookChangeInput[C, U, R any] struct {
 	Action     string `json:"action"`
 	EndpointID string `json:"endpoint_id,omitempty"`
@@ -119,13 +93,6 @@ type WebhookChangeInput[C, U, R any] struct {
 	Create     C      `json:"create,omitempty"`
 	Update     U      `json:"update,omitempty"`
 	Rotate     R      `json:"rotate,omitempty"`
-}
-type WebhookDeliveriesInput struct {
-	PageInput
-	EndpointID string   `json:"endpoint_id"`
-	DeliveryID string   `json:"delivery_id,omitempty"`
-	States     []string `json:"states,omitempty"`
-	EventTypes []string `json:"event_types,omitempty"`
 }
 type WebhookSendInput struct {
 	EndpointID string `json:"endpoint_id"`
@@ -146,4 +113,35 @@ type PreparationInput struct {
 	Action           string `json:"action"`
 	StartsAt         string `json:"starts_at,omitempty"`
 	ExpectedRevision int64  `json:"expected_revision,omitempty"`
+}
+type SpacesViewInput struct {
+	PageInput
+	View     string `json:"view,omitempty"`
+	SpaceID  string `json:"space_id,omitempty"`
+	Archived *bool  `json:"archived,omitempty"`
+}
+type EpisodesViewInput struct {
+	PageInput
+	View      string   `json:"view,omitempty"`
+	SpaceID   string   `json:"space_id,omitempty"`
+	EpisodeID string   `json:"episode_id,omitempty"`
+	SpaceIDs  []string `json:"space_ids,omitempty"`
+	State     string   `json:"state,omitempty"`
+}
+type RecordingsViewInput struct {
+	PageInput
+	View             string `json:"view,omitempty"`
+	SpaceID          string `json:"space_id,omitempty"`
+	EpisodeID        string `json:"episode_id,omitempty"`
+	RecordingID      string `json:"recording_id,omitempty"`
+	ExpiresInSeconds int    `json:"expires_in_seconds,omitempty"`
+	Download         bool   `json:"download,omitempty"`
+}
+type WebhooksViewInput struct {
+	PageInput
+	View       string   `json:"view,omitempty"`
+	EndpointID string   `json:"endpoint_id,omitempty"`
+	DeliveryID string   `json:"delivery_id,omitempty"`
+	States     []string `json:"states,omitempty"`
+	EventTypes []string `json:"event_types,omitempty"`
 }

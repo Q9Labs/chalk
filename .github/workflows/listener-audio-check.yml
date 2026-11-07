@@ -17,6 +17,11 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels its older run. Scheduled and manual runs keep their own group.
+concurrency:
+  group: listener-audio-check-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Listener audio check tests

@@ -100,8 +100,10 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		ScreenStreamCost:      210,
 		EpisodePacketCeiling:  1 << 20,
 		Memory:                config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10},
+		// A test process shares its CPUs with other packages, so its own scheduler
+		// latency says nothing about a node; guard tests that read it set their own.
 		Guard: config.Guard{
-			MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond,
+			MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 5 * time.Second,
 			MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second,
 		},
 		MaxEpisodeParticipants:     16,

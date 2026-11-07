@@ -52,8 +52,10 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		EpisodePacketCeiling:       1 << 20,
 		ScreenStreamCost:           210,
 		Memory:                     testMemory,
+		// A test process shares its CPUs with other packages, so its own scheduler
+		// latency says nothing about a node; guard tests that read it set their own.
 		Guard: config.Guard{
-			MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond,
+			MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 5 * time.Second,
 			MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second,
 		},
 		NegotiationTimeout: 5 * time.Second,

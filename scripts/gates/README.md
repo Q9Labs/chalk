@@ -19,14 +19,15 @@ the `services` lane, because CI runs the API and Sync gates as separate jobs.
 every night, and on manual dispatch. `Select gate jobs` runs
 `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
 same plan as the lanes to pick the jobs a pull request needs: the API gate, the
-Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
-per lane group: `checks` (every lane that no other group names, including type
-checks), `tests` (non-browser workspaces), `browser-tests` (the web app and SDK
+Sync gate, and the root lane groups. The root lanes run as jobs, one
+per lane group, at most four at a time (`max-parallel`) so one run cannot hold the organisation's hosted-runner slots: `checks` (every lane that no other group names, including type
+checks and the non-browser workspace tests), `browser-tests` (the web app and SDK
 consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboard against the real API),
 `call-leaks` (call resource cleanup journeys), and `build` (with the call bundle
 budget, Publint and Are The Types Wrong, which read the build output). The call
 bundle budget and the leak journeys run only when a file the call-states page
 imports changes (see `callUi` in `chalk-gate-plan.mjs`) or on a full gate.
+`Select gate jobs` and `Root gate` run on `ubuntu-slim`. GitHub documents the same concurrency model for single-CPU runners as for the others, but in a probe during a backlog they started at once instead of waiting for one of the 20 hosted-runner slots, so treat that as observed, not guaranteed. Editing `.fallowrc.json` or the design-token baseline in `scripts/gates/` (added by the design-token pull requests) selects only the `checks` group (a `.fallowrc.json` edit also runs a whole-repository Fallow audit); any other file under `scripts/gates/` or `package.json` still selects the full gate.
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when every
 selected group passed; a job that the planner skips counts as passed. When the

@@ -120,7 +120,8 @@ def preflight(args, db):
     base = args.base_url.rstrip("/") + "/mcp"
     endpoint = base if args.arm == "tools" else base + "/code"
     catalog = rpc(endpoint, f["key"], "tools/list", {})["tools"]
-    if not catalog or args.arm == "tools" and len(catalog) != 33:
+    # The runner key lacks tenants:write on purpose (the missing-scope task), so the filtered list is 24 of 25.
+    if not catalog or args.arm == "tools" and len(catalog) != 24:
         raise RuntimeError("Unexpected MCP tool catalog; update the suite deliberately")
     if args.arm == "code":
         if {t["name"] for t in catalog} != {"chalk_search_api", "chalk_execute"}:
@@ -128,15 +129,15 @@ def preflight(args, db):
         rpc(endpoint, f["key"], "tools/call", {"name": "chalk_search_api", "arguments": {"names": ["get_connection"]}})
         rpc(endpoint, f["key"], "tools/call", {"name": "chalk_execute", "arguments": {"code": "return await chalk.get_connection({});"}})
     for name, arguments in [
-        ("get_connection", {}), ("list_spaces", {}), ("list_recordings", {}),
-        ("list_transcripts", {}), ("list_admission_requests", {"space_id": f["spaces"]["Atlas"]}),
+        ("get_connection", {}), ("inspect_spaces", {}), ("inspect_recordings", {}),
+        ("inspect_transcripts", {}), ("inspect_episodes", {"view": "admissions", "space_id": f["spaces"]["Atlas"]}),
         ("inspect_webhooks", {}),
     ]:
         reply = rpc(base, f["key"], "tools/call", {"name": "chalk_" + name, "arguments": arguments})
         data = reply.get("structuredContent", {}).get("data", {})
-        if name == "list_recordings" and sorted(r["export"]["status"] for r in data["recordings"]) != ["failed", "ready", "ready", "ready"]:
+        if name == "inspect_recordings" and sorted(r["export"]["status"] for r in data["recordings"]) != ["failed", "ready", "ready", "ready"]:
             raise RuntimeError("Fixture does not expose the expected export states")
-        if name == "list_admission_requests" and [r["display_name"] for r in data["requests"]] != ["Esha"]:
+        if name == "inspect_episodes" and [r["display_name"] for r in data["requests"]] != ["Esha"]:
             raise RuntimeError("Fixture does not expose canonical pending admissions")
     rotation = next(t for t in suite(f) if t.id == "rotate-key")
     if grade(rotation, rotation.expected, db)[0]:

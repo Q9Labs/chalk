@@ -36,7 +36,7 @@ env:
 jobs:
   changes:
     name: Select gate jobs
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:
       api: ${{ steps.select.outputs.api }}
@@ -114,8 +114,11 @@ jobs:
     timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
+      # One run holds at most four root runners, so a full run takes 6 of the organisation's 20 hosted-runner slots
+      # (four root groups, API and Sync) instead of 10. The matrix lists the slowest groups first so they start first.
+      max-parallel: 4
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
@@ -245,7 +248,7 @@ jobs:
     name: Root gate
     needs: [changes, root-lanes]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
       - name: Check out source

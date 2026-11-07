@@ -91,7 +91,7 @@ redirects. HTTP 200 with admission open and spare budget emits zero with reason
 `tls_config` (the URL is not `https://`, or a certificate, key or CA file is unset, unreadable or invalid),
 `unreachable` (connect, handshake or timeout failure), `draining` (503),
 `http_status` (any other non-200), `invalid_response` (body is not the expected
-shape), `admission_cpu_steal`, `admission_cpu_busy`, `admission_pacer_queue_delay`,
+shape), `admission_cpu_steal`, `admission_cpu_busy`, `admission_scheduler_latency`,
 `admission_pacer_drops` or `admission_udp_buffer_errors` (the node refuses
 new Episodes), and `packet_budget` (reserved packets are at least 90% of the
 packet budget). A configured probe therefore fails closed: a missing file pages

@@ -53,7 +53,7 @@ test("changed files with non-ASCII or special characters in their names still se
   }
 });
 
-test("only pull request runs share a concurrency group, so no master scan is replaced", () => {
+test("pull request runs share a group per ref and master pushes share one, so a newer scan replaces an older one", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/codeql.yml", import.meta.url), "utf8");
-  assert.match(workflow, /group: codeql-\$\{\{ github\.event_name == 'pull_request' && github\.ref \|\| github\.run_id \}\}/);
+  assert.match(workflow, /group: codeql-\$\{\{ github\.event_name == 'pull_request' && github\.ref \|\| github\.event_name == 'push' && 'master' \|\| github\.run_id \}\}/);
 });
