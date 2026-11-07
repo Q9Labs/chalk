@@ -141,3 +141,6 @@ apps/web/public/chalk-mathjax/
 
 # Pinned camera-effects WASM copied by sync:public.
 apps/web/public/camera-effects/tasks-vision-*/
+
+# Verification evidence written by the verify-chalk skill
+.verify/

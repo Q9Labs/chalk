@@ -226,8 +226,11 @@ are retained, including `session_error` and `not_found`. Other codes become
 `unlisted`; invalid JSON or a missing, empty, or non-string `errorCode` becomes
 `unparsed_body`. These HTTP failures retain no response descriptions, message
 fingerprints, or bodies. Actual HTTP status and existing normalized errors remain
-available; cleanup acceptance and retry rules are unchanged. The boundary tests
-are in `apps/api/internal/adapters/cloudflare/sfu/http_failure_observability_test.go`.
+available. Forced close only recovers from an HTTP 200 track-level
+`provider_internal` failure when a complete inspection of the same session
+returns top-level HTTP 410 with `errorCode: "session_error"`; empty snapshots,
+404s, incomplete bodies, and other failures remain unresolved. The boundary
+tests are in `apps/api/internal/adapters/cloudflare/sfu/http_failure_observability_test.go`.
 
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
@@ -489,6 +492,11 @@ line. It records the check and reason, measured database values and limits or
 consumer freshness/failure counters where available; unavailable dependencies
 report `observed=false`. Exceptions and exits record only their category, never
 the raw error text. These are probe observations, before readiness hysteresis.
+
+Readiness status transitions emit `sync.readiness.changed` through the same
+observability path and JSON journal, only after hysteresis changes the cached
+status. The event includes the prior and new status, allowlisted failure reason,
+and consecutive failure count; recovery also reports time spent unready.
 
 Database query failures also record `query_stage` (`role`, `migration`, `pending_age`,
 or `replication`), `error_class`, and SQLSTATE when available. SQL text, parameters,

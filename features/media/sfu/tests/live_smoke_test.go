@@ -47,6 +47,10 @@ type liveLoad struct {
 	shareDuty                      float64
 	sharePeriod, hold, step, every time.Duration
 	samples                        string
+	capKbps                        int           // caps the first Participant's downlink, 0 for none
+	capAfter                       time.Duration // after this long in the hold
+	capEvery                       time.Duration // lift and restore the cap at this interval, 0 to keep it
+	capWithin                      time.Duration // the capped Participant must back off within this long of each cap
 }
 
 // shareOn is how long one share stretch lasts.
@@ -57,7 +61,7 @@ func (l liveLoad) shareOn() time.Duration {
 func liveLoadFromEnv(t *testing.T) liveLoad {
 	t.Helper()
 	load := liveLoad{classes: 2, participants: 3, cameras: 2, cameraKbps: [2]int{2500, 650}, shareDuty: 0.65,
-		sharePeriod: 4 * time.Minute, hold: 5 * time.Minute, every: time.Minute, samples: os.Getenv("SFU_LIVE_SAMPLES")}
+		sharePeriod: 4 * time.Minute, hold: 5 * time.Minute, every: time.Minute, capAfter: time.Minute, capWithin: 10 * time.Second, samples: os.Getenv("SFU_LIVE_SAMPLES")}
 	settings := []struct {
 		name   string
 		target any
@@ -65,6 +69,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
 		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
+		{"SFU_LIVE_CAP_KBPS", &load.capKbps}, {"SFU_LIVE_CAP_AFTER", &load.capAfter}, {"SFU_LIVE_CAP_EVERY", &load.capEvery}, {"SFU_LIVE_CAP_WITHIN", &load.capWithin},
 		{"SFU_LIVE_HOLD", &load.hold}, {"SFU_LIVE_STEP", &load.step}, {"SFU_LIVE_SAMPLE", &load.every},
 	}
 	for _, setting := range settings {
@@ -86,6 +91,11 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		if err != nil {
 			t.Fatalf("%s=%q: %v", setting.name, value, err)
 		}
+	}
+	// The subscriber is judged every two seconds, so the hold must outlast the
+	// deadline by two polls or a run could end with no verdict.
+	if need := load.capAfter + load.capWithin + 4*time.Second; load.capKbps > 0 && load.hold < need {
+		t.Fatalf("SFU_LIVE_HOLD=%v ends before the capped Participant is judged; it needs at least SFU_LIVE_CAP_AFTER + SFU_LIVE_CAP_WITHIN + 4s = %v", load.hold, need)
 	}
 	return load
 }
@@ -111,6 +121,9 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_CAMERA_KBPS   the cameras' h and l bitrates (default 2500,650)
 //	SFU_LIVE_SHARE_DUTY    the part of the time each class shares (default 0.65)
 //	SFU_LIVE_SHARE_PERIOD  one share stretch and one pause (default 4m)
+//	SFU_LIVE_CAP_KBPS      cap the first Participant's downlink at this rate, to see the node back off (default none)
+//	SFU_LIVE_CAP_AFTER     how long into the hold the cap starts (default 1m)
+//	SFU_LIVE_CAP_EVERY     lift the cap and restore it at this interval, to see the node back off again (default keep it)
 //	SFU_LIVE_HOLD          how long to hold them (default 5m)
 //	SFU_LIVE_STEP          add a class at this interval until the node refuses
 //	                       one or a quality signal breaks (default off)
@@ -207,6 +220,10 @@ func TestLiveSmokeClasses(t *testing.T) {
 			time.Sleep(10 * time.Second)
 		}
 	}
+	var capJudged atomic.Bool // the capped Participant has backed off or failed its deadline, and the last cap is judged
+	if load.capKbps > 0 {
+		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load, &capJudged)
+	}
 	cpu := readHostCPU()
 	// The baseline comes before the first wait, so drops during that wait count.
 	mu.Lock()
@@ -246,6 +263,19 @@ func TestLiveSmokeClasses(t *testing.T) {
 		}
 	}
 	mu.Lock()
+	if load.capKbps > 0 {
+		if !capJudged.Load() {
+			t.Errorf("the run ended before the capped Participant backed off or failed its %v deadline", load.capWithin)
+		}
+		capped := classes[0].receivers[0]
+		capped.mu.Lock()
+		for key, track := range capped.tracks {
+			if stalls, longest := track.stallsAt(time.Now(), classes[0].sharingSince()); track.kind == "audio" && stalls > 0 {
+				t.Errorf("%s: the capped Participant's audio %s stalled %d times, longest %v", classes[0].people[0].name, key, stalls, longest)
+			}
+		}
+		capped.mu.Unlock()
+	}
 	t.Logf("first class at the end:%s", classes[0].describe(svc))
 	for _, class := range classes {
 		for index, receiver := range class.receivers {
@@ -266,6 +296,74 @@ func TestLiveSmokeClasses(t *testing.T) {
 	// one still counts.
 	for _, failure := range fixedRunFailures(first, takeSample(svc, classes, &cpu)) {
 		t.Error(failure)
+	}
+}
+
+// capFirstParticipant squeezes one Participant's downlink after a while and
+// logs, every two seconds, what the node thinks of it: the estimate and what
+// its subscriptions forward. Each cap must bring the estimate under twice the
+// cap and take every tile off the high layer within load.capWithin, or the run
+// fails. The final report fails the run too if that Participant's audio stalled,
+// or if the run ends before a cap has been judged.
+func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad, judged *atomic.Bool) {
+	started := time.Now()
+	capped := 0 // cap changes so far: odd while the cap is on
+	var cappedAt time.Duration
+	var switchAt time.Duration
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		if since := time.Since(started); since >= load.capAfter && (capped == 0 || load.capEvery > 0 && since >= switchAt) {
+			capped++
+			rate := float64(load.capKbps) * 1000
+			if capped%2 == 1 {
+				person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
+				t.Logf("capped: %s downlink limited to %d kbit/s at %s", person.name, load.capKbps, time.Now().Format(time.TimeOnly))
+				cappedAt = since
+				judged.Store(false)
+			} else {
+				person.link.shape(0, 0, 0, 0, 0)
+				if !judged.Load() {
+					t.Errorf("%s was lifted from the %d kbit/s cap before it backed off", person.name, load.capKbps)
+				}
+				judged.Store(true)
+				t.Logf("capped: %s downlink lifted at %s", person.name, time.Now().Format(time.TimeOnly))
+			}
+			switchAt = since + load.capEvery
+		}
+		var inspected protocol.InspectResponse
+		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
+			if capped%2 == 1 && !judged.Load() && time.Since(started)-cappedAt > load.capWithin {
+				judged.Store(true)
+				t.Errorf("%s could not be inspected for %v after the %d kbit/s cap: %v", person.name, load.capWithin, load.capKbps, err)
+			}
+			continue
+		}
+		forwarded := map[string]int{}
+		for _, track := range inspected.Tracks {
+			if sub := track.Subscription; sub != nil {
+				forwarded[cmp.Or(sub.EffectiveRID, sub.State+"/"+sub.Reason)]++
+			}
+		}
+		transport := inspected.Transport
+		if capped%2 == 1 && !judged.Load() {
+			since := time.Since(started) - cappedAt
+			fell := forwarded["h"] == 0 && float64(transport.EstimateBps) <= 2*float64(load.capKbps)*1000
+			switch {
+			case since > load.capWithin:
+				judged.Store(true)
+				t.Errorf("%s did not back off within %v of the %d kbit/s cap (backed off by %v: %t): estimate %d, forwarding %v", person.name, load.capWithin, load.capKbps, since.Round(time.Second), fell, transport.EstimateBps, forwarded)
+			case fell:
+				judged.Store(true)
+				t.Logf("capped: %s backed off %v after the cap: estimate %d, forwarding %v", person.name, since.Round(time.Second), transport.EstimateBps, forwarded)
+			}
+		}
+		t.Logf("capped: +%v %s estimate %d proven %d queued %d dropped %d forwarding %v", time.Since(started).Round(time.Second), person.name, transport.EstimateBps, transport.ProvenBps, transport.QueuedBytes, transport.Dropped, forwarded)
 	}
 }
 

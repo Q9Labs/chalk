@@ -18,12 +18,13 @@ export async function runCli(argv = process.argv.slice(2), { cwd = process.cwd()
         return { code: state === "ready" ? 0 : 1, result: existing.record, config };
       }
     }
-    const supervisor = ["start", "reset"].includes(args.command) ? create(config, supervisorOptions) : undefined;
+    const supervisor = ["start", "reset", "down"].includes(args.command) ? create(config, supervisorOptions) : undefined;
     if (args.command === "start") shutdown = installSignalShutdown(supervisor, signalSource);
     const commandHooks = { ...(supervisor?.commandHooks || {}), ...(supervisorOptions?.hooks || {}) };
     const startup = runCommand(args.command, config, { supervisor: args.command === "start" ? supervisor : undefined, service: args.service, yes: args.yes, output, hooks: commandHooks });
     shutdown?.attachStartup(startup);
     const result = await startup;
+    if (args.command === "doctor") return { code: result.ok ? 0 : 1, result, config };
     if (args.command === "status" && args.ready) {
       const owner = await readOwner(config);
       const expectedCommand = owner?.supervisorExpectedCommand || owner?.supervisor?.expectedCommand;
