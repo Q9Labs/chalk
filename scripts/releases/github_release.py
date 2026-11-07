@@ -195,15 +195,21 @@ class GitHub:
     def newest_green_push_gate(self):
         # Merge queue groups and, before the queue, pushes to master supersede each other, so the newest commit may never
         # get a Gate. The newest commit that did is the nightly candidate; waiting for the tip's Gate would hold the plan
-        # behind the queue. Walking master's own history finds it however many unlanded groups ran in between.
-        base = 'actions/workflows/gate.yml/runs?status=success&per_page=100'
-        runs = (self.request(f'{base}&branch=master&event=push')['workflow_runs']
-                + self.request(f'{base}&event=merge_group')['workflow_runs'])
-        green = {run['head_sha'] for run in runs}
-        for commit in self.request('commits?sha=master&per_page=100'):
-            if commit['sha'] in green and self.has_green_gate(commit['sha'], push_only=True):
-                return commit['sha']
-        return None
+        # behind the queue. Each stream of successful runs is read newest first, a page at a time, until one run is a
+        # Gate that landed on master, so unlanded groups and long stretches of ungated commits cannot hide it.
+        found = [run for run in (self.newest_landed_gate('branch=master&event=push'), self.newest_landed_gate('event=merge_group')) if run]
+        return max(found, key=lambda run: run.get('created_at', ''))['head_sha'] if found else None
+
+    def newest_landed_gate(self, filters):
+        page = 1
+        while True:
+            runs = self.request(f'actions/workflows/gate.yml/runs?status=success&per_page=100&{filters}&page={page}')['workflow_runs']
+            for run in runs:
+                if self.has_green_gate(run['head_sha'], push_only=True):
+                    return run
+            if len(runs) < 100:
+                return None
+            page += 1
 
     def is_on_master(self, sha):
         return self.request(f'compare/master...{sha}')['status'] in ('behind', 'identical')

@@ -74,8 +74,6 @@ class MemoryGitHub(GitHub):
             return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
-        if route.startswith('commits?'):
-            return [dict(sha=sha) for sha in dict.fromkeys([self.tip] + [run['head_sha'] for run in reversed(self.gates)])]
         if route.startswith('actions/workflows/gate.yml/runs?') and 'status=success' in route:
             return dict(workflow_runs=[run for run in reversed(self.gates)
                                        if run['event'] == 'push' and run['conclusion'] == 'success'])
@@ -300,18 +298,20 @@ class CutTests(unittest.TestCase):
             with self.subTest(status), patch.object(api, 'pages', return_value=[queue]), patch.object(api, 'request', return_value=dict(status=status)):
                 self.assertEqual(api.has_green_gate(SHA), green)
 
-    def test_newest_green_gate_walks_master_history_past_unlanded_groups(self):
+    def test_newest_green_gate_pages_past_unlanded_groups(self):
         api = object.__new__(GitHub)
         landed = 'c' * 40
         def group(sha):
-            return dict(run_number=1, run_attempt=1, head_sha=sha, head_branch=f'gh-readonly-queue/master/pr-1-{sha}', event='merge_group', conclusion='success')
-        orphans = ['%040x' % number for number in range(1, 150)]
+            return dict(run_number=1, run_attempt=1, head_sha=sha, head_branch=f'gh-readonly-queue/master/pr-1-{sha}', event='merge_group',
+                        conclusion='success', created_at='2026-11-07T10:00:00Z')
+        everything = [group('%040x' % number) for number in range(1, 150)] + [group(landed)]
         def request(route):
-            if route.startswith('commits?'):
-                return [dict(sha='e' * 40), dict(sha=landed)]
             if route.startswith('compare/'):
-                return dict(status='behind')
-            return dict(workflow_runs=[group(sha) for sha in orphans + [landed]] if 'event=merge_group' in route else [])
+                return dict(status='behind' if route.endswith(landed) else 'diverged')
+            if 'event=merge_group' not in route:
+                return dict(workflow_runs=[])
+            page = int(route.rsplit('page=', 1)[1])
+            return dict(workflow_runs=everything[(page - 1) * 100:page * 100])
         with patch.object(api, 'request', side_effect=request), \
                 patch.object(api, 'pages', side_effect=lambda route, key: [group(route.split('head_sha=')[1])]):
             self.assertEqual(api.newest_green_push_gate(), landed)
