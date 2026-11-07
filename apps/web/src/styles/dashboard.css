@@ -2474,16 +2474,12 @@
 }
 
 .site .dash .lp-chev {
-  margin-left: auto;
   flex: none;
   color: var(--chalk-muted-text);
 }
 
-.site .dash .lp-chip .lp-chev {
-  margin-left: 0;
-}
-
 .site .dash .lp-name {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2492,15 +2488,10 @@
 }
 
 .site .dash .lp-native {
-  margin-left: auto;
   flex: none;
   font-size: 13px;
   font-weight: 400;
   color: var(--chalk-muted-text);
-}
-
-.site .dash .lp-trigger .lp-native + .lp-chev {
-  margin-left: 0;
 }
 
 .site .dash .lp-flag {
@@ -2514,18 +2505,17 @@
   box-shadow: 0 0 0 1px var(--chalk-line-strong);
 }
 
-.site .dash .lp-code {
+.site .dash .lp-code,
+.site .dash .lp-glyph {
   background: var(--chalk-hover);
   color: var(--chalk-soft-text);
+}
+
+.site .dash .lp-code {
   font-size: 9px;
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
-}
-
-.site .dash .lp-glyph {
-  background: var(--chalk-hover);
-  color: var(--chalk-soft-text);
 }
 
 .site .dash .lp-pop {
@@ -2620,6 +2610,7 @@
 }
 
 .site .dash .lp-text {
+  flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -2630,12 +2621,7 @@
   color: var(--chalk-muted-text);
 }
 
-.site .dash .lp-opt .lp-native + .lp-check {
-  margin-left: 0;
-}
-
 .site .dash .lp-check {
-  margin-left: auto;
   flex: none;
 }
 
@@ -2662,10 +2648,6 @@
 .site .dash .lp-acts {
   display: flex;
   gap: 8px;
-}
-
-.site .dash .lp-grab {
-  display: none;
 }
 
 @media (max-width: 640px) {
