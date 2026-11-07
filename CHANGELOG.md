@@ -2,9 +2,22 @@
 
 ## Unreleased
 
-- Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md).
+## 5.5.0
+
+- Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md). Sign in to the hosted server with OAuth as well as an API key.
 - Download clean UTF-8 transcript text from the dashboard and the public `GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text` route. Existing JSON transcript API routes remain available.
-- Add an account transcript language default and an inheritable Space override. Fixed languages pin Whisper; Auto keeps unpinned Whisper until a code-switching provider is qualified. Record the resolved mode on jobs and transcript documents.
+- Add an account transcript language default and an inheritable Space override. Fixed languages pin Whisper; Auto uses silence-trimmed MAI transcription and fails retryably when that provider is unavailable, with no fallback to Whisper. Record the resolved mode on jobs and transcript documents.
+- Support Chalk's own SFU as a media provider next to Cloudflare. Spaces still use Cloudflare unless the deployment enables the own SFU for them; an older SDK still gets Cloudflare when it creates an Episode, but it cannot join an Episode that runs on the own SFU: the join fails with `media.client_unsupported` until the app upgrades.
+- Restart ICE in place on the own SFU after a network change before replacing the session, and hold video that the SFU pauses for network reasons.
+- Tell Sync when a join starts with media on, so the own SFU forwards it from the first packet.
+- Pull remote video only for tiles that are on screen, and cancel size-only viewer downgrades that a tile growing makes obsolete.
+- Replace a publish connection that never came up and republish within seconds, and keep the BUNDLE transport when a person explicitly mutes, so unmuting does not rebuild the connection.
+- Keep a publication Cloudflare still lists as active through propagation lag, so a new track is not dropped before Cloudflare catches up.
+- Report listener-side audio receive health, so a listener who hears nothing shows up in diagnostics.
+- Jitter whiteboard reconnect waits, hold the retry timer while a snapshot is in flight, and settle a drawing still saving when Sync rejects it.
+- Show one design for every call and dashboard notice, make invite QR codes crisp and scannable, remove the Raised hands section from the People panel, put the call-link-ready popup on the call-details surface, stop the call toast avatar from being cut off, choose the call header's layout from the call's width, and give the join, ask-to-join and entering screens an icon and a black backdrop.
+- Dashboard: clearer let-in rows on the call page, a centered empty state for recent calls, and Home call actions in the header row with a fallback card when calls fail to load.
+- Advance the seven synchronized Chalk SDK packages to 5.5.0.
 
 ## 5.4.1
 
