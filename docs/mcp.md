@@ -51,9 +51,17 @@ Every request authenticates the key again. Its tenant is the only tenant the
 connection can access. Tools have no `tenant_id` argument or `switch_tenant`
 action. Use another key and connection for another tenant.
 
-The MCP tool list describes the whole catalog. A listed tool is not a permission
-grant: every call checks its required scope and the same tenant policy used by
-`/v1`. Revoked or expired keys cannot keep using an initialized connection.
+The MCP tool list shows only the tools the connection can call at least once. The
+server keeps no session, so it works this out on every request from the
+connection's granted scopes. A tool with action-dependent scopes is listed when
+any one action is allowed: `chalk_prepare_recording` needs `spaces:read` to
+inspect, so a read-only key lists it, and `chalk_configure_webhook` is listed for
+a key that holds only `webhooks:delete`. Listing is not authorization: every call
+checks its required scope and the same tenant policy used by `/v1`, so calling a
+tool that was not listed is refused. A scope change does not reach a client that
+already scanned the tools. ChatGPT scans tools when the app is created, so after a
+scope upgrade, refresh the tools there. Revoked or expired keys cannot keep using
+an initialized connection.
 Creating, rotating, or revoking keys cannot exceed the caller's scope authority.
 Credential and signing-secret issuance require explicit actions and return
 sensitive values. Responses are not cacheable.
@@ -77,6 +85,16 @@ receives a token for your tenant only.
   signing keys, memberships or tenant settings. Approval can narrow the request,
   never widen it. The connected-apps list pages through every active connection
   (newest first), so each one can be revoked.
+- A request without a valid token gets `401` with a `WWW-Authenticate: Bearer`
+  challenge that carries `resource_metadata` and the supported `scope`
+  (`chalk:read chalk:manage`). When a valid token lacks a scope that the larger
+  bundle grants, such as a `chalk:read` connection calling `chalk_create_space`,
+  `/mcp` answers `403` with `WWW-Authenticate: Bearer error="insufficient_scope",
+scope="chalk:manage", resource_metadata="<metadata URL>"` so the client can ask
+  the person to approve the larger bundle. One HTTP request carries one JSON-RPC
+  message, so the `403` answers that one tool call. A call that no bundle could
+  allow, or a call from an API key, is refused as a tool error naming the missing
+  scope, with no step-up challenge.
 - Access tokens last one hour and are bound to the `/mcp` resource. Refresh tokens
   rotate on every use and last 30 days from the last use. Presenting a used
   refresh token or authorization code again revokes the whole grant.
@@ -90,6 +108,17 @@ Operators enable OAuth by setting `CHALK_OAUTH_ISSUER` and
 API keys.
 
 ## Available tools
+
+An OAuth connection never sees the tools that need API-key, membership, tenant
+settings or delete scopes (`update_tenant`, `list_memberships`, `set_membership`,
+`list_api_keys`, `issue_api_key`, `revoke_api_key`, `delete_transcript`). A
+`chalk:manage` connection lists the other 26 tools and a `chalk:read` connection
+lists 16: the reads, `export_recording`, and `prepare_recording` for inspection.
+An API key lists the tools its scopes allow, up to all 33.
+
+Tools that take an `action` publish a plain object schema. Their descriptions list
+the fields each action needs besides `action`, and a call that omits one fails with
+`mcp.invalid_arguments` naming the missing fields.
 
 All names below start with `chalk_`. `Read` means read-only; `Add` means an
 additive operation; `Change` means a potentially destructive mutation. These

@@ -24,6 +24,7 @@ import { Route as PrivacyPreviousRouteImport } from './routes/privacy_.previous'
 import { Route as SpaceSpaceIndexRouteImport } from './routes/_space.space.index'
 import { Route as SpaceSpaceSlugRouteImport } from './routes/_space.space.$slug'
 import { Route as DashboardAppIndexRouteImport } from './routes/dashboard._app.index'
+import { Route as DashboardAppConnectRouteImport } from './routes/dashboard._app.connect'
 import { Route as DashboardAppDeveloperRouteImport } from './routes/dashboard._app.developer'
 import { Route as DashboardCallSpaceIdJoinRouteImport } from './routes/dashboard_.call.$spaceId.join'
 import { Route as DashboardAppCallSpaceIdIndexRouteImport } from './routes/dashboard._app.call.$spaceId.index'
@@ -102,6 +103,11 @@ const DashboardAppIndexRoute = DashboardAppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardAppRoute,
 } as any)
+const DashboardAppConnectRoute = DashboardAppConnectRouteImport.update({
+  id: '/connect',
+  path: '/connect',
+  getParentRoute: () => DashboardAppRoute,
+} as any)
 const DashboardAppDeveloperRoute = DashboardAppDeveloperRouteImport.update({
   id: '/developer',
   path: '/developer',
@@ -138,6 +144,7 @@ export interface FileRoutesByFullPath {
   '/privacy/previous': typeof PrivacyPreviousRoute
   '/docs/': typeof DocsIndexRoute
   '/space/$slug': typeof SpaceSpaceSlugRoute
+  '/dashboard/connect': typeof DashboardAppConnectRoute
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
   '/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/': typeof DashboardAppIndexRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/privacy/previous': typeof PrivacyPreviousRoute
   '/docs': typeof DocsIndexRoute
   '/space/$slug': typeof SpaceSpaceSlugRoute
+  '/dashboard/connect': typeof DashboardAppConnectRoute
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
   '/space': typeof SpaceSpaceIndexRoute
   '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/privacy_/previous': typeof PrivacyPreviousRoute
   '/docs/': typeof DocsIndexRoute
   '/_space/space/$slug': typeof SpaceSpaceSlugRoute
+  '/dashboard/_app/connect': typeof DashboardAppConnectRoute
   '/dashboard/_app/developer': typeof DashboardAppDeveloperRoute
   '/_space/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/_app/': typeof DashboardAppIndexRoute
@@ -198,6 +207,7 @@ export interface FileRouteTypes {
     | '/privacy/previous'
     | '/docs/'
     | '/space/$slug'
+    | '/dashboard/connect'
     | '/dashboard/developer'
     | '/space/'
     | '/dashboard/'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/privacy/previous'
     | '/docs'
     | '/space/$slug'
+    | '/dashboard/connect'
     | '/dashboard/developer'
     | '/space'
     | '/dashboard/call/$spaceId/join'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/privacy_/previous'
     | '/docs/'
     | '/_space/space/$slug'
+    | '/dashboard/_app/connect'
     | '/dashboard/_app/developer'
     | '/_space/space/'
     | '/dashboard/_app/'
@@ -362,6 +374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAppIndexRouteImport
       parentRoute: typeof DashboardAppRoute
     }
+    '/dashboard/_app/connect': {
+      id: '/dashboard/_app/connect'
+      path: '/connect'
+      fullPath: '/dashboard/connect'
+      preLoaderRoute: typeof DashboardAppConnectRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
     '/dashboard/_app/developer': {
       id: '/dashboard/_app/developer'
       path: '/developer'
@@ -408,6 +427,7 @@ const SpaceRouteChildren: SpaceRouteChildren = {
 const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 
 interface DashboardAppRouteChildren {
+  DashboardAppConnectRoute: typeof DashboardAppConnectRoute
   DashboardAppDeveloperRoute: typeof DashboardAppDeveloperRoute
   DashboardAppIndexRoute: typeof DashboardAppIndexRoute
   DashboardAppCallSpaceIdIndexRoute: typeof DashboardAppCallSpaceIdIndexRoute
@@ -415,6 +435,7 @@ interface DashboardAppRouteChildren {
 }
 
 const DashboardAppRouteChildren: DashboardAppRouteChildren = {
+  DashboardAppConnectRoute: DashboardAppConnectRoute,
   DashboardAppDeveloperRoute: DashboardAppDeveloperRoute,
   DashboardAppIndexRoute: DashboardAppIndexRoute,
   DashboardAppCallSpaceIdIndexRoute: DashboardAppCallSpaceIdIndexRoute,

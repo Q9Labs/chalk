@@ -20,7 +20,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -931,7 +930,12 @@ func (c *ControlPlaneClient) doRequest(ctx context.Context, method, path string,
 	if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
 		request.Header.Set("X-Chalk-Journey-ID", journeyID.String())
 	}
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))
+	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(request.Header))
+	if sessionID, ok := observability.SessionIDFromContext(ctx); ok {
+		// Only validated correlation data crosses this boundary; baggage properties
+		// and unknown members can contain private caller-supplied text.
+		request.Header.Set("baggage", observability.SessionIDKey+"="+sessionID)
+	}
 	response, err := c.client.Do(request)
 	if err != nil {
 		return nil, 0, TransportError{Err: err}

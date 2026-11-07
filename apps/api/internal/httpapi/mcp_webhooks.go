@@ -18,13 +18,6 @@ func bindMCPWebhookTools(server *mcp.Server, o Options) {
 		return mcpInvoke(b, listWebhookEndpoints(o.Webhooks, o.TenantAuthz), listWebhooksRequest{TenantID: b.tenant, Page: b.page(i.PageInput)})
 	})
 	mcpapi.Bind(server, mcpapi.ConfigureWebhook, func(ctx context.Context, i mcpapi.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
-		scope := "webhooks:write"
-		if i.Action == "delete" {
-			scope = "webhooks:delete"
-		}
-		if err := mcpapi.RequireScope(ctx, scope); err != nil {
-			return nil, err
-		}
 		b := newMCPRequest(ctx)
 		switch i.Action {
 		case "create":

@@ -45,6 +45,14 @@
 /:a-:b-:c
   X-Robots-Tag: noindex, nofollow, noarchive
 
+/dashboard
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+
+/dashboard/*
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY
+
 /.well-known/apple-app-site-association
   Content-Type: application/json
 
