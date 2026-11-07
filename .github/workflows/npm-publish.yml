@@ -34,6 +34,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Keep the tarball secret scan from the workflow revision
+        run: |
+          mkdir -p "$RUNNER_TEMP/publish-guard"
+          cp scripts/releases/scan-npm-tarballs.sh .gitleaks.toml "$RUNNER_TEMP/publish-guard/"
+
       - name: Verify publish ref
         if: ${{ !inputs.dry_run }}
         env:
@@ -57,6 +62,12 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org/
 
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
       - name: Install
         run: pnpm install --frozen-lockfile
 
@@ -77,11 +88,13 @@ jobs:
           pnpm "${release_filters[@]}" exec attw --pack --ignore-rules cjs-resolves-to-esm internal-resolution-error --exclude-entrypoints './styles.css' './src/styles.css' './dist/styles/*' './styles/*'
 
       - name: Pack packages
-        if: inputs.dry_run
         run: |
           mkdir -p "$RUNNER_TEMP/npm-packages"
           read -ra release_filters <<< "$RELEASE_FILTERS"
           pnpm --workspace-concurrency=1 "${release_filters[@]}" --recursive pack --pack-destination "$RUNNER_TEMP/npm-packages"
+
+      - name: Scan packed packages for secrets
+        run: bash "$RUNNER_TEMP/publish-guard/scan-npm-tarballs.sh" "$RUNNER_TEMP/npm-packages" "$RUNNER_TEMP/publish-guard/.gitleaks.toml"
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
