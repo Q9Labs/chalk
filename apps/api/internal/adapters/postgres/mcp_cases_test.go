@@ -41,7 +41,7 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 		{"get_recording_download", fmt.Sprintf(`{"recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},
 		{"export_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
 		{"inspect_transcripts", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
-		{"request_transcript", fmt.Sprintf(`{"recording_id":%q,"request_key":"mcp-transcript-request-01"}`, recordingID), ""},
+		{"request_transcript", fmt.Sprintf(`{"recording_id":%q,"request_key":"mcp-transcript-request-01"}`, recordingID), "transcript.already_exists"},
 		{"delete_transcript", fmt.Sprintf(`{"transcript_id":%q}`, transcriptID), ""},
 	}
 }
