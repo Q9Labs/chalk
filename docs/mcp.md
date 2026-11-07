@@ -220,10 +220,10 @@ with each request, so tool count and schema size are a running cost.
 Merging the list and get reads into four `inspect` tools took the catalog
 from 33 to 25 tools.
 
-| Catalog          | Tools | Serialized `tools/list` | Tokens, all tools loaded | Tokens, names only (tool search) |
-| ---------------- | ----- | ----------------------- | ------------------------ | -------------------------------- |
-| Before the merge | 33    | 27.7 KB                 | 10,773                   | 367                              |
-| After the merge  | 25    | 25.1 KB                 | 9,842                    | 280                              |
+| Catalog          | Tools | Serialized tool list | Tokens, all tools loaded | Tokens, names only (tool search) |
+| ---------------- | ----- | -------------------- | ------------------------ | -------------------------------- |
+| Before the merge | 33    | 27.7 KB              | 10,773                   | 367                              |
+| After the merge  | 25    | 25.1 KB              | 9,842                    | 280                              |
 
 The merge saves 931 tokens (8.6%), not 24%, because an `inspect` tool carries
 one schema that covers all its views, so each merged tool is larger than the
@@ -231,7 +231,7 @@ tools it replaced. The saving that matters is the second column: with tool
 search a client loads only names (about 280 tokens) and fetches a definition
 when the agent needs it.
 
-How it was measured: `tools/list` from the real handler on the eval stack,
+How it was measured: the tool list from the real handler on the eval stack,
 sent as function tools to `anthropic/claude-opus-5.5` through OpenRouter with
 `max_tokens=1`, and `prompt_tokens` compared with a request that carries one
 empty tool. Anthropic's `count_tokens` endpoint was not used because no
