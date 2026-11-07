@@ -7,6 +7,7 @@ import { chromium } from "playwright";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
+import { collectPage, measureFirstFrame, receiverTimedOut, senderNeverPublished, tileState } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
 
 const runId = process.argv[2];
 if (!runId) throw new Error("usage: join-call.mjs <run-id> [--web <origin>]");
@@ -19,17 +20,12 @@ const people = [
   { name: "Verify B", fixture: 2 },
 ];
 
+const waitMs = 60_000;
 const steps = [];
+const measurements = {};
 const logs = { console: [], network: [] };
 await mkdir(join(out, "screenshots"), { recursive: true });
 await mkdir(join(out, "video"), { recursive: true });
-
-// Counts decoded video frames of one participant's tile as shown in this page.
-const tileFrames = (name) => {
-  const tile = document.querySelector(`[aria-label="Video tile for ${name}"]`)?.closest('[data-part="stage-tile"]');
-  const video = tile?.querySelector("video");
-  return video && video.readyState >= 2 && video.videoWidth > 0 ? video.getVideoPlaybackQuality().totalVideoFrames : 0;
-};
 
 async function step(name, run) {
   const started = Date.now();
@@ -61,7 +57,20 @@ try {
     page.on("pageerror", (error) => logs.console.push({ who: person.name, type: "pageerror", text: String(error.message).slice(0, 300) }));
     page.on("response", (response) => {
       const { pathname } = new URL(response.url());
-      if (pathname.startsWith("/v1/")) logs.network.push({ who: person.name, method: response.request().method(), path: pathname, status: response.status() });
+      if (!pathname.startsWith("/v1/")) return;
+      const entry = { who: person.name, method: response.request().method(), path: pathname, status: response.status() };
+      logs.network.push(entry);
+      if (entry.status >= 400)
+        void response.json().then(
+          (body) => {
+            entry.errorCode = body?.error?.code;
+          },
+          () => undefined,
+        );
+    });
+    page.on("requestfailed", (request) => {
+      const { pathname } = new URL(request.url());
+      if (pathname.startsWith("/v1/")) logs.network.push({ who: person.name, method: request.method(), path: pathname, error: request.failure()?.errorText });
     });
     sessions.push({ ...person, context, page });
   }
@@ -91,15 +100,27 @@ try {
     });
   }
 
+  // A receiver can only be judged once its sender shows its own picture.
+  for (const { name, page } of sessions) {
+    await step(`${name} publishes its own video`, async () => {
+      const own = await measureFirstFrame(page, name, { timeoutMs: waitMs });
+      measurements[name] = { ...measurements[name], ownFirstFrameMs: own.firstFrameMs };
+      if (own.firstFrameMs === null) throw new Error(senderNeverPublished(name, own, waitMs));
+      return { firstFrameMs: own.firstFrameMs };
+    });
+  }
+
   for (const { name, page } of sessions) {
     const other = people.find((person) => person.name !== name).name;
     await step(`${name} receives ${other}'s video through the SFU`, async () => {
-      await page.waitForFunction(tileFrames, other, { timeout: 60_000, polling: 500 }).catch(() => undefined);
-      const first = await page.evaluate(tileFrames, other);
+      const received = await measureFirstFrame(page, other, { timeoutMs: waitMs });
+      measurements[name] = { ...measurements[name], remoteFirstFrameMs: received.firstFrameMs };
+      if (received.firstFrameMs === null) throw new Error(receiverTimedOut(name, other, received, waitMs));
+      const first = received.state.frames;
       await page.waitForTimeout(3000);
-      const second = await page.evaluate(tileFrames, other);
-      if (!(first > 0 && second > first + 5)) throw new Error(`${other}'s tile decoded ${first} then ${second} frames; video is not advancing`);
-      return { frames: [first, second] };
+      const { frames: second } = await page.evaluate(tileState, other);
+      if (!(second > first + 5)) throw new Error(`${other}'s tile decoded ${first} then ${second} frames after ${received.firstFrameMs} ms; video is not advancing`);
+      return { firstFrameMs: received.firstFrameMs, frames: [first, second] };
     });
   }
 
@@ -125,6 +146,8 @@ try {
   }
 } catch (error) {
   failure = String(error.message ?? error);
+  const pages = await Promise.all(sessions.map((session) => collectPage(session, { tileNames: people.map((person) => person.name), logs, measurements })));
+  await writeFile(join(out, "diagnostics.json"), `${JSON.stringify({ failure, pages }, null, 2)}\n`);
   for (const { name, page } of sessions) await page.screenshot({ path: join(out, "screenshots", `${name.replace(" ", "-")}-failure.png`) }).catch(() => undefined);
 } finally {
   for (const { context } of sessions) await context.close().catch(() => undefined);
@@ -135,7 +158,7 @@ try {
 const secrets = [seed.systemToken, process.env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET, process.env.CHALK_CLOUDFLARE_REALTIME_APP_ID].filter(Boolean);
 await writeFile(join(out, "console.json"), `${JSON.stringify(logs.console, null, 2)}\n`);
 await writeFile(join(out, "network.json"), `${JSON.stringify(logs.network, null, 2)}\n`);
-const result = { journey: "join-call", runId, web, pass: !failure && steps.every((entry) => entry.pass), failure, steps };
+const result = { journey: "join-call", runId, web, pass: !failure && steps.every((entry) => entry.pass), failure, measurements, steps };
 await writeFile(join(out, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
 for (const entry of await readdir(out, { recursive: true })) {
   if (!/\.(json|log|txt)$/.test(entry)) continue;
