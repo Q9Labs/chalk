@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SCORECARD_SCHEMA, parseScorecard, scorecardProblems } from "./scorecard.mjs";
+import { SCORECARD_SCHEMA, parseScorecard, scorecardProblems } from "./schema.mjs";
 
 const valid = () => ({
   schema: SCORECARD_SCHEMA,
@@ -25,10 +25,11 @@ test("a v1 scorecard passes", () => {
   assert.equal(parseScorecard(valid()).mediaPlane, "chalk_sfu");
 });
 
-test("unknown or repeated metric ids and impossible percentiles fail", () => {
+test("unknown or repeated ids, a unit other than the registry's, and impossible percentiles fail", () => {
   const card = valid();
   card.metrics.push({ id: "action.join.first_video_ms", unit: "ms", n: 3, p50: 9, p95: 5, source: "latency-kit" }, { id: "action.joined_ms", unit: "ms", n: 1, p50: 1, p95: 1, source: "latency-kit" });
-  assert.deepEqual(scorecardProblems(card), ["metrics: action.join.first_video_ms appears twice", "action.join.first_video_ms: p50 is above p95", "metrics: unknown id action.joined_ms"]);
+  card.metrics[1].unit = "count";
+  assert.deepEqual(scorecardProblems(card), ["action.leave_ms: unit must be ms", "metrics: action.join.first_video_ms appears twice", "action.join.first_video_ms: p50 is above p95", "metrics: unknown id action.joined_ms"]);
 });
 
 test("hosts, IPs, URLs and resource ids are refused anywhere but the run id", () => {

@@ -6,7 +6,7 @@
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
 // One cycle is one Episode in a new Space on that plane, with two guests: guest 1 acts and guest 2 watches.
-// Metric ids and what each one times are in scorecard.mjs.
+// Metric ids and what each one times are in features/scorecard/schema.mjs.
 // A cycle whose admission lands on the other plane, or that fails, is dropped and rerun; its reason is kept.
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
 // public scorecard shape. With budgets in latency-budgets.json, a p95 over budget, a timeout or a plane short
@@ -22,7 +22,7 @@ import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { budgetFailures, summarize } from "./latency-stats.mjs";
-import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "./scorecard.mjs";
+import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "../../features/scorecard/schema.mjs";
 
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
 const timeoutMs = 20_000;
@@ -200,7 +200,7 @@ function scorecard(report, plane, run) {
     mediaPlane: plane,
     metrics: Object.keys(METRICS)
       .filter((id) => summary[id])
-      .map((id) => ({ id, unit: "ms", n: summary[id].n, p50: summary[id].p50, p95: summary[id].p95, source: "latency-kit" })),
+      .map((id) => ({ id, unit: METRICS[id].unit, n: summary[id].n, p50: summary[id].p50, p95: summary[id].p95, source: "latency-kit" })),
     dropped: [...drops].map(([key, count]) => {
       const [metric, reason] = key.split(" ");
       return { metric, reason, count };

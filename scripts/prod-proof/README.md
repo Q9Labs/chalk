@@ -47,6 +47,53 @@ relative latency gate and the controlled HTTP fault; protocol acknowledgements
 and real SFU cleanup are never mocked. Private comparison and socket evidence
 is retained for every sample. Hosted proof files remain in memory until encrypted.
 
+## Action latency
+
+`pnpm prod:latency` times what a person in a call waits for, on the own SFU
+(`chalk_sfu`) and on Cloudflare (`cf_sfu`), with the same client on the same
+network. Each cycle is a new Space and Episode on one plane with two headless
+Chromium guests. Guest 1 acts and guest 2 watches. The planes take turns, so a
+slow minute lands on both. The defaults are 20 kept cycles per plane, about
+40 seconds each.
+
+```sh
+pnpm prod:latency --environment staging --region do-sgp1 --size s-4vcpu-8gb
+pnpm prod:latency --environment staging --samples 3 --planes chalk_sfu
+xvfb-run -a pnpm prod:latency --environment staging --headed
+```
+
+[`features/scorecard/schema.mjs`](../../features/scorecard/schema.mjs) lists every metric id and what it times. Each
+watch runs in the receiver's page and polls the SDK snapshot and WebRTC stats
+every 10 ms. A video frame counts when it is decoded, and an audio frame counts
+when an RTP packet arrives. Both guests run on one host and stamp times with
+`performance.timeOrigin + performance.now()`, so sender and receiver times
+compare directly. Spin-up is the API create time plus the first admit time
+plus the first guest's `join()` until it is live with a connected peer
+connection. The browser launch in between is left out, because the API does
+the media plane's Episode and join work inside admit.
+
+A cycle is dropped and run again when its admission lands on the other plane
+(`wrong_media_plane`, for example when a full own SFU falls back to
+Cloudflare), when it fails (`cycle_failed`), or when it can't end the Episode
+(`teardown_failed`). A watch that sees nothing within 20 seconds counts as a
+`timeout`. The run writes every sample to `latency.json` and one
+`scorecard-<plane>.json` per plane, in the public `chalk.scorecard/v1` shape,
+which `parseScorecard` validates. A scorecard has no hosts, IPs, URLs, Tenant
+or Space ids. With budgets in [`latency-budgets.json`](latency-budgets.json),
+the run fails on a p95 over budget, on any timeout, or when a plane has fewer
+kept cycles than `--samples`.
+
+Other checks cover parts of the same journey:
+
+| Check | What it times | Media plane | How it relates |
+| --- | --- | --- | --- |
+| `firstCallMs` in `apps/web/perf-budgets.json` | Cold navigation to one decoded on-screen camera and a visible Leave control, on loopback with fake media | none: no signaling or network | The web app's own render cost. `action.join.first_video_ms` is the network and media plane part that it leaves out. |
+| `interactionMs` in the same file | The worst Event Timing duration for trusted clicks | none | Main-thread response to a click. The toggle metrics start where it ends, at the SDK call. |
+| Join startup proof (`gate.yml`, `scripts/web-proof/join-startup.mjs`) | The failure and retry screens under loss and stalls, against a local Sync fixture | none: no media | Startup correctness under faults, not live latency. |
+| Leave plan (`pnpm prod:proof leave`) | The `leave()` median until the Sync acknowledgement, from five samples, against the published 5.2.6 client | the Space's plane, Cloudflare by default | `action.leave_ack_ms` uses the same acknowledgement probe (`leave-observation.mjs`), per plane with N samples. The plan keeps its relative gate for promote. |
+| `publisher-leaves` in `pnpm prod:sfu-e2e` | One sample of leave until the others drop the publisher | one plane per run | The same definition as `action.leave_ms`, as a pass or fail check. |
+| `liveShareStartup` in `features/media/sfu/tests/live_smoke_test.go` | A 5-second limit on the first share frame for synthetic Pion viewers | `chalk_sfu` only, no browser | The SFU's own limit. `action.screenshare.start_ms` is the same moment in a browser, end to end. |
+
 ## Manual hosted integrator proof
 
 Run the integrator proof alone. Finish and clean it up before starting any other

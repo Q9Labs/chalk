@@ -26,7 +26,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
 /**
  * @typedef {object} ScorecardMetric
  * @property {MetricId} id
- * @property {"ms"} unit
+ * @property {Unit} unit  Must match the unit METRICS gives the id.
  * @property {number} n  Samples behind the percentiles; dropped samples are not counted.
  * @property {number | null} p50  Null only when n is 0.
  * @property {number | null} p95
@@ -47,26 +47,30 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {ScorecardDrop[]} dropped
  */
 
-// Stable metric ids. Renaming one breaks history, so add a new id instead.
+// Units a metric may use. A metric's unit is fixed by its entry in METRICS.
+export const UNITS = /** @type {const} */ (["ms", "kib", "percent", "pps", "mbit_s", "count", "pass"]);
+/** @typedef {(typeof UNITS)[number]} Unit */
+
+// Stable metric ids, each with its unit. Renaming an id or changing its unit breaks history, so add a new id instead.
 export const METRICS = /** @type {const} */ ({
-  "action.spinup_ms": "Episode create, first admit, and the first join() until live with a connected peer connection",
-  "action.join.first_audio_ms": "join() until the first audio packet from a remote",
-  "action.join.first_video_ms": "join() until the first decoded video frame from a remote",
-  "action.camera_toggle.on_ms": "Camera on until the remote's roster shows it active",
-  "action.camera_toggle.off_ms": "Camera off until the remote's roster shows it inactive",
-  "action.mic_toggle.on_ms": "Microphone on until the remote's roster shows it active",
-  "action.mic_toggle.off_ms": "Microphone off until the remote's roster shows it inactive",
-  "action.publish.first_frame_ms": "Camera on until the remote decodes the first new frame",
-  "action.publish.first_audio_ms": "Microphone on until the remote receives the first new audio packet",
-  "action.unpublish.removed_ms": "Camera off until the remote no longer holds a live camera track",
-  "action.unpublish.audio_removed_ms": "Microphone off until the remote no longer holds a live microphone track",
-  "action.screenshare.start_ms": "Screen share start until the remote decodes the first share frame",
-  "action.screenshare.stop_ms": "Screen share stop until the remote no longer holds a live share track",
-  "action.screenshare.start_signal_ms": "Screen share start until the remote's roster shows it active",
-  "action.screenshare.stop_signal_ms": "Screen share stop until the remote's roster shows it inactive",
-  "action.leave_ms": "leave() until the remote's roster drops the Participant",
-  "action.leave_ack_ms": "leave() until Sync acknowledges it",
-  "action.leave_media_removed_ms": "leave() until the remote holds no live track from the Participant",
+  "action.spinup_ms": { unit: "ms", description: "Episode create, first admit, and the first join() until live with a connected peer connection" },
+  "action.join.first_audio_ms": { unit: "ms", description: "join() until the first audio packet from a remote" },
+  "action.join.first_video_ms": { unit: "ms", description: "join() until the first decoded video frame from a remote" },
+  "action.camera_toggle.on_ms": { unit: "ms", description: "Camera on until the remote's roster shows it active" },
+  "action.camera_toggle.off_ms": { unit: "ms", description: "Camera off until the remote's roster shows it inactive" },
+  "action.mic_toggle.on_ms": { unit: "ms", description: "Microphone on until the remote's roster shows it active" },
+  "action.mic_toggle.off_ms": { unit: "ms", description: "Microphone off until the remote's roster shows it inactive" },
+  "action.publish.first_frame_ms": { unit: "ms", description: "Camera on until the remote decodes the first new frame" },
+  "action.publish.first_audio_ms": { unit: "ms", description: "Microphone on until the remote receives the first new audio packet" },
+  "action.unpublish.removed_ms": { unit: "ms", description: "Camera off until the remote no longer holds a live camera track" },
+  "action.unpublish.audio_removed_ms": { unit: "ms", description: "Microphone off until the remote no longer holds a live microphone track" },
+  "action.screenshare.start_ms": { unit: "ms", description: "Screen share start until the remote decodes the first share frame" },
+  "action.screenshare.stop_ms": { unit: "ms", description: "Screen share stop until the remote no longer holds a live share track" },
+  "action.screenshare.start_signal_ms": { unit: "ms", description: "Screen share start until the remote's roster shows it active" },
+  "action.screenshare.stop_signal_ms": { unit: "ms", description: "Screen share stop until the remote's roster shows it inactive" },
+  "action.leave_ms": { unit: "ms", description: "leave() until the remote's roster drops the Participant" },
+  "action.leave_ack_ms": { unit: "ms", description: "leave() until Sync acknowledges it" },
+  "action.leave_media_removed_ms": { unit: "ms", description: "leave() until the remote holds no live track from the Participant" },
 });
 /** @typedef {keyof typeof METRICS} MetricId */
 
@@ -119,7 +123,8 @@ function metricProblems(metrics, fail) {
     if (!(name in METRICS)) fail(`metrics: unknown id ${name}`);
     if (seen.has(name)) fail(`metrics: ${name} appears twice`);
     seen.add(name);
-    if (metric?.unit !== "ms") fail(`${name}: unit must be ms`);
+    const expected = METRICS[/** @type {MetricId} */ (name)]?.unit;
+    if (expected && metric?.unit !== expected) fail(`${name}: unit must be ${expected}`);
     if (!Number.isInteger(metric?.n) || metric.n < 0) fail(`${name}: n must be a whole number`);
     if (typeof metric?.source !== "string" || !label.test(metric.source)) fail(`${name}: source must be a lowercase label`);
     const percentiles = [metric?.p50, metric?.p95];
