@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { percentile, rendering, summarize } from "./sfu-canary-criteria.mjs";
+import { percentile, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
 
 const row = (kind, source, bytes, frames = 0, id = kind) => ({ type: "inbound-rtp", kind, source, id, connection: 0, bytesReceived: bytes, framesDecoded: frames });
 const guest = (bytes, frames) => [row("video", "camera", bytes, frames), row("audio", "microphone", bytes)];
@@ -29,4 +29,9 @@ test("a stream on a new connection restarts from zero and is not counted until i
 test("a summary counts the trials inside the limit and the failures", () => {
   const summary = summarize([{ ms: 3000 }, { ms: 9000 }, { ms: 12000 }, { error: "x" }], 10_000);
   assert.deepEqual(summary, { trials: 4, withinLimit: 2, failed: 1, p50Ms: 9000, p95Ms: 12000, maxMs: 12000 });
+});
+
+test("a fault is proven only when no camera video moved", () => {
+  assert.equal(stalled([guest(100, 10), guest(100, 10)], [guest(100, 10), guest(100, 10)]), true);
+  assert.equal(stalled([guest(200, 20), guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
 });

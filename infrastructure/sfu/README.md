@@ -88,16 +88,22 @@ Move internal Spaces one at a time: add the Space ID to
 stop the whole canary, empty the list.
 
 The scripted check joins two real SDK clients per trial, measures how long both
-take to render audio and video, and cuts one client's network to measure
-recovery, once with the microphone on and once muted. Run it once per provider
-from the same machine, so the two reports compare:
+take to render audio and video, then blocks UDP to the media provider, proves
+that video stopped, restores it, and measures recovery, once with the first
+client's microphone on and once muted. Playwright's offline mode does not stop
+established WebRTC media, so you give the check the commands that block and
+restore the path. Run it once per provider from the same machine, so the two
+reports compare:
 
 ```sh
+export CHALK_CANARY_FAULT_DOWN='sudo iptables -I OUTPUT -p udp -d <media address> -j DROP'
+export CHALK_CANARY_FAULT_UP='sudo iptables -D OUTPUT -p udp -d <media address> -j DROP'
 CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
-CHALK_PROOF_MEDIA_PLANE=cf_sfu pnpm prod:canary --joins 20 --faults 10
 ```
 
-A report passes when every join renders within 10 seconds, every short fault
+For Cloudflare, use that provider's media address in both commands.
+
+A report passes when every join (including the join of each fault trial) renders within 10 seconds, every short fault
 recovers rendered media within 15 seconds without a manual toggle, and recovery
 never turns a muted microphone back on. Set `CHALK_CANARY_SPACE_ID` to reuse one
 allowlisted Space instead of creating a Space for each trial.

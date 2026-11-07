@@ -1,26 +1,34 @@
 #!/usr/bin/env node
 // Scripted join and short-fault trials on one media provider: the M7 canary check.
 //
-//   CHALK_PROOF_MEDIA_PLANE=chalk_sfu node scripts/prod-proof/sfu-canary.mjs [--joins 20] [--faults 10] [--fault-seconds 5]
+//   CHALK_PROOF_MEDIA_PLANE=chalk_sfu \
+//   CHALK_CANARY_FAULT_DOWN='sudo iptables -I OUTPUT -p udp -d <media address> -j DROP' \
+//   CHALK_CANARY_FAULT_UP='sudo iptables -D OUTPUT -p udp -d <media address> -j DROP' \
+//   node scripts/prod-proof/sfu-canary.mjs [--joins 20] [--faults 10] [--fault-seconds 5]
 //
 // Run it once per provider with the same flags and the same machine, so the two
 // result files compare under a matched network and call shape. Every trial joins two
 // real SDK clients in headless Chromium with generated camera and tones. A join is
 // rendered when both clients decode advancing video and receive advancing audio.
-// A fault trial takes one client offline, restores it, and measures how long both
-// directions take to render again. The run fails when a join takes more than 10 s,
-// a fault takes more than 15 s to recover, or a muted client is unmuted by recovery.
+// A fault trial runs the DOWN command, proves that no camera video moved, runs the UP
+// command, and measures how long both directions take to render again, once with
+// the first client's microphone on and once muted. Playwright's offline mode does not
+// stop established WebRTC media, so the fault is a command that blocks the media
+// path; both clients share the machine, so both lose it. The run fails when any join
+// (fault trials included) takes more than 10 s, a fault takes more than 15 s to
+// recover, the fault did not stall media, or recovery turns the muted microphone on.
+// meetsM7Minimum in the report says whether the run had 20 joins and 10 faults.
 // CHALK_CANARY_SPACE_ID reuses one existing Space, as an allowlisted production Space
 // needs, instead of creating a Space for each trial.
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
-import { check, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
+import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
-import { grew, rendering, summarize } from "./sfu-canary-criteria.mjs";
+import { grew, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
 
 const options = parseArgs({
   options: {
@@ -37,11 +45,16 @@ const faultMs = Number(options["fault-seconds"]) * 1000;
 const joinLimitMs = Number(options["join-limit-ms"]);
 const recoveryLimitMs = Number(options["recovery-limit-ms"]);
 const pollMs = 500;
+const stallProbeMs = 1500;
+const faultDown = process.env.CHALK_CANARY_FAULT_DOWN;
+const faultUp = process.env.CHALK_CANARY_FAULT_UP;
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+const shell = (script) => command("sh", ["-c", script]);
 
 async function rendersWithin(pages, startedAt, limitMs, label) {
   let previous = await stats(pages);
   for (;;) {
-    await new Promise((done) => setTimeout(done, pollMs));
+    await sleep(pollMs);
     const current = await stats(pages);
     if (rendering(current, previous)) return Math.round(performance.now() - startedAt);
     previous = current;
@@ -76,20 +89,25 @@ async function trial(run, receiver, fault) {
     const { pages } = call.guests;
     const joinMs = await rendersWithin(pages, call.startedAt, joinLimitMs, "join");
     if (!fault) return { ms: joinMs };
-    const context = pages[0].context();
     const recoveries = [];
     for (const muted of [false, true]) {
-      if (muted) await pages[1].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
-      await context.setOffline(true);
-      await new Promise((done) => setTimeout(done, faultMs));
-      await context.setOffline(false);
+      if (muted) await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
+      await shell(faultDown);
+      try {
+        await sleep(faultMs - stallProbeMs);
+        const before = await stats(pages);
+        await sleep(stallProbeMs);
+        check(stalled(await stats(pages), before), "The fault did not interrupt rendered media");
+      } finally {
+        await shell(faultUp);
+      }
       const restoredAt = performance.now();
       // A muted client sends no audio, so the muted round proves video and that the mute held.
       const recovered = muted ? await videoRendersWithin(pages, restoredAt, recoveryLimitMs) : await rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
-      if (muted) check((await microphoneState(pages[1])) !== "enabled", "Recovery turned a muted microphone back on");
+      if (muted) check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");
       recoveries.push(recovered);
     }
-    return { ms: Math.max(...recoveries), joinMs, recoveries, muteKept: true };
+    return { ms: Math.max(...recoveries), joinMs, recoveries };
   } catch (error) {
     return { error: errorEvidence(error).message ?? "failed" };
   } finally {
@@ -101,7 +119,7 @@ async function trial(run, receiver, fault) {
 async function videoRendersWithin(pages, startedAt, limitMs) {
   let previous = await stats(pages);
   for (;;) {
-    await new Promise((done) => setTimeout(done, pollMs));
+    await sleep(pollMs);
     const current = await stats(pages);
     if (current.every((rows, guest) => grew(rows, previous[guest], "video", "camera"))) return Math.round(performance.now() - startedAt);
     previous = current;
@@ -117,6 +135,9 @@ async function main() {
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), flags: { joins, faults, faultSeconds: faultMs / 1000, joinLimitMs, recoveryLimitMs }, joins: [], faults: [] };
   let run;
   try {
+    check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 1, "--joins and --faults must each be at least 1", "configuration");
+    check(faultMs > stallProbeMs + 1000, "--fault-seconds is too short to prove an interruption", "configuration");
+    check(faultDown && faultUp, "Set CHALK_CANARY_FAULT_DOWN and CHALK_CANARY_FAULT_UP to commands that block and restore UDP to the media provider", "configuration");
     const config = await loadConfig();
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
@@ -129,11 +150,15 @@ async function main() {
   } finally {
     if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
   }
-  report.summary = { join: summarize(report.joins, joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs) };
-  const passed = !report.error && !report.cleanupError && report.summary.join.withinLimit === joins && report.summary.recovery.withinLimit === faults;
+  // A fault trial also joins, so its join counts against the join limit.
+  const faultJoins = report.faults.map((trial) => (trial.joinMs === undefined ? trial : { ms: trial.joinMs }));
+  report.summary = { join: summarize([...report.joins, ...faultJoins], joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs) };
+  report.meetsM7Minimum = joins >= 20 && faults >= 10;
+  const { join, recovery } = report.summary;
+  const passed = !report.error && !report.cleanupError && join.withinLimit === join.trials && recovery.withinLimit === recovery.trials;
   report.result = passed ? "passed" : "failed";
   await save(`${directory}/sfu-canary-${mediaPlane}.json`, report);
-  console.log(JSON.stringify({ provider: mediaPlane, result: report.result, ...report.summary }, null, 2));
+  console.log(JSON.stringify({ provider: mediaPlane, result: report.result, meetsM7Minimum: report.meetsM7Minimum, ...report.summary }, null, 2));
   console.log(`Private evidence: ${directory}`);
   if (!passed) process.exitCode = 1;
 }

@@ -30,3 +30,8 @@ export function grew(rows, previous, kind, source) {
 export function rendering(after, before) {
   return after.length === 2 && after.every((rows, guest) => grew(rows, before[guest], "video", "camera") && grew(rows, before[guest], "audio", "microphone"));
 }
+
+// A fault interrupted the call when no client's camera video moved between two samples.
+export function stalled(after, before) {
+  return after.length === 2 && after.every((rows, guest) => !grew(rows, before[guest], "video", "camera"));
+}
