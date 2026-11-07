@@ -110,12 +110,12 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 			t.Errorf("chalk:manage must list %s", name)
 		}
 	}
-	for _, name := range []string{"chalk_get_connection", "chalk_list_spaces", "chalk_get_recording_download"} {
+	for _, name := range []string{"chalk_get_connection", "chalk_list_spaces", "chalk_get_recording_download", "chalk_prepare_recording"} {
 		if !slices.Contains(read, name) {
 			t.Errorf("chalk:read must list %s", name)
 		}
 	}
-	for _, name := range []string{"chalk_create_space", "chalk_configure_webhook", "chalk_prepare_recording", "chalk_end_episode"} {
+	for _, name := range []string{"chalk_create_space", "chalk_configure_webhook", "chalk_end_episode"} {
 		if slices.Contains(read, name) {
 			t.Errorf("chalk:read must not list %s", name)
 		}

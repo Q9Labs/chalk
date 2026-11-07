@@ -122,6 +122,8 @@ func mcpStepUp(service MCPOAuthService) mcpapi.ScopeRefusal {
 		if service == nil || principal.Kind != authentication.PrincipalOAuth || bundle == "" {
 			return false
 		}
+		actor, _ := mcpActor(principal)
+		slog.WarnContext(r.Context(), "MCP tool rejected", "event", "mcp.tool.completed", "tool", tool, "tenant_id", principal.TenantID.String(), "actor_id", actor, "outcome", "auth.insufficient_scope", "needed_scope", bundle)
 		w.Header().Set("WWW-Authenticate", mcpStepUpChallenge(service, bundle))
 		writeError(w, http.StatusForbidden, apiErrorForbidden.Code, tool+" needs the "+bundle+" scope. Reconnect and approve "+bundle+".")
 		return true
