@@ -48,7 +48,7 @@ export const StatusBadge = React.memo(({ status, pulse = false, size = "md", cla
   const { icon: Icon, text, colorClass, bgClass } = config[status];
 
   return (
-    <div className={cn("inline-flex items-center gap-1.5 rounded-sm font-medium", size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs", pulse && !prefersReducedMotion && "animate-pulse", colorClass, bgClass, className)} role="status" aria-label={status}>
+    <div className={cn("inline-flex items-center gap-1.5 rounded-sm font-medium", size === "sm" ? "px-1.5 py-0.5 text-(length:--type-micro)" : "px-2 py-1 text-xs", pulse && !prefersReducedMotion && "animate-pulse", colorClass, bgClass, className)} role="status" aria-label={status}>
       <Icon size={size === "sm" ? 10 : 12} className={cn(status === "recording" && "fill-current")} />
       <span>{text}</span>
     </div>

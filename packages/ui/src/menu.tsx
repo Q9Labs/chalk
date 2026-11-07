@@ -18,7 +18,7 @@ const menuContentVariants = cva("z-50 min-w-(--anchor-width) origin-(--transform
   variants: {
     tone: {
       default: "bg-popover text-popover-foreground border-border shadow-[var(--chalk-shadow-md)]",
-      sidebar: "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-[0_18px_50px_rgba(0,0,0,0.45)]",
+      sidebar: "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-(--elevation-sidebar-menu)",
     },
   },
   defaultVariants: { tone: "default" },
@@ -70,7 +70,7 @@ function MenuGroup(props: MenuPrimitive.Group.Props) {
 }
 
 function MenuGroupLabel({ className, ...props }: MenuPrimitive.GroupLabel.Props) {
-  return <MenuPrimitive.GroupLabel data-slot="menu-group-label" className={cn("px-2 pt-1.5 pb-1 font-mono text-[10px] tracking-[0.08em] uppercase opacity-60", className)} {...props} />;
+  return <MenuPrimitive.GroupLabel data-slot="menu-group-label" className={cn("px-2 pt-1.5 pb-1 font-mono text-(length:--type-micro) tracking-[0.08em] uppercase opacity-60", className)} {...props} />;
 }
 
 function MenuSeparator({ className, ...props }: MenuPrimitive.Separator.Props) {

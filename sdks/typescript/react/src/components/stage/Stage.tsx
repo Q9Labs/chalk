@@ -396,7 +396,7 @@ export function Stage({
                 onClick={foldedContent.length ? () => setOverflowOpen(true) : (onOverflowClick ?? (() => setOverflowOpen(true)))}
                 disabled={!interactive}
                 aria-label={`Show ${geometry.overflowCount} more ${foldedContent.length ? "items" : "participants"}`}
-                className="grid place-items-center rounded-[12px] bg-[var(--chalk-raised)] text-[22px] font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-[14px]"
+                className="grid place-items-center rounded-(--corner-xl) bg-[var(--chalk-raised)] text-(length:--type-title) font-semibold text-[var(--chalk-text)] hover:bg-[var(--chalk-hover)] max-[640px]:rounded-(--corner-xl)"
               >
                 +{geometry.overflowCount}
               </button>

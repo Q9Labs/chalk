@@ -140,21 +140,21 @@ export function ScreenSharePresentation({ sharedByName, media, mediaVisible, sta
             <span className="grid h-12 w-12 place-items-center rounded-[50%] bg-[var(--chalk-overlay-strong)]">
               <StageIcon name="pause" size={24} />
             </span>
-            <p className="rounded-[8px] bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
+            <p className="rounded-(--corner-lg) bg-[var(--chalk-overlay-strong)] px-3 py-1.5 font-semibold">{sharedByName} paused sharing</p>
           </div>
         ) : null}
         {status === "low-quality" ? (
-          <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-[6px] bg-[var(--chalk-overlay-strong)] px-2.5 text-[12px] font-medium text-[var(--chalk-on-overlay)]">
+          <div role="status" data-part="share-low-quality" className="absolute top-2 left-2 z-30 flex h-7 items-center gap-2 rounded-(--corner-md) bg-[var(--chalk-overlay-strong)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-on-overlay)]">
             <SignalBars />
             <span>{sharedByName}’s connection is slow</span>
           </div>
         ) : null}
         {primary ? switcher : null}
         {isLocal && primary ? (
-          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-[12px] bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:flex-wrap">
+          <div data-part="share-local-overlay" role="group" aria-label="Your share" className="absolute top-2.5 right-2.5 left-2.5 z-30 flex items-center gap-2 rounded-(--corner-xl) bg-[var(--chalk-overlay-strong)] p-2 pl-3.5 text-[var(--chalk-on-overlay)] max-[640px]:flex-wrap">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <b className="truncate font-semibold">{source ? `You’re sharing ${source}` : "You’re screen sharing"}</b>
-              {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-[12px] text-[var(--chalk-on-overlay)]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
+              {capture?.surface === "monitor" || capture?.surface === "browser" ? <span className="text-(length:--type-caption) text-[var(--chalk-on-overlay)]">Seeing a mirror effect? That’s normal when you share {capture.surface === "browser" ? "this tab" : "your whole screen"}.</span> : null}
             </div>
             {onChangeShare ? (
               <ChalkMenu
