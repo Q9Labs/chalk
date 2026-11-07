@@ -12,8 +12,9 @@ function bundle(scope: string): "chalk:read" | "chalk:manage" {
 }
 
 export async function connectPage(engine: Engine, request: string): Promise<ConnectDTO> {
-  const found = await run(engine.api.default.inspectMCPConsentRequest({ payload: { request } }));
-  return { clientName: found.client_name, redirectHost: found.redirect_host, requestedScope: bundle(found.scope) };
+  // The tenant name only labels the account on the page, so the page still loads without it.
+  const [found, tenant] = await Promise.all([run(engine.api.default.inspectMCPConsentRequest({ payload: { request } })), run(engine.api.tenants.getTenant({ params: { tenant_id: engine.tenantId } })).catch(() => null)]);
+  return { clientName: found.client_name, redirectHost: found.redirect_host, requestedScope: bundle(found.scope), tenantName: tenant?.name ?? null };
 }
 
 /** Returns the URL that sends the browser back to the app, with a code or an error. */

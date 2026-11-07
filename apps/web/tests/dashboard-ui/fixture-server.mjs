@@ -4,7 +4,7 @@
 // every request for the browser checks. It lives outside src/, so no build can bundle it.
 //
 //   node tests/dashboard-ui/fixture-server.mjs   (Vite on 3070, fixture on 3071)
-//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>&newCall=<name>
+//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>&newCall=<name>&manyConnections=1
 //   GET /__fixture/log   GET /__fixture/reset
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
@@ -91,9 +91,16 @@ function richAccount() {
       [uuid(0x401)]: [{ id: uuid(0x505), state: "delivered", createdAt: at(0, 11, 2), eventType: "recording.completed", attempts: 1, status: 200 }],
     },
     origins: ["https://chalkmeet.com", "https://portal.tuitionhighway.com", "https://app.q9labs.ai", "http://localhost:5173"],
+    connections: [
+      ["Claude", "chalk:manage", at(12, 9, 30), at(0, 9, 12)],
+      ["ChatGPT", "chalk:read", at(30, 14, 0), at(3, 16, 40)],
+      ["Cursor", "chalk:read", at(8, 11, 15), null],
+      ["Devin", "chalk:manage", at(60, 8, 0), at(21, 10, 5)],
+      ["Acme Notes", "chalk:read", at(2, 13, 20), at(2, 13, 25)],
+    ].map(([clientName, scope, createdAt, lastUsedAt], i) => ({ id: uuid(0x6000 + i), clientName, scope, createdAt, lastUsedAt })),
   };
 }
-const emptyAccount = () => ({ calls: [], sessions: [], live: false, keys: [], webhooks: [], deliveries: {}, origins: ["https://chalkmeet.com"] });
+const emptyAccount = () => ({ calls: [], sessions: [], live: false, keys: [], webhooks: [], deliveries: {}, origins: ["https://chalkmeet.com"], connections: [] });
 
 const TRANSCRIPT = [
   [12, "Nora Patel", "Morning. Can everyone hear me?"],
@@ -113,6 +120,7 @@ const TRANSCRIPT = [
   [2650, "Sofia Lind", "I’ll write up the launch notes and share them in chat."],
   [2731, "Hasan Shoaib", "Thanks, everyone. Same link on Tuesday."],
 ];
+const CONNECT_APPS = { claude: { name: "Claude", host: "claude.ai" }, chatgpt: { name: "ChatGPT", host: "chatgpt.com" }, cursor: { name: "Cursor", host: "cursor.com" }, devin: { name: "Devin", host: "app.devin.ai" }, acme: { name: "Acme Notes", host: "notes.acme.example" } };
 const SEAT = (name) => uuid(0x700 + ["Hasan Shoaib", "Nora Patel", "Akash Rao", "Sofia Lind", "Malik Haddad", "Priya Shah", "Eli Cohen", "Ali Raza"].indexOf(name));
 
 let state;
@@ -226,7 +234,7 @@ async function auth(request, response, path, url) {
   if (path === "/auth/start") {
     const provider = url.searchParams.get("provider");
     const returnTo = url.searchParams.get("returnTo") ?? "/dashboard";
-    if (!["google", "apple"].includes(provider) || !/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?$/.test(returnTo)) return fail(response, 400, "invalid_request");
+    if (!["google", "apple"].includes(provider) || !/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/.test(returnTo)) return fail(response, 400, "invalid_request");
     await wait(600);
     if (state.signInError) {
       response.writeHead(303, { Location: `/dashboard/sign-in?failed=${provider}` }).end();
@@ -331,6 +339,18 @@ async function dashboard(request, response, page, url, entry) {
       const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt) }));
       return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
     }
+    if (page === "connect") {
+      // The handle names the app and the scope the fixture pretends it asked for: chalk_oar_<app>_<read|manage>_<padding>.
+      const [, , app = "", asked = "read"] = (query.request ?? "").split("_");
+      const host = CONNECT_APPS[app];
+      if (!host) return fail(response, 404, "not_found");
+      return send(response, 200, { clientName: host.name, redirectHost: host.host, requestedScope: asked === "manage" ? "chalk:manage" : "chalk:read", tenantName: account === "new" ? "June Park" : "Hasan Shoaib" });
+    }
+    if (page === "connections") {
+      const start = Number(query.cursor ?? 0);
+      const end = start + 25;
+      return send(response, 200, { connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null });
+    }
     if (page === "developer")
       return send(response, 200, {
         tenantId: "00000000-0000-4000-8000-000000000001",
@@ -351,6 +371,15 @@ async function dashboard(request, response, page, url, entry) {
   await wait(250);
   const call = data.calls.find((item) => item.id === action.spaceId);
   switch (action.action) {
+    case "approve-connection":
+    case "deny-connection": {
+      const host = CONNECT_APPS[action.request.split("_")[2]];
+      if (!host) return fail(response, 404, "not_found");
+      return send(response, 200, { redirectUrl: `https://${host.host}/oauth/callback?${action.action === "approve-connection" ? "code=fixture" : "error=access_denied"}` });
+    }
+    case "revoke-connection":
+      data.connections = data.connections.filter((item) => item.id !== action.connectionId);
+      return send(response, 200, { ok: true });
     case "create-call": {
       const created = { id: uuid(0x1000 + data.calls.length), slug: `call-${action.idempotencyKey}`, name: action.name ?? "New call", archived: false, admission: action.admission, createdAt: new Date().toISOString() };
       data.calls.unshift(created);
@@ -489,6 +518,7 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
+          else if (key === "manyConnections" && value === "1") accounts.hasan.connections.push(...Array.from({ length: 22 }, (_, n) => ({ id: uuid(0x4a0 + n), clientName: `Notes ${n + 1}`, scope: "chalk:read", lastUsedAt: null, createdAt: at(30 + n, 9, 0) })));
           else if (key === "freshLive") {
             accounts.hasan.live = true;
             accounts.hasan.sessions = [];

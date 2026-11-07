@@ -97,6 +97,8 @@ export function MenuItem({ icon, danger, onSelect, children }: { readonly icon?:
 /* ---------- dialogs: a card on a scrim, a bottom sheet on the phone ---------- */
 
 type DialogProps = {
+  /** Shown above the title. */
+  readonly lead?: ReactNode;
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly alert?: boolean;
@@ -108,7 +110,7 @@ type DialogProps = {
 };
 
 /** Traps focus, closes on Esc or the scrim, and gives focus back to whatever opened it. */
-export function Dialog({ title, description, alert, wide, onClose, onSubmit, children, actions }: DialogProps) {
+export function Dialog({ lead, title, description, alert, wide, onClose, onSubmit, children, actions }: DialogProps) {
   const card = useRef<HTMLElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -136,6 +138,7 @@ export function Dialog({ title, description, alert, wide, onClose, onSubmit, chi
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
         <Icon name="x" />
       </button>
+      {lead}
       <h2 id={titleId}>{title}</h2>
       {description ? <p id={descriptionId}>{description}</p> : null}
       {children}
