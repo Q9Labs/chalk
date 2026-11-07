@@ -5,11 +5,42 @@ export type CloudflareSFUIceServer = {
   readonly username?: string;
   readonly credential?: string;
 };
-export type CloudflareSFUBootstrap = {
-  readonly connectionId: string;
-  readonly stunServer: string;
-  /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
-  readonly iceServers?: readonly CloudflareSFUIceServer[];
+export type CloudflareSFUBootstrap =
+  | {
+      readonly connectionId: string;
+      readonly stunServer: string;
+      /** STUN and TURN servers from the API. Absent on older servers, which means STUN only. */
+      readonly iceServers?: readonly CloudflareSFUIceServer[];
+      readonly capabilities?: undefined;
+    }
+  | {
+      readonly connectionId: string;
+      readonly stunServer?: undefined;
+      /** The own SFU sends every ICE server it wants. Empty means host candidates only. */
+      readonly iceServers: readonly CloudflareSFUIceServer[];
+      /** Absent means none: the client behaves as it does on Cloudflare. */
+      readonly capabilities?: SFUMediaCapabilities;
+    };
+/** What the media plane does for this connection beyond Cloudflare's behavior. */
+export type SFUMediaCapabilities = {
+  /** The SFU picks each subscriber's layer under the requested one, so the client asks only for a ceiling. */
+  readonly serverLayerAdaptation: boolean;
+  /** The SFU reports whether it delivers each remote video, and pauses one in place on request. */
+  readonly subscriptionState: boolean;
+  /** The SFU answers an ICE restart offer on the existing session, so a lost path recovers without a new session. */
+  readonly iceRestart: boolean;
+};
+/** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
+export type SFUSubscriptionState = {
+  readonly mid: string;
+  readonly sessionId: string;
+  readonly trackName: string;
+  readonly state: "active" | "paused";
+  /** congestion: the link cannot carry the lowest layer. viewer: this client paused it. source_inactive: the publisher sends nothing. source_unauthorized: the publisher has no live grant for it. */
+  readonly reason?: "congestion" | "viewer" | "source_inactive" | "source_unauthorized";
+  readonly revision: number;
+  readonly requestedRid?: string;
+  readonly effectiveRid?: string;
 };
 export type CloudflareSFUSessionDescription = {
   readonly type: "offer" | "answer";
@@ -27,6 +58,8 @@ export type CloudflareSFUTrackRequest = {
   };
   readonly source?: MediaPublicationSource;
   readonly publicationId?: string;
+  /** On an update only: stops or resumes a remote video in place. Only a plane with `subscriptionState` accepts it. */
+  readonly paused?: boolean;
 };
 export type CloudflareSFUCloseTrackRequest = {
   readonly mid: string;
@@ -62,10 +95,12 @@ export type CloudflareSFUSignalingTransport = {
     readonly replacementCause?: MediaConnectionReplacementCause;
   }) => Promise<CloudflareSFUTracksResponse>;
   readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
-  /** Changes the simulcast layer of tracks already pulled, without renegotiating. Transports without it keep the layer chosen at pull time. */
+  /** Changes the simulcast layer of tracks already pulled, or pauses them in place, without renegotiating. Transports without it keep the layer chosen at pull time. */
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /** Reads the delivery state of this connection's remote videos. Only a plane with `subscriptionState` answers it. */
+  readonly listSubscriptions?: () => Promise<readonly SFUSubscriptionState[]>;
   /**
    * Best-effort per-call stats upload; transports without it simply report nothing. The `closing`
    * batch reuses the last token and never asks the credential provider, which could refresh access
@@ -86,6 +121,8 @@ export type CloudflareSFUPhase = CloudflareSFUConnectionPhase;
 export type CloudflareSFUSnapshot = {
   /** Omitted by media adapters without receive diagnostics; treat as empty. */
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
+  /** Remote videos whose delivery the SFU reported. Omitted or empty on planes without `subscriptionState`. */
+  readonly remoteDelivery?: readonly import("./subscription-delivery").RemoteVideoDelivery[];
   readonly connection: {
     readonly phase: CloudflareSFUConnectionPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
@@ -107,7 +144,7 @@ export type CloudflareSFUSnapshot = {
 export type CloudflareSFULocalOfferDiagnostic = {
   readonly event: "local_offer_pending";
   readonly where: "sdp_operation_start" | "remote_offer";
-  readonly origin: "publish" | "publish_without_simulcast" | "close" | "outside_sdk";
+  readonly origin: "publish" | "publish_without_simulcast" | "close" | "ice_restart" | "outside_sdk";
   readonly pendingMs: number | null;
 };
 export type CloudflareSFUClientOptions = {
@@ -116,6 +153,11 @@ export type CloudflareSFUClientOptions = {
   readonly transport: CloudflareSFUSignalingTransport;
   readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
   readonly pollIntervalMs?: number;
+  /**
+   * How long an unreported video publication waits for `setVideoTileVisibility` before it is pulled. Defaults to 250 ms;
+   * a UI that never reports tiles can pass 0 to pull every video at once.
+   */
+  readonly unreportedVideoTileWaitMs?: number;
   readonly onError?: (error: unknown, mediaConnectionId: string) => void;
   readonly onDiagnostic?: (event: CloudflareSFULocalOfferDiagnostic) => void;
   readonly onRemoteTrack?: (publication: CloudflareSFURemoteTrack) => void;

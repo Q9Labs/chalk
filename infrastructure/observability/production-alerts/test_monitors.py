@@ -50,12 +50,18 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(failures["threshold"], 0)
         self.assertEqual(failures["intervalMinutes"], 1)
         self.assertIn("'recording-stop'", freshness["aplQuery"])
+        # The SFU row exists only once its probe is configured, so freshness must not count it.
+        self.assertNotIn("sfu-readiness", freshness["aplQuery"])
         self.assertEqual(freshness["threshold"], 6)
 
     def test_readiness_uses_distinct_minutes_latest_state_and_freshness(self):
         failures, _, freshness = monitor_definitions(VARIABLES)
         query = failures["aplQuery"]
         self.assertIn("chalk_alert_rule != 'sync-readiness'", query)
+        self.assertIn("chalk_alert_rule != 'sfu-readiness'", query)
+        self.assertIn("chalk_alert_rule == 'sfu-readiness'", query)
+        self.assertEqual(query.count("unready_minutes >= 4 and chalk_alert_value > 0"), 2)
+        self.assertNotIn("${", query)
         self.assertIn("extend probe_minute=bin(_time, 1m)", query)
         self.assertIn("by probe_minute", query)
         self.assertIn("unready_minutes=countif(chalk_alert_value > 0)", query)
@@ -70,6 +76,7 @@ class MonitorTests(unittest.TestCase):
         for before, after in zip(definitions, rollback):
             expected = before["aplQuery"].replace("${CONNECTION_REPORT_BRANCH}", "")
             expected = expected.replace("${SYNC_READINESS_BRANCH}", " | union (\n" + Path(__file__).with_name("sync-readiness.apl").read_text() + "\n)")
+            expected = expected.replace("${SFU_READINESS_BRANCH}", " | union (\n" + Path(__file__).with_name("sfu-readiness.apl").read_text() + "\n)")
             for key, value in VARIABLES.items():
                 expected = expected.replace("${" + key + "}", value)
             self.assertEqual(after["aplQuery"], expected)
@@ -143,9 +150,14 @@ class MonitorTests(unittest.TestCase):
 
     @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
     def test_readiness_incident_blip_sustained_recovery_duplicates_and_missing_samples(self):
+        for rule in ("sync-readiness", "sfu-readiness"):
+            with self.subTest(rule=rule):
+                self.check_readiness_rule(rule)
+
+    def check_readiness_rule(self, rule):
         def sample(at, value=1, reason="database_unavailable"):
             return {"at": "2026-10-28T" + at + "Z", "stream": "production-state-v2",
-                    "rule": "sync-readiness", "value": value, "headline": "Sync has stayed unready",
+                    "rule": rule, "value": value, "headline": "Sync has stayed unready",
                     "summary": "Latest readiness reason: " + reason + ".", "next": "Check Sync readiness.",
                     "engineers": "For engineers: inspect /readyz."}
 
@@ -174,7 +186,7 @@ class MonitorTests(unittest.TestCase):
                 if fires:
                     self.assertEqual(alerts[0]["value"], 1)
                     self.assertIn("Latest readiness reason: " + ("lifecycle_intent_lag" if name == "reason changes" else "database_unavailable"), alerts[0]["alert_message"])
-                    self.assertEqual(alerts[0]["alert_message"].split("\n")[2], "sync-readiness")
+                    self.assertEqual(alerts[0]["alert_message"].split("\n")[2], rule)
 
     @unittest.skipUnless(LIVE, "use --live for read-only Axiom execution")
     def test_media_projection_mismatch_sources_directions_deduplication_and_noise(self):

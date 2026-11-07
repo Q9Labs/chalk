@@ -8,6 +8,7 @@ import {
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
   createV1SyncClient,
+  mediaBootstrap,
   setSessionSource,
   type GetAccess,
   type ReactNativeWebSocketConstructor,
@@ -111,7 +112,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
-    bootstrap: input.access.media.clientPayload,
+    bootstrap: mediaBootstrap(input.access.media),
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
@@ -122,13 +123,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       participantId: subject.participantId,
       fetch,
     }),
-    replaceMediaConnection: replaceMediaConnection
-      ? async () => {
-          const replacement = await replaceMediaConnection();
-          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-          return replacement.clientPayload;
-        }
-      : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       return connection as unknown as globalThis.RTCPeerConnection;
@@ -145,13 +140,7 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMedi
     observeRemotePublications: client.observeRemotePublications.bind(client),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
-    restart: (input) => {
-      if ("provider" in input) {
-        if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-        return client.restart(input.clientPayload);
-      }
-      return client.restart(input);
-    },
+    restart: (input) => client.restart("provider" in input ? mediaBootstrap(input) : input),
     prepareLocalTrack: client.prepareLocalTrack.bind(client),
     clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
     getSnapshot: client.getSnapshot.bind(client),

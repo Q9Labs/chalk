@@ -24,8 +24,10 @@ permissions:
   contents: read
 
 concurrency:
-  # A new push to a pull request cancels its older run; every master commit keeps its own full run.
-  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # A new push to a pull request cancels its older run. Master pushes share one group without cancelling the running
+  # Gate: one run executes, only the newest push waits, and the pending runs it replaces are cancelled. A release or
+  # nightly therefore ships the newest commit whose Gate ran and passed. Scheduled and manual runs keep their own group.
+  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && 'master' || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -109,11 +111,11 @@ jobs:
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"call-performance":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
+    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
@@ -140,21 +142,21 @@ jobs:
 
       # Go runs the generated-output and contract checks.
       - name: Set up Go
-        if: matrix.group == 'checks' || matrix.group == 'browser-tests'
+        if: matrix.group == 'checks' || matrix.group == 'dashboard-engine'
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Set up Erlang and Elixir for the dashboard engine proof
-        if: matrix.group == 'browser-tests'
+        if: matrix.group == 'dashboard-engine'
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
         with:
           version-file: .tool-versions
           version-type: strict
 
       - name: Install the dashboard database client
-        if: matrix.group == 'browser-tests'
+        if: matrix.group == 'dashboard-engine'
         uses: ./.github/actions/apt-install
         with:
           packages: postgresql-client
@@ -181,15 +183,15 @@ jobs:
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-scanners
 
-      # Browser tests, call bundle budgets and leak journeys all drive Chromium.
+      # Browser tests, the call bundle budget (in the build group) and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
+        if: contains(fromJSON('["browser-tests", "dashboard-engine", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
 
-      # call-performance runs in the root gate for call rendering changes;
+      # call-performance runs in the build group for call UI changes;
       # GitHub enforces gzip budgets; timing limits need a calibrated runner.
       # Metro reuses transforms of unchanged modules, so the mobile export takes seconds instead of a minute.
       - name: Restore Metro cache

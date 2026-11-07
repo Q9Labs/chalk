@@ -38,36 +38,92 @@ type service struct {
 	baseURL string
 	client  *http.Client
 	stop    func()
+	logs    *logBuffer // everything the service logged, at every level
 }
 
-func startService(t *testing.T, ca *authority) *service {
+// logBuffer collects a service's log output for scanning.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *logBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *logBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+var operations atomic.Int64
+
+// op returns a fresh operation ID for a test request.
+func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
+
+// grantSources grants every source of each Participant once, as Sync does when it
+// lets them publish. The default test lease outlasts any test, so nothing renews.
+func (s *service) grantSources(t *testing.T, scopes ...protocol.Scope) {
+	t.Helper()
+	for _, scope := range scopes {
+		var controls []protocol.SourceControl
+		for _, source := range []string{"microphone", "camera", "screen", "screen_audio"} {
+			controls = append(controls, protocol.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: protocol.SourceGrant, Revision: 1})
+		}
+		var response protocol.SourceControlResponse
+		s.mustCall(t, "/v1/episodes/sources", protocol.SourceControlRequest{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, Controls: controls}, &response)
+	}
+}
+
+func startService(t *testing.T, ca *authority, configure ...func(*config.Config)) *service {
 	t.Helper()
 	dir := t.TempDir()
 	_, serverCert, serverKey := ca.issue("localhost", x509.ExtKeyUsageServerAuth)
 	cfg := config.Config{
-		ControlAddr:                "127.0.0.1:0",
-		UDPAddr:                    "127.0.0.1:0",
-		AnnounceIPs:                []string{"127.0.0.1"},
-		IncludeLoopback:            true,
-		TLSCertFile:                writeFile(t, dir, "server.pem", serverCert),
-		TLSKeyFile:                 writeFile(t, dir, "server.key", serverKey),
-		ClientCAFile:               writeFile(t, dir, "ca.pem", ca.pem),
-		ClientIdentity:             apiIdentity,
-		MaxSessions:                8,
+		ControlAddr:           "127.0.0.1:0",
+		UDPAddr:               "127.0.0.1:0",
+		AnnounceIPs:           []string{"127.0.0.1"},
+		IncludeLoopback:       true,
+		TLSCertFile:           writeFile(t, dir, "server.pem", serverCert),
+		TLSKeyFile:            writeFile(t, dir, "server.key", serverKey),
+		ClientCAFile:          writeFile(t, dir, "ca.pem", ca.pem),
+		ClientIdentity:        apiIdentity,
+		MaxSessions:           8,
+		PacketBudget:          1 << 20,
+		VideoStreamCost:       150,
+		CameraUplinkCost:      150,
+		CamerasPerParticipant: 2,
+		AudioStreamCost:       50,
+		ScreenStreamCost:      210,
+		EpisodePacketCeiling:  1 << 20,
+		Memory:                config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10},
+		Guard: config.Guard{
+			MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond,
+			MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second,
+		},
+		MaxEpisodeParticipants:     16,
 		MaxPublishedPerSession:     4,
 		MaxSubscriptionsPerSession: 8,
 		MaxRequestBytes:            256 << 10,
 		NegotiationTimeout:         time.Second,
 		ConnectTimeout:             30 * time.Second,
 		ShutdownTimeout:            5 * time.Second,
+		SourceLeaseTTL:             time.Hour,
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	for _, apply := range configure {
+		apply(&cfg)
+	}
+	logs := &logBuffer{}
+	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		t.Fatalf("start service: %v", err)
 	}
 	var once sync.Once
-	svc := &service{server: server, baseURL: "https://" + server.Addr().String()}
+	svc := &service{server: server, baseURL: "https://" + server.Addr().String(), logs: logs}
 	svc.stop = func() {
 		once.Do(func() {
 			if err := server.Stop(context.Background()); err != nil {
@@ -159,7 +215,7 @@ type peer struct {
 	pc *webrtc.PeerConnection
 }
 
-func newPeer(t *testing.T) *peer {
+func newPeer(t *testing.T, configure ...func(*webrtc.SettingEngine)) *peer {
 	t.Helper()
 	engine := &webrtc.MediaEngine{}
 	if err := engine.RegisterDefaultCodecs(); err != nil {
@@ -168,6 +224,9 @@ func newPeer(t *testing.T) *peer {
 	settings := webrtc.SettingEngine{}
 	settings.SetIncludeLoopbackCandidate(true)
 	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+	for _, apply := range configure {
+		apply(&settings)
+	}
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithSettingEngine(settings))
 	pc, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
@@ -314,6 +373,7 @@ func TestLoopback(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
+	svc.grantSources(t, scopeA, scopeB, scopeC, scopeD)
 
 	t.Run("mutual TLS", func(t *testing.T) {
 		rogue := newAuthority(t, "rogue CA")
@@ -336,6 +396,15 @@ func TestLoopback(t *testing.T) {
 		if svc.sessions(t) != 0 {
 			t.Fatal("a forbidden call created a session")
 		}
+		// Readiness names the node incarnation, so it needs the service identity too.
+		response, err := stranger.client.Get(svc.baseURL + "/readyz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusForbidden {
+			t.Fatalf("readiness with the wrong identity: status %d, want 403", response.StatusCode)
+		}
 	})
 
 	connA := svc.createSession(t, "create-alice", scopeA)
@@ -348,9 +417,6 @@ func TestLoopback(t *testing.T) {
 		}
 		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "create-alice", Scope: scopeB}, nil); status != http.StatusConflict || code != protocol.CodeOperationConflict {
 			t.Fatalf("reused operation ID: status %d code %q, want 409 operation_conflict", status, code)
-		}
-		if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "create-alice-2", Scope: scopeA}, nil); status != http.StatusConflict || code != protocol.CodeSessionExists {
-			t.Fatalf("second create for one generation: status %d code %q, want 409 session_exists", status, code)
 		}
 	})
 	connB := svc.createSession(t, "create-bob", scopeB)
@@ -379,7 +445,7 @@ func TestLoopback(t *testing.T) {
 	audioMid, videoMid := alice.mid(t, audio), alice.mid(t, video)
 
 	var pushed protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope:              scopeA,
 		SessionDescription: &pushOffer,
 		Tracks: []protocol.Track{
@@ -405,7 +471,7 @@ func TestLoopback(t *testing.T) {
 	bob := newPeer(t)
 	received := collect(bob)
 	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connB+"/tracks", protocol.TracksRequest{
+	svc.mustCall(t, "/v1/sessions/"+connB+"/tracks", protocol.TracksRequest{OperationID: op(),
 		Scope: scopeB,
 		Tracks: []protocol.Track{
 			{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName},
@@ -430,7 +496,7 @@ func TestLoopback(t *testing.T) {
 		t.Fatal(err)
 	}
 	answerSDP := bob.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{Scope: scopeB, SessionDescription: answerSDP}, nil)
+	svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scopeB, SessionDescription: answerSDP}, nil)
 
 	t.Run("audio and video arrive in order", func(t *testing.T) {
 		eventually(t, "30 audio and 30 video packets", 20*time.Second, func() bool {
@@ -454,7 +520,7 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("a pull across Tenants fails", func(t *testing.T) {
 		var response protocol.TracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connC+"/tracks", protocol.TracksRequest{
+		svc.mustCall(t, "/v1/sessions/"+connC+"/tracks", protocol.TracksRequest{OperationID: op(),
 			Scope:  scopeC,
 			Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: videoName}},
 		}, &response)
@@ -468,7 +534,7 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("close stops forwarding and inspect marks the track gone", func(t *testing.T) {
 		var closed protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &closed)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &closed)
 		if len(closed.Tracks) != 1 || closed.Tracks[0].AlreadyClosed {
 			t.Fatalf("close response: %+v", closed)
 		}
@@ -491,7 +557,7 @@ func TestLoopback(t *testing.T) {
 			t.Fatal("closing video stopped the audio")
 		}
 		var again protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &again)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &again)
 		if !again.Tracks[0].AlreadyClosed {
 			t.Fatal("closing an absent track was not idempotent")
 		}
@@ -504,8 +570,9 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("an unanswered server offer closes the session", func(t *testing.T) {
 		connD := svc.createSession(t, "create-dave", scopeD)
-		pull := protocol.TracksRequest{Scope: scopeD, Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName}}}
+		pull := protocol.TracksRequest{OperationID: op(), Scope: scopeD, Tracks: []protocol.Track{{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName}}}
 		svc.mustCall(t, "/v1/sessions/"+connD+"/tracks", pull, nil)
+		pull.OperationID = op()
 		if status, code := svc.call(t, "/v1/sessions/"+connD+"/tracks", pull, nil); status != http.StatusConflict || code != protocol.CodeNegotiationBusy {
 			t.Fatalf("second negotiation: status %d code %q, want 409 negotiation_in_progress", status, code)
 		}

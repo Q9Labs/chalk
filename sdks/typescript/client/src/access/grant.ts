@@ -20,16 +20,39 @@ export type ParticipantSyncAccess = {
   readonly token: ParticipantSyncCredential;
   readonly expiresAt: string;
 };
-export type ParticipantMediaAccess = {
-  readonly token: ParticipantMediaCredential;
-  readonly expiresAt: string;
-  readonly provider: "cloudflare_sfu";
-  readonly clientPayload: {
-    readonly connectionId: string;
-    readonly stunServer: string;
-    readonly iceServers?: readonly CloudflareSFUIceServer[];
-  };
+/** What the own SFU can do for this connection. A flag the server does not send as `true` is off. */
+export type ChalkSFUCapabilities = {
+  /** The SFU picks each subscriber's layer under the requested one, so a requested layer is a ceiling. */
+  readonly serverLayerAdaptation: boolean;
+  /** The SFU reports whether it delivers each remote video, and pauses one in place on request. */
+  readonly subscriptionState: boolean;
+  readonly iceRestart: boolean;
 };
+export type CloudflareSFUClientPayload = {
+  readonly connectionId: string;
+  readonly stunServer: string;
+  readonly iceServers?: readonly CloudflareSFUIceServer[];
+};
+export type ChalkSFUClientPayload = {
+  readonly connectionId: string;
+  readonly episodeRef: string;
+  /** Every ICE server the own SFU wants. It can be empty, because the SFU has a public address. */
+  readonly iceServers: readonly CloudflareSFUIceServer[];
+  readonly capabilities: ChalkSFUCapabilities;
+};
+export type ParticipantMediaAccess =
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "cloudflare_sfu";
+      readonly clientPayload: CloudflareSFUClientPayload;
+    }
+  | {
+      readonly token: ParticipantMediaCredential;
+      readonly expiresAt: string;
+      readonly provider: "chalk_sfu";
+      readonly clientPayload: ChalkSFUClientPayload;
+    };
 export type ParsedAccessGrant = {
   readonly subject: AccessSubject;
   readonly episodeStartedAt?: string | null;
@@ -168,19 +191,28 @@ function parseMediaAccess(value: unknown): ParticipantMediaAccess {
   const expiresAt = requireDateTime(value.expires_at ?? value.expiresAt);
   switch (value.provider) {
     case "cloudflare_sfu":
-      return {
-        token,
-        expiresAt,
-        provider: value.provider,
-        clientPayload: {
-          connectionId: requireNonEmptyString(payload.connectionId),
-          stunServer: requireNonEmptyString(payload.stunServer),
-          ...(payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) }),
-        },
-      };
+      return { token, expiresAt, provider: value.provider, clientPayload: parseCloudflareSFUPayload(payload) };
+    case "chalk_sfu":
+      return { token, expiresAt, provider: value.provider, clientPayload: parseChalkSFUPayload(payload) };
     default:
       throw new AccessGrantError();
   }
+}
+function parseCloudflareSFUPayload(payload: Readonly<Record<string, unknown>>): CloudflareSFUClientPayload {
+  const iceServers = payload.iceServers === undefined || payload.iceServers === null ? {} : { iceServers: parseIceServers(payload.iceServers) };
+  return { connectionId: requireNonEmptyString(payload.connectionId), stunServer: requireNonEmptyString(payload.stunServer), ...iceServers };
+}
+function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): ChalkSFUClientPayload {
+  return {
+    connectionId: requireNonEmptyString(payload.connectionId),
+    episodeRef: requireNonEmptyString(payload.episodeRef),
+    iceServers: parseIceServers(payload.iceServers ?? []),
+    capabilities: parseChalkSFUCapabilities(payload.capabilities),
+  };
+}
+function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
+  const flags = isRecord(value) ? value : {};
+  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true };
 }
 function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
   if (!Array.isArray(value)) throw new AccessGrantError();
@@ -198,6 +230,13 @@ function mediaClientPayload(value: ParticipantMediaAccess): Readonly<Record<stri
         connectionId: value.clientPayload.connectionId,
         stunServer: value.clientPayload.stunServer,
         ...(value.clientPayload.iceServers ? { iceServers: value.clientPayload.iceServers } : {}),
+      };
+    case "chalk_sfu":
+      return {
+        connectionId: value.clientPayload.connectionId,
+        episodeRef: value.clientPayload.episodeRef,
+        iceServers: value.clientPayload.iceServers,
+        capabilities: value.clientPayload.capabilities,
       };
   }
 }

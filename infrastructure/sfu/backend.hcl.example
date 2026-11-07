@@ -1,0 +1,6 @@
+# Replace ENVIRONMENT and ACCOUNT_ID privately. Staging uses the nightly state bucket.
+bucket       = "chalk-ENVIRONMENT-state-ACCOUNT_ID"
+key          = "sfu/terraform.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

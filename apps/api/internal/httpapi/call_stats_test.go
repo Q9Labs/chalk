@@ -16,7 +16,7 @@ import (
 
 const callStatsSessionID = "3f2b8c1e-9d4a-4b7e-8c55-0a1d2e3f4a5b"
 const callStatsFixture = `{"version":1,"samples":[` +
-	`{"elapsed_ms":10000,"window_ms":10000,"connection_type":"udp","local_candidate_type":"host","remote_candidate_type":"srflx","rtt_ms":42,"send_bitrate_kbps":850,"send_loss_pct":0.4,"send_jitter_ms":3,"send_layer":"h","recv_bitrate_kbps":1200,"recv_loss_pct":1.5,"recv_jitter_ms":6,"recv_height":360,"freeze_count":1,"freeze_ms":420},` +
+	`{"elapsed_ms":10000,"window_ms":10000,"connection_type":"udp","local_candidate_type":"host","remote_candidate_type":"srflx","rtt_ms":42,"send_bitrate_kbps":850,"send_loss_pct":0.4,"send_jitter_ms":3,"send_layer":"h","recv_bitrate_kbps":1200,"recv_loss_pct":1.5,"recv_jitter_ms":6,"recv_height":360,"freeze_count":1,"freeze_ms":420,"recv_paused_videos":2},` +
 	`{"elapsed_ms":20000,"window_ms":10000,"connection_type":"turn","local_candidate_type":"relay","remote_candidate_type":"host","relay_protocol":"tls"}]}`
 
 func TestCallStatsUploadIsLoggedUnderTheSession(t *testing.T) {
@@ -73,6 +73,7 @@ func TestCallStatsUploadIsLoggedUnderTheSession(t *testing.T) {
 	for key, want := range map[string]any{
 		"session.id": callStatsSessionID, "connection_type": "udp", "rtt_ms": float64(42), "recv_loss_pct": 1.5, "recv_height": float64(360),
 		"freeze_count": float64(1), "send_layer": "h", "country": "AE", "client_family": "safari", "client_os": "ios",
+		"recv_paused_videos": float64(2), "provider": "cloudflare_sfu", "provider_session_id": "connection-123",
 	} {
 		if first[key] != want {
 			t.Errorf("%s=%v, want %v", key, first[key], want)
@@ -102,6 +103,7 @@ func TestCallStatsRejectsFreeTextAndOutOfRangeValues(t *testing.T) {
 		{"window too short", `"window_ms":10000,"connection_type":"udp"`, `"window_ms":10,"connection_type":"udp"`},
 		{"unknown field", `"rtt_ms":42`, `"rtt_ms":42,"ip":"192.0.2.1"`},
 		{"version", `"version":1`, `"version":2`},
+		{"paused videos above the cap", `"recv_paused_videos":2`, `"recv_paused_videos":65`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			body := strings.Replace(callStatsFixture, test.from, test.to, 1)

@@ -114,3 +114,35 @@ const recording = {
   tenant_id: "tenant-one",
   updated_at: "2026-09-06T20:00:00Z",
 };
+
+describe("ChalkServerClient media providers", () => {
+  it("declares the own SFU and passes an own-SFU grant through", async () => {
+    const jwt = (audience: string) => `${btoa("header")}.${btoa(JSON.stringify({ aud: audience }))}.signature`;
+    const requests: Array<RequestInit | undefined> = [];
+    const grant = {
+      subject: { tenant_id: "tenant-1", space_id: "space-1", episode_id: "episode-1", participant_id: "participant-1", participant_generation: 2 },
+      sync: { token: jwt("chalk-sync"), expires_at: "2026-11-05T12:05:00Z" },
+      media: {
+        token: jwt("chalk-media"),
+        expires_at: "2026-11-05T12:05:00Z",
+        provider: "chalk_sfu",
+        client_payload: { connectionId: "own-1", provider: "chalk_sfu", episodeRef: "ref-1", iceServers: [], capabilities: { serverLayerAdaptation: false, iceRestart: false } },
+      },
+    };
+    const client = createChalkServerClient({
+      apiKey: "server-secret",
+      tenantId: "tenant-1",
+      apiBaseURL: "https://api.chalk.test",
+      fetch: async (_input, init) => {
+        requests.push(init);
+        return Response.json(requests.length === 1 ? { id: "episode-1" } : grant, { status: 201 });
+      },
+    });
+
+    await client.episodes.create("space-1", {}, { idempotencyKey: "create-episode-0001" });
+    const access = await client.participants.issueAccess("space-1", "episode-1", "participant-1", { participantGeneration: 2, replaceMediaConnection: true });
+
+    for (const init of requests) expect(new Headers(init?.headers).get("x-chalk-media-providers")).toBe("cloudflare_sfu,chalk_sfu");
+    expect(JSON.parse(JSON.stringify(access)).media).toMatchObject({ provider: "chalk_sfu", client_payload: { connectionId: "own-1", episodeRef: "ref-1", iceServers: [] } });
+  });
+});

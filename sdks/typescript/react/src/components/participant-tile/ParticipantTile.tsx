@@ -9,6 +9,7 @@ import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
 import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { TileShell } from "./TileShell";
+import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
 
 export interface ParticipantTileProps {
@@ -22,12 +23,16 @@ export interface ParticipantTileProps {
     audioLevel?: number;
     isMuted?: boolean;
     isVideoEnabled?: boolean;
+    /** Shows a badge while the SFU holds this camera back for the viewer's network. */
+    isVideoPausedForNetwork?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
     handRaiseOrder?: number;
     /** 0 means unknown; 1–2 show a poor-connection badge. */
     connectionQuality?: 0 | 1 | 2 | 3 | 4;
     avatarUrl?: string;
+    /** A remote camera's publication; the tile reports whether it is on screen so hidden video is not pulled. */
+    videoPublicationId?: string;
   };
   videoTrack?: MediaStreamTrack | null;
   /** Mirror the video horizontally. Defaults to the persisted self-view preference for local cameras, false for remote cameras. */
@@ -68,6 +73,7 @@ const aspectRatioClasses = {
 export const ParticipantTile = React.memo(function ParticipantTile({ videoTrack, ...props }: ParticipantTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const status = useVideoTrack(videoRef, videoTrack, props.participant.isVideoEnabled === true);
+  useVideoTileVisibility(videoRef, props.participant.isLocal ? undefined : props.participant.videoPublicationId, props.hidden !== true);
 
   return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} />;
 });
@@ -127,6 +133,11 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           {showStatus && hasPoorConnection ? (
             <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[var(--chalk-overlay)] px-[7px]">
               <SignalBars />
+            </span>
+          ) : null}
+          {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
+            <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[6px] bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
+              Video paused for network
             </span>
           ) : null}
           {onClick || onFollow ? (

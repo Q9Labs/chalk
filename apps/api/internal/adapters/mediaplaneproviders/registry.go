@@ -9,24 +9,37 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+// EpisodeReader loads the Episode whose frozen binding picks the provider.
+type EpisodeReader interface {
+	GetEpisode(ctx context.Context, tenantID, spaceID, episodeID utilities.ID) (episodes.Episode, error)
+}
 
 type Config struct {
 	ProcessConfig   runtimeconfig.CloudflareRealtimeConfig
 	DefaultProvider spaces.MediaPlaneProvider
 	Telemetry       providercontracts.Telemetry
+	// ChalkSFU is nil while the own SFU is off, so no Space can reach it.
+	ChalkSFU *chalksfu.Fleet
+	Episodes EpisodeReader
 }
 
 type Registry struct {
 	processConfig   runtimeconfig.CloudflareRealtimeConfig
 	defaultProvider spaces.MediaPlaneProvider
 	telemetry       providercontracts.Telemetry
+	chalk           *chalksfu.Fleet
+	episodes        EpisodeReader
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
 	turn *sfuadapter.TurnCredentials
@@ -55,11 +68,20 @@ func NewRegistry(config Config) Registry {
 		processConfig:   config.ProcessConfig,
 		defaultProvider: config.DefaultProvider,
 		telemetry:       config.Telemetry,
+		chalk:           config.ChalkSFU,
+		episodes:        config.Episodes,
 		turn:            sfuadapter.NewTurnCredentials(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
 
-func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spaces.Space) (service *mediaplane.Service, err error) {
+// ResolveEpisode returns the media plane the Episode is bound to. The Episode's
+// binding picks the provider, so a later change to the Space or Tenant selector
+// cannot move a live Episode. An Episode whose binding is null started without
+// media and has none, unless its selected provider still has no application: then
+// it refuses as unavailable, as master does; an Episode with no binding key
+// predates the binding and stays on Cloudflare. The Tenant document still supplies the mode and the
+// credentials, and the resolved application must match the binding's fingerprint.
+func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, space spaces.Space, episodeID utilities.ID) (service *mediaplane.Service, err error) {
 	startedAt := time.Now()
 	resolution := providercontracts.Resolution{
 		ConfigurationSource: providercontracts.ConfigurationSourceNone,
@@ -72,11 +94,47 @@ func (r Registry) Resolve(ctx context.Context, tenant tenants.Tenant, space spac
 			r.telemetry.RecordResolution(ctx, resolution)
 		}
 	}()
-	resolved, err := r.resolveProviderConfig(tenant, space, &resolution)
+	if r.episodes == nil {
+		return nil, fmt.Errorf("%w: no episode reader", providercontracts.ErrAdapterUnavailable)
+	}
+	episode, err := r.episodes.GetEpisode(ctx, tenant.ID, space.ID, episodeID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: episode lookup failed", mediaplane.ErrPlaneUnavailable)
+	}
+	binding, legacy, err := episode.MediaPlaneBinding()
+	if err != nil {
+		return nil, err
+	}
+	if binding == nil && !legacy {
+		// Creation also stores null when the selected provider has no application.
+		resolved, err := r.resolveProviderConfig(tenant, space, &resolution, "")
+		if err != nil {
+			return nil, err
+		}
+		if resolved != nil && r.applicationID(resolved) == "" {
+			return nil, fmt.Errorf("%w: no application for provider %s", providercontracts.ErrAdapterUnavailable, resolution.Provider)
+		}
+		return nil, nil
+	}
+	pin := spaces.MediaPlaneProviderCloudflareSFU
+	if binding != nil {
+		if pin, err = parseSelectedProvider(binding.Provider); err != nil {
+			return nil, err
+		}
+	}
+	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, pin)
 	if err != nil || resolved == nil {
 		return nil, err
 	}
-	return r.newService(resolved.provider, resolved.config)
+	node := ""
+	if binding != nil {
+		fingerprint, err := mediaplane.AdapterFingerprint(binding.Provider, r.applicationID(resolved))
+		if err != nil || fingerprint != binding.AdapterFingerprint {
+			return nil, fmt.Errorf("%w: the configured application is not the one the Episode was bound to", providercontracts.ErrAdapterUnavailable)
+		}
+		node = binding.Node
+	}
+	return r.newService(resolved.provider, resolved.config, node)
 }
 
 type resolvedProviderConfig struct {
@@ -84,10 +142,18 @@ type resolvedProviderConfig struct {
 	config   runtimeconfig.CloudflareRealtimeConfig
 }
 
-func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *providercontracts.Resolution) (*resolvedProviderConfig, error) {
-	providerName, err := selectedProvider(tenant, space)
-	if err != nil {
-		return nil, err
+// resolveProviderConfig finds the provider and its configuration. A non-empty pin
+// is the provider of an existing Episode's binding; it replaces the Space and
+// Tenant selection and relaxes the Tenant document's provider check, because that
+// document describes the next Episode, not this one.
+func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *providercontracts.Resolution, pin spaces.MediaPlaneProvider) (*resolvedProviderConfig, error) {
+	providerName := pin
+	if pin == "" {
+		selected, err := selectedProvider(tenant, space)
+		if err != nil {
+			return nil, err
+		}
+		providerName = selected
 	}
 	resolution.Provider = providerName
 	if providerName == "" {
@@ -97,7 +163,7 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 	providerConfig, err := parseProviderConfig(tenant.MediaPlaneProviderConfig)
 	if err != nil {
 		if errors.Is(err, providercontracts.ErrMissingProviderConfig) {
-			if providerName != r.defaultProvider {
+			if providerName != r.defaultProvider && !(providerName == spaces.MediaPlaneProviderChalkSFU && r.chalk != nil) {
 				return nil, fmt.Errorf("%w: no process config for provider %s", providercontracts.ErrAdapterUnavailable, providerName)
 			}
 			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
@@ -121,17 +187,19 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 	if err != nil {
 		return nil, err
 	}
+	mode := strings.TrimSpace(providerConfig.Mode)
 	if configuredProvider := strings.TrimSpace(providerConfig.Provider); configuredProvider != "" {
 		parsedProvider, parseErr := spaces.ParseMediaPlaneProvider(configuredProvider)
 		if parseErr != nil {
 			return nil, fmt.Errorf("%w: provider %s", providercontracts.ErrInvalidProviderConfig, configuredProvider)
 		}
-		if parsedProvider != providerName {
+		// Tenant-managed credentials belong to one provider. In Chalk-managed mode
+		// Chalk runs every provider, so the Space selection may pick another one.
+		if pin == "" && mode == providercontracts.ModeTenantManaged && parsedProvider != providerName {
 			return nil, fmt.Errorf("%w: provider does not match space", providercontracts.ErrInvalidProviderConfig)
 		}
 	}
 
-	mode := strings.TrimSpace(providerConfig.Mode)
 	resolution.Mode = mode
 	switch mode {
 	case providercontracts.ModeChalkManaged:
@@ -215,6 +283,8 @@ func providerForName(name spaces.MediaPlaneProvider) (mediaplane.Provider, error
 
 	case spaces.MediaPlaneProviderCloudflareSFU:
 		return mediaplane.ProviderCloudflareSFU, nil
+	case spaces.MediaPlaneProviderChalkSFU:
+		return mediaplane.ProviderChalkSFU, nil
 	default:
 		return "", fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, name)
 	}
@@ -223,6 +293,10 @@ func providerForName(name spaces.MediaPlaneProvider) (mediaplane.Provider, error
 func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, providerConfig providerConfig) (runtimeconfig.CloudflareRealtimeConfig, error) {
 	if providerConfig.Cloudflare == nil {
 		return runtimeconfig.CloudflareRealtimeConfig{}, providercontracts.ErrMissingProviderConfig
+	}
+
+	if providerName == spaces.MediaPlaneProviderChalkSFU {
+		return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: chalk_sfu has no tenant-managed mode", providercontracts.ErrInvalidMode)
 	}
 
 	resolved := runtimeconfig.CloudflareRealtimeConfig{}
@@ -242,7 +316,9 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, providerName)
 }
 
-func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig) (*mediaplane.Service, error) {
+// newService builds the Episode's media plane. node is the Episode's bound node for
+// a provider that runs several; it is ignored by a provider with one endpoint.
+func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, node string) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
 
@@ -257,12 +333,38 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 			configured = configured.WithTurnCredentials(r.turn)
 		}
 		plane = configured
+	case mediaplane.ProviderChalkSFU:
+		if r.chalk == nil {
+			return nil, fmt.Errorf("%w: Chalk SFU is not enabled", providercontracts.ErrAdapterUnavailable)
+		}
+		bound, err := r.chalk.Node(node)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
+		}
+		// A nil TURN source would be a typed nil inside the interface.
+		if r.turn != nil {
+			bound = bound.WithRelay(r.turn)
+		}
+		plane = bound
 	default:
 		return nil, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, provider)
 	}
 
 	service := mediaplane.NewServiceForProvider(provider, plane)
 	return &service, nil
+}
+
+// applicationID names the provider application a resolved configuration points at.
+func (r Registry) applicationID(resolved *resolvedProviderConfig) string {
+	switch resolved.provider {
+	case mediaplane.ProviderChalkSFU:
+		if r.chalk == nil {
+			return ""
+		}
+		return r.chalk.ApplicationID()
+	default:
+		return strings.TrimSpace(resolved.config.RealtimeAppID)
+	}
 }
 
 var _ providercontracts.Resolver = Registry{}

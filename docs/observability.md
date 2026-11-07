@@ -73,10 +73,16 @@ Episode, a hashed participant ID, and these fields: `connection_type` (`udp`,
 `tcp`, `turn`, `unknown`), `rtt_ms`, `send_loss_pct`, `recv_loss_pct`,
 `send_jitter_ms`, `recv_jitter_ms`, `send_bitrate_kbps`, `recv_bitrate_kbps`,
 `send_layer` (`h`, `m`, `l`: the highest layer that sent during the window),
-`recv_height`, `freeze_count`, and `freeze_ms`. Candidate types come from the
+`recv_height`, `freeze_count`, `freeze_ms`, and `recv_paused_videos` (own SFU
+only: remote videos the SFU paused for this device's network at the end of the
+window, 0 to 64). Candidate types come from the
 selected candidate pair. The body has no IP address, SDP, or free text. The API
 adds `country` (the edge's country code), `client_family`, and `client_os` from
 the request, so calls compare by region and platform without storing an address.
+It also adds `provider` (`cloudflare_sfu` or `chalk_sfu`) and
+`provider_session_id`, the media connection ID from the participant's media
+credential. That ID is the session the own SFU names in its logs and in
+`/inspect`, so one device's stats join the SFU's view of the same connection.
 
 ```apl
 ['<api-log-dataset>']
@@ -94,6 +100,47 @@ the request, so calls compare by region and platform without storing an address.
 Add `by ['attributes.country']` to compare regions. Field paths follow the
 dataset's log mapping, so match them to how `sdk.connection_report` appears there.
 Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
+### Own-SFU video paused for network
+
+On the own SFU (`chalk_sfu`), the SFU picks each viewer's simulcast layer under
+the one the SDK requests, and pauses a remote video when the viewer's link cannot
+carry even the lowest layer. Audio keeps flowing. The join sends the
+`serverLayerAdaptation` and `subscriptionState` capabilities, and the SDK then
+changes three things. Its own layer policy only caps the layer at the tile size,
+so the SDK and the SFU do not run competing upswitch loops. A remote video that
+has been quiet for 2 s makes the SDK read
+`GET .../participants/{participant_id}/media/sfu/subscriptions`, which returns
+each of the caller's subscriptions with `state`, `reason` (`congestion`,
+`viewer`, `source_inactive`, `source_unauthorized`), `revision`,
+`requested_rid`, and `effective_rid`.
+The route reads only the credential's own connection, and a Cloudflare Episode
+answers 400. While the SFU reports a pause, the stall check leaves that video
+out, so the SDK does not repull it after the 7 s window, and the tile shows
+"Video paused for network" until RTP returns or a read says the SFU resumed it.
+A read that says the video is active, or a read that fails, gives the video back
+to normal stall recovery. Off-screen video is paused in place with a
+`tracks/update` that carries `paused` and no simulcast, and is resumed the same
+way, so it needs no close, pull, or renegotiation. The Cloudflare adapter refuses
+`paused`, and the Cloudflare path keeps its `h`-first pulls and receive-only
+closes.
+
+To follow one device, find its `provider_session_id` in `sdk.call_stats` and
+match it to the session in the SFU's logs. A rising `recv_paused_videos` with low
+`recv_bitrate_kbps` means the SFU is protecting audio on a slow link, not a
+receive stall. A failed subscriptions read appears in connection reports as
+`media_error_step` `sfu_subscriptions`.
+
+A congestion pause is transient delivery that the client observes. It changes no
+durable journey boundary: the Episode, the participant, and the publication stay
+as they were. So it adds no journey-ledger event, and its evidence is the call
+stats and the SFU's own state. Proof is in
+`sdks/typescript/client/src/media/cloudflare-sfu.test.ts` (the "own-SFU
+subscription state" tests), `sdks/typescript/client/src/media/subscription-delivery.test.ts`,
+`sdks/typescript/client/src/media/call-stats.test.ts`,
+`apps/api/internal/httpapi/sfu_subscriptions_test.go`,
+`apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
+`apps/api/internal/adapters/chalksfu/conformance_test.go`.
 
 ### Interrupted recording stops and missing provider tracks
 
@@ -294,6 +341,83 @@ The span's `reserved` attribute distinguishes a successful reservation from a
 failed attempt; only a committed transaction retains the durable journey root.
 No token, raw participant or user identity, error text, or media payload is added.
 
+### Own SFU congestion, repair and admission
+
+The own SFU (`features/media/sfu`) logs structured JSON with no Tenant, Episode,
+Participant, address, SDP, certificate or payload in its node-wide lines.
+`features/media/sfu/tests/impairment_test.go` scans the logs of impaired calls for those.
+
+- `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
+  the repair and probe parts of it, subscriptions paused for congestion, subscriptions
+  the Episode plan pauses to hold its ceiling (`plannerPaused`), cameras
+  the Episode ceilings cap or pause, pacer queue delay p95, Go scheduler latency
+  p99, CPU steal where the host reports it, and the admission reason.
+- `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
+  the admission reason changes to or from `cpu_steal`, `cpu_busy`,
+  `pacer_queue_delay`, `pacer_drops` or `udp_buffer_errors`, with the readings
+  that decided it. Every refused join or screen share logs a `refused` warning
+  with its reason. Live Episodes keep admitting
+  their Participants while new ones are refused.
+- `media readers still running after close` (error) when shutdown gave up
+  waiting for a stream reader. A publisher that sent a second SSRC under a RID
+  causes it; the process still exits.
+
+To follow one subscriber, call the session's `inspect`. Each subscription shows
+its requested and effective RID, `state` and `reason` (`congestion` for a
+network pause; the wire reason of a pause by the Episode plan is `congestion` too,
+and only `plannerPaused` and the metrics tell the two apart), and its transport shows the estimate, proven rate, feedback age,
+queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
+probes. The Episode block shows its packets/s against its ceiling. `/readyz`
+shows the host signals behind admission.
+
+The node also exports metrics over OTLP/HTTP to the API's metrics dataset, as
+`service.name=chalk-sfu` with `deployment.environment.name` and the node
+incarnation as `service.instance.id`, so call quality and host health are
+readable without SSH. They carry no Tenant, Episode, Participant, session or
+address. Their only attributes are `chalk.sfu.direction` (`in`, `out`),
+`chalk.sfu.media_kind` (`audio`, `video`, and `repair` and `probe` out),
+`chalk.sfu.refusal_reason` and `chalk.sfu.admission_reason`.
+`features/media/sfu/tests/telemetry_test.go` runs an impaired call and checks
+the export against `inspect` and for identities.
+
+- Load: `chalk.sfu.sessions`, `chalk.sfu.episodes`, `chalk.sfu.packet_budget`,
+  `chalk.sfu.packets.reserved`, and `chalk.sfu.packet_rate` and
+  `chalk.sfu.bitrate` over the last second by direction and kind.
+- Totals since start, as cumulative counters: `chalk.sfu.packets` and
+  `chalk.sfu.bytes` by direction and kind (RTX sent is `out`/`repair`),
+  `chalk.sfu.pacer.drops`, `chalk.sfu.repairs.cut`, `chalk.sfu.nack.requested`,
+  `chalk.sfu.keyframe_repairs`, `chalk.sfu.rtx.received`,
+  `chalk.sfu.layer.switches`, `chalk.sfu.udp.send_refused` and
+  `chalk.sfu.udp.receive_truncated` (datagrams the media socket's kernel calls
+  refused or cut short; both stay 0 when `SFU_UDP_BATCH` is off), and
+  `chalk.sfu.refusals` by reason (`draining`,
+  `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
+  `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
+  `udp_buffer_errors`, `screen_ceiling`, `cameras`).
+- Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
+  only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
+  ceiling),
+  `chalk.sfu.cameras.capped` and `.paused`, `chalk.sfu.pacer.queue_delay.p95`
+  and `chalk.sfu.scheduler.latency.p99` in seconds, and
+  `chalk.sfu.host.cpu.steal`, `chalk.sfu.host.cpu.utilization` (ratios over the
+  guard window) and `chalk.sfu.host.udp.receive_buffer_errors` and `.send_buffer_errors`
+  where the host reports them.
+- State and process: `chalk.sfu.draining` and `chalk.sfu.admission.closed`
+  (1 or 0, with the admission reason), `process.cpu.time` and
+  `process.memory.usage` (resident bytes, Linux).
+
+A rate from the totals is exact over any window. A stream that closes between two
+100 ms control ticks loses that tick's counts, so totals can run slightly under
+the sum of every session's `inspect`. A restart starts every total again from
+zero under a new `service.instance.id`.
+
+The alert collector samples the node's `/readyz` and alerts when it stays
+unreachable, draining, closed to new Episodes or above 90% of its packet budget;
+see [Alerts](#alerts). `media readers still running after close` stays a journal
+line and has no monitor, because it only happens while the process exits.
+The paused-for-network journey (SDK `subscriptionState`) lands with the API and
+SDK change, and adds its journey ledger entry then.
+
 ## Alerts
 
 Three Axiom monitors cover API errors and abnormal Sync drops, failed/overdue
@@ -332,6 +456,14 @@ read-only synthetic Axiom query tests replay the blip and sustained window,
 recovery, duplicate/missing samples and a change of reason.
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
+The collector also samples the own SFU's `/readyz` over mutual TLS when
+`CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
+grouped monitor alerts on four unhealthy minute samples in five minutes: a
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
+queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
+allowlisted reason codes are exported, never TLS or HTTP error text, response
+bodies or node identifiers. The freshness monitor does not count this row, so
+hosts without an SFU stay quiet. See the production-alerts README for setup.
 
 ### Sync lifecycle readiness evidence
 
@@ -549,8 +681,8 @@ session; only another binding's takeover returns the terminal superseded code.
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
 `network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
-`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`, or
-`sfu_publications`). SFU HTTP failures also carry `http_status` (400–599).
+`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`,
+`sfu_publications`, or `sfu_subscriptions`). SFU HTTP failures also carry `http_status` (400–599).
 `network` identifies a fetch rejection or browser NetworkError, not an arbitrary
 TypeError. `granted_audio` and `granted_video` are `granted`, `not_granted`, or
 `unknown`: live tracks returned by acquisition, regardless of mute state, not

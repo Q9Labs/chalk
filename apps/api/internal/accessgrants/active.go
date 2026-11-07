@@ -66,27 +66,27 @@ func (a ActiveAuthorizer) BindParticipantMediaConnection(ctx context.Context, su
 	}
 	return a.repository.SetParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
-	}, subject.ParticipantGeneration, subject.CloudflareConnectionID)
+	}, subject.ParticipantGeneration, subject.ConnectionID)
 }
 
 // CheckParticipantMediaConnection rejects a credential whose connection was replaced.
 func (a ActiveAuthorizer) CheckParticipantMediaConnection(ctx context.Context, subject Subject) error {
 	return a.repository.CheckParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID,
-	}, subject.ParticipantGeneration, subject.CloudflareConnectionID)
+	}, subject.ParticipantGeneration, subject.ConnectionID)
 }
 
 // ReplaceParticipantMediaConnection fences concurrent refreshes of the same credential.
 func (a ActiveAuthorizer) ReplaceParticipantMediaConnection(ctx context.Context, previous, next Subject) error {
 	return a.repository.ReplaceParticipantMediaConnection(ctx, synctokens.SubjectKey{
 		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
-	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID)
+	}, previous.ParticipantGeneration, previous.ConnectionID, next.ConnectionID)
 }
 
 func (a ActiveAuthorizer) ReserveParticipantMediaRefresh(ctx context.Context, previous, reservation Subject, requestHash [32]byte) error {
 	return a.repository.ReserveParticipantMediaRefresh(ctx, synctokens.SubjectKey{
 		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
-	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, reservation.CloudflareConnectionID, requestHash)
+	}, previous.ParticipantGeneration, previous.ConnectionID, reservation.ConnectionID, requestHash)
 }
 
 func (a ActiveAuthorizer) LoadParticipantMediaRefresh(ctx context.Context, subject Subject, requestHash [32]byte) (*StoredRefreshReplay, error) {
@@ -98,5 +98,5 @@ func (a ActiveAuthorizer) LoadParticipantMediaRefresh(ctx context.Context, subje
 func (a ActiveAuthorizer) CompleteParticipantMediaRefresh(ctx context.Context, previous, next Subject, replay RefreshReplay) error {
 	return a.repository.CompleteParticipantMediaRefresh(ctx, synctokens.SubjectKey{
 		TenantID: previous.TenantID, SpaceID: previous.SpaceID, EpisodeID: previous.EpisodeID, ParticipantID: previous.ParticipantID,
-	}, previous.ParticipantGeneration, previous.CloudflareConnectionID, next.CloudflareConnectionID, replay)
+	}, previous.ParticipantGeneration, previous.ConnectionID, next.ConnectionID, replay)
 }

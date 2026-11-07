@@ -6,6 +6,22 @@ import { TileShell } from "./TileShell";
 import { ParticipantTileSurface } from "./ParticipantTile";
 
 describe("ParticipantTile", () => {
+  it("tells the viewer a camera is paused for their network, only while the camera is on", async () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const render = (participant: { isVideoEnabled: boolean; isVideoPausedForNetwork?: boolean }) => act(async () => root.render(<ParticipantTileSurface participant={{ id: "nora", displayName: "Nora", ...participant }} mediaVisible={false} animatedAvatars={false} />));
+    try {
+      await render({ isVideoEnabled: true, isVideoPausedForNetwork: true });
+      expect(container.querySelector('[data-part="tile-video-paused"]')?.textContent).toBe("Video paused for network");
+      await render({ isVideoEnabled: false, isVideoPausedForNetwork: true });
+      expect(container.querySelector('[data-part="tile-video-paused"]')).toBeNull();
+      await render({ isVideoEnabled: true });
+      expect(container.querySelector('[data-part="tile-video-paused"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it("shows the participant avatar in the main area when the camera is off", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);

@@ -276,7 +276,7 @@ defmodule ChalkSync.ProviderBridge.Client do
         result
         |> Map.merge(%{"effect" => effect, "tenant_id" => tenant_id, "episode_id" => episode_id})
         |> Map.take(
-          ~w(effect tenant_id episode_id participant_id participant_generation publication_source recording_id recording_reservation)
+          ~w(effect tenant_id episode_id participant_id participant_generation publication_source control_revision recording_id recording_reservation)
         )
 
       if is_nil(recording_reservation),
@@ -347,6 +347,7 @@ defmodule ChalkSync.ProviderBridge.Client do
       {"participant_id", :uuid},
       {"participant_generation", :positive_integer},
       {"publication_source", :source},
+      {"control_revision", :positive_integer},
       {"recording_id", :uuid}
     ]
 

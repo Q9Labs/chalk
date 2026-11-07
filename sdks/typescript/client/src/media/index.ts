@@ -5,4 +5,5 @@ export { configureCameraEffectProvider, getCameraBackgroundFallback, setCameraBa
 export type { CameraEffectsAssets, CameraEffectsTrack, CameraEffectsProvider, CameraSegmenter } from "./camera-effects";
 export type { CameraBackground } from "./camera-background-settings";
 export { setVideoRenderSize } from "./video-render-size";
+export { setVideoTileVisibility } from "./video-tile-visibility";
 export type { VideoRenderSize } from "./video-render-size";

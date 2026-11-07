@@ -46,7 +46,7 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 			}
 			cancelled, err := service.CancelParticipantJoin(ctx, episodes.CancelParticipantJoinInput{
 				TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID,
-				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.CloudflareConnectionID,
+				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.ConnectionID,
 			})
 			return cancelParticipantJoinResponse{Cancelled: cancelled}, err
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).

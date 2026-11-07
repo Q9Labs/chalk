@@ -13,6 +13,7 @@ import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
+import { HIDDEN_PAGE_CLOSE_MS, HIDDEN_TILE_CLOSE_MS, setVideoTileVisibility, UNREPORTED_TILE_WAIT_MS } from "./video-tile-visibility";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -24,6 +25,7 @@ import type {
   CloudflareSFUTrackRequest,
   CloudflareSFUTracksResponse,
 } from "./cloudflare-sfu";
+import type { SFUSubscriptionState } from "./types";
 
 it("stops receive health sampling when stopped", async () => {
   vi.useFakeTimers();
@@ -2332,6 +2334,98 @@ it.each(["microphone", "camera"] as const)("only retiring the negotiated BUNDLE 
   }
 });
 
+it.each(["microphone", "camera"] as const)("keeps the BUNDLE transport when explicitly muting its %s sender", async (source) => {
+  await expectExplicitMuteToKeepBundleTransport(source, false);
+});
+
+it.each(["microphone", "camera"] as const)("keeps the transport when explicitly muting %s without BUNDLE information", async (source) => {
+  await expectExplicitMuteToKeepBundleTransport(source, true);
+});
+
+async function expectExplicitMuteToKeepBundleTransport(source: "microphone" | "camera", omitBundleInfo: boolean): Promise<void> {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+  await withTimedHarness(
+    async (harness) => {
+      const otherSource = source === "microphone" ? "camera" : "microphone";
+      const mutedTrack = new FakeTrack(`muted-${source}`, source === "microphone" ? "audio" : "video");
+      const otherTrack = new FakeTrack(`other-${source}`, otherSource === "microphone" ? "audio" : "video");
+      await harness.client.start(fakeStream(mutedTrack, otherTrack));
+      const mutedTransceiver = harness.peers[0]!.getTransceivers().find((transceiver) => transceiver.sender.track === (mutedTrack as unknown as MediaStreamTrack))!;
+      expect(mutedTransceiver.mid).toBe("0");
+      if (omitBundleInfo) harness.peers[0]!.localDescription = { type: "offer", sdp: "v=0\r\n" };
+
+      remoteMedia(harness);
+      await harness.client.refreshRemotePublications();
+      const localTracks = harness.client.getSnapshot().localTracks;
+      const mutedPublicationId = localTracks.find((track) => track.source === source)!.publicationId!;
+      const otherPublicationId = localTracks.find((track) => track.source === otherSource)!.publicationId;
+      const remoteTracks = harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+        participantId,
+        publicationId,
+        source: remoteSource,
+        trackId: track.id,
+      }));
+      const remotePulls = remotePullCount(harness);
+
+      await harness.client.setLocalSourceIntent(source, false, "user_pause");
+      await expect(harness.client.setLocalPublicationTarget({ operationId: `mute-${source}`, participantId: "participant-1", source, enabled: false })).resolves.toMatchObject({ outcome: "satisfied" });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(harness.transport.closeInputs).toHaveLength(1);
+      expect(harness.transport.closeInputs[0]?.tracks).toEqual([expect.objectContaining({ publicationId: mutedPublicationId, source })]);
+      expect(harness.transport.localPublications.has(mutedPublicationId)).toBe(false);
+      expect(harness.transport.localPublications.has(otherPublicationId)).toBe(true);
+      expect(harness.client.getSnapshot().localTracks.find((track) => track.source === source)).toMatchObject({ enabled: false, publicationId: null });
+      expect(harness.client.getSnapshot().localTracks.find((track) => track.source === otherSource)?.publicationId).toBe(otherPublicationId);
+      expect(mutedTransceiver.sender.track).toBeNull();
+      expect(mutedTrack.enabled).toBe(false);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
+      expect(remotePullCount(harness)).toBe(remotePulls);
+      expect(replaceMediaConnection).not.toHaveBeenCalled();
+      expect(harness.peers).toHaveLength(1);
+      expect(harness.peers[0]?.connectionState).toBe("connected");
+      expect(harness.peers[0]?.closed).toBe(false);
+
+      await harness.client.setLocalSourceIntent(source, true);
+      await expect(harness.client.setLocalPublicationTarget({ operationId: `unmute-${source}`, participantId: "participant-1", source, enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(replaceMediaConnection).not.toHaveBeenCalled();
+      expect(harness.peers).toHaveLength(1);
+      expect(harness.peers[0]?.connectionState).toBe("connected");
+      expect(harness.peers[0]?.closed).toBe(false);
+      expect(
+        harness.client.getSnapshot().remoteTracks.map(({ participantId, publicationId, source: remoteSource, track }) => ({
+          participantId,
+          publicationId,
+          source: remoteSource,
+          trackId: track.id,
+        })),
+      ).toEqual(remoteTracks);
+      expect(remotePullCount(harness)).toBe(remotePulls);
+      expect(harness.transport.closeInputs).toHaveLength(1);
+      expect(harness.transport.closeInputs[0]).toMatchObject({ sessionDescription: undefined, force: true });
+      const updatedLocalTracks = harness.client.getSnapshot().localTracks;
+      expect(updatedLocalTracks.find((track) => track.source === source)).toMatchObject({ enabled: true });
+      expect(updatedLocalTracks.find((track) => track.source === source)?.publicationId).not.toBe(mutedPublicationId);
+      expect(updatedLocalTracks.find((track) => track.source === otherSource)?.publicationId).toBe(otherPublicationId);
+      expect(mutedTrack.enabled).toBe(true);
+      const replacementTransceiver = harness.peers[0]!.getTransceivers().find((transceiver) => transceiver.sender.track === (mutedTrack as unknown as MediaStreamTrack))!;
+      expect(replacementTransceiver).not.toBe(mutedTransceiver);
+      expect(replacementTransceiver.mid).not.toBe(mutedTransceiver.mid);
+      expect(mutedTransceiver.direction).toBe("inactive");
+    },
+    { replaceMediaConnection },
+  );
+}
+
 it.each(["microphone", "camera"] as const)("ownership: failed-close recovery can fence the old %s publication", async (source) => {
   const replace = vi.fn(async () => {
     // Mirror the server's old-connection retirement on replacement.
@@ -2359,8 +2453,14 @@ it.each(["user_pause", "moderation_pause", "sync_recovery_loss"] as const)("repo
     await harness.client.closeForcedLocalPublication("microphone", cause);
     harness.client.setLocalSourceIntent("microphone", true);
     await harness.client.setLocalPublicationTarget({ operationId: "resume", participantId: "participant-1", source: "microphone", enabled: true });
-    expect(add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []))).toEqual([cause]);
-    expect(harness.peers).toHaveLength(2);
+    const replacementCauses = add.mock.calls.flatMap(([input]) => (input.replacementCause ? [input.replacementCause] : []));
+    if (cause === "user_pause") {
+      expect(replacementCauses).toEqual([]);
+      expect(harness.peers).toHaveLength(1);
+    } else {
+      expect(replacementCauses).toEqual([cause]);
+      expect(harness.peers).toHaveLength(2);
+    }
   } finally {
     harness.client.stop();
   }
@@ -4427,6 +4527,7 @@ async function unmuteDuringSwap(scenario: "waited" | "cross-grace" | "rapid"): P
   const { harness, track, command, client, startSwap, enable, dispose } = createSwapCall();
   try {
     await client.join({ microphone: true, camera: false });
+    await vi.waitFor(() => expect(command).toHaveBeenCalledWith(true));
     if (scenario !== "rapid") {
       await client.media.setMicrophoneEnabled(false);
       expect(track.enabled).toBe(false);
@@ -4556,7 +4657,9 @@ function createHarness(
     readonly onScreenEnded?: () => void;
     readonly replaceMediaConnection?: () => Promise<CloudflareSFUBootstrap>;
     readonly pollIntervalMs?: number;
+    readonly unreportedVideoTileWaitMs?: number;
     readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
+    readonly bootstrap?: CloudflareSFUBootstrap;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -4567,11 +4670,13 @@ function createHarness(
     return peer as unknown as RTCPeerConnection;
   });
   const client = new CloudflareSFUClient({
-    bootstrap: bootstrap("connection-1"),
+    bootstrap: options.bootstrap ?? bootstrap("connection-1"),
     participantId: "participant-1",
     transport,
     replaceMediaConnection: options.replaceMediaConnection,
     pollIntervalMs: options.pollIntervalMs ?? 60000,
+    // Most tests never report tiles and expect video in the first pull.
+    unreportedVideoTileWaitMs: options.unreportedVideoTileWaitMs ?? 0,
     onError: options.onError,
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
@@ -4597,6 +4702,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }[] = [];
   blockPublicationList = false;
   uploadCallStats: CloudflareSFUSignalingTransport["uploadCallStats"];
+  listSubscriptions: CloudflareSFUSignalingTransport["listSubscriptions"];
   readonly localPublications = new Map<string, CloudflareSFUPublicationSnapshot["publications"][number]>();
   failNextLocalPublish = false;
   nextLocalPublishFailure: Error | null = null;
@@ -4823,7 +4929,9 @@ class FakePeerConnection extends EventTarget {
   activeTransceiverCount(): number {
     return this.#activeTransceivers.size;
   }
-  async createOffer(): Promise<RTCSessionDescriptionInit> {
+  readonly offerOptions: (RTCOfferOptions | undefined)[] = [];
+  async createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit> {
+    this.offerOptions.push(options);
     if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
     return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#transceivers.map((transceiver) => transceiver.mid).join(" ")}\r\n` };
   }
@@ -5758,4 +5866,973 @@ it("a re-pull whose final renegotiation fails still falls back for the retired a
     },
     { replaceMediaConnection: async () => reviewReplacement(receiver, `retired-fallback-${++replacements}`) },
   );
+});
+
+describe("visible-tile video subscriptions", () => {
+  const onScreen = { width: 640, height: 360 };
+
+  // The tile registry is shared by every client, so each call uses its own publication IDs.
+  function tileCall(tag: string, people: number, options: { readonly onError?: (error: unknown) => void } = {}) {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...options });
+    harness.transport.uniqueRemoteMids = true;
+    const cameras = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "1", "camera"));
+    const microphones = Array.from({ length: people }, (_, i) => versionedPublicationID(`${tag}-${i}`, "0", "microphone"));
+    const publications = cameras.flatMap((camera, i) => [
+      { participantId: `${tag}-person-${i}`, source: "microphone" as const, publicationId: microphones[i]! },
+      { participantId: `${tag}-person-${i}`, source: "camera" as const, publicationId: camera },
+    ]);
+    const join = async () => {
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      await harness.client.refreshRemotePublications();
+    };
+    const pulls = (trackName: "camera" | "microphone") => harness.transport.addInputs.flatMap((input) => input.tracks.filter((track) => track.location === "remote" && track.trackName === trackName));
+    const held = (source: "camera" | "microphone") =>
+      harness.client
+        .getSnapshot()
+        .remoteTracks.filter((track) => track.source === source)
+        .map((track) => track.publicationId);
+    // A receiver leaks when its track is gone but the SFU was never told to close its subscription.
+    const openVideoSubscriptions = () => {
+      const closed = new Set(harness.transport.closeInputs.flatMap((input) => input.tracks.map((track) => track.mid)));
+      return harness.peers.flatMap((peer) => peer.getTransceivers().filter((transceiver) => transceiver.mid?.startsWith("remote-") && transceiver.receiver.track?.kind === "video" && !closed.has(transceiver.mid)));
+    };
+    return { harness, cameras, publications, join, pulls, held, openVideoSubscriptions };
+  }
+
+  it("pulls video only for tiles on screen, reported before their tracks exist, and always pulls audio", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-grid", 8);
+    try {
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await call.join();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.pulls("camera")).toHaveLength(4);
+      expect(call.pulls("microphone")).toHaveLength(8);
+      expect(remotePullCount(call.harness)).toBe(1);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.held("microphone")).toHaveLength(8);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("pulls a tile scrolled into view, keeps it through the debounce, and closes only its video after", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-scroll", 3);
+    const [first, second, third] = call.cameras as [string, string, string];
+    try {
+      setVideoTileVisibility(first, onScreen);
+      setVideoTileVisibility(second, onScreen);
+      setVideoTileVisibility(third, null);
+      await call.join();
+      setVideoTileVisibility(third, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([first, second, third]);
+
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS - 1);
+      expect(call.held("camera")).toContain(second);
+      expect(call.harness.transport.closeInputs).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([first, third]);
+      expect(call.held("microphone")).toHaveLength(3);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: second, source: "camera" })] })]);
+      expect(call.openVideoSubscriptions()).toHaveLength(2);
+
+      setVideoTileVisibility(second, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual(expect.arrayContaining([first, second, third]));
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces rapid scrolling into a few pulls and leaks no receivers", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-fling", 8);
+    try {
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await call.join();
+      for (let step = 0; step < 40; step++) {
+        const page = step % 2;
+        call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, Math.floor(i / 4) === page ? onScreen : null));
+        await vi.advanceTimersByTimeAsync(25);
+      }
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1000);
+      expect(remotePullCount(call.harness)).toBeLessThanOrEqual(3);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.openVideoSubscriptions()).toHaveLength(4);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("pulls every video after the report wait for a UI that never reports tiles", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-silent", 8);
+    try {
+      await call.join();
+      expect(call.pulls("microphone")).toHaveLength(8);
+      expect(call.pulls("camera")).toEqual([]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
+      expect(remotePullCount(call.harness)).toBe(2);
+      expect(call.pulls("camera")).toHaveLength(8);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits for tiles reported just after the first listing instead of pulling every video", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-first", 8);
+    try {
+      await call.join();
+      call.cameras.forEach((camera, i) => setVideoTileVisibility(camera, i < 4 ? onScreen : null));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.pulls("camera")).toHaveLength(4);
+      expect(call.held("camera")).toEqual(call.cameras.slice(0, 4));
+      expect(call.harness.transport.closeInputs).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close of a hidden tile's video instead of leaking its subscription", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-close-fail", 2);
+    const [first, second] = call.cameras as [string, string];
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 10_000);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: second })] })]);
+      expect(call.held("camera")).toEqual([first]);
+      expect(call.openVideoSubscriptions()).toHaveLength(1);
+
+      setVideoTileVisibility(second, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([first, second]);
+      expect(call.openVideoSubscriptions()).toHaveLength(2);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps pulling a newly joined participant's audio while closing hidden video keeps failing", async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const call = tileCall("m8-close-down", 2, { onError });
+    const second = call.cameras[1]!;
+    const late = versionedPublicationID("m8-close-down-late", "0", "microphone");
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const close = vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValue(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      setVideoTileVisibility(second, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      call.harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...call.publications, { participantId: "m8-close-down-late", source: "microphone", publicationId: late }] };
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(call.held("microphone")).toContain(late);
+      expect(call.held("camera")).toContain(second);
+      expect(close.mock.calls.length).toBeGreaterThan(1);
+      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "close 503" }), expect.anything());
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits briefly for an unreported tile in a UI that reports, then pulls it as before", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("m8-late", 3);
+    const [first, second, third] = call.cameras as [string, string, string];
+    try {
+      setVideoTileVisibility(first, onScreen);
+      setVideoTileVisibility(second, null);
+      await call.join();
+      expect(call.held("camera")).toEqual([first]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS - 1);
+      expect(call.held("camera")).toEqual([first]);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([first, third]);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes on-screen video only after the tab stays hidden, and pulls it again when the tab returns", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab", 2);
+    const showPage = (state: DocumentVisibilityState) => {
+      page.visibilityState = state;
+      page.dispatchEvent(new Event("visibilitychange"));
+    };
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      showPage("hidden");
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS - 1);
+      expect(call.held("camera")).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+      expect(call.held("microphone")).toHaveLength(2);
+      showPage("visible");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual(call.cameras);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed close at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-close-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      vi.spyOn(call.harness.transport, "closeTracks").mockRejectedValueOnce(new CloudflareSFUError("close 503", "signaling_failed", { status: 503 }));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 10_000);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a failed listing at the hidden-tab deadline while the tab stays hidden", async () => {
+    vi.useFakeTimers();
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    vi.stubGlobal("document", page);
+    const call = tileCall("m8-tab-list-fail", 2);
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS - 100);
+      vi.spyOn(call.harness.transport, "listPublications").mockRejectedValueOnce(new CloudflareSFUError("list 503", "signaling_failed", { status: 503 }));
+      await vi.advanceTimersByTimeAsync(10_100);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the video shown in picture-in-picture after the tab stays hidden, and closes it once picture-in-picture ends", async () => {
+    vi.useFakeTimers();
+    class FakeMediaStream {
+      constructor(readonly tracks: readonly unknown[]) {}
+      getVideoTracks() {
+        return this.tracks;
+      }
+    }
+    class FakeVideoElement extends EventTarget {
+      constructor(readonly srcObject: FakeMediaStream) {
+        super();
+      }
+    }
+    const page = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState, pictureInPictureElement: null as FakeVideoElement | null });
+    vi.stubGlobal("document", page);
+    vi.stubGlobal("MediaStream", FakeMediaStream);
+    vi.stubGlobal("HTMLVideoElement", FakeVideoElement);
+    const call = tileCall("m8-pip", 2);
+    const second = call.cameras[1]!;
+    try {
+      call.cameras.forEach((camera) => setVideoTileVisibility(camera, onScreen));
+      await call.join();
+      const shared = call.harness.client.getSnapshot().remoteTracks.find((track) => track.publicationId === second)!;
+      page.pictureInPictureElement = new FakeVideoElement(new FakeMediaStream([shared.track]));
+      page.dispatchEvent(new Event("enterpictureinpicture"));
+      page.visibilityState = "hidden";
+      page.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(HIDDEN_PAGE_CLOSE_MS + 1);
+      expect(call.held("camera")).toEqual([second]);
+
+      page.pictureInPictureElement = null;
+      page.dispatchEvent(new Event("leavepictureinpicture"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call.held("camera")).toEqual([]);
+      expect(call.openVideoSubscriptions()).toEqual([]);
+    } finally {
+      call.harness.client.stop();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("own-SFU subscription state", () => {
+  const own: CloudflareSFUBootstrap = { connectionId: "own-connection-1", iceServers: [], capabilities: { serverLayerAdaptation: true, subscriptionState: true } };
+  const onScreen = { width: 640, height: 360 };
+  const camera = (h: ReturnType<typeof createHarness>) => h.client.getSnapshot().remoteTracks.find((p) => p.source === "camera")!;
+  const subscription = (h: ReturnType<typeof createHarness>, state: SFUSubscriptionState["state"], revision: number, reason?: SFUSubscriptionState["reason"]): SFUSubscriptionState => {
+    const publication = camera(h);
+    const mid = h.peers
+      .at(-1)!
+      .getTransceivers()
+      .find((t) => t.receiver.track === publication.track)!.mid!;
+    const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
+    return { mid, sessionId: connectionId, trackName, state, revision, requestedRid: "h", ...(reason ? { reason } : { effectiveRid: "l" }) };
+  };
+  // Microphones always flow; the camera's packet counter stops while cameraFlows says so.
+  const sampleMedia = (h: ReturnType<typeof createHarness>, cameraFlows: () => boolean) => {
+    let cameraPackets = 0;
+    vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+      const report = reviewStats(h, () => 0);
+      for (const p of h.client.getSnapshot().remoteTracks) {
+        if (p.source === "camera" && cameraFlows()) cameraPackets = Math.floor(performance.now() / 10);
+        const count = p.source === "camera" ? cameraPackets : Math.floor(performance.now() / 10);
+        Object.assign(report.get(p.track.id)!, { packetsReceived: count, ...(p.source === "camera" ? { kind: "video", packetsLost: 0, framesDecoded: Math.floor(count / 4), freezeCount: 0 } : {}) });
+      }
+      return report;
+    });
+  };
+
+  it("holds a camera the SFU paused for network past the stall window, keeps audio, and repulls nothing", async () => {
+    await withTimedHarness(
+      async (h) => {
+        let sfu: SFUSubscriptionState[] = [];
+        const reads = vi.fn(async () => sfu);
+        h.transport.listSubscriptions = reads;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        const pausedCamera = camera(h);
+        sfu = [subscription(h, "paused", 2, "congestion")];
+        flowing = false;
+
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(h.client.getSnapshot().remoteDelivery).toEqual([{ publicationId: pausedCamera.publicationId, state: "paused_for_network" }]);
+        expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+        expect(remotePullCount(h)).toBe(1);
+        expect(h.transport.closeInputs).toEqual([]);
+        expect(h.peers).toHaveLength(1);
+        expect(camera(h).track).toBe(pausedCamera.track);
+        expect(h.client.getSnapshot().remoteTracks.map((p) => p.source)).toContain("microphone");
+        // It re-reads every two seconds while paused.
+        expect(reads.mock.calls.length).toBeGreaterThanOrEqual(5);
+
+        sfu = [subscription(h, "active", 3)];
+        flowing = true;
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(h.client.getSnapshot().remoteDelivery).toEqual([{ publicationId: pausedCamera.publicationId, state: "flowing", layer: "l" }]);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+        expect(remotePullCount(h)).toBe(1);
+      },
+      { bootstrap: own },
+    );
+  });
+
+  it("restarts stall detection when the SFU resumes a paused camera, so a keyframe wait is no stall", async () => {
+    await withTimedHarness(
+      async (h) => {
+        let sfu: SFUSubscriptionState[] = [];
+        h.transport.listSubscriptions = async () => sfu;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "paused", 2, "congestion")];
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(10_000);
+        sfu = [subscription(h, "active", 3)];
+        await vi.advanceTimersByTimeAsync(4000);
+        expect(h.client.getSnapshot().remoteDelivery).toMatchObject([{ state: "flowing" }]);
+        expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+        expect(remotePullCount(h)).toBe(1);
+      },
+      { bootstrap: own },
+    );
+  });
+
+  it("still repulls a quiet camera once the SFU says it is delivering it", async () => {
+    await withTimedHarness(
+      async (h) => {
+        let sfu: SFUSubscriptionState[] = [];
+        h.transport.listSubscriptions = async () => sfu;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "active", 1)];
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(h.client.getSnapshot().receiveStalls).toMatchObject([{ event: "receive_stalled", stalledTracks: 1 }]);
+        expect(remotePullCount(h)).toBeGreaterThan(1);
+      },
+      { bootstrap: own },
+    );
+  });
+
+  it("reads again when a stall is due, so a pause after an active read is not repulled", async () => {
+    await withTimedHarness(
+      async (h) => {
+        let sfu: SFUSubscriptionState[] = [];
+        h.transport.listSubscriptions = async () => sfu;
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "active", 1)];
+        flowing = false;
+        // The quiet read says active; the SFU pauses the camera just after it.
+        await vi.advanceTimersByTimeAsync(3000);
+        sfu = [subscription(h, "paused", 2, "congestion")];
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot().receiveStalls).toEqual([]);
+        expect(remotePullCount(h)).toBe(1);
+        expect(h.client.getSnapshot().remoteDelivery).toMatchObject([{ state: "paused_for_network" }]);
+      },
+      { bootstrap: own },
+    );
+  });
+
+  it("falls back to stall recovery when the subscription read fails", async () => {
+    await withTimedHarness(
+      async (h) => {
+        h.transport.listSubscriptions = async () => {
+          throw new CloudflareSFUError("subscriptions unavailable", "signaling_failed", { status: 503 });
+        };
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(12_000);
+        expect(remotePullCount(h)).toBeGreaterThan(1);
+      },
+      { bootstrap: own },
+    );
+  });
+
+  function tileCall(tag: string, bootstrapOverride?: CloudflareSFUBootstrap) {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...(bootstrapOverride ? { bootstrap: bootstrapOverride } : {}) });
+    harness.transport.uniqueRemoteMids = true;
+    const cameraId = versionedPublicationID(`${tag}-0`, "1", "camera");
+    const publications = [
+      { participantId: `${tag}-person`, source: "microphone" as const, publicationId: versionedPublicationID(`${tag}-0`, "0", "microphone") },
+      { participantId: `${tag}-person`, source: "camera" as const, publicationId: cameraId },
+    ];
+    const join = async () => {
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      await harness.client.refreshRemotePublications();
+    };
+    const cameraPulls = () => harness.transport.addInputs.flatMap((input) => input.tracks.filter((track) => track.location === "remote" && track.trackName === "camera"));
+    return { harness, cameraId, join, cameraPulls };
+  }
+
+  it("pauses an off-screen camera in place and resumes it with no pull, close or renegotiation", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join, cameraPulls } = tileCall("m5-pause", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      expect(cameraPulls()).toMatchObject([{ simulcast: { preferredRid: "h" } }]);
+      const pulled = camera(h);
+      const mid = h.peers[0]!.getTransceivers().find((t) => t.receiver.track === pulled.track)!.mid;
+      const renegotiations = h.transport.renegotiateInputs.length;
+
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      expect(h.transport.updateInputs).toEqual([{ connectionId: own.connectionId, tracks: [{ location: "remote", mid, sessionId: "m5-pause-0", trackName: "camera", paused: true }] }]);
+      expect(h.transport.closeInputs).toEqual([]);
+      expect(camera(h).track).toBe(pulled.track);
+
+      setVideoTileVisibility(cameraId, onScreen);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.transport.updateInputs.at(-1)).toEqual({ connectionId: own.connectionId, tracks: [{ location: "remote", mid, sessionId: "m5-pause-0", trackName: "camera", paused: false }] });
+      expect(cameraPulls()).toHaveLength(1);
+      expect(h.transport.closeInputs).toEqual([]);
+      expect(h.transport.renegotiateInputs).toHaveLength(renegotiations);
+      expect(camera(h).track).toBe(pulled.track);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the layer ceiling across a pause in place, so a resume into a large tile asks for h", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join } = tileCall("m5-ceiling", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      sampleMedia(h, () => true);
+      setVideoRenderSize(camera(h).track, { width: 480, height: 270 });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks)).toMatchObject([{ simulcast: { preferredRid: "l" } }]);
+
+      setVideoTileVisibility(cameraId, null);
+      // The stats loop runs while the camera is paused.
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 3000);
+      setVideoRenderSize(camera(h).track, { width: 1280, height: 720 });
+      setVideoTileVisibility(cameraId, { width: 1280, height: 720 });
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks).map((track) => track.paused ?? track.simulcast?.preferredRid)).toEqual(["l", true, false, "h"]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a camera paused in place when a replacement in the same pull removes its receiver", async () => {
+    vi.useFakeTimers();
+    const replaceMediaConnection = vi.fn(async () => ({ ...own, connectionId: "own-connection-2" }));
+    const h = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, bootstrap: own, replaceMediaConnection });
+    h.transport.uniqueRemoteMids = true;
+    const cameraId = versionedPublicationID("m5-replaced-0", "1", "camera");
+    const publications = [{ participantId: "m5-replaced-person", source: "camera" as const, publicationId: cameraId }];
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await h.client.start(fakeStream());
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      await h.client.refreshRemotePublications();
+      const pulled = camera(h).track;
+      // The pull that runs with the pause fails on the old connection, so the client replaces it.
+      const addTracks = h.transport.addTracks.bind(h.transport);
+      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+        if (input.connectionId === own.connectionId) throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+        return addTracks(input);
+      });
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS - 500);
+      // A new publication arrives, so the poll that pauses the camera also pulls.
+      h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...publications, { participantId: "m5-replaced-other", source: "microphone", publicationId: versionedPublicationID("m5-replaced-1", "0", "microphone") }] };
+      await vi.advanceTimersByTimeAsync(501);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks)).toMatchObject([{ paused: true }]);
+      expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+
+      setVideoTileVisibility(cameraId, onScreen);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(camera(h).track).not.toBe(pulled);
+      expect(camera(h).track.readyState).toBe("live");
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends no layer update behind a pause still in flight, which would resume the camera", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join } = tileCall("m5-inflight", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      sampleMedia(h, () => true);
+      let releasePause: () => void = () => undefined;
+      const updateTracks = h.transport.updateTracks.bind(h.transport);
+      vi.spyOn(h.transport, "updateTracks").mockImplementation(async (input) => {
+        if (input.tracks.some((track) => track.paused)) await new Promise<void>((resolve) => void (releasePause = resolve));
+        return updateTracks(input);
+      });
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      // The layer policy wants l while the pause is still waiting for the SFU.
+      setVideoRenderSize(camera(h).track, { width: 480, height: 270 });
+      await vi.advanceTimersByTimeAsync(6000);
+      releasePause();
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks).map((track) => track.paused ?? track.simulcast?.preferredRid)).toEqual([true]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("closes an off-screen camera when the SFU refuses to pause it", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join } = tileCall("m5-refused", own);
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      h.transport.failTrackUpdates = true;
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: cameraId, source: "camera" })] })]);
+      expect(h.client.getSnapshot().remoteTracks.some((p) => p.source === "camera")).toBe(false);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps Cloudflare on h-first pulls and closing off-screen video, and never reads subscription state", async () => {
+    vi.useFakeTimers();
+    const { harness: h, cameraId, join, cameraPulls } = tileCall("m5-cloudflare");
+    const reads = vi.fn(async (): Promise<readonly SFUSubscriptionState[]> => []);
+    h.transport.listSubscriptions = reads;
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      expect(cameraPulls()).toEqual([expect.objectContaining({ simulcast: { preferredRid: "h", priorityOrdering: "none", ridNotAvailable: "asciibetical" } })]);
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 10_000);
+      expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: cameraId })] })]);
+      expect(h.transport.updateInputs.flatMap((input) => input.tracks).some((track) => track.paused !== undefined)).toBe(false);
+      expect(reads).not.toHaveBeenCalled();
+      expect(h.client.getSnapshot().remoteDelivery).toEqual([]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("in-place ICE restart on the own SFU", () => {
+  const OWN_SFU = { serverLayerAdaptation: false, subscriptionState: false, iceRestart: true } as const;
+  function ownBootstrap(connectionId: string, iceRestart = true): CloudflareSFUBootstrap {
+    return { connectionId, iceServers: [], capabilities: { ...OWN_SFU, iceRestart } };
+  }
+  function restartRequests(h: ReturnType<typeof createHarness>) {
+    return h.transport.addInputs.filter((input) => input.tracks.length === 0);
+  }
+  async function publishingAndPulling(h: ReturnType<typeof createHarness>) {
+    await h.client.start(fakeStream(new FakeTrack("microphone", "audio"), new FakeTrack("camera", "video")));
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone-a" }] };
+    await h.client.refreshRemotePublications();
+    const peer = h.peers[0]!;
+    expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, remoteTracks: [{ publicationId: "remote-connection|microphone-a" }] });
+    const remote = h.client.getSnapshot().remoteTracks[0]!.track;
+    return { peer, remote, publications: h.client.getSnapshot().localTracks.map((track) => track.publicationId), adds: h.transport.addInputs.length };
+  }
+
+  it.each(["failed", "disconnected"] as const)("restarts ICE on the same session when the path is %s, keeping its publication and subscription", async (state) => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer, remote, publications, adds } = await publishingAndPulling(h);
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates(state, state);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        if (state === "disconnected") {
+          await vi.advanceTimersByTimeAsync(1999);
+          expect(restartRequests(h)).toHaveLength(0);
+          expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        }
+        await vi.advanceTimersByTimeAsync(40);
+
+        expect(restartRequests(h)).toEqual([{ connectionId: "connection-1", sessionDescription: expect.objectContaining({ type: "offer" }), tracks: [], replacementCause: undefined }]);
+        expect(peer.offerOptions.at(-1)).toEqual({ iceRestart: true });
+        expect(peer.descriptionLog.slice(-2)).toEqual(["setLocal:offer", "setRemote:answer"]);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null, remoteTracks: [{ publicationId: "remote-connection|microphone-a", track: remote }] });
+        expect(h.client.getSnapshot().localTracks.map((track) => track.publicationId)).toEqual(publications);
+        expect(h.transport.addInputs).toHaveLength(adds + 1);
+        expect(h.transport.closeInputs).toHaveLength(0);
+        expect(h.peerConnectionFactory).toHaveBeenCalledTimes(1);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("restarts again when a later path fails after a restart that worked", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          peer.setNextRemoteDescriptionStates("connected", "connected");
+          peer.setStates("failed", "failed");
+          await vi.advanceTimersByTimeAsync(40);
+          expect(restartRequests(h)).toHaveLength(attempt);
+          expect(h.client.getSnapshot().connection.phase).toBe("live");
+        }
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a muted microphone muted and unpublished through a restart", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const microphone = h.client.getSnapshot().localTracks.find((track) => track.source === "microphone")!.track as unknown as FakeTrack;
+        await expect(h.client.setLocalPublicationTarget({ operationId: "mute", participantId: "participant-1", source: "microphone", enabled: false })).resolves.toMatchObject({ errorCode: null });
+        const microphoneAdds = localAddCount(h, "microphone");
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        expect(microphone.enabled).toBe(false);
+        expect(h.client.getSnapshot().localTracks.find((track) => track.source === "microphone")).toMatchObject({ enabled: false });
+        expect(localAddCount(h, "microphone")).toBe(microphoneAdds);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("reports a recoverable failure when the restart does not reconnect within 8 s, and replacement leaves one publication per source", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(7900);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        await vi.advanceTimersByTimeAsync(200);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+        // The lifecycle must not read a later disconnect as recovery in progress.
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(h.client.getSnapshot().connection.phase).toBe("failed");
+        expect(restartRequests(h)).toHaveLength(1);
+
+        await h.client.restart(ownBootstrap("connection-2"));
+        await vi.advanceTimersByTimeAsync(0);
+        const fresh = h.client.getSnapshot();
+        expect(fresh.connection.phase).toBe("live");
+        expect(h.peers).toHaveLength(2);
+        expect(fresh.localTracks.map((track) => parseCloudflareSFUPublicationID(track.publicationId!).connectionId)).toEqual(["connection-2", "connection-2"]);
+        // The SFU drops the old session when the fresh one is created, so each source publishes once, on the fresh session.
+        const freshPublishes = h.transport.addInputs.filter((input) => input.connectionId === "connection-2").flatMap((input) => input.tracks.filter((track) => track.location === "local").map((track) => track.source));
+        expect(freshPublishes.sort()).toEqual(["camera", "microphone"]);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("drops a restart answer that arrives after the 8 s budget, so the path stays failed for replacement", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8100);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+        const applied = peer.descriptionLog.length;
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(applied)).not.toContain("setRemote:answer");
+        expect(peer.rollbackCalls).toBe(1);
+        expect(peer.connectionState).toBe("failed");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("applies the answer the SFU sent when the path recovers on its own while that answer is in flight", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          // The SFU accepts the restart offer and changes its credentials before the answer comes back.
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(1);
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.descriptionLog.slice(-2)).toEqual(["setLocal:offer", "setRemote:answer"]);
+        expect(peer.rollbackCalls).toBe(0);
+        expect(peer.signalingState).toBe("stable");
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a restart the budget failed failed when the path recovers by itself just after 8 s, so replacement runs", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          const response = await addTracks(input);
+          if (input.tracks.length === 0) await answered.promise;
+          return response;
+        });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(8001);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        peer.setStates("connected", "connected");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(peer.rollbackCalls).toBe(1);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "ice_connection_failed", recoverable: true } });
+
+        await h.client.restart(ownBootstrap("connection-2"));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.peers).toHaveLength(2);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("fails at once for replacement when the session is gone after node loss (HTTP 404)", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        h.transport.nextLocalPublishFailure = new CloudflareSFUError("media connection not found", "signaling_failed", { status: 404 });
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
+        expect(peer.rollbackCalls).toBe(1);
+        expect(peer.signalingState).toBe("stable");
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("waits for earlier SDP work before it sends the restart offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        // The earlier pull fails once released, so the path is still down when the restart takes the queue.
+        const release = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) await release.promise;
+          return addTracks(input);
+        });
+        h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
+        const pulling = h.client.refreshRemotePublications().catch(() => undefined);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(h.transport.addInputs.at(-1)?.tracks.every((track) => track.location === "remote")).toBe(true);
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(0);
+        expect(restartRequests(h)).toHaveLength(0);
+        release.reject(new CloudflareSFUError("pull failed", "signaling_failed"));
+        await vi.advanceTimersByTimeAsync(40);
+        expect(restartRequests(h)).toHaveLength(1);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+        await pulling;
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps a path that reconnects while the restart waits for the queue live, and skips the restart offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const release = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.some((track) => track.location === "remote")) await release.promise;
+          return addTracks(input);
+        });
+        h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...h.transport.snapshot.publications, { participantId: "participant-3", source: "microphone", publicationId: "other-connection|microphone-b" }] };
+        const pulling = h.client.refreshRemotePublications();
+        await vi.advanceTimersByTimeAsync(0);
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(2040);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        peer.setStates("connected", "connected");
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+        release.resolve();
+        await vi.advanceTimersByTimeAsync(40);
+        await pulling;
+        expect(restartRequests(h)).toHaveLength(0);
+        expect(peer.offerOptions.some((options) => options?.iceRestart)).toBe(false);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "live" }, failure: null });
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it("keeps sampling stats on the same connection after a restart that spans a sampling tick", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        const stats = vi.spyOn(peer, "getStats");
+        const answered = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.tracks.length === 0) await answered.promise;
+          return addTracks(input);
+        });
+        peer.setNextRemoteDescriptionStates("connected", "connected");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(2500);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        answered.resolve();
+        await vi.advanceTimersByTimeAsync(40);
+        expect(h.client.getSnapshot().connection.phase).toBe("live");
+
+        const before = stats.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(stats.mock.calls.length - before).toBeGreaterThanOrEqual(2);
+        expect(h.peerConnectionFactory).toHaveBeenCalledTimes(1);
+      },
+      { bootstrap: ownBootstrap("connection-1") },
+    );
+  });
+
+  it.each([
+    { name: "Cloudflare", bootstrap: bootstrap("connection-1") },
+    { name: "an own SFU without the capability", bootstrap: ownBootstrap("connection-1", false) },
+  ])("$name still reports a failed path at once and never restarts ICE", async ({ bootstrap: initial }) => {
+    await withTimedHarness(
+      async (h) => {
+        const { peer } = await publishingAndPulling(h);
+        peer.setStates("disconnected", "disconnected");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(h.client.getSnapshot().connection.phase).toBe("recovering");
+        peer.setStates("failed", "failed");
+        await vi.advanceTimersByTimeAsync(9000);
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "peer_connection_failed", recoverable: true } });
+        expect(restartRequests(h)).toHaveLength(0);
+        expect(peer.offerOptions.every((options) => options === undefined)).toBe(true);
+      },
+      { bootstrap: initial },
+    );
+  });
 });

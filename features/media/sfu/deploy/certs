@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Issues own-SFU certificates from the environment's service CA.
+#
+#   certs <staging|production> ca              create the service CA once; its key goes to 1Password
+#   certs <staging|production> server          the SFU's server certificate (DNS chalk-sfu), 180 days
+#   certs <staging|production> api <key> <crt> the API's identity for its existing key and names, 365 days
+#   certs <staging|production> operator        a one-day client certificate with the API identity
+#
+# The API presents its identity to the SFU, and the SFU requires it
+# (SFU_CLIENT_IDENTITY). The same certificate serves the provider bridge, so it
+# carries both server and client auth and keeps the bridge's names. Files go to
+# $CHALK_SFU_PRIVATE_DIR/<env> (default ~/.config/chalk-sfu), never into Git.
+set -euo pipefail
+
+usage="usage: certs <staging|production> <ca|server|api|operator>"
+environment="${1:?$usage}"
+command="${2:?$usage}"
+case "$environment" in
+  staging) spiffe_environment=nightly title_environment=Staging ;;
+  production) spiffe_environment=production title_environment=Production ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+openssl="${OPENSSL:-openssl}"
+dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
+ca_title="Chalk SFU ${title_environment} Service CA Key"
+ca_ref="op://dev/${ca_title}/credential"
+api_identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
+mkdir -p "$dir"
+chmod 700 "$dir"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+new_key() {
+  "$openssl" genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$1" 2>/dev/null
+  chmod 600 "$1"
+}
+
+# sign <csr> <extensions file> <days> <certificate out>
+# install_pair moves a new key and the certificate signed for it into place
+# together, so a failed signing leaves the deployed pair as it was.
+install_pair() {
+  mv "${work}/$1.key" "${dir}/$1.key"
+  mv "${work}/$1.crt" "${dir}/$1.crt"
+}
+
+sign() {
+  if [[ ! -f "${dir}/ca.crt" ]]; then
+    echo "no ${dir}/ca.crt; run: certs ${environment} ca" >&2
+    exit 1
+  fi
+  2password read "$ca_ref" >"${work}/ca.key"
+  chmod 600 "${work}/ca.key"
+  "$openssl" x509 -req -in "$1" -CA "${dir}/ca.crt" -CAkey "${work}/ca.key" -set_serial "0x$("$openssl" rand -hex 16)" \
+    -days "$3" -sha256 -extfile "$2" -out "$4" 2>/dev/null
+  rm -f "${work}/ca.key"
+  "$openssl" x509 -in "$4" -noout -subject -enddate
+}
+
+case "$command" in
+  ca)
+    if [[ -f "${dir}/ca.crt" ]]; then
+      echo "${dir}/ca.crt exists; a new CA would orphan every certificate it issued" >&2
+      exit 1
+    fi
+    new_key "${work}/ca.key"
+    "$openssl" req -x509 -new -key "${work}/ca.key" -subj "/CN=chalk-${spiffe_environment}-service-ca" -days 3650 -sha256 \
+      -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign" \
+      -out "${work}/ca.crt"
+    if ! 2password create api-credential --title "$ca_title" --vault dev --stdin <"${work}/ca.key" | grep -q '"verified": true'; then
+      echo "the CA key did not verify in 1Password; nothing was kept" >&2
+      exit 1
+    fi
+    mv "${work}/ca.crt" "${dir}/ca.crt"
+    echo "service CA ${dir}/ca.crt; key in 1Password as \"${ca_title}\""
+    ;;
+  server)
+    new_key "${work}/server.key"
+    "$openssl" req -new -key "${work}/server.key" -subj "/CN=chalk-sfu" -out "${work}/server.csr"
+    printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
+      "extendedKeyUsage=serverAuth" "subjectAltName=DNS:chalk-sfu" >"${work}/server.ext"
+    sign "${work}/server.csr" "${work}/server.ext" 180 "${work}/server.crt"
+    install_pair server
+    ;;
+  api)
+    key="${3:?usage: certs <env> api <the API key file> <the API current certificate>}"
+    current="${4:?usage: certs <env> api <the API key file> <the API current certificate>}"
+    # The current certificate's names stay, so Sync still verifies the API.
+    names="$("$openssl" x509 -in "$current" -noout -ext subjectAltName | tail -n +2 | tr -d ' ' | sed 's/IPAddress:/IP:/g')"
+    names="$(tr ',' '\n' <<<"$names" | grep -v "^URI:${api_identity}$" | paste -sd, -)"
+    subject="$("$openssl" x509 -in "$current" -noout -subject -nameopt compat | sed 's/^subject=//')"
+    "$openssl" req -new -key "$key" -subj "$subject" -out "${work}/api.csr"
+    printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature,keyEncipherment" \
+      "extendedKeyUsage=serverAuth,clientAuth" "subjectAltName=URI:${api_identity},${names}" >"${work}/api.ext"
+    sign "${work}/api.csr" "${work}/api.ext" 365 "${dir}/api.crt"
+    ;;
+  operator)
+    new_key "${work}/operator.key"
+    "$openssl" req -new -key "${work}/operator.key" -subj "/CN=chalk-${spiffe_environment}-sfu-operator" -out "${work}/operator.csr"
+    printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
+      "extendedKeyUsage=clientAuth" "subjectAltName=URI:${api_identity}" >"${work}/operator.ext"
+    sign "${work}/operator.csr" "${work}/operator.ext" 1 "${work}/operator.crt"
+    install_pair operator
+    ;;
+  *)
+    echo "$usage" >&2
+    exit 2
+    ;;
+esac

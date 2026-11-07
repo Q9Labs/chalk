@@ -141,6 +141,7 @@ export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
         recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),
         relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
         remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
         rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -289,6 +290,7 @@ export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
         Schema.Struct({
           location: Schema.String,
           mid: Schema.optional(Schema.String),
+          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
           publication_id: Schema.optional(Schema.String),
           sessionId: Schema.optional(Schema.String),
           simulcast: Schema.optional(
@@ -326,6 +328,7 @@ export const CloudflareSFUTracksRequestSchema = /* @__PURE__ */ (() =>
       Schema.Struct({
         location: Schema.String.check(Schema.isMinLength(1)),
         mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
         publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
         sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
         simulcast: Schema.optional(
@@ -351,6 +354,7 @@ export const CloudflareSFUUpdateTracksRequestSchema = /* @__PURE__ */ (() =>
       Schema.Struct({
         location: Schema.String.check(Schema.isMinLength(1)),
         mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+        paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
         publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
         sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
         simulcast: Schema.optional(
@@ -433,7 +437,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         heartbeat_gap_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         http_status: Schema.optional(Schema.NullOr(Schema.Number)),
         media_error_kind: Schema.optional(Schema.Literals(["NotAllowedError", "NotReadableError", "NotFoundError", "OverconstrainedError", "AbortError", "SecurityError", "InvalidStateError", "OperationError", "NotSupportedError", "CloudflareSFUError", "network", "timeout", "unknown"])),
-        media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications"])),
+        media_error_step: Schema.optional(Schema.Literals(["local_capture", "peer_connection", "access_refresh", "sfu_tracks", "sfu_close_tracks", "sfu_renegotiate", "sfu_publications", "sfu_subscriptions"])),
         outcome: Schema.optional(Schema.Literals(["started", "succeeded", "failed", "cancelled"])),
         phase: Schema.optional(Schema.Literals(["idle", "connecting", "live", "recovering", "failed", "stopped", "new", "connected", "disconnected", "closed"])),
         play_result: Schema.optional(Schema.Literals(["ok", "NotAllowedError", "AbortError", "unknown"])),
@@ -1175,6 +1179,23 @@ export const RotateWebhookSecretResponseSchema = /* @__PURE__ */ (() =>
     secret: Schema.String,
   }))();
 export type RotateWebhookSecretResponse = typeof RotateWebhookSecretResponseSchema.Type;
+
+export const SFUSubscriptionsResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    subscriptions: Schema.Array(
+      Schema.Struct({
+        effective_rid: Schema.optional(Schema.String),
+        mid: Schema.String,
+        reason: Schema.optional(Schema.Literals(["congestion", "viewer", "source_inactive", "source_unauthorized"])),
+        requested_rid: Schema.optional(Schema.String),
+        revision: Schema.Number,
+        session_id: Schema.String,
+        state: Schema.Literals(["active", "paused"]),
+        track_name: Schema.String,
+      }),
+    ),
+  }))();
+export type SFUSubscriptionsResponse = typeof SFUSubscriptionsResponseSchema.Type;
 
 export const SetEpisodeDeadlineRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2239,6 +2260,7 @@ export type AdmitEpisodeParticipantPathParams = typeof AdmitEpisodeParticipantPa
 export const AdmitEpisodeParticipantRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type AdmitEpisodeParticipantRequestHeaders = typeof AdmitEpisodeParticipantRequestHeadersSchema.Type;
 
@@ -2434,6 +2456,7 @@ export type CreateEpisodePathParams = typeof CreateEpisodePathParamsSchema.Type;
 export const CreateEpisodeRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type CreateEpisodeRequestHeaders = typeof CreateEpisodeRequestHeadersSchema.Type;
 
@@ -3011,6 +3034,12 @@ export const IssueAccessGrantPathParamsSchema = /* @__PURE__ */ (() =>
   }))();
 export type IssueAccessGrantPathParams = typeof IssueAccessGrantPathParamsSchema.Type;
 
+export const IssueAccessGrantRequestHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
+  }))();
+export type IssueAccessGrantRequestHeaders = typeof IssueAccessGrantRequestHeadersSchema.Type;
+
 export const IssueAccessGrantRequestBodySchema = /* @__PURE__ */ (() => IssueAccessGrantRequestSchema)();
 export type IssueAccessGrantRequestBody = typeof IssueAccessGrantRequestBodySchema.Type;
 
@@ -3169,6 +3198,26 @@ export type ListRecordingsQueryParams = typeof ListRecordingsQueryParamsSchema.T
 
 export const ListRecordingsResponseSchema = /* @__PURE__ */ (() => RecordingListSchema)();
 export type ListRecordingsResponse = typeof ListRecordingsResponseSchema.Type;
+
+export const ListSFUSubscriptionsPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type ListSFUSubscriptionsPathParams = typeof ListSFUSubscriptionsPathParamsSchema.Type;
+
+export const ListSFUSubscriptionsResponseSchema = /* @__PURE__ */ (() => SFUSubscriptionsResponseSchema)();
+export type ListSFUSubscriptionsResponse = typeof ListSFUSubscriptionsResponseSchema.Type;
+
+export const ListSFUSubscriptions429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type ListSFUSubscriptions429ResponseHeaders = typeof ListSFUSubscriptions429ResponseHeadersSchema.Type;
 
 export const ListSpaceActivityPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -4468,6 +4517,25 @@ export const McpOauthRequestNotFoundErrorWireSchema = Schema.Struct({
 export const McpOauthRequestNotFoundErrorSchema = McpOauthRequestNotFoundErrorWireSchema.pipe(
   Schema.decodeTo(McpOauthRequestNotFoundError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "McpOauthRequestNotFoundError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class MediaClientUnsupportedError extends Schema.TaggedErrorClass<MediaClientUnsupportedError>()("MediaClientUnsupportedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("media.client_unsupported"),
+    message: Schema.String,
+  }),
+}) {}
+export const MediaClientUnsupportedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("media.client_unsupported"),
+    message: Schema.String,
+  }),
+});
+export const MediaClientUnsupportedErrorSchema = MediaClientUnsupportedErrorWireSchema.pipe(
+  Schema.decodeTo(MediaClientUnsupportedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "MediaClientUnsupportedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6207,6 +6275,7 @@ export const AdmitEpisodeParticipantErrorSchema = Schema.Union([
   EpisodeInvalidIdErrorSchema,
   EpisodeNotActiveErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
   ParticipantInvalidIdErrorSchema,
   RequestIdempotencyConflictErrorSchema,
@@ -6786,6 +6855,7 @@ export const IssueAccessGrantErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
   EpisodeInvalidIdErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   MediaTokenExpiredErrorSchema,
   MediaTokenInvalidAudienceErrorSchema,
   MediaTokenInvalidHeaderErrorSchema,
@@ -6905,6 +6975,23 @@ export const ListRecordingsErrorSchema = Schema.Union([
   TenantInvalidIdErrorSchema,
 ]);
 export type ListRecordingsError = typeof ListRecordingsErrorSchema.Type;
+
+export const ListSFUSubscriptionsErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type ListSFUSubscriptionsError = typeof ListSFUSubscriptionsErrorSchema.Type;
 
 export const ListSpaceActivityErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, EpisodeInvalidSpaceIdsErrorSchema, RequestRateLimitedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, SpaceNotFoundErrorSchema, TenantInvalidIdErrorSchema]);
 export type ListSpaceActivityError = typeof ListSpaceActivityErrorSchema.Type;

@@ -4,6 +4,7 @@ import { createBrowserMediaDevices } from "../connection/media-devices";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 import type { ClientFailure } from "./types";
+import { V1SyncError } from "../sync/v1-error";
 
 describe("join with unavailable capture devices", () => {
   it("refreshes cameras after private preview permission without publishing or enabling the camera", async () => {
@@ -161,6 +162,203 @@ describe("join with unavailable capture devices", () => {
       await expect(client.join()).rejects.toThrow(/media capture is unavailable/i);
       expect(client.getSnapshot().connection).toMatchObject({ status: "failed", lastError: { code: "environment.unsupported", recoverable: false } });
       expect(getAccess).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+});
+
+describe("join with media on", () => {
+  const joinWith = (setMicrophoneEnabled: ReturnType<typeof vi.fn>, setCameraEnabled: ReturnType<typeof vi.fn>, tracks = [track("audio"), track("video")]) => {
+    const platform = createCoreTestPlatform();
+    return createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...platform,
+        dependencies: {
+          ...platform.dependencies,
+          mediaDevices: { getUserMedia: async () => stream(tracks), enumerateDevices: async () => [] },
+          createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }),
+        },
+      },
+    );
+  };
+
+  // Chalk's own SFU forwards a source only under a grant, and Sync grants it only for an on it has accepted.
+  it("asks Sync to turn on each source it published at join", async () => {
+    const accepted = async () => ({ operationId: "on", name: "set_camera_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
+    const setMicrophoneEnabled = vi.fn(accepted);
+    const setCameraEnabled = vi.fn(accepted);
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled);
+    try {
+      await client.join({ microphone: true, camera: true });
+      await vi.waitFor(() => {
+        expect(setMicrophoneEnabled).toHaveBeenCalledWith(true);
+        expect(setCameraEnabled).toHaveBeenCalledWith(true);
+      });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("does not ask Sync to turn on a source joined off", async () => {
+    const accepted = async () => ({ operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
+    const setMicrophoneEnabled = vi.fn(accepted);
+    const setCameraEnabled = vi.fn(accepted);
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled);
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true));
+      expect(setCameraEnabled).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("resends the on after a short disconnect loses it, and keeps the source on", async () => {
+    const platform = createCoreTestPlatform();
+    const microphone = track("audio");
+    const accepted = { operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    const setMicrophoneEnabled = vi.fn(async () => {
+      if (setMicrophoneEnabled.mock.calls.length > 1) return accepted;
+      throw new V1SyncError("disconnected_before_delivery", "disconnected_before_delivery");
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(1));
+      const live = platform.sync.getSnapshot();
+      const media = { projectionId: "sync", sequence: 1, items: [{ participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "microphone-1" }] };
+      platform.emitSync({ ...live, connection: { phase: "reconnecting" } });
+      platform.emitSync({ ...live, media });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(2));
+      expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+      expect(microphone.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("retries the on after a failure while the call stays live, and keeps the source on", async () => {
+    const platform = createCoreTestPlatform();
+    const microphone = track("audio");
+    const accepted = { operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    const setMicrophoneEnabled = vi.fn(async () => {
+      if (setMicrophoneEnabled.mock.calls.length > 1) return accepted;
+      throw new V1SyncError("media_plane_unavailable", "retry_exhausted");
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+      expect(microphone.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("retries the on when its failure arrives after the call came back live", async () => {
+    const platform = createCoreTestPlatform();
+    const microphone = track("audio");
+    const accepted = { operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const };
+    let reject: (cause: unknown) => void = () => undefined;
+    const setMicrophoneEnabled = vi.fn(async () => {
+      if (setMicrophoneEnabled.mock.calls.length > 1) return accepted;
+      return new Promise<typeof accepted>((_resolve, fail) => {
+        reject = fail;
+      });
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(1));
+      const live = platform.sync.getSnapshot();
+      const media = { projectionId: "sync", sequence: 1, items: [{ participantId: "participant-1", source: "microphone" as const, enabled: true, publicationId: "microphone-1" }] };
+      platform.emitSync({ ...live, connection: { phase: "reconnecting" } });
+      platform.emitSync({ ...live, media });
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
+      reject(new V1SyncError("disconnected_before_delivery", "disconnected_before_delivery"));
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(2), { timeout: 3000 });
+      expect(setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+      expect(microphone.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("keeps consent when the call is left before Sync answers the on", async () => {
+    const platform = createCoreTestPlatform();
+    const getUserMedia = vi.fn(async () => stream([track("audio")]));
+    let reject: (cause: unknown) => void = () => undefined;
+    const setMicrophoneEnabled = vi.fn(
+      () =>
+        new Promise<never>((_resolve, rejectOn) => {
+          reject = rejectOn;
+        }),
+    );
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: false });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledTimes(1));
+      const left = client.leave();
+      reject(new V1SyncError("client_stopped", "client_stopped"));
+      await left;
+      getUserMedia.mockClear();
+      await client.join();
+      expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything() }));
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("does not ask Sync to turn on a camera the join could not capture", async () => {
+    const platform = createCoreTestPlatform();
+    const accepted = async () => ({ operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const });
+    const setMicrophoneEnabled = vi.fn(accepted);
+    const setCameraEnabled = vi.fn(accepted);
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video) throw new DOMException("Video capture failed", "NotReadableError");
+      return stream([track("audio")]);
+    });
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }) } },
+    );
+    try {
+      await client.join({ microphone: true, camera: true });
+      await vi.waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(setCameraEnabled).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("turns a source off when Sync refuses its on at join", async () => {
+    const setMicrophoneEnabled = vi.fn(async () => ({ operationId: "on", name: "set_microphone_enabled" as const, serverOutcome: "confirmed" as const, mediaPlaneOutcome: "confirmed" as const }));
+    const setCameraEnabled = vi.fn(async () => {
+      throw new V1SyncError("capability_denied", "terminal_failure");
+    });
+    const [microphone, camera] = [track("audio"), track("video")];
+    const client = joinWith(setMicrophoneEnabled, setCameraEnabled, [microphone, camera]);
+    try {
+      await client.join({ microphone: true, camera: true });
+      await vi.waitFor(() => expect(camera.enabled).toBe(false));
+      expect(setMicrophoneEnabled).toHaveBeenCalledWith(true);
+      expect(microphone.enabled).toBe(true);
     } finally {
       client.dispose();
     }

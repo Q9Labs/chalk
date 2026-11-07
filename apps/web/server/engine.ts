@@ -15,6 +15,8 @@ function client(env: DashboardEnvironment) {
     createChalkEffectClient({
       baseUrl: env.CHALK_API_ORIGIN,
       auth: { type: "bearer", token: env.DASHBOARD_SERVICE_TOKEN },
+      // The dashboard ships the current browser SDK, which runs both media providers.
+      headers: { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu" },
       fetch: async (input, init) => {
         const traceId = crypto.randomUUID().replaceAll("-", "");
         const headers = new Headers(init?.headers);

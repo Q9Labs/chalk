@@ -14,7 +14,7 @@ import { normalizeMediaError, SpaceClientError } from "./errors";
 import type { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore } from "./store";
 import { MediaProjectionMonitor } from "./media-projection-monitor";
-import type { IncomingMediaRequest, CameraPreview, MediaSlice, ScreenShareOptions } from "./types";
+import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
 const OFF_RETRY_INITIAL_MS = 1000;
@@ -38,6 +38,8 @@ type SourceWorker = {
   pausedPublicationId: string | null;
   capturePause: "none" | "pending" | "announced";
   awaitingLive: number | null;
+  /** A source the join published whose on Sync has not accepted yet. See `#announceInitialOn`. */
+  initialOn: { readonly revision: number; running: boolean; timer: unknown; delayMs: number } | null;
 };
 /*
  * The owed off. Turning media off is the device's decision and never fails, so an off the user asked for is a debt
@@ -69,6 +71,7 @@ function sourceWorker(enabled: boolean): SourceWorker {
     pausedPublicationId: null,
     capturePause: "none",
     awaitingLive: null,
+    initialOn: null,
   };
 }
 /** Joining/offline actions never hold a worker while waiting on the lifecycle queue. */
@@ -332,6 +335,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   dispose(): void {
     this.#disposed = true;
     this.#cancelOffRetries();
+    this.#cancelInitialOnRetries();
     for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
     this.#projection.reset();
     for (const check of this.#readinessChecks) check(normalizeMediaError(this.#cancelledCaptureError()));
@@ -722,6 +726,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const publish = foreign(async () => {
       const revisions = { microphone: this.#sources.microphone.initialRevision, camera: this.#sources.camera.initialRevision };
       const tracks = this.#consentedTracks(stream.getTracks());
+      let published = tracks;
       await media.start(streamFromTracks(tracks), () =>
         Effect.runPromise(
           waitForSync.pipe(
@@ -729,17 +734,83 @@ class MediaControllerRuntime implements MediaControllerEffects {
               const snapshot = this.#ports?.sync.getSnapshot();
               this.#microphoneMutedByOtherDevice = Boolean(snapshot && this.#hasConsent("microphone") && otherDeviceHasMicrophone(snapshot, this.#store.getSnapshot().participants.roster));
               if (this.#microphoneMutedByOtherDevice) this.#recordIntent("microphone", false);
-              return streamFromTracks(this.#consentedTracks(tracks));
+              published = this.#consentedTracks(tracks);
+              return streamFromTracks(published);
             }),
           ),
         ),
       );
+      const publishedSources = new Set(published.map((track) => (track.kind === "audio" ? "microphone" : "camera")));
       for (const source of ["microphone", "camera"] as const) {
         const state = this.#sources[source];
-        if (state.desired.revision === revisions[source]) state.result = { revision: revisions[source], status: "confirmed" };
+        this.#cancelInitialOnRetry(source);
+        state.initialOn = null;
+        if (state.desired.revision !== revisions[source]) continue;
+        state.result = { revision: revisions[source], status: "confirmed" };
+        if (!publishedSources.has(source)) continue;
+        state.initialOn = { revision: revisions[source], running: false, timer: null, delayMs: OFF_RETRY_INITIAL_MS };
+        this.#announceInitialOn(source);
       }
     });
     return this.#serialize("microphone", this.#serialize("camera", publish));
+  }
+  /**
+   * A source published at join still needs Sync to accept its on: Chalk's own SFU forwards a source only under the
+   * grant Sync makes for an accepted on. The join does not wait for it, because the call goes live only after the
+   * join. The on stays owed until Sync answers: a lost connection or a left call keeps it owed and consent intact,
+   * and the next return to live resends it. Any other failure while the call stays live is retried on the off-retry
+   * backoff. Only Sync's refusal turns the source off, since it was off before this join.
+   */
+  #announceInitialOn(source: MediaSource): void {
+    if (source === "screen") return;
+    const state = this.#sources[source];
+    const owed = state.initialOn;
+    const ports = this.#ports;
+    if (!owed || owed.running || !ports) return;
+    this.#cancelInitialOnRetry(source);
+    if (state.desired.revision !== owed.revision || !this.#hasConsent(source)) {
+      state.initialOn = null;
+      return;
+    }
+    owed.running = true;
+    const intent = { ...state.desired, previousEnabled: false };
+    const settle = Effect.sync(() => {
+      if (state.initialOn === owed) state.initialOn = null;
+    });
+    this.#fork(
+      this.#waitForLive(source, owed.revision, ports).pipe(
+        Effect.andThen(this.#serialize(source, this.#send(ports, source, intent, true))),
+        Effect.matchEffect({
+          onSuccess: () => settle,
+          onFailure: (cause) => (refusedBySync(cause) ? settle.pipe(Effect.andThen(this.#failRevision(ports, source, intent, cause))) : Effect.void),
+        }),
+        Effect.ensuring(
+          Effect.sync(() => {
+            owed.running = false;
+            this.#scheduleInitialOnRetry(source);
+          }),
+        ),
+      ),
+    );
+  }
+  #scheduleInitialOnRetry(source: "microphone" | "camera"): void {
+    const owed = this.#sources[source].initialOn;
+    if (!owed || owed.running || owed.timer !== null || !this.#syncLive || this.#disposed) return;
+    owed.timer = this.#connection.scheduleUnsafe(() => {
+      owed.timer = null;
+      this.#announceInitialOn(source);
+    }, owed.delayMs);
+    owed.delayMs = Math.min(owed.delayMs * 2, OFF_RETRY_MAX_MS);
+  }
+  #cancelInitialOnRetry(source: "microphone" | "camera"): void {
+    const owed = this.#sources[source].initialOn;
+    if (!owed || owed.timer === null) return;
+    this.#connection.cancelScheduleUnsafe(owed.timer);
+    owed.timer = null;
+  }
+  #cancelInitialOnRetries(): void {
+    this.#cancelInitialOnRetry("microphone");
+    this.#cancelInitialOnRetry("camera");
   }
 
   #consentedTracks(tracks: readonly MediaStreamTrack[]): MediaStreamTrack[] {
@@ -776,6 +847,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (this.#syncLive && !live) {
       this.#rememberRecoveryIntents();
       this.#cancelOffRetries();
+      this.#cancelInitialOnRetries();
     }
     const resumed = live && !this.#syncLive;
     this.#syncLive = live;
@@ -793,6 +865,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       // Screen share replays its unfinished stop; every source repays an owed off. Pending user enables own their readiness wait.
       if (source === "screen" && !owesRemoteOff(this.#sources[source])) this.#runWork(source);
       else this.#resendOwedOff(source);
+      this.#announceInitialOn(source);
     }
   }
   /** After a reconnect, Sync's snapshot decides: a source the device turned off but Sync still shows on, with the publication the device paused, is an off to resend. */
@@ -1285,6 +1358,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#projection.reset();
     this.#syncLive = false;
     this.#cancelOffRetries();
+    this.#cancelInitialOnRetries();
     this.#bindCamera(ports);
     if (!ports) {
       this.#resetObservations();
@@ -1515,7 +1589,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
       camera: this.#confirmedLocal("camera"),
       screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
-    const remote = Object.freeze((snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track })));
+    const pausedForNetwork = new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
+    const remote = Object.freeze(
+      (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
+    );
     const media = Object.freeze({
       ...current.media,
       microphoneMutedByOtherDevice: this.#microphoneMutedByOtherDevice,
@@ -1542,6 +1619,10 @@ function confirmedLocalMediaState(track: MediaStreamTrack | null, desired: boole
   if (convergence) return convergence;
   if (!live && track && liveTrack(track)) return "requesting";
   return confirmed ? "enabled" : pending ? "requesting" : "disabled";
+}
+/** Sync answered the on with a refusal; a lost connection, a left call or a timeout is not one. */
+function refusedBySync(cause: unknown): boolean {
+  return cause instanceof V1SyncError && cause.code === "terminal_failure";
 }
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
@@ -1590,7 +1671,11 @@ function sameLocalMedia(left: MediaSlice["local"][MediaSource], right: MediaSlic
   return left.source === right.source && left.state === right.state && left.track === right.track;
 }
 function sameRemoteMedia(left: MediaSlice["remote"], right: MediaSlice["remote"]): boolean {
-  return left.length === right.length && left.every((track, index) => track.participantId === right[index]?.participantId && track.source === right[index]?.source && track.publicationId === right[index]?.publicationId && track.track === right[index]?.track);
+  return left.length === right.length && left.every((track, index) => sameRemoteTrack(track, right[index]));
+}
+function sameRemoteTrack(left: RemoteMedia, right: RemoteMedia | undefined): boolean {
+  if (!right) return false;
+  return left.participantId === right.participantId && left.source === right.source && left.publicationId === right.publicationId && left.track === right.track && left.pausedForNetwork === right.pausedForNetwork;
 }
 function sameRequests(left: MediaSlice["incomingRequests"], right: MediaSlice["incomingRequests"]): boolean {
   return left.length === right.length && left.every((request, index) => sameRequest(request, right[index]));

@@ -269,6 +269,15 @@ type Querier interface {
 	ListRecordingRenderCaptureObjects(ctx context.Context, arg ListRecordingRenderCaptureObjectsParams) ([]ListRecordingRenderCaptureObjectsRow, error)
 	ListRecordingTranscriptionSourceChunks(ctx context.Context, arg ListRecordingTranscriptionSourceChunksParams) ([]RecordingTranscriptionSourceChunk, error)
 	ListRecordingTranscriptionSourcesNeedingCleanup(ctx context.Context, arg ListRecordingTranscriptionSourcesNeedingCleanupParams) ([]RecordingTranscriptionSource, error)
+	// The newest confirmed grant of every source in a live own-SFU Episode whose
+	// authorization still stands, in key order after the cursor. A stop decided at
+	// or after the grant ends it whatever its delivery outcome, so a dropped or
+	// failed revoke can never be renewed back to life. So does the Participant's
+	// departure or the loss of the source's capability. A Leave a newer entry's
+	// confirmation superseded is the one exception: a Leave sends nothing to the SFU
+	// itself, and Sync marks the superseded one failed with participant_inactive and
+	// makes the Participant active again.
+	ListRenewableSourceGrants(ctx context.Context, arg ListRenewableSourceGrantsParams) ([]ListRenewableSourceGrantsRow, error)
 	ListSpaceActivity(ctx context.Context, arg ListSpaceActivityParams) ([]ListSpaceActivityRow, error)
 	ListSpaceLiveEpisodes(ctx context.Context, arg ListSpaceLiveEpisodesParams) ([]ListSpaceLiveEpisodesRow, error)
 	ListSpaceMembers(ctx context.Context, arg ListSpaceMembersParams) ([]SpaceMember, error)

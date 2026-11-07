@@ -69,6 +69,7 @@ type issueAccessGrantRequest struct {
 	SpaceID       utilities.ID
 	EpisodeID     utilities.ID
 	ParticipantID utilities.ID
+	MediaClients  mediaplane.ClientProviders
 	Body          issueAccessGrantBody
 }
 
@@ -131,7 +132,7 @@ func issueAccessGrantEndpoint(
 					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
 					Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
-					CloudflareConnectionID: subject.CloudflareConnectionID,
+					ConnectionID: subject.ConnectionID,
 				}); routeErr != nil {
 					return accessGrantResponse{}, accessGrantRefreshError(routeErr)
 				}
@@ -158,10 +159,10 @@ func issueAccessGrantEndpoint(
 				if expected == "" {
 					return accessGrantResponse{}, apiErrorInvalidRequest
 				}
-				if subject.CloudflareConnectionID != expected {
+				if subject.ConnectionID != expected {
 					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
 				}
-				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": expected}})
+				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.Provider(subject.Provider), ClientPayload: map[string]any{"connectionId": expected}})
 				if err != nil {
 					return accessGrantResponse{}, err
 				}
@@ -187,7 +188,7 @@ func issueAccessGrantEndpoint(
 						return cached, nil
 					}
 					// Expired cached credentials can renew on the winning connection.
-					subject, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: cached.Media.ClientPayload})
+					subject, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.Provider(subject.Provider), ClientPayload: cached.Media.ClientPayload})
 					if err != nil {
 						return accessGrantResponse{}, err
 					}
@@ -197,14 +198,14 @@ func issueAccessGrantEndpoint(
 					stage = "media_binding"
 					reservation := previous
 					if conditionalReplacement {
-						reservation.CloudflareConnectionID = fmt.Sprintf("replacement:%x", requestHash)
+						reservation.ConnectionID = fmt.Sprintf("replacement:%x", requestHash)
 						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
 					} else {
 						reservationID, idErr := utilities.NewID()
 						if idErr != nil {
 							return accessGrantResponse{}, idErr
 						}
-						reservation.CloudflareConnectionID = "replacement:" + reservationID.String()
+						reservation.ConnectionID = "replacement:" + reservationID.String()
 						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
 					}
 					if err != nil {
@@ -275,7 +276,7 @@ func issueAccessGrantEndpoint(
 		Parameters(accessGrantParameters()...).
 		RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).
 		Responds(http.StatusCreated, "AccessGrant", accessGrantResponse{}).
-		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorRateLimited))...).
+		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited))...).
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
@@ -285,7 +286,7 @@ func decodeIssueAccessGrantRequest(request *http.Request) (issueAccessGrantReque
 		return issueAccessGrantRequest{}, err
 	}
 	body, err := decodeJSONBody[issueAccessGrantBody](request)
-	return issueAccessGrantRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, Body: body}, err
+	return issueAccessGrantRequest{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, MediaClients: mediaClients(request), Body: body}, err
 }
 
 func accessGrantIDsRequest(request *http.Request) (utilities.ID, utilities.ID, utilities.ID, utilities.ID, error) {
@@ -311,43 +312,45 @@ func accessGrantParameters() []APIParameterContract {
 		{Name: "space_id", In: "path", Type: "string", Required: true},
 		{Name: "episode_id", In: "path", Type: "string", Required: true},
 		{Name: "participant_id", In: "path", Type: "string", Required: true},
+		mediaProvidersParameter(),
 	}
 }
 
 func createAccessGrantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest) (mediaplane.Join, error) {
-	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request.TenantID, request.SpaceID, request.EpisodeID)
+	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request)
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
 	return service.CreateJoin(ctx, mediaplane.CreateJoinInput{
-		Provider: service.Provider(), Episode: episode,
+		Provider: service.Provider(), Scope: accessGrantScope(request), Episode: episode,
 		ParticipantName: request.ParticipantID.String(), ExternalParticipantID: request.ParticipantID.String(), ParticipantPreset: "contributor",
 		AllowRelay: true,
 	})
 }
 
 func resumeAccessGrantJoin(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest, subject accessgrants.Subject) (mediaplane.Join, error) {
-	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request.TenantID, request.SpaceID, request.EpisodeID)
+	service, episode, err := accessGrantMediaEpisode(ctx, spacesService, tenantsService, resolver, request)
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
-	connectionRef := subject.CloudflareConnectionID
+	connectionRef := subject.ConnectionID
 
 	if strings.TrimSpace(connectionRef) == "" {
 		return mediaplane.Join{}, mediaplane.ErrInvalidConnectionRef
 	}
 	return service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
-		Provider: service.Provider(), Episode: episode, ExternalParticipantID: request.ParticipantID.String(), ConnectionRef: connectionRef,
+		Provider: service.Provider(), Scope: accessGrantScope(request), Episode: episode, ExternalParticipantID: request.ParticipantID.String(), ConnectionRef: connectionRef,
 		AllowRelay: true,
 	})
 }
 
-func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, tenantID, spaceID, episodeID utilities.ID) (*mediaplane.Service, mediaplane.Episode, error) {
-	service, err := resolveMediaPlane(ctx, resolver, spacesService, tenantsService, tenantID, spaceID)
+func accessGrantMediaEpisode(ctx context.Context, spacesService SpaceService, tenantsService TenantService, resolver MediaPlaneResolver, request issueAccessGrantRequest) (*mediaplane.Service, mediaplane.Episode, error) {
+	tenantID, spaceID, episodeID := request.TenantID, request.SpaceID, request.EpisodeID
+	service, err := resolveMediaPlaneForClients(ctx, resolver, spacesService, tenantsService, tenantID, spaceID, episodeID, request.MediaClients)
 	if err != nil {
 		return nil, mediaplane.Episode{}, err
 	}
-	if service == nil || (service.Provider() != mediaplane.ProviderCloudflareSFU) {
+	if service == nil || !grantProvider(service.Provider()) {
 		return nil, mediaplane.Episode{}, mediaplane.ErrPlaneUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{Provider: service.Provider(), EpisodeKey: episodeID.String(), Metadata: map[string]string{"tenant_id": tenantID.String(), "space_id": spaceID.String()}})
@@ -359,19 +362,30 @@ func accessGrantSubjectForJoin(request issueAccessGrantRequest, join mediaplane.
 		TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
 		ParticipantID: request.ParticipantID, ParticipantGeneration: request.Body.ParticipantGeneration,
 	}
-	switch join.Provider {
-	case mediaplane.ProviderCloudflareSFU:
-		connectionID, ok := join.ClientPayload["connectionId"].(string)
-		if !ok || strings.TrimSpace(connectionID) == "" {
-			return accessgrants.Subject{}, mediaplane.ErrProviderFailed
-		}
-		subject.Provider = accessgrants.ProviderCloudflareSFU
-		subject.CloudflareConnectionID = strings.TrimSpace(connectionID)
-
-	default:
+	if !grantProvider(join.Provider) {
 		return accessgrants.Subject{}, mediaplane.ErrInvalidProvider
 	}
+	connectionID, ok := join.ClientPayload["connectionId"].(string)
+	if !ok || strings.TrimSpace(connectionID) == "" {
+		return accessgrants.Subject{}, mediaplane.ErrProviderFailed
+	}
+	subject.Provider = string(join.Provider)
+	subject.ConnectionID = strings.TrimSpace(connectionID)
 	return subject, nil
+}
+
+// grantProvider reports whether the provider's joins end in a media credential
+// that names one connection. Both SFU providers do, and their names match the
+// accessgrants vocabulary.
+func grantProvider(provider mediaplane.Provider) bool {
+	return provider == mediaplane.ProviderCloudflareSFU || provider == mediaplane.ProviderChalkSFU
+}
+
+func accessGrantScope(request issueAccessGrantRequest) mediaplane.Scope {
+	return mediaplane.Scope{
+		TenantID: request.TenantID.String(), EpisodeID: request.EpisodeID.String(),
+		ParticipantID: request.ParticipantID.String(), Generation: request.Body.ParticipantGeneration,
+	}
 }
 
 func newAccessGrantResponse(subject accessgrants.Subject, syncCredential synctokens.Token, mediaCredential accessgrants.MediaCredential, join mediaplane.Join) accessGrantResponse {

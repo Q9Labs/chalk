@@ -159,6 +159,8 @@ export type RemoteMedia = {
   readonly source: MediaSource | "screen_audio";
   readonly publicationId: string;
   readonly track: MediaStreamTrack;
+  /** The SFU stopped this video because the link cannot carry its lowest layer. Audio continues, and the video returns on its own. */
+  readonly pausedForNetwork?: true;
 };
 export type IncomingMediaRequest = ChalkIncomingMediaRequest;
 export type { ScreenShareSurface, ScreenShareOptions, ScreenShareCapture } from "../media/plane";

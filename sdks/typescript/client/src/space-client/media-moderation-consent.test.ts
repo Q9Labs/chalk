@@ -95,8 +95,10 @@ it.each(["microphone", "camera"] as const)("two clients sharing a participant ne
     second.emitSync({ ...second.sync.getSnapshot(), media });
   };
   const receipt = { operationId: "explicit", name: source === "microphone" ? ("set_microphone_enabled" as const) : ("set_camera_enabled" as const), serverOutcome: "confirmed" as const, mediaPlaneOutcome: "satisfied" as const };
+  let joined = false;
   const firstCommand = vi.fn(async (enabled: boolean) => {
-    project(enabled);
+    // The test projects the first client's publication itself once it is observed.
+    if (joined) project(enabled);
     return receipt;
   });
   const secondCommand = vi.fn(async (enabled: boolean) => {
@@ -107,6 +109,10 @@ it.each(["microphone", "camera"] as const)("two clients sharing a participant ne
   const b = capturedClient(second, Object.assign(mediaTrack(), { kind: track.kind }), { sync: { setMicrophoneEnabled: secondCommand, setCameraEnabled: secondCommand } });
   try {
     await a.join({ microphone: source === "microphone", camera: source === "camera" });
+    // The first client's own join on is not an automatic change.
+    await vi.waitFor(() => expect(firstCommand).toHaveBeenCalledExactlyOnceWith(true));
+    firstCommand.mockClear();
+    joined = true;
     await b.join({ microphone: false, camera: false });
     vi.useFakeTimers();
     first.media.emit({ ...first.media.getSnapshot(), localTracks: [{ ...publication, track }] });

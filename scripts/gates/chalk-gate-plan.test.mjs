@@ -106,8 +106,8 @@ test("the real dashboard engine proof cannot be skipped with external service ga
     const lane = plan.tasks.find((task) => task.id === "dashboard-engine");
     assert.equal(lane?.selected, true, file);
     assert.deepEqual(lane?.command, ["bash", "apps/web/tests/dashboard/check-engine.sh"]);
-    assert(laneGroupLanes(plan.tasks, "browser-tests").includes(lane));
-    assert(ciJobs([file]).rootGroups.includes("browser-tests"));
+    assert(laneGroupLanes(plan.tasks, "dashboard-engine").includes(lane));
+    assert(ciJobs([file]).rootGroups.includes("dashboard-engine"));
   }
   assert.equal(createGatePlan(["docs/contract-codegen.md"]).tasks.find((task) => task.id === "dashboard-engine")?.selected, false);
 });
@@ -213,17 +213,19 @@ test("scoped builds include workspace dependencies without widening other lanes"
   assert.deepEqual(docs.services, { api: false, sync: false });
 });
 
-test("separate call timing and leak budgets follow call renderers and full gates", () => {
-  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
+test("call bundle and leak budgets follow the call UI inputs and full gates", () => {
+  for (const file of ["apps/web/src/components/space/SpacePage.tsx", "apps/web/src/call-states/stage.tsx", "sdks/typescript/client/src/index.ts", "sdks/typescript/react/src/index.ts", "packages/ui/src/button.tsx", "packages/whiteboard/src/index.ts", "pnpm-lock.yaml"]) {
     const lane = createGatePlan([file]).tasks.find((task) => task.id === "call-performance");
     assert.equal(lane.selected, true, file);
-    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--timing-only"]);
+    assert.deepEqual(lane.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--bundle-only"]);
     const leaks = createGatePlan([file]).tasks.find((task) => task.id === "call-leaks");
     assert.equal(leaks.selected, true, file);
     assert.deepEqual(leaks.command, ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--leaks-only", "--out", "artifacts/call-leaks.json"]);
   }
-  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-performance").selected, false);
-  assert.equal(createGatePlan(["docs/performance-budget.md"]).tasks.find((task) => task.id === "call-leaks").selected, false);
+  for (const file of ["docs/performance-budget.md", "apps/web/src/components/dashboard/DeveloperPage.tsx", "apps/web/src/routes/index.tsx", "apps/api/internal/server.go", "sdks/typescript/react-native/src/index.ts"]) {
+    assert.equal(createGatePlan([file]).tasks.find((task) => task.id === "call-performance").selected, false, file);
+    assert.equal(createGatePlan([file]).tasks.find((task) => task.id === "call-leaks").selected, false, file);
+  }
   assert.equal(createGatePlan([], { full: true }).tasks.find((task) => task.id === "call-leaks").selected, true);
 });
 
@@ -240,19 +242,20 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
 
 test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
-  assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks", "browser-tests"] });
-  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
-  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
-  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
-  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks", "dashboard-engine"] });
+  assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "dashboard-engine", "build"] });
+  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
 });
 
-test("SFU changes run the SFU gate and nothing else that is Go", () => {
+test("SFU changes run the SFU gate and the API gate that builds the SFU, not Sync", () => {
   const plan = createGatePlan(["features/media/sfu/internal/media/session.go"]);
   assert.equal(plan.full, false);
   assert.equal(plan.tasks.find((task) => task.id === "sfu")?.selected, true);
-  assert.equal(plan.services.api, false);
+  assert.deepEqual(plan.services, { api: true, sync: false });
   assert.equal(createGatePlan(["apps/api/internal/server.go"]).tasks.find((task) => task.id === "sfu")?.selected, false);
+  assert.equal(createGatePlan(["features/media/sfu/README.md"]).tasks.find((task) => task.id === "sfu")?.selected, true);
 });
 
 test("deployment tree changes run the gates that read them, not a full gate", () => {
@@ -260,7 +263,7 @@ test("deployment tree changes run the gates that read them, not a full gate", ()
     const plan = createGatePlan([file]);
     assert.equal(plan.full, false, file);
     assert.equal(plan.tasks.find((task) => task.id === "recorder")?.selected, true, file);
-    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks", "browser-tests"] }, file);
+    assert.deepEqual(ciJobs([file]), { api: true, sync: true, rootGroups: ["checks", "dashboard-engine"] }, file);
   }
   assert.equal(createGatePlan(["infrastructure/observability/new.yaml"]).full, true);
 });
@@ -301,24 +304,25 @@ test("the Gate workflow narrows only on a job selection that succeeded", () => {
 
 test("browser CI groups each run only their own selected lanes", () => {
   const plan = createGatePlan(["apps/web/src/components/space/SpacePage.tsx"]);
-  for (const group of ["browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3"]) {
+  for (const group of ["browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]) {
     assert.deepEqual(
       laneGroupLanes(plan.tasks, group)
         .filter((lane) => lane.selected)
         .map((lane) => lane.id),
-      group === "browser-tests" ? ["browser-tests", "dashboard-engine"] : [group.startsWith("call-leaks-") ? "call-leaks" : group],
+      { "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "call-performance"] }[group],
     );
   }
-  assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "call-performance", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
+  assert.deepEqual(ciJobs(["apps/web/src/components/space/SpacePage.tsx"]).rootGroups, ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
 });
 
 test("every lane runs in exactly one CI lane group", () => {
   const lanes = gateConfig.lanes;
-  const groups = ["checks", "tests", "browser-tests", "call-performance", "call-leaks-1", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
+  const groups = ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");
-  assert.equal(laneGroup("call-performance"), "call-performance");
+  assert.equal(laneGroup("dashboard-engine"), "dashboard-engine");
+  assert.equal(laneGroup("call-performance"), "build");
   assert.equal(laneGroup("call-leaks"), "call-leaks-1");
   assert.equal(laneGroup("a-new-lane"), "checks");
   assert.equal(laneGroupLanes(lanes, undefined), lanes);

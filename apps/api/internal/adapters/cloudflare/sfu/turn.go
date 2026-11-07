@@ -80,6 +80,12 @@ func (a Adapter) iceServers(ctx context.Context, allowRelay bool) []mediaplane.I
 	return servers
 }
 
+// RelayServers returns Cloudflare TURN for a media plane that is not
+// Cloudflare's, such as Chalk's own SFU, from the same cache and backoff.
+func (t *TurnCredentials) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
+	return t.get(ctx, &http.Client{Transport: sharedSFUTransport()}, defaultEndpoint)
+}
+
 func (t *TurnCredentials) get(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	for {
 		t.mu.Lock()

@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# Deploys the SFU at the current commit to one own-SFU node.
+#
+#   deploy <staging|production> <node address> [--force|--firewall-only]
+#
+# It first makes the node's host firewall allow exactly the control and SSH
+# sources of the environment's cloud firewall, which OpenTofu owns; first boot
+# set the host firewall once, so an address change in OpenTofu alone would leave
+# the old address allowed and the new one blocked. --firewall-only stops there,
+# so an address change needs no restart. Otherwise it builds the image, loads it into the node's rootless Podman, installs the
+# certificates as Podman secrets, the settings and the Quadlet unit, drains the
+# running node, restarts it and checks readiness through an SSH tunnel with an
+# operator certificate. Running it twice converges on the same state. Without
+# --force it waits up to SFU_DRAIN_TIMEOUT seconds (default 3600) for live
+# calls to end. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
+# turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
+# which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
+set -euo pipefail
+
+usage="usage: deploy <staging|production> <node address> [--force|--firewall-only]"
+environment="${1:?$usage}"
+host="${2:?$usage}"
+mode="${3:-}"
+case "$mode" in
+  "" | --force | --firewall-only) ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+case "$environment" in
+  staging) spiffe_environment=nightly ;;
+  production) spiffe_environment=production ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+deploy_dir="$(cd "$(dirname "$0")" && pwd)"
+sfu_root="$(dirname "$deploy_dir")"
+dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
+drain_timeout="${SFU_DRAIN_TIMEOUT:-3600}"
+identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
+for file in ca.crt server.crt server.key; do
+  [[ -f "${dir}/${file}" ]] || { echo "missing ${dir}/${file}; see certs" >&2; exit 1; }
+done
+
+ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts")
+[[ -n "${SFU_SSH_KEY:-}" ]] && ssh_options+=(-i "$SFU_SSH_KEY")
+remote() { ssh "${ssh_options[@]}" "root@${host}" "$@"; }
+# as_sfu runs a command as the chalk-sfu user, inside its user session.
+as_sfu() {
+  remote "cd /home/chalk-sfu && uid=\$(id -u chalk-sfu) && runuser -u chalk-sfu -- env -i HOME=/home/chalk-sfu PATH=/usr/bin:/bin \
+    XDG_RUNTIME_DIR=/run/user/\$uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/\$uid/bus $*"
+}
+
+echo "==> waiting for the node's bootstrap"
+for _ in $(seq 60); do
+  remote test -f /var/lib/chalk-sfu-bootstrapped 2>/dev/null && break
+  sleep 10
+done
+remote test -f /var/lib/chalk-sfu-bootstrapped
+
+echo "==> matching the host firewall to the cloud firewall"
+sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" '
+  [.[] | select(.name == $name)] as $found
+  | if ($found | length) != 1 then error("want exactly one cloud firewall named \($name)") else $found[0] end
+  | .inbound_rules[] | select(.protocol == "tcp" and (.ports == "8443" or .ports == "22"))
+  | "\(.ports) \(.sources.addresses[])"')"
+for port in 8443 22; do
+  grep -q "^${port} " <<<"$sources" ||
+    { echo "the cloud firewall allows no source on TCP ${port}; refusing to close it on the node" >&2; exit 1; }
+done
+# Rules compare by canonical network, the form ufw stores, so an address written
+# another way (host bits set, a /32) is not taken for a new source and its
+# existing rule removed. New rules go in before stale ones come out, so this SSH
+# session stays allowed.
+remote "bash -s $(base64 <<<"$sources" | tr -d '\n')" <<'RECONCILE'
+set -euo pipefail
+python3 - "$1" <<'PY'
+import base64, ipaddress, re, subprocess, sys
+
+def rule(port, source):
+    network = ipaddress.ip_network(source, strict=False)
+    if network.prefixlen == 0:
+        return f"allow {port}/tcp"
+    if network.prefixlen == network.max_prefixlen:
+        network = network.network_address
+    return f"allow from {network} to any port {port} proto tcp"
+
+def ufw(*args):
+    subprocess.run(["ufw", *args], check=True, stdout=subprocess.DEVNULL)
+
+want = {rule(*line.split()) for line in base64.b64decode(sys.argv[1]).decode().splitlines() if line}
+have = {}
+added = subprocess.run(["ufw", "show", "added"], check=True, capture_output=True, text=True).stdout
+for line in added.splitlines():
+    match = re.fullmatch(r"ufw (allow (8443|22)/tcp|allow from (\S+) to any port (8443|22) proto tcp)", line)
+    if match:
+        key = rule(match[2], "::/0") if match[2] else rule(match[4], match[3])
+        have.setdefault(key, []).append(match[1])
+for key in sorted(want - have.keys()):
+    ufw(*key.split())
+    print("host firewall: added", key)
+for key in sorted(have.keys() - want):
+    for existing in have[key]:
+        ufw("delete", *existing.split())
+        print("host firewall: removed", existing)
+PY
+RECONCILE
+[[ "$mode" == --firewall-only ]] && exit 0
+
+# A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
+remote "printf 'net.core.wmem_max = 8388608\nnet.core.wmem_default = 8388608\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
+
+memory_kib="$(remote grep MemTotal /proc/meminfo | tr -dc 0-9)"
+if ((memory_kib > 1536 * 1024)); then
+  gomemlimit=768MiB memory_limit=1400m
+else
+  gomemlimit=384MiB memory_limit=700m
+fi
+# The packet budget follows the CPU, about 70% of the load at which a node of that size starts to
+# drop video. A 3-person, 2-camera class reserves 7170 packets/s, so 45000 admits 6 classes and
+# 60000 admits 8. The load runs stayed clean up to 8 classes on 1 vCPU and 11 to 12 on 2.
+vcpus="$(remote nproc)"
+case "$vcpus" in
+  1) budget=45000 ;;
+  2) budget=60000 ;;
+  *) echo "no measured packet budget for ${vcpus} vCPUs; load-test the size and add it here" >&2; exit 1 ;;
+esac
+
+revision="$(git -C "$sfu_root" rev-parse HEAD)"
+if [[ -n "$(git -C "$sfu_root" status --porcelain -- .)" ]]; then
+  echo "features/media/sfu has uncommitted changes; the image must match ${revision}" >&2
+  exit 1
+fi
+echo "==> building chalk-sfu at ${revision}"
+docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+  --file "${deploy_dir}/Dockerfile" --tag "chalk-sfu:${revision}" --load "$sfu_root" >/dev/null
+
+echo "==> loading the image"
+docker save "chalk-sfu:${revision}" | as_sfu podman load --quiet >/dev/null
+# The unit names the image by the ID the node computed, after checking that
+# the loaded image carries this revision.
+image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-sfu:${revision}")"
+loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$image_id")"
+[[ "$loaded" == "$revision" ]] || { echo "node image ${image_id} is revision ${loaded}, want ${revision}" >&2; exit 1; }
+
+echo "==> installing certificates, settings and unit"
+for pair in server-cert:server.crt server-key:server.key client-ca:ca.crt; do
+  name="chalk-sfu-${pair%%:*}"
+  replace=()
+  # Podman 4.9 refuses --replace for a secret that does not exist yet.
+  as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
+done
+otlp_endpoint="" otlp_secret="# Metrics export is off: the deploy found no otlp-headers."
+if [[ -f "${dir}/otlp-headers" ]]; then
+  replace=()
+  as_sfu podman secret inspect chalk-sfu-otlp-headers >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" chalk-sfu-otlp-headers - <"${dir}/otlp-headers" >/dev/null
+  otlp_endpoint="${SFU_OTLP_ENDPOINT:-https://api.axiom.co}"
+  otlp_secret="Secret=chalk-sfu-otlp-headers,type=env,target=OTEL_EXPORTER_OTLP_METRICS_HEADERS"
+else
+  echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
+fi
+sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
+  -e "s|__ENVIRONMENT__|${environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
+  "${deploy_dir}/sfu.env.in" |
+  as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
+sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" \
+  "${deploy_dir}/chalk-sfu.container.in" |
+  as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
+remote systemctl --user -M chalk-sfu@ daemon-reload
+
+if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
+  if [[ "$mode" == --force ]]; then
+    echo "==> restarting without waiting for live calls"
+  else
+    echo "==> draining: no new sessions; waiting up to ${drain_timeout}s for live calls to end"
+    since="$(remote date -u +%Y-%m-%dT%H:%M:%SZ)"
+    as_sfu podman kill --signal USR1 chalk-sfu >/dev/null
+    deadline=$((SECONDS + drain_timeout))
+    until as_sfu podman logs --since "$since" chalk-sfu 2>&1 | grep -q '"msg":"sfu drained"'; do
+      ((SECONDS < deadline)) || { echo "live calls remain after ${drain_timeout}s; rerun with --force to cut them" >&2; exit 1; }
+      sleep 5
+    done
+  fi
+fi
+remote systemctl --user -M chalk-sfu@ restart chalk-sfu
+as_sfu podman image prune --force >/dev/null
+
+echo "==> checking readiness"
+"${deploy_dir}/certs" "$environment" operator >/dev/null
+port=$((20000 + RANDOM % 20000))
+ssh "${ssh_options[@]}" -o ExitOnForwardFailure=yes -N -L "${port}:127.0.0.1:8443" "root@${host}" &
+tunnel=$!
+trap 'kill "$tunnel" 2>/dev/null || true' EXIT
+ready=""
+for _ in $(seq 30); do
+  if ready="$(curl --silent --fail --max-time 3 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
+    --resolve "chalk-sfu:${port}:127.0.0.1" "https://chalk-sfu:${port}/readyz")"; then
+    break
+  fi
+  sleep 2
+done
+[[ -n "$ready" ]] || { echo "the node did not become ready" >&2; exit 1; }
+granted="$(jq -r '.host.udpReceiveBufferBytes' <<<"$ready")"
+echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .packetBudget <<<"$ready"), receive buffer ${granted} bytes, receive-buffer drops $(jq -r '.host.udpReceiveBufferErrors // "unknown"' <<<"$ready")"
+((granted >= 8388608)) || { echo "the receive buffer is below 8 MiB; check net.core.rmem_max" >&2; exit 1; }
+sent="$(jq -r '.host.udpSendBufferBytes' <<<"$ready")"
+echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferErrors // "unknown"' <<<"$ready")"
+((sent >= 8388608)) || { echo "the send buffer is below 8 MiB; check net.core.wmem_max" >&2; exit 1; }

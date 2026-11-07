@@ -9,7 +9,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
 jar_url="https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
-jar_sha="011267fca25d0752cf18894dd585cd28b96960c112ea8a20b823ea770e7e10cd"
+jar_sha="654aa50197faa48fa0136b41257270de6469d29ef323e7822ead59d2be43ce10"
 jar="${TLA2TOOLS_JAR:-${XDG_CACHE_HOME:-$HOME/.cache}/chalk-tla/tla2tools-${jar_sha:0:12}.jar}"
 
 if [ ! -f "$jar" ]; then
@@ -59,6 +59,9 @@ while IFS='|' read -r name check sources seq drops loss mutes cfails rule ui sfu
 
   case "$sfu" in
     cloudflare) sfu_consts="CloseCanFail = TRUE
+  OrphansLinger = TRUE
+  AtomicRevoke = FALSE" ;;
+    own-distributed) sfu_consts="CloseCanFail = TRUE
   OrphansLinger = TRUE
   AtomicRevoke = FALSE" ;;
     own) sfu_consts="CloseCanFail = FALSE

@@ -325,6 +325,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert cleanup_payload["effect"] == "media.remove_participant"
     assert cleanup_payload["participant_id"] == old.participant_id
     assert cleanup_payload["participant_generation"] == old.participant_generation
+    assert_control_revision(cleanup.control_revision)
+    assert cleanup_payload["control_revision"] == cleanup.control_revision
 
     current = account_join(episode, account, "reentry_second_join")
     assert current.participant_id != old.participant_id
@@ -339,6 +341,10 @@ defmodule ChalkSync.DurableLeavePostgresTest do
 
     assert {:ok, grant} =
              Postgres.reserve_publication_grant(current, "reentry_current_camera_001", :camera)
+
+    # Reserved after the old generation's cleanup was accepted, so it is ordered after it.
+    assert_control_revision(grant.control_revision)
+    assert grant.control_revision > cleanup.control_revision
 
     assert {:ok, %{status: :confirmed, result: :authorized}} =
              Postgres.complete_publication_grant(episode, grant.reservation_id, :confirmed)
@@ -411,6 +417,8 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert mute_payload["participant_id"] == old.participant_id
     assert mute_payload["participant_generation"] == old.participant_generation
     assert mute_payload["publication_source"] == source
+    assert_control_revision(old_mute.control_revision)
+    assert mute_payload["control_revision"] == old_mute.control_revision
 
     assert {:ok, %{status: :failed, last_error_code: :stale_participant_generation}} =
              Postgres.read_operation(episode, mute_id)
@@ -484,16 +492,15 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              ).rows
   end
 
-  defp account_join(episode, account, key) do
-    {output, status} =
-      System.cmd(
-        "go",
-        ["run", "./tests/sync-reentry", episode.tenant_id, episode.space_id, account, key],
-        cd: Path.expand("../../../api", __DIR__),
-        stderr_to_stdout: true
-      )
+  @tag timeout: 180_000
+  test "reentry helper reports stderr on failure" do
+    assert_raise ExUnit.AssertionError, ~r/expected tenant, space, account and request key/, fn ->
+      run_reentry_helper([])
+    end
+  end
 
-    assert status == 0, output
+  defp account_join(episode, account, key) do
+    output = run_reentry_helper([episode.tenant_id, episode.space_id, account, key])
     result = JSON.decode!(output)
 
     %Identity{
@@ -504,6 +511,26 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       role: result["role"],
       capabilities: result["capabilities"]
     }
+  end
+
+  defp run_reentry_helper(args) do
+    stderr_path = Path.join(System.tmp_dir!(), "chalk-sync-reentry-#{UUID.generate()}")
+
+    try do
+      {output, status} =
+        System.cmd(
+          "sh",
+          ["-c", ~S(exec "$@" 2>"$0"), stderr_path, "go", "run", "./tests/sync-reentry"] ++ args,
+          cd: Path.expand("../../../api", __DIR__)
+        )
+
+      assert status == 0,
+             "reentry helper exited #{status}\nstdout: #{output}\nstderr: #{File.read!(stderr_path)}"
+
+      output
+    after
+      File.rm(stderr_path)
+    end
   end
 
   defp departure_snapshot(connection, episode, participant_id, departure_id) do
@@ -710,4 +737,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       [id]
     ).rows
   end
+
+  defp assert_control_revision(revision),
+    do: assert(is_integer(revision) and revision > 0)
 end

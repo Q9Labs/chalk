@@ -5,15 +5,17 @@ prove an internal canary, not the finished replacement. Full cutover requires
 M1–M8, M10 and M11; M12 moves every Tenant and Space; M13 retires Cloudflare SFU.
 M9 remains an optional efficiency improvement. The migration flag starts off and
 becomes default-on in M12. [Design](design.md) owns the contracts, capacity gates
-and temporary exclusions. These docs do not authorize provisioning or rollout.
+and temporary exclusions. Provisioning follows the [hosting decision](design.md#hosting-and-budget),
+not these docs alone.
 
-Run heavy Linux/browser/load checks on Instabox. Real `sgp1` capacity proofs run
-on production-size Basic `s-2vcpu-2gb` nodes, not the Air. Production targets one $18
-`s-2vcpu-2gb` primary and one $6 `s-1vcpu-1gb` degraded standby, $24/month.
-Primary proves the full admitted peak; standby proves its smaller envelope. Create staging only for test runs
-and destroy it afterwards. The design explicitly identifies workload combinations
-that do not fit the initial 32,000-packet reservation budget; a passing canary
-must not conceal that full-cutover blocker.
+Run heavy Linux/browser/load checks on Instabox. Chalk runs two Basic `s-1vcpu-1gb`
+nodes in `sgp1`, one for staging and one for production, about $12/month, and
+keeps both. Production moves to the $18 `s-2vcpu-2gb` tier only with the
+owner's approval, when measured load needs it. Real `sgp1` capacity proofs run on the
+production node's size, not the Air. Chalk has no active users yet, so M6 and M7
+carry no rollback plan: M7 verifies the live media plane instead. The design
+identifies workload combinations that do not fit the initial reservation
+budgets; a passing canary must not conceal that full-cutover blocker.
 
 ## M1 — Service skeleton and real single-layer push/pull
 
@@ -195,12 +197,14 @@ journey ledger/proof definitions for changed lifecycle boundaries.
 constrain only one subscriber, assert it drops quality while the other stays
 high, microphone packets/rendering continue, and quality rises after recovery.
 A new pull starts on `l` and reaches `h` on an unconstrained path inside a stated
-time, while a Cloudflare-provider session still requests `h` first. Constrain a
+time that includes the keyframe interval, while a Cloudflare-provider session still requests `h` first. Constrain a
 subscriber below the lowest layer: it goes audio-only with the paused-video state,
 no repull occurs through a pause lasting past the seven-second stall window, and
 video returns only after the estimate holds. A ten-person all-high call with a
 screen share stays at or below 11,520 ingress-plus-egress packets/s, including
-repair. Also test the configured 16-Participant maximum and mandatory-media admission:
+repair, with audio intact. A screen share reserves `SFU_SCREEN_STREAM_COST`, about
+210 packets/s. A revoked or muted source stops forwarding within the 15-second
+source lease, so the mute window is at most 15 seconds. Also test the configured 16-Participant maximum and mandatory-media admission:
 sixteen microphones alone need 12,800 packets/s, so the default 11,520 ceiling
 must refuse that shape unless a higher configurable ceiling has been validated.
 Do not drop required audio to make the test pass. A configured maximum is not
@@ -218,15 +222,16 @@ SDK/server upswitch loops can worsen congestion. Starting low must not leave a
 large tile blurry for long. Missing audio TWCC support
 must not cause audio starvation; retain an audio budget and conservative fallback.
 
-## M6 — Reproducible sgp1 staging and capacity proof
+## M6 — Reproducible sgp1 staging and production nodes
 
-**Scope:** add a DO `sgp1` SFU deployment module and managed runtime integration,
-host/cloud firewalls, certificate rotation, private telemetry and single-node
-drain/rollback controls. Use disposable `s-1vcpu-1gb` nodes for functional checks
-and disposable `s-2vcpu-2gb` nodes for capacity, with runtime settings from the
-[design](design.md#memory-budget). Production uses the $18 primary and $6
-standby; primary-first placement and degraded failover belong to M11. Reuse Cloudflare TURN and prove relay
-to our SFU. Destroy staging after each run; do not retain a $6 monthly node.
+**Scope:** deploy the SFU to the two `sgp1` `s-1vcpu-1gb` nodes, staging and
+production, from an OpenTofu module and a deploy script: image, runtime settings
+from the [design](design.md#memory-budget), host and cloud firewalls (media UDP
+open, control reachable only from the API), service-identity mTLS certificates
+and their rotation, private telemetry and single-node drain. Wire the staging API
+to the staging node with the switch on for internal Spaces only. Production gets
+the same build and keeps the switch off until M7. Reuse Cloudflare TURN and prove
+relay to our SFU. Primary-first placement and degraded failover belong to M11.
 
 Before staging, set the host and socket receive buffer to 8 MiB, report the
 effective size, and drain/cap unread layer buffers from the
@@ -234,8 +239,8 @@ effective size, and drain/cap unread layer buffers from the
 Measure the finished M5 feature set against the
 [M1 evidence](design.md#measured-m1-capacity), including the estimated 15 to 30%
 CPU overhead, instead of treating M1 throughput as a finished-SFU guarantee.
-Profile each load on the production SKU. A profile-justified optimization or Pion
-fork patch is a separate PR; M7 waits only if it fixes a failed budget.
+Profile each load on the production node's size. A profile-justified optimization
+or Pion fork patch is a separate PR; M7 waits only if it fixes a failed budget.
 
 **Files:** deployment composition under `infrastructure/`, SFU image/runtime
 configuration, browser/network proof scripts and public guidance without real
@@ -249,14 +254,16 @@ propagation, missing-subscription repull, path change, 60-second offline,
 process kill/restart and outbound-TCP-443-only relay. Replay #761 off-reason
 proof for the candidate and supported prior SDK sockets.
 
-Run hour-long tests on a production-size node for 10 and 12 three-person
-Episodes with two cameras, 65% screen duty and an all-screens-on burst. Run a
-ten-person sparse-camera call, its capped all-high case, and a 16-person ceiling
-case with admission refusal or a validated higher ceiling. Also run twelve
-classes plus the rare call and the all-camera stress
-case, even if initial admission refuses them. Report refusals and quality loss,
-not just admitted-call throughput. This distinguishes the measured workload,
-supported admission envelope and unsupported raw worst case.
+The starting capacity bar is six concurrent three-person classes on the $6 node,
+in the target workload's shape: two cameras, a screen share 65% of the time,
+one-hour evening classes and a rare ten-person call. Run that for an hour,
+then step up to find the node's real envelope: more classes, an all-screens-on
+burst, the ten-person sparse-camera call and its all-high case (at or below
+11,520 packets/s with audio intact), and the 16-person ceiling case, which
+admission refuses at the fourteenth Participant, or the twelfth with a screen
+share ([#836](https://github.com/Q9Labs/chalk/pull/836)). Report refusals and
+quality loss, not just admitted-call throughput. This distinguishes the measured
+workload, supported admission envelope and unsupported raw worst case.
 
 Record actual ingress/egress/repair packets, admitted reservations, forwarded
 sources, rendered resolution, CPU, steal, GC, scheduler/pacer delay, peak RSS and
@@ -265,25 +272,23 @@ justify a reviewed calibration; never silently change units or use M8/M9 savings
 to hide missing baseline capacity. Require below 70% total RAM, no growing
 buffers, no receive-buffer drops, bounded repair/queues and no unexplained media
 loss. Repeat in evening-to-night Pakistan/Dubai windows and report the spread.
-Investigate the roughly 60,000 outbound-packet ceiling before claiming capacity
-above it. Capture profiles privately and publish sanitized summaries only.
+Capture profiles privately and publish sanitized summaries only.
 
 For low latency, compare rendered end-to-end p50/p95 and freeze rate with a
 matched Cloudflare cohort at the same load, codec and network. Require no p95
 latency or sustained freeze regression; report SFU processing/queue delay apart
 from encode and network latency. Keep M7's join/recovery thresholds as separate
 gates. Starve CPU and expire TURN credentials to prove admission guards, renewal,
-alerts and bounded recovery. Rehearse CPU/RAM-only resize up/down after full
-drain, without growing disk, and verify teardown leaves no test nodes running.
+alerts and bounded recovery. Load generators run on Instabox, or on disposable
+Droplets tagged `chalk-sfu-bench` that are deleted after the run.
 
-**Risk:** shared CPU and generator limits can distort one run. Staging's one
-vCPU cannot certify production. Full cutover waits for M10's capture demand on primary and M11's
-degraded-standby drain/failover proof; the $6 node need not pass the full primary
-peak or all-high reservations. If
-relay, native interop, consent, recovery or capacity evidence is absent, keep the
-migration flag off for affected cohorts.
+**Risk:** shared CPU and generator limits can distort one run. Staging matches
+production's size, so its results carry over, but one run is not a capacity
+guarantee. Full cutover waits for M10's capture demand and M11's placement and
+failover proof. If relay, native interop, consent, recovery or capacity evidence
+is absent, keep the migration flag off for affected cohorts.
 
-## M7 — Internal canary and rollback rehearsal
+## M7 — Internal canary and live verification
 
 **Scope:** make the default-off allowlist configurable for internal Spaces after
 M1–M6 are green; preserve Cloudflare elsewhere during migration. This is an
@@ -292,7 +297,7 @@ automated canary checks. Rollout is an operational step after this PR, not an
 automatic consequence of merging it. Keep both adapters installed.
 
 **Files:** provider selection/runtime configuration, proof scripts, observability
-queries and public rollout/rollback guide. Private allowlists live outside Git.
+queries and public rollout guide. Private allowlists live outside Git.
 
 **Check:** at least 20 scripted joins and 10 fault/recovery trials per provider
 under matched network/call shape; zero cross-Tenant or mute/consent failures,
@@ -302,13 +307,14 @@ without manual toggles. Long-drop cases intentionally remain off pending fresh
 consent. These are initial acceptance thresholds, not statistical SLO claims.
 Then run internal usage for seven days with no unresolved privacy/authority
 failures or persistent listener-unpulled alarm and within M6 capacity limits.
-Rehearse flag rollback: new Episode uses Cloudflare, live own-SFU Episode stays
-pinned, explicit rejoin recovers a killed node and outstanding cleanup drains.
+Once the media plane is live, test it end to end, stress it and hunt edge cases
+on the live node: a killed node recovers by explicit rejoin, outstanding cleanup
+drains, and a live own-SFU Episode stays pinned when the selector changes.
 
 **Risk:** a one-node canary can lose all own-SFU calls until replacement. That
 is acceptable only for this internal proof. M11 supplies primary-first placement,
 degraded standby admission and drain/failure proof, and M12 supplies recording/client/monitoring parity
-for full rollout. Selector rollback is not live-session migration; removing an
+for full rollout. Changing the selector does not move live sessions; removing an
 adapter early strands calls and cleanup. Canary evidence does not establish
 500-Participant capacity or authorize general rollout.
 
@@ -415,7 +421,7 @@ generation/source fences, M5 budgets and M6 capacity evidence. Build in parallel
 with M10; final capacity acceptance includes M10 capture.
 
 **Scope:** operate one **$18 `s-2vcpu-2gb` primary** and one **$6 `s-1vcpu-1gb`
-standby**, $24/month total. New Episodes use primary unless it is unhealthy,
+standby**, $24/month total, once the owner approves the $18 tier. New Episodes use primary unless it is unhealthy,
 draining or full. Only then try standby in degraded mode: M5 holds camera layers
 low, protects audio/screen, bounds repair/queues and refuses admission at
 **16,000**, versus primary's **32,000** initial budget. This is not equal-node

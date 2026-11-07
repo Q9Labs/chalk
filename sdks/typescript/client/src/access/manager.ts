@@ -184,6 +184,7 @@ function hasSameSubject(previous: ParsedAccessGrant, next: ParsedAccessGrant): b
 function mediaBinding(access: ParsedAccessGrant): string {
   switch (access.media.provider) {
     case "cloudflare_sfu":
+    case "chalk_sfu":
       return access.media.clientPayload.connectionId;
   }
 }

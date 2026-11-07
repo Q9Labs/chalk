@@ -32,6 +32,7 @@ const (
 	Audience = "chalk-media"
 
 	ProviderCloudflareSFU = "cloudflare_sfu"
+	ProviderChalkSFU      = "chalk_sfu"
 	Lifetime              = 5 * time.Minute
 	ClockSkew             = 30 * time.Second
 	RecoveryGrace         = 2 * time.Minute
@@ -45,20 +46,20 @@ type Subject struct {
 	ParticipantGeneration int64
 	Provider              string
 	// ProviderSubject is the provider-owned participant binding, never a provider
-	// access token. Cloudflare SFU uses CloudflareConnectionID instead.
-	ProviderSubject        string
-	CloudflareConnectionID string
+	// access token. Both SFU providers use ConnectionID instead.
+	ProviderSubject string
+	ConnectionID    string
 }
 
 type RouteSubject struct {
-	TenantID               utilities.ID
-	SpaceID                utilities.ID
-	EpisodeID              utilities.ID
-	ParticipantID          utilities.ID
-	ParticipantGeneration  int64
-	Provider               string
-	ProviderSubject        string
-	CloudflareConnectionID string
+	TenantID              utilities.ID
+	SpaceID               utilities.ID
+	EpisodeID             utilities.ID
+	ParticipantID         utilities.ID
+	ParticipantGeneration int64
+	Provider              string
+	ProviderSubject       string
+	ConnectionID          string
 }
 
 type MediaCredential struct {
@@ -92,10 +93,10 @@ func RequireRouteSubject(subject Subject, route RouteSubject) error {
 
 func sameProviderBinding(subject Subject, route RouteSubject) bool {
 	switch subject.Provider {
-	case ProviderCloudflareSFU:
+	case ProviderCloudflareSFU, ProviderChalkSFU:
 		return subject.ProviderSubject == "" && route.ProviderSubject == "" &&
-			subject.CloudflareConnectionID != "" &&
-			subject.CloudflareConnectionID == route.CloudflareConnectionID
+			subject.ConnectionID != "" &&
+			subject.ConnectionID == route.ConnectionID
 
 	default:
 		return false

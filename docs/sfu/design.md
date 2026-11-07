@@ -45,8 +45,10 @@ Goals:
 - Low latency at the real peak, not just a successful forwarding demo. Compare
   rendered-media latency, freezes, join and recovery against matched Cloudflare
   cohorts. Bound packet queues and measure the complete M5 media path.
-- One production Basic `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` degraded
-  standby in `sgp1`, **$24/month** total. The primary carries the full admitted
+- Today one `s-1vcpu-1gb` production node and one staging node of the same size
+  in `sgp1`, **$12/month** total. Full cutover targets one Basic `s-2vcpu-2gb`
+  primary and one `s-1vcpu-1gb` degraded standby, **$24/month**, once the
+  owner approves the larger tier. The primary carries the full admitted
   peak; standby carries a smaller, low-layer workload when primary is unhealthy,
   draining or full. Prove both envelopes separately. Drain keeps existing calls
   running but does not promise full new-call capacity on standby.
@@ -371,7 +373,8 @@ Cloudflare. Only item 3 is provider-neutral.
    moment for a queue and a freeze. The allocator starts on the lowest layer the
    ceiling allows and climbs to the next layer once the estimate and its feedback
    age support it. The SDK still requests `h` as a ceiling. The cost is a picture
-   that sharpens over a few seconds; M5 measures that time and bounds it.
+   that sharpens over a few seconds; M5 measures that time, including the
+   keyframe interval each climb waits for, and bounds it.
    Cloudflare pulls stay `h`-first.
 3. **Subscribe to video only for visible tiles (M8).** Today the SDK pulls every
    remote publication, visible or not. The viewer policy already measures tile
@@ -416,7 +419,8 @@ Cloudflare. Only item 3 is provider-neutral.
    guessing. The SDK learns of a server pause through a **subscription-state
    read**, because the signaling path is request/response and has no server push.
    The SFU's inspect result carries, per subscription, a state (`active` or
-   `paused`), a reason (`congestion`, `viewer` or `source_inactive`) and a
+   `paused`), a reason (`congestion`, `viewer`, `source_inactive` or
+   `source_unauthorized`, while the source has no live grant) and a
    revision (M4 defines it; M5 exposes it through the API and SDK transport
    behind a `subscriptionState` capability). When the receive-stall detector
    (`sdks/typescript/client/src/media/receive-stall.ts`) would call a track stalled, an own-provider session first
@@ -473,29 +477,37 @@ revision tombstone even without a track; remove routing before acknowledging
 revoke. A newer authorized grant alone can clear it. Preserve distinct scopes:
 a device's off/old-session close targets only its owned allocation; a host stop
 fences the Participant/source across allocations. Neither may let a late close
-kill another device's newer publication. The current provider
-executor's resume is a no-op and its cleanup is track-based
-(`apps/api/internal/providerbridge/sfu_executor.go:95` and `:153`); M3 must add
-source-level grant/revoke dispatch, including the no-track case.
+kill another device's newer publication. The provider executor dispatches
+grants and revokes as source controls to the Episode's pinned node at the
+operation's control revision, including the no-track case; a screen control also
+covers `screen_audio`, and a removal covers every source. The node's revoke
+closes only publications admitted before it, so the executor records the tracks
+the node reports closed and sends no close of its own, which could otherwise
+close a track a newer grant admitted.
 
-Use short-lived forwarding leases (initial proposal: 15-second TTL, refresh every
-five seconds in bounded batches) backed by current durable authorization. Lost
+Use short-lived forwarding leases (15-second TTL, refreshed every five seconds in
+bounded batches) backed by current durable authorization. A source no control has
+named does not forward; there is no flag that lets it. The API renews the newest
+confirmed grant of each source while the Episode is live on the own SFU, the
+Participant is present with the source's capability, and no stop was decided at
+or after the grant's revision, whether or not that stop's revoke was delivered. Lost
 control connectivity then stops forwarding by expiry rather than preserving a
 muted orphan indefinitely. Do not extend from RTP receipt or SDK claims. Check
 expiry on the forwarding path, not solely a delayed GC ticker. Lease refresh,
 grant and revoke share the same revision order; a stale refresh cannot resurrect
-a revoked source. Transport loss therefore has a bounded mute-enforcement window,
-not a zero-window atomicity guarantee. Recheck the model with failing close,
-orphan cleanup and delayed lease/revoke delivery before enabling the flag.
+a revoked source. Transport loss therefore has a bounded mute-enforcement window of at most the
+15-second source lease, not a zero-window atomicity guarantee. Recheck the model with failing close,
+orphan cleanup and delayed lease/revoke delivery.
 
 **ICE restart:** support a client offer with new ICE credentials on an existing
 session through AddTracks, returning an answer without duplicating publications.
-There is no SDK `restartIce()`/`iceRestart` call in this baseline; current recovery
-replaces the connection (`sdks/typescript/client/src/media/client.ts:1543`). Add an own-provider-capability
-gated restart attempt in the shared SDK, serialized with other SDP, with one
-eight-second budget before using existing replacement. Restart preserves consent
-and off debt; it does not imply media on. Failed restart or missing session gets
-a fresh bootstrap, generation and PeerConnection. Never reuse a DTLS association
+When the own SFU advertises the `iceRestart` capability, the shared SDK restarts
+ICE in place: a failed path, or one still disconnected after two seconds, sends an
+`iceRestart` offer as a push with no tracks, serialized with other SDP, with one
+eight-second budget before the existing replacement. The API accepts a push with no
+tracks only as an offer to a plane that restarts in place, so Cloudflare is unchanged.
+Restart preserves consent and off debt; it does not imply media on. Failed restart
+or missing session gets a fresh bootstrap, generation and PeerConnection. Never reuse a DTLS association
 across a node incarnation change. Prove Wi-Fi/mobile-style address changes and
 TURN/TLS-only recovery independently of the Sync reconnect tests.
 
@@ -552,27 +564,33 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 
 ## Hosting and budget
 
-Use one Basic Regular `s-2vcpu-2gb` primary and one `s-1vcpu-1gb` standby in
-Singapore `sgp1`. The primary is preferred for new Episodes. The standby takes
-new Episodes only when the primary is unhealthy, draining or full, with M5
-holding camera layers low and refusing admission at the smaller packet budget.
-This is a full-capacity primary with a **degraded standby**, not two equal nodes
-or a guarantee that failover preserves every peak call at full quality.
+Chalk runs two Basic Regular `s-1vcpu-1gb` nodes in Singapore `sgp1`, one for
+staging and one for production, about $12/month, and keeps both (decided
+6 November 2026). Production moves to one `s-2vcpu-2gb` only with the owner's
+approval, when measured load needs it. The starting capacity bar is six
+concurrent three-person classes on the $6 production node.
+
+The full-cutover target is one `s-2vcpu-2gb` primary and one `s-1vcpu-1gb`
+standby. The primary is preferred for new Episodes. The standby takes new
+Episodes only when the primary is unhealthy, draining or full, with M5 holding
+camera layers low and refusing admission at the smaller packet budget. That is a
+full-capacity primary with a **degraded standby**, not two equal nodes or a
+guarantee that failover preserves every peak call at full quality.
 
 Public list prices checked **5 November 2026**, USD before tax. Regional SKU
 availability does not guarantee creation-time stock.
 
-| Use                     | Layout                                                   | Included monthly outbound     | Compute                                                     |
-| ----------------------- | -------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------- |
-| Production primary      | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk | 3,000 GiB per full-month node | **$18/month**                                               |
-| Production standby      | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk | 1,000 GiB per full-month node | **$6/month**                                                |
-| Functional test run     | Disposable `s-1vcpu-1gb`                                 | Prorated while created        | $0.00893/hour equivalent, $6 monthly cap                    |
-| Capacity/drain test run | Disposable primary or primary/standby pair               | Prorated while created        | $0.02679/hour primary plus $0.00893/hour standby equivalent |
+| Use                           | Layout                                                     | Included monthly outbound     | Compute                                      |
+| ----------------------------- | ---------------------------------------------------------- | ----------------------------- | -------------------------------------------- |
+| Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk   | 1,000 GiB per full-month node | **$6/month**                                 |
+| Staging node                  | One `s-1vcpu-1gb`                                          | 1,000 GiB per full-month node | **$6/month**                                 |
+| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk   | 3,000 GiB per full-month node | $18/month, only with the owner's approval    |
+| Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench` | Prorated while created        | Free on Instabox; under $1 per run otherwise |
 
-Production compute totals **$24/month**, with no permanent staging node.
+SFU compute totals **$12/month** today.
 
 DigitalOcean bills per second with a minimum charge. Stopped Droplets still cost
-money; destroy test nodes after collecting sanitized results. No media load
+money; delete load generators after collecting sanitized results. No media load
 balancer, media disk backup or replicated packet store is required. Existing
 API/Sync/Postgres, recorder compute/storage and observability costs are excluded.
 Sources: [Droplet pricing](https://www.digitalocean.com/pricing/droplets),
@@ -681,26 +699,48 @@ uncapped. Do not use the 65% screen duty to discount these peak requirements.
 
 ### Admission and the single-node envelope
 
-M2 owns configurable costs of **150 packets/s per video stream** and **50 per
-audio stream**, node budgets of **16,000** and **32,000**, a configurable Episode
-Participant limit defaulting to **16**, and an Episode binding that records the
-selected node. These are reservations, not a claim that every video physically
-sends 150 packets/s. Keep one active screen share per Episode.
+M2 owns configurable costs, node budgets of **16,000** and **32,000**, a
+configurable Episode Participant limit defaulting to **16**, and an Episode
+binding that records the selected node. The costs come from the SDK's camera
+encodings (`h` at 2.5 Mbit/s, `l` at 650 kbit/s, 30 frames/s, a frame needing
+`ceil(bytes/1150)` packets): **300 packets/s** for the `h` layer one subscriber
+receives, **390** for a camera's uplink because a publisher sends every layer, and
+**50** per audio stream. A deployed node measured 300 and 90 from real SDK
+cameras. A Participant may publish `SFU_CAMERAS_PER_PARTICIPANT` cameras, 2 by
+default, and a push of one more is refused, so the reservation is an upper bound
+and admission, not a blanket pause, is the gate. Keep one active screen share per
+Episode.
 
-The nominal all-source reservation counts one camera and microphone per
-Participant plus the screen and its audio on every hop:
-`R(n) = (150 + 50) · n · (n + 1)`. Reserve at least two Participants for a new
-Episode. M5 bounds the supported reservation by the per-Episode ceiling:
+The nominal all-source reservation, with `m` cameras of uplink `u` and downlink
+`d`, microphone `a` and screen `s` per Participant, counts every hop:
+`R(n) = n·(m·u + a) + n·(n-1)·(m·d + a) + n·(s + a)`. The node reserves a screen
+share at `SFU_SCREEN_STREAM_COST`, about 210 packets/s. Reserve at least two
+Participants for a new Episode. M5 bounds the supported reservation by the per-Episode ceiling:
 `min(R(n), 11,520, node budget)`. Before M5's enforcing allocator is enabled,
 M2 must not claim that a smaller reservation bounds actual media. A second RID,
 hotter video, retransmissions and capture still need measured headroom.
 
-| Reservation                                            | Packets/s                                       |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| One three-person Episode                               | 2,400                                           |
-| 10 / 12 three-person Episodes                          | 24,000 / 28,800                                 |
-| One ten-person Episode                                 | 22,000 nominal; 11,520 only with M5 enforcement |
-| Twelve three-person Episodes plus the capped rare call | **40,320**                                      |
+| Reservation                                    | Packets/s                                 |
+| ---------------------------------------------- | ----------------------------------------- |
+| One three-person Episode, two cameras each     | 7,170                                     |
+| One three-person Episode, one camera each      | 4,200                                     |
+| A new Episode's first join (two Participants)  | 3,480                                     |
+| Two three-person Episodes on a 16,000 budget   | 14,340                                    |
+| One Episode of four to six, two cameras each   | capped at 11,520 by M5 enforcement        |
+| One Episode of seven or more, two cameras each | 35,800 for ten, capped at the node budget |
+
+**Large calls.** A call of more than `SFU_LARGE_CALL_PARTICIPANTS` (6) Participants
+shows its cameras as small tiles, and the SDK asks the low layer for a tile of 400 px
+or less. Reserving every downlink at the top layer then bills about four times what is
+sent: ten Participants with two cameras each came to 69,400 against about 31,000 sent.
+Past that size `R(n)` bills one featured Participant's cameras at `d` and every other
+camera at `SFU_SMALL_TILE_STREAM_COST` (90, the `l` layer), and the Episode's ceiling is
+the node budget, because a class-sized ceiling cannot carry the call's audio and camera
+uplinks. A large call never reserves less than a call at the threshold would, so a Participant
+leaving cannot raise the node's total. A viewer who opens a large tile still gets `h` while the Episode stays under its
+ceiling; the allocator lowers or pauses cameras beyond it as before. At two cameras each,
+ten Participants reserve 35,800, so on a 32,000 node the call fills the node; fewer cameras
+or a larger budget leave room for classes beside it.
 
 Reject a join or new Episode if its reservation would exceed the selected
 node's budget. Replacement must not double-count the same Participant.
@@ -713,7 +753,12 @@ packets/s, sixteen microphones alone cost `50 · 16² = 12,800` in plus out;
 one screen and its audio raise that to **16,960**, before camera ingress. They
 cannot fit a fixed 11,520 ceiling by pausing cameras. M5 must refuse admission or
 source activation when mandatory media cannot fit, or use a separately validated
-higher configurable Episode ceiling within the node budget. Never claim sixteen
+higher configurable Episode ceiling within the node budget. Every camera's
+uplink stays in that mandatory base, because the plan lowers only what
+subscribers receive, so for a class-sized Episode at the defaults (two cameras each)
+admission would refuse the tenth Participant, or the ninth with a screen share
+([#836](https://github.com/Q9Labs/chalk/pull/836)). A large call (above) takes the node
+budget as its ceiling, so there the mandatory media is checked against the budget. Never claim sixteen
 all-audio Participants fit the default ceiling, or silently sacrifice audio.
 
 **Primary acceptance:** prove the full admitted workload on the $18 node alone,
@@ -734,10 +779,10 @@ the unsupported shape rather than pretend to downscale it. Screen is
 single-encoding, so a low camera RID does not lower screen bitrate. Any lower
 screen/uplink cap needs a separately proven publisher policy.
 
-At unchanged 150/50 reservation costs, standby admits **six three-person
-Episodes** at 14,400, not seven at 16,800. Alternatively it admits a capped
-10-person Episode at 11,520 plus one three-person Episode at 2,400, total
-13,920. Six realistic classes at the conservative screen-on rate use about
+Under the earlier 150/50 reservation costs, which undercounted real SDK cameras,
+standby would have admitted six three-person Episodes at 14,400. At the SDK-derived
+costs it admits **two** three-person Episodes with two cameras each (14,340), or
+**three** with one camera each (12,600). Six realistic classes at the conservative screen-on rate use about
 **10,620 actual packets/s** before repair/capture, with subscribers held on
 `l`. One realistic rare call held on `l` uses 10,640. These are realistic admitted workloads, not a promise of the full
 twelve-class peak. Twelve realistic classes are 20,760 before repair, and their
@@ -792,8 +837,11 @@ production size, never extrapolated from staging.
 ### Shared CPU, drain and resizing
 
 Export CPU steal from `/proc/stat`, pacer queue delay and Go scheduler latency.
-Initially stop new Episodes when steal exceeds 3% over 30 seconds or pacer queue
-p95 exceeds 50 ms. Keep existing media running and alert on the bounded reason.
+Stop new Episodes when pacer queue p95 exceeds 50 ms or steal exceeds a
+threshold over 30 seconds. The code defaults steal to 3%, but the sgp1 $6 nodes
+run at 25%: with two live classes their shared vCPU showed 10-21% steal while
+pacer queue p95 stayed at 2 ms, so 3% refused a third class long before media
+suffered. Keep existing media running and alert on the bounded reason.
 If these guards close admission in more than 1% of minutes in a week, compare a
 measured dedicated-CPU replacement rather than accepting persistent freezes.
 The unexplained M1 packet ceiling still applies until diagnosed.
@@ -831,8 +879,8 @@ At the observed **103 decimal GB/month**, Cloudflare SFU costs **$0**, inside it
 shared 1,000 GB allowance; it then charges **$0.05/GB**. Replacing it is a control,
 quality and product-completeness decision, not a saving at present usage.
 
-The $18 primary and $6 standby cost **$24/month** before tax, plus disposable
-test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
+The two $6 nodes Chalk runs today cost **$12/month** before tax. The full-cutover
+$18 primary and $6 standby would cost **$24/month**, plus disposable test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
 to the team pool. 103 GB is about **95.9 GiB**, even all through one node below that
 node's 3,000 GiB. DigitalOcean ingress is free and excess outbound is $0.01/GiB.
 The own-SFU egress estimate stays $0 at this volume if other team workloads have

@@ -344,12 +344,41 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", ...deploymentRoots]));
+  // The API's chalksfu conformance tests build and run the SFU from features/media/sfu.
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", ...deploymentRoots]));
   const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
+  // What the call-states page imports (traced from apps/web/src/call-states/main.tsx through vite.aliases.ts) plus the harness that drives it.
+  const callUi =
+    dependencyChange ||
+    nonDocumentationFiles.some((file) =>
+      startsWithAny(file, [
+        "apps/web/src/call-states",
+        "apps/web/src/components/space",
+        "apps/web/src/components/privacy",
+        "apps/web/src/lib",
+        "apps/web/src/styles",
+        "apps/web/src/styles.css",
+        "apps/web/scripts",
+        "apps/web/call-states.html",
+        "apps/web/perf-budgets.json",
+        "apps/web/vite.aliases.ts",
+        "apps/web/vite.call-states.config.ts",
+        "apps/web/vite.call-performance.config.ts",
+        "sdks/typescript/client",
+        "sdks/typescript/react",
+        "packages/ui",
+        "packages/assets",
+        "packages/facehash",
+        "packages/whiteboard",
+        "packages/transcript-language",
+        "packages/recording-presentation",
+      ]),
+    );
   const recorder = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["infrastructure/recorder", "scripts/recorder", ...deploymentRoots]));
-  const sfu = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
+  // The SFU gate also runs for its Markdown: its README and AGENTS.md hold the service contract.
+  const sfu = full || normalizedFiles.some((file) => startsWithAny(file, ["features/media/sfu"]));
   const imageSizePatch = full || nonDocumentationFiles.some((file) => file === "scripts/security/image-size-patch.test.mjs" || file === "patches/image-size@2.0.2.patch");
   const sourceFiles = nonDocumentationFiles.filter((file) => sourceExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const formattedFiles = normalizedFiles.filter((file) => formatExtensions.has(path.extname(file)) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
@@ -427,13 +456,8 @@ export function createGatePlan(files, options = {}) {
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
-    task("call-performance", "Call performance budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call rendering inputs or full gate", [
-      "node",
-      "apps/web/scripts/check-call-performance.mjs",
-      "--gate",
-      "--timing-only",
-    ]),
-    task("call-leaks", "Call lifecycle leak budgets", full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web", "sdks/typescript/react", "packages/ui", "packages/whiteboard"])), "call lifecycle inputs or full gate", [
+    task("call-performance", "Call performance budgets", callUi, "call rendering inputs or full gate", ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--bundle-only"]),
+    task("call-leaks", "Call lifecycle leak budgets", callUi, "call lifecycle inputs or full gate", [
       "node",
       "apps/web/scripts/check-call-performance.mjs",
       "--gate",
@@ -534,7 +558,7 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests", "dashboard-engine"], "call-performance": ["call-performance"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["build", "publint", "attw"] };
+const rootLaneGroups = { tests: ["tests"], "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["call-performance", "build", "publint", "attw"] };
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";

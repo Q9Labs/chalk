@@ -430,6 +430,24 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
+  it("marks a remote camera the SFU paused for network, and clears it when the SFU resumes it", async () => {
+    const platform = createCoreTestPlatform();
+    const track = mediaTrack();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
+    try {
+      await client.join({ microphone: false, camera: false });
+      const publication = { participantId: "participant-2", source: "camera" as const, enabled: true, publicationId: "publication-2" };
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 1, items: [publication] } });
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteTracks: [{ ...publication, track }], remoteDelivery: [{ publicationId: "publication-2", state: "paused_for_network" }] });
+      expect(client.getSnapshot().media.remote).toEqual([expect.objectContaining({ publicationId: "publication-2", track, pausedForNetwork: true })]);
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteDelivery: [{ publicationId: "publication-2", state: "flowing", layer: "l" }] });
+      expect(client.getSnapshot().media.remote[0]).not.toHaveProperty("pausedForNetwork");
+      expect(client.getSnapshot().media.remote[0]?.track).toBe(track);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it.each(["microphone", "screen_audio"] as const)("gates an attached remote %s track on the same projection as the muted state", async (source) => {
     const platform = createCoreTestPlatform();
     const track = mediaTrack();

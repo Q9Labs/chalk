@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
-import { check, command, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
 export async function prepareIntegration(run, webhooks) {
@@ -19,7 +19,7 @@ export async function prepareIntegration(run, webhooks) {
   run.ownership = { keyId: key.api_key.id };
   run.apiKey = key.secret;
   await saveOwnership(run);
-  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, {}, run.signal);
+  run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, run.signal);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
@@ -30,12 +30,14 @@ export async function prepareIntegration(run, webhooks) {
   if (webhooks) await exposeWebhook(run, receiver);
   return receiver;
 }
+// Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
+const recordable = mediaPlane === "cf_sfu";
 export async function createSpace(run) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: "cf_sfu",
+    media_plane: mediaPlane,
     recording_policy: "manual",
     transcription_policy: "on_demand",
     default_episode_duration_seconds: 1800,
@@ -76,6 +78,7 @@ async function createEpisode(run, space) {
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
+  if (!recordable) return;
   const started = await pages[0].evaluate(() => window.proofClient.recording.start());
   check(started.recordingId, "Recording start returned no Recording");
   run.recordingId = started.recordingId;
@@ -184,6 +187,7 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   return { seconds: observed.seconds, failure };
 }
 async function finalizedSource(run) {
+  if (!recordable) return null;
   const recording = await waitFor(
     "Recording source",
     async () => {
@@ -234,8 +238,8 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
   checkMediaProgress(refreshedBefore, refreshedAfter);
-  // End the active Episode once; its lifecycle stops Capture and finalizes the Recording.
-  console.log("Ending own Episode and its active Recording");
+  // End the active Episode once; its lifecycle stops any Capture and finalizes the Recording.
+  console.log("Ending own Episode");
   await end();
   const recording = await finalizedSource(run);
   for (const page of pages) await page.context().close();

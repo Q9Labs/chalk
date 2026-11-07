@@ -26,7 +26,7 @@ type Gauges = { sum: number; count: number };
 
 export type CallStatsCollector = {
   /** Feed one `getStats()` report. Cheap; summarises once a window has elapsed. */
-  readonly observe: (report: RTCStatsReport) => void;
+  readonly observe: (report: RTCStatsReport, delivery?: CallStatsDelivery) => void;
   /** Close the open window (if long enough) and upload what is buffered with `upload`, once any upload in flight ends. */
   readonly flush: (upload: Upload) => Promise<void>;
   /** A new peer connection starts new counters: drop the open window and its baseline, keep what is already buffered. */
@@ -34,6 +34,8 @@ export type CallStatsCollector = {
 };
 
 type Upload = (request: CallStatsRequest) => Promise<void>;
+/** What the SFU reported about remote video delivery. Planes that report nothing leave it out. */
+export type CallStatsDelivery = { readonly pausedVideos: number };
 
 export function createCallStatsCollector(options: { readonly upload: Upload; readonly now?: () => number }): CallStatsCollector {
   const now = options.now ?? (() => Date.now());
@@ -44,12 +46,13 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
   let baseline: Baseline | null = null;
   const gauges: Windowed = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges() };
   let latest: RTCStatsReport | null = null;
+  let delivery: CallStatsDelivery | undefined;
 
   const closeWindow = (at: number): void => {
     if (!baseline || !latest) return;
     const windowMs = at - baseline.at;
     if (windowMs < 1000) return;
-    const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges);
+    const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges, delivery);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
     if (windowMs > CALL_STATS_MAX_WINDOW_MS || produced >= CALL_STATS_CALL_CAP) return;
@@ -73,9 +76,10 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
   };
 
   return {
-    observe(report) {
+    observe(report, observed) {
       const at = now();
       latest = report;
+      delivery = observed;
       baseline ??= readBaseline(report, at);
       addGauges(report, gauges);
       if (at - baseline.at >= CALL_STATS_WINDOW_MS) closeWindow(at);
@@ -89,6 +93,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
     reset() {
       baseline = null;
       latest = null;
+      delivery = undefined;
       resetGauges(gauges);
     },
   };
@@ -96,7 +101,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
 
 type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges };
 
-function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed): CallStatsSample {
+function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed, delivery: CallStatsDelivery | undefined): CallStatsSample {
   const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
   const recvLost = delta("inbound-rtp", "packetsLost");
   const pair = selectedPair(report);
@@ -121,6 +126,7 @@ function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number,
     recv_height: scaled(recvHeight(report), 1, 4320),
     freeze_count: scaled(delta("inbound-rtp", "freezeCount", "video"), 1, 10000),
     freeze_ms: scaled(delta("inbound-rtp", "totalFreezesDuration", "video"), 1000, 600000),
+    recv_paused_videos: scaled(delivery?.pausedVideos ?? null, 1, 64),
   };
 }
 

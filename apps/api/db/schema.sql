@@ -2162,6 +2162,16 @@ create unique index sync_publication_grant_reservations_active_source_key
     where status in ('pending', 'ambiguous');
 create index sync_publication_grant_reservations_expiry_idx
     on sync_publication_grant_reservations(expires_at, reservation_id);
+-- The revision at which Sync decided a grant or stop, unique and rising in commit order within
+-- an Episode because every decision holds the Episode row lock. Null rows are never renewed.
+create sequence sync_source_control_revisions as bigint;
+alter table sync_publication_grant_reservations
+    add column control_revision bigint check (control_revision > 0);
+alter table sync_external_operations
+    add column control_revision bigint check (control_revision > 0);
+create index sync_publication_grant_reservations_confirmed_source_idx
+    on sync_publication_grant_reservations(tenant_id, episode_id, participant_id, source, control_revision desc)
+    where status = 'confirmed' and control_revision is not null;
 
 create table sync_recordings (
     tenant_id uuid not null,
