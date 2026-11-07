@@ -95,7 +95,7 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
+  if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
@@ -364,7 +364,8 @@ export function createGatePlan(files, options = {}) {
         "apps/web/src/styles.css",
         "apps/web/scripts",
         "apps/web/call-states.html",
-        "apps/web/perf-budgets.json",
+        "perf/budgets.json",
+        "features/scorecard/budgets.mjs",
         "apps/web/vite.aliases.ts",
         "apps/web/vite.call-states.config.ts",
         "apps/web/vite.call-performance.config.ts",

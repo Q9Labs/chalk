@@ -1,0 +1,979 @@
+{
+  "_comment": "The route limit covers the pre-join entrance (#712); SpaceCall loads the admitted call after Join (#730), and builds its join client from the generated ChalkPublicApi (only the unauthenticated /v1/public operations), so the MCP OAuth contract (#814) stays out of the route. The route measures about 205.5 KiB and its ceiling is 217 KiB, down from 219. Five fresh-context bundle-only runs per revision on Linux x64, 8-core Intel Xeon, Node 24.19.0, pnpm 12.8.1 and Chromium 151.0.7922.34 give non-board JavaScript gzip min/median/max of 386.486/386.486/386.486 KiB on master 35a9d072c and 386.560/386.560/386.560 KiB with send recovery. Validating the call path with Effect Schema instead of zod, which also removes zod and its English locale from the call JavaScript, cut 2.1 KiB (386.5 to 384.5 KiB on the same machine), so the non-board ceiling went down from 387 to 385 KiB. Board, CSS, timing, video-quality and leak limits and the historical timing baseline remain unchanged. The route limit alone falls, from 219 to 217 KiB. The route CSS ceiling is 28 KiB: it rose from 32 to 33 for the transcript language picker (#880) and fell to 28 in #919.",
+  "callRun": {
+    "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
+    "repeats": 5,
+    "sampleMs": 3000,
+    "devices": {
+      "laptop": {
+        "viewport": {
+          "width": 1366,
+          "height": 768
+        },
+        "cpu": 4,
+        "touch": false
+      },
+      "phone": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "cpu": 6,
+        "touch": true
+      }
+    },
+    "leaks": {
+      "cycles": 20,
+      "settleMs": 600,
+      "metrics": {
+        "heapMiB": {
+          "perCycle": 0.1,
+          "allowance": 3,
+          "tailPerCycle": 0.05
+        },
+        "domNodes": {
+          "perCycle": 0.1,
+          "allowance": 8
+        },
+        "listeners": {
+          "perCycle": 0.1,
+          "allowance": 4
+        },
+        "documents": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "videos": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "audios": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "liveTracks": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "audioContexts": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "intervals": {
+          "perCycle": 0,
+          "allowance": 0
+        },
+        "animationFrames": {
+          "perCycle": 0.05,
+          "allowance": 1
+        },
+        "rosterCacheKeys": {
+          "perCycle": 0.1,
+          "allowance": 1
+        }
+      }
+    }
+  },
+  "budgets": {
+    "web.route.js_gzip_kib": {
+      "max_p50": 217,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.route.css_gzip_kib": {
+      "max_p50": 28,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.calm-six.frame_p95_ms": {
+      "max_p50": 89,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.dropped_frame_pct": {
+      "max_p50": 61,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.dom_nodes": {
+      "max_p50": 1920,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.calm-six.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.calm-six.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.calm-six.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.frame_p95_ms": {
+      "max_p50": 120,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.dropped_frame_pct": {
+      "max_p50": 67,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.dom_nodes": {
+      "max_p50": 6543,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.grid-24.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.grid-24.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.grid-24.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.frame_p95_ms": {
+      "max_p50": 101,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.dropped_frame_pct": {
+      "max_p50": 71,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.long_tasks": {
+      "max_p50": 9,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.blocking_ms": {
+      "max_p50": 160,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.interaction_ms": {
+      "max_p50": 530,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.heap_mib": {
+      "max_p50": 17,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.dom_nodes": {
+      "max_p50": 2455,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.panels.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.panels.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.panels.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.frame_p95_ms": {
+      "max_p50": 120,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.dropped_frame_pct": {
+      "max_p50": 66,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.heap_mib": {
+      "max_p50": 15,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.dom_nodes": {
+      "max_p50": 2215,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.spotlight-share.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.frame_p95_ms": {
+      "max_p50": 110,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.dropped_frame_pct": {
+      "max_p50": 63,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.interaction_ms": {
+      "max_p50": 337,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.heap_mib": {
+      "max_p50": 19,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.dom_nodes": {
+      "max_p50": 2290,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.js_gzip_kib": {
+      "max_p50": 743,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.board.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.board.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.board.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.frame_p95_ms": {
+      "max_p50": 130,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.dropped_frame_pct": {
+      "max_p50": 82,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.dom_nodes": {
+      "max_p50": 1993,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.reactions.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.reactions.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reactions.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.frame_p95_ms": {
+      "max_p50": 130,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.dropped_frame_pct": {
+      "max_p50": 66,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.long_tasks": {
+      "max_p50": 4,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.blocking_ms": {
+      "max_p50": 58,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.dom_nodes": {
+      "max_p50": 1947,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.reconnect.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.reconnect.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.reconnect.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.frame_p95_ms": {
+      "max_p50": 159,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.dropped_frame_pct": {
+      "max_p50": 72,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.long_tasks": {
+      "max_p50": 9,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.blocking_ms": {
+      "max_p50": 842,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.heap_mib": {
+      "max_p50": 14,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.dom_nodes": {
+      "max_p50": 1920,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.first_call_ms": {
+      "max_p50": 1861,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.first-load.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.laptop.first-load.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.laptop.first-load.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.frame_p95_ms": {
+      "max_p50": 47,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.dropped_frame_pct": {
+      "max_p50": 53,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.heap_mib": {
+      "max_p50": 15,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.dom_nodes": {
+      "max_p50": 1968,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.calm-six.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.calm-six.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.calm-six.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.frame_p95_ms": {
+      "max_p50": 47,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.dropped_frame_pct": {
+      "max_p50": 53,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.long_tasks": {
+      "max_p50": 4,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.blocking_ms": {
+      "max_p50": 39,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.dom_nodes": {
+      "max_p50": 6593,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.grid-24.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.grid-24.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.grid-24.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.frame_p95_ms": {
+      "max_p50": 82,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.dropped_frame_pct": {
+      "max_p50": 56,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.long_tasks": {
+      "max_p50": 11,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.blocking_ms": {
+      "max_p50": 351,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.interaction_ms": {
+      "max_p50": 420,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.heap_mib": {
+      "max_p50": 17,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.dom_nodes": {
+      "max_p50": 2318,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.panels.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.panels.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.panels.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.frame_p95_ms": {
+      "max_p50": 47,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.dropped_frame_pct": {
+      "max_p50": 53,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.dom_nodes": {
+      "max_p50": 2233,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.spotlight-share.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.spotlight-share.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.spotlight-share.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.frame_p95_ms": {
+      "max_p50": 44,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.dropped_frame_pct": {
+      "max_p50": 9,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.interaction_ms": {
+      "max_p50": 144,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.heap_mib": {
+      "max_p50": 19,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.dom_nodes": {
+      "max_p50": 2554,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.js_gzip_kib": {
+      "max_p50": 743,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.board.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.board.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.board.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.frame_p95_ms": {
+      "max_p50": 47,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.dropped_frame_pct": {
+      "max_p50": 53,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.long_tasks": {
+      "max_p50": 2,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.blocking_ms": {
+      "max_p50": 25,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.dom_nodes": {
+      "max_p50": 2040,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.reactions.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.reactions.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reactions.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.frame_p95_ms": {
+      "max_p50": 47,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.dropped_frame_pct": {
+      "max_p50": 54,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.long_tasks": {
+      "max_p50": 6,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.blocking_ms": {
+      "max_p50": 136,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.heap_mib": {
+      "max_p50": 16,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.dom_nodes": {
+      "max_p50": 1994,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.reconnect.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.reconnect.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.reconnect.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.frame_p95_ms": {
+      "max_p50": 110,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.dropped_frame_pct": {
+      "max_p50": 63,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.long_tasks": {
+      "max_p50": 9,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.blocking_ms": {
+      "max_p50": 1308,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.interaction_ms": {
+      "max_p50": 24,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.heap_mib": {
+      "max_p50": 15,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.dom_nodes": {
+      "max_p50": 1968,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.first_call_ms": {
+      "max_p50": 2499,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.js_gzip_kib": {
+      "max_p50": 385,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.first-load.css_gzip_kib": {
+      "max_p50": 54,
+      "tolerancePct": 1,
+      "gate": true
+    },
+    "web.phone.first-load.video_dropped_frame_pct": {
+      "max_p50": 5,
+      "tolerancePct": 10,
+      "gate": true
+    },
+    "web.phone.first-load.layout_shift": {
+      "max_p50": 0.05,
+      "tolerancePct": 10,
+      "gate": true
+    }
+  }
+}
