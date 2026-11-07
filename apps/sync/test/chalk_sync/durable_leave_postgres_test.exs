@@ -492,15 +492,15 @@ defmodule ChalkSync.DurableLeavePostgresTest do
              ).rows
   end
 
-  defp account_join(episode, account, key) do
-    {output, status} =
-      System.cmd(
-        "go",
-        ["run", "./tests/sync-reentry", episode.tenant_id, episode.space_id, account, key],
-        cd: Path.expand("../../../api", __DIR__)
-      )
+  @tag timeout: 180_000
+  test "reentry helper reports stderr on failure" do
+    assert_raise ExUnit.AssertionError, ~r/expected tenant, space, account and request key/, fn ->
+      run_reentry_helper([])
+    end
+  end
 
-    assert status == 0, output
+  defp account_join(episode, account, key) do
+    output = run_reentry_helper([episode.tenant_id, episode.space_id, account, key])
     result = JSON.decode!(output)
 
     %Identity{
@@ -511,6 +511,26 @@ defmodule ChalkSync.DurableLeavePostgresTest do
       role: result["role"],
       capabilities: result["capabilities"]
     }
+  end
+
+  defp run_reentry_helper(args) do
+    stderr_path = Path.join(System.tmp_dir!(), "chalk-sync-reentry-#{UUID.generate()}")
+
+    try do
+      {output, status} =
+        System.cmd(
+          "sh",
+          ["-c", ~S(exec "$@" 2>"$0"), stderr_path, "go", "run", "./tests/sync-reentry"] ++ args,
+          cd: Path.expand("../../../api", __DIR__)
+        )
+
+      assert status == 0,
+             "reentry helper exited #{status}\nstdout: #{output}\nstderr: #{File.read!(stderr_path)}"
+
+      output
+    after
+      File.rm(stderr_path)
+    end
   end
 
   defp departure_snapshot(connection, episode, participant_id, departure_id) do
