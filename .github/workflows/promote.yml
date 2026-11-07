@@ -143,8 +143,8 @@ jobs:
       leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
       leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
     secrets: inherit
-  # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
   scorecard:
+    # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
     needs: [select, proof]
     if: needs.proof.result == 'success' && needs.proof.outputs.result == 'passed'
     outputs:

@@ -16,6 +16,7 @@ function gate(mode, { passRate = 1, override = "", open = "" } = {}) {
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
   const bin = join(dir, "bin");
   mkdirSync(bin);
+  writeFileSync(join(dir, "gh.log"), "");
   writeFileSync(join(bin, "gh"), `#!/usr/bin/env bash\necho "$*" >> "${dir}/gh.log"\nif [[ "$1 $2" == "issue list" ]]; then echo "\${FAKE_OPEN_ISSUE:-}"; fi\n`);
   chmodSync(join(bin, "gh"), 0o755);
   const card = join(dir, "card.json");
