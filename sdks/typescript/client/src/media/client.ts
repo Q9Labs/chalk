@@ -1945,7 +1945,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       this.#fenceLocalPublications();
       const connectionEpoch = ++this.#connectionEpoch;
-      this.#disposeConnection(false);
+      // A connection that never negotiated carried nothing, so swapping it is no recovery. Saying "recovering" would
+      // move the whole call to reconnecting and cut off any other enable that is running.
+      this.#disposeConnection(false, cause !== "dormant_connection");
       this.#clearRemoteTracks();
       this.#cursor = null;
       this.#bootstrap = bootstrap;
@@ -2002,10 +2004,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       throw error;
     }
   }
-  #disposeConnection(stopSenders: boolean): void {
+  #disposeConnection(stopSenders: boolean, announceRecovery = true): void {
     this.#receiveHealth.replaced();
     this.#receiveProgress.replaced();
-    if (!stopSenders) this.#setPhase("recovering", null);
+    if (!stopSenders && announceRecovery) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
     this.#disposeConnectionObservation = undefined;
     if (stopSenders) {

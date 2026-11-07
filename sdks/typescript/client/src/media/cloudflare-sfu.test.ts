@@ -3681,6 +3681,23 @@ describe("remote publication recovery", () => {
       { replaceMediaConnection },
     );
   });
+  it("keeps the media phase live while the first publish replaces a connection that never negotiated", async () => {
+    const replaceMediaConnection = sequentialReplacementConnections();
+    await withTimedHarness(
+      async (harness) => {
+        await harness.client.start(fakeStream());
+        const phases: string[] = [];
+        harness.client.subscribe(() => phases.push(harness.client.getSnapshot().connection.phase));
+        harness.client.prepareLocalTrack("microphone", new FakeTrack("microphone", "audio") as unknown as MediaStreamTrack);
+        await expect(harness.client.setLocalPublicationTarget({ operationId: "enable-microphone", participantId: "participant-1", source: "microphone", enabled: true })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(1);
+        expect(phases).not.toContain("recovering");
+        expect(harness.client.getSnapshot().connection.phase).toBe("live");
+        expect(harness.client.getSnapshot().localTracks).toMatchObject([{ source: "microphone", enabled: true }]);
+      },
+      { replaceMediaConnection },
+    );
+  });
   it("does not reset the replacement budget when recovery republishes local tracks", async () => {
     const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
     await withTimedHarness(
