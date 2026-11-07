@@ -2,6 +2,7 @@
 // The file is append-only, and appending the same run twice changes nothing, so a retry after a crash ends in the same state.
 import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
+import { planeBudgets } from "./budgets.mjs";
 import { percentile } from "./stats.mjs";
 
 const BASELINE_RUNS = 7;
@@ -20,7 +21,11 @@ export function readHistory(directory) {
 /** appendCards adds the cards that history lacks, one line each, and returns how many it added. */
 export function appendCards(directory, cards) {
   const known = new Set(readHistory(directory).map(key));
-  const fresh = cards.filter((card) => !known.has(key(card)));
+  const fresh = cards.filter((card) => {
+    if (known.has(key(card))) return false;
+    known.add(key(card));
+    return true;
+  });
   if (fresh.length > 0) appendFileSync(join(directory, "history.jsonl"), fresh.map((card) => `${JSON.stringify(card)}\n`).join(""));
   return fresh.length;
 }
@@ -61,13 +66,14 @@ export function trendsMarkdown(history, budgets) {
   for (const plane of [...new Set(history.map((card) => card.mediaPlane))].sort()) {
     const runs = nightlyOf(history, plane).slice(-TREND_RUNS);
     if (runs.length === 0) continue;
+    const limits = planeBudgets(budgets, plane);
     const ids = [...new Set(runs.flatMap((card) => card.metrics.map((metric) => metric.id)))].sort();
     lines.push(`## ${plane}`, "", `${runs.length} runs, ${runs[0].run.startedAt.slice(0, 10)} to ${runs.at(-1).run.startedAt.slice(0, 10)}.`, "", "| Metric | Unit | Values |", "|---|---|---|");
     for (const id of ids) {
       const values = runs.map((card) => {
         const metric = card.metrics.find((candidate) => candidate.id === id);
         if (!metric || metric.n === 0) return "–";
-        return number(budgets[id]?.max_p95 !== undefined ? metric.p95 : metric.p50);
+        return number(limits[id]?.max_p95 !== undefined ? metric.p95 : metric.p50);
       });
       lines.push(`| \`${id}\` | ${runs.at(-1).metrics.find((metric) => metric.id === id)?.unit ?? ""} | ${values.join(" ")} |`);
     }

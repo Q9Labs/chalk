@@ -221,7 +221,7 @@ jobs:
             exit 0
           fi
           mkdir -p artifacts
-          node features/scorecard/scorecard.mjs build --proof-leave "$leave" --tier nightly --environment staging \
+          node features/scorecard/scorecard.mjs build --proof-leave "$leave" --tier nightly --environment staging --id "$GITHUB_RUN_ID" \
             --plane "$CHALK_PROOF_MEDIA_PLANE" --region github-hosted --size ubuntu-24-04 --commit "$(git rev-parse HEAD)" \
             --out artifacts/scorecard-proof.json
         env:

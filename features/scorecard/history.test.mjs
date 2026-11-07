@@ -19,9 +19,10 @@ test("appending the same run twice leaves history unchanged", () => {
   const dir = directory();
   assert.equal(appendCards(dir, [night(1, 100), night(2, 110)]), 2);
   assert.equal(appendCards(dir, [night(2, 110), night(3, 120)]), 1);
+  assert.equal(appendCards(dir, [night(4, 130), night(4, 130)]), 1);
   assert.deepEqual(
     readHistory(dir).map((card) => card.run.id),
-    ["run-1", "run-2", "run-3"],
+    ["run-1", "run-2", "run-3", "run-4"],
   );
   assert.equal(readFileSync(join(dir, "history.jsonl"), "utf8").split("\n").length, 4);
 });
@@ -44,4 +45,12 @@ test("the trends list the last 14 values, p95 where the budget bounds the p95", 
   assert.equal(values.length, 14);
   assert.equal(values[0], "204"); // run 3: p50 102, p95 204
   assert.equal(values.at(-1), "230");
+});
+
+test("a plane's own p95 budget picks the p95 for that plane only", () => {
+  const history = [night(1, 100), night(2, 100, "cf_sfu")];
+  const table = trendsMarkdown(history, { "chalk_sfu.action.leave_ms": { max_p95: 500, tolerancePct: 10, gate: false } });
+  const [chalk, cf] = table.split("## cf_sfu");
+  assert.match(chalk, /\| `action.leave_ms` \| ms \| 200 \|/);
+  assert.match(cf, /\| `action.leave_ms` \| ms \| 100 \|/);
 });
