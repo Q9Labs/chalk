@@ -48,7 +48,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  */
 
 // Units a metric may use. A metric's unit is fixed by its entry in METRICS.
-export const UNITS = /** @type {const} */ (["ms", "kib", "percent", "pps", "mbit_s", "count", "pass"]);
+const UNITS = /** @type {const} */ (["ms", "kib", "percent", "pps", "mbit_s", "count", "pass"]);
 /** @typedef {(typeof UNITS)[number]} Unit */
 
 // Stable metric ids, each with its unit. Renaming an id or changing its unit breaks history, so add a new id instead.
@@ -99,22 +99,29 @@ export function scorecardProblems(value) {
   const fail = (/** @type {string} */ problem) => problems.push(problem);
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
-  const run = card?.run;
   exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "dropped"], "scorecard", fail);
-  exactKeys(run, ["id", "commit", "tier", "environment", "startedAt", "client"], "run", fail);
-  exactKeys(run?.client, ["kind", "browser", "region", "size"], "run.client", fail);
-  if (typeof run?.id !== "string" || !/^[A-Za-z0-9_-]+$/.test(run.id)) fail("run.id must be a plain run label");
-  if (typeof run?.commit !== "string" || !/^[0-9a-f]{40}$/.test(run.commit)) fail("run.commit must be a full SHA");
-  if (!tiers.includes(run?.tier)) fail(`run.tier must be one of ${tiers.join(", ")}`);
-  if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
-  if (typeof run?.startedAt !== "string" || !isoTime.test(run.startedAt) || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be a UTC ISO time");
-  if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
-  for (const [field, shape] of Object.entries(clientLabels)) if (typeof run?.client?.[field] !== "string" || !shape.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
+  runProblems(card?.run, fail);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
   dropProblems(card?.dropped, fail);
   leakProblems(card, fail);
   return problems;
+}
+
+/**
+ * @param {any} run
+ * @param {(problem: string) => void} fail
+ */
+function runProblems(run, fail) {
+  exactKeys(run, ["id", "commit", "tier", "environment", "startedAt", "client"], "run", fail);
+  if (typeof run?.id !== "string" || !/^[A-Za-z0-9_-]+$/.test(run.id)) fail("run.id must be a plain run label");
+  if (typeof run?.commit !== "string" || !/^[0-9a-f]{40}$/.test(run.commit)) fail("run.commit must be a full SHA");
+  if (!tiers.includes(run?.tier)) fail(`run.tier must be one of ${tiers.join(", ")}`);
+  if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
+  if (typeof run?.startedAt !== "string" || !isoTime.test(run.startedAt) || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be a UTC ISO time");
+  exactKeys(run?.client, ["kind", "browser", "region", "size"], "run.client", fail);
+  if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
+  for (const [field, shape] of Object.entries(clientLabels)) if (typeof run?.client?.[field] !== "string" || !shape.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
 }
 
 /**
@@ -144,13 +151,25 @@ function metricProblems(metrics, fail) {
     seen.add(name);
     const expected = METRICS[/** @type {MetricId} */ (name)]?.unit;
     if (expected && metric?.unit !== expected) fail(`${name}: unit must be ${expected}`);
-    if (!Number.isInteger(metric?.n) || metric.n < 0) fail(`${name}: n must be a whole number`);
     if (typeof metric?.source !== "string" || !label.test(metric.source)) fail(`${name}: source must be a lowercase label`);
-    const percentiles = [metric?.p50, metric?.p95];
-    if (metric?.n === 0 && percentiles.some((value) => value !== null)) fail(`${name}: p50 and p95 must be null without samples`);
-    if (metric?.n > 0 && !percentiles.every((value) => Number.isFinite(value) && value >= 0)) fail(`${name}: p50 and p95 must be non-negative numbers`);
-    if (metric?.n > 0 && metric.p50 > metric.p95) fail(`${name}: p50 is above p95`);
+    sampleProblems(name, metric, fail);
   }
+}
+
+/**
+ * @param {string} name
+ * @param {any} metric
+ * @param {(problem: string) => void} fail
+ */
+function sampleProblems(name, metric, fail) {
+  if (!Number.isInteger(metric?.n) || metric.n < 0) return fail(`${name}: n must be a whole number`);
+  const percentiles = [metric.p50, metric.p95];
+  if (metric.n === 0) {
+    if (percentiles.some((value) => value !== null)) fail(`${name}: p50 and p95 must be null without samples`);
+    return;
+  }
+  if (!percentiles.every((value) => Number.isFinite(value) && value >= 0)) fail(`${name}: p50 and p95 must be non-negative numbers`);
+  else if (metric.p50 > metric.p95) fail(`${name}: p50 is above p95`);
 }
 
 /**
