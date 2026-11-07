@@ -116,6 +116,8 @@ function transform(file, text, isNative) {
       if (next !== stringBody) edits.push({ start: bodyStart, end: bodyStart + stringBody.length, text: next });
       continue;
     }
+    // In plain .ts web modules a number is usually geometry math input (stage gap), not a CSS length.
+    if (!isNative && file.endsWith(".ts")) continue;
     const number = Number.parseFloat(match[5]);
     const px = Math.abs(number);
     const step = px === 0 ? undefined : kind === "corner" && isCircle(text, match.index, px) ? { name: "pill", snapped: false } : stepFor(kind, px);
