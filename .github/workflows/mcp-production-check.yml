@@ -1,0 +1,47 @@
+name: MCP production check
+
+# Connects to the hosted MCP server the way a client does: an unauthenticated call
+# gets a 401 with OAuth discovery, then the proof tenant's API key runs initialize,
+# tools/list and one tool call. A 404 or a broken sign-in setup fails this run.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_run:
+    workflows: ["Promote newest held nightly"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment with a permanent proof Tenant
+        type: environment
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-production-check-${{ inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  mcp:
+    name: MCP initialize, list tools and call a tool
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment || 'production' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Check the hosted MCP server
+        env:
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+        run: node scripts/mcp-proof/check.mjs
