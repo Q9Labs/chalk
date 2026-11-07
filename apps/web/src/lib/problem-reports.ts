@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { z } from "./zod-mini";
+import { Schema } from "effect";
 import { currentSessionId, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 
@@ -7,7 +7,7 @@ const apiFetch = withRequestContext();
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
 type ReportConnection = Pick<ReturnType<SpaceClient["getSnapshot"]>["connection"], "lastError"> & { readonly status: string };
 export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
-const availability = z.object({ available: z.boolean() });
+const parseAvailability = Schema.decodeUnknownSync(Schema.Struct({ available: Schema.Boolean }));
 
 export function useReportCredentialExpired(expiresAt: number | undefined) {
   const [expiredAt, setExpiredAt] = useState<number>();
@@ -42,7 +42,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       try {
         const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports/availability`, { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
         if (!response.ok) throw new Error("Availability probe failed");
-        const enabled = availability.parse(await response.json()).available;
+        const enabled = parseAvailability(await response.json()).available;
         if (!controller.signal.aborted && !attempt.signal.aborted) {
           setAvailable(enabled);
           if (enabled) retryDelay = 1000;
