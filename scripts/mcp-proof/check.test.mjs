@@ -3,29 +3,40 @@ import { createServer } from "node:http";
 import { test } from "node:test";
 import { checkMcp } from "./check.mjs";
 
+function reply(res, status, body, headers = {}) {
+  res.writeHead(status, { "content-type": "application/json", ...headers });
+  res.end(JSON.stringify(body));
+}
+
+function discovery(url, origin) {
+  if (url === "/.well-known/oauth-protected-resource/mcp") return { resource: `${origin}/mcp`, authorization_servers: [origin] };
+  if (url === "/.well-known/oauth-authorization-server") {
+    return { authorization_endpoint: `${origin}/oauth/authorize`, token_endpoint: `${origin}/oauth/token`, registration_endpoint: `${origin}/oauth/register`, code_challenge_methods_supported: ["S256"] };
+  }
+  return undefined;
+}
+
+function answer(message, { toolStatus }) {
+  if (message.method === "initialize") return [200, { jsonrpc: "2.0", id: message.id, result: { serverInfo: { name: "chalk" } } }];
+  if (message.method === "tools/list") return [200, { jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "chalk_list_spaces" }] } }];
+  return [toolStatus, { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "[]" }] } }];
+}
+
 function startServer({ routes = true, oauth = true, toolStatus = 200 } = {}) {
   const server = createServer((req, res) => {
     const origin = `http://${req.headers.host}`;
-    const send = (status, body, headers = {}) => {
-      res.writeHead(status, { "content-type": "application/json", ...headers });
-      res.end(JSON.stringify(body));
-    };
-    if (!routes) return send(404, { error: { code: "route.not_found" } });
-    if (req.url === "/.well-known/oauth-protected-resource/mcp") return send(200, { resource: `${origin}/mcp`, authorization_servers: [origin] });
-    if (req.url === "/.well-known/oauth-authorization-server") {
-      return send(200, { authorization_endpoint: `${origin}/oauth/authorize`, token_endpoint: `${origin}/oauth/token`, registration_endpoint: `${origin}/oauth/register`, code_challenge_methods_supported: ["S256"] });
-    }
+    if (!routes) return reply(res, 404, { error: { code: "route.not_found" } });
+    const metadata = discovery(req.url, origin);
+    if (metadata) return reply(res, 200, metadata);
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
-      const message = JSON.parse(body);
       if (req.headers.authorization !== "Bearer key") {
         const challenge = oauth ? { "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"` } : {};
-        return send(401, { error: { code: "auth.unauthenticated" } }, challenge);
+        return reply(res, 401, { error: { code: "auth.unauthenticated" } }, challenge);
       }
-      if (message.method === "initialize") return send(200, { jsonrpc: "2.0", id: message.id, result: { serverInfo: { name: "chalk" } } });
-      if (message.method === "tools/list") return send(200, { jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "chalk_list_spaces" }] } });
-      return send(toolStatus, { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "[]" }] } });
+      const [status, payload] = answer(JSON.parse(body), { toolStatus });
+      reply(res, status, payload);
     });
   });
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, url: `http://127.0.0.1:${server.address().port}` })));
