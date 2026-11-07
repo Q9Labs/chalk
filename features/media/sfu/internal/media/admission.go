@@ -87,19 +87,26 @@ func episodeOf(scope protocol.Scope) episodeKey { return episodeKey{scope.Tenant
 // NewEpisodePackets is the reservation of an Episode's first join: room for two Participants.
 func (n *Node) NewEpisodePackets() int { return n.episodeReservation(1) }
 
-// reservations counts live sessions per Episode, leaving out one session that is about to be
-// replaced, and sums the Episodes' reservations. The caller holds n.mu.
+// reservations counts live Participant sessions per Episode, leaving out one session that is
+// about to be replaced, and sums the Episodes' reservations. Each capture session adds its own
+// CapturePackets to the total and no Participant to its Episode, so a recording takes node budget
+// without changing what the Episode's callers reserve. The caller holds n.mu.
 func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total int) {
 	counts = map[episodeKey]int{}
+	captures := 0
 	for _, session := range n.sessions {
-		if session != leaving {
+		switch {
+		case session == leaving:
+		case session.kind == kindCapture:
+			captures++
+		default:
 			counts[episodeOf(session.scope)]++
 		}
 	}
 	for _, count := range counts {
 		total += n.episodeReservation(count)
 	}
-	return counts, total
+	return counts, total + captures*n.cfg.CapturePackets
 }
 
 // reservedPackets is the sum of every live Episode's reservation. The caller holds n.mu.
@@ -129,6 +136,34 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 	}
 	grown := total - n.episodeReservation(count) + n.episodeReservation(count+1)
 	if grown > n.cfg.PacketBudget {
+		return n.refuse(RefusedNodeFull, errNodeFull)
+	}
+	return nil
+}
+
+// admitCapture checks that one more capture session fits its Episode and the node. replacing is the
+// older epoch of the same capture, which the new session replaces, so a new epoch does not count
+// twice. A capture joins an Episode the node already hosts; it never opens one, so the host guard
+// that closes admission to new Episodes does not apply. The caller holds n.mu.
+func (n *Node) admitCapture(scope protocol.Scope, replacing *Session) error {
+	if n.cfg.MaxCapturesPerEpisode == 0 {
+		return fmt.Errorf("%w: this node takes no capture sessions", ErrUnsupportedOperation)
+	}
+	key := episodeOf(scope)
+	if !n.hostsEpisode(key) {
+		return fmt.Errorf("%w: the node hosts no Participant of this Episode", ErrSessionGone)
+	}
+	captures := 0
+	for _, session := range n.sessions {
+		if session != replacing && session.kind == kindCapture && episodeOf(session.scope) == key {
+			captures++
+		}
+	}
+	if captures+1 > n.cfg.MaxCapturesPerEpisode {
+		return n.refuse(RefusedCaptureLimit, errCaptureLimit)
+	}
+	_, total := n.reservations(replacing)
+	if total+n.cfg.CapturePackets > n.cfg.PacketBudget {
 		return n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	return nil

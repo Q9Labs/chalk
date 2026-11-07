@@ -27,6 +27,7 @@ type Session struct {
 	id              string
 	createOperation string
 	scope           protocol.Scope
+	kind            sessionKind
 	node            *Node
 	pc              *webrtc.PeerConnection
 
@@ -56,7 +57,7 @@ type pendingOffer struct {
 }
 
 // newSession builds a session and starts its pacer. The caller holds n.mu.
-func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Session, error) {
+func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind sessionKind) (*Session, error) {
 	transport := newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done)
 	pc, err := n.peers.newPeer(transport)
 	if err != nil {
@@ -64,7 +65,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 		return nil, fmt.Errorf("create peer connection: %w", err)
 	}
 	s := &Session{
-		id: id, createOperation: operationID, scope: scope, node: n, pc: pc,
+		id: id, createOperation: operationID, scope: scope, kind: kind, node: n, pc: pc,
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
@@ -86,6 +87,9 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope) (*Sessio
 	pc.OnConnectionStateChange(s.onConnectionState)
 	return s, nil
 }
+
+// key is the session's place in the node's table of live sessions.
+func (s *Session) key() participantKey { return sessionKey(s.scope, s.kind) }
 
 func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
 	switch state {
@@ -195,6 +199,9 @@ func (s *Session) AddTracks(ctx context.Context, request protocol.TracksRequest)
 			return protocol.TracksResponse{}, err
 		}
 		if local {
+			if s.kind == kindCapture {
+				return protocol.TracksResponse{}, fmt.Errorf("%w: a capture session only pulls", ErrUnsupportedOperation)
+			}
 			return s.push(ctx, request)
 		}
 		return s.pull(ctx, request)
@@ -366,7 +373,16 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 
 // transceiverLimit is the most media sections one connection may ever hold.
 func (s *Session) transceiverLimit() int {
-	return sectionHeadroom * (s.node.cfg.MaxPublishedPerSession + s.node.cfg.MaxSubscriptionsPerSession)
+	return sectionHeadroom * (s.node.cfg.MaxPublishedPerSession + s.subscriptionLimit())
+}
+
+// subscriptionLimit is the most tracks the session pulls. A capture pulls every Participant's
+// microphone and camera and publishes nothing.
+func (s *Session) subscriptionLimit() int {
+	if s.kind == kindCapture {
+		return s.node.cfg.MaxCaptureSubscriptions
+	}
+	return s.node.cfg.MaxSubscriptionsPerSession
 }
 
 // registerPublication records one pushed track. The caller holds s.mu. It returns the
@@ -527,7 +543,7 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	for _, existing := range s.subscribed {
 		duplicate = duplicate || existing.pub == pub
 	}
-	full := len(s.subscribed)+len(staged) >= s.node.cfg.MaxSubscriptionsPerSession
+	full := len(s.subscribed)+len(staged) >= s.subscriptionLimit()
 	s.mu.Unlock()
 	switch {
 	case duplicate:
