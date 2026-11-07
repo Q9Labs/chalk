@@ -205,7 +205,8 @@ class GitHub:
         while True:
             runs = self.request(f'actions/workflows/gate.yml/runs?status=success&per_page=100&{filters}&page={page}')['workflow_runs']
             for run in runs:
-                if self.has_green_gate(run['head_sha'], push_only=True):
+                # A push run of history that master later dropped stays in the run list, so a push run needs the check too.
+                if self.is_on_master(run['head_sha']) and self.has_green_gate(run['head_sha'], push_only=True):
                     return run
             if len(runs) < 100:
                 return None

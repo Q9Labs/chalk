@@ -36,6 +36,7 @@ class MemoryGitHub(GitHub):
         self.items = []
         self.archives = {}
         self.tip = SHA
+        self.dropped = set()
         self.dispatches = 0
         self.created_at = '2026-10-17T02:00:00Z'
         self.gates = [dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master',
@@ -74,6 +75,8 @@ class MemoryGitHub(GitHub):
             return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
+        if route.startswith('compare/master...'):
+            return dict(status='behind' if route.split('...')[1] not in self.dropped else 'diverged')
         if route.startswith('actions/workflows/gate.yml/runs?') and 'status=success' in route:
             return dict(workflow_runs=[run for run in reversed(self.gates)
                                        if run['event'] == 'push' and run['conclusion'] == 'success'])
@@ -297,6 +300,13 @@ class CutTests(unittest.TestCase):
         for status, green in [('behind', True), ('identical', True), ('diverged', False), ('ahead', False)]:
             with self.subTest(status), patch.object(api, 'pages', return_value=[queue]), patch.object(api, 'request', return_value=dict(status=status)):
                 self.assertEqual(api.has_green_gate(SHA), green)
+
+    def test_nightly_skips_a_push_gate_of_history_master_dropped(self):
+        older = 'b' * 40
+        api = MemoryGitHub()
+        api.gates = [dict(api.gates[0], head_sha=older), dict(api.gates[0], run_number=2, head_sha='d' * 40)]
+        api.dropped = {'d' * 40}
+        self.assertEqual(api.newest_green_push_gate(), older)
 
     def test_newest_green_gate_pages_past_unlanded_groups(self):
         api = object.__new__(GitHub)
