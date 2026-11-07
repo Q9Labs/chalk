@@ -37,11 +37,22 @@ def control(environment, root, body, operation):
     return {"status": int(status), "body": json.loads(raw) if raw else None}
 
 
-def registration(issuer, root, provider_id):
-    state = json.loads(pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_STATE_PATH"]).read_text())
-    record = state["registrations"].get(provider_id)
-    ca = pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_CERT"]).read_text()
-    return {"record": record, "ca_pem": ca, "trust_domain": issuer["CHALK_RECORDER_FLEET_ISSUER_SPIFFE_TRUST_DOMAIN"]}
+def registration(user_id, provider_id):
+    # The issuer container can restart while the check runs, which makes its PID and
+    # /proc root stale. Resolve both on every read; after a short pause for the new
+    # container to start, retry once, then fail with the path.
+    for attempt in (0, 1):
+        _, issuer, root = runtime("chalk-recorder-issuer", user_id)
+        try:
+            state = json.loads(pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_STATE_PATH"]).read_text())
+            ca = pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_CERT"]).read_text()
+        except FileNotFoundError:
+            if attempt:
+                raise
+            time.sleep(5)
+            continue
+        return {"record": state["registrations"].get(provider_id), "ca_pem": ca,
+                "trust_domain": issuer["CHALK_RECORDER_FLEET_ISSUER_SPIFFE_TRUST_DOMAIN"]}
 
 
 def bootstrap_pending(result):
@@ -64,8 +75,8 @@ def duration_seconds(value):
 def execute(task):
     role = task["role"]
     container, environment, root = runtime("chalk-recorder-" + role, task["user_id"])
-    _, issuer, issuer_root = runtime("chalk-recorder-issuer", task["user_id"])
     if task["action"] == "summary":
+        _, issuer, _ = runtime("chalk-recorder-issuer", task["user_id"])
         keys = ("ENVIRONMENT", "ROLE", "OWNER_TAG", "DIGITALOCEAN_PROJECT_ID", "DIGITALOCEAN_VPC_UUID",
                 "BOOTSTRAP_CA_BASE64", "SSH_KEY_IDS", "REGION", "SIZE", "FIREWALL_ID", "BOOTSTRAP_ENDPOINT", "IMAGE_ID", "IMAGE_DIGEST",
                 "RELEASE_ID", "JOURNAL_PATH", "RECONCILE_INTERVAL", "CONTROL_PLANE_URL", "SERVER_NAME")
@@ -77,7 +88,7 @@ def execute(task):
                 "issuer_control_plane_url": issuer["CHALK_RECORDER_FLEET_ISSUER_CONTROL_PLANE_URL"]}
     if task["action"] == "abandon":
         result = control(environment, root, task["bootstrap"], "abandon")
-        return {**result, **registration(issuer, issuer_root, task["bootstrap"]["provider_id"])}
+        return {**result, **registration(task["user_id"], task["bootstrap"]["provider_id"])}
     deadline = time.monotonic() + task["timeout"]
     interval = duration_seconds(environment.get("CHALK_RECORDER_FLEET_RECONCILE_INTERVAL", "5s"))
     history = []
@@ -85,10 +96,10 @@ def execute(task):
         result = control(environment, root, task["bootstrap"], "register")
         history.append({"time": time.time(), "status": result["status"]})
         history = history[-50:]
-        evidence = registration(issuer, issuer_root, task["bootstrap"]["provider_id"])
+        evidence = registration(task["user_id"], task["bootstrap"]["provider_id"])
         if result["status"] == 200 and evidence["record"] and evidence["record"]["certificates"]:
             return {"history": history, "controller_response": result, "controller_request": {**task["bootstrap"], "schema_version": "recorder_fleet_bootstrap.v1"}, **evidence}
         if result["status"] != 202 and not bootstrap_pending(result):
             return {"history": history, "controller_response": result, "controller_request": {**task["bootstrap"], "schema_version": "recorder_fleet_bootstrap.v1"}, **evidence}
         time.sleep(min(interval, max(0, deadline - time.monotonic())))
-    return {"history": history, **registration(issuer, issuer_root, task["bootstrap"]["provider_id"])}
+    return {"history": history, **registration(task["user_id"], task["bootstrap"]["provider_id"])}
