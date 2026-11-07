@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type mcpToolReply struct {
@@ -109,5 +111,33 @@ func TestMCPTenantViewsNeedTheirOwnScope(t *testing.T) {
 	response := scopeTestCall(t, &read, toolCallBody("chalk_inspect_tenant", `{}`))
 	if strings.Contains(response.Body.String(), "auth.forbidden") {
 		t.Errorf("a call without view must read settings with tenants:read: %s", response.Body.String())
+	}
+}
+
+type requestCaptureStub struct {
+	TranscriptArtifactService
+	got transcripts.RequestInput
+}
+
+func (s *requestCaptureStub) Request(_ context.Context, input transcripts.RequestInput) (transcripts.Transcript, transcripts.Job, error) {
+	s.got = input
+	return transcripts.Transcript{ID: input.RecordingID, TenantID: input.TenantID, Status: transcripts.StatusPending}, transcripts.Job{}, nil
+}
+
+func TestMCPRequestTranscriptKeepsTheTraceCarrier(t *testing.T) {
+	tenantID := documentTestID(t, "11111111-1111-4111-8111-111111111111")
+	recordingID := documentTestID(t, "44444444-4444-4444-8444-444444444444")
+	service := &requestCaptureStub{}
+	handler := NewMCPHandler(Options{TranscriptArtifacts: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
+	principal := authentication.Principal{Kind: authentication.PrincipalAPIKey, APIKeyID: recordingID, TenantID: tenantID, Scopes: []authentication.Scope{authentication.ScopeTranscriptionsWrite}}
+	span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1, 2, 3}, SpanID: trace.SpanID{4, 5}, TraceFlags: trace.FlagsSampled})
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(toolCallBody("chalk_request_transcript", `{"recording_id":"`+recordingID.String()+`","request_key":"`+testRequestKey+`"}`)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	ctx := trace.ContextWithSpanContext(authentication.ContextWithPrincipal(request.Context(), principal), span)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request.WithContext(ctx))
+	if response.Code != http.StatusOK || !strings.HasPrefix(service.got.Traceparent, "00-"+span.TraceID().String()+"-") {
+		t.Fatalf("%d %s traceparent=%q", response.Code, response.Body.String(), service.got.Traceparent)
 	}
 }
