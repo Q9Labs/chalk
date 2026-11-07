@@ -17,7 +17,10 @@ test("summarize keeps timeouts out of the percentiles and counts them", () => {
 });
 
 test("a budget fails on a slow p95, a timeout, or too few samples", () => {
-  const summary = summarize([{ fast: 10, slow: 900, lost: null, rare: 5 }, { fast: 20, slow: 950, lost: 10 }]);
+  const summary = summarize([
+    { fast: 10, slow: 900, lost: null, rare: 5 },
+    { fast: 20, slow: 950, lost: 10 },
+  ]);
   const budgets = { fast: { p95Ms: 50 }, slow: { p95Ms: 500 }, lost: { p95Ms: 500 }, rare: { p95Ms: 50 }, absent: { p95Ms: 50 } };
   assert.deepEqual(budgetFailures(summary, budgets, 2), ["slow: p95 950 ms is over 500 ms", "lost: 1 timed out", "rare: 1 samples, need 2", "absent: 0 samples, need 2"]);
 });

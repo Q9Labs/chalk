@@ -38,7 +38,10 @@ test("hosts, IPs, URLs and resource ids are refused anywhere but the run id", ()
     card.dropped[0].reason = "timeout";
     card.run.client.region = leak;
     const problems = scorecardProblems(card);
-    assert.ok(problems.some((problem) => problem.startsWith("run.client.region looks like")), `${leak}: ${problems.join("; ")}`);
+    assert.ok(
+      problems.some((problem) => problem.startsWith("run.client.region looks like")),
+      `${leak}: ${problems.join("; ")}`,
+    );
   }
 });
 
