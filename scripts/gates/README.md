@@ -19,9 +19,9 @@ the `services` lane, because CI runs the API and Sync gates as separate jobs.
 every night, and on manual dispatch. `Select gate jobs` runs
 `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
 same plan as the lanes to pick the jobs a pull request needs: the API gate, the
-Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
-per lane group: `checks` (every lane that no other group names, including type
-checks), `tests` (non-browser workspaces), `browser-tests` (the web app and SDK
+Sync gate, and the root lane groups. The root lanes run as jobs, one
+per lane group, at most four at a time (`max-parallel`) so one run cannot hold the organisation's hosted-runner slots: `checks` (every lane that no other group names, including type
+checks and the non-browser workspace tests), `browser-tests` (the web app and SDK
 consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboard against the real API),
 `call-leaks` (call resource cleanup journeys), and `build` (with the call bundle
 budget, Publint and Are The Types Wrong, which read the build output). The call

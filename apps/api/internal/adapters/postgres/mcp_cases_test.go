@@ -12,9 +12,8 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 	return []mcpToolCase{
 		{"get_connection", `{}`, ""},
 		{"update_tenant", `{"body":{"name":"MCP changed"}}`, ""},
-		{"list_memberships", `{}`, ""},
+		{"inspect_tenant", `{}`, ""},
 		{"set_membership", fmt.Sprintf(`{"action":"create","create":{"user_id":%q,"role":"observer"}}`, userID), ""},
-		{"list_api_keys", `{}`, ""},
 		{"issue_api_key", fmt.Sprintf(`{"action":"create","request_key":"mcp-issued-key-0001","create":{"name":"MCP issued","scopes":["spaces:read"],"expires_at":%q}}`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339)), ""},
 		{"revoke_api_key", fmt.Sprintf(`{"api_key_id":%q}`, keyID), ""},
 		{"inspect_webhooks", `{}`, ""},
@@ -41,7 +40,8 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 		{"get_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
 		{"get_recording_download", fmt.Sprintf(`{"recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},
 		{"export_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
-		{"list_transcripts", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
+		{"inspect_transcripts", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},
+		{"request_transcript", fmt.Sprintf(`{"recording_id":%q,"request_key":"mcp-transcript-request-01"}`, recordingID), "transcript.already_exists"},
 		{"delete_transcript", fmt.Sprintf(`{"transcript_id":%q}`, transcriptID), ""},
 	}
 }

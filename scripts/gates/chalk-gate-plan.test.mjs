@@ -255,9 +255,9 @@ test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs(["docs/contract-codegen.md"]), { api: false, sync: false, rootGroups: ["checks"] });
   assert.deepEqual(ciJobs(["apps/api/internal/server.go"]), { api: true, sync: false, rootGroups: ["checks", "dashboard-engine"] });
   assert.deepEqual(ciJobs(["apps/web/src/main.tsx"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "dashboard-engine", "build"] });
-  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
-  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
-  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["sdks/typescript/react/src/index.ts"]), { api: false, sync: false, rootGroups: ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs(["gate.config.ts"]), { api: true, sync: true, rootGroups: ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
+  assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
 });
 
 test("SFU changes run the SFU gate and the API gate that builds the SFU, not Sync", () => {
@@ -328,7 +328,7 @@ test("browser CI groups each run only their own selected lanes", () => {
 
 test("every lane runs in exactly one CI lane group", () => {
   const lanes = gateConfig.lanes;
-  const groups = ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
+  const groups = ["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "build"].map((group) => laneGroupLanes(lanes, group).map((lane) => lane.id));
   assert.deepEqual(groups.flat().toSorted(), lanes.map((lane) => lane.id).toSorted());
   assert.equal(laneGroup("publint"), "build");
   assert.equal(laneGroup("browser-tests"), "browser-tests");

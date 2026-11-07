@@ -14,7 +14,7 @@ import {
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
-import { createSpaceClientForPlatform, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import { createSpaceClientForPlatform, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
@@ -52,7 +52,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const { storage } = options;
   const syncDialTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
-  const syncURL = options.syncUrl ?? defaultSyncURL(apiBaseURL);
+  const syncURL = options.syncUrl ?? defaultSyncUrl(apiBaseURL);
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
@@ -186,15 +186,6 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Whiteboa
 function whiteboardURL(syncURL: string): string {
   const url = new URL(syncURL);
   url.pathname = "/v1/whiteboard";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-}
-function defaultSyncURL(apiBaseURL: string): string {
-  const url = new URL(apiBaseURL);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  if (url.hostname.startsWith("api.")) url.hostname = `sync.${url.hostname.slice(4)}`;
-  url.pathname = "/v1/sync";
   url.search = "";
   url.hash = "";
   return url.toString();
