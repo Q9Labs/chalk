@@ -31,7 +31,7 @@ export function AiAppsPage() {
             <code>{state.data.mcpUrl}</code>
             <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
           </div>
-          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.nextCursor ? state.data.connectedNames : state.data.connections.map((connection) => connection.clientName)} />
+          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={[...(state.data.nextCursor ? state.data.connectedNames : []), ...state.data.connections.map((connection) => connection.clientName)]} />
         </>
       ) : null}
       {state.kind === "loading" ? (

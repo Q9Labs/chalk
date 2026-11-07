@@ -232,6 +232,19 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
+    const { tab, context } = await open("/dashboard/apps", { set: "manyConnections=1&fail=connections-scan" });
+    try {
+      await tab.locator("table.capps tbody tr").first().waitFor();
+      const codex = tab.locator(".ctile", { hasText: "Codex" });
+      const before = (await codex.innerText()).includes("Connected");
+      await tab.getByRole("button", { name: "Show more apps" }).click();
+      await tab.locator("table.capps tbody tr:nth-child(27)").waitFor();
+      check("an app on a page the name scan missed shows Connected once its page is loaded", !before && (await codex.innerText()).includes("Connected"));
+    } finally {
+      await context.close();
+    }
+  }
+  {
     const { tab, context } = await open("/dashboard/apps", { set: "fail=connections-list" });
     try {
       await tab.getByRole("alert").filter({ hasText: "Couldn’t load your connected apps" }).waitFor();

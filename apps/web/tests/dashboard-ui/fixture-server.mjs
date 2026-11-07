@@ -352,7 +352,9 @@ async function dashboard(request, response, page, url, entry) {
       const mcpUrl = "https://api.chalk.test/mcp";
       // "connections-list" is the server's answer when the grants can't be read: the address still comes back.
       if (state.fail.has("connections-list")) return send(response, 200, { mcpUrl, connections: [], nextCursor: null, connectedNames: [], listError: true });
-      const connectedNames = query.cursor ? [] : [...new Set(data.connections.map((item) => item.clientName))];
+      // "connections-scan" is a name scan that failed after the first page: only that page's names come back.
+      const named = state.fail.has("connections-scan") ? data.connections.slice(0, 25) : data.connections;
+      const connectedNames = query.cursor ? [] : [...new Set(named.map((item) => item.clientName))];
       return send(response, 200, { mcpUrl, connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null, connectedNames, listError: false });
     }
     if (page === "developer")
