@@ -220,6 +220,7 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "failed", title: "Connection lost", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed"))} /> },
+  { id: "media-failed", title: "Media could not connect", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "failed", "connection.media_start_failed"))} /> },
   { id: "leaving", title: "Leaving", render: () => <Live snapshot={liveSnapshot({ others: [nora], status: "leaving" })} /> },
   { id: "left", title: "Left the call", render: () => <Live snapshot={liveSnapshot({ others: [nora] })} then={(client) => client.updateSnapshot((current) => withStatus(current, "left"))} /> },
   {
@@ -237,8 +238,8 @@ export const CALL_STATES: readonly CallState[] = [
   },
 ];
 
-function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]["status"]): SpaceSnapshot {
-  const lastError = status === "failed" ? { code: "connection.sync_recovery_exhausted" as const, recoverable: false, message: "Chalk could not reconnect to this Space." } : null;
+function withStatus(snapshot: SpaceSnapshot, status: SpaceSnapshot["connection"]["status"], code: "connection.sync_recovery_exhausted" | "connection.media_start_failed" = "connection.sync_recovery_exhausted"): SpaceSnapshot {
+  const lastError = status === "failed" ? { code, recoverable: false, message: "Chalk could not reconnect to this Space." } : null;
   return { ...snapshot, connection: { ...snapshot.connection, status, lastError } };
 }
 
