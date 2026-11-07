@@ -105,3 +105,78 @@ jobs:
         with:
           path: ~/.terraform.d/plugin-cache
           key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
+
+  scanners:
+    name: Warm scanner downloads
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Check for saved scanner downloads
+        id: saved
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.cache/chalk-scanner-downloads
+          key: scanner-downloads-${{ runner.os }}-${{ hashFiles('.github/actions/setup-scanners/action.yml') }}
+          lookup-only: true
+
+      - name: Download scanners
+        if: steps.saved.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-scanners
+
+      - name: Save scanner downloads
+        if: steps.saved.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.cache/chalk-scanner-downloads
+          key: scanner-downloads-${{ runner.os }}-${{ hashFiles('.github/actions/setup-scanners/action.yml') }}
+
+  sync:
+    name: Warm Mix dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Check for saved Mix dependencies
+        id: saved
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            apps/sync/deps
+            apps/sync/_build
+          key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+          lookup-only: true
+
+      - name: Set up Erlang and Elixir
+        if: steps.saved.outputs.cache-hit != 'true'
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      # Same fetch, retry and test-environment compile that apps/sync/scripts/gate.sh runs.
+      - name: Fetch and compile Mix dependencies
+        if: steps.saved.outputs.cache-hit != 'true'
+        working-directory: apps/sync
+        env:
+          MIX_ENV: test
+        run: |
+          for delay in 10 30 0; do
+            mix deps.get --check-locked && break
+            ((delay)) || exit 1
+            sleep "$delay"
+          done
+          mix compile
+
+      - name: Save Mix dependencies
+        if: steps.saved.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            apps/sync/deps
+            apps/sync/_build
+          key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
