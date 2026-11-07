@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -34,7 +35,7 @@ type Repository interface {
 	GetArrivalByIdempotency(context.Context, utilities.ID, utilities.ID, string) (Arrival, error)
 	UpdateArrivalState(context.Context, UpdateArrivalStateInput) (Arrival, error)
 
-	CreateAdmissionRequest(context.Context, AdmissionRequest) (AdmissionRequest, error)
+	CreateAdmissionRequest(context.Context, AdmissionRequest, mediaplane.ClientProviders) (AdmissionRequest, error)
 	GetAdmissionRequest(context.Context, utilities.ID, utilities.ID, utilities.ID) (AdmissionRequest, error)
 	GetAdmissionRequestForArrival(context.Context, Arrival) (AdmissionRequest, error)
 	ListAdmissionRequests(context.Context, utilities.ID, utilities.ID, AdmissionRequestState, int32) ([]AdmissionRequest, error)
@@ -461,7 +462,7 @@ func (s Service) CreateAdmissionRequest(ctx context.Context, input CreateAdmissi
 		State:         AdmissionRequestPending,
 		RequestedAt:   now,
 		ExpiresAt:     expiresAt,
-	})
+	}, input.MediaClients)
 }
 
 func (s Service) GetAdmissionRequest(ctx context.Context, tenantID, spaceID, requestHandle utilities.ID) (AdmissionRequest, error) {
@@ -791,7 +792,7 @@ func (r Runtime) decideAdmissionRequest(ctx context.Context, input DecidePublicA
 		}
 		return AdmissionRequest{}, ErrInviteUnavailable
 	}
-	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, RequireKnock: true})
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, RequireKnock: true, MediaClients: mediaplane.AllClientProviders()})
 	if err != nil {
 		return AdmissionRequest{}, err
 	}
@@ -892,9 +893,9 @@ func (r Runtime) CreatePublicSpace(ctx context.Context, input CreatePublicSpaceI
 	var grant PublicAccessGrant
 	switch arrival.State {
 	case ArrivalAdmitted:
-		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
 	case ArrivalPending:
-		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+		grant, err = r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
 		if err == nil {
 			arrival, err = r.service.UpdateArrivalState(ctx, UpdateArrivalStateInput{
 				TenantID:              arrival.TenantID,
@@ -990,7 +991,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		}
 		result := r.arrivalResult(space, arrival)
 		if arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}
@@ -999,7 +1000,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			}
 			result.Access = &grant
 		} else if (arrival.IdentityMode == IdentityAccount || space.AdmissionMode == AdmissionOpen) && arrival.State == ArrivalPending {
-			grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+			grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: input.MediaClients})
 			if grantErr != nil {
 				return PublicSpaceArrival{}, grantErr
 			}
@@ -1085,7 +1086,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 	}
 	if accountAuthorized || space.AdmissionMode == AdmissionOpen {
 		if arrivalResult.Arrival.State == ArrivalAdmitted {
-			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
+			grant, refreshErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
 			if refreshErr != nil {
 				return PublicSpaceArrival{}, refreshErr
 			}
@@ -1100,7 +1101,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		if arrivalResult.Arrival.State != ArrivalPending {
 			return PublicSpaceArrival{}, ErrArrivalUnavailable
 		}
-		grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival})
+		grant, grantErr := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrivalResult.Arrival, MediaClients: input.MediaClients})
 		if grantErr != nil {
 			return PublicSpaceArrival{}, grantErr
 		}
@@ -1129,7 +1130,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 		if arrivalResult.Arrival.State != ArrivalPending {
 			result := r.arrivalResult(space, arrivalResult.Arrival)
 			if arrivalResult.Arrival.State == ArrivalAdmitted {
-				result, err = r.resumeAdmittedArrival(ctx, space, arrivalResult.Arrival)
+				result, err = r.resumeAdmittedArrival(ctx, space, arrivalResult.Arrival, input.MediaClients)
 				if err != nil {
 					return PublicSpaceArrival{}, err
 				}
@@ -1137,7 +1138,7 @@ func (r Runtime) Arrive(ctx context.Context, input PublicInviteArrivalInput) (Pu
 			result.GuestCredential = base64.RawURLEncoding.EncodeToString(arrivalResult.Credential)
 			return result, nil
 		}
-		_, requestErr := r.service.CreateAdmissionRequest(ctx, CreateAdmissionRequestInput{ArrivalHandle: arrivalResult.Arrival.ArrivalHandle, DisplayName: name})
+		_, requestErr := r.service.CreateAdmissionRequest(ctx, CreateAdmissionRequestInput{ArrivalHandle: arrivalResult.Arrival.ArrivalHandle, DisplayName: name, MediaClients: input.MediaClients})
 		if errors.Is(requestErr, ErrArrivalUnavailable) {
 			terminal, terminalErr := r.invalidatePendingArrival(ctx, arrivalResult.Arrival)
 			if terminalErr != nil {
@@ -1171,7 +1172,7 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		return PublicSpaceArrival{}, ErrInviteUnavailable
 	}
 	if arrival.State == ArrivalPending && arrival.IdentityMode == IdentityGuest {
-		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival, beforeWrite); resolved || err != nil {
+		if result, resolved, err := r.resolvePendingAdmission(ctx, space, arrival, input.MediaClients, beforeWrite); resolved || err != nil {
 			return result, err
 		}
 		valid, validationErr := r.pendingGuestArrivalValid(ctx, arrival, space)
@@ -1192,13 +1193,13 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		if err := beforeWrite(); err != nil {
 			return PublicSpaceArrival{}, err
 		}
-		return r.resumeAdmittedArrival(ctx, space, arrival)
+		return r.resumeAdmittedArrival(ctx, space, arrival, input.MediaClients)
 	}
 	return r.arrivalResult(space, arrival), nil
 }
 
-func (r Runtime) resumeAdmittedArrival(ctx context.Context, space PublicSpace, arrival Arrival) (PublicSpaceArrival, error) {
-	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival})
+func (r Runtime) resumeAdmittedArrival(ctx context.Context, space PublicSpace, arrival Arrival, clients mediaplane.ClientProviders) (PublicSpaceArrival, error) {
+	grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaClients: clients})
 	if err != nil {
 		return PublicSpaceArrival{}, err
 	}
@@ -1210,7 +1211,7 @@ func (r Runtime) resumeAdmittedArrival(ctx context.Context, space PublicSpace, a
 	return result, nil
 }
 
-func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace, arrival Arrival, beforeWrite func() error) (PublicSpaceArrival, bool, error) {
+func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace, arrival Arrival, clients mediaplane.ClientProviders, beforeWrite func() error) (PublicSpaceArrival, bool, error) {
 	request, err := r.service.repository.GetAdmissionRequestForArrival(ctx, arrival)
 	if errors.Is(err, ErrAdmissionRequestNotFound) {
 		return PublicSpaceArrival{}, false, nil
@@ -1229,7 +1230,7 @@ func (r Runtime) resolvePendingAdmission(ctx context.Context, space PublicSpace,
 	state, reason := ArrivalPending, ""
 	switch request.State {
 	case AdmissionRequestApproved:
-		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding, RequireKnock: true})
+		grant, err := r.access.GrantPublicAccess(ctx, PublicAccessInput{Arrival: arrival, Admission: request.Binding, RequireKnock: true, MediaClients: clients})
 		if errors.Is(err, ErrArrivalUnavailable) {
 			state, reason = ArrivalUnavailable, "admission_episode_ended"
 			break
@@ -1338,7 +1339,7 @@ func (r Runtime) RefreshAccess(ctx context.Context, input PublicInviteRefreshInp
 	if arrival.State != ArrivalAdmitted {
 		return PublicAccessGrant{}, ErrArrivalUnavailable
 	}
-	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof, ReplaceMediaConnection: input.ReplaceMediaConnection})
+	grant, err := r.access.RefreshPublicAccess(ctx, PublicAccessInput{Arrival: arrival, MediaProof: input.MediaProof, ReplaceMediaConnection: input.ReplaceMediaConnection, MediaClients: input.MediaClients})
 	if err != nil {
 		return PublicAccessGrant{}, err
 	}
@@ -1507,6 +1508,10 @@ func validateClientPayload(grant PublicAccessGrant) error {
 	switch grant.Provider {
 	case PublicProviderCloudflareSFU:
 		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.StunServer) || payload.ProviderSubject != "" || payload.Token != "" {
+			return ErrInvalidArrival
+		}
+	case PublicProviderChalkSFU:
+		if !validClientPayloadField(payload.ConnectionID) || !validClientPayloadField(payload.EpisodeRef) || payload.StunServer != "" || payload.ProviderSubject != "" || payload.Token != "" {
 			return ErrInvalidArrival
 		}
 

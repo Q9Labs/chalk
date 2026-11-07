@@ -58,7 +58,7 @@ func mountMCPOAuthProtocolRoutes(r chi.Router, service MCPOAuthService, limits R
 	resource := map[string]any{
 		"resource":                 config.Resource(),
 		"authorization_servers":    []string{config.Issuer},
-		"scopes_supported":         []string{mcpauth.ScopeRead, mcpauth.ScopeManage},
+		"scopes_supported":         mcpauth.SupportedScopes(),
 		"bearer_methods_supported": []string{"header"},
 		"resource_name":            "Chalk",
 	}
@@ -74,7 +74,7 @@ func mountMCPOAuthProtocolRoutes(r chi.Router, service MCPOAuthService, limits R
 		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":               []string{"S256"},
 		"token_endpoint_auth_methods_supported":          []string{"none"},
-		"scopes_supported":                               []string{mcpauth.ScopeRead, mcpauth.ScopeManage},
+		"scopes_supported":                               mcpauth.SupportedScopes(),
 		"authorization_response_iss_parameter_supported": true,
 	}))
 	r.Method(http.MethodPost, "/oauth/register", rateLimit(limits, mcpOAuthRegisterRateLimit)(registerHandler(service)))
@@ -207,7 +207,13 @@ func mcpChallenge(service MCPOAuthService) string {
 	if service == nil {
 		return ""
 	}
-	return `Bearer resource_metadata="` + service.Config().Issuer + `/.well-known/oauth-protected-resource/mcp"`
+	return `Bearer resource_metadata="` + service.Config().Issuer + `/.well-known/oauth-protected-resource/mcp", scope="` + strings.Join(mcpauth.SupportedScopes(), " ") + `"`
+}
+
+// mcpStepUpChallenge tells an OAuth client which bundle it must be approved for
+// before the refused tool call can succeed (RFC 6750 section 3.1, MCP authorization).
+func mcpStepUpChallenge(service MCPOAuthService, bundle string) string {
+	return `Bearer error="insufficient_scope", scope="` + bundle + `", resource_metadata="` + service.Config().Issuer + `/.well-known/oauth-protected-resource/mcp"`
 }
 
 var errNoOAuthToken = errors.New("no oauth token")

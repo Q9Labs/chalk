@@ -123,7 +123,7 @@ type httpClient interface {
 }
 
 type responseValidator interface {
-	providerError(operation string) error
+	providerError(operation string, statusCode int) error
 }
 
 type providerErrorEnvelope struct {
@@ -487,7 +487,11 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 	if input.Force && a.forcedCloseClient != nil {
 		a.client = a.forcedCloseClient
 	}
-	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(a.sessions.providerID(input.ConnectionID))), request, &providerResponse, "close_tracks")
+	providerID := a.sessions.providerID(input.ConnectionID)
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(providerID)), request, &providerResponse, "close_tracks")
+	if err != nil && input.Force && !forcedCloseSatisfied(err) && a.closeSessionTerminated(ctx, providerID, err) {
+		return mediaplane.CloseTracksResponse{AlreadyClosed: true, Tracks: input.Tracks}, nil
+	}
 	if err != nil && !(input.Force && forcedCloseSatisfied(err)) {
 		return mediaplane.CloseTracksResponse{}, err
 	}
@@ -596,7 +600,7 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 			return providerResponse.StatusCode, newProviderFailure(operation, failureStageDecode, providerResponse.StatusCode, "invalid_json")
 		}
 		if validator, ok := output.(responseValidator); ok {
-			if err := validator.providerError(operation); err != nil {
+			if err := validator.providerError(operation, providerResponse.StatusCode); err != nil {
 				if response, ok := output.(*captureTracksResponse); ok {
 					for _, track := range response.Tracks {
 						if strings.EqualFold(strings.TrimSpace(track.ErrorCode), "not_found_track_error") {
@@ -616,9 +620,9 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	return providerResponse.StatusCode, nil
 }
 
-func (r *closeTracksResponse) providerError(operation string) error {
+func (r *closeTracksResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
+		return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
 	}
 
 	requestedMids := make(map[string]struct{}, len(r.requestedTracks))
@@ -629,29 +633,29 @@ func (r *closeTracksResponse) providerError(operation string) error {
 	for _, track := range r.Tracks {
 		track.Mid = strings.TrimSpace(track.Mid)
 		if _, ok := requestedMids[track.Mid]; !ok || track.Mid == "" {
-			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+			return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 		}
 		if _, duplicate := seenMids[track.Mid]; duplicate {
-			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+			return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 		}
 		seenMids[track.Mid] = struct{}{}
 		if closedTrackAbsent(track.ErrorCode) {
 			continue
 		}
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
+			return newProviderResponseFailure(operation, failureStageTrack, statusCode, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedCloseTrackCount(r.Tracks))
 		}
 	}
 	if len(seenMids) != len(requestedMids) {
-		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+		return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 	}
 
 	return nil
 }
 
-func (r *updateTracksResponse) providerError(operation string) error {
+func (r *updateTracksResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+		return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 	}
 	requested := make(map[string]struct{}, len(r.requestedTracks))
 	for _, track := range r.requestedTracks {
@@ -659,14 +663,14 @@ func (r *updateTracksResponse) providerError(operation string) error {
 	}
 	for _, track := range r.Tracks {
 		if _, ok := requested[strings.TrimSpace(track.Mid)]; !ok {
-			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+			return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 		}
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			return newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+			return newProviderResponseFailure(operation, failureStageTrack, statusCode, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 		}
 	}
 	if len(r.Tracks) != len(r.requestedTracks) {
-		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+		return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 	}
 	return nil
 }
@@ -679,9 +683,9 @@ func (r updateTracksResponse) mediaPlaneTracks() []mediaplane.Track {
 	return tracks
 }
 
-func (r *addTracksResponse) providerError(operation string) error {
+func (r *addTracksResponse) providerError(operation string, statusCode int) error {
 	if strings.TrimSpace(r.ErrorCode) != "" || strings.TrimSpace(r.ErrorDescription) != "" {
-		return newProviderResponseFailure(operation, failureStageTopLevel, http.StatusOK, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+		return newProviderResponseFailure(operation, failureStageTopLevel, statusCode, r.ErrorCode, r.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 	}
 
 	tracks := r.normalizedTracks()
@@ -700,7 +704,7 @@ func (r *addTracksResponse) providerError(operation string) error {
 	seen := make(map[localTrackIdentity]struct{}, len(requested))
 	for _, track := range tracks {
 		if strings.TrimSpace(track.ErrorCode) != "" || strings.TrimSpace(track.ErrorDescription) != "" {
-			failure := newProviderResponseFailure(operation, failureStageTrack, http.StatusOK, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
+			failure := newProviderResponseFailure(operation, failureStageTrack, statusCode, track.ErrorCode, track.ErrorDescription, len(r.Tracks), failedAddTrackCount(r.Tracks))
 			if exactRemoteAbsence {
 				failure.exactRemoteAbsence = true
 				failure.missingRemoteTracks = missingRemoteTrackIdentities(tracks)
@@ -714,15 +718,15 @@ func (r *addTracksResponse) providerError(operation string) error {
 
 		identity := localTrackIdentity{mid: track.Mid, trackName: track.TrackName}
 		if _, ok := requested[identity]; !ok || track.Mid == "" || track.TrackName == "" {
-			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+			return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 		}
 		if _, duplicate := seen[identity]; duplicate {
-			return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+			return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 		}
 		seen[identity] = struct{}{}
 	}
 	if len(seen) != len(requested) {
-		return newProviderFailure(operation, failureStageContract, http.StatusOK, "invalid_contract")
+		return newProviderFailure(operation, failureStageContract, statusCode, "invalid_contract")
 	}
 
 	return nil
@@ -861,8 +865,12 @@ func forcedCloseSatisfied(err error) bool {
 	if failure.statusCode == http.StatusTooEarly {
 		return failure.providerCode == "connection_not_connected"
 	}
-	return failure.statusCode == http.StatusOK &&
+	return isSuccessfulHTTPStatus(failure.statusCode) &&
 		(failure.providerCode == "connection_not_found" || failure.providerCode == "track_already_closed" || failure.providerCode == "track_not_found")
+}
+
+func isSuccessfulHTTPStatus(statusCode int) bool {
+	return statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices
 }
 
 func newProviderFailure(operation string, stage providerFailureStage, statusCode int, providerCode string) providerFailure {

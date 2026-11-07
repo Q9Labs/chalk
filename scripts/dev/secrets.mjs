@@ -5,7 +5,7 @@ import { FailureKind, failure } from "./model.mjs";
 const execFileAsync = promisify(execFile);
 const credentialTitle = /api[_ -]?credential/i;
 
-export async function resolveLocalSfuCredentials({ enumerateVaults, enumerateItems, getItem, itemIsCandidate = defaultCandidate, selectCandidate } = {}) {
+async function resolveLocalSfuCredentials({ enumerateVaults, enumerateItems, getItem, itemIsCandidate = defaultCandidate, selectCandidate } = {}) {
   if (!enumerateVaults || !enumerateItems || !getItem) throw failure(FailureKind.CONFIG, "SFU credential resolver is not configured", { stage: "secrets" });
   const candidates = [];
   for (const vault of await enumerateVaults()) {
@@ -62,7 +62,21 @@ function fieldValue(item, wanted) {
   return "";
 }
 
-export function createOpSecretResolver({ op = "op", env = process.env } = {}) {
+// Headless boxes pass the non-production credential in the API's own variables, so they need no 1Password CLI.
+export function sfuCredentialsFromEnv(env = process.env) {
+  const appId = env.CHALK_CLOUDFLARE_REALTIME_APP_ID?.trim();
+  const appSecret = env.CHALK_CLOUDFLARE_REALTIME_APP_SECRET?.trim();
+  if (!appId && !appSecret) return undefined;
+  if (!appId || !appSecret) throw failure(FailureKind.CONFIG, "CHALK_CLOUDFLARE_REALTIME_APP_ID and CHALK_CLOUDFLARE_REALTIME_APP_SECRET must be set together", { stage: "secrets" });
+  return { appId, appSecret, source: { env: true }, redactions: [appId, appSecret] };
+}
+
+export function createSecretResolver({ env = process.env, op } = {}) {
+  const fromOp = createOpSecretResolver({ op, env });
+  return async () => sfuCredentialsFromEnv(env) ?? fromOp();
+}
+
+function createOpSecretResolver({ op = "op", env = process.env } = {}) {
   const json = async (args) => {
     const { stdout } = await execFileAsync(op, args, { env, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 });
     return JSON.parse(stdout);

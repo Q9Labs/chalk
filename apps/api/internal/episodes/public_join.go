@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -29,6 +30,9 @@ type PublicJoinInput struct {
 	DisplayName    string
 	Role           string
 	Request        Request
+	// MediaClients is what the joining guest's SDK can run. A new Episode binds
+	// the own SFU only when it declares it.
+	MediaClients mediaplane.ClientProviders
 }
 
 type PublicAccessInput struct {

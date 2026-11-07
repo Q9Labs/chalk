@@ -1,18 +1,29 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as processStdin, stdout as processStdout } from "node:process";
+import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readManifest, readOwner, releaseStaleOwnership, removeRuntimeFiles, validateOwnedPid } from "./ownership.mjs";
 import { stopProcessGroup, tailLog } from "./process.mjs";
 import { DevCommand } from "./config.mjs";
 import { FailureKind, RuntimeState, failure } from "./model.mjs";
+import { proveSeededSignIn } from "./chalk-signin.mjs";
+
+const execFileAsync = promisify(execFile);
 
 const helpText = `Usage: pnpm dev [command] [options]
 
-Commands: start, status, logs [service], stop, reset
+Commands: start, status, doctor, logs [service], stop, down, reset
 Options: --profile core|mobile, --fresh, --yes, --ready (status only)
 
 start creates a local Tenant and Space with a valid media plane (cf_sfu); its ids are
 in the ready summary. Use the dev fixture for local media runs. Run pnpm dev:smoke
-for the media smoke test.`;
+for the media smoke test.
+
+doctor is a read-only check that this instance is worth driving; it exits 0 only when every check passes.
+down stops the runtime and removes what start created (database, Redis volume, runtime files); it keeps .logs and .verify.
+Set PUBLIC_ORIGIN to the address browsers use. Set CHALK_CLOUDFLARE_REALTIME_APP_ID and
+CHALK_CLOUDFLARE_REALTIME_APP_SECRET to skip 1Password.`;
 
 export async function runCommand(command, config, { supervisor, service, yes = false, confirm = confirmReset, hooks = {}, output = console.log } = {}) {
   switch (command) {
@@ -27,6 +38,11 @@ export async function runCommand(command, config, { supervisor, service, yes = f
       return stopCommand(config, { supervisor, hooks, output });
     case DevCommand.RESET:
       return resetCommand(config, { yes, confirm, hooks, output });
+    case DevCommand.DOCTOR:
+      return doctorCommand(config, { output, hooks });
+    case DevCommand.DOWN:
+      await stopCommand(config, { hooks, output });
+      return resetCommand(config, { yes: true, hooks, output });
     case DevCommand.HELP:
       output(helpText);
       return { ok: true, help: helpText };
@@ -70,6 +86,61 @@ async function logsCommand(config, { service, lines = 200, output } = {}) {
     if (output && logs[name]) output(logs[name]);
   }
   return logs;
+}
+
+/** Read-only except for one seeded guest who arrives and leaves. */
+async function doctorCommand(config, { output, hooks = {} } = {}) {
+  const validatePid = hooks.validatePid || validateOwnedPid;
+  const fetchImpl = hooks.fetchImpl || fetch;
+  const checks = [];
+  const check = async (name, run) => {
+    try {
+      checks.push({ name, ok: true, detail: await run() });
+    } catch (error) {
+      checks.push({ name, ok: false, detail: error.message || String(error) });
+    }
+  };
+  const owner = await readOwner(config);
+  await check("owner", async () => {
+    if (!owner) throw new Error("no runtime owns this machine; run pnpm dev");
+    if (owner.checkout !== config.root) throw new Error(`runtime belongs to another checkout (${owner.checkout})`);
+    if (owner.state !== RuntimeState.READY) throw new Error(`runtime state is ${owner.state}, not ready`);
+    if (!(await validatePid(owner.supervisorPid, { expectedCommand: owner.supervisorExpectedCommand }))) throw new Error(`supervisor ${owner.supervisorPid} is not running`);
+    return `supervisor ${owner.supervisorPid}`;
+  });
+  await check("build", async () => {
+    const head = hooks.headRevision ? await hooks.headRevision() : (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: config.root })).stdout.trim();
+    if (owner?.revision !== head) throw new Error(`runtime started at ${owner?.revision ?? "no revision"}, checkout is at ${head}; restart it`);
+    return head;
+  });
+  await check("services", async () => {
+    const manifest = await readManifest(config);
+    if (!manifest) throw new Error("no runtime manifest");
+    const entries = serviceEntries(manifest.services);
+    const dead = [];
+    for (const [id, service] of entries) if (service.exited || !(await validatePid(service.pid, { expectedCommand: service.expectedCommand }))) dead.push(id);
+    if (dead.length > 0) throw new Error(`not running: ${dead.join(", ")}`);
+    return `${entries.length} running`;
+  });
+  for (const [name, url] of [
+    ["api", `${config.urls.api}/readyz`],
+    ["sync", `${config.urls.sync}/readyz`],
+    ["web", `${config.urls.web}/`],
+  ]) {
+    await check(name, async () => {
+      const response = await fetchImpl(url);
+      if (!response.ok) throw new Error(`${url} answered HTTP ${response.status}`);
+      return `${url} answered`;
+    });
+  }
+  await check("sign-in", async () => {
+    const seed = JSON.parse(await readFile(config.seedPath, "utf8"));
+    const proof = await (hooks.proveSignIn || proveSeededSignIn)({ origin: config.urls.web, invite: seed.invite, fetchImpl });
+    return `seeded guest arrival ${proof.state}`;
+  });
+  const result = { ok: checks.every((entry) => entry.ok), checks };
+  output?.(JSON.stringify(result, null, 2));
+  return result;
 }
 
 export async function stopCommand(config, { supervisor, hooks = {}, output } = {}) {

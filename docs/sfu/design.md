@@ -128,7 +128,13 @@ The SDK is now under `sdks/typescript/`, not `packages/`.
    `stunServer`, optional credentialed `iceServers`. Reuse the same media engine
    for additive `chalk_sfu` grants, updating these checks and native consumers.
    Old SDKs use Cloudflare only during migration. M12 sunsets those cohorts; an
-   unknown provider must not fall through.
+   unknown provider must not fall through. Public-invite arrivals follow the same
+   rule: an arrival, status poll or refresh that declares `chalk_sfu` in
+   `X-Chalk-Media-Providers` can bind and join an own-SFU Episode, one that
+   declares nothing gets Cloudflare, and a guest whose SDK cannot run a live
+   Episode's provider gets `media.client_unsupported` (409) without any provider work.
+   A host's legacy approval has no guest SDK to ask, so the guest is checked when it
+   collects access.
    Evidence: `sdks/typescript/client/src/access/grant.ts:170`,
    `sdks/typescript/client/src/connection/production.ts:109`,
    `sdks/typescript/client/src/connection/lifecycle.ts:857`,
