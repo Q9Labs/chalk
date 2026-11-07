@@ -390,7 +390,9 @@ export function createGatePlan(files, options = {}) {
   const serviceGates = servicesExternal ? [] : [api ? "apps/api/scripts/gate.sh" : null, sync ? "apps/sync/scripts/reliability-correctness" : null].filter(Boolean);
   const base = options.base ?? "origin/master";
   const scope = options.scope ?? "staged";
-  const fallowCommand = explicitFull ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
+  // A changed Fallow configuration is not source, but only a whole-repository audit exercises it.
+  const fallowConfigChanged = normalizedFiles.includes(".fallowrc.json");
+  const fallowCommand = explicitFull || fallowConfigChanged ? ["pnpm", "run", "static:fallow"] : scope === "staged" ? ["bash", "-lc", "git diff --cached --no-ext-diff --binary | pnpm exec fallow audit --diff-stdin"] : ["pnpm", "exec", "fallow", "audit", "--changed-since", base];
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
@@ -428,7 +430,7 @@ export function createGatePlan(files, options = {}) {
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
-    task("fallow", "Changed-code analysis", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, fallowCommand),
+    task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
     task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
       "pnpm",

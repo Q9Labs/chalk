@@ -89,6 +89,9 @@ test("gate data files do not force the full gate", () => {
     assert.deepEqual(ciJobs([file]), { api: false, sync: false, rootGroups: ["checks"] }, file);
   }
   assert.equal(createGatePlan(["scripts/gates/chalk-gate-plan.mjs"]).full, true);
+  const fallow = createGatePlan([".fallowrc.json"]).tasks.find((task) => task.id === "fallow");
+  assert.equal(fallow.selected, true);
+  assert.deepEqual(fallow.command, ["pnpm", "run", "static:fallow"]);
 });
 
 test("dependency changes select the package boundary check", () => {
