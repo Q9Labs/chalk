@@ -51,7 +51,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   const content = (
     <>
       <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
-        <h2 id={id} data-part="ready-title" tabIndex={-1} style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap", outline: "none" }}>
+        <h2 id={id} data-part="ready-title" tabIndex={-1} style={{ fontSize: "var(--type-body-lg)", fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap", outline: "none" }}>
           Your call is ready
         </h2>
         <button type="button" data-part="ready-dismiss" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
@@ -60,8 +60,8 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
           </svg>
         </button>
       </div>
-      <p className="mr-1 text-[13px] text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
-      <div data-part="ready-link" style={{ borderRadius: 999 }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-hover)] pl-3.5 pr-1 font-medium">
+      <p className="mr-1 text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
+      <div data-part="ready-link" style={{ borderRadius: "var(--corner-pill)" }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-hover)] pl-3.5 pr-1 font-medium">
         <span className="min-w-0 truncate">{link.replace(/^https?:\/\//, "")}</span>
         <span className="flex gap-0.5">
           <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
@@ -78,7 +78,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       <div ref={qrRef} id={`${id}-qr`} hidden={!showQR}>
         <div className="mt-3 flex items-center gap-3.5">
           {qr ? <InviteQR value={link} /> : null}
-          <p className="text-[13px] text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
+          <p className="text-(length:--type-body-sm) text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
         </div>
       </div>
     </>
@@ -106,7 +106,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       aria-hidden={!open}
       inert={!open}
       style={{ opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
-      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-[0_12px_32px_var(--chalk-menu-shadow-color)] pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
+      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-(--elevation-menu) pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
     >
       {content}
     </section>

@@ -33,7 +33,7 @@ export const AudioIndicator = React.memo(({ level = 0, muted = false, size = "md
 
   if (variant === "bars") {
     return (
-      <div className={cn("flex items-end justify-center gap-[2px]", className)} style={{ width, height }} role="status" aria-label={muted ? "Microphone muted" : `Microphone active, level ${Math.round(clampedLevel)}%`}>
+      <div className={cn("flex items-end justify-center gap-(--space-0-5)", className)} style={{ width, height }} role="status" aria-label={muted ? "Microphone muted" : `Microphone active, level ${Math.round(clampedLevel)}%`}>
         {[0.6, 1, 0.6].map((scale, i) => {
           const barLevel = Math.max(0, Math.min(100, clampedLevel * scale));
           const h = muted ? 20 : Math.max(20, barLevel);
@@ -41,7 +41,7 @@ export const AudioIndicator = React.memo(({ level = 0, muted = false, size = "md
           return (
             <div
               key={i}
-              className={cn("w-[3px] rounded-[1px] transition-all duration-100 ease-out", muted ? "bg-[var(--chalk-muted-text)]" : "bg-[var(--chalk-positive)]")}
+              className={cn("w-[3px] rounded-(--corner-xs) transition-all duration-100 ease-out", muted ? "bg-[var(--chalk-muted-text)]" : "bg-[var(--chalk-positive)]")}
               style={{
                 height: `${h}%`,
                 opacity: muted ? 0.5 : 1,

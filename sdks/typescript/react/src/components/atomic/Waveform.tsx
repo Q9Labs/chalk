@@ -25,7 +25,7 @@ export const Waveform = React.memo(({ levels, color = "var(--chalk-focus)", anim
   }, [levels, barCount]);
 
   return (
-    <div className={cn("flex items-center gap-[2px] h-8", className)} role="img" aria-label="Audio waveform">
+    <div className={cn("flex items-center gap-(--space-0-5) h-8", className)} role="img" aria-label="Audio waveform">
       {displayLevels.map((level, i) => (
         <div
           key={i}
