@@ -23,7 +23,7 @@ createRoot(root).render(state ? state.render() : <StateIndex />);
 
 function StateIndex() {
   return (
-    <main className="mx-auto max-w-2xl p-8 font-sans text-[#0c0e12]">
+    <main className="mx-auto max-w-2xl p-8 font-sans text-(--ink)">
       <h1 className="text-2xl font-semibold">Call states</h1>
       <ol className="mt-6 grid gap-1 text-sm">
         {CALL_STATES.map((candidate) => (

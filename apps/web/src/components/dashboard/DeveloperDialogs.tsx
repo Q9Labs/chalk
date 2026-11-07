@@ -89,7 +89,7 @@ export function SecretDialog({ secret, onClose }: { readonly secret: Secret; rea
         <CopyAction text={secret.secret} label="Copy" pill toastMessage="Secret copied" />
       </div>
       {after ? (
-        <p className="help" style={{ marginTop: 12 }}>
+        <p className="help" style={{ marginTop: "var(--space-3)" }}>
           {after}
         </p>
       ) : null}
@@ -147,7 +147,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
         </>
       }
     >
-      <div className="field" style={{ marginTop: 18 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="key-name">
           Name
         </label>
@@ -353,7 +353,7 @@ export function EndpointDialog(props: EndpointDialogProps) {
     >
       {webhook ? null : (
         <>
-          <div className="field" style={{ marginTop: 18 }}>
+          <div className="field" style={{ marginTop: "var(--space-4)" }}>
             <label className="lbl" htmlFor="endpoint-name">
               Name
             </label>
@@ -390,7 +390,7 @@ export function EndpointDialog(props: EndpointDialogProps) {
           </div>
         </>
       )}
-      <fieldset className="field" style={webhook ? { marginTop: 18 } : undefined}>
+      <fieldset className="field" style={webhook ? { marginTop: "var(--space-4)" } : undefined}>
         <legend className="lbl">Events</legend>
         <div className="evgrid">
           {EVENT_GROUPS.map(([group, types], groupIndex) => (
@@ -440,7 +440,7 @@ export function RotateWebhookDialog({ webhook, onClose, onRotated }: { readonly 
         </>
       }
     >
-      <label className="chk" style={{ marginTop: 16 }}>
+      <label className="chk" style={{ marginTop: "var(--space-4)" }}>
         <input type="checkbox" checked={now} onChange={(event) => setNow(event.target.checked)} />
         <span>
           Stop the old secret now
@@ -500,7 +500,7 @@ export function AddWebsiteDialog({ origins, onClose, onSaved }: { readonly origi
         </>
       }
     >
-      <div className="field" style={{ marginTop: 16 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="website-input">
           Website
         </label>

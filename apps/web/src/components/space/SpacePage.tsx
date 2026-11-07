@@ -553,7 +553,7 @@ export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange,
           if (displayName.trim()) onJoin();
         }}
       >
-        <label htmlFor="join-display-name" className="text-[13px] font-semibold">
+        <label htmlFor="join-display-name" className="text-(length:--type-body-sm) font-semibold">
           Your name
         </label>
         <input

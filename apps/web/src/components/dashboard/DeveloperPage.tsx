@@ -56,7 +56,7 @@ export function DeveloperPage() {
     return (
       <div className="wrap">
         {intro}
-        <div style={{ marginTop: 32 }}>
+        <div style={{ marginTop: "var(--space-8)" }}>
           <ErrorPanel title="Couldn’t load your developer settings" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       </div>
@@ -72,7 +72,7 @@ export function DeveloperPage() {
     <div className="wrap">
       {intro}
       <RecordingSettings mode={data.recordingRenderMode} onSaved={(recordingRenderMode) => update((value) => ({ ...value, recordingRenderMode }))} />
-      <section style={{ marginTop: 32 }} aria-label="Transcripts">
+      <section style={{ marginTop: "var(--space-8)" }} aria-label="Transcripts">
         <TranscriptLanguageSettings
           value={data.transcriptLanguage ?? "auto"}
           onSave={async (value) => {
@@ -82,14 +82,14 @@ export function DeveloperPage() {
           }}
         />
       </section>
-      <div className="secth" style={{ marginTop: 48 }}>
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
         <h2>API keys</h2>
         <button type="button" className="btn sec" onClick={() => setOpen({ kind: "create-key" })}>
           <Icon name="plus" />
           Create API key
         </button>
       </div>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: "var(--space-6)" }}>
         <h3 className="lbl">Tenant ID</h3>
         <div className="linkrow">
           <code className="mono" style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
@@ -102,7 +102,7 @@ export function DeveloperPage() {
       <KeysTable keys={keys} onRotate={(apiKey) => setOpen({ kind: "rotate-key", apiKey })} onRevoke={(apiKey) => setOpen({ kind: "revoke-key", apiKey })} />
       {data.nextKeyCursor ? <MoreButton label="Show more keys" cursor={data.nextKeyCursor} load={(keyCursor) => readPage("developer", { keyCursor })} onLoaded={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
 
-      <div className="secth" style={{ marginTop: 48 }}>
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
         <h2>Allowed websites</h2>
         <button type="button" className="btn sec" onClick={() => setOpen({ kind: "add-website" })}>
           <Icon name="plus" />
@@ -125,7 +125,7 @@ export function DeveloperPage() {
       </div>
       {origins.length ? null : <p className="ohelp">Add the website where your app runs, and Chalk calls can load inside it with this account’s keys.</p>}
 
-      <div className="secth" style={{ marginTop: 48 }}>
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
         <h2>Webhook endpoints</h2>
         <button type="button" className="btn sec" onClick={() => setOpen({ kind: "add-endpoint" })}>
           <Icon name="plus" />
@@ -534,7 +534,7 @@ function RecordingSettings({ mode, onSaved }: { readonly mode: RecordingRenderSe
           {error}
         </p>
       ) : null}
-      <button type="submit" className="btn pri" style={{ marginTop: 16 }} disabled={busy || draft === mode}>
+      <button type="submit" className="btn pri" style={{ marginTop: "var(--space-4)" }} disabled={busy || draft === mode}>
         {busy ? "Saving…" : "Save recording settings"}
       </button>
     </form>

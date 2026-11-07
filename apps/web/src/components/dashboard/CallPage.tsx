@@ -168,7 +168,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
     return (
       <div className="wrap">
         {back}
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: "var(--space-6)" }}>
           <ErrorPanel title="Couldn’t load this call" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       </div>
@@ -284,7 +284,7 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           <p className="help">{call.admission === "anyone" ? "People with the link join right away." : "People ask to join, and someone in the call lets them in."}</p>
         </div>
       </div>
-      <section style={{ marginBottom: 32 }} aria-label="Transcripts">
+      <section style={{ marginBottom: "var(--space-8)" }} aria-label="Transcripts">
         <TranscriptLanguageSettings
           value={call.transcriptLanguage ?? null}
           inherit
