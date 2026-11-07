@@ -33,6 +33,7 @@ func (n *Node) run() {
 		case <-health.C:
 			n.guard.observePacer(pacerLoad{dropped: n.totals.counts.PacerDrops, sent: n.totals.out[classVideo].packets})
 			n.guard.tick()
+			n.pressure.stealSample(monotonic(), n.guard.recentSteal())
 		case <-telemetry.C:
 			n.logTelemetry()
 		}
@@ -59,6 +60,8 @@ func (n *Node) logTelemetry() {
 		"cappedCameras", capped, "pausedCameras", paused,
 		"queueDelayP95Ms", host.QueueDelayP95Ms, "schedulerLatencyP99Ms", host.SchedulerLatencyP99Ms,
 		"admissionReason", host.AdmissionReason,
+		"controlStalls", n.pressure.stalls, "controlStallMaxMs", n.pressure.takeLongest().Milliseconds(),
+		"hostPressureMs", n.pressure.underFor.Milliseconds(),
 	}
 	if host.StealPercent != nil {
 		attributes = append(attributes, "stealPercent", *host.StealPercent)

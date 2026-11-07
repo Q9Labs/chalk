@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { FailureKind, failure } from "./model.mjs";
 
 const sensitiveKey = /(token|secret|password|credential|private.?key|authorization)/i;
@@ -117,7 +117,15 @@ export async function releaseStaleOwnership(config, { isAlive = processAlive } =
   return { released: true };
 }
 
-export function ownerRecord({ lease, config, state, revision = "unknown", supervisorPid = process.pid, supervisorExpectedCommand = process.argv[1] || process.execPath, manifestPath = config.manifestPath, services = {}, resources = [] }) {
+// `ps` prints the script path as typed ("node scripts/dev/cli.mjs"), so match the checkout-relative path, which the absolute form also contains.
+function supervisorCommand(config) {
+  const script = process.argv[1];
+  if (!script) return process.execPath;
+  const local = relative(config.root, script);
+  return local.startsWith("..") ? script : local;
+}
+
+export function ownerRecord({ lease, config, state, revision = "unknown", supervisorPid = process.pid, supervisorExpectedCommand = supervisorCommand(config), manifestPath = config.manifestPath, services = {}, resources = [] }) {
   return {
     schemaVersion: 1,
     runtimeId: lease.runtimeId,

@@ -3813,6 +3813,7 @@ export interface operations {
       query?: never;
       header: {
         "X-Chalk-Arrival-Handle": string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path?: never;
       cookie?: never;
@@ -3969,6 +3970,7 @@ export interface operations {
       query?: never;
       header: {
         "X-Chalk-Arrival-Handle": string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path?: never;
       cookie?: never;
@@ -4071,6 +4073,7 @@ export interface operations {
       header: {
         "Idempotency-Key": string;
         "X-Chalk-Arrival-Handle"?: string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path?: never;
       cookie?: never;
@@ -4244,6 +4247,7 @@ export interface operations {
       query?: never;
       header: {
         "Idempotency-Key": string;
+        "X-Chalk-Media-Providers"?: string;
       };
       path?: never;
       cookie?: never;

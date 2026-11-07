@@ -1,6 +1,7 @@
 "use client";
 import { useRef, type ReactNode } from "react";
 import { useIdleChrome } from "../../internal/call-motion";
+import { NarrowCallProvider, useNarrowCallFrame } from "../../internal/call-width";
 import { cn } from "../../utils/cn";
 import { SpaceHeader, type SpaceHeaderProps } from "../space-header/SpaceHeader";
 export interface SpacePresentationProps {
@@ -27,28 +28,31 @@ export interface SpacePresentationProps {
 export function SpacePresentation({ colorScheme = "dark", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, toasts, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
   const root = useRef<HTMLElement>(null);
   const idle = useIdleChrome(root, interactive);
+  const narrow = useNarrowCallFrame(root);
   return (
-    <main ref={root} data-chalk data-part="call-frame" data-idle={idle} data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root chalk-frame", className)}>
-      {mediaOutput}
-      <SpaceHeader {...header} className={cn("chalk-frame-header", header.className)} />
-      <section data-part="stage-region" data-stage-background={stageBackground} className="chalk-frame-stage" aria-label="Space stage">
-        <div data-part="stage-layout" className="chalk-stage-layout">
-          {stage}
-          {stageOverlay}
+    <NarrowCallProvider value={narrow}>
+      <main ref={root} data-chalk data-part="call-frame" data-idle={idle} data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root chalk-frame", className)}>
+        {mediaOutput}
+        <SpaceHeader {...header} className={cn("chalk-frame-header", header.className)} />
+        <section data-part="stage-region" data-stage-background={stageBackground} className="chalk-frame-stage" aria-label="Space stage">
+          <div data-part="stage-layout" className="chalk-stage-layout">
+            {stage}
+            {stageOverlay}
+          </div>
+        </section>
+        <div data-part="dock-region" className="chalk-frame-dock">
+          <div className={compactControls ? "chalk-frame-regular" : undefined} style={compactControls ? undefined : { display: "contents" }}>
+            {controls}
+          </div>
+          {compactControls ? <div className="chalk-frame-compact">{compactControls}</div> : null}
         </div>
-      </section>
-      <div data-part="dock-region" className="chalk-frame-dock">
-        <div className={compactControls ? "chalk-frame-regular" : undefined} style={compactControls ? undefined : { display: "contents" }}>
-          {controls}
+        {sidebar}
+        {toasts}
+        <div data-part="overlays-region" className="chalk-frame-overlays">
+          {overlays}
+          {dialogs}
         </div>
-        {compactControls ? <div className="chalk-frame-compact">{compactControls}</div> : null}
-      </div>
-      {sidebar}
-      {toasts}
-      <div data-part="overlays-region" className="chalk-frame-overlays">
-        {overlays}
-        {dialogs}
-      </div>
-    </main>
+      </main>
+    </NarrowCallProvider>
   );
 }

@@ -33,6 +33,7 @@ const (
 type subscription struct {
 	pub         *publication
 	transport   *transport // the subscriber session's
+	pauseLogged bool       // the control loop has logged this subscription's congestion pause
 	transceiver *webrtc.RTPTransceiver
 	sender      *webrtc.RTPSender
 	track       *egressTrack
