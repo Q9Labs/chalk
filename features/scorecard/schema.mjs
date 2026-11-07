@@ -79,6 +79,8 @@ const environments = ["ci", "staging", "production"];
 const planes = ["chalk_sfu", "cf_sfu"];
 const clientKinds = ["browser", "sdk"];
 const label = /^[a-z0-9][a-z0-9./_-]*$/;
+// Free-form client labels may hold a version like chromium/151.0.1 but never dotted words, whatever the top-level domain.
+const hostShaped = /[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*/;
 const forbidden = [
   ["an IP address", /\b\d{1,3}(?:\.\d{1,3}){3}\b|\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|[0-9a-f]*::[0-9a-f]/i],
   ["a URL", /:\/\//],
@@ -103,7 +105,7 @@ export function scorecardProblems(value) {
   if (!environments.includes(run?.environment)) fail(`run.environment must be one of ${environments.join(", ")}`);
   if (typeof run?.startedAt !== "string" || Number.isNaN(Date.parse(run.startedAt))) fail("run.startedAt must be an ISO time");
   if (!clientKinds.includes(run?.client?.kind)) fail(`run.client.kind must be one of ${clientKinds.join(", ")}`);
-  for (const field of ["browser", "region", "size"]) if (typeof run?.client?.[field] !== "string" || !label.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
+  for (const field of ["browser", "region", "size"]) if (typeof run?.client?.[field] !== "string" || !label.test(run.client[field]) || hostShaped.test(run.client[field])) fail(`run.client.${field} must be a lowercase label`);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
   dropProblems(card?.dropped, fail);

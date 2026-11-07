@@ -42,8 +42,7 @@ export function installLatencyProbe() {
 
   async function poll(spec, baseline, deadline) {
     while (now() < deadline) {
-      const at = now();
-      if (await conditions[spec.kind](spec, baseline)) return { name: spec.name, at };
+      if (await conditions[spec.kind](spec, baseline)) return { name: spec.name, at: now() };
       await pause(10);
     }
     return { name: spec.name, at: null };

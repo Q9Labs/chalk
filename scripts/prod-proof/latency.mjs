@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
-import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
@@ -27,6 +27,7 @@ import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "../../features/scorec
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
 const timeoutMs = 20_000;
 const settleMs = 1500;
+const disposeTimeoutMs = 15_000;
 const clock = () => performance.timeOrigin + performance.now();
 
 function options() {
@@ -106,7 +107,6 @@ async function cycle(run, origin, plane, headed, ending) {
   );
   const { pages, participants } = guests;
   for (const page of pages) await page.evaluate(installLatencyProbe);
-  ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode.
   const join = (guest) => ({ slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
   const first = await measure(pages[0], pages[0], "join", join(0), [{ name: "firstReady", kind: "ready" }]);
   const sample = { "action.spinup_ms": first.delays.firstReady === null ? null : Math.round(createMs + guests.admissions[0].ms + first.delays.firstReady) };
@@ -116,6 +116,7 @@ async function cycle(run, origin, plane, headed, ending) {
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
   ]);
   Object.assign(sample, second.delays);
+  ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
   for (const step of toggles(sender)) {
     await sleep(settleMs);
     Object.assign(sample, (await measure(pages[0], pages[1], step.action, step.value, step.specs)).delays);
@@ -144,7 +145,11 @@ async function attempt(run, origin, plane, headed) {
     outcome = { plane, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
   if (ending.current) await ending.current.end().catch((error) => (outcome = { plane, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));
-  for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => (outcome = { plane, dropped: "teardown_failed", error: `dispose: ${reason(error)}` }));
+  for (const resource of run.resources.slice(mark)) {
+    const failures = await disposeResource(run, resource, disposeTimeoutMs);
+    if (failures.length) outcome = { plane, dropped: "teardown_failed", error: `dispose: ${reason(failures[0])}` };
+    run.resources.splice(run.resources.indexOf(resource), 1);
+  }
   return outcome;
 }
 
@@ -227,7 +232,7 @@ async function main() {
   const report = { startedAt: new Date().toISOString(), settings, cycles: [] };
   let run;
   try {
-    const config = await loadConfig();
+    const config = await loadConfig({ readiness: false });
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
     const receiver = await prepareIntegration(run, false);

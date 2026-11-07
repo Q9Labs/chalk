@@ -33,13 +33,13 @@ test("unknown or repeated ids, a unit other than the registry's, and impossible 
 });
 
 test("hosts, IPs, URLs and resource ids are refused anywhere but the run id", () => {
-  for (const leak of ["10.0.0.4", "fd00:1:2:3:4::5", "https://example", "sfu.example.com", "3d474782-c768-4dba-91f4-0123456789ab"]) {
+  for (const leak of ["10.0.0.4", "fd00:1:2:3:4::5", "https://example", "sfu.example.com", "sfu.example.co.uk", "3d474782-c768-4dba-91f4-0123456789ab"]) {
     const card = valid();
     card.dropped[0].reason = "timeout";
     card.run.client.region = leak;
     const problems = scorecardProblems(card);
     assert.ok(
-      problems.some((problem) => problem.startsWith("run.client.region looks like")),
+      problems.some((problem) => problem.startsWith("run.client.region")),
       `${leak}: ${problems.join("; ")}`,
     );
   }

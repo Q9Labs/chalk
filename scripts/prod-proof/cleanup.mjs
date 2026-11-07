@@ -156,7 +156,7 @@ async function sweepSpace(call, base, space, runId, now) {
   check((await call("GET", `${base}/spaces/${space.id}`)).archived, "Stale Space not archived");
 }
 
-async function disposeResource(run, resource, timeoutMs) {
+export async function disposeResource(run, resource, timeoutMs) {
   let timer;
   try {
     await Promise.race([
