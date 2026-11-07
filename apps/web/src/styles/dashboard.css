@@ -547,54 +547,172 @@
   color: var(--chalk-text);
 }
 
-.site .dash .cscope {
-  margin: 24px 0 0;
-  padding: 0;
-  border: 0;
+/* Connect: the app and Chalk as a pair, the access it asks for, and the connected apps table. */
+.site .dash .cbox {
+  width: 400px;
+  text-align: center;
+}
+
+.site .dash .cbox .sib {
+  text-align: initial;
+}
+
+.site .dash .alogo {
   display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--chalk-surface);
+  border: 1px solid var(--chalk-line-strong);
+  color: var(--chalk-text);
+}
+
+.site .dash .alogo.lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+}
+
+.site .dash .alogo.sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.site .dash .alogo.none {
+  border-style: dashed;
+  background: transparent;
+}
+
+.site .dash .alogo img,
+.site .dash .alogo .mono,
+.site .dash .alogo > svg {
+  width: 55%;
+  height: 55%;
+}
+
+.site .dash .alogo .mono {
+  background: currentColor;
+  mask: var(--logo) center / contain no-repeat;
+}
+
+.site .dash .alogo .initial {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.site .dash .apair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 28px;
+}
+
+.site .dash .aconn {
+  width: 72px;
+  height: 24px;
+  fill: none;
+  stroke: var(--chalk-muted-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.site .dash .aconn .cut {
+  stroke: var(--chalk-danger-text);
+}
+
+.site .dash .dlg .apair {
+  justify-content: flex-start;
+  margin-bottom: 20px;
+}
+
+.site .dash .cacc {
+  margin-top: 24px;
+  display: grid;
+  justify-items: center;
   gap: 8px;
 }
 
-.site .dash .cscope legend {
+.site .dash .cacc .lbl {
+  margin: 0;
+}
+
+.site .dash .cperm {
+  list-style: none;
+  margin: 24px 0 0;
   padding: 0;
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  text-align: initial;
+  border-top: 1px solid var(--chalk-line);
+}
+
+.site .dash .cperm li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--chalk-line);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--chalk-text);
+}
+
+.site .dash .cperm li.no {
   color: var(--chalk-muted-text);
 }
 
-.site .dash .cscope label {
+.site .dash .cperm svg.site-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.site .dash .cperm li:not(.no) svg.site-icon {
+  color: var(--chalk-positive);
+}
+
+.site .dash .capp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.site .dash .capp > span:last-child {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 10px;
-  align-items: start;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--chalk-surface);
-  border: 1px solid var(--chalk-line-strong);
+}
+
+.site .dash .csub {
+  display: none;
+  font-size: 13px;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .capps td.act {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.site .dash .capps .cdis:hover {
+  color: var(--chalk-danger-text);
+}
+
+.site .dash .cempty {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 20px;
   font-size: 14px;
-  line-height: 1.45;
   color: var(--chalk-soft-text);
-  cursor: pointer;
 }
 
-.site .dash .cscope label:has(input:checked) {
-  border-color: var(--chalk-text);
-}
-
-.site .dash .cscope label:has(input:focus-visible) {
-  outline: 2px solid var(--chalk-text);
-  outline-offset: 2px;
-}
-
-.site .dash .cscope input {
-  margin-top: 2px;
-}
-
-.site .dash .cscope b {
-  display: block;
-  font-weight: 600;
-  color: var(--chalk-text);
+.site .dash .cempty span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .site .dash .sifine {
@@ -1883,6 +2001,16 @@
 
   .site .dash .sgrid {
     grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 640px) {
+  .site .dash .capps .wide {
+    display: none;
+  }
+
+  .site .dash .capps .csub {
+    display: block;
   }
 }
 

@@ -2,9 +2,12 @@ import { useState } from "react";
 
 import type { ConnectionDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
-import { ago } from "../../lib/dashboard/format";
+import { ago, fullDate } from "../../lib/dashboard/format";
+import { AppLogo, AppPair } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { Dialog, MoreButton, Sk, useToast } from "./kit";
+
+const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
 /** Apps such as Claude and ChatGPT that signed in to this account through OAuth. */
 export function ConnectedApps() {
@@ -24,21 +27,68 @@ export function ConnectedApps() {
           <div className="empty">
             <b>No connected apps</b>
             <p>Add Chalk as a custom connector in Claude or ChatGPT and approve it here. It then shows up in this list.</p>
+            <div className="cempty">
+              <span>
+                <AppLogo name="Claude" size="sm" />
+                Claude
+              </span>
+              <span>
+                <AppLogo name="ChatGPT" size="sm" />
+                ChatGPT
+              </span>
+            </div>
           </div>
         </div>
       ) : null}
       {state.kind === "ready" && state.data.connections.length > 0 ? (
-        <div className="list origins">
-          {state.data.connections.map((connection) => (
-            <div className="orow" key={connection.id}>
-              <span>
-                <b>{connection.clientName}</b> · {connection.scope === "chalk:manage" ? "Read and change" : "Read only"} · {connection.lastUsedAt ? `Used ${ago(connection.lastUsedAt)}` : "Not used yet"}
-              </span>
-              <button type="button" className="btn sec" onClick={() => setRevoking(connection)}>
-                Disconnect
-              </button>
-            </div>
-          ))}
+        <div className="list">
+          <table className="tbl capps">
+            <thead>
+              <tr>
+                <th scope="col">App</th>
+                <th scope="col" className="wide">
+                  Access
+                </th>
+                <th scope="col" className="wide">
+                  Connected
+                </th>
+                <th scope="col" className="wide">
+                  Last used
+                </th>
+                <th scope="col">
+                  <span className="sr">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.data.connections.map((connection) => {
+                const lastUsed = connection.lastUsedAt ? ago(connection.lastUsedAt) : "Not used yet";
+                return (
+                  <tr key={connection.id}>
+                    <td>
+                      <span className="capp">
+                        <AppLogo name={connection.clientName} size="sm" />
+                        <span>
+                          <span className="nm">{connection.clientName}</span>
+                          <span className="csub">
+                            {ACCESS_LABEL[connection.scope]} · {lastUsed}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="wide">{ACCESS_LABEL[connection.scope]}</td>
+                    <td className="wide">{fullDate(connection.createdAt)}</td>
+                    <td className="wide">{lastUsed}</td>
+                    <td className="r act">
+                      <button type="button" className="btn gh sm cdis" aria-label={`Disconnect ${connection.clientName}`} onClick={() => setRevoking(connection)}>
+                        Disconnect
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : null}
       {state.kind === "ready" && state.data.nextCursor ? (
@@ -47,8 +97,9 @@ export function ConnectedApps() {
       {revoking ? (
         <Dialog
           alert
+          lead={<AppPair name={revoking.clientName} broken />}
           title={`Disconnect ${revoking.clientName}?`}
-          description="It stops working at once and has to be approved again to reconnect."
+          description={`${revoking.clientName} stops working with your Chalk account at once. To use it again, approve it again.`}
           onClose={() => setRevoking(null)}
           actions={
             <>

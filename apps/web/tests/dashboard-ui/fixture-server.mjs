@@ -91,9 +91,16 @@ function richAccount() {
       [uuid(0x401)]: [{ id: uuid(0x505), state: "delivered", createdAt: at(0, 11, 2), eventType: "recording.completed", attempts: 1, status: 200 }],
     },
     origins: ["https://chalkmeet.com", "https://portal.tuitionhighway.com", "https://app.q9labs.ai", "http://localhost:5173"],
+    connections: [
+      ["Claude", "chalk:manage", at(12, 9, 30), at(0, 9, 12)],
+      ["ChatGPT", "chalk:read", at(30, 14, 0), at(3, 16, 40)],
+      ["Cursor", "chalk:read", at(8, 11, 15), null],
+      ["Devin", "chalk:manage", at(60, 8, 0), at(21, 10, 5)],
+      ["Acme Notes", "chalk:read", at(2, 13, 20), at(2, 13, 25)],
+    ].map(([clientName, scope, createdAt, lastUsedAt], i) => ({ id: uuid(0x6000 + i), clientName, scope, createdAt, lastUsedAt })),
   };
 }
-const emptyAccount = () => ({ calls: [], sessions: [], live: false, keys: [], webhooks: [], deliveries: {}, origins: ["https://chalkmeet.com"] });
+const emptyAccount = () => ({ calls: [], sessions: [], live: false, keys: [], webhooks: [], deliveries: {}, origins: ["https://chalkmeet.com"], connections: [] });
 
 const TRANSCRIPT = [
   [12, "Nora Patel", "Morning. Can everyone hear me?"],
@@ -113,6 +120,7 @@ const TRANSCRIPT = [
   [2650, "Sofia Lind", "I’ll write up the launch notes and share them in chat."],
   [2731, "Hasan Shoaib", "Thanks, everyone. Same link on Tuesday."],
 ];
+const CONNECT_APPS = { claude: { name: "Claude", host: "claude.ai" }, chatgpt: { name: "ChatGPT", host: "chatgpt.com" }, cursor: { name: "Cursor", host: "cursor.com" }, devin: { name: "Devin", host: "app.devin.ai" }, acme: { name: "Acme Notes", host: "notes.acme.example" } };
 const SEAT = (name) => uuid(0x700 + ["Hasan Shoaib", "Nora Patel", "Akash Rao", "Sofia Lind", "Malik Haddad", "Priya Shah", "Eli Cohen", "Ali Raza"].indexOf(name));
 
 let state;
@@ -330,6 +338,17 @@ async function dashboard(request, response, page, url, entry) {
       // Like the server, a past session lists each recording's transcripts.
       const recordings = recordingsFor(episode, false).map((recording) => ({ ...recording, transcripts: transcriptsFor(episode.endedAt) }));
       return send(response, 200, { callName: data.calls[0].name, episode: episodeDTO(episode), attendance: { kind: "available", participants }, recordings, nextCursor: null });
+    }
+    if (page === "connect") {
+      // The handle names the app and the scope the fixture pretends it asked for: chalk_oar_<app>_<read|manage>_<padding>.
+      const [, , app = "", asked = "read"] = (query.request ?? "").split("_");
+      const host = CONNECT_APPS[app];
+      if (!host) return fail(response, 404, "not_found");
+      return send(response, 200, { clientName: host.name, redirectHost: host.host, requestedScope: asked === "manage" ? "chalk:manage" : "chalk:read" });
+    }
+    if (page === "connections") {
+      const start = Number(query.cursor ?? 0);
+      return send(response, 200, { connections: data.connections.slice(start, start + 25), nextCursor: null });
     }
     if (page === "developer")
       return send(response, 200, {
