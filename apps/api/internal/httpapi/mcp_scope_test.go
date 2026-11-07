@@ -22,7 +22,7 @@ var testRequestKey = strings.Repeat("k", 16)
 const scopeTestMetadata = `https://api.example/.well-known/oauth-protected-resource/mcp`
 
 // The OAuth bundles can never call these: no bundle holds their scopes.
-var toolsOutsideEveryBundle = []string{"chalk_update_tenant", "chalk_inspect_tenant", "chalk_set_membership", "chalk_issue_api_key", "chalk_revoke_api_key", "chalk_delete_transcript"}
+var toolsOutsideEveryBundle = []string{"chalk_update_tenant", "chalk_inspect_tenant", "chalk_set_membership", "chalk_issue_api_key", "chalk_revoke_api_key", "chalk_delete_transcript", "chalk_control_call"}
 
 func scopeTestPrincipal(t *testing.T, kind authentication.PrincipalKind, scopes ...authentication.Scope) authentication.Principal {
 	t.Helper()
@@ -97,7 +97,7 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 	read := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalOAuth, mcpauth.AuthenticationScopes(mcpauth.ScopeRead)...)))
 	t.Logf("tools listed: api key with all scopes=%d, chalk:manage=%d, chalk:read=%d", len(all), len(manage), len(read))
 
-	if len(all) != 25 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 8 {
+	if len(all) != 26 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 8 {
 		t.Fatalf("listed %d, %d and %d tools for all scopes, chalk:manage and chalk:read", len(all), len(manage), len(read))
 	}
 	for _, name := range toolsOutsideEveryBundle {

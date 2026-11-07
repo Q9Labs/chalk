@@ -1,0 +1,74 @@
+name: Cache warm-up
+
+# The merge queue tests every commit before it lands on master, so master pushes no longer run the Gate. Pull requests
+# and queue groups can read caches only from master, so this job builds the Go packages once per push and saves the
+# Go build cache under the keys the Gate jobs restore. The Gate's Metro cache is not saved any more; the mobile export
+# starts cold when it runs.
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-cache-warm
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Warm Go caches
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: apps/api/go.mod
+          cache: false
+
+      - name: Restore Go caches
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+          restore-keys: go-api-${{ runner.os }}-
+
+      # Compiles every package and test binary, with and without the race detector, without running any test.
+      - name: Compile Go packages and tests
+        working-directory: apps/api
+        env:
+          GOFLAGS: -buildvcs=false
+        run: |
+          go build ./...
+          go test -vet=off -run '^$' ./...
+          go test -race -vet=off -run '^$' ./...
+
+      - name: Save root checks Go cache
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+
+      - name: Save API Go cache
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+
+      - name: Save Sync Go cache
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}

@@ -32,12 +32,12 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-export async function createSpace(run) {
+export async function createSpace(run, plane = mediaPlane) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: mediaPlane,
+    media_plane: plane,
     recording_policy: "manual",
     transcription_policy: "on_demand",
     default_episode_duration_seconds: 1800,
