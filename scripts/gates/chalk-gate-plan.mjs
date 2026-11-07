@@ -344,7 +344,8 @@ export function createGatePlan(files, options = {}) {
   const unitTestWorkspaces = selectedWorkspaces.filter((workspace) => !browserTestWorkspaceNames.has(workspace.name));
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", ...deploymentRoots]));
+  // The API's chalksfu conformance tests build and run the SFU from features/media/sfu.
+  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", ...deploymentRoots]));
   const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
