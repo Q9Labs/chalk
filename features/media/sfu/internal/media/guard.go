@@ -23,10 +23,11 @@ const (
 	reasonPacerDrops       = "pacer_drops"
 	reasonUDPBufferErrors  = "udp_buffer_errors"
 	minGuardPacerDrops     = 100 // drops in a window below which the drop share is noise
-	// latencyWindow is how far back the guard reads scheduler latency. It is
-	// shorter than the guard window, so admission reopens within seconds of a
-	// host stall ending.
+	// latencyWindow is how far back the guard reads scheduler latency, whatever
+	// the guard window is. It is short so admission reopens within seconds of a
+	// host stall ending, and long enough that one slow second can't close it.
 	latencyWindow = 10 * time.Second
+	latencySlots  = int(latencyWindow / time.Second) // one-second samples in latencyWindow
 )
 
 // queueDelayBounds are the upper bounds of the pacer queue delay histogram. A
@@ -210,9 +211,6 @@ func (g *guard) recentSteal() float64 {
 // slots is how many one-second samples the window holds.
 func (g *guard) slots() int { return max(int(g.cfg.Window/time.Second), 1) }
 
-// latencySlots is how many one-second samples the scheduler latency reads.
-func (g *guard) latencySlots() int { return min(g.slots(), int(latencyWindow/time.Second)) }
-
 // closedReason is why new Episodes are refused, or empty.
 func (g *guard) closedReason() string {
 	g.mu.Lock()
@@ -248,7 +246,7 @@ func (g *guard) tick() {
 	g.pacer = appendBounded(g.pacer, g.latest, slots+1)
 	g.delayRing = appendBounded(g.delayRing, delays, slots)
 	if sched != nil {
-		g.sched = appendBounded(g.sched, *sched, g.latencySlots()+1)
+		g.sched = appendBounded(g.sched, *sched, latencySlots+1)
 	}
 
 	health := HostHealth{StealKnown: len(g.steal) > 1}
@@ -290,7 +288,7 @@ func (g *guard) tick() {
 		health.AdmissionReason = reasonCPUSteal
 	case health.StealKnown && fullWindow && health.BusyPercent > g.cfg.MaxBusyPercent:
 		health.AdmissionReason = reasonCPUBusy
-	case len(g.sched) > g.latencySlots() && health.SchedulerLatencyP99 > g.cfg.MaxSchedulerLatency:
+	case len(g.sched) > latencySlots && health.SchedulerLatencyP99 > g.cfg.MaxSchedulerLatency:
 		health.AdmissionReason = reasonSchedulerLatency
 	case health.PacerDrops >= minGuardPacerDrops && health.PacerDropPercent > g.cfg.MaxPacerDropPercent:
 		health.AdmissionReason = reasonPacerDrops
