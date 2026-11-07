@@ -2,6 +2,7 @@ package media
 
 import (
 	"cmp"
+	"math"
 	"slices"
 	"time"
 )
@@ -77,6 +78,14 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 		}
 		return cmp.Compare(a.order, b.order)
 	})
+	if estimate.pressured {
+		// The estimate and the drops describe a stalled node, not the path. Every
+		// tile keeps its layer, and nothing raises, until the stall is over.
+		for index := range tiles {
+			hold(&tiles[index], estimate, math.Inf(1), now)
+		}
+		return 0
+	}
 	budget := allocHeadroom*estimate.current - audio - repair
 	if estimate.congested {
 		budget *= congestedShare
