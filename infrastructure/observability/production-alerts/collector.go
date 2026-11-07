@@ -278,7 +278,8 @@ func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
 	}
 	switch ready.Host.AdmissionReason {
 	case "":
-	case "cpu_steal", "cpu_busy", "pacer_queue_delay", "pacer_drops", "udp_buffer_errors":
+	// pacer_queue_delay is what SFU builds before scheduler_latency report; drop it once no node runs one.
+	case "cpu_steal", "cpu_busy", "scheduler_latency", "pacer_queue_delay", "pacer_drops", "udp_buffer_errors":
 		item.Reason = "admission_" + ready.Host.AdmissionReason
 		return item
 	default:
