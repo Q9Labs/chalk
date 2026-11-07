@@ -1,6 +1,7 @@
 {
   "entry": [
     "gate.config.ts",
+    "features/scorecard/scorecard.mjs",
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
     "tools/formal/sync-entry-leave/EntryLeave.view.mjs",

@@ -98,7 +98,7 @@ test("decoder restarts contribute a new generation instead of negative playback 
 test("every budget entry bounds a median or a p95 and says whether it gates", () => {
   const file = JSON.parse(readFileSync(new URL("../../perf/budgets.json", import.meta.url), "utf8"));
   assert.doesNotThrow(() => validateBudgetEntries(file.budgets));
-  assert.throws(() => validateBudgetEntries({ "web.route.js_gzip_kib": { tolerancePct: 1, gate: true } }), /needs max_p50 or max_p95/);
+  assert.throws(() => validateBudgetEntries({ "web.route.js_gzip_kib": { tolerancePct: 1, gate: true } }), /needs max_p50, max_p95 or min_p50/);
   assert.throws(() => validateBudgetEntries({ "web.route.js_gzip_kib": { max_p50: 219, tolerancePct: 1 } }), /gate must be true or false/);
   assert.throws(() => validateBudgetEntries({ "route js": { max_p50: 219, tolerancePct: 1, gate: true } }), /not a dotted metric id/);
 });

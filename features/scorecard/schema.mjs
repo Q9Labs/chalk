@@ -2,6 +2,8 @@
 // The Chalk performance scorecard, draft v1: one file per media plane per run. History is public, so a file
 // holds no host, IP, URL, Tenant, Space or other resource id.
 
+import { FAMILY_METRICS } from "./metrics.mjs";
+
 export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
 
 /** @typedef {"chalk_sfu" | "cf_sfu"} MediaPlane */
@@ -34,7 +36,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  */
 /**
  * @typedef {object} ScorecardDrop
- * @property {MetricId} metric
+ * @property {MetricId | "*"} metric  "*" for a whole-cycle drop.
  * @property {string} reason  A snake_case code, never free text.
  * @property {number} count
  */
@@ -47,12 +49,13 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {ScorecardDrop[]} dropped
  */
 
-// Units a metric may use. A metric's unit is fixed by its entry in METRICS.
-const UNITS = /** @type {const} */ (["ms", "kib", "percent", "pps", "mbit_s", "count", "pass"]);
+// Units a metric may use. A metric's unit is fixed by its entry in METRICS. A pass value is a share from 0 to 1 and
+// higher is better; every other unit is lower-is-better.
+const UNITS = /** @type {const} */ (["ms", "kib", "mib", "percent", "pps", "mbit_s", "count", "score", "pass"]);
 /** @typedef {(typeof UNITS)[number]} Unit */
 
 // Stable metric ids, each with its unit. Renaming an id or changing its unit breaks history, so add a new id instead.
-export const METRICS = /** @type {const} */ ({
+const ACTION_METRICS = /** @type {const} */ ({
   "action.spinup_ms": { unit: "ms", description: "Episode create, first admit, and the first join() until live with a connected peer connection" },
   "action.join.first_audio_ms": { unit: "ms", description: "join() until the first audio packet from a remote" },
   "action.join.first_video_ms": { unit: "ms", description: "join() until the first decoded video frame from a remote" },
@@ -72,8 +75,13 @@ export const METRICS = /** @type {const} */ ({
   "action.leave_ack_ms": { unit: "ms", description: "leave() until Sync acknowledges it" },
   "action.leave_media_removed_ms": { unit: "ms", description: "leave() until the remote holds no live track from the Participant" },
 });
-/** @typedef {keyof typeof METRICS} MetricId */
 
+/** @type {Readonly<Record<string, {unit: Unit, description: string}>>} */
+export const METRICS = { ...ACTION_METRICS, .../** @type {Record<string, {unit: Unit, description: string}>} */ (FAMILY_METRICS) };
+/** @typedef {string} MetricId */
+
+// A dropped entry with this metric covers a whole cycle (for example cycle_failed), not one metric.
+export const WHOLE_CYCLE = "*";
 const tiers = ["pr", "nightly", "promote", "manual"];
 const environments = ["ci", "staging", "production"];
 const planes = ["chalk_sfu", "cf_sfu"];
@@ -180,7 +188,7 @@ function dropProblems(dropped, fail) {
   if (!Array.isArray(dropped)) return fail("dropped must be an array");
   for (const drop of dropped) {
     exactKeys(drop, ["metric", "reason", "count"], `dropped ${drop?.metric}`, fail);
-    if (!Object.hasOwn(METRICS, drop?.metric)) fail(`dropped: unknown metric ${drop?.metric}`);
+    if (drop?.metric !== WHOLE_CYCLE && !(drop?.metric in METRICS)) fail(`dropped: unknown metric ${drop?.metric}`);
     if (typeof drop?.reason !== "string" || !/^[a-z][a-z_]*$/.test(drop.reason)) fail(`dropped: ${drop?.metric} reason must be a snake_case code`);
     if (!Number.isInteger(drop?.count) || drop.count < 1) fail(`dropped: ${drop?.metric} count must be a positive whole number`);
   }

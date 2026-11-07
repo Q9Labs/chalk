@@ -19,13 +19,19 @@ export function summarize(samples) {
 }
 
 // budgetFailures lists every metric whose p95 is over budget, that timed out, or that has fewer samples than required.
+// A budget with warnOnly never fails on its p95; budgetWarnings reports that instead. Timeouts and missing samples fail either way.
 export function budgetFailures(summary, budgets, minimumSamples) {
   const failures = [];
   for (const [metric, budget] of Object.entries(budgets)) {
     const observed = summary[metric];
     if (observed?.timeouts) failures.push(`${metric}: ${observed.timeouts} timed out`);
     else if (!observed || observed.n < minimumSamples) failures.push(`${metric}: ${observed?.n ?? 0} samples, need ${minimumSamples}`);
-    else if (observed.p95 > budget.p95Ms) failures.push(`${metric}: p95 ${observed.p95} ms is over ${budget.p95Ms} ms`);
+    else if (!budget.warnOnly && observed.p95 > budget.p95Ms) failures.push(`${metric}: p95 ${observed.p95} ms is over ${budget.p95Ms} ms`);
   }
   return failures;
+}
+
+// budgetWarnings lists every warn-only metric whose p95 is over its limit.
+export function budgetWarnings(summary, budgets) {
+  return Object.entries(budgets).flatMap(([metric, budget]) => (budget.warnOnly && summary[metric]?.p95 > budget.p95Ms ? [`${metric}: p95 ${summary[metric].p95} ms is over ${budget.p95Ms} ms`] : []));
 }
