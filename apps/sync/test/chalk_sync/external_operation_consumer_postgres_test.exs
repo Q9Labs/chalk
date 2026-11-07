@@ -685,14 +685,15 @@ defmodule ChalkSync.ExternalOperationConsumerPostgresTest do
       maximum_episode_duration_expired role_transition_cleanup role_transition_source_stop)
     for name <- names, status <- ~w(pending applied failed), source <- [nil, "microphone", "camera", "screen"] do
       row = [nil, nil, nil, <<0::128>>, nil, "key", <<>>, name, nil, nil, nil, nil,
-             source, nil, nil, nil, nil, nil, nil, nil, nil, %{}, status, 0, nil, nil, nil]
+             source, nil, nil, nil, nil, nil, nil, nil, nil, %{}, status, 0, nil, nil, nil, 42]
       operation = apply(record, :from_row, [row])
       expected = if name == "maximum_episode_duration_expired", do: "maximum_duration_expired", else: name
       unless Atom.to_string(operation.name) == expected and Atom.to_string(operation.status) == status and
-               (is_nil(source) or Atom.to_string(operation.source) == source), do: raise("incorrect decode")
+               (is_nil(source) or Atom.to_string(operation.source) == source) and
+               operation.control_revision == 42, do: raise("incorrect decode")
     end
     row = [nil, nil, nil, <<0::128>>, nil, "key", <<>>, "not_an_operation", nil, nil, nil, nil,
-           nil, nil, nil, nil, nil, nil, nil, nil, nil, %{}, "pending", 0, nil, nil, nil]
+           nil, nil, nil, nil, nil, nil, nil, nil, nil, %{}, "pending", 0, nil, nil, nil, nil]
     try do
       apply(record, :from_row, [row])
       raise "unknown operation accepted"
