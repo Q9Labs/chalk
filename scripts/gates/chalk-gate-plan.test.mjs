@@ -124,6 +124,7 @@ test("service gate selection follows the plan inputs", () => {
   const services = (files) => createGatePlan(files).services;
   assert.deepEqual(services(["docs/contract-codegen.md"]), { api: false, sync: false });
   assert.deepEqual(services(["apps/api/internal/server.go"]), { api: true, sync: false });
+  assert.deepEqual(services(["features/media/sfu/internal/config/config.go"]), { api: true, sync: false });
   assert.deepEqual(services(["apps/sync/lib/chalk_sync.ex"]), { api: false, sync: true });
   assert.deepEqual(services(["apps/api/db/migrations/20261028120000_example.sql"]), { api: true, sync: true });
   assert.deepEqual(services(["sdks/typescript/client/src/generated/sync.ts"]), { api: false, sync: true });
