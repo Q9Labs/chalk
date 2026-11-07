@@ -2436,7 +2436,7 @@
   max-width: 100%;
 }
 
-.site .dash .lp.field {
+.site .dash .lp-field {
   display: flex;
   max-width: 320px;
 }
@@ -2449,7 +2449,7 @@
   cursor: pointer;
 }
 
-.site .dash .lp.chip .lp-trigger {
+.site .dash .lp-chip .lp-trigger {
   gap: 8px;
 }
 
@@ -2474,7 +2474,7 @@
   color: var(--chalk-muted-text);
 }
 
-.site .dash .lp.chip .lp-chev {
+.site .dash .lp-chip .lp-chev {
   margin-left: 0;
 }
 
@@ -2668,7 +2668,7 @@
     justify-items: stretch;
   }
 
-  .site .dash .lp.field {
+  .site .dash .lp-field {
     max-width: none;
   }
 
