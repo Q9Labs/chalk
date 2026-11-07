@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { ZodError } from "zod";
+import { Schema } from "effect";
 import { opaqueAccessGrant } from "../../../../sdks/typescript/client/src/space-client/core.test.helpers";
 import { reloadRejoinAccess, type PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { createPreparedPublicSpace, createPublicInviteClient, type PublicInviteClient, publicAPIBaseURL } from "./chalk-access";
@@ -63,7 +63,7 @@ it.each(["not-date", "2026-02-30T01:00:00Z", "2026-10-29T01:00:00+04:00"])("pres
   } catch (caught) {
     error = caught;
   }
-  expect(error).toBeInstanceOf(ZodError);
+  expect(Schema.isSchemaError(error)).toBe(true);
   expect(error).toBeInstanceOf(Error);
-  expect(error).toMatchObject({ stack: expect.any(String), issues: [expect.objectContaining({ message: "Invalid ISO datetime" })] });
+  expect(error).toMatchObject({ stack: expect.any(String), message: expect.stringContaining("Invalid ISO datetime") });
 });
