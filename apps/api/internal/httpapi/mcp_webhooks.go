@@ -10,12 +10,18 @@ import (
 )
 
 func bindMCPWebhookTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.InspectWebhooks, func(ctx context.Context, i mcpapi.WebhookInspectInput) (json.RawMessage, error) {
+	mcpapi.Bind(server, mcpapi.InspectWebhooks, func(ctx context.Context, i mcpapi.WebhooksViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
-		if i.EndpointID != "" {
+		switch i.View {
+		case "endpoint":
 			return mcpInvoke(b, getWebhookEndpoint(o.Webhooks, o.TenantAuthz), webhookIDsRequest{TenantID: b.tenant, EndpointID: b.id(i.EndpointID)})
+		case "deliveries":
+			return mcpInvoke(b, listWebhookDeliveriesEndpoint(o.Webhooks, o.TenantAuthz), listWebhookDeliveriesRequest{TenantID: b.tenant, EndpointID: b.id(i.EndpointID), Page: b.page(i.PageInput), Filters: webhooks.DeliveryFilters{States: i.States, EventTypes: i.EventTypes}})
+		case "delivery":
+			return mcpInvoke(b, getWebhookDeliveryEndpoint(o.Webhooks, o.TenantAuthz), webhookDeliveryIDsRequest{TenantID: b.tenant, EndpointID: b.id(i.EndpointID), DeliveryID: b.id(i.DeliveryID)})
+		default:
+			return mcpInvoke(b, listWebhookEndpoints(o.Webhooks, o.TenantAuthz), listWebhooksRequest{TenantID: b.tenant, Page: b.page(i.PageInput)})
 		}
-		return mcpInvoke(b, listWebhookEndpoints(o.Webhooks, o.TenantAuthz), listWebhooksRequest{TenantID: b.tenant, Page: b.page(i.PageInput)})
 	})
 	mcpapi.Bind(server, mcpapi.ConfigureWebhook, func(ctx context.Context, i mcpapi.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
@@ -43,14 +49,6 @@ func bindMCPWebhookTools(server *mcp.Server, o Options) {
 		default:
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
-	})
-	mcpapi.Bind(server, mcpapi.InspectWebhookDeliveries, func(ctx context.Context, i mcpapi.WebhookDeliveriesInput) (json.RawMessage, error) {
-		b := newMCPRequest(ctx)
-		endpointID := b.id(i.EndpointID)
-		if i.DeliveryID != "" {
-			return mcpInvoke(b, getWebhookDeliveryEndpoint(o.Webhooks, o.TenantAuthz), webhookDeliveryIDsRequest{TenantID: b.tenant, EndpointID: endpointID, DeliveryID: b.id(i.DeliveryID)})
-		}
-		return mcpInvoke(b, listWebhookDeliveriesEndpoint(o.Webhooks, o.TenantAuthz), listWebhookDeliveriesRequest{TenantID: b.tenant, EndpointID: endpointID, Page: b.page(i.PageInput), Filters: webhooks.DeliveryFilters{States: i.States, EventTypes: i.EventTypes}})
 	})
 	mcpapi.Bind(server, mcpapi.SendWebhook, func(ctx context.Context, i mcpapi.WebhookSendInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)

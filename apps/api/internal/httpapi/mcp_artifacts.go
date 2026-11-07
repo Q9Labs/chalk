@@ -9,14 +9,16 @@ import (
 )
 
 func bindMCPArtifactTools(server *mcp.Server, o Options) {
-	bindMCPEndpoint(server, mcpapi.ListRecordings, listRecordingsEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingsInput) listRecordingsRequest {
-		return listRecordingsRequest{TenantID: b.tenant, SpaceID: b.optionalID(i.SpaceID), EpisodeID: b.optionalID(i.EpisodeID), Page: b.page(i.PageInput)}
-	})
-	bindMCPEndpoint(server, mcpapi.GetRecording, getRecordingEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingInput) getRecordingRequest {
-		return getRecordingRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)}
-	})
-	bindMCPEndpoint(server, mcpapi.GetRecordingDownload, createRecordingDownloadURLEndpoint(o.Recordings, o.RecordingExports, o.RecordingDownloads, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingDownloadInput) createRecordingDownloadURLEndpointRequest {
-		return createRecordingDownloadURLEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID), Body: createRecordingDownloadURLRequest{ExpiresInSeconds: i.ExpiresInSeconds, Download: i.Download}}
+	mcpapi.Bind(server, mcpapi.InspectRecordings, func(ctx context.Context, i mcpapi.RecordingsViewInput) (json.RawMessage, error) {
+		b := newMCPRequest(ctx)
+		switch i.View {
+		case "recording":
+			return mcpInvoke(b, getRecordingEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), getRecordingRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)})
+		case "download_url":
+			return mcpInvoke(b, createRecordingDownloadURLEndpoint(o.Recordings, o.RecordingExports, o.RecordingDownloads, o.TenantAuthz), createRecordingDownloadURLEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID), Body: createRecordingDownloadURLRequest{ExpiresInSeconds: i.ExpiresInSeconds, Download: i.Download}})
+		default:
+			return mcpInvoke(b, listRecordingsEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), listRecordingsRequest{TenantID: b.tenant, SpaceID: b.optionalID(i.SpaceID), EpisodeID: b.optionalID(i.EpisodeID), Page: b.page(i.PageInput)})
+		}
 	})
 	bindMCPEndpoint(server, mcpapi.ExportRecording, requestRecordingExportEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingInput) requestRecordingExportEndpointRequest {
 		return requestRecordingExportEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)}

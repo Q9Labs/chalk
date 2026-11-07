@@ -17,7 +17,7 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 	payload, _ := json.Marshal(struct {
 		Text string `json:"text"`
 	}{strings.Repeat("untrusted 🖍️ ", 10000)})
-	Bind(server, ListSpaces, func(context.Context, PageInput) (json.RawMessage, error) { return payload, nil })
+	Bind(server, InspectSpaces, func(context.Context, PageInput) (json.RawMessage, error) { return payload, nil })
 	transport := NewHandler(server, []string{"https://trusted.example"}, nil)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		transport.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{TenantID: "fixture-tenant", Scopes: []string{"spaces:read"}})))
@@ -33,7 +33,7 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 	var collected strings.Builder
 	offset := 0
 	for {
-		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_list_spaces", Arguments: PageInput{ReadInput: ReadInput{ResultOffset: offset}}})
+		result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_inspect_spaces", Arguments: PageInput{ReadInput: ReadInput{ResultOffset: offset}}})
 		if err != nil {
 			t.Fatal(err)
 		}
