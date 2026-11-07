@@ -10,6 +10,7 @@ import (
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestBindingResolutionSeparatesTenantApplicationsAndCredentialRotation(t *testing.T) {
@@ -68,5 +69,27 @@ func TestOldSDKInOwnSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
 	binding, err = registry.ResolveBinding(disabled, chalkSelected, mediaplane.ClientProviders{})
 	if err != nil || binding != nil {
 		t.Fatalf("disabled media still creates an Episode without media: %#v %v", binding, err)
+	}
+}
+
+func TestOnlyAllowlistedSpacesStartOnTheOwnSFU(t *testing.T) {
+	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
+	other, _ := utilities.ParseID("22222222-2222-4222-8222-222222222222")
+	allowed, err := spaces.ParseChalkSFUAllowlist([]string{listed.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewRegistry(Config{DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"}, ChalkSFUSpaces: allowed})
+	chalkSelected := string(spaces.MediaPlaneProviderChalkSFU)
+	runsOwnSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
+
+	// Without a fleet the listed Space cannot resolve the own SFU at all, which
+	// shows it was not diverted to Cloudflare.
+	if _, err := registry.ResolveBinding(tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: chalkSelected}, runsOwnSFU); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+		t.Fatalf("listed Space: err = %v, want the own SFU to be tried", err)
+	}
+	binding, err := registry.ResolveBinding(tenants.Tenant{}, spaces.Space{ID: other, MediaPlane: chalkSelected}, runsOwnSFU)
+	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("Space outside the allowlist: %#v %v, want Cloudflare", binding, err)
 	}
 }

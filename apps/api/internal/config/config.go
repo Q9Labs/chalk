@@ -90,6 +90,7 @@ const (
 	ChalkSFUClientKeyFile  = "CHALK_SFU_CLIENT_KEY_FILE"
 	ChalkSFUTimeoutMS      = "CHALK_SFU_TIMEOUT_MS"
 	ChalkSFUSTUNURLs       = "CHALK_SFU_STUN_URLS"
+	ChalkSFUAllowedSpaces  = "CHALK_SFU_ALLOWED_SPACES"
 	DefaultMediaPlane      = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
@@ -219,6 +220,11 @@ type ChalkSFUConfig struct {
 	ClientCertFile string
 	ClientKeyFile  string
 	STUNURLs       []string
+
+	// AllowedSpaces are the only Spaces that start Episodes on the own SFU while the
+	// rest of the deployment stays on Cloudflare. It is empty by default, even when
+	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
+	AllowedSpaces spaces.ChalkSFUAllowlist
 
 	RequestTimeout time.Duration
 }
@@ -677,6 +683,9 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 		return ChalkSFUConfig{}, err
 	}
 	config.Nodes = nodes
+	if config.AllowedSpaces, err = spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces)); err != nil {
+		return ChalkSFUConfig{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
+	}
 	return config, nil
 }
 

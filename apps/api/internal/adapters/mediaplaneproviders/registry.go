@@ -31,7 +31,10 @@ type Config struct {
 	Telemetry       providercontracts.Telemetry
 	// ChalkSFU is nil while the own SFU is off, so no Space can reach it.
 	ChalkSFU *chalksfu.Fleet
-	Episodes EpisodeReader
+	// ChalkSFUSpaces are the Spaces whose new Episodes may start on the own SFU.
+	// Every other Space selecting it starts on Cloudflare.
+	ChalkSFUSpaces spaces.ChalkSFUAllowlist
+	Episodes       EpisodeReader
 }
 
 type Registry struct {
@@ -39,6 +42,7 @@ type Registry struct {
 	defaultProvider spaces.MediaPlaneProvider
 	telemetry       providercontracts.Telemetry
 	chalk           *chalksfu.Fleet
+	chalkSpaces     spaces.ChalkSFUAllowlist
 	episodes        EpisodeReader
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
@@ -69,6 +73,7 @@ func NewRegistry(config Config) Registry {
 		defaultProvider: config.DefaultProvider,
 		telemetry:       config.Telemetry,
 		chalk:           config.ChalkSFU,
+		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
 		turn:            sfuadapter.NewTurnCredentials(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
