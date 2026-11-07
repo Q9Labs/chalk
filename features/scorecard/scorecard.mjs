@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // scorecard build: adapters turn existing measurement output into one validated scorecard file.
 // scorecard diff:  compares a scorecard with a baseline and prints the delta table.
+// scorecard append: adds scorecards to the nightly history. scorecard baseline: the median of the last seven nightly runs.
 // scorecard comment: creates or updates one section of the pull request's single scorecard comment.
 // scorecard go-output: prints the human-readable lines of `go test -json` on stdin, so a gate can keep its log.
 import { execFileSync } from "node:child_process";
@@ -14,6 +15,7 @@ import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sf
 import { webMetrics } from "./adapters/web.mjs";
 import { sectionComment, sectionMarker } from "./comment.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
+import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
 import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -101,6 +103,25 @@ async function comment(argv) {
   else gh(`repos/${values.repo}/issues/${values.pr}/comments`, "-f", `body=${body}`);
 }
 
+// append adds scorecards to <history>/history.jsonl and regenerates TRENDS.md.
+async function append(argv) {
+  const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, options: { history: { type: "string" } } });
+  const cards = positionals.map((path) => parseScorecard(readJson(path)));
+  const added = appendCards(values.history, cards);
+  const { budgets } = await readBudgets();
+  writeTrends(values.history, budgets);
+  console.log(`Appended ${added} of ${cards.length} scorecards.`);
+}
+
+// baseline writes the median of the last seven nightly scorecards of a plane; it writes nothing when history has none.
+function baseline(argv) {
+  const { values } = parseArgs({ args: argv, options: { history: { type: "string" }, plane: { type: "string" }, out: { type: "string" } } });
+  const card = baselineCard(readHistory(values.history), values.plane);
+  if (!card) return console.log(`No nightly history for ${values.plane}.`);
+  writeFileSync(values.out, `${JSON.stringify(parseScorecard(card), null, 2)}\n`);
+  console.log(`Baseline for ${values.plane}: median of ${card.run.id}.`);
+}
+
 async function goOutput() {
   for await (const line of createInterface({ input: process.stdin })) {
     if (!line.startsWith("{")) continue;
@@ -113,5 +134,7 @@ const [command, ...rest] = process.argv.slice(2);
 if (command === "build") build(rest);
 else if (command === "diff") await diff(rest);
 else if (command === "comment") comment(rest);
+else if (command === "append") await append(rest);
+else if (command === "baseline") baseline(rest);
 else if (command === "go-output") await goOutput();
-else throw new Error("Usage: scorecard.mjs build|diff|comment|go-output");
+else throw new Error("Usage: scorecard.mjs build|diff|comment|append|baseline|go-output");
