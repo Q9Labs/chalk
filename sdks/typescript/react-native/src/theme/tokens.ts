@@ -40,15 +40,15 @@ export type Palette = {
 };
 
 const dark: Palette = {
-  canvas: "#0B0C0E",
-  surface: "#151619",
-  tile: "#151619",
-  raised: "#1D1F23",
-  popover: "#1D1F23",
-  hover: "#272A2F",
-  pressed: "#30333A",
-  line: "rgba(255,255,255,0.08)",
-  lineStrong: "rgba(255,255,255,0.14)",
+  canvas: "#000000",
+  surface: "#060606",
+  tile: "#060606",
+  raised: "#0C0C0C",
+  popover: "#0C0C0C",
+  hover: "#161616",
+  pressed: "#1F1F1F",
+  line: "rgba(255,255,255,0.045)",
+  lineStrong: "rgba(255,255,255,0.08)",
   text: "#ECECEE",
   textStrong: "#FFFFFF",
   textSoft: "#C4C6CC",
@@ -143,7 +143,7 @@ export type Elevation = {
 };
 
 export const elevations: Readonly<Record<ColorScheme, Elevation>> = {
-  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", floatTile: "0px 0px 0px 1px rgba(255,255,255,0.14), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: false },
+  dark: { popover: "0px 12px 32px rgba(0,0,0,0.5)", toast: "0px 8px 24px rgba(0,0,0,0.4)", floatTile: "0px 0px 0px 1px rgba(255,255,255,0.08), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: false },
   light: { popover: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", toast: "0px 0px 0px 1px rgba(0,0,0,0.09), 0px 12px 32px rgba(0,0,0,0.12)", floatTile: "0px 0px 0px 1px rgba(0,0,0,0.15), 0px 6px 18px rgba(0,0,0,0.5)", ringOnCanvas: true },
 };
 
