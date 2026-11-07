@@ -151,11 +151,11 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     reopen.push(open);
   }
   const ready = () =>
-    waitFor("two live camera and voice publishers", async () => {
+    waitFor(`${guestCount} live camera and voice publishers`, async () => {
       for (const page of pages) {
         const live = await page.evaluate(() => {
           const snapshot = window.proofClient.getSnapshot();
-          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === 2, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
+          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === guestCount, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
           return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
         });
         if (!live) return false;
