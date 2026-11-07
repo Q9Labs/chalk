@@ -235,6 +235,8 @@ export function defaultSyncUrl(apiBaseUrl: string): string {
   if (url.hostname.startsWith("api.")) url.hostname = `sync.${url.hostname.slice(4)}`;
   else if (url.hostname.endsWith(".chalkmeet.com")) url.hostname = url.hostname.replace(/^([^.]+-)api\./u, "$1sync.");
   url.pathname = "/v1/sync";
+  url.search = "";
+  url.hash = "";
   return url.toString();
 }
 function screenShares(snapshot: SpaceSnapshot): ReadonlySet<string> {
