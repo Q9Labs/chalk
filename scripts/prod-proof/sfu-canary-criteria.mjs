@@ -25,13 +25,17 @@ function advanced(row, before) {
   return row.kind !== "video" || row.framesDecoded > before.framesDecoded;
 }
 
-// Within one connection, a stream moves when its counters grew between two samples.
-export function grew(rows, previous, kind, source) {
-  return rows.some((row) => {
+// Within one connection, a stream moves when its counters grew between two samples. growing counts such streams.
+export function growing(rows, previous, kind, source) {
+  return rows.filter((row) => {
     if (!isStream(row, kind, source)) return false;
     const before = previous.find(sameStream(row));
     return before !== undefined && advanced(row, before);
-  });
+  }).length;
+}
+
+export function grew(rows, previous, kind, source) {
+  return growing(rows, previous, kind, source) > 0;
 }
 
 export function rendering(after, before) {
