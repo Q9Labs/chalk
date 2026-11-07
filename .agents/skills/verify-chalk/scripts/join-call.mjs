@@ -107,7 +107,7 @@ try {
           .getByRole("button", { name: enabled, exact: true })
           .waitFor({ timeout: enableMs })
           .catch(async () => {
-            const toast = await page.locator('[data-part="toast"][data-type="error"]').evaluateAll((nodes) => nodes.map((node) => `${node.textContent} [${node.dataset.detail ?? "no detail"}]`));
+            const toast = await page.locator('[data-part="toast"][data-type="error"]').evaluateAll((nodes) => nodes.map((node) => node.textContent));
             throw new Error(`clicking "${control}" did not produce "${enabled}" within ${enableMs / 1000} s; error toasts: ${toast.join(" | ") || "none"}`);
           });
       }
