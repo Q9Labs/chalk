@@ -40,7 +40,8 @@ async function shoot() {
   const out = option("out");
   const states = option("states");
   const web = option("web");
-  const only = option("only")?.split(",").filter(Boolean);
+  const prefixes = (option("only") ?? "").split(",").filter(Boolean);
+  const only = prefixes.length > 0 ? prefixes : undefined;
   if (!out || (!states && !web)) throw new Error("shoot needs --out and --states and/or --web");
   mkdirSync(out, { recursive: true });
   const browser = await chromium.launch();
@@ -202,7 +203,7 @@ async function compare() {
   if (!beforeDir || !afterDir || !out) throw new Error("compare needs BEFORE_DIR AFTER_DIR --out DIR");
   mkdirSync(out, { recursive: true });
   const files = readdirSync(afterDir).filter((name) => name.endsWith(".png"));
-  const beforeFiles = new Set(readdirSync(beforeDir));
+  const beforeFiles = new Set(readdirSync(beforeDir).filter((name) => name.endsWith(".png")));
   const pairs = files
     .filter((name) => beforeFiles.has(name))
     .map((name) => ({
