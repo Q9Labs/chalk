@@ -85,8 +85,8 @@ async function shoot() {
     const page = await context.newPage();
     try {
       await page.goto(job.url, { waitUntil: "load" });
-      // Stubbed dashboard pages fill in after their fixture requests answer.
-      if (job.stub) await page.waitForFunction(() => document.body.innerText.trim().length > 40);
+      // Web pages fill in after their data requests answer; a blank shot would compare equal to itself.
+      if (!job.id.startsWith("state-")) await page.waitForFunction(() => document.body.innerText.trim().length > 40);
       await page.addStyleTag({ content: STILL });
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(700);
