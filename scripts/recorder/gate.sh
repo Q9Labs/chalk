@@ -11,7 +11,7 @@ node --test "$repo_root/scripts/deploy/deploy-managed-release.test.mjs"
 python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_*.py'
 
 tofu -chdir="$tofu_dir" fmt -check -recursive
-tofu -chdir="$tofu_dir" init -backend=false -input=false -upgrade=false
+bash "$repo_root/scripts/recorder/tofu-init.sh" "$tofu_dir"
 tofu -chdir="$tofu_dir" validate
 
 # A local validation gate must remain closed by default. This proves the
