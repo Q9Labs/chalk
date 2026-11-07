@@ -431,7 +431,7 @@ export function SpaceView({
             </ToastStack>
           }
           mediaOutput={
-            <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-[0_8px_24px_rgba(0,0,0,.4)]">
+            <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-(--elevation-toast)">
               <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
             </div>
           }

@@ -94,6 +94,7 @@ async function shoot() {
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(700);
       // States such as the chat card open a panel first; the same actions run before both shots.
+      if (job.actions?.length) await page.waitForTimeout(800);
       for (const action of job.actions ?? []) {
         if ("wait" in action) await page.waitForTimeout(action.wait);
         else
@@ -101,7 +102,7 @@ async function shoot() {
             .getByRole(action.role ?? "button", { name: action.click })
             .first()
             .click({ timeout: 5000 });
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(700);
       }
       await page.screenshot({ path: join(out, `${job.id}.png`), fullPage: job.fullPage });
     } catch (error) {

@@ -32,12 +32,12 @@ type FacehashComponentProps = {
 const GeneratedFacehash = Facehash as React.ComponentType<FacehashComponentProps>;
 
 const sizeMap = {
-  xs: { size: 24, fontSize: "0.75rem" },
-  sm: { size: 32, fontSize: "0.875rem" },
-  md: { size: 48, fontSize: "1rem" },
-  lg: { size: 64, fontSize: "1.5rem" },
-  xl: { size: 96, fontSize: "2.25rem" },
-  "2xl": { size: 120, fontSize: "2.75rem" },
+  xs: { size: 24, fontSize: "var(--type-caption)" },
+  sm: { size: 32, fontSize: "var(--type-body)" },
+  md: { size: 48, fontSize: "var(--type-lead)" },
+  lg: { size: 64, fontSize: "var(--type-title)" },
+  xl: { size: 96, fontSize: "var(--type-display-sm)" },
+  "2xl": { size: 120, fontSize: "var(--type-display)" },
 };
 
 const statusColorMap = {

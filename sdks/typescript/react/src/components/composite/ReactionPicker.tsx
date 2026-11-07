@@ -159,7 +159,7 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
               spellCheck={false}
               autoComplete="off"
             />
-            <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[var(--chalk-line)] bg-[var(--chalk-canvas)] text-[10px] font-medium text-[var(--chalk-muted-text)] uppercase">Esc</kbd>
+            <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[var(--chalk-line)] bg-[var(--chalk-canvas)] text-(length:--type-micro) font-medium text-[var(--chalk-muted-text)] uppercase">Esc</kbd>
           </div>
         ) : null}
 

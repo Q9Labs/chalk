@@ -25,7 +25,7 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
               data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
               data-variant={variant}
               className={variant === "ready" ? "chalk-sheet data-[starting-style]:!translate-y-8 data-[ending-style]:!translate-y-8" : "chalk-sheet"}
-              style={variant === "ready" ? { padding: "8px 20px 46px", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
+              style={variant === "ready" ? { padding: "var(--space-2) var(--space-5) var(--space-12)", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
             >
               <div data-part="sheet-handle" className="chalk-sheet-handle" />
               {variant !== "details" ? (
