@@ -28,6 +28,8 @@ async function setLook(nextTheme, nextSize) {
 // A phone sheet covers the screen; otherwise the shot is the section plus any open list, so the picture holds the control and its list.
 async function shot(name, area) {
   if (!shotsDir) return;
+  // Let the list and sheet finish sliding in, or the page shows through them.
+  await page.waitForTimeout(500);
   const path = resolve(shotsDir, `${theme}-${size}-${name}.png`);
   if (await page.locator(".scrim .lp-pop").count()) return page.screenshot({ path });
   const boxes = [];
