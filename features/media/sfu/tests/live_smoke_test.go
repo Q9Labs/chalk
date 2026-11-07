@@ -220,10 +220,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 			time.Sleep(10 * time.Second)
 		}
 	}
-	var capVerdictPending atomic.Bool // a cap is on and its subscriber has not yet backed off or failed
-	capVerdictPending.Store(load.capKbps > 0)
+	var capJudged atomic.Bool // the capped Participant has backed off or failed its deadline, and the last cap is judged
 	if load.capKbps > 0 {
-		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load, &capVerdictPending)
+		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load, &capJudged)
 	}
 	cpu := readHostCPU()
 	// The baseline comes before the first wait, so drops during that wait count.
@@ -265,7 +264,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 	}
 	mu.Lock()
 	if load.capKbps > 0 {
-		if capVerdictPending.Load() {
+		if !capJudged.Load() {
 			t.Errorf("the run ended before the capped Participant backed off or failed its %v deadline", load.capWithin)
 		}
 		capped := classes[0].receivers[0]
@@ -306,7 +305,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 // cap and take every tile off the high layer within load.capWithin, or the run
 // fails. The final report fails the run too if that Participant's audio stalled,
 // or if the run ends before a cap has been judged.
-func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad, backedOff *atomic.Bool) {
+func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad, judged *atomic.Bool) {
 	started := time.Now()
 	capped := 0 // cap changes so far: odd while the cap is on
 	var cappedAt time.Duration
@@ -326,21 +325,21 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 				person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
 				t.Logf("capped: %s downlink limited to %d kbit/s at %s", person.name, load.capKbps, time.Now().Format(time.TimeOnly))
 				cappedAt = since
-				backedOff.Store(false)
+				judged.Store(false)
 			} else {
 				person.link.shape(0, 0, 0, 0, 0)
-				if !backedOff.Load() {
+				if !judged.Load() {
 					t.Errorf("%s was lifted from the %d kbit/s cap before it backed off", person.name, load.capKbps)
 				}
-				backedOff.Store(true)
+				judged.Store(true)
 				t.Logf("capped: %s downlink lifted at %s", person.name, time.Now().Format(time.TimeOnly))
 			}
 			switchAt = since + load.capEvery
 		}
 		var inspected protocol.InspectResponse
 		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
-			if capped%2 == 1 && !backedOff.Load() && time.Since(started)-cappedAt > load.capWithin {
-				backedOff.Store(true)
+			if capped%2 == 1 && !judged.Load() && time.Since(started)-cappedAt > load.capWithin {
+				judged.Store(true)
 				t.Errorf("%s could not be inspected for %v after the %d kbit/s cap: %v", person.name, load.capWithin, load.capKbps, err)
 			}
 			continue
@@ -352,15 +351,15 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 			}
 		}
 		transport := inspected.Transport
-		if capped%2 == 1 && !backedOff.Load() {
+		if capped%2 == 1 && !judged.Load() {
 			since := time.Since(started) - cappedAt
 			fell := forwarded["h"] == 0 && float64(transport.EstimateBps) <= 2*float64(load.capKbps)*1000
 			switch {
 			case since > load.capWithin:
-				backedOff.Store(true)
+				judged.Store(true)
 				t.Errorf("%s did not back off within %v of the %d kbit/s cap (backed off by %v: %t): estimate %d, forwarding %v", person.name, load.capWithin, load.capKbps, since.Round(time.Second), fell, transport.EstimateBps, forwarded)
 			case fell:
-				backedOff.Store(true)
+				judged.Store(true)
 				t.Logf("capped: %s backed off %v after the cap: estimate %d, forwarding %v", person.name, since.Round(time.Second), transport.EstimateBps, forwarded)
 			}
 		}
