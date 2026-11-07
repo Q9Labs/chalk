@@ -128,7 +128,7 @@ try {
       // Start every look from a saved Auto-detect, so choosing Urdu below is a change Save accepts.
       if (!/Auto-detect/.test(await trigger("Transcript language").innerText())) {
         await trigger("Transcript language").click();
-        await pickByTyping("auto-detect");
+        await page.getByRole("option", { name: /Auto-detect/ }).click();
         await save().click();
         await page.getByText("Transcript language saved", { exact: true }).waitFor();
       }
