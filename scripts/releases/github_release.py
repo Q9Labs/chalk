@@ -60,6 +60,12 @@ def cut_decision(target, deployments, now, manual=False):
     return True, 'new master commits'
 
 
+def gate_branch_is_master(run):
+    if run['event'] == 'merge_group':
+        return run['head_branch'].startswith('gh-readonly-queue/master/')
+    return run['head_branch'] == 'master'
+
+
 class GitHub:
     def __init__(self, timeout=60):
         self.repository = os.environ['GITHUB_REPOSITORY']
@@ -175,19 +181,29 @@ class GitHub:
                      'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
 
     def latest_gate(self, sha, *, push_only=False):
-        runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}&branch=master', 'workflow_runs')
-        runs = [run for run in runs if run['head_sha'] == sha and run['head_branch'] == 'master'
-                and run['event'] in (('push',) if push_only else ('push', 'schedule', 'workflow_dispatch'))]
+        # A merge queue group runs the Gate on a temporary gh-readonly-queue branch and then fast-forwards master to that
+        # exact commit, so its run counts as the Gate of the commit that landed. Pull request runs never count.
+        runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}', 'workflow_runs')
+        events = ('push', 'merge_group') if push_only else ('push', 'merge_group', 'schedule', 'workflow_dispatch')
+        runs = [run for run in runs if run['head_sha'] == sha and run['event'] in events and gate_branch_is_master(run)]
         return max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
 
     def newest_green_push_gate(self):
-        # Pushes to master supersede each other, so the newest commit may never get a Gate. The newest commit that did is
-        # the nightly candidate; waiting for the tip's Gate would hold the plan behind the queue.
-        runs = self.request('actions/workflows/gate.yml/runs?branch=master&event=push&status=success&per_page=30')['workflow_runs']
-        for run in runs:
+        # Merge queue groups and, before the queue, pushes to master supersede each other, so the newest commit may never
+        # get a Gate. The newest commit that did is the nightly candidate; waiting for the tip's Gate would hold the plan
+        # behind the queue.
+        base = 'actions/workflows/gate.yml/runs?status=success&per_page=30'
+        runs = (self.request(f'{base}&branch=master&event=push')['workflow_runs']
+                + self.request(f'{base}&event=merge_group')['workflow_runs'])
+        for run in sorted(runs, key=lambda run: run.get('created_at', ''), reverse=True):
+            if run['event'] == 'merge_group' and not self.is_on_master(run['head_sha']):
+                continue
             if self.has_green_gate(run['head_sha'], push_only=True):
                 return run['head_sha']
         return None
+
+    def is_on_master(self, sha):
+        return self.request(f'compare/master...{sha}')['status'] in ('behind', 'identical')
 
     def has_green_gate(self, sha, *, push_only=False):
         latest = self.latest_gate(sha, push_only=push_only)
