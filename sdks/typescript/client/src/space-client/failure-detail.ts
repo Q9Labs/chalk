@@ -17,3 +17,12 @@ export function getConnectionFailureDetail({ code, sync }: { readonly code?: Err
   if (sync?.stage === "upgrade") return sync.closeCode !== null ? "The connection closed before the call service could be reached. Try again." : "A connection to the call service could not be opened. Try again.";
   return (code && FAILURE_DETAILS[code]) ?? DEFAULT_FAILURE_DETAIL;
 }
+
+const RECORDING_FAILURE_DETAILS: Readonly<Record<string, string>> = {
+  recording_capture_unsupported: "Recording isn’t available in this call yet.",
+};
+
+/** What to tell people when the Recording failed, shared by web and native call screens. */
+export function getRecordingFailureDetail(failureCode: string | null): string {
+  return (failureCode && RECORDING_FAILURE_DETAILS[failureCode]) ?? "Recording failed. Try again.";
+}

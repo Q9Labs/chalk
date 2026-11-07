@@ -9,7 +9,8 @@ export type Notice =
   | { readonly kind: "newHost"; readonly previousHost: string }
   | { readonly kind: "shareStopped"; readonly name: string }
   | { readonly kind: "recordingStarted" }
-  | { readonly kind: "recordingStopped" };
+  | { readonly kind: "recordingStopped" }
+  | { readonly kind: "recordingFailed"; readonly failureCode: string | null };
 
 /**
  * Notices for what changed between `previous` and `next`. Only changes inside a live call count,
@@ -47,7 +48,9 @@ export function callNotices(previous: SpaceSnapshot, next: SpaceSnapshot, ownMic
   const wasRecording = previous.recording.current?.status === "recording";
   const isRecording = next.recording.current?.status === "recording";
   if (!wasRecording && isRecording) notices.push({ kind: "recordingStarted" });
-  if (wasRecording && !isRecording) notices.push({ kind: "recordingStopped" });
+  if (wasRecording && !isRecording && next.recording.current?.status !== "failed") notices.push({ kind: "recordingStopped" });
+  const failure = next.recording.current;
+  if (failure?.status === "failed" && (previous.recording.current?.status !== "failed" || previous.recording.current.recordingId !== failure.recordingId)) notices.push({ kind: "recordingFailed", failureCode: failure.failureCode });
 
   return notices;
 }

@@ -117,7 +117,8 @@ func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, ten
 	if err != nil {
 		return false, fmt.Errorf("read Entrance eligibility: %w", err)
 	}
-	if row.RecordingPolicy != "automatic" || row.ArchivedAt.Valid || row.Active || (row.PreparationState == "scheduled" && row.StartsAt.Valid && !row.StartsAt.Time.After(now) && now.Before(row.StartsAt.Time.Add(recordingpreparation.NoShowGrace))) {
+	// The own SFU has no capture path yet, so its Spaces get no pre-warmed recorder.
+	if row.RecordingPolicy != "automatic" || row.ArchivedAt.Valid || row.Active || row.MediaPlane == string(spaces.MediaPlaneProviderChalkSFU) || (row.PreparationState == "scheduled" && row.StartsAt.Valid && !row.StartsAt.Time.After(now) && now.Before(row.StartsAt.Time.Add(recordingpreparation.NoShowGrace))) {
 		return false, nil
 	}
 	_, err = q.PrepareRecordingSpace(ctx, sqlc.PrepareRecordingSpaceParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID), StartsAt: timestamptzValue(now), ObservedAt: timestamptzValue(now), ExpectedRevision: row.Revision})
