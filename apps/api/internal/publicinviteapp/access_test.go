@@ -244,6 +244,8 @@ type mediaPlaneStub struct {
 	createCalls           int
 	removeCalls           int
 	removedParticipantRef string
+	// scopes records the scope of every call, in order.
+	scopes []mediaplane.Scope
 }
 
 func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.EnsureEpisodeInput) (mediaplane.Episode, error) {
@@ -251,6 +253,7 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 }
 func (p *mediaPlaneStub) CreateJoin(_ context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
+	p.scopes = append(p.scopes, input.Scope)
 	return p.join("new-provider", input.AllowRelay), nil
 }
 
@@ -277,11 +280,13 @@ func relayServers(allowRelay bool) []mediaplane.ICEServer {
 
 func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	p.resumeCalls++
+	p.scopes = append(p.scopes, input.Scope)
 	return p.join(input.ConnectionRef, input.AllowRelay), nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {
 	p.removeCalls++
+	p.scopes = append(p.scopes, input.Scope)
 	p.removedParticipantRef = input.ParticipantRef
 	return nil
 }
@@ -499,5 +504,41 @@ func TestFirstJoinCarriesTheGuestsProvidersToEpisodeCreation(t *testing.T) {
 
 	if !fixture.joins.joinClient.Runs(mediaplane.ProviderChalkSFU) {
 		t.Fatalf("JoinPublic did not get the guest's declared providers")
+	}
+}
+
+// The own SFU isolates by Tenant, Episode, Participant and generation and
+// rejects a call that lacks any of them.
+func TestOwnSFUCallsCarryTheParticipantsFullScope(t *testing.T) {
+	clients := mediaplane.ParseClientProviders("chalk_sfu")
+	fixture := newChalkFixture(t)
+	config := fixture.config()
+	config.MediaProof = fixture.recovery
+	access, err := publicinviteapp.NewAccessPort(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := access.RefreshPublicAccess(ctx, publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", MediaClients: clients}); err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := access.RefreshPublicAccess(ctx, publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", ReplaceMediaConnection: true, MediaClients: clients})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := access.DiscardPublicAccess(ctx, replaced); err != nil {
+		t.Fatal(err)
+	}
+	if err := access.RevokePublicAccess(ctx, publicinvites.PublicAccessInput{Arrival: fixture.arrival}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(fixture.plane.scopes) != 4 {
+		t.Fatalf("recorded %d scopes, want resume, create, discard and leave", len(fixture.plane.scopes))
+	}
+	for i, scope := range fixture.plane.scopes {
+		if scope.TenantID == "" || scope.EpisodeID == "" || scope.ParticipantID == "" || scope.Generation <= 0 {
+			t.Fatalf("call %d scope = %+v, want all four parts", i, scope)
+		}
 	}
 }

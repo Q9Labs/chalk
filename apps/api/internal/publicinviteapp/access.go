@@ -248,7 +248,8 @@ func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.
 		return nil
 	}
 	_ = service.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
-		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: arrival.ProviderSubject,
+		Provider: service.Provider(), Scope: scopeOf(arrival.TenantID, arrival.EpisodeID, arrival.ParticipantID, arrival.ParticipantGeneration),
+		EpisodeRef: episode.Ref, ParticipantRef: arrival.ProviderSubject,
 	})
 	return nil
 }
@@ -259,7 +260,8 @@ func (a accessPort) DiscardPublicAccess(ctx context.Context, grant publicinvites
 		return err
 	}
 	return service.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
-		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: grant.ProviderSubject,
+		Provider: service.Provider(), Scope: scopeOf(grant.TenantID, grant.EpisodeID, grant.ParticipantID, grant.ParticipantGeneration),
+		EpisodeRef: episode.Ref, ParticipantRef: grant.ProviderSubject,
 	})
 }
 
@@ -307,12 +309,12 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	var join mediaplane.Join
 	if refresh && !replaceMediaConnection {
 		join, err = service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
-			Provider: service.Provider(), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
+			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
 			AllowRelay: allowRelay,
 		})
 	} else {
 		join, err = service.CreateJoin(ctx, mediaplane.CreateJoinInput{
-			Provider: service.Provider(), Episode: episode,
+			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode,
 			ParticipantName: arrival.DisplayName, ExternalParticipantID: result.Participant.ID.String(), ParticipantPreset: "contributor",
 			Metadata:   map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
 			AllowRelay: allowRelay,
@@ -392,6 +394,12 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
 	return service, episode, nil
+}
+
+// scopeOf names the Participant connection a media call acts for. Chalk SFU
+// rejects a call without all four parts; Cloudflare ignores them.
+func scopeOf(tenantID, episodeID, participantID utilities.ID, generation int64) mediaplane.Scope {
+	return mediaplane.Scope{TenantID: tenantID.String(), EpisodeID: episodeID.String(), ParticipantID: participantID.String(), Generation: generation}
 }
 
 // publicProvider reports whether the provider's joins name one connection, which

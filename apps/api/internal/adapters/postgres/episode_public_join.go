@@ -342,6 +342,11 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 	}
 	episode, err := queries.LockLiveEpisodeForUpdate(ctx, sqlc.LockLiveEpisodeForUpdateParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
 	if err == nil {
+		// The Episode keeps its provider. Refuse a guest whose SDK cannot run it
+		// here, in the transaction that would otherwise reserve its seat.
+		if err := requireClientRunsBinding(mapLifecycleEpisode(episode), clients); err != nil {
+			return sqlc.Episode{}, false, webhookCommitMetric{}, err
+		}
 		return episode, false, webhookCommitMetric{}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -385,6 +390,20 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("produce public Episode started webhook: %w", err)
 	}
 	return episode, true, metric, nil
+}
+
+// requireClientRunsBinding returns mediaplane.ErrClientUnsupported when the
+// Episode is bound to a provider the caller's SDK cannot run. An Episode with no
+// binding, or one that predates bindings, is Cloudflare or has no media.
+func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
+	binding, _, err := episode.MediaPlaneBinding()
+	if err != nil {
+		return err
+	}
+	if binding != nil && !clients.Runs(mediaplane.Provider(binding.Provider)) {
+		return mediaplane.ErrClientUnsupported
+	}
+	return nil
 }
 
 var _ episodes.PublicJoinRepository = EpisodeLifecycleRepository{}
