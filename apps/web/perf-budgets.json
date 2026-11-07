@@ -33,7 +33,7 @@
     "jsGzipKiB": 743,
     "cssGzipKiB": 54,
     "routeJsGzipKiB": 217,
-    "routeCssGzipKiB": 33,
+    "routeCssGzipKiB": 28,
     "videoDroppedFramePercent": 5,
     "layoutShift": 0.05
   },
