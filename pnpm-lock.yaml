@@ -166,7 +166,7 @@ overrides:
   '@q9labsai/cli': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
   '@q9labsai/config-depcruise': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
   '@q9labsai/diagnostics': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
-  '@q9labsai/gates': https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
+  '@q9labsai/gates': 0.4.1
   '@babel/core': ^7.29.7
   '@tanstack/start-server-core': 1.169.39
   '@vitest/browser': ^4.1.12
@@ -252,8 +252,8 @@ importers:
         specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
         version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz(dependency-cruiser@18.2.0)
       '@q9labsai/gates':
-        specifier: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
-        version: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz
+        specifier: 0.4.1
+        version: 0.4.1
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.0
@@ -3514,9 +3514,8 @@ packages:
     peerDependencies:
       dependency-cruiser: ^18.2.0
 
-  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
-    resolution: {integrity: sha512-rPDbhzhuBHIEr2XT/lq+1CxtUBwXKcbNsoH2DtnW2Y4h0v0FEkGXIA67AIxsfomPDrHk6MiojAl5v7b8oQEb4g==, tarball: https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz}
-    version: 0.3.0
+  '@q9labsai/gates@0.4.1':
+    resolution: {integrity: sha512-VxecE2dlelZMDf4rIu01WMBmwlTedNmuf9rEwNeUkvbTWaPmkfxXNr1f7+0975f/SolOveccJAnHDsFv5xeTMQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -9484,6 +9483,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -12205,7 +12207,7 @@ snapshots:
     dependencies:
       dependency-cruiser: 18.2.0
 
-  '@q9labsai/gates@https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-gates-0.3.0.tgz':
+  '@q9labsai/gates@0.4.1':
     dependencies:
       cac: 7.0.0
       execa: 10.0.1
@@ -12214,7 +12216,7 @@ snapshots:
       picocolors: 1.1.1
       semver: 7.8.5
       smol-toml: 1.9.0
-      zod: 4.6.7
+      zod: 4.6.6
 
   '@radix-ui/primitive@1.0.0':
     dependencies:
@@ -19242,6 +19244,8 @@ snapshots:
       youch-core: 0.3.3
 
   zod@3.25.76: {}
+
+  zod@4.6.6: {}
 
   zod@4.6.7: {}
 
