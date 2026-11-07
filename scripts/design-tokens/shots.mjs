@@ -87,7 +87,7 @@ async function shoot() {
     try {
       // The board waits for a CDN stylesheet; holding it back keeps the loading screen, as the call-state captures do.
       if (job.stallBoard) await page.route(/\/chalk-whiteboard\//u, () => undefined);
-      await page.goto(job.url, { waitUntil: "load" });
+      await page.goto(job.url, { waitUntil: job.stallBoard ? "domcontentloaded" : "load" });
       // Web pages fill in after their data requests answer; a blank shot would compare equal to itself.
       if (!job.id.startsWith("state-")) await page.waitForFunction(() => document.body.innerText.trim().length > 40);
       await page.addStyleTag({ content: STILL });

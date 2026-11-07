@@ -81,12 +81,20 @@ const pages = {
   }),
 };
 
+const cues = [
+  { startMs: 0, endMs: 4000, text: "Thanks for joining. Let's start with the roadmap.", speaker: "Amira Khan" },
+  { startMs: 4000, endMs: 9000, text: "The recorder ships next week, and the transcript follows it.", speaker: "Noor Ali" },
+  { startMs: 9000, endMs: 13000, text: "Good. I will send the notes after the call.", speaker: "Amira Khan" },
+];
+
 export const DASHBOARD_PATHS = ["/dashboard", `/dashboard/call/${callId}`, `/dashboard/call/${callId}/session/${episodeId}`, "/dashboard/developer"];
 
 export async function installDashboardStubs(context) {
   await context.route("**/auth/session", (route) => route.fulfill({ json: { profile: { id: "u1", name: "Amira Khan", email: "amira@example.com", avatarUrl: null }, csrfToken: "fixture-csrf" } }));
   await context.route("**/dashboard-api/**", (route) => {
     const page = new URL(route.request().url()).pathname.split("/").at(-1);
+    // The past-session page loads its transcript with a POST action; the GET payload has no cues.
+    if (route.request().postDataJSON()?.action === "transcript-document") return route.fulfill({ json: { cues } });
     const build = pages[page];
     return build ? route.fulfill({ json: build() }) : route.fulfill({ status: 503, json: { error: { code: "engine_unavailable" } } });
   });
