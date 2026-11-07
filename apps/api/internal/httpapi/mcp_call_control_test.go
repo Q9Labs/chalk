@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -9,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
@@ -134,5 +137,64 @@ func TestMCPConnectionDoesNotListTheDerivedCallCredentialsPermission(t *testing.
 	body := response.Body.String()
 	if response.Code != http.StatusOK || !strings.Contains(body, "episodes:write") || strings.Contains(body, "episodes:credentials:issue") {
 		t.Fatalf("%d %s", response.Code, body)
+	}
+}
+
+// ownSFUGrantHandler serves an Episode bound to the own SFU, with the issuer and verifier the REST route uses.
+func ownSFUGrantHandler(t *testing.T, principal authentication.Principal, lifecycle EpisodeLifecycleService) (http.Handler, *chalkGrantPlane, accessgrants.Subject) {
+	t.Helper()
+	subject := participantMediaSubject(t)
+	subject.TenantID = principal.TenantID
+	repo := &refreshGrantRepository{current: synctokens.Input{TenantID: subject.TenantID, SpaceID: subject.SpaceID, EpisodeID: subject.EpisodeID, ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration}}
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := accessgrants.NewIssuer(accessgrants.IssuerConfig{Issuer: "chalk", KeyID: "key", PrivateKey: private})
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := accessgrants.NewVerifier(accessgrants.VerifierConfig{Issuer: "chalk", VerificationKeys: map[string]ed25519.PublicKey{"key": public}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := &chalkGrantPlane{recoveryGrantPlane{refreshGrantPlane{issuer: issuer}}}
+	active := accessgrants.NewActiveAuthorizer(repo)
+	return NewMCPHandler(Options{Episodes: lifecycle, SyncTokenRefresh: fixture, ParticipantMediaIssuer: fixture, ParticipantMediaVerify: verifier, ParticipantMediaActive: active, ParticipantGeneration: active, Spaces: fixture, Tenants: fixture, MediaPlane: fixture, TenantAuthz: authorization.NewTenantPolicy(nil, nil)}), fixture, subject
+}
+
+func TestMCPControlCallWorksOnOwnSFUEpisodes(t *testing.T) {
+	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
+	lifecycle := &admissionRecorder{}
+	handler, fixture, subject := ownSFUGrantHandler(t, writer, lifecycle)
+	base := `"space_id":"` + subject.SpaceID.String() + `","episode_id":"` + subject.EpisodeID.String() + `"`
+
+	admit := callControlCall(t, handler, writer, `{"action":"admit",`+base+`,"name":"Hana","role":"collaborator","request_key":"mcp-call-admit-0001"}`)
+	if lifecycle.admitted != 1 || strings.Contains(admit.Body.String(), "media.client_unsupported") {
+		t.Fatalf("admit into an own-SFU Episode: %d admissions, %s", lifecycle.admitted, admit.Body.String())
+	}
+
+	grant := callControlCall(t, handler, writer, `{"action":"access_grant",`+base+`,"participant_id":"`+subject.ParticipantID.String()+`","participant_generation":7,"replace_media_connection":true}`)
+	if fixture.created != 1 || strings.Contains(grant.Body.String(), "media.client_unsupported") {
+		t.Fatalf("access grant for an own-SFU Episode: %d joins, %s", fixture.created, grant.Body.String())
+	}
+}
+
+func TestMCPControlCallRejectsAnEmptyConnectionFence(t *testing.T) {
+	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
+	handler, fixture, subject := ownSFUGrantHandler(t, writer, &admissionRecorder{})
+	base := `{"action":"access_grant","space_id":"` + subject.SpaceID.String() + `","episode_id":"` + subject.EpisodeID.String() + `","participant_id":"` + subject.ParticipantID.String() + `","participant_generation":7`
+	for _, tail := range []string{
+		`,"replace_media_connection":true,"expected_media_connection_id":""}`,
+		`,"replace_media_connection":true,"expected_media_connection_id":"  "}`,
+		`,"replace_media_connection":false,"expected_media_connection_id":""}`,
+	} {
+		response := callControlCall(t, handler, writer, base+tail)
+		if !strings.Contains(response.Body.String(), `"isError":true`) {
+			t.Errorf("%s: an empty fence was accepted: %s", tail, response.Body.String())
+		}
+	}
+	if fixture.created != 0 {
+		t.Fatalf("an empty fence reserved %d own-SFU joins", fixture.created)
 	}
 }

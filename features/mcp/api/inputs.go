@@ -58,7 +58,7 @@ type CallInput struct {
 	ParticipantGeneration     int64           `json:"participant_generation,omitempty"`
 	CurrentMediaToken         string          `json:"current_media_token,omitempty"`
 	ReplaceMediaConnection    bool            `json:"replace_media_connection,omitempty"`
-	ExpectedMediaConnectionID string          `json:"expected_media_connection_id,omitempty"`
+	ExpectedMediaConnectionID *string         `json:"expected_media_connection_id,omitempty"`
 }
 type AdmissionDecisionInput struct {
 	SpaceID       string `json:"space_id"`
