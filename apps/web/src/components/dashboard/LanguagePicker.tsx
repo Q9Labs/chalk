@@ -224,7 +224,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        {query ? (
+        {query && rows.length ? (
           <button
             type="button"
             className="ib"

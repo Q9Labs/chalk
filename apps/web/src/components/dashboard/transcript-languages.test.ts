@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { whisperLanguageCodes } from "@chalk/transcript-language";
