@@ -126,7 +126,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cards=$(ls artifacts/nightly/scorecard-*.json 2> /dev/null || true)
+          cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
           if [ -z "$cards" ]; then
             echo "No nightly scorecard in this run."
             exit 0

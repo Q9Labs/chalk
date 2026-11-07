@@ -215,7 +215,7 @@ jobs:
         if: always() && inputs.environment == 'nightly'
         run: |
           # The scorecard holds timings only, so unlike the evidence it is not encrypted. The nightly run appends it to the history.
-          leave=$(ls .private/prod-proof/*-leave/leave-comparison.json 2> /dev/null | head -n 1 || true)
+          leave=$(find .private/prod-proof -path "*-leave/leave-comparison.json" -print -quit 2> /dev/null || true)
           if [ -z "$leave" ]; then
             echo "No Leave proof result in this run; no scorecard."
             exit 0
