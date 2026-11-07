@@ -781,6 +781,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollAfterCurrent = false;
     this.#clearPoll();
     this.#remotePullRetries.clear();
+    this.#setPhase("recovering", null);
     this.#disposeConnection(false);
     for (const publication of this.#ownedPublications) this.#markPublicationRetiring(publication);
     void this.#retireOwnedPublications();
@@ -1726,6 +1727,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#connectionEpoch++;
     this.#clearPoll();
     this.#polling = false;
+    this.#setPhase("recovering", null);
     this.#disposeConnection(false);
     this.#setFailure(error, "media_failed");
   }
@@ -1945,6 +1947,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       this.#fenceLocalPublications();
       const connectionEpoch = ++this.#connectionEpoch;
+      // A connection that never negotiated carried nothing, so swapping it is no recovery. Saying "recovering" would
+      // move the whole call to reconnecting and cut off any other enable that is running.
+      if (cause !== "dormant_connection") this.#setPhase("recovering", null);
       this.#disposeConnection(false);
       this.#clearRemoteTracks();
       this.#cursor = null;
@@ -2005,7 +2010,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #disposeConnection(stopSenders: boolean): void {
     this.#receiveHealth.replaced();
     this.#receiveProgress.replaced();
-    if (!stopSenders) this.#setPhase("recovering", null);
     this.#disposeConnectionObservation?.();
     this.#disposeConnectionObservation = undefined;
     if (stopSenders) {
