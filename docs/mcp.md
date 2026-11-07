@@ -258,3 +258,13 @@ The most expensive tools are `chalk_configure_webhook` (813 tokens),
 Chalk sets no `alwaysLoad`. With tool search on, the agent finds
 `chalk_get_connection` and the `inspect` tools by name, so the four-view
 `inspect` design costs one search step per area, not one per list or get.
+
+## Production check
+
+The `MCP production check` workflow runs every six hours and after each production
+Promote. It sends an unauthenticated request (expects 401 with OAuth discovery),
+then uses the proof Tenant's API key for `initialize`, the tool list and
+`chalk_list_spaces`, which the proof key's scopes allow. Run it by hand with
+`scripts/mcp-proof/check.mjs`; it reads `CHALK_PROOF_API_URL` and `CHALK_PROOF_API_KEY`.
+Set the environment variable `CHALK_MCP_EXPECT_OAUTH` to `false` for an environment
+where OAuth is off.
