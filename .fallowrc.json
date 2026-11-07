@@ -140,6 +140,7 @@
     "ignore": [
       "scripts/gates/**",
       "scripts/dev/**",
+      "scripts/design-tokens/**",
       "scratchpad/**",
       "apps/web/src/routeTree.gen.ts",
       "apps/web/src/routes/_space.tsx",
@@ -175,6 +176,7 @@
       "**/*.test.tsx",
       "scripts/gates/**",
       "scripts/dev/**",
+      "scripts/design-tokens/**",
       "scripts/open-mobile-dev-simulators.mjs",
       "scripts/performance/space-experience/**",
       "scripts/recorder/**",
