@@ -181,7 +181,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	}
 	transcriptRepo := NewTranscriptRepositoryWithPool(q, pool)
 	storage := objectstorage.NewService(mcpDownloadStore{key: objectKey})
-	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
+	options := httpapi.Options{APIKeys: keys, APIKeyAuthentication: keys, TenantAuthz: authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)), Tenants: tenantService, Memberships: memberships.NewService(NewMembershipRepository(q, pool)), Spaces: spaceService, Episodes: episodes.NewService(episodeRepo), PublicInvites: inviteRuntime, RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(pool), spaceService), Recordings: recordings.NewService(NewRecordingRepository(q)), RecordingExports: recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)), RecordingDownloads: storage, RecordingObjects: storage, TranscriptArtifacts: transcripts.NewArtifactService(transcriptRepo, transcriptRepo), TranscriptTextMetadata: NewTranscriptTextRepository(q), Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions()}
 	options.RateLimit.DisableAuthenticated = true
 	options.LocalSystemToken = "mcp-system-fixture"
 	options.MCP = httpapi.NewMCPHandler(options)
@@ -242,6 +242,28 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 				}
 			}
 		})
+	}
+	// Every view of a multi-view read tool needs its own scope and fields. The
+	// transcript fixture has no artifact, so reading its content must refuse as not ready.
+	for _, view := range []mcpToolCase{
+		{"inspect_tenant", `{"view":"settings"}`, ""},
+		{"inspect_tenant", `{"view":"memberships"}`, ""},
+		{"inspect_tenant", `{"view":"api_keys"}`, ""},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"metadata","transcript_id":%q}`, transcriptID), ""},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"text","transcript_id":%q}`, transcriptID), "not_ready"},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"document","transcript_id":%q}`, transcriptID), "not_ready"},
+		{"inspect_transcripts", fmt.Sprintf(`{"view":"download_url","transcript_id":%q,"expires_in_seconds":60}`, transcriptID), "not_ready"},
+	} {
+		result := callMCP(t, fullSession, view.name, view.args)
+		if view.wantError == "" && result.IsError || view.wantError != "" && (!result.IsError || !strings.Contains(mcpText(result), view.wantError)) {
+			t.Fatalf("%s %s: error=%v %s", view.name, view.args, result.IsError, mcpText(result))
+		}
+	}
+	settings := mcpText(callMCP(t, fullSession, "inspect_tenant", `{}`))
+	for _, field := range []string{"cors_allowed_origins", "recording_retention_seconds", "default_media_plane", "transcription_default_mode"} {
+		if !strings.Contains(settings, field) {
+			t.Fatalf("tenant settings view lacks %s: %s", field, settings)
+		}
 	}
 	// Exhaust the public HTTP write budget with invalid bodies, then prove MCP
 	// cannot evade that same per-key bucket. Read tools must remain usable.
