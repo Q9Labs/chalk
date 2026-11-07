@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
@@ -141,7 +142,7 @@ type Adapter struct {
 	endpoint          string
 	client            httpClient
 	forcedCloseClient httpClient
-	captureReplay     *captureReplayRegistry
+	captureReplay     *captureplane.ReplayCache
 	sessions          *sessionRegistry
 	turn              *TurnCredentials
 }
@@ -259,7 +260,7 @@ func newAdapter(cfg config.CloudflareRealtimeConfig, transport *http.Transport) 
 		endpoint:          endpoint,
 		client:            &http.Client{Transport: transport, Timeout: cfg.RequestTimeout},
 		forcedCloseClient: &http.Client{Transport: transport, Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
-		captureReplay:     newCaptureReplayRegistry(),
+		captureReplay:     captureplane.NewReplayCache(captureReplayCapacity),
 		sessions:          sessionRegistryForApp(appID),
 	}, nil
 }

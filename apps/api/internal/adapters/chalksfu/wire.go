@@ -36,6 +36,9 @@ type wireTrack struct {
 type wireCreateRequest struct {
 	OperationID string    `json:"operationId"`
 	Scope       wireScope `json:"scope"`
+	// Kind is "capture" for a recorder's receive-only session. A node that does not
+	// know the field refuses the request, so it is sent only for captures.
+	Kind string `json:"kind,omitempty"`
 }
 
 type wireCreateResponse struct {
@@ -96,6 +99,10 @@ type wireClosedTrack struct {
 type wireCloseResponse struct {
 	Tracks             []wireClosedTrack `json:"tracks"`
 	SessionDescription *wireDescription  `json:"sessionDescription,omitempty"`
+}
+
+type wireRemoveRequest struct {
+	Scope wireScope `json:"scope"`
 }
 
 type wireEndRequest struct {
