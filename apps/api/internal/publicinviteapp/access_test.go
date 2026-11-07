@@ -132,6 +132,20 @@ type accessFixture struct {
 	// managedTenant owns the anonymous public Spaces; it differs from tenant
 	// unless a test says the arrival is an anonymous public Space guest.
 	managedTenant utilities.ID
+	// provider is the Episode's bound media provider; it defaults to Cloudflare.
+	provider mediaplane.Provider
+	issued   *mediaIssuerStub
+	joins    *publicJoinStub
+}
+
+// newChalkFixture is an admitted arrival on an Episode bound to the own SFU.
+func newChalkFixture(t *testing.T) *accessFixture {
+	t.Helper()
+	fixture := newAccessFixture(t)
+	fixture.provider = mediaplane.ProviderChalkSFU
+	fixture.arrival.Provider = publicinvites.PublicProviderChalkSFU
+	fixture.recovery.subject.Provider = accessgrants.ProviderChalkSFU
+	return fixture
 }
 
 func newAccessFixture(t *testing.T) *accessFixture {
@@ -147,31 +161,40 @@ func newAccessFixture(t *testing.T) *accessFixture {
 		arrival: publicinvites.Arrival{TenantID: tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, ParticipantGeneration: 7, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "old-provider", IdentityMode: publicinvites.IdentityGuest, DisplayName: "Trace Guest", State: publicinvites.ArrivalAdmitted},
 		result:  result, plane: &mediaPlaneStub{}, recovery: &proofVerifierStub{subject: proofSubject},
 		managedTenant: mustID(t, "55555555-5555-4555-8555-555555555555"),
+		provider:      mediaplane.ProviderCloudflareSFU,
+		issued:        &mediaIssuerStub{},
+		joins:         &publicJoinStub{result: result},
 	}
 }
 
 func (f *accessFixture) config() publicinviteapp.AccessConfig {
-	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f.plane)
+	f.plane.provider = f.provider
+	f.joins.result = f.result
+	service := mediaplane.NewServiceForProvider(f.provider, f.plane)
 	return publicinviteapp.AccessConfig{
 		ManagedTenantID: f.managedTenant,
-		Episodes:        publicJoinStub{result: f.result}, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
+		Episodes:        f.joins, Spaces: publicSpaceStub{tenantID: f.tenant, spaceID: f.space}, Tenants: publicTenantStub{id: f.tenant},
 		MediaResolver: mediaResolverStub{service: &service},
-		SyncTokens:    syncIssuerStub{}, MediaTokens: mediaIssuerStub{}, MediaProofRecovery: f.recovery,
+		SyncTokens:    syncIssuerStub{}, MediaTokens: f.issued, MediaProofRecovery: f.recovery,
 	}
 }
 
-type publicJoinStub struct{ result episodes.PublicJoinResult }
+type publicJoinStub struct {
+	result     episodes.PublicJoinResult
+	joinClient mediaplane.ClientProviders
+}
 
-func (s publicJoinStub) JoinPublic(context.Context, episodes.PublicJoinInput) (episodes.PublicJoinResult, error) {
+func (s *publicJoinStub) JoinPublic(_ context.Context, input episodes.PublicJoinInput) (episodes.PublicJoinResult, error) {
+	s.joinClient = input.MediaClients
 	return s.result, nil
 }
-func (s publicJoinStub) FindPublic(context.Context, episodes.PublicAccessInput) (episodes.PublicJoinResult, error) {
+func (s *publicJoinStub) FindPublic(context.Context, episodes.PublicAccessInput) (episodes.PublicJoinResult, error) {
 	return s.result, nil
 }
-func (s publicJoinStub) LeavePublic(context.Context, episodes.PublicLeaveInput) (episodes.PublicLeaveResult, error) {
+func (s *publicJoinStub) LeavePublic(context.Context, episodes.PublicLeaveInput) (episodes.PublicLeaveResult, error) {
 	return episodes.PublicLeaveResult{}, nil
 }
-func (s publicJoinStub) WaitPublicParticipantReady(context.Context, episodes.PublicParticipantKey) (episodes.PublicJoinResult, error) {
+func (s *publicJoinStub) WaitPublicParticipantReady(context.Context, episodes.PublicParticipantKey) (episodes.PublicJoinResult, error) {
 	return s.result, nil
 }
 
@@ -199,9 +222,10 @@ func (syncIssuerStub) IssueForParticipant(context.Context, synctokens.SubjectKey
 	return synctokens.Token{Value: "sync-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 
-type mediaIssuerStub struct{}
+type mediaIssuerStub struct{ subject accessgrants.Subject }
 
-func (mediaIssuerStub) Issue(context.Context, accessgrants.Subject) (accessgrants.MediaCredential, error) {
+func (s *mediaIssuerStub) Issue(_ context.Context, subject accessgrants.Subject) (accessgrants.MediaCredential, error) {
+	s.subject = subject
 	return accessgrants.MediaCredential{Token: "media-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 
@@ -215,6 +239,7 @@ func (s *proofVerifierStub) VerifyForRecovery(context.Context, string) (accessgr
 }
 
 type mediaPlaneStub struct {
+	provider              mediaplane.Provider
 	resumeCalls           int
 	createCalls           int
 	removeCalls           int
@@ -226,7 +251,19 @@ func (p *mediaPlaneStub) EnsureEpisode(_ context.Context, input mediaplane.Ensur
 }
 func (p *mediaPlaneStub) CreateJoin(_ context.Context, input mediaplane.CreateJoinInput) (mediaplane.Join, error) {
 	p.createCalls++
-	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ParticipantRef: "new-provider", ClientPayload: map[string]any{"connectionId": "new-provider", "stunServer": "stun:test", "iceServers": relayServers(input.AllowRelay)}}, nil
+	return p.join("new-provider", input.AllowRelay), nil
+}
+
+// join builds the payload the provider's adapter builds: Cloudflare names a STUN
+// server, the own SFU an Episode reference and its capabilities.
+func (p *mediaPlaneStub) join(connection string, allowRelay bool) mediaplane.Join {
+	if p.provider == mediaplane.ProviderChalkSFU {
+		return mediaplane.Join{Provider: p.provider, ParticipantRef: connection, ClientPayload: map[string]any{
+			"connectionId": connection, "provider": "chalk_sfu", "episodeRef": "episode-ref", "iceServers": relayServers(allowRelay),
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": false},
+		}}
+	}
+	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ParticipantRef: connection, ClientPayload: map[string]any{"connectionId": connection, "stunServer": "stun:test", "iceServers": relayServers(allowRelay)}}
 }
 
 // relayServers mirrors the Cloudflare adapter: TURN only when relay is allowed.
@@ -240,7 +277,7 @@ func relayServers(allowRelay bool) []mediaplane.ICEServer {
 
 func (p *mediaPlaneStub) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	p.resumeCalls++
-	return mediaplane.Join{Provider: input.Provider, ParticipantRef: input.ConnectionRef, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:test", "iceServers": relayServers(input.AllowRelay)}}, nil
+	return p.join(input.ConnectionRef, input.AllowRelay), nil
 }
 
 func (p *mediaPlaneStub) RemoveParticipant(_ context.Context, input mediaplane.RemoveParticipantInput) error {
@@ -339,5 +376,128 @@ func TestLegacyKnockAllocationCarriesArrivalProvenance(t *testing.T) {
 	_, err = access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: pending, RequireKnock: true})
 	if !errors.Is(err, publicinvites.ErrArrivalUnavailable) || lookup.arrival != pending.ArrivalHandle || fixture.plane.createCalls != 0 {
 		t.Fatalf("legacy allocation bypassed provenance: arrival=%s media_creates=%d err=%v", lookup.arrival, fixture.plane.createCalls, err)
+	}
+}
+
+func TestOwnSFUEpisodeGivesANewClientTheOwnSFUPayload(t *testing.T) {
+	fixture := newChalkFixture(t)
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clients := mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu")
+
+	grant, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaClients: clients})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := grant.ClientPayload
+	if grant.Provider != "chalk_sfu" || payload.ConnectionID != fixture.arrival.ProviderSubject || payload.EpisodeRef != "episode-ref" || payload.StunServer != "" {
+		t.Fatalf("grant = %q %+v, want the own SFU payload on the arrival's connection", grant.Provider, payload)
+	}
+	if got := payload.Capabilities; !got.ServerLayerAdaptation || !got.SubscriptionState || got.ICERestart {
+		t.Fatalf("capabilities = %+v, want the flags the adapter sent", got)
+	}
+	if got := fixture.issued.subject; got.Provider != accessgrants.ProviderChalkSFU || got.ConnectionID != fixture.arrival.ProviderSubject || got.ProviderSubject != "" {
+		t.Fatalf("media proof subject = %+v, want it bound to the own SFU connection", got)
+	}
+}
+
+func TestOwnSFUEpisodeRefusesAClientThatCannotRunItBeforeAnyProviderWork(t *testing.T) {
+	for _, clients := range []mediaplane.ClientProviders{{}, mediaplane.ParseClientProviders("cloudflare_sfu")} {
+		fixture := newChalkFixture(t)
+		access, err := publicinviteapp.NewAccessPort(fixture.config())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaClients: clients})
+
+		if !errors.Is(err, mediaplane.ErrClientUnsupported) {
+			t.Fatalf("error = %v, want ErrClientUnsupported", err)
+		}
+		if fixture.plane.createCalls != 0 || fixture.plane.resumeCalls != 0 || fixture.issued.subject.Provider != "" {
+			t.Fatalf("a refused client must not touch the provider or get a media proof")
+		}
+	}
+}
+
+func TestCloudflareEpisodeStillServesAClientThatDeclaresNothing(t *testing.T) {
+	fixture := newAccessFixture(t)
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	grant, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if grant.Provider != "cloudflare_sfu" || grant.ClientPayload.StunServer != "stun:test" || grant.ClientPayload.EpisodeRef != "" {
+		t.Fatalf("grant = %q %+v, want the Cloudflare payload", grant.Provider, grant.ClientPayload)
+	}
+}
+
+func TestOwnSFURefreshKeepsTheConnectionAndReplacementIssuesANewOne(t *testing.T) {
+	clients := mediaplane.ParseClientProviders("chalk_sfu")
+	fixture := newChalkFixture(t)
+	config := fixture.config()
+	config.MediaProof = fixture.recovery
+	access, err := publicinviteapp.NewAccessPort(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refreshed, err := access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", MediaClients: clients})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", ReplaceMediaConnection: true, MediaClients: clients})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if refreshed.ProviderSubject != fixture.arrival.ProviderSubject {
+		t.Fatalf("refresh moved the connection to %q", refreshed.ProviderSubject)
+	}
+	if replaced.ProviderSubject != "new-provider" || replaced.ClientPayload.EpisodeRef != "episode-ref" {
+		t.Fatalf("replacement = %q %+v, want a new own SFU connection", replaced.ProviderSubject, replaced.ClientPayload)
+	}
+}
+
+func TestOwnSFURefreshRejectsAProofForAnotherProvider(t *testing.T) {
+	fixture := newChalkFixture(t)
+	fixture.recovery.subject.Provider = accessgrants.ProviderCloudflareSFU
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaProof: "proof", ReplaceMediaConnection: true, MediaClients: mediaplane.ParseClientProviders("chalk_sfu")})
+
+	if !errors.Is(err, publicinvites.ErrMediaProofRejected) {
+		t.Fatalf("error = %v, want the proof rejected", err)
+	}
+}
+
+func TestFirstJoinCarriesTheGuestsProvidersToEpisodeCreation(t *testing.T) {
+	fixture := newChalkFixture(t)
+	fixture.arrival.State = publicinvites.ArrivalPending
+	fixture.arrival.ProviderSubject = ""
+	fixture.arrival.Provider = ""
+	access, err := publicinviteapp.NewAccessPort(fixture.config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clients := mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu")
+
+	if _, err := access.GrantPublicAccess(context.Background(), publicinvites.PublicAccessInput{Arrival: fixture.arrival, MediaClients: clients}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !fixture.joins.joinClient.Runs(mediaplane.ProviderChalkSFU) {
+		t.Fatalf("JoinPublic did not get the guest's declared providers")
 	}
 }

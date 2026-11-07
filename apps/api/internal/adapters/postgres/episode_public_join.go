@@ -49,7 +49,7 @@ func (r EpisodeLifecycleRepository) JoinPublic(ctx context.Context, input episod
 			return episodes.ErrAdmissionClosed
 		}
 
-		episode, created, metric, err := r.ensurePublicLiveEpisode(ctx, queries, tx, input.TenantID, input.SpaceID, space)
+		episode, created, metric, err := r.ensurePublicLiveEpisode(ctx, queries, tx, input.TenantID, input.SpaceID, space, input.MediaClients)
 		if err != nil {
 			return err
 		}
@@ -329,7 +329,7 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 	return result, err
 }
 
-func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space) (sqlc.Episode, bool, webhookCommitMetric, error) {
+func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, tenantID, spaceID utilities.ID, space sqlc.Space, clients mediaplane.ClientProviders) (sqlc.Episode, bool, webhookCommitMetric, error) {
 	// Read the ID without locking the Episode, then follow Sync's order:
 	// control before Episode. The caller's Space lock serializes creation.
 	candidate, err := queries.GetLiveEpisodeForPublicJoin(ctx, sqlc.GetLiveEpisodeForPublicJoinParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
@@ -358,9 +358,7 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 	if err != nil {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode Artifact policy: %w", err)
 	}
-	// Public access runs Cloudflare only, so a public arrival never binds the
-	// own SFU.
-	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, tenantID, space, mediaplane.ClientProviders{})
+	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, tenantID, space, clients)
 	if err != nil {
 		return sqlc.Episode{}, false, webhookCommitMetric{}, fmt.Errorf("resolve public Episode media binding: %w", err)
 	}
