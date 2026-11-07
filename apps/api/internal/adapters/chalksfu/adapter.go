@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
@@ -56,6 +57,7 @@ type Adapter struct {
 	iceServers    []mediaplane.ICEServer
 	relay         RelaySource
 	backoff       time.Duration
+	captureReplay *captureplane.ReplayCache
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -136,6 +138,7 @@ func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFU
 		applicationID: config.ApplicationID,
 		iceServers:    iceServersOf(config.STUNURLs),
 		backoff:       retryBackoff,
+		captureReplay: captureplane.NewReplayCache(captureReplayCapacity),
 	}, nil
 }
 
@@ -243,6 +246,9 @@ func (a *Adapter) send(ctx context.Context, endpoint string, body []byte) (int, 
 	return reply.StatusCode, payload, err
 }
 
+// errStaleGeneration means the SFU holds a newer generation of the session's scope.
+var errStaleGeneration = errors.New("sfu session generation is stale")
+
 // classify turns an SFU error reply into the port's errors. A gone session is
 // the one case callers act on: it means the connection no longer exists.
 func classify(status int, payload []byte) error {
@@ -254,6 +260,8 @@ func classify(status int, payload []byte) error {
 		return fmt.Errorf("%w: sfu %s", mediaplane.ErrConnectionNotFound, code)
 	case status == http.StatusBadRequest:
 		return fmt.Errorf("%w: sfu %s", mediaplane.ErrInvalidSignalRequest, code)
+	case code == "stale_generation":
+		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, errStaleGeneration, code)
 	case status == http.StatusTooManyRequests:
 		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, mediaplane.ErrProviderRateLimited, code)
 	case status == http.StatusForbidden:
