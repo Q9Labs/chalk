@@ -189,6 +189,7 @@ func run() error {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
 	}
+	ownCapture := chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
@@ -295,7 +296,7 @@ func run() error {
 		captureRegistrations := []captureproviders.Registration{{
 			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
 		}}
-		if chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled {
+		if ownCapture {
 			ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, chalkSFU.ApplicationID())
 			if err != nil {
 				return fmt.Errorf("configure own SFU recording identity: %w", err)
@@ -407,12 +408,12 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool).WithOwnCapture(ownCapture))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
 		recordingEntrance = postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission)
-		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService)
+		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService).WithOwnCapture(ownCapture)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)

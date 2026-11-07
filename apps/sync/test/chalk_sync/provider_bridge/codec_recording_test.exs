@@ -18,6 +18,18 @@ defmodule ChalkSync.ProviderBridge.CodecRecordingTest do
              Codec.decode_operation_response(payload, @operation_id, @request_payload)
   end
 
+  test "preserves the capture-unsupported reason" do
+    payload = %{
+      "operation_id" => @operation_id,
+      "effect" => "recording.start",
+      "outcome" => "terminal_failure",
+      "reason" => "recording_capture_unsupported"
+    }
+
+    assert {:ok, {:terminal_failure, :recording_capture_unsupported}} =
+             Codec.decode_operation_response(payload, @operation_id, @request_payload)
+  end
+
   test "rejects a non-string optional reason" do
     payload = %{
       "operation_id" => @operation_id,

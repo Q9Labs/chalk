@@ -19,10 +19,18 @@ type Service struct {
 	repository Repository
 	spaces     SpaceReader
 	now        func() time.Time
+	ownCapture bool
 }
 
 func NewService(repository Repository, spaces SpaceReader) Service {
 	return Service{repository: repository, spaces: spaces, now: time.Now}
+}
+
+// WithOwnCapture says the recorder can reach the own SFU's nodes, so a Space that selects it can
+// schedule a recording.
+func (s Service) WithOwnCapture(enabled bool) Service {
+	s.ownCapture = enabled
+	return s
 }
 
 func (s Service) Prepare(ctx context.Context, input Input) (Preparation, error) {
@@ -34,8 +42,8 @@ func (s Service) Prepare(ctx context.Context, input Input) (Preparation, error) 
 	if err != nil {
 		return Preparation{}, err
 	}
-	// The own SFU has no capture path yet, so a Space that selects it cannot schedule one.
-	if space.ArchivedAt != nil || space.RecordingPolicy == artifactpolicy.RecordingDisabled || space.MediaPlane == string(spaces.MediaPlaneProviderChalkSFU) {
+	ownWithoutCapture := space.MediaPlane == string(spaces.MediaPlaneProviderChalkSFU) && !s.ownCapture
+	if space.ArchivedAt != nil || space.RecordingPolicy == artifactpolicy.RecordingDisabled || ownWithoutCapture {
 		return Preparation{}, ErrPolicyDenied
 	}
 	input.StartsAt = input.StartsAt.UTC().Truncate(time.Microsecond)
