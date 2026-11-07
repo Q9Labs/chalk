@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only smoke and camera-share
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -44,7 +44,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only smoke and camera-share
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share
         type: string
         default: cf_sfu
       release_sha:
@@ -178,9 +178,9 @@ jobs:
               all|smoke|camera-share|recording-rejoin|export|transcript|leave) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
-            # Recording, export and transcripts need Cloudflare, so the own SFU proves the call alone.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != smoke ] && [ "$proof" != camera-share ]; then
-              echo "chalk_sfu supports only smoke and camera-share" >&2
+            # Recording, export and transcripts need Cloudflare, and smoke includes an export, so the own SFU proves the call alone.
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ]; then
+              echo "chalk_sfu supports only camera-share" >&2
               exit 1
             fi
           done
