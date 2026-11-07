@@ -151,13 +151,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     reopen.push(open);
   }
   const ready = () =>
-    waitFor("two live camera and voice publishers", async () => {
+    waitFor(`${guestCount} live camera and voice publishers`, async () => {
       for (const page of pages) {
-        const live = await page.evaluate(() => {
+        const live = await page.evaluate((count) => {
           const snapshot = window.proofClient.getSnapshot();
-          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === 2, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
+          const readiness = [snapshot.connection.status === "live", snapshot.participants.roster.length === count, snapshot.media.local.microphone.state === "enabled", snapshot.media.local.camera.state === "enabled"];
           return readiness.every(Boolean) && snapshot.media.remote.some((entry) => entry.track.readyState === "live");
-        });
+        }, guestCount);
         if (!live) return false;
       }
       return true;
@@ -171,6 +171,18 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         await waitForCredentialRefresh(run, refreshes, ready);
       } finally {
         await Promise.all(networks.map((network, guest) => save(`${run.directory}/guest-${guest + 1}-network.json`, network)));
+      }
+    },
+    // rejoinAll drops every transport together, reopens every page, then checks shared readiness once, so a page
+    // that is still closed never fails another's readiness check.
+    rejoinAll: async () => {
+      await Promise.all(close.map((closePage) => closePage()));
+      await run.wait(2000);
+      for (let guest = 0; guest < reopen.length; guest++) pages[guest] = await reopen[guest](true);
+      await ready();
+      for (let guest = 0; guest < pages.length; guest++) {
+        const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
+        check(participant === participants[guest], "Rejoin changed participant identity");
       }
     },
     rejoin: async (guest) => {
@@ -341,7 +353,10 @@ export async function proveLayers(run, { before, after, limited = false, receive
   else {
     for (let guest = 0; guest < after.length; guest++) {
       const layers = movingLayers(before[guest], after[guest]);
-      check(new Set(layers.map((row) => row.rid)).size === 3, "Stats did not prove three live simulcast encodings");
+      // Cloudflare makes every simulcast encoding live. The own SFU asks a publisher only for the layers someone views.
+      const live = new Set(layers.map((row) => row.rid)).size;
+      if (mediaPlane === "chalk_sfu") check(live >= 1, "Stats did not prove a live simulcast encoding");
+      else check(live === 3, "Stats did not prove three live simulcast encodings");
     }
   }
   return moving;

@@ -47,7 +47,7 @@ export function installFixture({ speech, guest, tones = false }) {
     let frame = 0;
     const backgrounds = { before: ["#1b365d", "#613c69"], after: ["#185d45", "#69461d"] };
     window.proofCameraTimer = setInterval(() => {
-      context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest];
+      context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest % 2];
       context.fillRect(0, 0, 1280, 720);
       context.fillStyle = "white";
       context.font = "64px sans-serif";
@@ -64,7 +64,7 @@ export function installFixture({ speech, guest, tones = false }) {
   }
   function toneTrack(context) {
     const source = context.createOscillator();
-    source.frequency.value = [440, 880][guest];
+    source.frequency.value = 440 * (guest + 1);
     const gain = context.createGain();
     gain.gain.value = 0.15;
     const destination = context.createMediaStreamDestination();
