@@ -66,19 +66,21 @@ async function microphoneState(page) {
   return page.evaluate(() => window.proofClient.getSnapshot().media.local.microphone.state);
 }
 
-async function openCall(run, receiver) {
+// openCall records the Episode's owner in `owned` before any guest launches, so a failed setup can still end it.
+async function openCall(run, receiver, owned) {
   const space = process.env.CHALK_CANARY_SPACE_ID ? await run.apiRequest("GET", `${run.tenantPath}/spaces/${process.env.CHALK_CANARY_SPACE_ID}`) : await createSpace(run);
   check(space.media_plane === mediaPlane, `Space uses ${space.media_plane}, not ${mediaPlane}`);
   await save(`${run.directory}/space.json`, space);
   const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId } });
+  owned.path = `${episodePath}/${episode.id}`;
+  owned.ending = episodeEnd(run, owned.path);
   await save(`${run.directory}/episode.json`, episode);
-  const ending = episodeEnd(run, `${episodePath}/${episode.id}`);
   let startedAt = performance.now();
   // A join starts when the first guest calls the SDK join, not when its browser launches.
   const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 0 && (startedAt = at) });
-  ending.useSDK(guests.pages[0]);
-  return { ...ending, guests, startedAt };
+  owned.ending.useSDK(guests.pages[0]);
+  return { guests, startedAt };
 }
 
 async function faultRound(pages, muted) {
@@ -101,22 +103,42 @@ async function faultRound(pages, muted) {
   return recovered;
 }
 
+// endEpisode ends the trial's Episode through the SDK, then through the owner API. A reused Space is outside
+// the run-wide cleanup, so a failure here is returned and fails the trial.
+async function endEpisode(run, owned) {
+  if (!owned.ending) return undefined;
+  try {
+    await owned.ending.end();
+    return undefined;
+  } catch {
+    try {
+      await episodeEnd(run, owned.path).end();
+      return undefined;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  }
+}
+
 async function trial(run, receiver, fault) {
   const mark = run.resources.length;
-  let call;
+  const owned = {};
+  let result;
   try {
-    call = await openCall(run, receiver);
+    const call = await openCall(run, receiver, owned);
     const { pages } = call.guests;
     const joinMs = await rendersWithin(pages, call.startedAt, joinLimitMs, "join");
-    if (!fault) return { ms: joinMs };
-    const recoveries = [await faultRound(pages, false), await faultRound(pages, true)];
-    return { ms: Math.max(...recoveries), joinMs, recoveries };
+    if (!fault) result = { ms: joinMs };
+    else {
+      const recoveries = [await faultRound(pages, false), await faultRound(pages, true)];
+      result = { ms: Math.max(...recoveries), joinMs, recoveries };
+    }
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
-  } finally {
-    if (call) await call.end().catch(() => {});
-    for (const resource of run.resources.splice(mark)) await resource.dispose().catch(() => {});
+    result = { error: error instanceof Error ? error.message : String(error) };
   }
+  const teardownError = await endEpisode(run, owned);
+  for (const resource of run.resources.splice(mark)) await resource.dispose().catch(() => {});
+  return teardownError === undefined ? result : { error: result.error ?? `The trial's Episode did not end: ${teardownError}` };
 }
 
 // The muted client sends no audio, so the other client's audio must reach it and video must reach both.
