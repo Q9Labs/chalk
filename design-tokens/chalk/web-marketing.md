@@ -1,6 +1,6 @@
 # Chalk design tokens: web-marketing
 
-16 screens compared, 8 identical, 8 changed. Each strip is before | after | changed pixels in red.
+8 screens compared, 0 identical, 8 changed. Each strip is before | after | changed pixels in red.
 
 | Screen | Changed pixels |
 | --- | ---: |
@@ -12,14 +12,6 @@
 | web-home-desktop-light | 965563 |
 | web-home-phone-dark | 3260479 |
 | web-home-phone-light | 1392612 |
-| web-privacy-desktop-dark | 0 |
-| web-privacy-desktop-light | 0 |
-| web-privacy-phone-dark | 0 |
-| web-privacy-phone-light | 0 |
-| web-terms-desktop-dark | 0 |
-| web-terms-desktop-light | 0 |
-| web-terms-phone-dark | 0 |
-| web-terms-phone-light | 0 |
 
 ![sheet 71](sheets/sheet-71.png)
 

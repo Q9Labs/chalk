@@ -1,4 +1,4 @@
-compared 235 screens: 15 identical, 220 changed
+compared 235 screens: 7 identical, 228 changed
 only before: 0, only after: 0
 36214 dash-dashboard-call-id-desktop-dark
 36214 dash-dashboard-call-id-desktop-light
@@ -227,11 +227,11 @@ only before: 0, only after: 0
 965563 web-home-desktop-light (size changed)
 3260479 web-home-phone-dark (size changed)
 1392612 web-home-phone-light (size changed)
-0 web-privacy-desktop-dark
-0 web-privacy-desktop-light
-0 web-privacy-phone-dark
-0 web-privacy-phone-light
-0 web-terms-desktop-dark
-0 web-terms-desktop-light
-0 web-terms-phone-dark
-0 web-terms-phone-light
+1834426 web-privacy-desktop-dark (size changed)
+1834426 web-privacy-desktop-light (size changed)
+895554 web-privacy-phone-dark (size changed)
+895554 web-privacy-phone-light (size changed)
+573480 web-terms-desktop-dark (size changed)
+573480 web-terms-desktop-light (size changed)
+286039 web-terms-phone-dark (size changed)
+286039 web-terms-phone-light (size changed)
