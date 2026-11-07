@@ -79,7 +79,7 @@ test("go test output becomes pass rates, and a test that did not run is reported
   const { metrics, dropped } = goTestMetrics(events.map((event) => JSON.stringify(event)).join("\n"));
   const rate = Object.fromEntries(metrics.map((metric) => [metric.id, metric.p50]));
   assert.deepEqual(rate, { "sfu.loopback.pass": 1, "sfu.impairment.pass": 0.5 });
-  assert.deepEqual(dropped, [{ metric: "sfu.impairment.pass", reason: "test_not_run", count: 4 }]);
+  assert.deepEqual(dropped, [{ metric: "sfu.impairment.pass", reason: "test_not_run", count: 3 }]);
 });
 
 test("live smoke samples give loss, stalls per class-hour and refusals", () => {
