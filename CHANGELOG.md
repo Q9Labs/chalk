@@ -2,9 +2,16 @@
 
 ## Unreleased
 
+## 5.5.0
+
 - Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md).
 - Download clean UTF-8 transcript text from the dashboard and the public `GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text` route. Existing JSON transcript API routes remain available.
 - Add an account transcript language default and an inheritable Space override. Fixed languages pin Whisper; Auto keeps unpinned Whisper until a code-switching provider is qualified. Record the resolved mode on jobs and transcript documents.
+- Support Chalk's own SFU as a media provider next to Cloudflare. Spaces still use Cloudflare unless the deployment enables the own SFU for them; older SDKs stay on Cloudflare.
+- Restart ICE in place on the own SFU after a network change before replacing the session, and hold video that the SFU pauses for network reasons.
+- Tell Sync when a join starts with media on, so the own SFU forwards it from the first packet.
+- Pull remote video only for tiles that are on screen, and cancel size-only viewer downgrades that a tile growing makes obsolete.
+- Advance the seven synchronized Chalk SDK packages to 5.5.0.
 
 ## 5.4.1
 
