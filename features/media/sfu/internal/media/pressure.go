@@ -51,10 +51,10 @@ func (p *hostPressure) controlTick(now int64) (from int64, stalled bool) {
 		p.stalls++
 		p.longestStall = max(p.longestStall, time.Duration(now-last))
 	}
-	// Pressure is counted by the tick that finds it on, for the whole span since
-	// the last tick, so a stall counts in full and no span counts twice.
-	if p.active(now) {
-		p.underFor += time.Duration(now - last)
+	// Each tick counts the part of the span since the last tick that the current
+	// run covers, so a stall counts in full up to the cap and no span counts twice.
+	if on := min(now, p.until, p.since+int64(pressureMax)) - max(last, p.since); on > 0 {
+		p.underFor += time.Duration(on)
 	}
 	if !stalled {
 		return 0, false

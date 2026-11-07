@@ -318,6 +318,9 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 				cappedAt, backedOff = since, false
 			} else {
 				person.link.shape(0, 0, 0, 0, 0)
+				if !backedOff {
+					t.Errorf("%s was lifted from the %d kbit/s cap before it backed off", person.name, load.capKbps)
+				}
 				backedOff = true
 				t.Logf("capped: %s downlink lifted at %s", person.name, time.Now().Format(time.TimeOnly))
 			}
@@ -325,6 +328,10 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 		}
 		var inspected protocol.InspectResponse
 		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
+			if !backedOff && time.Since(started)-cappedAt > load.capWithin {
+				backedOff = true
+				t.Errorf("%s could not be inspected for %v after the %d kbit/s cap: %v", person.name, load.capWithin, load.capKbps, err)
+			}
 			continue
 		}
 		forwarded := map[string]int{}
@@ -336,13 +343,14 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 		transport := inspected.Transport
 		if !backedOff {
 			since := time.Since(started) - cappedAt
+			fell := forwarded["h"] == 0 && float64(transport.EstimateBps) <= 2*float64(load.capKbps)*1000
 			switch {
-			case forwarded["h"] == 0 && float64(transport.EstimateBps) <= 2*float64(load.capKbps)*1000:
-				backedOff = true
-				t.Logf("capped: %s backed off %v after the cap: estimate %d, forwarding %v", person.name, since.Round(time.Second), transport.EstimateBps, forwarded)
 			case since > load.capWithin:
 				backedOff = true
-				t.Errorf("%s did not back off within %v of the %d kbit/s cap: estimate %d, forwarding %v", person.name, load.capWithin, load.capKbps, transport.EstimateBps, forwarded)
+				t.Errorf("%s did not back off within %v of the %d kbit/s cap (backed off by %v: %t): estimate %d, forwarding %v", person.name, load.capWithin, load.capKbps, since.Round(time.Second), fell, transport.EstimateBps, forwarded)
+			case fell:
+				backedOff = true
+				t.Logf("capped: %s backed off %v after the cap: estimate %d, forwarding %v", person.name, since.Round(time.Second), transport.EstimateBps, forwarded)
 			}
 		}
 		t.Logf("capped: +%v %s estimate %d proven %d queued %d dropped %d forwarding %v", time.Since(started).Round(time.Second), person.name, transport.EstimateBps, transport.ProvenBps, transport.QueuedBytes, transport.Dropped, forwarded)

@@ -89,6 +89,23 @@ func TestAStealSampleThatBeginsBeforeAnActiveStallStillCountsItsWholeSpan(t *tes
 	}
 }
 
+func TestAStallLongerThanTheCapCountsTheCapAndNoMore(t *testing.T) {
+	var p hostPressure
+	tickThrough(&p, 0, time.Second, 0)
+	p.controlTick(at(time.Second + 12*time.Second)) // the loop was gone for 12 s
+	if got := p.underFor; got != pressureMax {
+		t.Fatalf("a 12 s stall counted %v, want the cap %v", got, pressureMax)
+	}
+	// Steal while the loop is gone does not count past the cap either.
+	var q hostPressure
+	tickThrough(&q, 0, time.Second, 0)
+	q.stealSample(at(5*time.Second), 20)
+	q.controlTick(at(time.Second + 12*time.Second))
+	if got := q.underFor; got > pressureMax {
+		t.Fatalf("a stall with steal inside it counted %v, want no more than the cap %v", got, pressureMax)
+	}
+}
+
 func TestTwoOverlappingSignsOfPressureCountTheOverlapOnce(t *testing.T) {
 	var p hostPressure
 	tickThrough(&p, 0, time.Second, 0)
