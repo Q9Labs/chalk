@@ -234,7 +234,7 @@ async function auth(request, response, path, url) {
   if (path === "/auth/start") {
     const provider = url.searchParams.get("provider");
     const returnTo = url.searchParams.get("returnTo") ?? "/dashboard";
-    if (!["google", "apple"].includes(provider) || !/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?$/.test(returnTo)) return fail(response, 400, "invalid_request");
+    if (!["google", "apple"].includes(provider) || !/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/.test(returnTo)) return fail(response, 400, "invalid_request");
     await wait(600);
     if (state.signInError) {
       response.writeHead(303, { Location: `/dashboard/sign-in?failed=${provider}` }).end();

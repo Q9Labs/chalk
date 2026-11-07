@@ -135,7 +135,8 @@ export function ConnectPage({ request }: { readonly request: string }) {
       <p>{clientName} wants to use your Chalk account.</p>
       {profile ? (
         <p className="cwho">
-          Signed in as <b>{profile.email}</b> · {tenantName}
+          Signed in as <b>{profile.email}</b>
+          {tenantName ? ` · ${tenantName}` : null}
           <button type="button" disabled={busy !== null} onClick={() => void switchAccount()}>
             Switch account
           </button>

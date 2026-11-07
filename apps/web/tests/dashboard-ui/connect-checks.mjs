@@ -19,6 +19,10 @@ export async function connectChecks({ open, check }) {
       check("read request has no access choice", (await tab.getByRole("button", { name: "Read and change" }).count()) === 0);
       check("consent names the signed-in account and tenant", await tab.getByText("hasan@q9labs.ai").isVisible() && (await tab.locator(".cwho").innerText()).includes("Hasan Shoaib"));
       check("consent offers to switch account", await tab.getByRole("button", { name: "Switch account" }).isVisible());
+      await tab.getByRole("button", { name: "Switch account" }).click();
+      await tab.getByRole("button", { name: "Continue with Google" }).click();
+      await tab.getByRole("heading", { name: "Connect Claude to Chalk" }).waitFor();
+      check("switching accounts signs in again and returns to the same request", tab.url().endsWith(`/dashboard/connect?request=${handle("claude", "read")}`));
       check("consent page leaves out the dashboard frame", (await tab.locator(".topb").count()) === 0);
     } finally {
       await context.close();
