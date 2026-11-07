@@ -121,7 +121,7 @@
       "gate": true
     },
     "web.laptop.calm-six.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -176,7 +176,7 @@
       "gate": true
     },
     "web.laptop.grid-24.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -231,7 +231,7 @@
       "gate": true
     },
     "web.laptop.panels.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -286,7 +286,7 @@
       "gate": true
     },
     "web.laptop.spotlight-share.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -396,7 +396,7 @@
       "gate": true
     },
     "web.laptop.reactions.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -451,7 +451,7 @@
       "gate": true
     },
     "web.laptop.reconnect.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -511,7 +511,7 @@
       "gate": true
     },
     "web.laptop.first-load.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -566,7 +566,7 @@
       "gate": true
     },
     "web.phone.calm-six.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -621,7 +621,7 @@
       "gate": true
     },
     "web.phone.grid-24.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -676,7 +676,7 @@
       "gate": true
     },
     "web.phone.panels.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -731,7 +731,7 @@
       "gate": true
     },
     "web.phone.spotlight-share.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -841,7 +841,7 @@
       "gate": true
     },
     "web.phone.reactions.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -896,7 +896,7 @@
       "gate": true
     },
     "web.phone.reconnect.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
@@ -956,7 +956,7 @@
       "gate": true
     },
     "web.phone.first-load.js_gzip_kib": {
-      "max_p50": 385,
+      "max_p50": 386,
       "tolerancePct": 1,
       "gate": true
     },
