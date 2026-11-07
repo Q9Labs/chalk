@@ -92,6 +92,7 @@ const (
 	ChalkSFUSTUNURLs       = "CHALK_SFU_STUN_URLS"
 	ChalkSFUAllowedSpaces  = "CHALK_SFU_ALLOWED_SPACES"
 	DefaultMediaPlane      = "CHALK_DEFAULT_MEDIA_PLANE"
+	NewSpaceMediaPlane     = "CHALK_NEW_SPACE_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -315,6 +316,9 @@ type Config struct {
 	CloudflareRealtime CloudflareRealtimeConfig
 	ChalkSFU           ChalkSFUConfig
 	DefaultMediaPlane  spaces.MediaPlaneProvider
+	// NewSpaceMediaPlane is the plane a Create Space request gets when it omits
+	// media_plane. It is empty when new Spaces use DefaultMediaPlane.
+	NewSpaceMediaPlane spaces.MediaPlaneProvider
 	Database           DatabaseConfig
 	DeadlineScheduler  DeadlineSchedulerConfig
 
@@ -524,6 +528,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	newSpaceMediaPlane, err := loadNewSpaceMediaPlane(chalkSFU)
+	if err != nil {
+		return Config{}, err
+	}
 	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
@@ -591,6 +599,7 @@ func Load() (Config, error) {
 		CloudflareRealtime:              cloudflareRealtime,
 		ChalkSFU:                        chalkSFU,
 		DefaultMediaPlane:               defaultMediaPlane,
+		NewSpaceMediaPlane:              newSpaceMediaPlane,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,
@@ -640,6 +649,23 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	}
 	if provider != spaces.MediaPlaneProviderCloudflareSFU {
 		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	}
+	return provider, nil
+}
+
+// loadNewSpaceMediaPlane reads the plane new Spaces get. A new Space has a random
+// ID that no allowlist can name in advance, so the own SFU needs every Space allowed.
+func loadNewSpaceMediaPlane(chalkSFU ChalkSFUConfig) (spaces.MediaPlaneProvider, error) {
+	value, ok := os.LookupEnv(NewSpaceMediaPlane)
+	if !ok || strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+	provider, err := spaces.ParseMediaPlaneProvider(value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", NewSpaceMediaPlane, err)
+	}
+	if provider == spaces.MediaPlaneProviderChalkSFU && (!chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1) {
+		return "", fmt.Errorf("%s=%s requires %s=true and %s=*", NewSpaceMediaPlane, provider, ChalkSFUEnabled, ChalkSFUAllowedSpaces)
 	}
 	return provider, nil
 }

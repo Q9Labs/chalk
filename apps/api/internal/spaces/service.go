@@ -142,9 +142,10 @@ type FilteredRepository interface {
 }
 
 type Service struct {
-	repository        Repository
-	defaultMediaPlane MediaPlaneProvider
-	chalkSFUAllowed   ChalkSFUAllowlist
+	repository         Repository
+	defaultMediaPlane  MediaPlaneProvider
+	newSpaceMediaPlane MediaPlaneProvider
+	chalkSFUAllowed    ChalkSFUAllowlist
 }
 
 type CreateSpaceInput struct {
@@ -241,6 +242,24 @@ func (s Service) WithChalkSFUAllowlist(allowed ChalkSFUAllowlist) Service {
 	return s
 }
 
+// WithNewSpaceMediaPlane sets the plane a Create Space request gets when it omits
+// media_plane. It replaces the deployment default for new Spaces only: Spaces and
+// Tenants that store no plane keep resolving to the deployment default.
+func (s Service) WithNewSpaceMediaPlane(provider MediaPlaneProvider) Service {
+	s.newSpaceMediaPlane = provider
+	return s
+}
+
+func (s Service) planeForNewSpace() (MediaPlaneProvider, error) {
+	if s.newSpaceMediaPlane != "" {
+		return s.newSpaceMediaPlane, nil
+	}
+	if s.defaultMediaPlane != "" && s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
+		return "", ErrInvalidMediaPlane
+	}
+	return s.defaultMediaPlane, nil
+}
+
 func (s Service) selectable(provider string, spaceID utilities.ID) bool {
 	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUAllowed.Allows(spaceID)
 }
@@ -251,11 +270,12 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 		return Space{}, err
 	}
 	input.ID = id
-	if !input.MediaPlaneSet && input.MediaPlane == "" && s.defaultMediaPlane != "" {
-		if s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
-			return Space{}, ErrInvalidMediaPlane
+	if !input.MediaPlaneSet && input.MediaPlane == "" {
+		plane, err := s.planeForNewSpace()
+		if err != nil {
+			return Space{}, err
 		}
-		input.MediaPlane = string(s.defaultMediaPlane)
+		input.MediaPlane = string(plane)
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
 		return Space{}, err

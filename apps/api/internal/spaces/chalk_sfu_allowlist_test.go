@@ -55,3 +55,23 @@ func TestOnlyAllowlistedSpacesSelectTheOwnSFU(t *testing.T) {
 		t.Fatal("a service with no allowlist refuses chalk_sfu")
 	}
 }
+
+func TestNewSpacesGetTheNewSpacePlane(t *testing.T) {
+	cases := []struct {
+		name    string
+		service Service
+		want    MediaPlaneProvider
+		wantErr error
+	}{
+		{"no default", Service{}, "", nil},
+		{"deployment default", NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU), MediaPlaneProviderCloudflareSFU, nil},
+		{"new Space plane replaces the default", NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithNewSpaceMediaPlane(MediaPlaneProviderChalkSFU), MediaPlaneProviderChalkSFU, nil},
+		{"own SFU deployment default is refused", NewServiceWithDefaultProvider(nil, MediaPlaneProviderChalkSFU), "", ErrInvalidMediaPlane},
+	}
+	for _, c := range cases {
+		got, err := c.service.planeForNewSpace()
+		if got != c.want || err != c.wantErr {
+			t.Errorf("%s: got %q, %v; want %q, %v", c.name, got, err, c.want, c.wantErr)
+		}
+	}
+}
