@@ -301,7 +301,7 @@ func (s *sfu) fleetOf(t *testing.T, clientCA *authority, identity string, nodes 
 	t.Helper()
 	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
 	fleet, err := chalksfu.NewFleet(runtimeconfig.ChalkSFUConfig{
-		Enabled: true, ApplicationID: "conformance-pool", Nodes: nodes, ServerName: "localhost",
+		Enabled: true, ApplicationID: "conformance-pool", Nodes: nodes, ServerName: "localhost", STUNURLs: []string{"stun:stun.example:3478"},
 		CAFile: write(t, s.dir, "trust.pem", s.ca.pem), ClientCertFile: write(t, s.dir, fmt.Sprintf("client-%d.pem", serial.Add(1)), certPEM),
 		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second,
 	}, nil)

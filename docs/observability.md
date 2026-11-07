@@ -239,6 +239,14 @@ When the API cannot mint Cloudflare TURN credentials it logs
 no credential, and the join continues with STUN only. A sustained stream of this
 event means clients behind strict networks cannot connect.
 
+The own SFU does the same: it logs `chalk_sfu.turn_credentials_failed` with the
+node and the Episode id, and the join continues with STUN only. Each failure also
+adds one to the API metric `chalk.sfu.turn_mint_failures`, whose only attribute is
+`chalk.media_plane.provider`; it carries no Episode id, so its cardinality stays
+fixed. Search the log for the Episode id to find the affected class. Any value
+above zero over a few minutes means clients on UDP-blocked networks cannot
+connect media.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
