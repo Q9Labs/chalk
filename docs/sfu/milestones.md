@@ -268,7 +268,7 @@ workload, supported admission envelope and unsupported raw worst case.
 Record actual ingress/egress/repair packets, admitted reservations, forwarded
 sources, rendered resolution, CPU, steal, GC, scheduler/pacer delay, peak RSS and
 transfer. Keep the initial 16,000/32,000 budgets unless complete measurements
-justify a reviewed calibration; never silently change units or use M8/M9 savings
+justify a reviewed calibration ([current calibration](capacity-calibration.md)); never silently change units or use M8/M9 savings
 to hide missing baseline capacity. Require below 70% total RAM, no growing
 buffers, no receive-buffer drops, bounded repair/queues and no unexplained media
 loss. Repeat in evening-to-night Pakistan/Dubai windows and report the spread.
