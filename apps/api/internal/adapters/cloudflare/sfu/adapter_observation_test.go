@@ -142,7 +142,7 @@ func TestForcedCloseStaleConnectionConverges(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			response, err := adapter.CloseTracks(context.Background(), mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: "abandoned-connection", Force: true, Tracks: []mediaplane.CloseTrack{{Mid: "0"}}})
+			response, err := adapter.CloseTracks(context.Background(), mediaplane.CloseTracksRequest{Provider: mediaplane.ProviderCloudflareSFU, ConnectionID: "abandoned-connection-" + tc.name, Force: true, Tracks: []mediaplane.CloseTrack{{Mid: "0"}}})
 			if tc.satisfied && (err != nil || !response.AlreadyClosed) {
 				t.Fatalf("stale close must converge: %v", err)
 			}
