@@ -7,14 +7,15 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 func TestRequireClientRunsBinding(t *testing.T) {
-	own, err := mediaplane.NewBinding("chalk_sfu", mediaplane.BindingSourceDeploymentDefault, "app")
+	own, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, "app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloudflare, err := mediaplane.NewBinding("cloudflare_sfu", mediaplane.BindingSourceDeploymentDefault, "app")
+	cloudflare, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, "app")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,6 +35,7 @@ func TestRequireClientRunsBinding(t *testing.T) {
 		{"own SFU Episode, declaring client", snapshot(&own), mediaplane.ParseClientProviders("chalk_sfu"), nil},
 		{"own SFU Episode, silent client", snapshot(&own), mediaplane.ClientProviders{}, mediaplane.ErrClientUnsupported},
 		{"Cloudflare Episode, silent client", snapshot(&cloudflare), mediaplane.ClientProviders{}, nil},
+		{"Cloudflare Episode, declaring client", snapshot(&cloudflare), mediaplane.ParseClientProviders("cloudflare_sfu,chalk_sfu"), nil},
 		{"Episode without media", snapshot(nil), mediaplane.ClientProviders{}, nil},
 		{"Episode from before bindings", []byte(`{}`), mediaplane.ClientProviders{}, nil},
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -393,14 +394,16 @@ func (r EpisodeLifecycleRepository) ensurePublicLiveEpisode(ctx context.Context,
 }
 
 // requireClientRunsBinding returns mediaplane.ErrClientUnsupported when the
-// Episode is bound to a provider the caller's SDK cannot run. An Episode with no
-// binding, or one that predates bindings, is Cloudflare or has no media.
+// Episode is bound to the own SFU and the caller's SDK cannot run it. Bindings
+// name providers in the Space vocabulary, and every SDK runs Cloudflare, so only
+// an own-SFU binding can refuse. An Episode with no binding, or one that predates
+// bindings, is Cloudflare or has no media.
 func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.ClientProviders) error {
 	binding, _, err := episode.MediaPlaneBinding()
 	if err != nil {
 		return err
 	}
-	if binding != nil && !clients.Runs(mediaplane.Provider(binding.Provider)) {
+	if binding != nil && spaces.MediaPlaneProvider(binding.Provider) == spaces.MediaPlaneProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
 		return mediaplane.ErrClientUnsupported
 	}
 	return nil
