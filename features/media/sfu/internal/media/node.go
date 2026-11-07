@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"math"
 	"net"
-	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -364,11 +363,8 @@ func (n *Node) Host() protocol.HostState {
 		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
 		UDPReceiveBufferBytes: n.receiveBuffer,
 		UDPSendBufferBytes:    n.sendBuffer,
-		Goroutines:            runtime.NumGoroutine(),
 	}
-	var memory runtime.MemStats
-	runtime.ReadMemStats(&memory)
-	state.HeapInuseBytes = memory.HeapInuse
+	state.Goroutines, state.HeapInuseBytes = readRuntime()
 	if rss, known := readRSS(rssPath); known {
 		state.RSSBytes = &rss
 	}
