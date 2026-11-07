@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -26,7 +27,7 @@ func TestCancelPendingAdmissionDiscardsRacingGrant(t *testing.T) {
 	}
 	completed := make(chan outcome, 1)
 	go func() {
-		result, _, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival, func() error { return nil })
+		result, _, err := runtime.resolvePendingAdmission(context.Background(), PublicSpace{}, arrival, mediaplane.ClientProviders{}, func() error { return nil })
 		completed <- outcome{result, err}
 	}()
 	<-access.started
