@@ -69,4 +69,4 @@ The device lane writes one file per run, with one entry per scenario and one run
 
 ## The pull request tier
 
-`pr-tier.sh` runs inside the existing Gate jobs and adds no job of its own. The `build` group scores the call bundle sizes and the `checks` group scores the SFU loopback and impairment tests, the latter only when the SFU gate lane ran. Each compares with the scorecard of the latest successful master push run (the `scorecard-web` and `scorecard-sfu` artifacts), writes the table to the run summary and updates its section of one sticky pull request comment.
+`pr-tier.sh` runs inside the existing Gate jobs and adds no job of its own. The `build` group scores the call bundle sizes and the `checks` group scores the SFU loopback and impairment tests, the latter only when the SFU gate lane ran. Each compares with the scorecard of the latest landed master change, which is the latest successful merge queue Gate run that has one (the `scorecard-web` and `scorecard-sfu` artifacts; master pushes run no Gate), writes the table to the run summary and updates its section of one sticky pull request comment.
