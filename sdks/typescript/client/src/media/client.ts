@@ -154,6 +154,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #retirement: Promise<void> = Promise.resolve();
   #snapshot: CloudflareSFUSnapshot;
   #started = false;
+  // The epoch of the last connection that went live; a pull that times out on any other one never connected.
+  #connectedEpoch = -1;
   #receivingInitial = false;
   #stopped = false;
   #transport: CloudflareSFUSignalingTransport | undefined;
@@ -1492,7 +1494,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         }
         await this.#completeRenegotiation(response, connection, connectionId, generation);
         if (matched.length === 0) return [];
-        await this.#waitForConnection(connection, generation);
+        await this.#waitForConnection(connection, generation).catch((error: unknown) => {
+          // A connection that never went live is not a transient pull error: report it so the call recovers or fails.
+          if (this.#connectedEpoch !== this.#connectionEpoch && generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
+          throw error;
+        });
         this.#negotiatedGeneration = generation;
         await (() => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5000))();
         this.#requireGeneration(generation);
@@ -1798,6 +1804,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const observe = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
+      if (connectionIsLive(connection)) this.#connectedEpoch = connectionEpoch;
       const observation = this.#observeIceRecovery(connection, connectionEpoch, observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started));
       if (observation) this.#publishSnapshot(observation.phase, observation.failure);
       else this.#publishSnapshot();

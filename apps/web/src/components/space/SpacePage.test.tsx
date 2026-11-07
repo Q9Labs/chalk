@@ -174,7 +174,7 @@ describe("public Space entry", () => {
   // the terminal route must replace it with safe guidance and the real code.
   it.each([
     ["connection.sync_hello_timeout", "The call service did not respond in time. Try again.", "Sync did not become live before the startup deadline"],
-    ["connection.media_start_failed", "Audio and video could not connect. Try again.", "Private transport details"],
+    ["connection.media_start_failed", "Audio and video could not connect. Your network may block calls. Try again, or switch networks.", "Private transport details"],
   ])("keeps %s when the host replaces the call screen", async (code, guidance, message) => {
     const view = await enterInvite();
     const snapshot = mocks.client.getSnapshot();
