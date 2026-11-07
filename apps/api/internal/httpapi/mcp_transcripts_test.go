@@ -15,7 +15,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -167,9 +169,20 @@ func TestMCPRequestTranscriptKeepsTheTraceCarrier(t *testing.T) {
 	}
 }
 
+type tenantProfileStub struct{ TenantService }
+
+func (tenantProfileStub) GetTenant(_ context.Context, id utilities.ID) (tenants.Tenant, error) {
+	return tenants.Tenant{ID: id, Name: "Profile"}, nil
+}
+
 func TestMCPConnectionDoesNotListTheDerivedSettingsPermission(t *testing.T) {
 	key := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeTenantsRead)
-	response := scopeTestCall(t, &key, toolCallBody("chalk_get_connection", `{}`))
+	handler := NewMCPHandler(Options{Tenants: tenantProfileStub{}, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(toolCallBody("chalk_get_connection", `{}`)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request.WithContext(authentication.ContextWithPrincipal(request.Context(), key)))
 	body := response.Body.String()
 	if response.Code != http.StatusOK || !strings.Contains(body, "tenants:read") || strings.Contains(body, "tenants:settings:read") {
 		t.Fatalf("%d %s", response.Code, body)
