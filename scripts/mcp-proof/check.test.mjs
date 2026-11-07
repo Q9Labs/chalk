@@ -16,13 +16,43 @@ function discovery(url, origin) {
   return undefined;
 }
 
-function answer(message, { toolStatus }) {
+// Tool names the hosted server lists today (features/mcp/api/catalog.go). chalk_list_spaces is gone since #879,
+// which is why the nightly check failed with 20 tools and no chalk_list_spaces.
+const listedTools = [
+  "chalk_get_connection",
+  "chalk_inspect_tenant",
+  "chalk_update_tenant",
+  "chalk_set_membership",
+  "chalk_issue_api_key",
+  "chalk_revoke_api_key",
+  "chalk_configure_webhook",
+  "chalk_send_webhook",
+  "chalk_inspect_webhooks",
+  "chalk_inspect_spaces",
+  "chalk_inspect_episodes",
+  "chalk_inspect_recordings",
+  "chalk_create_space",
+  "chalk_configure_space",
+  "chalk_set_space_archived",
+  "chalk_prepare_recording",
+  "chalk_create_episode",
+  "chalk_end_episode",
+  "chalk_set_episode_deadline",
+  "chalk_decide_admission_request",
+  "chalk_remove_participant",
+  "chalk_export_recording",
+  "chalk_delete_transcript",
+  "chalk_inspect_transcripts",
+  "chalk_request_transcript",
+].map((name) => ({ name }));
+
+function answer(message, { toolStatus, tools }) {
   if (message.method === "initialize") return [200, { jsonrpc: "2.0", id: message.id, result: { serverInfo: { name: "chalk" } } }];
-  if (message.method === "tools/list") return [200, { jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "chalk_inspect_spaces" }] } }];
+  if (message.method === "tools/list") return [200, { jsonrpc: "2.0", id: message.id, result: { tools } }];
   return [toolStatus, { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "[]" }] } }];
 }
 
-function startServer({ routes = true, oauth = true, toolStatus = 200 } = {}) {
+function startServer({ routes = true, oauth = true, toolStatus = 200, tools = listedTools } = {}) {
   const server = createServer((req, res) => {
     const origin = `http://${req.headers.host}`;
     if (!routes) return reply(res, 404, { error: { code: "route.not_found" } });
@@ -35,7 +65,7 @@ function startServer({ routes = true, oauth = true, toolStatus = 200 } = {}) {
         const challenge = oauth ? { "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"` } : {};
         return reply(res, 401, { error: { code: "auth.unauthenticated" } }, challenge);
       }
-      const [status, payload] = answer(JSON.parse(body), { toolStatus });
+      const [status, payload] = answer(JSON.parse(body), { toolStatus, tools });
       reply(res, status, payload);
     });
   });
@@ -84,6 +114,16 @@ test("a rejected API key fails at initialize", async () => {
   const { server, url } = await startServer();
   try {
     await assert.rejects(checkMcp({ apiUrl: url, apiKey: "wrong", expectOAuth: true }), /initialize/);
+  } finally {
+    server.close();
+  }
+});
+
+test("a tool list without chalk_inspect_spaces fails at tools/list", async () => {
+  const tools = listedTools.filter((tool) => tool.name !== "chalk_inspect_spaces");
+  const { server, url } = await startServer({ tools });
+  try {
+    await assert.rejects(checkMcp({ apiUrl: url, apiKey: "key", expectOAuth: true }), /tools\/list.*chalk_inspect_spaces/);
   } finally {
     server.close();
   }
