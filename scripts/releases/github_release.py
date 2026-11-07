@@ -182,24 +182,27 @@ class GitHub:
 
     def latest_gate(self, sha, *, push_only=False):
         # A merge queue group runs the Gate on a temporary gh-readonly-queue branch and then fast-forwards master to that
-        # exact commit, so its run counts as the Gate of the commit that landed. Pull request runs never count.
+        # exact commit, so its run counts as the Gate of the commit that landed. A group that passed but never landed
+        # (a later group failed, or the entry was removed) is not on master and counts for nothing. Pull request runs
+        # never count.
         runs = self.pages(f'actions/workflows/gate.yml/runs?head_sha={sha}', 'workflow_runs')
         events = ('push', 'merge_group') if push_only else ('push', 'merge_group', 'schedule', 'workflow_dispatch')
         runs = [run for run in runs if run['head_sha'] == sha and run['event'] in events and gate_branch_is_master(run)]
+        if any(run['event'] == 'merge_group' for run in runs) and not self.is_on_master(sha):
+            runs = [run for run in runs if run['event'] != 'merge_group']
         return max(runs, key=lambda run: (int(run['run_number']), int(run['run_attempt'])), default=None)
 
     def newest_green_push_gate(self):
         # Merge queue groups and, before the queue, pushes to master supersede each other, so the newest commit may never
         # get a Gate. The newest commit that did is the nightly candidate; waiting for the tip's Gate would hold the plan
-        # behind the queue.
-        base = 'actions/workflows/gate.yml/runs?status=success&per_page=30'
+        # behind the queue. Walking master's own history finds it however many unlanded groups ran in between.
+        base = 'actions/workflows/gate.yml/runs?status=success&per_page=100'
         runs = (self.request(f'{base}&branch=master&event=push')['workflow_runs']
                 + self.request(f'{base}&event=merge_group')['workflow_runs'])
-        for run in sorted(runs, key=lambda run: run.get('created_at', ''), reverse=True):
-            if run['event'] == 'merge_group' and not self.is_on_master(run['head_sha']):
-                continue
-            if self.has_green_gate(run['head_sha'], push_only=True):
-                return run['head_sha']
+        green = {run['head_sha'] for run in runs}
+        for commit in self.request('commits?sha=master&per_page=100'):
+            if commit['sha'] in green and self.has_green_gate(commit['sha'], push_only=True):
+                return commit['sha']
         return None
 
     def is_on_master(self, sha):
