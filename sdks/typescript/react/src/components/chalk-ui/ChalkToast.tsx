@@ -12,11 +12,9 @@ export interface ChalkToastProps {
   readonly action?: { readonly label: string; readonly onClick: () => void };
   /** Enables live announcements. Pass false for an already-announced notice; a replacement message can enable the same mounted toast later. */
   readonly announce?: boolean;
-  /** Support detail for bug reports and proof artifacts. Exposed as `data-detail`, never shown. */
-  readonly detail?: string;
   readonly onDismiss: () => void;
 }
-export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, action, icon, announce = true, detail, onDismiss }: ChalkToastProps) {
+export function ChalkToast({ message, announcementKey, announcementText, type = "info", duration = type === "info" || type === "success" ? 5000 : Infinity, action, icon, announce = true, onDismiss }: ChalkToastProps) {
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   const identity = noticeIdentity({ message, announcementText, announcementKey, type });
@@ -36,16 +34,7 @@ export function ChalkToast({ message, announcementKey, announcementText, type = 
     return () => clearTimeout(timer);
   }, [exiting, identity]);
   return (
-    <div
-      data-part="toast"
-      data-type={type}
-      data-exiting={exiting || undefined}
-      data-detail={detail}
-      className="chalk-toast"
-      role={announce ? (type === "error" ? "alert" : "status") : undefined}
-      aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined}
-      aria-atomic={announce || undefined}
-    >
+    <div data-part="toast" data-type={type} data-exiting={exiting || undefined} className="chalk-toast" role={announce ? (type === "error" ? "alert" : "status") : undefined} aria-live={announce ? (type === "error" ? "assertive" : "polite") : undefined} aria-atomic={announce || undefined}>
       <span data-part="toast-icon" aria-hidden="true">
         {icon}
       </span>

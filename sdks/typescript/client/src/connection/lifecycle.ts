@@ -1278,15 +1278,15 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           enqueue(
             Effect.gen(function* () {
               const ports = portsFor(model);
-              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected (runCommand.not_live)."));
+              if (!active(model) || !ports || ports.sync.getSnapshot().connection.phase !== "live") return yield* Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
               return ports;
             }),
           ).pipe(
             Effect.flatMap((ports) =>
               withFreshAccess(() =>
                 Effect.suspend<A, E | ConnectionLifecycleFailure, never>(() => {
-                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected (runCommand.superseded)."));
-                  return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection (runCommand.finished_inactive)")))));
+                  if (!active(model) || ports.sync !== model.sync) return Effect.fail(lifecycleFailure("invalid_state", true, "Connection interrupted. Try again when reconnected."));
+                  return operation(ports).pipe(Effect.flatMap((value) => (active(model) && ports.sync === model.sync ? Effect.succeed(value) : Effect.fail(lifecycleFailure("invalid_state", true, "The command belongs to an inactive Connection")))));
                 }),
               ),
             ),

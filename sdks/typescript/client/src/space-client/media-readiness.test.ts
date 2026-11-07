@@ -172,7 +172,7 @@ describe("media readiness", () => {
       platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "failed", peerConnectionState: "failed", iceConnectionState: "failed" }, failure: { code: "signaling_failed", recoverable: true } });
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
       finishCommand();
-      expect(await result).toMatchObject({ code: "connection.invalid_state", message: expect.stringMatching(/\((?:waitForLive|assertCurrentIntent|assertActivePorts|runCommand\.\w+)\)/) });
+      expect(await result).toMatchObject({ code: "connection.invalid_state" });
       expect(track.stop).toHaveBeenCalled();
     } finally {
       finishCommand();

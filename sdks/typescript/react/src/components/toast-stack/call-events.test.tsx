@@ -2,7 +2,6 @@ import type { Participant, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 import { createSnapshot } from "../../test-support";
-import { ChalkToast } from "../chalk-ui/ChalkToast";
 import { callEventToasts, mediaFailureToast } from "./call-events";
 
 function live(): SpaceSnapshot {
@@ -74,13 +73,6 @@ it.each(["client.internal_error", "connection.invalid_state"] as const)("does no
   expect(text).not.toContain("setCameraEnabled");
   expect(text).toBe(code === "connection.invalid_state" ? "That change was interrupted. Try again." : "Couldn’t change your camera settings. Try again.");
   expect(text).not.toMatch(/reconnect|start/);
-});
-
-it("keeps the failure code and message off the screen but on the toast for bug reports", () => {
-  const toast = mediaFailureToast({ code: "connection.invalid_state", recoverable: true, message: "setCameraEnabled belongs to an inactive connection (assertActivePorts)" }, "camera");
-  if (!toast) throw new Error("expected a toast");
-  expect(toast.detail).toBe("connection.invalid_state: setCameraEnabled belongs to an inactive connection (assertActivePorts)");
-  expect(renderToStaticMarkup(<ChalkToast {...toast} onDismiss={() => {}} />)).toContain('data-detail="connection.invalid_state: setCameraEnabled belongs to an inactive connection (assertActivePorts)"');
 });
 
 it.each(["client.internal_error", "connection.invalid_state"] as const)("preserves non-media command guidance for %s", (code) => {
