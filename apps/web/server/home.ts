@@ -53,7 +53,15 @@ export async function homeMutation(engine: Engine, action: HomeAction) {
       engine.api.spaces.createSpace({
         params,
         headers: { "Idempotency-Key": action.idempotencyKey },
-        payload: { name: action.name ?? "New call", slug: `call-${action.idempotencyKey}`, admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" }, default_episode_duration_seconds: 3600, maximum_episode_duration_seconds: 86400, linger_window_seconds: 60 },
+        payload: {
+          ...(action.transcriptLanguage ? { transcript_language: action.transcriptLanguage } : {}),
+          name: action.name ?? "New call",
+          slug: `call-${action.idempotencyKey}`,
+          admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" },
+          default_episode_duration_seconds: 3600,
+          maximum_episode_duration_seconds: 86400,
+          linger_window_seconds: 60,
+        },
       }),
     );
     return { call: callDTO(space) };
