@@ -50,7 +50,7 @@ export function EmbedSection() {
           <p className="sub">
             <code className="ic">&lt;Chalk /&gt;</code> renders the whole call: the entrance, the stage, chat, the board and the controls. Your server creates each person’s access, so you decide who gets in.
           </p>
-          <div style={{ marginTop: 32 }}>
+          <div style={{ marginTop: "var(--space-8)" }}>
             <CodeBlock
               label="Embed code"
               tabs={[
