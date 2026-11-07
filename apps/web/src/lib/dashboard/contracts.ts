@@ -38,7 +38,7 @@ export const connectQuery = z.strictObject({ request: consentHandle });
 export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
 export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });
 export const homeAction = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("create-call"), name: name.optional(), admission, idempotencyKey }),
+  z.strictObject({ action: z.literal("create-call"), name: name.optional(), admission, transcriptLanguage: transcriptLanguage.optional(), idempotencyKey }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
   z.strictObject({ action: z.literal("set-transcript-language"), spaceId: id, transcriptLanguage: transcriptLanguage.nullable() }),
   z.strictObject({ action: z.literal("set-admission"), spaceId: id, admission }),
