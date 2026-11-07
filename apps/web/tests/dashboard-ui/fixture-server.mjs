@@ -344,7 +344,7 @@ async function dashboard(request, response, page, url, entry) {
       const [, , app = "", asked = "read"] = (query.request ?? "").split("_");
       const host = CONNECT_APPS[app];
       if (!host) return fail(response, 404, "not_found");
-      return send(response, 200, { clientName: host.name, redirectHost: host.host, requestedScope: asked === "manage" ? "chalk:manage" : "chalk:read" });
+      return send(response, 200, { clientName: host.name, redirectHost: host.host, requestedScope: asked === "manage" ? "chalk:manage" : "chalk:read", tenantName: account === "new" ? "June Park" : "Hasan Shoaib" });
     }
     if (page === "connections") {
       const start = Number(query.cursor ?? 0);

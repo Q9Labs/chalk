@@ -12,8 +12,8 @@ function bundle(scope: string): "chalk:read" | "chalk:manage" {
 }
 
 export async function connectPage(engine: Engine, request: string): Promise<ConnectDTO> {
-  const found = await run(engine.api.default.inspectMCPConsentRequest({ payload: { request } }));
-  return { clientName: found.client_name, redirectHost: found.redirect_host, requestedScope: bundle(found.scope) };
+  const [found, tenant] = await Promise.all([run(engine.api.default.inspectMCPConsentRequest({ payload: { request } })), run(engine.api.tenants.getTenant({ params: { tenant_id: engine.tenantId } }))]);
+  return { clientName: found.client_name, redirectHost: found.redirect_host, requestedScope: bundle(found.scope), tenantName: tenant.name };
 }
 
 /** Returns the URL that sends the browser back to the app, with a code or an error. */

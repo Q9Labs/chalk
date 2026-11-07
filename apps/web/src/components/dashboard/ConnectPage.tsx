@@ -1,11 +1,11 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 
-import { act, errorMessage, failureKind, readPage } from "../../lib/dashboard/client";
+import { act, errorMessage, failureKind, readPage, signOut } from "../../lib/dashboard/client";
 import { Icon } from "../site/Icon";
 import { Lockup } from "../site/Lockup";
 import { AppPair } from "./AppLogo";
-import { useLoad } from "./AppShell";
+import { useLoad, useSession } from "./AppShell";
 import { Seg, Sk } from "./kit";
 
 type Scope = "chalk:read" | "chalk:manage";
@@ -35,7 +35,7 @@ function ConnectShell({ app, broken, title, children }: { readonly app: string |
 /** The connect page without a request: the person opened it directly instead of from the app. */
 export function ConnectMissing() {
   return (
-    <ConnectShell app={null} broken title="Start from the app">
+    <ConnectShell app={null} title="Start from the app">
       <p>Open Chalk from the app you want to connect. In Claude or ChatGPT, add Chalk as a connector and it brings you here.</p>
       <ToDashboard />
     </ConnectShell>
@@ -58,6 +58,8 @@ export function ConnectPage({ request }: { readonly request: string }) {
   const [scope, setScope] = useState<Scope>("chalk:read");
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const { profile } = useSession();
+  const navigate = useNavigate();
   const [decided, setDecided] = useState<{ readonly outcome: "approved" | "denied"; readonly url: string } | null>(null);
 
   if (state.kind === "loading")
@@ -69,7 +71,7 @@ export function ConnectPage({ request }: { readonly request: string }) {
   if (state.kind === "error") {
     if (failureKind(state.error) === "transient")
       return (
-        <ConnectShell app={null} broken title="Chalk couldn’t load this request">
+        <ConnectShell app={null} title="Chalk couldn’t load this request">
           <p>{errorMessage(state.error)}</p>
           <div className="sib">
             <button type="button" className="btn pri lg" onClick={reload}>
@@ -79,13 +81,13 @@ export function ConnectPage({ request }: { readonly request: string }) {
         </ConnectShell>
       );
     return (
-      <ConnectShell app={null} broken title="This connection request expired">
+      <ConnectShell app={null} title="This connection request expired">
         <p>Requests last a few minutes and work once. Go back to the app and connect Chalk again.</p>
         <ToDashboard />
       </ConnectShell>
     );
   }
-  const { clientName, redirectHost, requestedScope } = state.data;
+  const { clientName, redirectHost, requestedScope, tenantName } = state.data;
 
   if (decided) {
     const approved = decided.outcome === "approved";
@@ -117,10 +119,28 @@ export function ConnectPage({ request }: { readonly request: string }) {
     );
   }
 
+  // Signing out sends the person to sign in with the same request, so they come back to this page as the other account.
+  async function switchAccount() {
+    try {
+      await signOut();
+      void navigate({ to: "/dashboard/sign-in", search: { returnTo: `/dashboard/connect?request=${request}` } });
+    } catch (error) {
+      setFailure(errorMessage(error));
+    }
+  }
+
   const manage = scope === "chalk:manage";
   return (
     <ConnectShell app={clientName} title={`Connect ${clientName} to Chalk`}>
       <p>{clientName} wants to use your Chalk account.</p>
+      {profile ? (
+        <p className="cwho">
+          Signed in as <b>{profile.email}</b> · {tenantName}
+          <button type="button" disabled={busy !== null} onClick={() => void switchAccount()}>
+            Switch account
+          </button>
+        </p>
+      ) : null}
       {requestedScope === "chalk:manage" ? (
         <div className="cacc">
           <span id="connect-access" className="lbl">

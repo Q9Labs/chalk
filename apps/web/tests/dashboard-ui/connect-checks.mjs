@@ -17,6 +17,8 @@ export async function connectChecks({ open, check }) {
     try {
       await tab.getByRole("heading", { name: "Connect Claude to Chalk" }).waitFor();
       check("read request has no access choice", (await tab.getByRole("button", { name: "Read and change" }).count()) === 0);
+      check("consent names the signed-in account and tenant", await tab.getByText("hasan@q9labs.ai").isVisible() && (await tab.locator(".cwho").innerText()).includes("Hasan Shoaib"));
+      check("consent offers to switch account", await tab.getByRole("button", { name: "Switch account" }).isVisible());
       check("consent page leaves out the dashboard frame", (await tab.locator(".topb").count()) === 0);
     } finally {
       await context.close();
@@ -63,6 +65,7 @@ export async function connectChecks({ open, check }) {
     try {
       await tab.getByRole("heading", { name: "This connection request expired" }).waitFor();
       check("an expired request uses the same standalone layout", (await tab.locator(".topb").count()) === 0 && (await tab.locator(".sibox .apair").count()) === 1);
+      check("an expired request shows only the Chalk mark and no account line", (await tab.locator(".sibox .apair .alogo").count()) === 1 && (await tab.locator(".cwho").count()) === 0);
     } finally {
       await context.close();
     }

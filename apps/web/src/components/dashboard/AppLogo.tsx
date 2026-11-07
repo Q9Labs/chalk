@@ -44,11 +44,17 @@ export function ChalkLogo({ size = "md" }: { readonly size?: "sm" | "md" | "lg" 
   );
 }
 
-/** The app and Chalk side by side. The connector is solid while they are connected and cut when they are not. A missing app is an empty outlined tile. */
+/** The app and Chalk side by side. The connector is solid while they are connected and cut when they are not. With no known app there is only the Chalk mark. */
 export function AppPair({ name, broken }: { readonly name: string | null; readonly broken?: boolean }) {
+  if (!name)
+    return (
+      <div className="apair">
+        <ChalkLogo size="lg" />
+      </div>
+    );
   return (
     <div className={broken ? "apair broken" : "apair"}>
-      {name ? <AppLogo name={name} size="lg" /> : <Tile className="lg none" />}
+      <AppLogo name={name} size="lg" />
       <svg className="aconn" viewBox="0 0 72 24" aria-hidden="true" focusable="false">
         {broken ? (
           <>

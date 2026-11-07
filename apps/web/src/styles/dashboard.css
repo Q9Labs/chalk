@@ -581,11 +581,6 @@
   border-radius: 9px;
 }
 
-.site .dash .alogo.none {
-  border-style: dashed;
-  background: transparent;
-}
-
 .site .dash .alogo img,
 .site .dash .alogo .mono,
 .site .dash .alogo > svg {
@@ -713,6 +708,29 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.site .dash .cwho {
+  font-size: 13px;
+  color: var(--chalk-muted-text);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.site .dash .cwho b {
+  font-weight: 500;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .cwho button {
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+
+.site .dash .cwho button:hover {
+  color: var(--chalk-text);
 }
 
 .site .dash .sifine {
