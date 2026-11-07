@@ -173,22 +173,22 @@ export function splitMatch(text: string, query: string): readonly [before: strin
 
 /* ---------- what this device remembers ---------- */
 
-const RECENT_KEY = "chalk.transcript-language.recent";
-const NEW_CALL_KEY = "chalk.transcript-language.new-call";
+const RECENT_SLOT = "chalk.transcript-language.recent";
+const NEW_CALL_SLOT = "chalk.transcript-language.new-call";
 const RECENT_LIMIT = 3;
 
-function readStored(key: string): string | null {
+function readStored(slot: string): string | null {
   try {
-    return window.localStorage.getItem(key);
+    return window.localStorage.getItem(slot);
   } catch {
     // Storage can be blocked (private windows, strict settings); the picker then starts fresh each time.
     return null;
   }
 }
 
-function writeStored(key: string, value: string) {
+function writeStored(slot: string, value: string) {
   try {
-    window.localStorage.setItem(key, value);
+    window.localStorage.setItem(slot, value);
   } catch {
     // Same as above: a choice that can't be kept still works for this visit.
   }
@@ -199,7 +199,7 @@ function asWhisper(code: string): WhisperLanguage | null {
 }
 
 export function readRecentLanguages(): readonly WhisperLanguage[] {
-  const raw = readStored(RECENT_KEY);
+  const raw = readStored(RECENT_SLOT);
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
@@ -211,20 +211,20 @@ export function readRecentLanguages(): readonly WhisperLanguage[] {
 }
 
 export function rememberLanguage(code: WhisperLanguage) {
-  writeStored(RECENT_KEY, JSON.stringify([code, ...readRecentLanguages().filter((item) => item !== code)].slice(0, RECENT_LIMIT)));
+  writeStored(RECENT_SLOT, JSON.stringify([code, ...readRecentLanguages().filter((item) => item !== code)].slice(0, RECENT_LIMIT)));
 }
 
 /** What the next new call uses: null means the account default. */
 export type NewCallLanguage = TranscriptLanguage | null;
 
 export function readNewCallLanguage(): NewCallLanguage {
-  const raw = readStored(NEW_CALL_KEY);
+  const raw = readStored(NEW_CALL_SLOT);
   if (raw === "auto") return "auto";
   return raw ? asWhisper(raw) : null;
 }
 
 export function saveNewCallLanguage(value: NewCallLanguage) {
-  writeStored(NEW_CALL_KEY, value ?? "default");
+  writeStored(NEW_CALL_SLOT, value ?? "default");
 }
 
 /** The browser's languages that the transcriber supports, then the languages most calls need, without those in `skip`. */
