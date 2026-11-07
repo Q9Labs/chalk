@@ -42,7 +42,7 @@ function sectionsFor(query: string, allowDefault: boolean): readonly Section[] {
   ].filter((section) => section.rows.length > 0);
 }
 
-export function Flag({ option }: { readonly option: LanguageOption }) {
+function Flag({ option }: { readonly option: LanguageOption }) {
   // The drawn flag is a hint, so it has no text of its own: the name beside it says the language.
   return option.flag ? <img className="lp-flag" src={option.flag} alt="" width={24} height={16} loading="lazy" /> : <span className="lp-flag lp-code">{option.code}</span>;
 }

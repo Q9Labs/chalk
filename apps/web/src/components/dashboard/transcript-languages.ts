@@ -119,7 +119,7 @@ const english = new Intl.DisplayNames(["en"], { type: "language" });
 // Intl knows Javanese only as "jv", the modern code; Whisper still says "jw".
 const names: Partial<Record<WhisperLanguage, string>> = { jw: "Javanese" };
 
-export function fold(text: string): string {
+function fold(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
 
@@ -132,7 +132,6 @@ function option(code: WhisperLanguage): LanguageOption {
 }
 
 export const languageOptions: readonly LanguageOption[] = [...whisperLanguageCodes].map(option).sort((a, b) => a.name.localeCompare(b.name));
-export const flagPaths: readonly string[] = [...new Set(Object.values(flagCountry).flatMap((country) => (country ? [`${country.toLowerCase()}.svg`] : [])))];
 
 const byCode = new Map(languageOptions.map((item) => [item.code, item]));
 export function languageByCode(code: WhisperLanguage): LanguageOption {
