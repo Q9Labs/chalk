@@ -256,8 +256,8 @@ The most expensive tools are `chalk_configure_webhook` (813 tokens),
 | Cursor               | Dynamic context discovery: MCP tool descriptions sync to a folder and the agent reads them on demand. Cursor reports 46.9% fewer agent tokens in runs that called an MCP tool, with high variance.                   | [Cursor blog](https://cursor.com/blog/dynamic-context-discovery). The figure is Cursor's own and has no independent check.                                                                                                                                                     |
 
 Chalk sets no `alwaysLoad`. With tool search on, the agent finds
-`chalk_get_connection` and the `inspect` tools by name, so the four-view
-`inspect` design costs one search step per area, not one per list or get.
+`chalk_get_connection` and the `inspect` tools by name, so the four `inspect`
+tools, each with a `view` argument, cost one search step per area, not one per list or get.
 
 ## Production check
 
