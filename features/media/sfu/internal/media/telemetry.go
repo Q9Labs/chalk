@@ -5,19 +5,19 @@ import "maps"
 // Refusal reasons label the joins and screen shares the node refused. They are a closed set, so a
 // metric can carry them as an attribute.
 const (
-	RefusedDraining       = "draining"
-	RefusedSessions       = "sessions"
-	RefusedFences         = "fences"
-	RefusedEpisodeFull    = "episode_full"
-	RefusedMandatoryMedia = "mandatory_media"
-	RefusedNodeFull       = "node_full"
-	RefusedScreenCeiling  = "screen_ceiling"
-	RefusedCameras        = "cameras"
-	RefusedCPUSteal       = reasonCPUSteal
-	RefusedCPUBusy        = reasonCPUBusy
-	RefusedPacerQueue     = reasonPacerQueueDelay
-	RefusedPacerDrops     = reasonPacerDrops
-	RefusedUDPErrors      = reasonUDPBufferErrors
+	RefusedDraining         = "draining"
+	RefusedSessions         = "sessions"
+	RefusedFences           = "fences"
+	RefusedEpisodeFull      = "episode_full"
+	RefusedMandatoryMedia   = "mandatory_media"
+	RefusedNodeFull         = "node_full"
+	RefusedScreenCeiling    = "screen_ceiling"
+	RefusedCameras          = "cameras"
+	RefusedCPUSteal         = reasonCPUSteal
+	RefusedCPUBusy          = reasonCPUBusy
+	RefusedSchedulerLatency = reasonSchedulerLatency
+	RefusedPacerDrops       = reasonPacerDrops
+	RefusedUDPErrors        = reasonUDPBufferErrors
 )
 
 // Ingress kinds split what publishers send by media.

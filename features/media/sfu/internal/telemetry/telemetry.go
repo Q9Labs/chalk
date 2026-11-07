@@ -126,7 +126,7 @@ func Register(meter metric.Meter, read Read) error {
 	packetRate := ratio("chalk.sfu.packet_rate", "{packet}/s", "Media packets per second over the last second.")
 	bitrate := ratio("chalk.sfu.bitrate", "bit/s", "Media bits per second over the last second.")
 	queueDelay := ratio("chalk.sfu.pacer.queue_delay.p95", "s", "95th percentile of pacer queue delay over the guard window.")
-	scheduler := ratio("chalk.sfu.scheduler.latency.p99", "s", "99th percentile of Go scheduler latency over the guard window.")
+	scheduler := ratio("chalk.sfu.scheduler.latency.p99", "s", "99th percentile of Go scheduler latency over the last 10 seconds.")
 	steal := ratio("chalk.sfu.host.cpu.steal", "1", "Share of host CPU time stolen by the hypervisor over the guard window.")
 	busy := ratio("chalk.sfu.host.cpu.utilization", "1", "Share of host CPU time spent working over the guard window, steal excluded.")
 	paused := gauge("chalk.sfu.subscriptions.congestion_paused", "{subscription}", "Video subscriptions paused because their own downlink cannot carry the lowest layer.")
