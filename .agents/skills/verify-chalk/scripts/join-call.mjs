@@ -21,6 +21,7 @@ const people = [
 ];
 
 const waitMs = 60_000;
+const enableMs = 15_000;
 const steps = [];
 const measurements = {};
 const logs = { console: [], network: [] };
@@ -93,9 +94,20 @@ try {
 
   for (const { name, page } of sessions) {
     await step(`${name} turns on microphone and camera`, async () => {
-      for (const control of ["Unmute microphone", "Turn on camera"]) {
+      for (const [control, enabled] of [
+        ["Unmute microphone", "Mute microphone"],
+        ["Turn on camera", "Turn off camera"],
+      ]) {
         await page.getByRole("region", { name: "Space stage", exact: true }).hover();
         await page.getByRole("button", { name: control, exact: true }).click();
+        // A dropped enable puts the button back to its off label with an error toast; say so here, not 60 s later as "never published".
+        await page
+          .getByRole("button", { name: enabled, exact: true })
+          .waitFor({ timeout: enableMs })
+          .catch(async () => {
+            const toast = await page.locator('[data-part="toast"][data-type="error"]').evaluateAll((nodes) => nodes.map((node) => `${node.textContent} [${node.dataset.detail ?? "no detail"}]`));
+            throw new Error(`clicking "${control}" did not produce "${enabled}" within ${enableMs / 1000} s; error toasts: ${toast.join(" | ") || "none"}`);
+          });
       }
     });
   }
