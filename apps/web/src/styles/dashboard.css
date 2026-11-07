@@ -547,6 +547,51 @@
   color: var(--chalk-text);
 }
 
+.site .dash .cscope {
+  margin: 24px 0 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.site .dash .cscope legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .cscope label {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--chalk-surface);
+  border: 1px solid var(--chalk-line-strong);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--chalk-soft-text);
+  cursor: pointer;
+}
+
+.site .dash .cscope label:has(input:checked) {
+  border-color: var(--chalk-text);
+}
+
+.site .dash .cscope input {
+  margin-top: 2px;
+}
+
+.site .dash .cscope b {
+  display: block;
+  font-weight: 600;
+  color: var(--chalk-text);
+}
+
 .site .dash .sifine {
   font-size: 13px;
   color: var(--chalk-muted-text);
