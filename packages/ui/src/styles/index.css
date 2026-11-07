@@ -52,6 +52,50 @@
    Chalk design tokens - scoped to [data-chalk] containers
    ============================================================================= */
 
+/* The design-token scale. Source of truth: scripts/design-tokens/scale.json (checked by scale.test.mjs).
+   Spacing names follow the four-pixel grid in design.md (`space-3` is 12px); type is named by role. */
+:root,
+[data-chalk] {
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-16: 64px;
+  --space-22: 88px;
+
+  --type-micro: 10px;
+  --type-caption: 12px;
+  --type-body-sm: 13px;
+  --type-body: 14px;
+  --type-body-lg: 15px;
+  --type-lead: 16px;
+  --type-title-sm: 20px;
+  --type-title: 24px;
+  --type-headline: 28px;
+  --type-display-sm: 36px;
+  --type-display: 44px;
+  --type-display-lg: 56px;
+  --type-hero: 92px;
+
+  --corner-xs: 2px;
+  --corner-sm: 4px;
+  --corner-md: 6px;
+  --corner-lg: 8px;
+  --corner-xl: 12px;
+  --corner-2xl: 16px;
+  --corner-3xl: 24px;
+  --corner-pill: 999px;
+}
+
 [data-chalk]:not([data-chalk] [data-chalk]) {
   --background: var(--chalk-canvas);
   --foreground: var(--chalk-text);

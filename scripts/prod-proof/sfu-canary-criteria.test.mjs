@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { percentile, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
+import { growing, percentile, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
 
 const row = (kind, source, bytes, frames = 0, id = kind) => ({ type: "inbound-rtp", kind, source, id, connection: 0, bytesReceived: bytes, framesDecoded: frames });
 const guest = (bytes, frames) => [row("video", "camera", bytes, frames), row("audio", "microphone", bytes)];
@@ -40,4 +40,10 @@ test("a replaced stream cannot prove that the fault stopped media", () => {
   const replaced = { ...row("video", "camera", 500, 50, "new-stream") };
   assert.equal(stalled([[replaced], guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
   assert.equal(stalled([[], guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
+});
+
+test("growing counts every stream that moved, so a class can require media from each other guest", () => {
+  const before = [row("video", "camera", 100, 10, "a"), row("video", "camera", 100, 10, "b")];
+  assert.equal(growing([row("video", "camera", 200, 20, "a"), row("video", "camera", 100, 10, "b")], before, "video", "camera"), 1);
+  assert.equal(growing([row("video", "camera", 200, 20, "a"), row("video", "camera", 200, 20, "b")], before, "video", "camera"), 2);
 });

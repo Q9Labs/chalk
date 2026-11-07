@@ -493,20 +493,47 @@ These pages are built from the call kit above, not from a kit of their own: pill
 
 Use a four-pixel base grid. The call favors the smaller steps; marketing compositions may use the larger steps.
 
-| Token      | Value  | Typical use                             |
-| ---------- | ------ | --------------------------------------- |
-| `space-1`  | `4px`  | Icon adjustment, tight group            |
-| `space-2`  | `8px`  | Related controls, the gap between tiles |
-| `space-3`  | `12px` | Control clusters, card inset            |
-| `space-4`  | `16px` | Default component gap, stage edge       |
-| `space-5`  | `20px` | Dock and corner-button inset            |
-| `space-6`  | `24px` | Section inside a card                   |
-| `space-8`  | `32px` | Desktop panel and card padding          |
-| `space-10` | `40px` | Page-level breathing space              |
-| `space-14` | `56px` | Desktop container edge                  |
-| `space-22` | `88px` | Minimum marketing section space         |
+| Token       | Value  | Typical use                             |
+| ----------- | ------ | --------------------------------------- |
+| `space-0-5` | `2px`  | Hairline gap, icon nudge                |
+| `space-1`   | `4px`  | Icon adjustment, tight group            |
+| `space-1-5` | `6px`  | Chip and badge inset                    |
+| `space-2`   | `8px`  | Related controls, the gap between tiles |
+| `space-2-5` | `10px` | Compact control inset                   |
+| `space-3`   | `12px` | Control clusters, card inset            |
+| `space-4`   | `16px` | Default component gap, stage edge       |
+| `space-5`   | `20px` | Dock and corner-button inset            |
+| `space-6`   | `24px` | Section inside a card                   |
+| `space-8`   | `32px` | Desktop panel and card padding          |
+| `space-10`  | `40px` | Page-level breathing space              |
+| `space-12`  | `48px` | Large card inset                        |
+| `space-14`  | `56px` | Desktop container edge                  |
+| `space-16`  | `64px` | Marketing block gap                     |
+| `space-22`  | `88px` | Minimum marketing section space         |
 
 Spacing describes relationships. Use less space inside a component, more space between component groups, and the most space between page sections.
+
+### The token scale
+
+Every spacing, font-size and radius value in the web app, the web SDK, the React Native SDK and the mobile app comes from one scale in `scripts/design-tokens/scale.json`. The web uses `--space-*`, `--type-*` and `--corner-*` custom properties from `packages/ui/src/styles/index.css`; React Native uses `space`, `fontSizes` and `corners` from `sdks/typescript/react-native/src/theme/tokens.ts`. A test keeps the three in step.
+
+| Type step    | Size   | Corner step | Radius  |
+| ------------ | ------ | ----------- | ------- |
+| `micro`      | `10px` | `xs`        | `2px`   |
+| `caption`    | `12px` | `sm`        | `4px`   |
+| `body-sm`    | `13px` | `md`        | `6px`   |
+| `body`       | `14px` | `lg`        | `8px`   |
+| `body-lg`    | `15px` | `xl`        | `12px`  |
+| `lead`       | `16px` | `2xl`       | `16px`  |
+| `title-sm`   | `20px` | `3xl`       | `24px`  |
+| `title`      | `24px` | `pill`      | `999px` |
+| `headline`   | `28px` |             |         |
+| `display-sm` | `36px` |             |         |
+| `display`    | `44px` |             |         |
+| `display-lg` | `56px` |             |         |
+| `hero`       | `92px` |             |         |
+
+A value that is not on the scale snaps to the nearest step, and a tie goes to the step the product already uses more. The `design-tokens` gate lane fails a new raw value. A true one-off, such as fluid `vw` type or a bespoke hero offset, carries a `token-ratchet-ignore: <reason>` comment.
 
 ### Marketing
 

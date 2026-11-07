@@ -1,0 +1,117 @@
+#!/usr/bin/env node
+// scorecard build: adapters turn existing measurement output into one validated scorecard file.
+// scorecard diff:  compares a scorecard with a baseline and prints the delta table.
+// scorecard comment: creates or updates one section of the pull request's single scorecard comment.
+// scorecard go-output: prints the human-readable lines of `go test -json` on stdin, so a gate can keep its log.
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { parseArgs } from "node:util";
+import { planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { deviceMetrics } from "./adapters/device.mjs";
+import { joinStartupMetrics, leaveMedianMetrics } from "./adapters/proof.mjs";
+import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
+import { webMetrics } from "./adapters/web.mjs";
+import { sectionComment, sectionMarker } from "./comment.mjs";
+import { diffMetrics, renderTable } from "./diff.mjs";
+import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
+
+const read = (path) => readFileSync(path, "utf8");
+const readJson = (path) => JSON.parse(read(path));
+
+// Each input flag names a file in one adapter's format.
+const INPUTS = {
+  action: (path) => {
+    const card = readJson(path);
+    return { metrics: card.metrics, dropped: card.dropped };
+  },
+  web: (path) => webMetrics(readJson(path)),
+  "sfu-tests": (path) => goTestMetrics(read(path)),
+  "sfu-live": (path) => liveSampleMetrics(read(path)),
+  "sfu-load": (path) => nodeLoadMetrics(readJson(path)),
+  "proof-join": (path) => joinStartupMetrics(readJson(path)),
+  "proof-leave": (path) => leaveMedianMetrics(readJson(path)),
+  device: (path) => deviceMetrics(readJson(path)),
+};
+
+function build(argv) {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      out: { type: "string" },
+      tier: { type: "string" },
+      environment: { type: "string" },
+      plane: { type: "string", default: "chalk_sfu" },
+      commit: { type: "string", default: process.env.GITHUB_SHA },
+      id: { type: "string", default: `${process.env.GITHUB_RUN_ID ?? "local"}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}` },
+      "client-kind": { type: "string", default: "browser" },
+      browser: { type: "string" },
+      region: { type: "string" },
+      size: { type: "string" },
+      ...Object.fromEntries(Object.keys(INPUTS).map((name) => [name, { type: "string" }])),
+    },
+  });
+  const metrics = [];
+  const dropped = [];
+  for (const [name, adapt] of Object.entries(INPUTS)) {
+    if (!values[name]) continue;
+    const result = adapt(values[name]);
+    metrics.push(...result.metrics);
+    dropped.push(...result.dropped);
+  }
+  const browser = values.browser ?? (values.web ? `chromium/${readJson(values.web).browser}` : "none");
+  const card = parseScorecard({
+    schema: SCORECARD_SCHEMA,
+    run: { id: values.id, commit: values.commit, tier: values.tier, environment: values.environment, startedAt: new Date().toISOString(), client: { kind: values["client-kind"], browser, region: values.region, size: values.size } },
+    mediaPlane: values.plane,
+    metrics,
+    dropped,
+  });
+  writeFileSync(values.out, `${JSON.stringify(card, null, 2)}\n`);
+  console.log(`Wrote ${values.out}: ${metrics.length} metrics, ${dropped.length} drops.`);
+}
+
+async function diff(argv) {
+  const { values } = parseArgs({
+    args: argv,
+    options: { baseline: { type: "string" }, current: { type: "string" }, title: { type: "string", default: "Performance scorecard" }, "baseline-label": { type: "string", default: "the latest master run" }, markdown: { type: "string" }, "fail-on-gate": { type: "boolean" } },
+  });
+  const current = parseScorecard(readJson(values.current));
+  const baseline = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
+  const { budgets } = await readBudgets();
+  validateBudgetEntries(budgets);
+  const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
+  const table = renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
+  if (values.markdown) writeFileSync(values.markdown, table);
+  console.log(table);
+  if (values["fail-on-gate"] && result.failures.length > 0) {
+    console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
+    process.exitCode = 1;
+  }
+}
+
+async function comment(argv) {
+  const { values } = parseArgs({ args: argv, options: { repo: { type: "string" }, pr: { type: "string" }, section: { type: "string" }, file: { type: "string" } } });
+  const gh = (...args) => execFileSync("gh", ["api", ...args], { encoding: "utf8" });
+  const existing = JSON.parse(gh(`repos/${values.repo}/issues/${values.pr}/comments`, "--paginate", "--slurp"))
+    .flat()
+    .find((item) => item.body.startsWith(sectionMarker(values.section)));
+  const body = sectionComment(values.section, read(values.file));
+  if (existing) gh(`repos/${values.repo}/issues/comments/${existing.id}`, "-X", "PATCH", "-f", `body=${body}`);
+  else gh(`repos/${values.repo}/issues/${values.pr}/comments`, "-f", `body=${body}`);
+}
+
+async function goOutput() {
+  for await (const line of createInterface({ input: process.stdin })) {
+    if (!line.startsWith("{")) continue;
+    const event = JSON.parse(line);
+    if (event.Output) process.stdout.write(event.Output);
+  }
+}
+
+const [command, ...rest] = process.argv.slice(2);
+if (command === "build") build(rest);
+else if (command === "diff") await diff(rest);
+else if (command === "comment") comment(rest);
+else if (command === "go-output") await goOutput();
+else throw new Error("Usage: scorecard.mjs build|diff|comment|go-output");

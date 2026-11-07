@@ -68,7 +68,7 @@ function Options({ controls, deviceId, menu: { Label, Item } }: { readonly contr
           {option.image ? (
             <picture>
               <source srcSet={option.avif} type="image/avif" />
-              <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: 4 }} />
+              <img src={option.image} alt="" width={40} height={24} style={{ objectFit: "cover", borderRadius: "var(--corner-sm, 4px)" }} />
             </picture>
           ) : null}
           {option.label}

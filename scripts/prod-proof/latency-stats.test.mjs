@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { budgetFailures, percentile, summarize } from "./latency-stats.mjs";
+import { budgetFailures, budgetWarnings, percentile, summarize } from "./latency-stats.mjs";
 
 test("percentile takes the nearest rank", () => {
   const twenty = Array.from({ length: 20 }, (_, index) => index + 1);
@@ -23,4 +23,14 @@ test("a budget fails on a slow p95, a timeout, or too few samples", () => {
   ]);
   const budgets = { fast: { p95Ms: 50 }, slow: { p95Ms: 500 }, lost: { p95Ms: 500 }, rare: { p95Ms: 50 }, absent: { p95Ms: 50 } };
   assert.deepEqual(budgetFailures(summary, budgets, 2), ["slow: p95 950 ms is over 500 ms", "lost: 1 timed out", "rare: 1 samples, need 2", "absent: 0 samples, need 2"]);
+});
+
+test("a warn-only limit warns on its p95 but a timeout or too few samples still fail", () => {
+  const summary = summarize([
+    { slow: 950, lost: 100, rare: 100 },
+    { slow: 900, lost: null },
+  ]);
+  const budgets = { slow: { p95Ms: 500, warnOnly: true }, lost: { p95Ms: 500, warnOnly: true }, rare: { p95Ms: 500, warnOnly: true } };
+  assert.deepEqual(budgetFailures(summary, budgets, 2), ["lost: 1 timed out", "rare: 1 samples, need 2"]);
+  assert.deepEqual(budgetWarnings(summary, budgets), ["slow: p95 950 ms is over 500 ms"]);
 });
