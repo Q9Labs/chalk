@@ -238,6 +238,9 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	}
 	ctx, span := otel.Tracer("chalk/mcp").Start(b.ctx, "mcp."+endpoint.contract.OperationID, trace.WithAttributes(attribute.String("tenant_id", b.tenant.String()), attribute.String("operation", endpoint.contract.OperationID)))
 	defer span.End()
+	if traced, ok := any(request).(interface{ withTrace(context.Context) Request }); ok {
+		request = traced.withTrace(ctx)
+	}
 	response, err := endpoint.handle(ctx, request)
 	outcome := "ok"
 	if err != nil {

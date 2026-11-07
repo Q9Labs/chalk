@@ -6,7 +6,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 func bindMCPArtifactTools(server *mcp.Server, o Options) {
@@ -39,9 +38,7 @@ func bindMCPArtifactTools(server *mcp.Server, o Options) {
 		}
 	})
 	bindMCPEndpoint(server, mcpapi.RequestTranscript, requestTranscriptEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcpapi.TranscriptRequestInput) requestTranscriptEndpointRequest {
-		carrier := propagation.HeaderCarrier{}
-		propagation.TraceContext{}.Inject(b.ctx, carrier)
-		return requestTranscriptEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID), Traceparent: carrier.Get("traceparent"), Tracestate: carrier.Get("tracestate"), Body: requestTranscriptBody{IdempotencyKey: i.RequestKey, Language: i.Language, Languages: i.Languages}}
+		return requestTranscriptEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID), Body: requestTranscriptBody{IdempotencyKey: i.RequestKey, Language: i.Language, Languages: i.Languages}}
 	})
 	bindMCPEndpoint(server, mcpapi.DeleteTranscript, deleteTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcpapi.TranscriptIDInput) deleteTranscriptRequest {
 		return deleteTranscriptRequest{TenantID: b.tenant, TranscriptID: b.id(i.TranscriptID)}

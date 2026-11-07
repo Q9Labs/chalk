@@ -14,6 +14,8 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -128,6 +130,9 @@ func TestMCPRequestTranscriptKeepsTheTraceCarrier(t *testing.T) {
 	tenantID := documentTestID(t, "11111111-1111-4111-8111-111111111111")
 	recordingID := documentTestID(t, "44444444-4444-4444-8444-444444444444")
 	service := &requestCaptureStub{}
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider())
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
 	handler := NewMCPHandler(Options{TranscriptArtifacts: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
 	principal := authentication.Principal{Kind: authentication.PrincipalAPIKey, APIKeyID: recordingID, TenantID: tenantID, Scopes: []authentication.Scope{authentication.ScopeTranscriptionsWrite}}
 	span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1, 2, 3}, SpanID: trace.SpanID{4, 5}, TraceFlags: trace.FlagsSampled})
@@ -137,7 +142,8 @@ func TestMCPRequestTranscriptKeepsTheTraceCarrier(t *testing.T) {
 	ctx := trace.ContextWithSpanContext(authentication.ContextWithPrincipal(request.Context(), principal), span)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request.WithContext(ctx))
-	if response.Code != http.StatusOK || !strings.HasPrefix(service.got.Traceparent, "00-"+span.TraceID().String()+"-") {
+	// The job must parent the MCP operation span, not the HTTP request span above it.
+	if response.Code != http.StatusOK || !strings.HasPrefix(service.got.Traceparent, "00-"+span.TraceID().String()+"-") || strings.Contains(service.got.Traceparent, span.SpanID().String()) {
 		t.Fatalf("%d %s traceparent=%q", response.Code, response.Body.String(), service.got.Traceparent)
 	}
 }
