@@ -235,3 +235,18 @@ func TestMCPInspectToolsAreListedPerScope(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// The schema publishes one space_ids cap for two views, so the live view's lower cap
+// is enforced at the MCP boundary and answered with a typed error, not an internal one.
+func TestMCPLiveViewRefusesMoreThanThirtySpaces(t *testing.T) {
+	all := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.AllScopes...)
+	ids := make([]string, 31)
+	for i := range ids {
+		id, _ := utilities.NewID()
+		ids[i] = `"` + id.String() + `"`
+	}
+	response := scopeTestCall(t, &all, toolCallBody("chalk_inspect_episodes", `{"view":"live","space_ids":[`+strings.Join(ids, ",")+`]}`))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "invalid_space_ids") {
+		t.Fatalf("%d %s", response.Code, response.Body.String())
+	}
+}
