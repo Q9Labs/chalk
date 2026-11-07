@@ -43,7 +43,7 @@ six capture operations (`apps/api/internal/captureplane/types.go`). Those
 operations only create, pull, renegotiate, inspect and close; none publishes media,
 and the worker is not a roster participant. It runs
 on a DigitalOcean `c-2` node at one Episode per node. Output is encrypted capture,
-a rendered MP4 and a Whisper transcript after the call. Shared tab audio is
+a rendered MP4 and a Whisper transcript after the call, made from each participant's microphone audio, not from the MP4. Shared tab audio is
 excluded from recordings.
 
 **The SDK can run without a browser media stack.** The media client takes an
@@ -65,7 +65,7 @@ session identity before its calls can be followed.
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | What it hears | Every microphone and camera track, from a server-side pull. It does not hear shared tab audio.                                     |
 | What it says  | Nothing. The capture plane has no publish operation.                                                                               |
-| Latency       | Minutes after the call. The transcript comes from the rendered MP4.                                                                |
+| Latency       | Minutes after the call. The transcript is made from each participant's microphone audio after render.                              |
 | Cost          | About $0.238 per recorded hour (capture $0.0625, render $0.146, Whisper $0.03), from [the cost model](recording-transcription.md). |
 | Main risk     | It needs an active recording, so every participant is recorded to give the Agent ears.                                             |
 
@@ -75,7 +75,7 @@ Option A fits a post-call summariser. It does not fit a participant.
 
 | Question      | Answer                                                                                                                                                                                                                                                                                                                                   |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What it hears | The remote audio tracks it subscribes to, in real time. It should subscribe to audio only: today the SDK pulls every remote video track (the M8 tile-visibility work in [the SFU design](sfu/design.md) is not built).                                                                                                                   |
+| What it hears | The remote audio tracks it subscribes to, in real time. It should subscribe to audio only: the worker reports every remote tile as hidden with `setVideoTileVisibility(publicationId, null)`, and the SDK then stops pulling that video and keeps the audio.                                                                             |
 | What it says  | A synthetic audio track published from synthesized speech, plus Sync messages (chat, hand raise) as any participant sends them.                                                                                                                                                                                                          |
 | Latency       | Real time. The speed of the speech-to-text, model and speech-synthesis loop decides the delay, not Chalk.                                                                                                                                                                                                                                |
 | Cost          | Not measured. Three parts: the worker (a Node process, or Chromium at roughly half a `c-2` node, about $0.03 per hour, an estimate to measure in the spike), the SFU packets for the audio it subscribes to, and the vendor price of speech-to-text, model and speech-synthesis. Take vendor prices at build time; none is assumed here. |
@@ -109,7 +109,7 @@ sees text only.
 
 ## Plan
 
-1. Spike (one day): join a test Episode from Node with an injected WebRTC library,
+1. Spike (one day): join a live Episode of a test Space from Node with an injected WebRTC library,
    subscribe to one audio track, publish one tone, and record CPU and memory on the
    own SFU and the Cloudflare SFU. Stop here if it fails, and decide on Chromium.
 2. Worker: admission, token renewal, subscribe to audio, speech loop, leave rules.
