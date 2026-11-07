@@ -3,6 +3,7 @@
 
 // Runs in the page. Describes one participant's tile as shown in this page: how many frames were decoded and whether a
 // track ever arrived. The three "0 frames" causes (no video element, nothing loaded, no picture yet) stay apart.
+// fallow-ignore-next-line complexity
 export const tileState = (name) => {
   const tile = document.querySelector(`[aria-label="Video tile for ${name}"]`)?.closest('[data-part="stage-tile"]');
   const video = tile?.querySelector("video");
@@ -23,6 +24,7 @@ export const peerStats = async () => {
   const pick = (row, keys) => Object.fromEntries(keys.filter((key) => row[key] !== undefined).map((key) => [key, row[key]]));
   const connections = window.proofConnections ?? [];
   return Promise.all(
+    // fallow-ignore-next-line complexity
     connections.map(async (connection) => {
       const rows = [...(await connection.getStats()).values()];
       const byId = new Map(rows.map((row) => [row.id, row]));
@@ -59,6 +61,7 @@ export async function measureFirstFrame(page, name, { timeoutMs, pollMs = 500 })
   return { firstFrameMs: state.frames > 0 ? Date.now() - started : null, state };
 }
 
+// fallow-ignore-next-line complexity
 export function describeState(state) {
   if (!state.tile) return "no tile on the page";
   if (!state.video) return "tile has no video element";
