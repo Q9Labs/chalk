@@ -18,7 +18,7 @@ function discovery(url, origin) {
 
 function answer(message, { toolStatus }) {
   if (message.method === "initialize") return [200, { jsonrpc: "2.0", id: message.id, result: { serverInfo: { name: "chalk" } } }];
-  if (message.method === "tools/list") return [200, { jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "chalk_list_spaces" }] } }];
+  if (message.method === "tools/list") return [200, { jsonrpc: "2.0", id: message.id, result: { tools: [{ name: "chalk_inspect_spaces" }] } }];
   return [toolStatus, { jsonrpc: "2.0", id: message.id, result: { content: [{ type: "text", text: "[]" }] } }];
 }
 
@@ -74,7 +74,7 @@ test("missing OAuth discovery fails when OAuth is expected and passes when it is
 test("a failed tool call fails the check", async () => {
   const { server, url } = await startServer({ toolStatus: 500 });
   try {
-    await assert.rejects(checkMcp({ apiUrl: url, apiKey: "key", expectOAuth: true }), /tools\/call chalk_list_spaces.*HTTP 500/);
+    await assert.rejects(checkMcp({ apiUrl: url, apiKey: "key", expectOAuth: true }), /tools\/call chalk_inspect_spaces.*HTTP 500/);
   } finally {
     server.close();
   }
