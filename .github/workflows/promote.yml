@@ -14,6 +14,10 @@ on:
         description: SHA-256 of the encrypted baseline comparison evidence
         type: string
         required: true
+      scorecard_override:
+        description: Reason to accept a performance regression the scorecard gate finds; leave empty to apply the gate
+        type: string
+        required: false
 permissions:
   contents: read
   actions: read
@@ -139,6 +143,69 @@ jobs:
       leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
       leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
     secrets: inherit
+  # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
+  scorecard:
+    needs: [select, proof]
+    if: needs.proof.result == 'success' && needs.proof.outputs.result == 'passed'
+    outputs:
+      over: ${{ steps.gate.outputs.over }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scorecard-promote-proof
+          path: artifacts
+      - name: Score the production proof against the nightly median
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
+        run: features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json
+  scorecard-rerun:
+    needs: [select, scorecard]
+    if: needs.scorecard.outputs.over == 'true'
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      proofs: leave
+      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
+      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
+      scorecard_label: rerun
+    secrets: inherit
+  scorecard-final:
+    needs: [scorecard, scorecard-rerun]
+    if: needs.scorecard.outputs.over == 'true' && needs.scorecard-rerun.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: scorecard-promote-rerun
+          path: artifacts
+      - name: Decide on the rerun
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json
   rollback:
     needs: [select, approve, release, proof]
     if: >-

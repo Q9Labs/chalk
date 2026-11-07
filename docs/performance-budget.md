@@ -125,6 +125,12 @@ worth accepting. Do not raise a budget merely to turn CI green. Compare the
 production code against the pinned baseline commit in the data file; do not
 silently replace it with whichever revision happens to pass today.
 
+A budget with `gate: false` only warns. Real-node budgets (`sfu.*`, nightly
+`action.*`, `proof.*` and `device.*`) start there and flip to `gate: true` in
+their own budgets pull request, after seven nightly values whose run-to-run
+spread stays below `tolerancePct`. Rollback wiring (B) revisited when the first
+real-node metric is gated (after 7 nightly values).
+
 `--self-test` installs a temporary busy loop of at least 250 ms in trusted click
 handling, sized above the configured interaction/blocking budgets. It feeds the
 result through the same budget evaluator as a normal run and requires an actual
