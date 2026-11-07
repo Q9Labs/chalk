@@ -71,11 +71,11 @@ export function loadCallBudgets(file) {
   return { baselineCommit, repeats, sampleMs, devices, leaks, limits, scenarios };
 }
 
-/** withCallLimits returns a copy of the file whose call-run limits come from a measured baseline. */
+/** withCallLimits returns a copy of the file whose call-run limits come from a measured baseline. Other entries keep every field. */
 export function withCallLimits(file, { scenarios, route }) {
-  const budgets = Object.fromEntries(Object.entries(file.budgets).filter(([id]) => !id.startsWith("web.")));
   const previous = file.budgets;
-  const entry = (id, limit, tolerancePct) => ({ max_p50: limit, tolerancePct: previous[id]?.tolerancePct ?? tolerancePct, gate: previous[id]?.gate ?? true });
+  const budgets = Object.fromEntries(Object.entries(previous).filter(([id]) => !isCallRunId(id)));
+  const entry = (id, limit, tolerancePct) => ({ ...previous[id], max_p50: limit, tolerancePct: previous[id]?.tolerancePct ?? tolerancePct, gate: previous[id]?.gate ?? true });
   for (const [metric, limit] of Object.entries(route)) budgets[routeMetricId(metric)] = entry(routeMetricId(metric), limit, 1);
   for (const [device, byScenario] of Object.entries(scenarios)) {
     for (const [scenario, limits] of Object.entries(byScenario)) {
@@ -86,4 +86,9 @@ export function withCallLimits(file, { scenarios, route }) {
     }
   }
   return { ...file, budgets };
+}
+
+// A call run owns the web.* ids that end in one of its segments (the route bundle ids end in the same ones); other web.* entries belong to other kits.
+function isCallRunId(id) {
+  return id.startsWith("web.") && Object.values(CALL_METRICS).some((segment) => id.endsWith(`.${segment}`));
 }

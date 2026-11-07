@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { budgetFailures, summarize, trustedInteractionMs, validateScenarioBudgets } from "../../apps/web/scripts/call-performance-metrics.mjs";
 import { scenarios } from "../../apps/web/scripts/call-performance-scenarios.mjs";
-import { loadCallBudgets, validateBudgetEntries } from "../../features/scorecard/budgets.mjs";
+import { loadCallBudgets, validateBudgetEntries, withCallLimits } from "../../features/scorecard/budgets.mjs";
 
 test("every budgeted scenario runs on each device, and every runner has a budget", () => {
   const budgets = loadCallBudgets(JSON.parse(readFileSync(new URL("../../perf/budgets.json", import.meta.url), "utf8")));
@@ -101,4 +101,18 @@ test("every budget entry bounds a median or a p95 and says whether it gates", ()
   assert.throws(() => validateBudgetEntries({ "web.route.js_gzip_kib": { tolerancePct: 1, gate: true } }), /needs max_p50 or max_p95/);
   assert.throws(() => validateBudgetEntries({ "web.route.js_gzip_kib": { max_p50: 219, tolerancePct: 1 } }), /gate must be true or false/);
   assert.throws(() => validateBudgetEntries({ "route js": { max_p50: 219, tolerancePct: 1, gate: true } }), /not a dotted metric id/);
+});
+
+test("a proposed call baseline keeps web entries it does not measure and every field of the ones it updates", () => {
+  const file = {
+    budgets: {
+      "web.laptop.panels.interaction_ms": { max_p50: 100, max_p95: 850, tolerancePct: 10, gate: false },
+      "web.laptop.panels.heap_mib": { max_p50: 50, tolerancePct: 10, gate: true },
+      "web.real_node.latency_ms": { max_p95: 100, tolerancePct: 10, gate: false },
+    },
+  };
+  const next = withCallLimits(file, { scenarios: { laptop: { panels: { interactionMs: 120 } } }, route: {} });
+  assert.deepEqual(next.budgets["web.laptop.panels.interaction_ms"], { max_p50: 120, max_p95: 850, tolerancePct: 10, gate: false });
+  assert.deepEqual(next.budgets["web.real_node.latency_ms"], file.budgets["web.real_node.latency_ms"]);
+  assert.equal("web.laptop.panels.heap_mib" in next.budgets, false);
 });

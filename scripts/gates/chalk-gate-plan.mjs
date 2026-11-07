@@ -95,7 +95,7 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces) {
   if (isGateDefinition(file)) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
-  if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
+  if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
   if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
