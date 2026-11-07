@@ -97,7 +97,8 @@ async function cycle(run, origin, plane, headed, ending) {
   const createdAt = clock();
   const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
   const createMs = clock() - createdAt;
-  ending.current = episodeEnd(run, `${path}/${episode.id}`);
+  ending.path = `${path}/${episode.id}`;
+  ending.current = episodeEnd(run, ending.path);
   const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true });
   const landed = guests.admissions.map((admission) => admission.provider);
   check(
@@ -135,6 +136,16 @@ async function cycle(run, origin, plane, headed, ending) {
 
 const reason = (error) => (error instanceof Error ? error.message : String(error));
 
+// When the SDK cannot end the Episode, the owner API does, so a failed cycle never leaves a call open under the next one.
+async function endEpisode(run, ending) {
+  try {
+    await ending.current.end();
+  } catch (sdkError) {
+    await episodeEnd(run, ending.path).end();
+    throw sdkError;
+  }
+}
+
 async function attempt(run, origin, plane, headed) {
   const mark = run.resources.length;
   const ending = { current: null };
@@ -144,7 +155,7 @@ async function attempt(run, origin, plane, headed) {
   } catch (error) {
     outcome = { plane, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
-  if (ending.current) await ending.current.end().catch((error) => (outcome = { plane, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));
+  if (ending.current) await endEpisode(run, ending).catch((error) => (outcome = { plane, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));
   for (const resource of run.resources.slice(mark)) {
     const failures = await disposeResource(run, resource, disposeTimeoutMs);
     if (failures.length) outcome = { plane, dropped: "teardown_failed", error: `dispose: ${reason(failures[0])}` };
@@ -246,7 +257,7 @@ async function main() {
   await conclude(report, settings);
   report.result = !report.error && !report.cleanupError && Object.values(report.planes).every((plane) => !plane.failures.length) ? "passed" : "failed";
   await save(`${directory}/latency.json`, report);
-  const browser = report.cycles.find((cycle) => cycle.browser)?.browser ?? "unknown";
+  const browser = (report.cycles.find((cycle) => cycle.browser)?.browser ?? "unknown").replace(/^chromium/, settings.headed ? "chromium-headed" : "chromium-headless");
   const commit = (await command("git", ["rev-parse", "HEAD"])).trim();
   const client = { kind: "browser", browser, region: settings.scorecard.region, size: settings.scorecard.size };
   const identity = { id: runId, commit, tier: settings.scorecard.tier, environment: settings.scorecard.environment, startedAt: report.startedAt, client };
