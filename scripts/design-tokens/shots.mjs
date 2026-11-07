@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Screenshots for design-token PRs: shoot every screen before and after, then count changed pixels.
 //
-//   node scripts/design-tokens/shots.mjs shoot --out DIR --states URL [--web URL] [--only REGEX]
+//   node scripts/design-tokens/shots.mjs shoot --out DIR --states URL [--web URL] [--only PREFIX[,PREFIX]]
 //   node scripts/design-tokens/shots.mjs compare BEFORE_DIR AFTER_DIR --out DIR
 //
 // --states is the call-state harness (cd apps/web && CHALK_CALL_STATES_PORT=3171 pnpm exec vite --config vite.call-states.config.ts).
@@ -40,7 +40,7 @@ async function shoot() {
   const out = option("out");
   const states = option("states");
   const web = option("web");
-  const only = option("only") ? new RegExp(option("only"), "u") : undefined;
+  const only = option("only")?.split(",");
   if (!out || (!states && !web)) throw new Error("shoot needs --out and --states and/or --web");
   mkdirSync(out, { recursive: true });
   const browser = await chromium.launch();
@@ -77,7 +77,7 @@ async function shoot() {
     }
   }
 
-  const selected = jobs.filter((job) => !only || only.test(job.id));
+  const selected = jobs.filter((job) => !only || only.some((prefix) => job.id.startsWith(prefix)));
   let failures = 0;
   await pool(selected, 4, async (job) => {
     const context = await browser.newContext({ viewport: job.viewport, colorScheme: job.scheme, reducedMotion: "reduce", deviceScaleFactor: 1 });
