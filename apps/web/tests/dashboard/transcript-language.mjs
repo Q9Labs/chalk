@@ -14,7 +14,7 @@ const sizes = { desktop: { width: 1440, height: 900 }, phone: { width: 390, heig
 let size = "desktop";
 let theme = "dark";
 
-const trigger = (name) => page.getByRole("button", { name, exact: false });
+const trigger = (name) => page.getByRole("button", { name: new RegExp(`^${name}`) });
 const search = () => page.getByRole("combobox", { name: "Search languages", exact: true });
 const save = () => page.getByRole("button", { name: "Save transcript language", exact: true });
 
@@ -53,7 +53,8 @@ async function slowly(urlPart, method, work) {
   const held = new Promise((done) => (release = done));
   await page.route(`**/${urlPart}`, async (route) => {
     if (route.request().method() === method) await held;
-    await route.continue();
+    // The page may have moved on while the request was held.
+    await route.continue().catch(() => {});
   });
   try {
     await work();
