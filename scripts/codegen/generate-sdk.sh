@@ -15,6 +15,7 @@ pnpm exec oxfmt --write \
   contract/generated/openapi.json \
   sdks/typescript/client/src/generated/schemas.ts \
   sdks/typescript/client/src/generated/http-api.ts \
+  sdks/typescript/client/src/generated/public-http-api.ts \
   sdks/typescript/client/src/generated/sync.ts \
   sdks/typescript/client/src/generated/whiteboard-v1.ts \
   packages/whiteboard/src/collab/view-limits.ts \

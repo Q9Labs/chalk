@@ -2,9 +2,14 @@ package media
 
 import (
 	"errors"
+	"math"
+	"runtime/metrics"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 )
 
 // fakeSteal is a host whose CPU spends percent of every second stolen.
@@ -79,36 +84,122 @@ func TestOneBusySecondAtBootDoesNotCloseAdmission(t *testing.T) {
 	}
 }
 
-func TestQueueDelayP95AboveThresholdRefusesNewEpisodes(t *testing.T) {
-	node := newTestNode(t, nil)
-	node.guard.readSteal = func() (cpuTimes, bool) { return cpuTimes{}, false }
-	node.newTestSession(t, episodeScope("live", "alice"))
+// fakeSched is the runtime's cumulative scheduler latency histogram, with
+// buckets up to 1, 5, 20, 50 and 100 ms and beyond.
+type fakeSched struct{ counts [6]uint64 }
 
-	// 90% of packets leave at once and 10% wait 80 ms: p95 is 80 ms.
-	for range 90 {
-		node.guard.delays.record(0)
+var fakeSchedBuckets = []float64{0, 0.001, 0.005, 0.02, 0.05, 0.1, math.Inf(1)}
+
+// second adds one second of goroutine wakeups: prompt ones that waited up to
+// 5 ms for a CPU, and late ones that waited up to 100 ms.
+func (f *fakeSched) second(prompt, late uint64) {
+	f.counts[1] += prompt
+	f.counts[4] += late
+}
+
+func (f *fakeSched) read() *metrics.Float64Histogram {
+	return &metrics.Float64Histogram{Counts: slices.Clone(f.counts[:]), Buckets: fakeSchedBuckets}
+}
+
+// A replay of an overload of a 1 vCPU staging node. Five classes held steady at
+// 2-5% steal; then the host stole 12% for 20 s, 40% for 10 s and 25% for 10 s,
+// and in the 40% stretch goroutines waited 100 ms for the CPU and peers stalled
+// for up to 1.2 s. Steal stays under the node's 25% threshold over the window,
+// so the scheduler latency alone has to close admission, and it reopens within
+// seconds of the stall ending.
+func TestAHostStallUnderTheStealThresholdClosesAdmissionAndReopensWithinSeconds(t *testing.T) {
+	node := newTestNode(t, func(cfg *config.Config) {
+		cfg.Guard.MaxStealPercent, cfg.Guard.MaxSchedulerLatency = 25, 20*time.Millisecond
+	})
+	host, sched := &fakeSteal{}, &fakeSched{}
+	node.guard.readSteal, node.guard.readSched = host.read, sched.read
+	live := node.newTestSession(t, episodeScope("live", "alice"))
+	run := func(seconds int, steal uint64, late uint64, check func(second int, health HostHealth)) {
+		t.Helper()
+		for second := range seconds {
+			host.advance(steal)
+			sched.second(20_000, late)
+			node.guard.tick()
+			check(second, node.guard.snapshot())
+		}
 	}
-	for range 10 {
-		node.guard.delays.record(80 * time.Millisecond)
+	open := func(phase string) func(int, HostHealth) {
+		return func(second int, health HostHealth) {
+			t.Helper()
+			if health.AdmissionReason != "" {
+				t.Fatalf("%s, second %d: health %+v, want admission open", phase, second, health)
+			}
+		}
 	}
-	node.guard.tick()
-	health := node.guard.snapshot()
-	if health.AdmissionReason != reasonPacerQueueDelay || health.QueueDelayP95 < 50*time.Millisecond {
-		t.Fatalf("health %+v, want pacer_queue_delay above 50 ms", health)
-	}
+
+	run(100, 3, 0, open("steady five classes"))
+	run(20, 12, 0, open("12% steal"))
+	run(10, 4, 0, open("steal falls back"))
+	run(10, 40, 1_000, func(second int, health HostHealth) {
+		t.Helper()
+		if second >= 3 && health.AdmissionReason != reasonSchedulerLatency {
+			t.Fatalf("stall, second %d: health %+v, want admission closed for scheduler latency", second, health)
+		}
+	})
 	if _, err := node.CreateSession("create-new", episodeScope("new", "bob")); !errors.Is(err, errAdmissionClosed) {
-		t.Fatalf("new Episode under queue delay: %v, want admission closed", err)
+		t.Fatalf("new Episode during the stall: %v, want admission closed", err)
 	}
 	node.newTestSession(t, episodeScope("live", "carol"))
+	if live.isClosed() {
+		t.Fatal("the guard closed an existing session")
+	}
 
-	// The slow second leaves the 30-second window and admission reopens.
-	for range 30 {
-		node.guard.delays.record(time.Millisecond)
+	reopened := -1
+	run(10, 25, 0, func(second int, health HostHealth) {
+		t.Helper()
+		if health.AdmissionReason == reasonCPUSteal {
+			t.Fatalf("after the stall, second %d: health %+v, want steal under its threshold", second, health)
+		}
+		if health.AdmissionReason == "" && reopened < 0 {
+			reopened = second
+		}
+		if health.AdmissionReason != "" && reopened >= 0 {
+			t.Fatalf("after the stall, second %d: health %+v, want admission to stay open once reopened", second, health)
+		}
+	})
+	if reopened < 0 {
+		t.Fatalf("admission still closed %v after the stall ended", latencyWindow)
+	}
+	run(30, 2, 0, open("recovered"))
+	node.newTestSession(t, episodeScope("new", "bob"))
+}
+
+// One class joining an idle node: its transports drain keyframes at their first
+// estimate, so pacer queue delay reads 50-75 ms for 30 s, while the host is idle
+// and goroutines get the CPU at once. That delay is the links', so admission
+// stays open.
+func TestAJoinsPacerQueueDelayDoesNotCloseAdmission(t *testing.T) {
+	node := newTestNode(t, func(cfg *config.Config) { cfg.Guard.MaxSchedulerLatency = 20 * time.Millisecond })
+	host, sched := &fakeSteal{}, &fakeSched{}
+	node.guard.readSteal, node.guard.readSched = host.read, sched.read
+	for second := range 40 {
+		host.advance(2)
+		sched.second(5_000, 0)
+		if second < 30 {
+			for range 84 {
+				node.guard.delays.record(0)
+			}
+			for range 10 {
+				node.guard.delays.record(45 * time.Millisecond)
+			}
+			for range 6 {
+				node.guard.delays.record(70 * time.Millisecond)
+			}
+		}
 		node.guard.tick()
+		if health := node.guard.snapshot(); health.AdmissionReason != "" {
+			t.Fatalf("second %d of a join: health %+v, want admission open", second, health)
+		}
+		if second == 29 && node.guard.snapshot().QueueDelayP95 <= 50*time.Millisecond {
+			t.Fatalf("health %+v, want the join's queue delay still reported", node.guard.snapshot())
+		}
 	}
-	if reason := node.guard.closedReason(); reason != "" {
-		t.Fatalf("admission still closed: %s", reason)
-	}
+	node.newTestSession(t, episodeScope("new", "bob"))
 }
 
 func TestReadProcStatParsesStealOnLinux(t *testing.T) {
@@ -131,45 +222,38 @@ func TestSchedulerLatencyIsReadable(t *testing.T) {
 	_ = histogramDeltaPercentile(*first, *second, 0.99)
 }
 
-// TestADelayedPacerClosesAdmissionAndTheLiveEpisodeContinues delays packets in
-// a live session's own pacer, so the delay reaches the guard the way production
-// traffic does: new Episodes are refused while the live Episode still admits.
-func TestADelayedPacerClosesAdmissionAndTheLiveEpisodeContinues(t *testing.T) {
+// A joining Participant's real pacer at its first estimate, fed 120 kB of
+// keyframes at once: the raise of the pace shrinks as the queue drains, so the
+// burst's tail waits past 50 ms on any host. The node is idle, so admission stays
+// open while readiness still reports the delay.
+func TestAJoiningTransportsKeyframeBurstDoesNotCloseAdmission(t *testing.T) {
 	node := newTestNode(t, nil)
 	node.guard.readSteal = func() (cpuTimes, bool) { return cpuTimes{}, false }
-	live := node.newTestSession(t, episodeScope("live", "alice"))
+	joining := node.newTestSession(t, episodeScope("live", "alice"))
 
 	wire := &wireWriter{}
 	video := &egressBinding{writer: wire, ssrc: 10, payloadType: 96, twccID: 3}
-	pacer := live.transport
-	pacer.mu.Lock()
-	pacer.refill(monotonic())
-	pacer.tokens = -1e6 // the pace lets nothing out
-	pacer.mu.Unlock()
 	var w packetWriter
-	payload := make([]byte, 500)
-	for seq := range uint16(4) {
-		pacer.send(&egressPacket{binding: video, class: classVideo, seq: seq, payload: payload}, &w)
+	payload := make([]byte, 1100)
+	const burst = 110 // inside the 128 kB queue, so nothing drops
+	for seq := range uint16(burst) {
+		joining.transport.send(&egressPacket{binding: video, class: classVideo, seq: seq, payload: payload}, &w)
 	}
-	time.Sleep(80 * time.Millisecond)
-	pacer.mu.Lock()
-	pacer.tokens = 0
-	pacer.mu.Unlock()
-	pacer.signal()
-	deadline := time.Now().Add(2 * time.Second)
-	for len(wire.sent()) < 4 && time.Now().Before(deadline) {
+	deadline := time.Now().Add(5 * time.Second)
+	for len(wire.sent()) < burst && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if sent := len(wire.sent()); sent != 4 {
-		t.Fatalf("the pacer sent %d of 4 packets", sent)
+	if sent := len(wire.sent()); sent != burst {
+		t.Fatalf("the pacer sent %d of %d packets", sent, burst)
 	}
 
 	node.guard.tick()
-	if health := node.guard.snapshot(); health.AdmissionReason != reasonPacerQueueDelay {
-		t.Fatalf("health %+v, want admission closed for pacer queue delay", health)
+	health := node.guard.snapshot()
+	if health.QueueDelayP95 <= 50*time.Millisecond {
+		t.Fatalf("health %+v, want the burst's tail to wait past 50 ms", health)
 	}
-	if _, err := node.CreateSession("create-new", episodeScope("new", "bob")); !errors.Is(err, errAdmissionClosed) {
-		t.Fatalf("new Episode while the pacer lags: %v, want admission closed", err)
+	if health.AdmissionReason != "" {
+		t.Fatalf("health %+v, want admission open after one transport's startup burst", health)
 	}
-	node.newTestSession(t, episodeScope("live", "carol"))
+	node.newTestSession(t, episodeScope("new", "bob"))
 }
