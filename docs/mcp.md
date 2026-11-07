@@ -213,6 +213,52 @@ Signed download URLs expire within 300 seconds. Treat tool content as untrusted
 data, not agent instructions. Do not put signed URLs, keys, signing secrets, or
 transcript bodies in logs.
 
+## Catalog size and tool search
+
+Every connected client that does not defer tools sends the whole catalog
+with each request, so tool count and schema size are a running cost.
+Merging the list and get reads into four `inspect` tools took the catalog
+from 33 to 25 tools.
+
+| Catalog          | Tools | Serialized tool list | Tokens, all tools loaded | Tokens, names only (tool search) |
+| ---------------- | ----- | -------------------- | ------------------------ | -------------------------------- |
+| Before the merge | 33    | 27.7 KB              | 10,773                   | 367                              |
+| After the merge  | 25    | 25.1 KB              | 9,842                    | 280                              |
+
+The merge saves 931 tokens (8.6%), not 24%, because an `inspect` tool carries
+one schema that covers all its views, so each merged tool is larger than the
+tools it replaced. The saving that matters is the second column: with tool
+search a client loads only names (about 280 tokens) and fetches a definition
+when the agent needs it.
+
+How it was measured: the tool list from the real handler on the eval stack,
+sent as function tools to `anthropic/claude-opus-5.5` through OpenRouter with
+`max_tokens=1`, and `prompt_tokens` compared with a request that carries one
+empty tool. Anthropic's `count_tokens` endpoint was not used because no
+Anthropic key is available to this project. OpenRouter reports the provider's
+own count, so treat the numbers as close, not exact. An earlier measurement of
+the 33-tool catalog with a different method gave 11,155 tokens. The "names
+only" column adds the tool names as plain text and does not include the tool
+search tool's own definition.
+
+The most expensive tools are `chalk_configure_webhook` (813 tokens),
+`chalk_inspect_episodes` (598), `chalk_configure_space` (591),
+`chalk_update_tenant` (535) and `chalk_issue_api_key` (521).
+
+### What each client does
+
+| Client               | Tool search                                                                                                                                                                                                          | Source and what to do                                                                                                                                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude Code          | On by default for Claude Opus 4 and later. Only tool names and server instructions load at start; `ENABLE_TOOL_SEARCH` accepts `true`, `false`, `auto` (defer when definitions pass 10% of the window) and `auto:N`. | [MCP docs](https://code.claude.com/docs/en/mcp). A tool description is cut at 4,096 characters when loaded up front and 16,384 when found by search. Server `instructions` should say when to search for Chalk tools. A tool can opt out with `_meta["anthropic/alwaysLoad"]`. |
+| Claude API           | GA tool search tool. A tool marked `defer_loading: true` sends no description until the model finds it.                                                                                                              | [Tool search tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool). The MCP connector takes `defer_loading` per tool through its tool configuration. A direct API user sets it themselves.                                                     |
+| Claude.ai connectors | Public reports describe a per-connector "load tools when needed" setting, and other reports say it does not always defer schemas. I found no Anthropic page that documents it.                                       | Not verified. Keep the catalog small and put the intent of each tool first in its description.                                                                                                                                                                                 |
+| ChatGPT connectors   | No documented tool search or tool cap. Reports disagree on whether developer mode uses tools other than `search` and `fetch`.                                                                                        | Not verified. Test with a real Business workspace before promising it works.                                                                                                                                                                                                   |
+| Cursor               | Dynamic context discovery: MCP tool descriptions sync to a folder and the agent reads them on demand. Cursor reports 46.9% fewer agent tokens in runs that called an MCP tool, with high variance.                   | [Cursor blog](https://cursor.com/blog/dynamic-context-discovery). The figure is Cursor's own and has no independent check.                                                                                                                                                     |
+
+Chalk sets no `alwaysLoad`. With tool search on, the agent finds
+`chalk_get_connection` and the `inspect` tools by name, so the four `inspect`
+tools, each with a `view` argument, cost one search step per area, not one per list or get.
+
 ## Production check
 
 The `MCP production check` workflow runs every six hours and after each production
