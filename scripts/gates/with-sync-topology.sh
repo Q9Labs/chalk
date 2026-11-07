@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The public.ecr.aws mirror carries the same image as Docker Hub and avoids the Docker Hub anonymous pull limit.
-postgres_image="public.ecr.aws/docker/library/postgres:18.3-alpine"
+# shellcheck source=scripts/gates/postgres-image.sh
+source "$(dirname "${BASH_SOURCE[0]}")/postgres-image.sh"
 
 if (($# == 0)); then
   echo "with-sync-topology.sh requires at least one command" >&2
@@ -171,6 +171,7 @@ start_docker_topology() {
   export CHALK_SYNC_TOPOLOGY_NETWORK="${network}"
   export CHALK_SYNC_TOPOLOGY_STANDBY_VOLUME="${standby_volume}"
 
+  pull_postgres_image "${docker_bin}"
   "${docker_bin}" network create "${network}" >/dev/null
   "${docker_bin}" volume create "${standby_volume}" >/dev/null
   "${docker_bin}" run \

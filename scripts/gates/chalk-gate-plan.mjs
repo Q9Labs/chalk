@@ -413,6 +413,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/dev/cli-ready.test.mjs",
       "apps/mobile/scripts/run-ios.test.mjs",
       "scripts/gates/with-postgres.test.mjs",
+      "scripts/gates/postgres-image.test.mjs",
       "scripts/gates/new-vulnerabilities.test.mjs",
       "scripts/security/tooling-dependencies.test.mjs",
       "scripts/gates/gate-policy.test.mjs",
