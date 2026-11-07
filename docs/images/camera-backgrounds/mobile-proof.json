@@ -1,0 +1,60 @@
+{
+  "browsers": [
+    {
+      "engine": "webkit",
+      "version": "26.5",
+      "supported": false,
+      "effects": [],
+      "backgroundHidden": true,
+      "cameraAdvances": true,
+      "cameraLive": true,
+      "errors": []
+    },
+    {
+      "engine": "firefox",
+      "version": "153.0",
+      "supported": false,
+      "effects": [],
+      "backgroundHidden": true,
+      "cameraAdvances": true,
+      "cameraLive": true,
+      "errors": []
+    }
+  ],
+  "throttle": {
+    "rate": 8,
+    "completedEffectFps": 7.154704218022483,
+    "plainCameraFps": 29.347872106020393,
+    "elapsedSecondsIncludingLoad": 6.287855487000001,
+    "selected": "none",
+    "input": {
+      "live": true,
+      "sameTrack": false,
+      "width": 1280,
+      "height": 720,
+      "frameRate": 30
+    },
+    "sourceLive": true,
+    "publicationRetained": true,
+    "remoteFramesContinue": true,
+    "lazyOnJoin": true,
+    "initialEffectRequests": [],
+    "effectRequestsAfterSelection": [
+      "/@fs/data/home/work/sdks/typescript/client/src/camera-effects-provider.ts",
+      "/@fs/tmp/chalk-call-harness-8z3Erq/deps/@mediapipe_tasks-vision.js?v=5501ed00",
+      "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.js",
+      "/camera-effects/tasks-vision-1.1.1-078d426aedad4273/vision_wasm_internal.wasm",
+      "/camera-effects/selfie-segmenter-landscape.490e9ea73431.tflite"
+    ],
+    "keyboardRing": {
+      "child": "0px",
+      "parent": "2px",
+      "radius": "999px",
+      "groupWidth": 96,
+      "buttonsWidth": 96
+    },
+    "mouseRing": false,
+    "touchRing": false,
+    "errors": []
+  }
+}

@@ -118,6 +118,7 @@ export class ConnectionReporter {
   recordTransport(event: ConnectionReportTransportEvent): void {
     this.#record({
       event: event.event,
+      code: event.code,
       elapsed_ms: this.#elapsed(),
       ...(event.phase ? { phase: event.phase } : {}),
       ...(event.attempt == null ? {} : { attempt: milliseconds(event.attempt) }),

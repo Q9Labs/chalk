@@ -1,0 +1,87 @@
+{
+  "budgetKiB": 469,
+  "mode": "bundle-only",
+  "builds": {
+    "baseline": {
+      "source": "dee8a8feef72e5a20b8fd8c1fdcc912d515171c4",
+      "checkout": "dee8a8feef72e5a20b8fd8c1fdcc912d515171c4",
+      "mode": "bundle-only",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625,
+      "failures": [],
+      "errors": []
+    },
+    "head": {
+      "source": "b65d84984b9230d0a5c7943bcb157dc1a1ec6139",
+      "checkout": "b65d84984b9230d0a5c7943bcb157dc1a1ec6139",
+      "mode": "bundle-only",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625,
+      "failures": [],
+      "errors": []
+    }
+  },
+  "samples": [
+    {
+      "sample": 1,
+      "side": "baseline",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 1,
+      "side": "head",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 2,
+      "side": "baseline",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 2,
+      "side": "head",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 3,
+      "side": "baseline",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 3,
+      "side": "head",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 4,
+      "side": "baseline",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 4,
+      "side": "head",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 5,
+      "side": "baseline",
+      "routeJsGzipKiB": 466.6025390625,
+      "routeCssGzipKiB": 30.09765625
+    },
+    {
+      "sample": 5,
+      "side": "head",
+      "routeJsGzipKiB": 468.849609375,
+      "routeCssGzipKiB": 30.09765625
+    }
+  ],
+  "notes": "Gzip level 9 of scripts actually requested before Join; no CPU or rendering speedup claim."
+}

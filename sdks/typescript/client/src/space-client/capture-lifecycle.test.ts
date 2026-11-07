@@ -313,7 +313,7 @@ it.each(["enable", "join", "selection"] as const)("recaptures on %s after a priv
     expect(capture).toHaveBeenCalledTimes(2);
     if (operation === "enable") expect(prepared).toEqual([second]);
     if (operation === "selection") {
-      expect(capture).toHaveBeenNthCalledWith(2, { audio: false, video: { deviceId: { exact: "camera-b" } } });
+      expect(capture.mock.calls[1]?.[0]).toEqual({ audio: false, video: { deviceId: { exact: "camera-b" } } });
       expect(client.getSnapshot().media.selection.camera).toBe("camera-b");
     }
     expect(client.getSnapshot().media.local.camera.track).toBe(second);

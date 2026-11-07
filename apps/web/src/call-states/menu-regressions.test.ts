@@ -100,11 +100,11 @@ it("discovers both cameras when private preview reveals the permission-restricte
     const preview = privatePage.locator(".chalk-shell-preview video");
     await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
     if (artifacts) await privatePage.screenshot({ path: resolve(artifacts, "permission-after.png") });
-    await expect.poll(() => privatePage.getByRole("menuitemradio").count()).toBe(2);
+    await expect.poll(() => privatePage.getByRole("menuitemradio", { name: /^fake_device_\d+$/ }).count()).toBe(2);
     await privatePage.getByRole("menuitemradio", { name: "fake_device_0", exact: true }).waitFor();
     await privatePage.getByRole("menuitemradio", { name: "fake_device_1", exact: true }).waitFor();
     const second = await privatePage.evaluate(async () => (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput")[1]?.deviceId);
-    await privatePage.getByRole("menuitemradio").nth(1).click();
+    await privatePage.getByRole("menuitemradio", { name: "fake_device_1", exact: true }).click();
     await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.srcObject instanceof MediaStream && video.srcObject.getVideoTracks()[0]?.getSettings().deviceId)).toBe(second);
     expect(await privatePage.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).count()).toBe(1);
     const track = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));

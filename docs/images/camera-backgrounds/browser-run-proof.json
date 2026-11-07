@@ -1,0 +1,55 @@
+{
+  "source": "b65d84984b9230d0a5c7943bcb157dc1a1ec6139",
+  "base": "dee8a8feef72e5a20b8fd8c1fdcc912d515171c4",
+  "command": "pnpm exec bash scripts/gates/commit.sh --base origin/master",
+  "environment": {
+    "CI": "true",
+    "GATE_LANE_GROUP": "browser-tests",
+    "GATE_SERVICES": "external",
+    "GATE_BASE_REF": "origin/master",
+    "GATE_VULN_BASE_REF": "origin/master",
+    "GATE_WORKSPACE_CONCURRENCY": "2",
+    "VITEST_MAX_WORKERS": "2"
+  },
+  "platform": "Instabox Debian 13, Ubuntu 24.04 xvfb-run executable prepended to PATH; this is launcher replay, not a full Ubuntu OS run",
+  "launcher": {
+    "package": "xvfb_21.1.12-1ubuntu1.9_amd64.deb",
+    "sha256": "48ee444c30fdaaede4cc311644b30e554162e956f949b206858e37eb8ba1ae05",
+    "oldInvocationExit": 2,
+    "fixedInvocationExit": 0
+  },
+  "hostedFailure": "https://github.com/Q9Labs/chalk/actions/runs/41130507801/job/124320002270",
+  "failure": "xvfb-run fails opening /dev/stderr supplied by Node as a socket, before browser or segmentation starts",
+  "fix": "Use an owned temporary regular log file, print it on failure, remove it during cleanup",
+  "runs": [
+    {
+      "run": 1,
+      "exit": 0,
+      "seconds": 861,
+      "lanesMs": {
+        "browser-tests": 491564,
+        "dashboard-engine": 369210
+      }
+    },
+    {
+      "run": 2,
+      "exit": 0,
+      "seconds": 824,
+      "lanesMs": {
+        "browser-tests": 484483,
+        "dashboard-engine": 338507
+      }
+    },
+    {
+      "run": 3,
+      "exit": 0,
+      "seconds": 817,
+      "lanesMs": {
+        "browser-tests": 479092,
+        "dashboard-engine": 337303
+      }
+    }
+  ],
+  "retriesAdded": false,
+  "olderHostedFailureCause": "Not established: 1e9f0a4 lacked subprocess diagnostics and retained no browser artifacts. The separately reproduced fallback/pixel-observation race is also fixed."
+}

@@ -730,6 +730,12 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+A browser camera-effects processing failure records `media_state` with
+`source=camera`, `phase=failed`, `outcome=failed`, `code=media_capture_failed`,
+`media_error_kind=OperationError`, and `media_error_step=local_capture` before
+the generated track ends. These are existing allowlisted labels. No error text,
+device identifiers, image data, or camera frames enter the diagnostic buffer.
+
 Listener audio receive health uses the same report endpoint, not a second
 diagnostic channel. It tracks desired remote `microphone` and `screen_audio`
 publications, never camera or local capture. Two event names also serve as report
