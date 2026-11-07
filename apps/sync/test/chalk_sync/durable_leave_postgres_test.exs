@@ -238,6 +238,21 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     end
   end
 
+  @tag timeout: 180_000
+  test "ambiguous stale media retries below the limit and settles at exhaustion", %{
+    connection: connection,
+    fixture: fixture
+  } do
+    assert_account_reentry(
+      connection,
+      fixture,
+      :confirmed,
+      :mute_participant,
+      "microphone",
+      "ambiguous"
+    )
+  end
+
   for {kind, source} <- [
         mute_participant: "microphone",
         stop_participant_camera: "camera",
@@ -453,17 +468,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
                [UUID.dump!(mute_id)]
              ).rows
 
-    expected_media_result =
-      %{"confirmed" => :confirmed, "terminal_failure" => :terminal_failure}[media_outcome]
-
-    assert ^expected_media_result =
-             ExternalOperationConsumer.execute_operation(
-               episode,
-               old_mute,
-               {MediaPlane, adapter},
-               nil,
-               &Postgres.finalize_operation/3
-             )
+    settle_old_media(connection, episode, old_mute, adapter, media_outcome)
 
     assert_receive {:provider_call, ^mute_id, mute_payload, _}, 5_000
     assert mute_payload["effect"] == "media.revoke_publication"
@@ -479,6 +484,7 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     media_settlement =
       %{
         "confirmed" => {:confirmed, :provider},
+        "ambiguous" => {:confirmed, :provider},
         "terminal_failure" => {:failed, :provider_rejected}
       }[media_outcome]
 
@@ -498,6 +504,15 @@ defmodule ChalkSync.DurableLeavePostgresTest do
                "select count(*) from sync_publication_fences where external_operation_id=$1",
                [UUID.dump!(mute_id)]
              ).rows
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(mute_id)]
+    )
+
+    assert {:ok, remaining} = Postgres.claim_operations(64)
+    refute Enum.any?(remaining, fn {_, op} -> op.external_operation_id == mute_id end)
 
     refute_receive {:provider_call, _, _, _}, 0
 
@@ -563,6 +578,49 @@ defmodule ChalkSync.DurableLeavePostgresTest do
     assert_raise ExUnit.AssertionError, ~r/expected tenant, space, account and request key/, fn ->
       run_reentry_helper([])
     end
+  end
+
+  defp settle_old_media(connection, episode, operation, adapter, "ambiguous") do
+    id = operation.external_operation_id
+    assert operation.attempt_count < 100
+    assert :pending = execute_media(episode, operation, adapter)
+
+    assert {:error, :stale_participant_generation} =
+             Postgres.finalize_operation(episode, id, {:ambiguous, :provider})
+
+    assert {:ok, %{status: :pending}} = Postgres.read_operation(episode, id)
+    assert_receive {:provider_call, ^id, _, _}, 5_000
+
+    Postgrex.query!(
+      connection,
+      "update sync_external_operations set attempt_count=99,next_attempt_at=now() where external_operation_id=$1",
+      [UUID.dump!(id)]
+    )
+
+    assert {:ok, operations} = Postgres.claim_operations(64)
+
+    assert {^episode, %{attempt_count: 100} = retry} =
+             Enum.find(operations, fn {_, op} -> op.external_operation_id == id end)
+
+    assert :terminal_failure = execute_media(episode, retry, adapter)
+  end
+
+  defp settle_old_media(_connection, episode, operation, adapter, "confirmed") do
+    assert :confirmed = execute_media(episode, operation, adapter)
+  end
+
+  defp settle_old_media(_connection, episode, operation, adapter, "terminal_failure") do
+    assert :terminal_failure = execute_media(episode, operation, adapter)
+  end
+
+  defp execute_media(episode, operation, adapter) do
+    ExternalOperationConsumer.execute_operation(
+      episode,
+      operation,
+      {MediaPlane, adapter},
+      nil,
+      &Postgres.finalize_operation/3
+    )
   end
 
   defp account_join(episode, account, key) do
