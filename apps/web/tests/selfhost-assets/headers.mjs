@@ -18,10 +18,12 @@ test("Pages serves a single cache policy for fonts, vendor assets and HTML", asy
       ["/chalk-mathjax/4.1.3/tex-svg.js", "public, max-age=0, s-maxage=0, must-revalidate"],
       ["/assets/app.js", "public, max-age=31536000, immutable"],
       ["/", "public, max-age=0, s-maxage=0, must-revalidate"],
+      ["/dashboard", "public, max-age=0, s-maxage=0, must-revalidate"],
+      ["/dashboard/connect", "public, max-age=0, s-maxage=0, must-revalidate"],
     ];
     await writeFile(resolve(directory, "_headers"), await readFile(resolve(import.meta.dirname, "../../public/_headers")));
     for (const [path] of cases) {
-      const file = resolve(directory, path === "/" ? "index.html" : path.slice(1));
+      const file = resolve(directory, path === "/" ? "index.html" : path === "/dashboard" ? "dashboard.html" : path.slice(1));
       await mkdir(resolve(file, ".."), { recursive: true });
       await writeFile(file, "asset");
     }
@@ -30,6 +32,10 @@ test("Pages serves a single cache policy for fonts, vendor assets and HTML", asy
       const response = await runtime.dispatchFetch(`http://chalk.test${path}`);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("cache-control"), policy, path);
+      if (path === "/dashboard" || path.startsWith("/dashboard/")) {
+        assert.equal(response.headers.get("content-security-policy"), "frame-ancestors 'none'", path);
+        assert.equal(response.headers.get("x-frame-options"), "DENY", path);
+      }
     }
   } finally {
     await runtime?.dispose();

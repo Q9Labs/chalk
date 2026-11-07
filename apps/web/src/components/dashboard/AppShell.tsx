@@ -14,7 +14,9 @@ import { ErrorPanel, Menu, MenuItem, Seg, useToast } from "./kit";
 function useSignInRedirect(): () => void {
   const router = useRouter();
   return useCallback(() => {
-    const returnTo = router.state.location.pathname;
+    const { pathname, searchStr } = router.state.location;
+    // The connect page is the only dashboard page whose query must survive sign-in.
+    const returnTo = pathname === "/dashboard/connect" ? pathname + searchStr : pathname;
     if (returnTo.startsWith("/dashboard/sign-in")) return;
     void router.navigate({ to: "/dashboard/sign-in", search: { returnTo } });
   }, [router]);

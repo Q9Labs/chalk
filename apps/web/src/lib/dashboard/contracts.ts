@@ -32,6 +32,11 @@ export const homeStatusQuery = z.union([z.strictObject({ home: z.literal("1"), s
 export type HomeStatusQuery = z.infer<typeof homeStatusQuery>;
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
+/** The one-time handle the API puts in the consent link. It is a secret until the request is decided. */
+const consentHandle = z.string().regex(/^chalk_oar_[A-Za-z0-9_-]{20,100}$/);
+export const connectQuery = z.strictObject({ request: consentHandle });
+export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
+export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });
 export const homeAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("create-call"), name: name.optional(), admission, idempotencyKey }),
   z.strictObject({ action: z.literal("rename-call"), spaceId: id, name }),
@@ -122,6 +127,11 @@ export type HomeAction = z.infer<typeof homeAction>;
 export type CallAction = z.infer<typeof callAction>;
 export type PastSessionAction = z.infer<typeof pastAction>;
 export type DeveloperAction = z.infer<typeof developerAction>;
+export type ConnectAction = z.infer<typeof connectAction>;
+export type ConnectionsAction = z.infer<typeof connectionsAction>;
+export type ConnectDTO = { clientName: string; redirectHost: string; requestedScope: "chalk:read" | "chalk:manage" };
+export type ConnectionDTO = { id: string; clientName: string; scope: "chalk:read" | "chalk:manage"; lastUsedAt: string | null; createdAt: string };
+export type ConnectionsDTO = { connections: ConnectionDTO[]; nextCursor: string | null };
 export type ProfileDTO = { id: string; name: string; email: string; avatarUrl: string | null };
 export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
 export type CallDTO = { transcriptLanguage?: TranscriptLanguage | null; id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };
