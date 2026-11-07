@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
@@ -91,5 +92,17 @@ func TestOnlyAllowlistedSpacesStartOnTheOwnSFU(t *testing.T) {
 	binding, err := registry.ResolveBinding(tenants.Tenant{}, spaces.Space{ID: other, MediaPlane: chalkSelected}, runsOwnSFU)
 	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
 		t.Fatalf("Space outside the allowlist: %#v %v, want Cloudflare", binding, err)
+	}
+
+	// The own SFU cannot record or transcribe yet, so such a listed Space stays on Cloudflare.
+	for name, space := range map[string]spaces.Space{
+		"recording":     {ID: listed, MediaPlane: chalkSelected, RecordingPolicy: artifactpolicy.RecordingAutomatic},
+		"manual":        {ID: listed, MediaPlane: chalkSelected, RecordingPolicy: artifactpolicy.RecordingManual},
+		"transcription": {ID: listed, MediaPlane: chalkSelected, TranscriptionPolicy: artifactpolicy.TranscriptionOnDemand},
+	} {
+		binding, err := registry.ResolveBinding(tenants.Tenant{}, space, runsOwnSFU)
+		if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+			t.Fatalf("%s Space: %#v %v, want Cloudflare", name, binding, err)
+		}
 	}
 }

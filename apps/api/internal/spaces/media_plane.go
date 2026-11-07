@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -67,4 +68,12 @@ func (a ChalkSFUAllowlist) Size() int {
 		return -1
 	}
 	return len(a.spaces)
+}
+
+// Captures reports whether the Space may record or transcribe an Episode. The own
+// SFU has no capture path until M10, so such a Space must stay on Cloudflare.
+func (s Space) Captures() bool {
+	recording := s.RecordingPolicy == artifactpolicy.RecordingManual || s.RecordingPolicy == artifactpolicy.RecordingAutomatic
+	transcription := s.TranscriptionPolicy == artifactpolicy.TranscriptionOnDemand || s.TranscriptionPolicy == artifactpolicy.TranscriptionAutomatic
+	return recording || transcription
 }

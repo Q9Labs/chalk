@@ -11,16 +11,18 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-// A Space outside the own-SFU allowlist and an SDK that cannot run the own SFU
-// get Cloudflare, so only allowlisted Spaces move and old SDK cohorts stay on
-// Cloudflare when their Space selects the own SFU.
+// A Space outside the own-SFU allowlist, an SDK that cannot run the own SFU and a
+// Space that records or transcribes get Cloudflare, so only allowlisted Spaces
+// without capture move and old SDK cohorts stay on Cloudflare when their Space
+// selects the own SFU. The own SFU has no capture path yet, so an Episode there
+// would lose its recording without telling the user.
 func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	selected, err := selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
 	var pin spaces.MediaPlaneProvider
-	if selected == spaces.MediaPlaneProviderChalkSFU && (!r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU)) {
+	if selected == spaces.MediaPlaneProviderChalkSFU && (!r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU) || space.Captures()) {
 		pin = spaces.MediaPlaneProviderCloudflareSFU
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
