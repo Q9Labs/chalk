@@ -131,12 +131,12 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       corner={
         <>
           {showStatus && hasPoorConnection ? (
-            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-[6px] bg-[var(--chalk-overlay)] px-[7px]">
+            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-(--corner-md) bg-[var(--chalk-overlay)] px-(--space-2)">
               <SignalBars />
             </span>
           ) : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
-            <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-[6px] bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
+            <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
               Video paused for network
             </span>
           ) : null}
@@ -164,7 +164,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
         showName || showStatus ? (
           <>
             {pinned && <StageIcon name="pin" size={14} aria-label="Pinned" />}
-            <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-[5px] overflow-hidden">
+            <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-(--space-1-5) overflow-hidden">
               {showName && (
                 <>
                   <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full shrink-0 items-center [unicode-bidi:plaintext]" title={participant.displayName}>
@@ -182,7 +182,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
                 </>
               )}
               {participant.deviceHint ? (
-                <span data-part="tile-device" className="contents text-[11px]">
+                <span data-part="tile-device" className="contents text-(length:--type-caption)">
                   <span data-part="tile-device-type" className="flex h-full shrink-0 items-center whitespace-nowrap opacity-80">
                     {deviceLabel}
                   </span>
@@ -199,7 +199,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             {showStatus && participant.isHandRaised && (
               <span className="flex shrink-0 items-center text-[var(--chalk-overlay-warning)]" role="img" aria-label={`Hand raised${participant.handRaiseOrder ? `, number ${participant.handRaiseOrder}` : ""}`}>
                 <StageIcon name="hand" size={14} />
-                {participant.handRaiseOrder ? <b className="ml-px text-[11px] font-bold">{participant.handRaiseOrder}</b> : null}
+                {participant.handRaiseOrder ? <b className="ml-px text-(length:--type-caption) font-bold">{participant.handRaiseOrder}</b> : null}
               </span>
             )}
           </>
@@ -248,7 +248,7 @@ export function SignalBars(): React.JSX.Element {
   return (
     <span aria-hidden="true" className="inline-flex h-3 items-end gap-0.5">
       {[6, 9, 12, 15].map((height, index) => (
-        <i key={height} className="block w-[3px] rounded-[1px]" style={{ height, background: index === 0 ? "var(--chalk-overlay-warning)" : "color-mix(in srgb, var(--chalk-on-overlay) 30%, transparent)" }} />
+        <i key={height} className="block w-[3px] rounded-(--corner-xs)" style={{ height, background: index === 0 ? "var(--chalk-overlay-warning)" : "color-mix(in srgb, var(--chalk-on-overlay) 30%, transparent)" }} />
       ))}
     </span>
   );

@@ -27,7 +27,7 @@ export function ParticipantOptionsMenu({
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
-  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-sm font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)]");
+  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-(--corner-lg) px-3 py-2.5 text-left text-sm font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)]");
 
   const dividerClassName = "my-1.5 h-px bg-[var(--chalk-app-line)]";
 

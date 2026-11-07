@@ -41,15 +41,15 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
       data-chalk
       data-chalk-theme={theme?.colorScheme ?? "dark"}
       data-chalk-status={phase}
-      style={{ ...chalkThemeStyle(theme), fontSize: 14, lineHeight: 1.4 }}
+      style={{ ...chalkThemeStyle(theme), fontSize: "var(--type-body)", lineHeight: 1.4 }}
       className="chalk-root relative flex h-full min-h-0 w-full flex-col items-center justify-center gap-3 bg-[var(--chalk-canvas)] p-6 text-center text-[var(--chalk-text)]"
     >
-      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
+      <h1 role={phase === "entering" ? "status" : undefined} style={{ fontSize: "var(--type-title)", fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap" }}>
         {copy.title}
       </h1>
-      {reason || copy.detail ? <p className="text-[14px] text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
+      {reason || copy.detail ? <p className="text-(length:--type-body) text-[var(--chalk-muted-text)]">{reason ?? copy.detail}</p> : null}
       {phase === "failed" && errorCode ? (
-        <p className="text-[13px] text-[var(--chalk-muted-text)]">
+        <p className="text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">
           Reference:{" "}
           <code dir="ltr" className="break-all">
             {errorCode}
@@ -63,7 +63,7 @@ export function StatusSurface({ phase, callName = "the call", reason, episodeEnd
         {phase !== "entering" && onHome ? <StatusAction icon={<StatusIcon />} label="Home" onClick={onHome} /> : null}
       </div>
       {onReportProblem && phase !== "entering" ? (
-        <button type="button" onClick={onReportProblem} className="mt-[18px] px-2.5 py-2 text-[13px] text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
+        <button type="button" onClick={onReportProblem} className="mt-(--space-4) px-2.5 py-2 text-(length:--type-body-sm) text-[var(--chalk-muted-text)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2">
           Report a problem
         </button>
       ) : null}
@@ -88,7 +88,7 @@ function StatusIcon({ retry = false }: { readonly retry?: boolean }) {
 
 function StatusAction({ icon, label, onClick, disabled }: { readonly icon: React.ReactNode; readonly label: string; readonly onClick: () => void; readonly disabled?: boolean }): React.JSX.Element {
   return (
-    <button type="button" onClick={onClick} disabled={disabled} style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.4 }} className="group flex flex-col items-center gap-2 text-[var(--chalk-soft-text)] outline-none disabled:pointer-events-none disabled:opacity-50">
+    <button type="button" onClick={onClick} disabled={disabled} style={{ fontSize: "var(--type-body-sm)", fontWeight: 500, lineHeight: 1.4 }} className="group flex flex-col items-center gap-2 text-[var(--chalk-soft-text)] outline-none disabled:pointer-events-none disabled:opacity-50">
       <span
         aria-hidden="true"
         data-part="status-action-circle"
