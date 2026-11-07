@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -59,6 +60,17 @@ type oauthHarness struct {
 	tenantB  utilities.ID
 	logs     *bytes.Buffer
 	resource string
+	// documents answers client_id metadata document fetches; no test uses the network.
+	documents oauthDocuments
+}
+
+type oauthDocuments map[string]string
+
+func (d oauthDocuments) Fetch(_ context.Context, clientID string) ([]byte, error) {
+	if body, ok := d[clientID]; ok {
+		return []byte(body), nil
+	}
+	return nil, errors.New("no document")
 }
 
 type sqlcPool = sqlc.DBTX
@@ -104,7 +116,8 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 	var issuer string
 	server := httptest.NewUnstartedServer(nil)
 	issuer = "http://" + server.Listener.Addr().String()
-	oauth := mcpauth.NewService(NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: issuer, ConsentURL: "https://dashboard.example.test/dashboard/connect", Now: clock.Now})
+	documents := oauthDocuments{}
+	oauth := mcpauth.NewService(NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: issuer, ConsentURL: "https://dashboard.example.test/dashboard/connect", Now: clock.Now}).WithMetadataFetcher(documents)
 	options := httpapi.Options{
 		OAuth:            oauth,
 		TenantAuthz:      authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
@@ -117,7 +130,7 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 	server.Config.Handler = httpapi.NewRouter(options)
 	server.Start()
 	t.Cleanup(server.Close)
-	return &oauthHarness{t: t, pool: pool, server: server, clock: clock, tenantA: tenantA, tenantB: tenantB, logs: logs, resource: issuer + "/mcp"}
+	return &oauthHarness{t: t, pool: pool, server: server, clock: clock, tenantA: tenantA, tenantB: tenantB, logs: logs, resource: issuer + "/mcp", documents: documents}
 }
 
 func (h *oauthHarness) do(method, path string, headers map[string]string, body string) (*http.Response, string) {
@@ -768,5 +781,36 @@ func TestMCPOAuthEmptyRedirectURIIsTreatedAsOmitted(t *testing.T) {
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {single}, "code": {code}, "redirect_uri": {""}, "code_verifier": {pkce.verifier}, "resource": {h.resource}}
 	if status, _ := h.token(form); status != http.StatusBadRequest {
 		t.Errorf("empty redirect_uri after a supplied one = %d, want 400", status)
+	}
+}
+
+func TestMCPOAuthClientIDMetadataDocuments(t *testing.T) {
+	h := newOAuthHarness(t)
+	_, metadata := h.do(http.MethodGet, "/.well-known/oauth-authorization-server", nil, "")
+	if !strings.Contains(metadata, `"client_id_metadata_document_supported":true`) {
+		t.Fatalf("authorization server metadata does not advertise client ID metadata documents: %s", metadata)
+	}
+	const redirect = "https://claude.ai/api/mcp/auth_callback"
+	clientID := "https://claude.ai/oauth/" + h.tenantA.String()
+	h.documents[clientID] = `{"client_id":"` + clientID + `","client_name":"Claude (CIMD)","redirect_uris":["` + redirect + `"],"token_endpoint_auth_method":"none"}`
+
+	tokens, _ := h.connect(clientID, redirect, h.tenantA)
+	if h.mcpStatus(tokens.AccessToken) != http.StatusOK {
+		t.Fatal("a token issued to a metadata-document client must reach /mcp")
+	}
+	if status, rotated := h.refresh(clientID, tokens.RefreshToken); status != http.StatusOK || rotated.AccessToken == "" {
+		t.Fatalf("refresh for a metadata-document client: %d %+v", status, rotated)
+	}
+
+	// A document that names a redirect outside the allowlist, or the wrong client_id, never reaches consent.
+	hostile := "https://claude.ai/oauth/hostile"
+	h.documents[hostile] = `{"client_id":"` + hostile + `","client_name":"Claude","redirect_uris":["https://evil.example.test/cb"]}`
+	mismatch := "https://claude.ai/oauth/mismatch"
+	h.documents[mismatch] = `{"client_id":"https://claude.ai/oauth/other","client_name":"Claude","redirect_uris":["` + redirect + `"]}`
+	for _, id := range []string{hostile, mismatch, "https://claude.ai/oauth/missing"} {
+		response, body := h.do(http.MethodGet, "/oauth/authorize?"+h.authorizeQuery(id, redirect, newPKCE(), nil).Encode(), nil, "")
+		if response.StatusCode != http.StatusBadRequest || response.Header.Get("Location") != "" {
+			t.Errorf("%s: %d %q %s", id, response.StatusCode, response.Header.Get("Location"), body)
+		}
 	}
 }

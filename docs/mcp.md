@@ -79,6 +79,17 @@ receives a token for your tenant only.
 - Registration only accepts redirect URIs for claude.ai, claude.com, ChatGPT,
   loopback addresses and operator-configured exact URIs. `/oauth/authorize`
   never redirects to a URI that is not registered for the client.
+- A client can also skip registration and use an HTTPS URL as its `client_id`
+  (OAuth Client ID Metadata Documents, advertised as
+  `client_id_metadata_document_supported`). Chalk fetches the document once per
+  authorization, and it must name the same URL as `client_id`, have a name, and list
+  one to five `redirect_uris` that pass the allowlist above. It may not hold a
+  secret or ask for client authentication. The fetch resolves the host, refuses any
+  non-public address, connects to the address it checked on port 443, follows no
+  redirects, and stops after 5 seconds or 5 KiB. The consent screen shows the name
+  stored when the client was first seen, so a later rename in the document appears
+  only after the stored row is pruned. Redirect URIs are always checked against the
+  document just fetched.
 - Consent runs on the dashboard, where the signed-in person approves one tenant and
   one bundle: `chalk:read` or `chalk:manage` (read plus Spaces, Episodes,
   Recordings, Transcriptions and Webhooks changes). No bundle includes API keys,
