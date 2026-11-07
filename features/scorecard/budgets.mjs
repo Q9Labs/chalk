@@ -3,7 +3,7 @@
 // between the two views: loadCallBudgets for the check, withCallLimits for propose-call-budgets.
 import { readFile } from "node:fs/promises";
 
-export const BUDGETS_FILE = new URL("../../perf/budgets.json", import.meta.url);
+const BUDGETS_FILE = new URL("../../perf/budgets.json", import.meta.url);
 
 // The check's metric names, each with the scorecard id segment it becomes.
 const CALL_METRICS = {
@@ -22,8 +22,8 @@ const CALL_METRICS = {
 };
 const ROUTE_METRICS = { routeJsGzipKiB: "js_gzip_kib", routeCssGzipKiB: "css_gzip_kib" };
 
-export const callMetricId = (device, scenario, metric) => `web.${device}.${scenario}.${CALL_METRICS[metric]}`;
-export const routeMetricId = (metric) => `web.route.${ROUTE_METRICS[metric]}`;
+const callMetricId = (device, scenario, metric) => `web.${device}.${scenario}.${CALL_METRICS[metric]}`;
+const routeMetricId = (metric) => `web.route.${ROUTE_METRICS[metric]}`;
 
 export async function readBudgets() {
   return JSON.parse(await readFile(BUDGETS_FILE, "utf8"));
