@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 
 import { Icon } from "../site/Icon";
-import { AppLogo } from "./AppLogo";
+import { AppLogo, AppPair } from "./AppLogo";
 import { CopyAction, Dialog, Seg } from "./kit";
 
 type Category = "chat" | "agent";
@@ -125,9 +125,6 @@ export function McpClients({ mcpUrl, registeredNames }: { readonly mcpUrl: strin
 
   return (
     <>
-      <div className="secth" style={{ marginTop: 48 }}>
-        <h2>Connect an AI app</h2>
-      </div>
       <div className="cfind">
         <label className="cquery" htmlFor={searchId}>
           <Icon name="search" size={18} />
@@ -145,18 +142,18 @@ export function McpClients({ mcpUrl, registeredNames }: { readonly mcpUrl: strin
             return (
               <li key={client.name}>
                 <button type="button" className="ctile" onClick={() => setOpen(client)}>
-                  <AppLogo name={client.name} size="lg" />
+                  <AppLogo name={client.name} size="md" />
                   <span className="ctext">
                     <span className="nm">{client.name}</span>
                     <span className="ln">{client.line}</span>
                   </span>
                   {connected ? (
-                    <span className="cstate ok">
-                      <Icon name="check" size={14} />
+                    <span className="cbadge ok">
+                      <Icon name="check" size={12} />
                       Connected
                     </span>
                   ) : client.way.kind === "soon" ? (
-                    <span className="cstate">Soon</span>
+                    <span className="cbadge">Soon</span>
                   ) : null}
                 </button>
               </li>
@@ -174,13 +171,10 @@ function ClientSheet({ client, mcpUrl, onClose }: { readonly client: Client; rea
   return (
     <Dialog
       wide
+      tall={way.kind === "ready"}
       onClose={onClose}
-      title={
-        <span className="ctitle">
-          <AppLogo name={client.name} size="sm" />
-          Add Chalk to {client.name}
-        </span>
-      }
+      lead={<AppPair name={client.name} />}
+      title={`Add Chalk to ${client.name}`}
       actions={
         <>
           <a className="btn gh" href={client.docs} target="_blank" rel="noopener noreferrer">
@@ -200,7 +194,7 @@ function ClientSheet({ client, mcpUrl, onClose }: { readonly client: Client; rea
             <span className="lbl">{way.copyLabel}</span>
             <div className="cbox2">
               <code>{way.copy(mcpUrl)}</code>
-              <CopyAction text={way.copy(mcpUrl)} label={`Copy ${way.copyLabel}`} toastMessage={`${way.copyLabel} copied`} />
+              <CopyAction pill text={way.copy(mcpUrl)} label="Copy" toastMessage={`${way.copyLabel} copied`} />
             </div>
           </div>
           <ol className="csteps">

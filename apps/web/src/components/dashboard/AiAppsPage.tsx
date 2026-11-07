@@ -7,25 +7,50 @@ import { Icon } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { DisconnectPrompt } from "./DisconnectPrompt";
-import { MoreButton, Sk, useToast } from "./kit";
+import { CopyAction, ErrorPanel, MoreButton, Sk, useToast } from "./kit";
 import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
 /** How to connect an AI app to Chalk, and the apps that signed in to this account through OAuth. */
-export function ConnectedApps() {
-  const { state, update } = useLoad(() => readPage("connections", {}), "connections");
+export function AiAppsPage() {
+  const { state, reload, update } = useLoad(() => readPage("connections", {}), "connections");
   const [revoking, setRevoking] = useState<ConnectionDTO | null>(null);
   const toast = useToast();
 
   return (
-    <>
-      {state.kind === "ready" ? <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.connections.map((connection) => connection.clientName)} /> : null}
-      <div className="secth" style={{ marginTop: 48 }}>
-        <h2>Connected apps</h2>
+    <div className="wrap wide">
+      <div className="pgh">
+        <h1>AI apps</h1>
       </div>
-      {state.kind === "loading" ? <Sk width="100%" height={48} /> : null}
-      {state.kind === "error" ? <p className="ohelp">Couldn’t load connected apps. {errorMessage(state.error)}</p> : null}
+      <p className="intro">Connect Claude, ChatGPT and other AI apps to Chalk, and they can work with your Spaces for you. You choose what each app is allowed to do.</p>
+      {state.kind === "ready" ? (
+        <>
+          <div className="murl">
+            <span className="lbl">Chalk URL</span>
+            <code>{state.data.mcpUrl}</code>
+            <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
+          </div>
+          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.connections.map((connection) => connection.clientName)} />
+        </>
+      ) : null}
+      {state.kind === "loading" ? (
+        <div className="cgrid" aria-hidden="true">
+          {[0, 1, 2, 3].map((index) => (
+            <Sk key={index} width="100%" height={132} radius="16px" />
+          ))}
+        </div>
+      ) : null}
+      {state.kind === "error" ? (
+        <div style={{ marginTop: 32 }}>
+          <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
+        </div>
+      ) : null}
+      {state.kind === "ready" ? (
+        <div className="secth" style={{ marginTop: 48 }}>
+          <h2>Connected apps</h2>
+        </div>
+      ) : null}
       {state.kind === "ready" && state.data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
@@ -104,6 +129,6 @@ export function ConnectedApps() {
           }
         />
       ) : null}
-    </>
+    </div>
   );
 }

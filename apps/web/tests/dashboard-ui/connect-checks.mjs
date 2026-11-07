@@ -87,7 +87,7 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
-    const { tab, context } = await open("/dashboard/developer");
+    const { tab, context } = await open("/dashboard/apps");
     try {
       const rows = tab.locator("table.capps tbody tr");
       await rows.first().waitFor();
@@ -118,7 +118,7 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
-    const { tab, context } = await open("/dashboard/developer", { set: "manyConnections=1" });
+    const { tab, context } = await open("/dashboard/apps", { set: "manyConnections=1" });
     try {
       const rows = tab.locator("table.capps tbody tr");
       await rows.first().waitFor();
@@ -131,10 +131,21 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
-    const { tab, context } = await open("/dashboard/developer");
+    const { tab, context } = await open("/dashboard/apps");
     try {
       const tiles = tab.locator(".ctile");
       await tiles.first().waitFor();
+      check(
+        "the AI apps page has its own tab and heading",
+        (await tab.getByRole("heading", { level: 1, name: "AI apps" }).isVisible()) && (await tab.getByRole("link", { name: "AI apps", exact: true }).getAttribute("aria-current")) === "page" && (await tab.getByRole("link", { name: "Home", exact: true }).getAttribute("aria-current")) === null,
+      );
+      check("the page shows the Chalk URL to copy", (await tab.locator(".murl code").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".murl").getByRole("button", { name: "Copy URL" }).isVisible()));
+      const columns = async (width) => {
+        await tab.setViewportSize({ width, height: 900 });
+        return tab.locator(".cgrid").evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(" ").length);
+      };
+      check("the grid has 4 columns on a wide screen, 2 on a tablet and 1 on a phone", (await columns(1280)) === 4 && (await columns(820)) === 2 && (await columns(390)) === 1);
+      await tab.setViewportSize({ width: 1280, height: 860 });
       check("the catalog lists the clients that can connect", (await tiles.count()) === 7);
       const boxes = await tiles.evaluateAll((nodes) => nodes.map((node) => ({ w: Math.round(node.getBoundingClientRect().width), h: Math.round(node.getBoundingClientRect().height) })));
       check(
@@ -155,6 +166,11 @@ export async function connectChecks({ open, check }) {
       check("a connected app shows Connected and the same name with a suffix does not", (await tiles.filter({ hasText: "Claude" }).first().innerText()).includes("Connected") && !(await tiles.filter({ hasText: "Claude Code" }).innerText()).includes("Connected"));
       check("an app that can't connect yet says Soon", (await tiles.filter({ hasText: "Grok" }).innerText()).includes("Soon"));
       const search = tab.getByRole("searchbox", { name: "Search AI apps" });
+      await tiles.filter({ hasText: "Codex" }).focus();
+      await tab.keyboard.press("Enter");
+      check("a tile opens from the keyboard", await tab.getByRole("dialog").isVisible());
+      await tab.keyboard.press("Escape");
+      check("closing the sheet returns focus to its tile", await tiles.filter({ hasText: "Codex" }).evaluate((node) => node === document.activeElement));
       await search.fill("codex");
       check("search narrows the catalog", (await tiles.count()) === 1);
       await search.fill("zzz");
@@ -166,6 +182,7 @@ export async function connectChecks({ open, check }) {
       await tiles.filter({ hasText: "Claude Code" }).click();
       const sheet = tab.getByRole("dialog");
       check("a client sheet gives the command with this server's address", (await sheet.locator("code").innerText()) === "claude mcp add --transport http chalk https://api.chalk.test/mcp");
+      check("the sheet shows the app and Chalk logos", (await sheet.locator(".apair .alogo").count()) === 2);
       await tab.keyboard.press("Escape");
       await tiles.filter({ hasText: "Claude" }).first().click();
       check("a chat app sheet gives the URL and numbered steps", (await sheet.locator("code").innerText()) === "https://api.chalk.test/mcp" && (await sheet.locator("ol li").count()) === 5);
@@ -174,16 +191,32 @@ export async function connectChecks({ open, check }) {
       check("an app that can't connect yet offers no steps", (await sheet.locator("code, ol").count()) === 0 && (await sheet.getByText("end to end").isVisible()));
       await tab.keyboard.press("Escape");
       check("Escape closes the sheet", (await tab.getByRole("dialog").count()) === 0);
+      await tab.setViewportSize({ width: 390, height: 844 });
+      await tiles.filter({ hasText: "Claude Code" }).click();
+      await tab.waitForTimeout(400);
+      const sheetBox = await sheet.boundingBox();
+      check("on a phone the sheet is a tall bottom sheet inside the screen", sheetBox !== null && sheetBox.height > 700 && sheetBox.width <= 390 && sheetBox.y + sheetBox.height <= 844 + 1);
+      await tab.keyboard.press("Escape");
     } finally {
       await context.close();
     }
   }
   {
-    const { tab, context } = await open("/dashboard/developer", { account: "new" });
+    const { tab, context } = await open("/dashboard/apps", { account: "new" });
     try {
       await tab.getByText("No connected apps").waitFor();
       check("no connected apps points at the catalog", await tab.getByText("Pick an app above").isVisible());
       check("with nothing connected no tile says Connected", (await tab.locator(".ctile", { hasText: "Connected" }).count()) === 0);
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { tab, context } = await open("/dashboard/developer");
+    try {
+      await tab.getByRole("link", { name: "Connect an AI app" }).click();
+      await tab.getByRole("heading", { level: 1, name: "AI apps" }).waitFor();
+      check("the Developer page links to the AI apps page", tab.url().endsWith("/dashboard/apps"));
     } finally {
       await context.close();
     }
