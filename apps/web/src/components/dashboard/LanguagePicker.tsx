@@ -299,7 +299,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
   );
 
   return (
-    <div className={`lp ${variant}`} ref={wrap}>
+    <div className={`lp lp-${variant}`} ref={wrap}>
       <button
         ref={trigger}
         id={id}
