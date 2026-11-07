@@ -55,7 +55,8 @@ container_exists() {
 
 wait_until_ready() {
   for _ in {1..60}; do
-    if docker exec "${container}" pg_isready -U "${user}" -d "${db}" >/dev/null 2>&1; then
+    # TCP, not the socket: the image's first-boot init server listens on the socket only, before the database exists.
+    if docker exec "${container}" pg_isready -h 127.0.0.1 -U "${user}" -d "${db}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.5
