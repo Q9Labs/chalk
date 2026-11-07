@@ -103,7 +103,7 @@ CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
 
 For Cloudflare, use that provider's media address in both commands.
 
-A report passes when every join (including the join of each fault trial) renders within 10 seconds, every short fault
+A report passes when every join (including the join of each fault trial) renders within 10 seconds of the second client's join call, every short fault
 recovers rendered media within 15 seconds without a manual toggle, and recovery
 never turns a muted microphone back on. Set `CHALK_CANARY_SPACE_ID` to reuse one
 allowlisted Space instead of creating a Space for each trial.

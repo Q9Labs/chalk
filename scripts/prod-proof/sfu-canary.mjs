@@ -22,6 +22,7 @@
 // needs, instead of creating a Space for each trial.
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { parseArgs } from "node:util";
 import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
@@ -77,16 +78,26 @@ async function openCall(run, receiver, owned) {
   owned.ending = episodeEnd(run, owned.path);
   await save(`${run.directory}/episode.json`, episode);
   let startedAt = performance.now();
-  // A join starts when the first guest calls the SDK join, not when its browser launches.
-  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 0 && (startedAt = at) });
+  // Guests launch one after the other, and the first cannot receive media before the second joins. A join is timed
+  // from the second guest's SDK join call, so browser startup and admission of either guest are outside it.
+  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 1 && (startedAt = at) });
   owned.ending.useSDK(guests.pages[0]);
   return { guests, startedAt };
+}
+
+// True from the start of the fault command until the restore command ends, so an interrupt can restore the path.
+let faultInstalled = false;
+
+function restoreOnInterrupt(signal) {
+  if (faultInstalled) spawnSync("sh", ["-c", faultUp], { stdio: "inherit" });
+  process.exit(signal === "SIGINT" ? 130 : 143);
 }
 
 async function faultRound(pages, muted) {
   if (muted) await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
   let restoredAt;
   try {
+    faultInstalled = true;
     await shell(faultDown);
     await sleep(faultMs - stallProbeMs);
     const before = await stats(pages);
@@ -96,6 +107,7 @@ async function faultRound(pages, muted) {
     // Recovery counts from the start of the restore command, which may keep running after the path is back.
     restoredAt = performance.now();
     await shell(faultUp);
+    faultInstalled = false;
   }
   if (!muted) return rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
   const recovered = await mutedRendersWithin(pages, restoredAt, recoveryLimitMs);
@@ -170,6 +182,8 @@ function conclude(report) {
 }
 
 async function main() {
+  process.once("SIGINT", restoreOnInterrupt);
+  process.once("SIGTERM", restoreOnInterrupt);
   const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
   runLabel(runId);
   const directory = resolve(".private", "prod-proof", runId);
