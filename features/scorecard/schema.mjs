@@ -51,7 +51,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
 
 // Units a metric may use. A metric's unit is fixed by its entry in METRICS. A pass value is a share from 0 to 1 and
 // higher is better; every other unit is lower-is-better.
-export const UNITS = /** @type {const} */ (["ms", "kib", "mib", "percent", "pps", "mbit_s", "count", "score", "pass"]);
+const UNITS = /** @type {const} */ (["ms", "kib", "mib", "percent", "pps", "mbit_s", "count", "score", "pass"]);
 /** @typedef {(typeof UNITS)[number]} Unit */
 
 // Stable metric ids, each with its unit. Renaming an id or changing its unit breaks history, so add a new id instead.
