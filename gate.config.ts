@@ -31,6 +31,12 @@ const taskIds = [
   "attw",
 ];
 // Format is always on so documentation-only changes are still checked.
+// Raw color, spacing, radius, font-size and shadow values may only shrink. theme/tokens.ts defines the tokens.
+const designTokenOptions = {
+  baselinePath: "scripts/gates/design-tokens-baseline.json",
+  roots: ["apps/web/src", "packages/ui/src", "sdks/typescript/react/src", "sdks/typescript/react-native/src", "apps/mobile"],
+  ignore: ["**/theme/tokens.ts"],
+};
 const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
   "apps/api",
@@ -102,5 +108,5 @@ export default defineGate({
   },
   concurrency: 1,
   // CI sets GATE_LANE_GROUP to run one lane group per job.
-  lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." })], process.env.GATE_LANE_GROUP),
+  lanes: laneGroupLanes([emptyScopeLane, ...chalkLanes, lanes.depcruise({ config: ".dependency-cruiser.cjs", source: "." }), lanes.designTokens(designTokenOptions)], process.env.GATE_LANE_GROUP),
 });
