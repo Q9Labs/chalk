@@ -4,6 +4,7 @@ export { ChalkArrival } from "./status/ChalkArrival";
 export type { ArrivalState, ChalkArrivalProps } from "./status/ChalkArrival";
 export type { Permission } from "./toasts/CallEventToasts";
 export type { ColorScheme, Palette } from "./theme/tokens";
+export { corners, fontSizes, space } from "./theme/tokens";
 export { ChalkProvider, useSpaceClient } from "./context/space-client-context";
 export type { ChalkProviderProps } from "./context/space-client-context";
 export { useCan, useChat, useConnection, useMedia, useParticipants, useReactions, useRecording, useSelf, useWhiteboard } from "./hooks/space-hooks";
