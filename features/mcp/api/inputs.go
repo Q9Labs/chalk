@@ -81,15 +81,25 @@ type RecordingDownloadInput struct {
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
 	Download         bool   `json:"download,omitempty"`
 }
-type TranscriptsInput struct {
+type TenantViewInput struct {
 	PageInput
-	RecordingID string `json:"recording_id,omitempty"`
+	View string `json:"view,omitempty"`
 }
-type TranscriptInput struct {
-	ReadInput
-	TranscriptID     string `json:"transcript_id"`
+type TranscriptViewInput struct {
+	PageInput
 	View             string `json:"view,omitempty"`
+	RecordingID      string `json:"recording_id,omitempty"`
+	TranscriptID     string `json:"transcript_id,omitempty"`
 	ExpiresInSeconds int    `json:"expires_in_seconds,omitempty"`
+}
+type TranscriptIDInput struct {
+	TranscriptID string `json:"transcript_id"`
+}
+type TranscriptRequestInput struct {
+	RecordingID string   `json:"recording_id"`
+	Language    string   `json:"language,omitempty"`
+	Languages   []string `json:"languages,omitempty"`
+	RequestKey  string   `json:"request_key"`
 }
 type MembershipInput[C, U any] struct {
 	Action       string `json:"action"`

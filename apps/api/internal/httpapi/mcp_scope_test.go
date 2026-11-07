@@ -22,7 +22,7 @@ var testRequestKey = strings.Repeat("k", 16)
 const scopeTestMetadata = `https://api.example/.well-known/oauth-protected-resource/mcp`
 
 // The OAuth bundles can never call these: no bundle holds their scopes.
-var toolsOutsideEveryBundle = []string{"chalk_update_tenant", "chalk_list_memberships", "chalk_set_membership", "chalk_list_api_keys", "chalk_issue_api_key", "chalk_revoke_api_key", "chalk_delete_transcript"}
+var toolsOutsideEveryBundle = []string{"chalk_update_tenant", "chalk_set_membership", "chalk_issue_api_key", "chalk_revoke_api_key", "chalk_delete_transcript"}
 
 func scopeTestPrincipal(t *testing.T, kind authentication.PrincipalKind, scopes ...authentication.Scope) authentication.Principal {
 	t.Helper()
@@ -97,7 +97,7 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 	read := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalOAuth, mcpauth.AuthenticationScopes(mcpauth.ScopeRead)...)))
 	t.Logf("tools listed: api key with all scopes=%d, chalk:manage=%d, chalk:read=%d", len(all), len(manage), len(read))
 
-	if len(all) != 33 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 16 {
+	if len(all) != 33 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 17 {
 		t.Fatalf("listed %d, %d and %d tools for all scopes, chalk:manage and chalk:read", len(all), len(manage), len(read))
 	}
 	for _, name := range toolsOutsideEveryBundle {
@@ -156,7 +156,7 @@ func TestMCPRefusalsWithoutAStepUpStayToolErrors(t *testing.T) {
 		principal       authentication.Principal
 		tool, arguments string
 	}{
-		"oauth tool outside every bundle":    {read, "chalk_list_api_keys", `{}`},
+		"oauth tool outside every bundle":    {read, "chalk_inspect_tenant", `{"view":"api_keys"}`},
 		"oauth delete scope no bundle holds": {read, "chalk_configure_webhook", `{"action":"delete","endpoint_id":"` + strings.Repeat("a", 36) + `","revision":1,"request_key":"` + testRequestKey + `"}`},
 		"api key missing scope":              {spacesRead, "chalk_create_space", `{"body":{"name":"A","slug":"a"},"request_key":"` + testRequestKey + `"}`},
 	} {
