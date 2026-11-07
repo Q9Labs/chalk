@@ -42,9 +42,9 @@ func TestStealRaisesPressureAndSustainedStealCannotFreezeForever(t *testing.T) {
 	if p.active(now) {
 		t.Fatalf("30 s of steal still reads as pressure after %v", pressureMax)
 	}
-	p.stealSample(at(0), 0)
-	p.stealSample(now+int64(pressureHold), 20)
-	if !p.active(now + int64(pressureHold)) {
+	later := now + int64(pressureHold+2*time.Second) // its second begins after the hold ended
+	p.stealSample(later, 20)
+	if !p.active(later) {
 		t.Fatal("pressure did not return after a quiet spell")
 	}
 }
@@ -179,5 +179,35 @@ func TestRunningProbesCountAgainstTheNodesProbeBudget(t *testing.T) {
 	budget = node.shareHostState(idle, now)
 	if !budget.take() || !budget.take() || budget.take() {
 		t.Fatal("an idle node must give out exactly maxProbes slots")
+	}
+}
+
+// freezeTicks drives control ticks every allocationInterval for d, except that
+// the loop freezes for freeze at the start of every period.
+func freezeTicks(p *hostPressure, from, to, period, freeze time.Duration) {
+	for moment := from; moment <= to; moment += allocationInterval {
+		if moment%period < freeze && moment >= period {
+			continue
+		}
+		p.controlTick(at(moment))
+	}
+}
+
+func TestRepeatedShortStallsCannotRestartTheCap(t *testing.T) {
+	var p hostPressure
+	// 300 ms freezes every 2.1 s: each stall begins inside the hold of the one before.
+	freezeTicks(&p, 0, 9*time.Second, 2100*time.Millisecond, 300*time.Millisecond)
+	if !p.active(at(9 * time.Second)) {
+		t.Fatalf("no pressure 9 s into a run of repeating stalls")
+	}
+	freezeTicks(&p, 9*time.Second, 40*time.Second, 2100*time.Millisecond, 300*time.Millisecond)
+	if p.active(at(40 * time.Second)) {
+		t.Fatalf("pressure still held after 40 s of repeating stalls, the cap restarts on each one")
+	}
+	// A quiet gap longer than the hold ends the run, so a later stall begins a new one.
+	tickThrough(&p, 40*time.Second, 50*time.Second, 0)
+	p.controlTick(at(50*time.Second + 400*time.Millisecond))
+	if !p.active(at(50*time.Second + 500*time.Millisecond)) {
+		t.Fatalf("a stall after a quiet gap raised no pressure")
 	}
 }

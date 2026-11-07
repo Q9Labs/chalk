@@ -76,9 +76,14 @@ func (p *hostPressure) stealSample(now int64, percent float64) {
 	}
 }
 
+// raise records pressure over from..now. A span that overlaps or touches the
+// current hold extends that run and keeps its earliest start, so repeated short
+// stalls cannot restart the pressureMax cap. Only a quiet gap begins a new run.
 func (p *hostPressure) raise(from, now int64) {
-	if now >= p.until {
+	if from >= p.until {
 		p.since = from
+	} else {
+		p.since = min(p.since, from)
 	}
 	p.until = now + int64(pressureHold)
 }
