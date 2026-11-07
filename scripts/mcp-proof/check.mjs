@@ -35,7 +35,7 @@ function rpc(fetchImpl, mcpUrl, apiKey, id, method, params, extraHeaders = {}) {
 }
 
 /** Runs the checks a person connecting an MCP client would hit, in order. Returns the step names that passed. */
-export async function checkMcp({ apiUrl, apiKey, tenantId, expectOAuth, fetchImpl = fetch }) {
+export async function checkMcp({ apiUrl, apiKey, expectOAuth, fetchImpl = fetch }) {
   const base = apiUrl.replace(/\/+$/, "");
   const mcpUrl = `${base}/mcp`;
   const passed = [];
@@ -78,14 +78,13 @@ export async function checkMcp({ apiUrl, apiKey, tenantId, expectOAuth, fetchImp
   const sessionHeaders = session ? { "mcp-session-id": session } : {};
   const listed = await json(await rpc(fetchImpl, mcpUrl, apiKey, 3, "tools/list", {}, sessionHeaders), "tools/list");
   const names = (listed.result?.tools ?? []).map((tool) => tool.name);
-  if (!names.includes("chalk_get_connection") || !names.includes("chalk_list_spaces")) fail("tools/list", `expected chalk_get_connection and chalk_list_spaces among ${names.length} tools`);
+  if (!names.includes("chalk_list_spaces")) fail("tools/list", `expected chalk_list_spaces among ${names.length} tools`);
   pass(`tools/list returns ${names.length} tools`);
 
-  const called = await json(await rpc(fetchImpl, mcpUrl, apiKey, 4, "tools/call", { name: "chalk_get_connection", arguments: {} }, sessionHeaders), "tools/call");
-  const text = JSON.stringify(called.result ?? called);
-  if (called.result?.isError || called.error) fail("tools/call chalk_get_connection", text.slice(0, 300));
-  if (tenantId && !text.includes(tenantId)) fail("tools/call chalk_get_connection", `result does not name tenant ${tenantId}`);
-  pass("authenticated tool call names the proof tenant");
+  const called = await rpc(fetchImpl, mcpUrl, apiKey, 4, "tools/call", { name: "chalk_list_spaces", arguments: {} }, sessionHeaders);
+  const result = await json(called, "tools/call chalk_list_spaces");
+  if (called.status !== 200 || result.error || !result.result || result.result.isError) fail("tools/call chalk_list_spaces", `HTTP ${called.status}: ${JSON.stringify(result).slice(0, 300)}`);
+  pass("authenticated tool call lists the proof tenant's Spaces");
   return passed;
 }
 
@@ -99,7 +98,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const passed = await checkMcp({
     apiUrl: requiredEnv("CHALK_PROOF_API_URL"),
     apiKey: requiredEnv("CHALK_PROOF_API_KEY"),
-    tenantId: process.env.CHALK_PROOF_TENANT_ID,
     expectOAuth: process.env.CHALK_MCP_EXPECT_OAUTH !== "false",
   }).catch((error) => {
     console.error(error.message);

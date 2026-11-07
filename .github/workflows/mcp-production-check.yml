@@ -2,7 +2,7 @@ name: MCP production check
 
 # Connects to the hosted MCP server the way a client does: an unauthenticated call
 # gets a 401 with OAuth discovery, then the proof tenant's API key runs initialize,
-# tools/list and one tool call. A 404 or a broken sign-in setup fails this run.
+# tools/list and one tool call (listing Spaces, which the proof key's scopes allow). A 404 or a broken sign-in setup fails this run.
 
 on:
   schedule:
@@ -23,6 +23,7 @@ permissions:
 concurrency:
   group: mcp-production-check-${{ inputs.environment || 'production' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   mcp:
@@ -43,5 +44,5 @@ jobs:
         env:
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
-          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_MCP_EXPECT_OAUTH: ${{ vars.CHALK_MCP_EXPECT_OAUTH }}
         run: node scripts/mcp-proof/check.mjs

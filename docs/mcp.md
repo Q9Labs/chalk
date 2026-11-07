@@ -173,5 +173,7 @@ transcript bodies in logs.
 The `MCP production check` workflow runs every six hours and after each production
 Promote. It sends an unauthenticated request (expects 401 with OAuth discovery),
 then uses the proof Tenant's API key for `initialize`, the tool list and
-`chalk_get_connection`. Run it by hand with `scripts/mcp-proof/check.mjs`; it reads
-`CHALK_PROOF_API_URL`, `CHALK_PROOF_API_KEY` and `CHALK_PROOF_TENANT_ID`.
+`chalk_list_spaces`, which the proof key's scopes allow. Run it by hand with
+`scripts/mcp-proof/check.mjs`; it reads `CHALK_PROOF_API_URL` and `CHALK_PROOF_API_KEY`.
+Set the environment variable `CHALK_MCP_EXPECT_OAUTH` to `false` for an environment
+where OAuth is off.
