@@ -13,6 +13,7 @@ import { checkLeaks, LEAK_JOURNEYS, leakShard } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, validateScenarioBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 import { scenarios } from "./call-performance-scenarios.mjs";
+import { loadCallBudgets, readBudgets } from "../../../features/scorecard/budgets.mjs";
 
 const runStarted = performance.now();
 const { values } = parseArgs({
@@ -43,7 +44,7 @@ const shard = values.shard ? leakShard(values.shard) : undefined;
 const web = resolve(import.meta.dirname, "..");
 const root = resolve(web, "../..");
 const dist = resolve(web, ".call-performance");
-const budgets = JSON.parse(await readFile(resolve(web, "perf-budgets.json"), "utf8"));
+const budgets = loadCallBudgets(await readBudgets());
 validateBudgets(budgets);
 if (!values["record-baseline"]) validateScenarioBudgets(budgets, scenarios);
 if (!values["skip-build"]) {
