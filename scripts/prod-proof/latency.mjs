@@ -22,7 +22,7 @@ import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { budgetFailures, summarize } from "./latency-stats.mjs";
-import { planeBudgets, readBudgets } from "../../features/scorecard/budgets.mjs";
+import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
@@ -182,21 +182,16 @@ async function measureAll(run, origin, { samples, planes, headed }, report) {
   }
 }
 
-// planeLimits is the p95 limit of every action metric that has a budget for the plane, in the shape budgetFailures reads.
-function planeLimits(budgets, plane) {
-  const entries = Object.entries(planeBudgets(budgets, plane)).filter(([id, entry]) => id.startsWith("action.") && entry.max_p95 !== undefined);
-  return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95 }]));
-}
-
 async function conclude(report, { samples, planes }) {
   const { budgets } = await readBudgets();
   report.planes = {};
   for (const plane of planes) {
     const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
     const summary = summarize(kept.map((outcome) => outcome.sample));
-    const failures = budgetFailures(summary, planeLimits(budgets, plane), samples);
+    const failures = budgetFailures(summary, planeLimits(budgets, plane, true), samples);
+    const warnings = budgetFailures(summary, planeLimits(budgets, plane, false), samples);
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
-    report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures };
+    report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures, warnings };
   }
 }
 
@@ -261,7 +256,10 @@ async function main() {
   const identity = { id: runId, commit, tier: settings.scorecard.tier, environment: settings.scorecard.environment, startedAt: report.startedAt, client };
   for (const plane of settings.planes) await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
   console.log(table(report));
-  for (const [plane, { failures }] of Object.entries(report.planes)) for (const failure of failures) console.log(`${plane}: ${failure}`);
+  for (const [plane, { failures, warnings }] of Object.entries(report.planes)) {
+    for (const failure of failures) console.log(`${plane}: ${failure}`);
+    for (const warning of warnings) console.log(`${plane}: warning, ${warning}`);
+  }
   console.log(`Private evidence: ${directory}`);
   if (report.result !== "passed") process.exitCode = 1;
 }

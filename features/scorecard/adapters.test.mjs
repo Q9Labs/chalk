@@ -83,19 +83,21 @@ test("go test output becomes pass rates, and a test that did not run is reported
   assert.deepEqual(dropped, [{ metric: "sfu.impairment.pass", reason: "test_not_run", count: 3 }]);
 });
 
-test("live smoke samples give loss, stalls per class-hour and refusals", () => {
-  const sample = (minute, expected, received, stalls, refused) => ({
-    at: new Date(Date.UTC(2026, 10, 7, 3, minute)).toISOString(),
-    classes: 3,
+test("live smoke samples give interval loss, stalls per class-hour and refusals", () => {
+  // Cumulative counters, as the live smoke test writes them. The second minute loses 10 of 100 packets after a clean first.
+  const sample = (elapsed, classes, expected, received, stalls, refused) => ({
+    elapsed,
+    classes,
     ready: { host: refused ? { admissionReason: "cpu_steal" } : {} },
     peers: { expected, received, videoStalls: stalls, screenStalls: 0, audioStalls: 0 },
   });
-  const text = [sample(0, 1000, 1000, 0, false), sample(30, 2000, 1980, 3, true), sample(60, 3000, 2970, 6, false)].map((line) => JSON.stringify(line)).join("\n");
+  const text = [sample("1m0s", 1, 900, 900, 0, false), sample("2m0s", 1, 1000, 990, 1, true), sample("3m0s", 2, 1100, 1090, 3, false)].map((line) => JSON.stringify(line)).join("\n");
   const { metrics, dropped } = liveSampleMetrics(text);
   const by = Object.fromEntries(metrics.map((metric) => [metric.id, metric]));
-  assert.equal(by["sfu.loss_pct"].p95, 1);
+  assert.equal(by["sfu.loss_pct"].p95, 10);
   assert.equal(by["sfu.admission_refusals"].p50, 1);
-  assert.equal(by["sfu.stalls_per_class_hour"].p50, 2);
+  // 3 stalls over 1 class for 2 minutes plus 2 classes for 1 minute: 4 class-minutes.
+  assert.equal(by["sfu.stalls_per_class_hour"].p50, 3 / (4 / 60));
   assert.deepEqual(dropped, []);
   assert.deepEqual(liveSampleMetrics("").dropped, [{ metric: "*", reason: "no_samples", count: 1 }]);
 });

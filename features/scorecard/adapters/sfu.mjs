@@ -34,9 +34,18 @@ export function goTestMetrics(text) {
   return { metrics, dropped };
 }
 
+// The live smoke test writes Go durations such as "1m0.5s" or "1h2m3s".
+function elapsedSeconds(text) {
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?$/.exec(text ?? "");
+  return match ? Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0) : Number.NaN;
+}
+
 /**
  * liveSampleMetrics maps the JSON lines the live smoke test appends to SFU_LIVE_SAMPLES (one sample a minute)
- * to loss, stalls and admission refusals. The node does not report CPU busy, packet rates or egress in a sample;
+ * to loss, stalls and admission refusals. Counters in a sample are cumulative since the run started, so each
+ * sample is turned into the interval since the one before it (the first runs from the start): loss is the
+ * interval's lost share of expected packets, and stalls per class-hour divides all stalls by the classes held
+ * times the length of each interval. The node does not report CPU busy, packet rates or egress in a sample;
  * nodeLoadMetrics reads those.
  */
 export function liveSampleMetrics(text) {
@@ -45,15 +54,22 @@ export function liveSampleMetrics(text) {
   if (samples.length === 0) return { metrics: [], dropped: [{ metric: WHOLE_CYCLE, reason: "no_samples", count: 1 }] };
   const metrics = [];
   const dropped = [];
-  const loss = samples.filter((sample) => sample.peers.expected > 0).map((sample) => (100 * (sample.peers.expected - sample.peers.received)) / sample.peers.expected);
+  const loss = [];
+  let classHours = 0;
+  let previous = { peers: { expected: 0, received: 0 }, seconds: 0 };
+  for (const sample of samples) {
+    const seconds = elapsedSeconds(sample.elapsed);
+    const expected = sample.peers.expected - previous.peers.expected;
+    const received = sample.peers.received - previous.peers.received;
+    if (expected > 0 && received >= 0) loss.push((100 * (expected - received)) / expected);
+    if (seconds > previous.seconds) classHours += (sample.classes * (seconds - previous.seconds)) / 3600;
+    previous = { peers: sample.peers, seconds: Number.isFinite(seconds) ? seconds : previous.seconds };
+  }
   metrics.push(metric("sfu.loss_pct", loss, source));
   metrics.push(metric("sfu.admission_refusals", [samples.filter((sample) => sample.ready.host.admissionReason || sample.refused).length], source));
-  const last = samples.at(-1);
-  const hours = (Date.parse(last.at) - Date.parse(samples[0].at)) / 3_600_000;
-  const classes = Math.max(...samples.map((sample) => sample.classes));
-  if (hours > 0) {
-    const stalls = last.peers.videoStalls + last.peers.screenStalls + last.peers.audioStalls;
-    metrics.push(metric("sfu.stalls_per_class_hour", [stalls / (classes * hours)], source));
+  if (classHours > 0) {
+    const last = samples.at(-1).peers;
+    metrics.push(metric("sfu.stalls_per_class_hour", [(last.videoStalls + last.screenStalls + last.audioStalls) / classHours], source));
   } else dropped.push({ metric: "sfu.stalls_per_class_hour", reason: "run_too_short", count: 1 });
   return { metrics, dropped };
 }

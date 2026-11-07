@@ -21,14 +21,16 @@ node features/scorecard/scorecard.mjs build "${flag}" "${report}" --tier pr --en
 baseline=()
 if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
   # Master never runs the Gate on a push: every change lands through the merge queue, so the latest landed queue group is the master baseline.
-  # A group that did not select this lane leaves no artifact, so walk back through the last few until one has it.
+  # A queue group that is still waiting has not landed, so only a group whose commit master already contains counts. A group that did
+  # not select this lane leaves no artifact, so walk back through the last few until one has it.
   # No baseline is expected on the first run and after the artifacts expire: the table then shows budgets only.
-  for run_id in $(gh run list --repo "${GITHUB_REPOSITORY}" --workflow gate.yml --event merge_group --status success --limit 10 --json databaseId --jq '.[].databaseId'); do
+  while read -r run_id sha; do
+    [[ "$(gh api "repos/${GITHUB_REPOSITORY}/compare/${sha}...master" --jq .status 2>/dev/null)" =~ ^(ahead|identical)$ ]] || continue
     if gh run download "${run_id}" --repo "${GITHUB_REPOSITORY}" --name "scorecard-${section}" --dir artifacts/baseline 2>/dev/null; then
       baseline=(--baseline "artifacts/baseline/scorecard-${section}.json")
       break
     fi
-  done
+  done < <(gh run list --repo "${GITHUB_REPOSITORY}" --workflow gate.yml --event merge_group --status success --limit 10 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')
   if [[ ${#baseline[@]} -eq 0 ]]; then
     echo "No master baseline for ${section}; comparing with budgets only."
   fi

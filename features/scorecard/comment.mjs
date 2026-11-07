@@ -1,14 +1,12 @@
-// Several jobs of one run each own a section of a pull request's single scorecard comment.
-export const MARKER = "<!-- chalk-scorecard -->";
-const END = "<!-- /section -->";
+// Each job of a run owns one sticky pull request comment, found by its section marker. Two jobs never write the same comment,
+// so they cannot overwrite each other.
 
-/** upsertSection returns the comment body with `section` replaced by `markdown`, or added when the body lacks it. */
-export function upsertSection(body, section, markdown) {
-  const open = `<!-- section:${section} -->`;
-  const kept = (body ?? "")
-    .slice(MARKER.length)
-    .split(END)
-    .map((part) => part.trim())
-    .filter((part) => part !== "" && !part.startsWith(open));
-  return [MARKER, ...kept.map((part) => `${part}\n${END}`), `${open}\n${markdown.trim()}\n${END}`].join("\n");
+/** sectionComment returns the comment body for one section: its marker, then the table. */
+export function sectionComment(section, markdown) {
+  return `${sectionMarker(section)}\n${markdown.trim()}\n`;
+}
+
+/** sectionMarker is the first line of a section's comment. */
+export function sectionMarker(section) {
+  return `<!-- chalk-scorecard:${section} -->`;
 }

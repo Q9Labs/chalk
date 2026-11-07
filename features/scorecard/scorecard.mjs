@@ -12,7 +12,7 @@ import { deviceMetrics } from "./adapters/device.mjs";
 import { joinStartupMetrics, leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
 import { webMetrics } from "./adapters/web.mjs";
-import { MARKER, upsertSection } from "./comment.mjs";
+import { sectionComment, sectionMarker } from "./comment.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
 import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
 
@@ -95,8 +95,8 @@ async function comment(argv) {
   const gh = (...args) => execFileSync("gh", ["api", ...args], { encoding: "utf8" });
   const existing = JSON.parse(gh(`repos/${values.repo}/issues/${values.pr}/comments`, "--paginate", "--slurp"))
     .flat()
-    .find((item) => item.body.startsWith(MARKER));
-  const body = upsertSection(existing?.body, values.section, read(values.file));
+    .find((item) => item.body.startsWith(sectionMarker(values.section)));
+  const body = sectionComment(values.section, read(values.file));
   if (existing) gh(`repos/${values.repo}/issues/comments/${existing.id}`, "-X", "PATCH", "-f", `body=${body}`);
   else gh(`repos/${values.repo}/issues/${values.pr}/comments`, "-f", `body=${body}`);
 }
