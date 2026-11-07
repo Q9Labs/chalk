@@ -92,9 +92,15 @@ export async function connectChecks({ open, check }) {
       const rows = tab.locator("table.capps tbody tr");
       await rows.first().waitFor();
       check("connected apps list one row per app", (await rows.count()) === 5);
-      await rows.filter({ hasText: "Claude" }).getByRole("button", { name: "Disconnect Claude" }).click();
+      const trash = rows.filter({ hasText: "Claude" }).getByRole("button", { name: "Disconnect Claude" });
+      check("a connected app is disconnected with an icon button that has no visible text", ((await trash.innerText()).trim() === "") && (await trash.getAttribute("data-tip")) !== null);
+      await trash.click();
       const dialog = tab.getByRole("alertdialog");
       check("disconnect confirmation shows the pair as broken", (await dialog.locator(".apair.broken").count()) === 1);
+      check("disconnect confirmation starts on Cancel, the safe choice", await dialog.getByRole("button", { name: "Cancel" }).evaluate((node) => node === document.activeElement));
+      await tab.keyboard.press("Escape");
+      check("Escape closes the confirmation and keeps the app", (await tab.getByRole("alertdialog").count()) === 0 && (await rows.count()) === 5);
+      await trash.click();
       await dialog.getByRole("button", { name: "Disconnect" }).click();
       await tab.getByText("Disconnected Claude").waitFor();
       check("disconnecting removes the row", (await rows.count()) === 4);
@@ -120,6 +126,11 @@ export async function connectChecks({ open, check }) {
     try {
       await tab.getByText("No connected apps").waitFor();
       check("no connected apps explains how to add one", await tab.getByText("Add Chalk as a custom connector").isVisible());
+      const tile = tab.locator(".cempty-app .alogo").first();
+      const logo = tab.locator(".cempty-app .alogo img, .cempty-app .alogo .glyph").first();
+      const [tileBox, logoBox] = await Promise.all([tile.boundingBox(), logo.boundingBox()]);
+      const centered = tileBox && logoBox && Math.abs(tileBox.x + tileBox.width / 2 - (logoBox.x + logoBox.width / 2)) < 1.5 && Math.abs(tileBox.y + tileBox.height / 2 - (logoBox.y + logoBox.height / 2)) < 1.5;
+      check("logos sit centred inside their tiles in the empty state", centered === true);
     } finally {
       await context.close();
     }

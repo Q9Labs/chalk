@@ -3,9 +3,11 @@ import { useState } from "react";
 import type { ConnectionDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, fullDate } from "../../lib/dashboard/format";
-import { AppLogo, AppPair } from "./AppLogo";
+import { Icon } from "../site/Icon";
+import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
-import { Dialog, MoreButton, Sk, useToast } from "./kit";
+import { DisconnectPrompt } from "./DisconnectPrompt";
+import { MoreButton, Sk, useToast } from "./kit";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
@@ -28,11 +30,11 @@ export function ConnectedApps() {
             <b>No connected apps</b>
             <p>Add Chalk as a custom connector in Claude or ChatGPT and approve it here. It then shows up in this list.</p>
             <div className="cempty">
-              <span>
+              <span className="cempty-app">
                 <AppLogo name="Claude" size="sm" />
                 Claude
               </span>
-              <span>
+              <span className="cempty-app">
                 <AppLogo name="ChatGPT" size="sm" />
                 ChatGPT
               </span>
@@ -80,8 +82,8 @@ export function ConnectedApps() {
                     <td className="wide">{fullDate(connection.createdAt)}</td>
                     <td className="wide">{lastUsed}</td>
                     <td className="r act">
-                      <button type="button" className="btn gh sm cdis" aria-label={`Disconnect ${connection.clientName}`} onClick={() => setRevoking(connection)}>
-                        Disconnect
+                      <button type="button" className="ib cdis" data-tip aria-label={`Disconnect ${connection.clientName}`} onClick={() => setRevoking(connection)}>
+                        <Icon name="trash" />
                       </button>
                     </td>
                   </tr>
@@ -95,34 +97,18 @@ export function ConnectedApps() {
         <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
       ) : null}
       {revoking ? (
-        <Dialog
-          alert
-          lead={<AppPair name={revoking.clientName} broken />}
-          title={`Disconnect ${revoking.clientName}?`}
-          description={`${revoking.clientName} stops working with your Chalk account at once. To use it again, approve it again.`}
-          onClose={() => setRevoking(null)}
-          actions={
-            <>
-              <button type="button" className="btn gh" onClick={() => setRevoking(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn dz"
-                onClick={() =>
-                  act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
-                    () => {
-                      update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
-                      setRevoking(null);
-                      toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
-                    },
-                    (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-                  )
-                }
-              >
-                Disconnect
-              </button>
-            </>
+        <DisconnectPrompt
+          app={revoking.clientName}
+          onCancel={() => setRevoking(null)}
+          onConfirm={() =>
+            act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
+              () => {
+                update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
+                setRevoking(null);
+                toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
+              },
+              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+            )
           }
         />
       ) : null}

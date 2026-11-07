@@ -575,6 +575,12 @@
   border-radius: 18px;
 }
 
+.site .dash .alogo.xl {
+  width: 84px;
+  height: 84px;
+  border-radius: 24px;
+}
+
 .site .dash .alogo.sm {
   width: 32px;
   height: 32px;
@@ -582,13 +588,13 @@
 }
 
 .site .dash .alogo img,
-.site .dash .alogo .mono,
+.site .dash .alogo .glyph,
 .site .dash .alogo > svg {
   width: 55%;
   height: 55%;
 }
 
-.site .dash .alogo .mono {
+.site .dash .alogo .glyph {
   background: currentColor;
   mask: var(--logo) center / contain no-repeat;
 }
@@ -618,11 +624,6 @@
 
 .site .dash .aconn .cut {
   stroke: var(--chalk-danger-text);
-}
-
-.site .dash .dlg .apair {
-  justify-content: flex-start;
-  margin-bottom: 20px;
 }
 
 .site .dash .cacc {
@@ -695,6 +696,54 @@
   color: var(--chalk-danger-text);
 }
 
+.site .dash .capps td.act .ib {
+  margin-left: auto;
+}
+
+.site .dash .brk {
+  width: 460px;
+  max-width: 100%;
+  padding: 44px 40px 32px;
+  text-align: center;
+  background: var(--chalk-surface);
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: 24px;
+  box-shadow: var(--raise);
+  animation: dash-up 0.22s var(--ease);
+}
+
+.site .dash .brk .apair {
+  margin-bottom: 32px;
+}
+
+.site .dash .brk .aconn {
+  width: 104px;
+}
+
+.site .dash .brk h2 {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.site .dash .brk p {
+  max-width: 34ch;
+  margin: 0 auto;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .brk .acts {
+  margin-top: 32px;
+  gap: 12px;
+}
+
+.site .dash .brk .acts .btn {
+  flex: 1;
+}
+
 .site .dash .cempty {
   display: flex;
   justify-content: center;
@@ -704,7 +753,8 @@
   color: var(--chalk-soft-text);
 }
 
-.site .dash .cempty span {
+/* A class of its own: a bare `.cempty span` also matched the logo tile and its glyph and broke their centering. */
+.site .dash .cempty-app {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -2090,6 +2140,34 @@
     border-radius: 24px 24px 0 0;
     padding: 26px 20px 34px;
     border-width: 1px 0 0;
+  }
+
+  .site .dash .brk {
+    position: relative;
+    width: 100%;
+    border-radius: 28px 28px 0 0;
+    border-width: 1px 0 0;
+    padding: 40px 20px 34px;
+  }
+
+  .site .dash .brk::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 5px;
+    margin-left: -18px;
+    border-radius: 3px;
+    background: var(--chalk-line-strong);
+  }
+
+  .site .dash .brk .aconn {
+    width: 72px;
+  }
+
+  .site .dash .brk .acts .btn {
+    flex: none;
   }
 
   .site .dash .dlg::before {

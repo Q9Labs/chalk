@@ -2,6 +2,8 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { ChalkMark } from "../site/Lockup";
 
+type Size = "sm" | "md" | "lg" | "xl";
+
 type KnownApp = { readonly match: RegExp; readonly file: string; /** Single-colour logos follow the theme's text colour; the rest keep their brand colours. */ readonly brand: boolean };
 
 // Logos come from Svgl (svgl.app). Devin is not on Svgl, so its file is the mark from devin.ai.
@@ -23,20 +25,20 @@ function Tile({ className, children }: { readonly className?: string; readonly c
 }
 
 /** The logo of the app that connects to Chalk, or its first letter when Chalk has no logo for it. */
-export function AppLogo({ name, size = "md" }: { readonly name: string; readonly size?: "sm" | "md" | "lg" }) {
+export function AppLogo({ name, size = "md" }: { readonly name: string; readonly size?: Size }) {
   const known = KNOWN_APPS.find((app) => app.match.test(name));
   const url = known ? `/brand/apps/${known.file}.svg` : null;
   return (
     <Tile className={size}>
       {known && url && known.brand ? <img src={url} alt="" /> : null}
-      {known && url && !known.brand ? <span className="mono" style={{ "--logo": `url(${url})` } as CSSProperties} /> : null}
+      {known && url && !known.brand ? <span className="glyph" style={{ "--logo": `url(${url})` } as CSSProperties} /> : null}
       {!known ? <span className="initial">{name.trim().charAt(0).toUpperCase()}</span> : null}
     </Tile>
   );
 }
 
 /** Chalk's own side of the pair. */
-function ChalkLogo({ size = "md" }: { readonly size?: "sm" | "md" | "lg" }) {
+function ChalkLogo({ size = "md" }: { readonly size?: Size }) {
   return (
     <Tile className={size}>
       <ChalkMark />
@@ -45,16 +47,16 @@ function ChalkLogo({ size = "md" }: { readonly size?: "sm" | "md" | "lg" }) {
 }
 
 /** The app and Chalk side by side. The connector is solid while they are connected and cut when they are not. With no known app there is only the Chalk mark. */
-export function AppPair({ name, broken }: { readonly name: string | null; readonly broken?: boolean }) {
+export function AppPair({ name, broken, size = "lg" }: { readonly name: string | null; readonly broken?: boolean; readonly size?: "lg" | "xl" }) {
   if (!name)
     return (
       <div className="apair">
-        <ChalkLogo size="lg" />
+        <ChalkLogo size={size} />
       </div>
     );
   return (
-    <div className={broken ? "apair broken" : "apair"}>
-      <AppLogo name={name} size="lg" />
+    <div className={broken ? `apair ${size} broken` : `apair ${size}`}>
+      <AppLogo name={name} size={size} />
       <svg className="aconn" viewBox="0 0 72 24" aria-hidden="true" focusable="false">
         {broken ? (
           <>
@@ -68,7 +70,7 @@ export function AppPair({ name, broken }: { readonly name: string | null; readon
           </>
         )}
       </svg>
-      <ChalkLogo size="lg" />
+      <ChalkLogo size={size} />
     </div>
   );
 }
