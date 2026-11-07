@@ -59,7 +59,9 @@ Deploy the API and Sync before the SDK. The API must allow the `Baggage` header 
 CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
 frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
-later reconnects. The whiteboard socket does not carry the ID yet.
+later reconnects. The whiteboard client sends the same baggage member beside its
+presenter-view extensions, then retries without baggage after a 1009 close from
+an older server.
 
 ### Compare call quality by connection type
 

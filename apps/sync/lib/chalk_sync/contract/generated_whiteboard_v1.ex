@@ -108,7 +108,16 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
     "frames" => %{
       "hello" => %{
         "exactFields" => ["type", "protocol", "token", "cursor"],
-        "extendedExactFields" => ["type", "protocol", "token", "cursor", "extensions"]
+        "extendedExactFields" => ["type", "protocol", "token", "cursor", "extensions"],
+        "optionalFields" => %{
+          "baggage" => %{
+            "kind" => "string",
+            "minBytes" => 47,
+            "maxBytes" => 47,
+            "format" => "w3c-baggage-session-id",
+            "pattern" => "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          }
+        }
       },
       "submitUpdate" => %{
         "exactFields" => ["type", "operation_id", "scene_id", "sync_all", "elements"]
@@ -346,6 +355,7 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   ]
   @json_max_depth @limits["jsonMaxDepth"]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
+  @session_baggage_pattern ~r/^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
   @unsigned_decimal ~r/\A(?:0|[1-9][0-9]*)\z/
 
   def metadata, do: @metadata
@@ -397,16 +407,26 @@ defmodule ChalkSync.Contract.GeneratedWhiteboardV1 do
   def valid_server_frame?(_frame), do: false
 
   defp decode_hello(frame) do
+    baggage = Map.get(frame, "baggage")
+    baggage = if valid_session_baggage?(baggage), do: baggage, else: nil
+    frame = Map.delete(frame, "baggage")
+
     with {:ok, extensions} <- hello_extensions(frame),
          "whiteboard-v1" <- frame["protocol"],
          token when is_binary(token) <- frame["token"],
          true <- byte_size(token) > 0 and byte_size(token) <= @limits["tokenBytes"],
          {:ok, cursor} <- cursor(frame["cursor"]) do
-      {:ok, {:hello, %{token: token, cursor: cursor, extensions: extensions}}}
+      {:ok, {:hello, %{token: token, cursor: cursor, extensions: extensions, baggage: baggage}}}
     else
       _ -> {:error, :invalid_hello}
     end
   end
+
+  defp valid_session_baggage?(value) when is_binary(value) do
+    byte_size(value) == 47 and Regex.match?(@session_baggage_pattern, value)
+  end
+
+  defp valid_session_baggage?(_value), do: false
 
   defp hello_extensions(frame) do
     cond do
