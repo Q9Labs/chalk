@@ -54,13 +54,6 @@ func bindMCPSpaceTools(server *mcp.Server, o Options) {
 		return mcpInvoke(b, restoreSpaceEndpoint(o.Spaces, o.TenantAuthz), request)
 	})
 	mcpapi.Bind(server, mcpapi.PrepareRecording, func(ctx context.Context, i mcpapi.PreparationInput) (json.RawMessage, error) {
-		scope := "spaces:write"
-		if i.Action == "inspect" {
-			scope = "spaces:read"
-		}
-		if err := mcpapi.RequireScope(ctx, scope); err != nil {
-			return nil, err
-		}
 		b := newMCPRequest(ctx)
 		spaceID := b.id(i.SpaceID)
 		switch i.Action {

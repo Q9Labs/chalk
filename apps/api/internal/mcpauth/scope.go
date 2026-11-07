@@ -13,6 +13,21 @@ import (
 // app cannot read credentials, list members or widen its own access.
 var contentResources = []string{"spaces", "episodes", "recordings", "transcriptions", "webhooks"}
 
+// SupportedScopes lists the bundles a client may request, smallest first.
+func SupportedScopes() []string { return []string{ScopeRead, ScopeManage} }
+
+// SmallestBundleGranting names the smallest bundle that includes scope, or ""
+// when no bundle does (API keys, memberships, tenant settings and deletes), so
+// asking the person to approve a bigger bundle would never help.
+func SmallestBundleGranting(scope string) string {
+	for _, bundle := range SupportedScopes() {
+		if slices.Contains(AuthenticationScopes(bundle), authentication.Scope(scope)) {
+			return bundle
+		}
+	}
+	return ""
+}
+
 // NormalizeScope reduces a client's requested scope string to one bundle.
 // Unknown scopes are ignored. An empty request gets the read bundle.
 func NormalizeScope(requested string) string {

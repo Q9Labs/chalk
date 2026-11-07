@@ -36,7 +36,7 @@ func NewMCPHandler(options Options) http.Handler {
 	bindMCPEpisodeTools(server, options)
 	bindMCPArtifactTools(server, options)
 	bindMCPWebhookTools(server, options)
-	transport := mcpapi.NewHandler(server, options.CORS.AllowedOrigins)
+	transport := mcpapi.NewHandler(server, options.CORS.AllowedOrigins, mcpStepUp(options.OAuth))
 	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok := authentication.PrincipalFromContext(r.Context())
 		actor, valid := mcpActor(principal)
@@ -108,6 +108,23 @@ func acceptMCPOAuthToken(service MCPOAuthService) func(http.Handler) http.Handle
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// mcpStepUp answers a refused tool call from an OAuth connection with a 403 that
+// names the bundle to be approved, when a bigger bundle would allow the call.
+// API-key connections and calls no bundle can allow get the tool's own refusal:
+// there is nothing to step up to, and the tool error names the missing scope.
+func mcpStepUp(service MCPOAuthService) mcpapi.ScopeRefusal {
+	return func(w http.ResponseWriter, r *http.Request, tool, scope string) bool {
+		principal, _ := authentication.PrincipalFromContext(r.Context())
+		bundle := mcpauth.SmallestBundleGranting(scope)
+		if service == nil || principal.Kind != authentication.PrincipalOAuth || bundle == "" {
+			return false
+		}
+		w.Header().Set("WWW-Authenticate", mcpStepUpChallenge(service, bundle))
+		writeError(w, http.StatusForbidden, apiErrorForbidden.Code, tool+" needs the "+bundle+" scope. Reconnect and approve "+bundle+".")
+		return true
 	}
 }
 
