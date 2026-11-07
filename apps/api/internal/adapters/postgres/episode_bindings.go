@@ -19,10 +19,20 @@ type episodeBindingQuerier interface {
 // EpisodeBindings reads the provider frozen into the Episode. Capture uses it to
 // refuse the Episodes it cannot serve, and cleanup uses it to pick the closer.
 // An Episode with no binding predates it and ran on Cloudflare.
-type EpisodeBindings struct{ db episodeBindingQuerier }
+type EpisodeBindings struct {
+	db         episodeBindingQuerier
+	ownCapture bool
+}
 
 func NewEpisodeBindings(db episodeBindingQuerier) EpisodeBindings {
 	return EpisodeBindings{db: db}
+}
+
+// WithOwnCapture says the recorder can reach the own SFU's nodes, so an Episode bound to it is
+// capturable.
+func (e EpisodeBindings) WithOwnCapture(enabled bool) EpisodeBindings {
+	e.ownCapture = enabled
+	return e
 }
 
 // BindingOf returns the bound provider and node. Both are "" for an Episode with
@@ -50,7 +60,7 @@ func (e EpisodeBindings) CaptureSupported(ctx context.Context, tenantID, episode
 	if err != nil {
 		return err
 	}
-	if provider == string(spaces.MediaPlaneProviderChalkSFU) {
+	if provider == string(spaces.MediaPlaneProviderChalkSFU) && !e.ownCapture {
 		return recordingpipeline.ErrCaptureUnsupported
 	}
 	return nil
