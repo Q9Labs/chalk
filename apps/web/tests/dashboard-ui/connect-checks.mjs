@@ -98,6 +98,15 @@ export async function connectChecks({ open, check }) {
       const dialog = tab.getByRole("alertdialog");
       check("disconnect confirmation shows the pair as broken", (await dialog.locator(".apair.broken").count()) === 1);
       check("disconnect confirmation starts on Cancel, the safe choice", await dialog.getByRole("button", { name: "Cancel" }).evaluate((node) => node === document.activeElement));
+      await tab.setViewportSize({ width: 640, height: 360 });
+      const confirmButton = dialog.getByRole("button", { name: "Disconnect" });
+      await confirmButton.scrollIntoViewIfNeeded();
+      const reach = await confirmButton.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return { top: box.top, bottom: box.bottom, height: window.innerHeight };
+      });
+      check("disconnect button stays reachable on a short screen", reach.top >= 0 && reach.bottom <= reach.height);
+      await tab.setViewportSize({ width: 1280, height: 800 });
       await tab.keyboard.press("Escape");
       check("Escape closes the confirmation and keeps the app", (await tab.getByRole("alertdialog").count()) === 0 && (await rows.count()) === 5);
       await trash.click();
