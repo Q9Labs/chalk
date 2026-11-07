@@ -6530,6 +6530,42 @@ describe("in-place ICE restart on the own SFU", () => {
     return { peer, remote, publications: h.client.getSnapshot().localTracks.map((track) => track.publicationId), adds: h.transport.addInputs.length };
   }
 
+  it("fails a publisher whose first ICE connection never completes, 8 s after the offer", async () => {
+    await withTimedHarness(
+      async (h) => {
+        const outcome = h.client.start(fakeStream(new FakeTrack("microphone", "audio"))).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        await vi.advanceTimersByTimeAsync(7900);
+        expect(h.client.getSnapshot().connection.phase).not.toBe("failed");
+        await vi.advanceTimersByTimeAsync(200);
+        expect(await outcome).toMatchObject({ code: "media_failed" });
+        expect(h.client.getSnapshot()).toMatchObject({ connection: { phase: "failed" }, failure: { code: "media_failed", recoverable: true } });
+      },
+      { bootstrap: ownBootstrap("connection-1"), autoConnect: false },
+    );
+  });
+
+  it("EXPLORE: a listener whose first ICE connection never completes", async () => {
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream());
+        h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [{ participantId: "participant-2", source: "microphone", publicationId: "remote-connection|microphone-a" }] };
+        const pulled = h.client.refreshRemotePublications().catch(() => undefined);
+        const seen: string[] = [];
+        for (let second = 0; second < 70; second++) {
+          await vi.advanceTimersByTimeAsync(1000);
+          const phase = h.client.getSnapshot().connection.phase;
+          if (seen.at(-1) !== phase) seen.push(`${second}s:${phase}`);
+        }
+        await pulled;
+        console.log("EXPLORE phases", seen.join(" "));
+      },
+      { bootstrap: ownBootstrap("connection-1"), autoConnect: false },
+    );
+  });
+
   it.each(["failed", "disconnected"] as const)("restarts ICE on the same session when the path is %s, keeping its publication and subscription", async (state) => {
     await withTimedHarness(
       async (h) => {
