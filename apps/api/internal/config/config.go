@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -81,21 +82,24 @@ const (
 
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
-	ChalkSFUEnabled            = "CHALK_SFU_ENABLED"
-	ChalkSFUCaptureEnabled     = "CHALK_SFU_CAPTURE_ENABLED"
-	ChalkSFUNodes              = "CHALK_SFU_NODES"
-	ChalkSFUApplicationID      = "CHALK_SFU_APPLICATION_ID"
-	ChalkSFUServerName         = "CHALK_SFU_SERVER_NAME"
-	ChalkSFUCAFile             = "CHALK_SFU_CA_FILE"
-	ChalkSFUClientCertFile     = "CHALK_SFU_CLIENT_CERT_FILE"
-	ChalkSFUClientKeyFile      = "CHALK_SFU_CLIENT_KEY_FILE"
-	ChalkSFUTimeoutMS          = "CHALK_SFU_TIMEOUT_MS"
-	ChalkSFUSTUNURLs           = "CHALK_SFU_STUN_URLS"
-	ChalkSFUCloudflareOverflow = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
-	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
-	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
-	ChalkSFUClientSunset       = "CHALK_SFU_CLIENT_SUNSET"
-	DefaultMediaPlane          = "CHALK_DEFAULT_MEDIA_PLANE"
+	ChalkSFUEnabled             = "CHALK_SFU_ENABLED"
+	ChalkSFUCaptureEnabled      = "CHALK_SFU_CAPTURE_ENABLED"
+	ChalkSFUNodes               = "CHALK_SFU_NODES"
+	ChalkSFUApplicationID       = "CHALK_SFU_APPLICATION_ID"
+	ChalkSFUServerName          = "CHALK_SFU_SERVER_NAME"
+	ChalkSFUCAFile              = "CHALK_SFU_CA_FILE"
+	ChalkSFUClientCertFile      = "CHALK_SFU_CLIENT_CERT_FILE"
+	ChalkSFUClientKeyFile       = "CHALK_SFU_CLIENT_KEY_FILE"
+	ChalkSFUTimeoutMS           = "CHALK_SFU_TIMEOUT_MS"
+	ChalkSFUSTUNURLs            = "CHALK_SFU_STUN_URLS"
+	ChalkSFUCloudflareOverflow  = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
+	ChalkSFUStandbyBudget       = "CHALK_SFU_STANDBY_PACKET_BUDGET"
+	ChalkSFUAllowedSpaces       = "CHALK_SFU_ALLOWED_SPACES"
+	ChalkSFUClientSunset        = "CHALK_SFU_CLIENT_SUNSET"
+	DefaultMediaPlane           = "CHALK_DEFAULT_MEDIA_PLANE"
+	NewSpaceMediaPlane          = "CHALK_NEW_SPACE_MEDIA_PLANE"
+	NewSpaceRecordingPolicy     = "CHALK_NEW_SPACE_RECORDING_POLICY"
+	NewSpaceTranscriptionPolicy = "CHALK_NEW_SPACE_TRANSCRIPTION_POLICY"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -350,8 +354,11 @@ type Config struct {
 	CloudflareRealtime CloudflareRealtimeConfig
 	ChalkSFU           ChalkSFUConfig
 	DefaultMediaPlane  spaces.MediaPlaneProvider
-	Database           DatabaseConfig
-	DeadlineScheduler  DeadlineSchedulerConfig
+	// NewSpace holds what a Create Space request gets for the fields it omits.
+	// Each field is empty when new Spaces keep the existing default.
+	NewSpace          spaces.NewSpaceDefaults
+	Database          DatabaseConfig
+	DeadlineScheduler DeadlineSchedulerConfig
 
 	Observability            ObservabilityConfig
 	PublicInvite             PublicInviteConfig
@@ -559,6 +566,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	newSpace, err := loadNewSpaceDefaults(chalkSFU)
+	if err != nil {
+		return Config{}, err
+	}
 	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
@@ -626,6 +637,7 @@ func Load() (Config, error) {
 		CloudflareRealtime:              cloudflareRealtime,
 		ChalkSFU:                        chalkSFU,
 		DefaultMediaPlane:               defaultMediaPlane,
+		NewSpace:                        newSpace,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,
@@ -677,6 +689,46 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 	return provider, nil
+}
+
+// loadNewSpaceDefaults reads what a Create Space request gets for the fields it
+// omits. A new Space has a random ID that no allowlist can name in advance, so
+// the own SFU as the new-Space plane needs every Space allowed. Automatic capture
+// defaults on the own SFU need capture, or new Spaces would promise artifacts
+// that no node produces.
+func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
+	var defaults spaces.NewSpaceDefaults
+	if value := strings.TrimSpace(os.Getenv(NewSpaceMediaPlane)); value != "" {
+		provider, err := spaces.ParseMediaPlaneProvider(value)
+		if err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceMediaPlane, err)
+		}
+		defaults.MediaPlane = provider
+	}
+	if value := strings.TrimSpace(os.Getenv(NewSpaceRecordingPolicy)); value != "" {
+		defaults.RecordingPolicy = artifactpolicy.RecordingMode(value)
+		if err := defaults.RecordingPolicy.Validate(); err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceRecordingPolicy, err)
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv(NewSpaceTranscriptionPolicy)); value != "" {
+		defaults.TranscriptionPolicy = artifactpolicy.TranscriptionMode(value)
+		if err := defaults.TranscriptionPolicy.Validate(); err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceTranscriptionPolicy, err)
+		}
+	}
+	if defaults.MediaPlane != spaces.MediaPlaneProviderChalkSFU {
+		return defaults, nil
+	}
+	if !chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1 {
+		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s=%s requires %s=true and %s=*", NewSpaceMediaPlane, defaults.MediaPlane, ChalkSFUEnabled, ChalkSFUAllowedSpaces)
+	}
+	capturing := defaults.RecordingPolicy != "" && defaults.RecordingPolicy != artifactpolicy.RecordingDisabled ||
+		defaults.TranscriptionPolicy != "" && defaults.TranscriptionPolicy != artifactpolicy.TranscriptionDisabled
+	if capturing && !chalkSFU.CaptureEnabled {
+		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s and %s other than disabled need %s=true when %s=%s", NewSpaceRecordingPolicy, NewSpaceTranscriptionPolicy, ChalkSFUCaptureEnabled, NewSpaceMediaPlane, defaults.MediaPlane)
+	}
+	return defaults, nil
 }
 
 func loadChalkSFUConfig() (ChalkSFUConfig, error) {

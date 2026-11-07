@@ -76,6 +76,30 @@ production requires this setting; generic local and test processes may omit it,
 but then Create Space requests must supply a provider. Explicit Space and
 Tenant-managed provider configuration uses `cf_sfu`.
 
+`CHALK_NEW_SPACE_MEDIA_PLANE` sets the plane a Create Space request gets when it
+omits `media_plane`, instead of `CHALK_DEFAULT_MEDIA_PLANE`. It changes new
+Spaces only: a Space or Tenant that stores no plane still resolves to the
+deployment default. `chalk_sfu` is accepted only with `CHALK_SFU_ENABLED=true`
+and `CHALK_SFU_ALLOWED_SPACES=*`, because a new Space's ID is not known ahead of
+time; startup fails otherwise. An Episode still starts on Cloudflare when the
+client SDK does not declare `chalk_sfu` (older than 5.5.0) or no node has room.
+To turn it off, unset the variable (or set `cf_sfu`) and restart; Spaces that
+already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
+`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list. Spaces that
+public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
+instead, so that setting moves them separately.
+
+`CHALK_NEW_SPACE_RECORDING_POLICY` (`disabled`, `manual`, `automatic`) and
+`CHALK_NEW_SPACE_TRANSCRIPTION_POLICY` (`disabled`, `on_demand`, `automatic`) set
+the `recording_policy` and `transcription_policy` a Create Space request gets
+when it omits them. Unset, an omitted policy keeps the database default. A
+request that names a policy always wins, and a Tenant's transcription ceiling
+still clamps the effective mode. When `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu`, a
+policy other than `disabled` also needs `CHALK_SFU_CAPTURE_ENABLED=true`; startup
+fails otherwise. Turning the policies off only affects Spaces created afterwards:
+existing Spaces keep the policies they stored. Spaces that public invites create
+are not covered.
+
 An absent Tenant provider configuration may use deployment credentials only
 when the Space provider matches this default. A concrete Tenant configuration
 remains authoritative, an explicit disable never falls back, and deployment
