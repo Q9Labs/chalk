@@ -280,7 +280,7 @@ latency or sustained freeze regression; report SFU processing/queue delay apart
 from encode and network latency. Keep M7's join/recovery thresholds as separate
 gates. Starve CPU and expire TURN credentials to prove admission guards, renewal,
 alerts and bounded recovery. Load generators run on Instabox, or on disposable
-Droplets tagged `chalk-sfu-bench` that are deleted after the run.
+Droplets tagged with the lane's own tag, `chalk-sfu-bench-<lane>`, and deleted by that tag after each run. The tag list must be empty before the lane reports done.
 
 **Risk:** shared CPU and generator limits can distort one run. Staging matches
 production's size, so its results carry over, but one run is not a capacity

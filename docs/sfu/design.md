@@ -586,12 +586,12 @@ guarantee that failover preserves every peak call at full quality.
 Public list prices checked **5 November 2026**, USD before tax. Regional SKU
 availability does not guarantee creation-time stock.
 
-| Use                           | Layout                                                     | Included monthly outbound     | Compute                                      |
-| ----------------------------- | ---------------------------------------------------------- | ----------------------------- | -------------------------------------------- |
-| Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk   | 1,000 GiB per full-month node | **$6/month**                                 |
-| Staging node                  | One `s-1vcpu-1gb`                                          | 1,000 GiB per full-month node | **$6/month**                                 |
-| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk   | 3,000 GiB per full-month node | $18/month, only with the owner's approval    |
-| Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench` | Prorated while created        | Free on Instabox; under $1 per run otherwise |
+| Use                           | Layout                                                                                                                               | Included monthly outbound     | Compute                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- | -------------------------------------------- |
+| Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk                                                                             | 1,000 GiB per full-month node | **$6/month**                                 |
+| Staging node                  | One `s-1vcpu-1gb`                                                                                                                    | 1,000 GiB per full-month node | **$6/month**                                 |
+| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk                                                                             | 3,000 GiB per full-month node | $18/month, only with the owner's approval    |
+| Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench-<lane>`, deleted by that tag and listed empty before the lane reports done | Prorated while created        | Free on Instabox; under $1 per run otherwise |
 
 SFU compute totals **$12/month** today.
 
