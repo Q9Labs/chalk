@@ -166,6 +166,8 @@ try {
       await shot("space-open", section);
       await search().press("Escape");
 
+      // Home starts every look on the account default, whatever an earlier journey chose.
+      await page.evaluate(() => window.localStorage.removeItem("chalk.transcript-language.new-call"));
       await page.goto(`${origin}/dashboard`);
       await trigger("Transcript for new calls").waitFor();
       const head = page.locator(".hhead");
@@ -180,7 +182,6 @@ try {
         await shot("home-disabled", head);
       });
       await closeReadyDialog();
-      await page.evaluate(() => window.localStorage.removeItem("chalk.transcript-language.new-call"));
     }
   }
   console.log("PASS account, Space and new-call transcript languages work through the picker");
