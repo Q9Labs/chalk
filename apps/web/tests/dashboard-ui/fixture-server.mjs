@@ -94,8 +94,8 @@ function richAccount() {
     connections: [
       ["Claude", "chalk:manage", at(12, 9, 30), at(0, 9, 12)],
       ["ChatGPT", "chalk:read", at(30, 14, 0), at(3, 16, 40)],
-      ["Cursor", "chalk:read", at(8, 11, 15), null],
-      ["Devin", "chalk:manage", at(60, 8, 0), at(21, 10, 5)],
+      ["Gemini CLI", "chalk:read", at(8, 11, 15), null],
+      ["Codex", "chalk:manage", at(60, 8, 0), at(21, 10, 5)],
       ["Acme Notes", "chalk:read", at(2, 13, 20), at(2, 13, 25)],
     ].map(([clientName, scope, createdAt, lastUsedAt], i) => ({ id: uuid(0x6000 + i), clientName, scope, createdAt, lastUsedAt })),
   };
@@ -120,7 +120,7 @@ const TRANSCRIPT = [
   [2650, "Sofia Lind", "I’ll write up the launch notes and share them in chat."],
   [2731, "Hasan Shoaib", "Thanks, everyone. Same link on Tuesday."],
 ];
-const CONNECT_APPS = { claude: { name: "Claude", host: "claude.ai" }, chatgpt: { name: "ChatGPT", host: "chatgpt.com" }, cursor: { name: "Cursor", host: "cursor.com" }, devin: { name: "Devin", host: "app.devin.ai" }, acme: { name: "Acme Notes", host: "notes.acme.example" } };
+const CONNECT_APPS = { claude: { name: "Claude", host: "claude.ai" }, chatgpt: { name: "ChatGPT", host: "chatgpt.com" }, gemini: { name: "Gemini CLI", host: "localhost" }, devin: { name: "Devin", host: "app.devin.ai" }, acme: { name: "Acme Notes", host: "notes.acme.example" } };
 const SEAT = (name) => uuid(0x700 + ["Hasan Shoaib", "Nora Patel", "Akash Rao", "Sofia Lind", "Malik Haddad", "Priya Shah", "Eli Cohen", "Ali Raza"].indexOf(name));
 
 let state;

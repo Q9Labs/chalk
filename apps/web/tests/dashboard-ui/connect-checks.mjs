@@ -93,7 +93,7 @@ export async function connectChecks({ open, check }) {
       await rows.first().waitFor();
       check("connected apps list one row per app", (await rows.count()) === 5);
       const trash = rows.filter({ hasText: "Claude" }).getByRole("button", { name: "Disconnect Claude" });
-      check("a connected app is disconnected with an icon button that has no visible text", ((await trash.innerText()).trim() === "") && (await trash.getAttribute("data-tip")) !== null);
+      check("a connected app is disconnected with an icon button that has no visible text", (await trash.innerText()).trim() === "" && (await trash.getAttribute("data-tip")) !== null);
       await trash.click();
       const dialog = tab.getByRole("alertdialog");
       check("disconnect confirmation shows the pair as broken", (await dialog.locator(".apair.broken").count()) === 1);
