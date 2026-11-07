@@ -23,9 +23,37 @@ export async function connectMutation(engine: Engine, action: ConnectAction): Pr
   return { redirectUrl: result.redirect_url };
 }
 
+function connectionRow(row: { id: string; client_name: string; scope: string; last_used_at: string | null; created_at: string }) {
+  return { id: row.id, clientName: row.client_name, scope: bundle(row.scope), lastUsedAt: row.last_used_at, createdAt: row.created_at };
+}
+
+const NAME_PAGE_SIZE = 100;
+const NAME_PAGE_LIMIT = 20;
+
+/**
+ * One page of grants for the table. The first page also names every connected app, so the catalog badges stay right when the table holds more than one page.
+ * The Chalk URL does not depend on the grants, so a failed read still returns it with `listError` set and the catalog stays usable.
+ */
 export async function connectionsPage(engine: Engine, cursor?: string): Promise<ConnectionsDTO> {
-  const result = await run(engine.api.default.listMCPConnections({ params: { tenant_id: engine.tenantId }, query: { page_size: 25, cursor } }));
-  return { mcpUrl: engine.mcpUrl, connections: result.data.map((row) => ({ id: row.id, clientName: row.client_name, scope: bundle(row.scope), lastUsedAt: row.last_used_at, createdAt: row.created_at })), nextCursor: result.pagination.next_cursor };
+  const read = (pageCursor: string | undefined, pageSize: number) => run(engine.api.default.listMCPConnections({ params: { tenant_id: engine.tenantId }, query: { page_size: pageSize, cursor: pageCursor } }));
+  if (cursor) {
+    const result = await read(cursor, 25);
+    return { mcpUrl: engine.mcpUrl, connections: result.data.map(connectionRow), nextCursor: result.pagination.next_cursor, connectedNames: [], listError: false };
+  }
+  try {
+    const result = await read(undefined, 25);
+    const names = new Set(result.data.map((row) => row.client_name));
+    let next = result.pagination.next_cursor;
+    for (let pages = 0; next && pages < NAME_PAGE_LIMIT; pages++) {
+      const more = await read(next, NAME_PAGE_SIZE);
+      for (const row of more.data) names.add(row.client_name);
+      next = more.pagination.next_cursor;
+    }
+    return { mcpUrl: engine.mcpUrl, connections: result.data.map(connectionRow), nextCursor: result.pagination.next_cursor, connectedNames: [...names], listError: false };
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "dashboard.mcp_connections_failed", tenant_id: engine.tenantId, error: error instanceof Error ? error.message : "unknown" }));
+    return { mcpUrl: engine.mcpUrl, connections: [], nextCursor: null, connectedNames: [], listError: true };
+  }
 }
 
 export async function connectionsMutation(engine: Engine, action: ConnectionsAction) {

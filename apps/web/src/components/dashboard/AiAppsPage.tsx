@@ -31,7 +31,7 @@ export function AiAppsPage() {
             <code>{state.data.mcpUrl}</code>
             <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
           </div>
-          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.connections.map((connection) => connection.clientName)} />
+          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.nextCursor ? state.data.connectedNames : state.data.connections.map((connection) => connection.clientName)} />
         </>
       ) : null}
       {state.kind === "loading" ? (
@@ -51,7 +51,8 @@ export function AiAppsPage() {
           <h2>Connected apps</h2>
         </div>
       ) : null}
-      {state.kind === "ready" && state.data.connections.length === 0 ? (
+      {state.kind === "ready" && state.data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Adding an app above still works." onRetry={reload} /> : null}
+      {state.kind === "ready" && !state.data.listError && state.data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
             <b>No connected apps</b>

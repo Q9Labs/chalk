@@ -131,7 +131,13 @@ export type ConnectAction = z.infer<typeof connectAction>;
 export type ConnectionsAction = z.infer<typeof connectionsAction>;
 export type ConnectDTO = { clientName: string; redirectHost: string; requestedScope: "chalk:read" | "chalk:manage"; tenantName: string | null };
 export type ConnectionDTO = { id: string; clientName: string; scope: "chalk:read" | "chalk:manage"; lastUsedAt: string | null; createdAt: string };
-export type ConnectionsDTO = { /** The address an AI app adds as a remote MCP server. */ mcpUrl: string; connections: ConnectionDTO[]; nextCursor: string | null };
+export type ConnectionsDTO = {
+  /** The address an AI app adds as a remote MCP server. */ mcpUrl: string;
+  connections: ConnectionDTO[];
+  nextCursor: string | null;
+  /** The name of every connected app, on the first page only. */ connectedNames: string[];
+  /** The grants could not be read. The address above is still good. */ listError: boolean;
+};
 export type ProfileDTO = { id: string; name: string; email: string; avatarUrl: string | null };
 export type SessionDTO = { profile: ProfileDTO; csrfToken: string };
 export type CallDTO = { transcriptLanguage?: TranscriptLanguage | null; id: string; name: string; archived: boolean; admission: "anyone" | "knock"; createdAt: string; slug: string };

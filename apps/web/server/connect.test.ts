@@ -45,3 +45,23 @@ it("shows what the app asked for and lists and revokes connections for the sessi
   await connectionsMutation(engine({ revokeMCPConnection: revoke }), { action: "revoke-connection", connectionId });
   expect(revoke).toHaveBeenCalledWith({ params: { tenant_id: tenantId, connection_id: connectionId } });
 });
+
+it("names every connected app on the first page, and keeps the Chalk URL when the grants can't be read", async () => {
+  const row = (name: string) => ({ id: crypto.randomUUID(), client_name: name, scope: "chalk:read", last_used_at: null, created_at: "2026-11-05T10:00:00Z" });
+  const list = vi
+    .fn()
+    .mockReturnValueOnce(Effect.succeed({ data: [row("Claude")], pagination: { page_size: 25, next_cursor: "c1", has_more: true } }))
+    .mockReturnValueOnce(Effect.succeed({ data: [row("Codex"), row("Claude")], pagination: { page_size: 100, next_cursor: null, has_more: false } }));
+  const first = await connectionsPage(engine({ listMCPConnections: list }));
+  expect(first.connections.map((item) => item.clientName)).toEqual(["Claude"]);
+  expect(first.nextCursor).toBe("c1");
+  expect(first.connectedNames).toEqual(["Claude", "Codex"]);
+  expect(list).toHaveBeenLastCalledWith({ params: { tenant_id: tenantId }, query: { page_size: 100, cursor: "c1" } });
+
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const down = await connectionsPage(engine({ listMCPConnections: () => Effect.fail(new Error("rate limited")) }));
+  expect(down).toEqual({ mcpUrl: "https://api.example.test/mcp", connections: [], nextCursor: null, connectedNames: [], listError: true });
+  warn.mockRestore();
+
+  await expect(connectionsPage(engine({ listMCPConnections: () => Effect.fail(new Error("rate limited")) }), "c1")).rejects.toThrow();
+});

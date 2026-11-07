@@ -131,6 +131,16 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
+    const { tab, context } = await open("/dashboard/apps", { set: "manyConnections=1" });
+    try {
+      await tab.locator("table.capps tbody tr").first().waitFor();
+      const rowNames = await tab.locator("table.capps tbody .nm").allInnerTexts();
+      check("an app on a later page of the table still shows Connected", !rowNames.includes("Codex") && (await tab.locator(".ctile", { hasText: "Codex" }).first().innerText()).includes("Connected"), rowNames.join());
+    } finally {
+      await context.close();
+    }
+  }
+  {
     const { tab, context } = await open("/dashboard/apps");
     try {
       const tiles = tab.locator(".ctile");
@@ -204,6 +214,18 @@ export async function connectChecks({ open, check }) {
       const sheetBox = await sheet.boundingBox();
       check("on a phone the sheet is a tall bottom sheet inside the screen", sheetBox !== null && sheetBox.height > 700 && sheetBox.width <= 390 && sheetBox.y + sheetBox.height <= 844 + 1);
       await tab.keyboard.press("Escape");
+    } finally {
+      await context.close();
+    }
+  }
+  {
+    const { tab, context } = await open("/dashboard/apps", { set: "fail=connections-list" });
+    try {
+      await tab.getByRole("alert").filter({ hasText: "Couldn’t load your connected apps" }).waitFor();
+      check("when the connected apps can't load, the address and every app still show", (await tab.locator(".murl code").innerText()) === "https://api.chalk.test/mcp" && (await tab.locator(".ctile").count()) === 7);
+      check("a failed list reads as an error, not as no connected apps", (await tab.getByText("No connected apps").count()) === 0);
+      await tab.locator(".ctile", { hasText: "Codex" }).click();
+      check("an app's setup opens while the list is down", await tab.getByRole("dialog").isVisible());
     } finally {
       await context.close();
     }
