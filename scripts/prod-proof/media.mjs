@@ -173,6 +173,18 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         await Promise.all(networks.map((network, guest) => save(`${run.directory}/guest-${guest + 1}-network.json`, network)));
       }
     },
+    // rejoinAll drops every transport together, reopens every page, then checks shared readiness once, so a page
+    // that is still closed never fails another's readiness check.
+    rejoinAll: async () => {
+      await Promise.all(close.map((closePage) => closePage()));
+      await run.wait(2000);
+      for (let guest = 0; guest < reopen.length; guest++) pages[guest] = await reopen[guest](true);
+      await ready();
+      for (let guest = 0; guest < pages.length; guest++) {
+        const participant = await pages[guest].evaluate(() => window.proofClient.getSnapshot().self.participantId);
+        check(participant === participants[guest], "Rejoin changed participant identity");
+      }
+    },
     rejoin: async (guest) => {
       // Closing the entire browser drops transports without an SDK leave request.
       await close[guest]();

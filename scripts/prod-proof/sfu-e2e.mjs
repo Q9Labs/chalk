@@ -6,7 +6,9 @@
 // Scenarios (default: all that need no outside command):
 //   ten               ten clients with camera and microphone; every client receives media from every other
 //   publisher-leaves  a publisher leaves mid-stream; the others drop it and keep their own media
-//   background        a hidden tab, then back; its media comes back without a manual toggle
+//   background        the SDK sees a hidden tab (visibilitychange), then a visible one; media comes back without a manual toggle.
+//                     Automated Chromium cannot make a tab natively hidden (tested: focus emulation, tab switch, minimize,
+//                     lifecycle freeze), so this drives the SDK's visibility handling; native backgrounding is a manual pass.
 //   impair            CHALK_E2E_IMPAIR_DOWN / _UP run around a hold, as a tc loss or bandwidth cap; media keeps moving
 //   node-restart      CHALK_E2E_RESTART runs mid-call; clients recover, by themselves or by an explicit rejoin
 // Screen share, join and leave on two clients are covered by `pnpm prod:proof camera-share`.
@@ -75,9 +77,23 @@ const scenarios = {
     await waitForMovement(pages, everyone(3), 2, 30_000, "before the leave");
     const leftAt = performance.now();
     await pages[0].evaluate(() => window.proofClient.leave());
-    await waitFor("the others drop the publisher who left", async () => (await Promise.all([rosterSize(pages[1]), rosterSize(pages[2])])).every((size) => size === 2), 30_000, 500);
+    const leaver = guests.participants[0];
+    // The roster shrinks and every remote track of the leaver is gone, while each survivor still holds the other's tracks.
+    const remoteOwners = (page) => page.evaluate(() => window.proofClient.getSnapshot().media.remote.map((entry) => entry.participantId));
+    await waitFor(
+      "the others drop the publisher who left",
+      async () => {
+        const sizes = await Promise.all([rosterSize(pages[1]), rosterSize(pages[2])]);
+        const owners = await Promise.all([remoteOwners(pages[1]), remoteOwners(pages[2])]);
+        return sizes.every((size) => size === 2) && owners.every((ids) => !ids.includes(leaver));
+      },
+      30_000,
+      500,
+    );
     const dropMs = Math.round(performance.now() - leftAt);
     const rest = await waitForMovement(pages, [1, 2], 1, 30_000, "after the leave");
+    const owners = await Promise.all([remoteOwners(pages[1]), remoteOwners(pages[2])]);
+    check(owners[0].includes(guests.participants[2]) && owners[1].includes(guests.participants[1]), "A survivor lost the other survivor's media");
     return { dropMs, restMs: rest.ms, seen: rest.seen };
   },
 
@@ -96,7 +112,7 @@ const scenarios = {
     await hide(false);
     const back = await waitForMovement(pages, everyone(3), 2, 30_000, "after the tab came back");
     check(whileHidden[0].microphones >= 1 && whileHidden[2].microphones >= 1, "The others stopped hearing audio while one tab was hidden");
-    return { hiddenSeconds: 65, whileHidden, backMs: back.ms };
+    return { emulatedVisibility: true, hiddenSeconds: 65, whileHidden, backMs: back.ms };
   },
 
   async impair({ guests }) {
@@ -133,8 +149,7 @@ const scenarios = {
     } catch {
       // The brief accepts an explicit rejoin after a node restart.
     }
-    // Each rejoin waits for every guest to be live, so they rejoin together.
-    await Promise.all(pages.map((_page, guest) => guests.rejoin(guest)));
+    await guests.rejoinAll();
     const recovered = await waitForMovement(guests.pages, everyone(3), 2, 60_000, "after the explicit rejoin");
     return { recovery: "by explicit rejoin", ms: Math.round(performance.now() - restartedAt), seen: recovered.seen };
   },
