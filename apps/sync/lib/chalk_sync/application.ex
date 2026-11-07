@@ -24,13 +24,14 @@ defmodule ChalkSync.Application do
         fanout_child(),
         whiteboard_fanout_child(),
         lifecycle_consumer_child(),
-        external_operation_consumer_child(),
+        external_operation_consumer_children(),
         retention_scheduler_child(),
         boot_check_child(),
         {ChalkSync.Operations.Readiness, []},
         presence_runtime_child(),
         listener_child()
       ]
+      |> List.flatten()
       |> Enum.reject(&is_nil/1)
 
     Supervisor.start_link(children, strategy: :one_for_one, name: ChalkSync.Supervisor)
@@ -100,18 +101,19 @@ defmodule ChalkSync.Application do
     end
   end
 
-  defp external_operation_consumer_child do
+  defp external_operation_consumer_children do
     case Application.fetch_env!(:chalk_sync, :stateholder) do
       ChalkSync.Stateholder.Postgres ->
         adapter_timeout_ms =
           Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms)
 
-        {ChalkSync.ExternalOperationConsumer,
-         adapter_timeout_ms: adapter_timeout_ms,
-         poll_interval_ms:
-           Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
-         media_plane: media_plane(adapter_timeout_ms),
-         recording_plane: recording_plane(adapter_timeout_ms)}
+        ChalkSync.ExternalOperationConsumer.child_specs(
+          adapter_timeout_ms: adapter_timeout_ms,
+          poll_interval_ms:
+            Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
+          media_plane: media_plane(adapter_timeout_ms),
+          recording_plane: recording_plane(adapter_timeout_ms)
+        )
 
       _adapter ->
         nil

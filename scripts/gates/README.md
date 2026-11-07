@@ -22,16 +22,18 @@ same plan as the lanes to pick the jobs a pull request needs: the API gate, the
 Sync gate, and the root lane groups. The root lanes run as parallel jobs, one
 per lane group: `checks` (every lane that no other group names, including type
 checks), `tests` (non-browser workspaces), `browser-tests` (the web app and SDK
-consumer workspaces whose tests drive Chromium), `call-performance` (call bundle
-budgets), `call-leaks` (call resource cleanup journeys), and
-`build` (with Publint and Are The Types Wrong, which read the build output).
+consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboard against the real API),
+`call-leaks` (call resource cleanup journeys), and `build` (with the call bundle
+budget, Publint and Are The Types Wrong, which read the build output). The call
+bundle budget and the leak journeys run only when a file the call-states page
+imports changes (see `callUi` in `chalk-gate-plan.mjs`) or on a full gate.
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when every
 selected group passed; a job that the planner skips counts as passed. When the
 planner cannot select jobs, for example because the base does not resolve, or
 `Select gate jobs` fails, every job runs and every lane runs with `--full`. Pushes to `master`, the nightly run, and manual runs select every job and
 run every lane with `--full`, so anything a pull request skips still runs once it merges, and
-every master commit keeps its own run. A full run scans staged files and commits
+master pushes share one run slot, so a newer push replaces the run still queued and some commits get no run. A full run scans staged files and commits
 for secrets: the pushed range on a push to `master`, otherwise the commits since
 the base, or the last commit.
 
@@ -112,6 +114,7 @@ shipment target from branch, release mode, or directory.
 - Dependency inputs run Syncpack and OSV against tracked product lockfiles.
 - Publishable packages run Publint and Are The Types Wrong only when affected.
 - Architecture and recorder inputs run their standalone gates.
+- `features/media/sfu` changes run its Go gate (`features/media/sfu/scripts/gate.sh`: format, tidy, vet and race tests). The Chromium check there runs on demand.
 - `infrastructure/managed-episode` and `infrastructure/nightly` run the API,
   Sync and recorder gates, whose tests read them.
   The full mode selects every rule. Separate nightly and release-candidate

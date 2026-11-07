@@ -221,7 +221,7 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 	if err != nil {
 		t.Fatal(err)
 	}
-	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, CloudflareConnectionID: "matrix-own-connection"}
+	mediaSubject := accessgrants.Subject{TenantID: own.TenantID, SpaceID: own.SpaceID, EpisodeID: own.EpisodeID, ParticipantID: own.ParticipantID, ParticipantGeneration: 1, Provider: accessgrants.ProviderCloudflareSFU, ConnectionID: "matrix-own-connection"}
 	mediaToken, err := mediaSigner.Issue(t.Context(), mediaSubject)
 	if err != nil {
 		t.Fatal(err)
@@ -264,8 +264,9 @@ func newRouteMatrixFixture(t *testing.T, tx pgx.Tx, own, foreign chatattachments
 		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithTransactor(lingerTestTransactor{tx})),
 		RecordingPreparations: recordingpreparation.NewService(NewRecordingPreparationRepository(nil), spaceService),
 		RecordingObjects:      storage, RecordingDownloads: storage, TranscriptArtifacts: transcriptService,
-		Webhooks:        webhooks.NewService(NewWebhookRepository(nil), nil),
-		ChatAttachments: chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
+		TranscriptTextMetadata: NewTranscriptTextRepository(q),
+		Webhooks:               webhooks.NewService(NewWebhookRepository(nil), nil),
+		ChatAttachments:        chatattachments.NewService(chatRepo, storage), ChatParticipants: chatattachments.NewParticipantVerifier(syncVerifier),
 		WhiteboardFiles: whiteboardfiles.NewService(NewWhiteboardFileRepository(tx), storage), WhiteboardParticipants: whiteboardfiles.NewParticipantVerifier(syncVerifier),
 	}
 	matrixMountWorkers(&fixture.options, transcriptService)

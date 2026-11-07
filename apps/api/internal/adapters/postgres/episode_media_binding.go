@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, space sqlc.Space) ([]byte, error) {
+func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, space sqlc.Space, clients mediaplane.ClientProviders) ([]byte, error) {
 	if r.mediaBindingResolver == nil {
 		return []byte("null"), nil
 	}
@@ -22,7 +23,7 @@ func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Conte
 		DefaultMediaPlane:        nullableText(policy.DefaultMediaPlane),
 		MediaPlaneProviderConfig: json.RawMessage(policy.MediaPlaneProviderConfig),
 	}
-	binding, err := r.mediaBindingResolver.ResolveBinding(tenant, mapSpace(space))
+	binding, err := r.mediaBindingResolver.ResolveBinding(tenant, mapSpace(space), clients)
 	if err != nil {
 		return nil, err
 	}

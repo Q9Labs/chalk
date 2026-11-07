@@ -200,9 +200,9 @@ function discoverWebJoinPath(root) {
   const candidates = findFiles(routesDirectory)
     .filter(({ path, content }) => path.endsWith(".tsx") && (/from\s+["']@q9labsai\/chalk-react["']/.test(content) || /from\s+["'][^"']*\/components\/space\/SpacePage["']/.test(content)))
     .map(({ content }) => content.match(/createFileRoute\(\s*["']([^"']+)["']\s*\)/)?.[1])
-    .filter((route) => route === "/space" || route === "/space/");
+    .filter((route) => route === "/_space");
   if (candidates.length !== 1) throw failure(FailureKind.CONFIG, `expected one public web join route, found ${candidates.length}`, { stage: "config" });
-  return candidates[0].replace(/\/$/, "");
+  return "/space";
 }
 
 function findFiles(directory) {

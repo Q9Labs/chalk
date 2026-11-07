@@ -38,14 +38,18 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
       episode_id: UUID.generate()
     }
 
-    :ok = Memory.seed_episode(episode)
-    coordinator = start_supervised!({Coordinator, episode})
-
     identity = %Identity{
       episode: episode,
       participant_id: UUID.generate(),
       participant_generation: 1
     }
+
+    :ok =
+      Memory.seed_episode(episode, [
+        %{id: identity.participant_id, generation: 1, display_name: "Participant", role: "owner"}
+      ])
+
+    coordinator = start_supervised!({Coordinator, episode})
 
     {:ok, recovery} = Memory.recover_episode(episode, nil)
     {:ok, ^coordinator} = Coordinator.subscribe(identity, recovery.head)
@@ -54,11 +58,19 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     :sys.replace_state(coordinator, fn state ->
       %{
         state
-        | live: %{state.live | connections: %{socket => %{participant_id: UUID.generate()}}}
+        | live: %{
+            state.live
+            | connections: %{
+                socket => %{
+                  participant_id: identity.participant_id,
+                  generation: identity.participant_generation
+                }
+              }
+          }
       }
     end)
 
-    %{episode: episode, coordinator: coordinator}
+    %{episode: episode, coordinator: coordinator, participant_id: identity.participant_id}
   end
 
   test "a storm during an in-flight reconciliation coalesces to one fresh read", %{
@@ -104,6 +116,61 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     Coordinator.publication_observed(episode)
     assert_receive {:observing, reader, ^episode}, 1_000
     send(reader, {:observation, observation(1)})
+  end
+
+  test "withdrawn publications tombstone before a replacement is projected", %{
+    episode: episode,
+    coordinator: coordinator,
+    participant_id: participant_id
+  } do
+    reconcile_observation(episode, coordinator, 1, [publication(participant_id, "P")])
+    assert_media_item(coordinator, participant_id, true, "P")
+
+    frame = reconcile_observation(episode, coordinator, 2, [])
+    assert_media_tombstone(frame, participant_id)
+    state = :sys.get_state(coordinator).live
+    assert state.media_items == []
+    assert Map.values(state.media_projection.items) == [frame["item"]]
+
+    reconcile_observation(episode, coordinator, 3, [publication(participant_id, "P2")])
+    assert_media_item(coordinator, participant_id, true, "P2")
+  end
+
+  test "a pause for a withdrawn publication does not mask its replacement", %{
+    episode: episode,
+    coordinator: coordinator,
+    participant_id: participant_id
+  } do
+    reconcile_observation(episode, coordinator, 1, [publication(participant_id, "P")])
+    assert_media_item(coordinator, participant_id, true, "P")
+
+    identity = %Identity{
+      episode: episode,
+      participant_id: participant_id,
+      participant_generation: 1
+    }
+
+    assert :ok = Memory.set_media_pause(identity, :microphone, "P")
+    pause_key = {participant_id, "microphone"}
+
+    :sys.replace_state(coordinator, fn state ->
+      %{
+        state
+        | live: %{state.live | media_pauses: Map.put(state.live.media_pauses, pause_key, "P")}
+      }
+    end)
+
+    assert :sys.get_state(coordinator).live.media_pauses[pause_key] == "P"
+
+    frame = reconcile_observation(episode, coordinator, 2, [])
+    assert_media_tombstone(frame, participant_id)
+    state = :sys.get_state(coordinator).live
+    assert state.media_items == []
+    assert Map.values(state.media_projection.items) == [frame["item"]]
+    refute Map.has_key?(state.media_pauses, pause_key)
+
+    reconcile_observation(episode, coordinator, 3, [publication(participant_id, "P2")])
+    assert_media_item(coordinator, participant_id, true, "P2")
   end
 
   @tag timeout: 20_000
@@ -180,20 +247,64 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     end
   end
 
-  defp observation(sequence) do
+  defp observation(sequence, publications \\ nil) do
     {:ok,
      %{
        incarnation: 1,
        sequence: sequence,
-       publications: [
-         %{
-           participant_id: "00000000-0000-4000-8000-000000000001",
-           source: :microphone,
-           enabled: true,
-           publication_id: "fresh-#{sequence}"
-         }
-       ]
+       publications:
+         publications ||
+           [
+             %{
+               participant_id: "00000000-0000-4000-8000-000000000001",
+               source: :microphone,
+               enabled: true,
+               publication_id: "fresh-#{sequence}"
+             }
+           ]
      }}
+  end
+
+  defp publication(participant_id, publication_id) do
+    %{
+      participant_id: participant_id,
+      source: :microphone,
+      enabled: true,
+      publication_id: publication_id
+    }
+  end
+
+  defp reconcile_observation(episode, coordinator, sequence, publications) do
+    Coordinator.publication_observed(episode)
+    assert_receive {:observing, reader, ^episode}, 1_000
+    send(reader, {:observation, observation(sequence, publications)})
+
+    assert_receive {:sync_v1_live_frame, ^coordinator, %{"stream" => "media"} = frame}, 1_000
+    assert :sys.get_state(coordinator).live_reconcile_task == nil
+    frame
+  end
+
+  defp assert_media_tombstone(frame, participant_id) do
+    assert %{
+             "type" => "projection_event",
+             "item" => %{
+               "participant_id" => ^participant_id,
+               "source" => "microphone",
+               "enabled" => false,
+               "publication_id" => nil
+             }
+           } = frame
+  end
+
+  defp assert_media_item(coordinator, participant_id, enabled, publication_id) do
+    assert [
+             %{
+               "participant_id" => ^participant_id,
+               "source" => "microphone",
+               "enabled" => ^enabled,
+               "publication_id" => ^publication_id
+             }
+           ] = :sys.get_state(coordinator).live.media_items
   end
 
   defp assert_converged(coordinator, sequence) do

@@ -62,7 +62,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
   };
 }
 export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>) {
-  if (action.action === "rename-call" || action.action === "set-admission") return homeMutation(engine, action);
+  if (action.action === "set-transcript-language" || action.action === "rename-call" || action.action === "set-admission") return homeMutation(engine, action);
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   await run(engine.api.spaces.getSpace({ params }));
   const headers = { "Idempotency-Key": action.idempotencyKey };

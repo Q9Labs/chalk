@@ -103,6 +103,8 @@ function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBo
   setContentType(headers, hasBody);
   setOptionalHeader(headers, "idempotency-key", idempotencyKeyValue);
   headers.set("authorization", `Bearer ${apiKey}`);
+  // The API binds an Episode to the own SFU only for an SDK that declares it.
+  headers.set("x-chalk-media-providers", "cloudflare_sfu,chalk_sfu");
   return headers;
 }
 

@@ -208,8 +208,17 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "pattern" => "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$"
         }
       },
+      "helloOnlyFields" => %{
+        "baggage" => %{
+          "kind" => "string",
+          "minBytes" => 47,
+          "maxBytes" => 47,
+          "format" => "w3c-baggage-session-id",
+          "pattern" => "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        }
+      },
       "acceptedOn" => %{"hello" => "client-to-server", "serverFrames" => "server-to-client"},
-      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate"],
+      "upgradeHeaders" => ["x-chalk-journey-id", "traceparent", "tracestate", "baggage"],
       "rule" => "propagate_from_first_observed_layer_to_every_downstream_frame"
     },
     "externalIntents" => [
@@ -521,6 +530,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     ]
   }
   @correlation_field_keys ["journey_id", "traceparent", "tracestate"]
+  @hello_only_correlation_field_keys ["baggage"]
   @capabilities [
     "publishAudio",
     "publishVideo",
@@ -630,6 +640,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
   @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
+  @baggage ~r/\Asession\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
   @digest ~r/\A[0-9a-f]{64}\z/
 
   def protocol_version, do: @protocol_version
@@ -673,15 +684,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp decode_hello(%{"type" => "hello", "protocol" => @protocol_version, "token" => token,
       "streams" => streams} = frame) do
     cond do
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
+      hello_exact_keys?(frame, ["type", "protocol", "token", "streams"]) and
           valid_token?(token) and valid_streams?(streams) ->
         {:ok, {:hello, %{token: token, streams: streams, extensions: [],
-            correlation: correlation_fields(frame)}}}
-      correlation_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
+            correlation: hello_correlation_fields(frame)}}}
+      hello_exact_keys?(frame, ["type", "protocol", "token", "streams", "extensions"]) and
           valid_token?(token) and valid_streams?(streams) and
           valid_collaborations_hello_extensions?(frame["extensions"]) ->
         {:ok, {:hello, %{token: token, streams: streams, extensions: frame["extensions"],
-            correlation: correlation_fields(frame)}}}
+            correlation: hello_correlation_fields(frame)}}}
       true ->
         {:error, :invalid_hello}
     end
@@ -982,6 +993,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
     base = if Map.has_key?(frame, "extensions"), do: base ++ ["extensions"], else: base
     base = if Map.has_key?(frame, "entry_confirmation"), do: base ++ ["entry_confirmation"],
         else: base
+    base = if Map.has_key?(frame, "media_off_reason"), do: base ++ ["media_off_reason"],
+        else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
     base = if Map.has_key?(frame, "participant_identity_id"),
@@ -995,9 +1008,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         valid_collaborations_welcome_extensions?(frame["extensions"])
     valid_entry = not Map.has_key?(frame, "entry_confirmation") or
         frame["entry_confirmation"] == true
+    valid_off_reason = not Map.has_key?(frame, "media_off_reason") or
+        frame["media_off_reason"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_generation and valid_identity
+        valid_off_reason and valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,
@@ -1348,9 +1363,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp projection_item_limit(_stream), do: -1
   defp valid_projection_item?("media", %{"participant_id" => id, "source" => source,
       "enabled" => enabled, "publication_id" => publication_id} = item), do: exact_keys?(item,
-      ["participant_id", "source", "enabled", "publication_id"]) and valid_uuid?(id) and
+      ["participant_id", "source", "enabled", "publication_id"] ++ Enum.filter(["off_reason",
+      "off_revision"], &Map.has_key?(item, &1))) and valid_uuid?(id) and
       source in @media_sources and is_boolean(enabled) and (is_nil(publication_id) or
-      bounded_string?(publication_id, 1, 256)) and (not enabled or not is_nil(publication_id))
+      bounded_string?(publication_id, 1, 256)) and (not enabled or
+      not is_nil(publication_id)) and valid_media_off_reason?(item)
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
@@ -1362,6 +1379,13 @@ defmodule ChalkSync.Contract.GeneratedV1 do
       state in @presence_states and is_boolean(speaking) and is_boolean(active) and
       (state != "disconnected" or (not speaking and not active))
   defp valid_projection_item?(_stream, _item), do: false
+  defp valid_media_off_reason?(%{"off_reason" => "host", "off_revision" => revision}),
+      do: valid_positive_integer?(revision)
+  defp valid_media_off_reason?(%{"off_reason" => reason,
+      "enabled" => false} = item) when reason in ["self", "dead"], do: not Map.has_key?(item,
+      "off_revision")
+  defp valid_media_off_reason?(item), do: not Map.has_key?(item, "off_reason") and
+      not Map.has_key?(item, "off_revision")
 
   defp valid_live_target_result?(%{"operation_id" => id, "name" => name, "outcome" => outcome,
       "error_code" => error_code} = frame), do: correlation_exact_keys?(frame, ["type",
@@ -1557,6 +1581,14 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp correlation_fields(frame), do: Enum.reduce(@correlation_field_keys, %{}, fn key,
       fields -> if Map.has_key?(frame, key), do: Map.put(fields, key, frame[key]),
       else: fields end)
+  def valid_baggage?(value), do: bounded_string?(value, 47, 47) and value =~ @baggage
+  defp hello_correlation_fields(frame),
+      do: frame |> correlation_fields() |> Map.merge(Map.take(frame,
+      @hello_only_correlation_field_keys))
+  defp hello_exact_keys?(frame, keys), do: correlation_exact_keys?(Map.drop(frame,
+      @hello_only_correlation_field_keys), keys) and
+      Enum.all?(@hello_only_correlation_field_keys, fn key -> not Map.has_key?(frame, key) or
+      valid_baggage?(frame[key]) end)
   defp correlation_exact_keys?(map, keys) when is_map(map),
       do: valid_correlation_fields?(map) and map_size(map) >= length(keys) and Enum.all?(keys,
       &Map.has_key?(map, &1)) and Enum.all?(Map.keys(map), &(&1 in keys or

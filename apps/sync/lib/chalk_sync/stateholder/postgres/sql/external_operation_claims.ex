@@ -1,7 +1,14 @@
 defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   @moduledoc false
 
+  alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationColumns
+
+  # A claim hides an operation from other nodes for this long. A page of provider
+  # calls must finish inside it, or another node can claim and rerun the operation.
+  @lease_seconds 60
+
+  def lease_seconds, do: @lease_seconds
 
   def read_operation do
     """
@@ -17,17 +24,18 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
   end
 
   def claim_local_operations do
+    claim_operations_where("operation_name in (#{local_names()})")
+  end
+
+  def claim_provider_operations do
     claim_operations_where("""
-    operation_name in (
-      'participant_leave',
-      'deny_admission',
-      'admission_request_expired',
-      'tenant_set_deadline',
-      'recording_capture_ready',
-      'recording_capture_stopped',
-      'recording_capture_failed'
-    )
+    operation_name not in (#{local_names()}) and operation_name <> 'role_transition_cleanup'
     """)
+  end
+
+  defp local_names do
+    ExternalOperation.local_names()
+    |> Enum.map_join(", ", &"'#{&1}'")
   end
 
   defp claim_operations_where(operation_filter) do
@@ -93,7 +101,7 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       update sync_external_operations operation
       set
         attempt_count = least(operation.attempt_count + 1, 100),
-        next_attempt_at = now() + interval '60 seconds'
+        next_attempt_at = now() + interval '#{@lease_seconds} seconds'
       from candidates
       where operation.external_operation_id = candidates.external_operation_id
       returning operation.*

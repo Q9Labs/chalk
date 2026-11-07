@@ -80,6 +80,7 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
       const screen = {
         getByLabel: () => ({ fill: async () => {} }),
         getByRole: (_role, name, options) => ({
+          hover: async () => {},
           count: async () => 1,
           click: name === "Leave call" ? step("web-leave") : async () => {},
           async waitFor(waitOptions) {
@@ -90,7 +91,7 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
           },
         }),
       };
-      const result = withProofCall({ app: { open: async () => {} }, screen }, callbackLeave ? (guest) => guest.leave() : step("assertion"));
+      const result = withProofCall({ app: { open: async () => {}, screenshot: async () => {} }, screen }, callbackLeave ? (guest) => guest.leave() : step("assertion"));
       const flatten = (entry) => (entry instanceof AggregateError ? entry.errors.flatMap(flatten) : [entry]);
       const actual = await result.then(() => [], flatten);
       assert.deepEqual(actual, [...errors.values()]);
@@ -123,6 +124,7 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
       const screen = {
         getByLabel: () => ({ fill: async () => {} }),
         getByRole: (_role, name, options) => ({
+          hover: async () => {},
           count: async () => (webLeaving ? 0 : 1),
           click: async () => {
             if (name !== "Leave call") return;
@@ -137,7 +139,7 @@ test("a proof retains its assertion and every cleanup failure", async (t) => {
           },
         }),
       };
-      const result = withProofCall({ app: { open: async () => {} }, screen }, async () => {
+      const result = withProofCall({ app: { open: async () => {}, screenshot: async () => {} }, screen }, async () => {
         if (callbackLeave) await screen.getByRole("button", "Leave call").click();
       });
       const outcome = result.then(

@@ -19,6 +19,7 @@ defmodule ChalkSync.ProtocolV1 do
   def decode(text)
       when is_binary(text) and byte_size(text) <= @inbound_frame_bytes do
     with {:ok, %{} = frame} <- JSON.decode(text),
+         frame = drop_invalid_baggage(frame),
          {:ok, decoded} <- GeneratedV1.decode_client_frame(frame),
          {:ok, normalized} <- normalize(decoded) do
       {:ok, normalized}
@@ -32,6 +33,14 @@ defmodule ChalkSync.ProtocolV1 do
 
   def decode(text) when is_binary(text), do: {:error, :frame_too_large}
   def decode(_frame), do: {:error, :invalid_frame}
+
+  # `baggage` only carries the optional session ID. A malformed value is ignored
+  # instead of failing the hello, because it must never reject a connection.
+  defp drop_invalid_baggage(%{"type" => "hello", "baggage" => baggage} = frame) do
+    if GeneratedV1.valid_baggage?(baggage), do: frame, else: Map.delete(frame, "baggage")
+  end
+
+  defp drop_invalid_baggage(frame), do: frame
 
   def recovery_id, do: UUID.generate()
 
@@ -83,6 +92,11 @@ defmodule ChalkSync.ProtocolV1 do
     frame =
       if Map.get(options, :entry_confirmation, false),
         do: Map.put(frame, "entry_confirmation", true),
+        else: frame
+
+    frame =
+      if Map.get(options, :media_off_reason, false),
+        do: Map.put(frame, "media_off_reason", true),
         else: frame
 
     frame |> maybe_entry_generation(identity, options) |> encode!()

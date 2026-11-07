@@ -313,6 +313,20 @@ It is separate from the public router and exposes authenticated readiness at
 against a protocol-faithful Cloudflare endpoint. Non-local environments reject
 it and always use Cloudflare's production SFU endpoint.
 
+`CHALK_CLOUDFLARE_TURN_KEY_ID` and `CHALK_CLOUDFLARE_TURN_API_TOKEN` name a
+Cloudflare TURN key (created by [`infrastructure/cloudflare-turn`](../../infrastructure/cloudflare-turn/README.md)).
+Set both or neither; the runtime validators require them for nightly and
+production on the Cloudflare SFU. With both, a media bootstrap carries
+`iceServers` with short-lived TURN credentials (UDP 3478, TCP, and TLS on 443)
+next to `stunServer`, but only for callers tied to an accountable owner:
+authenticated access grants and episode admission, and guests who join a
+tenant's Space through its public invite. Guests of an anonymous public Space
+(the managed public Tenant) get STUN only, as do tenant-managed Cloudflare
+accounts. With no TURN key, or when Cloudflare cannot mint a credential, clients
+get STUN only and the join still succeeds. One process-wide minter reuses a
+credential for an hour, backs off for 30 seconds after a failure, and a join
+waits at most two seconds for it.
+
 ## Runtime Smoke
 
 ```bash
@@ -353,7 +367,9 @@ CHALK_API_OTLP_ENDPOINT=https://otel.example.com:4318
 environments. The runtime emits Go runtime metrics, HTTP server spans, database
 operation spans, Redis rate-limit spans, and Cloudflare media-plane request
 spans. It propagates W3C `traceparent` and mirrors or creates the lowercase
-`x-chalk-journey-id` response header. Request bodies and operation content are
+`x-chalk-journey-id` response header. A valid `baggage: session.id=<uuid>` request
+header becomes the `session.id` attribute on every span of the request and a field
+on its log lines; anything else in `baggage` is ignored. Request bodies and operation content are
 never included in traces or logs.
 
 `CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.

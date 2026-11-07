@@ -6,6 +6,9 @@ import { createV1SyncClient } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
+import { withRequestContext } from "../session";
+import { mediaBootstrap } from "../access/media-bootstrap";
+const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
     clock: {
@@ -26,7 +29,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
           return () => globalThis.window?.removeEventListener("online", listener);
         },
         send: async (grant, report, signal, traceparent) => {
-          const response = await fetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(grant.subject.tenantId)}/connection-reports`, {
+          const response = await apiFetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(grant.subject.tenantId)}/connection-reports`, {
             method: "POST",
             headers: { Authorization: `Bearer ${grant.media.token}`, "Content-Type": "application/json", traceparent },
             body: JSON.stringify(report),
@@ -43,7 +46,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     getEpisodeStatus: async (access, signal) => {
       const { tenantId, spaceId, episodeId, participantId } = access.subject;
       const path = [tenantId, spaceId, episodeId, participantId].map(encodeURIComponent);
-      const response = await fetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/episode-status`, {
+      const response = await apiFetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/episode-status`, {
         headers: { Authorization: `Bearer ${access.media.token}` },
         signal,
         cache: "no-store",
@@ -60,7 +63,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       let baseEnd = options.apiBaseURL.length;
       while (baseEnd > 0 && options.apiBaseURL[baseEnd - 1] === "/") baseEnd--;
       const baseURL = options.apiBaseURL.slice(0, baseEnd);
-      const response = await fetch(`${baseURL}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/cancel-join`, {
+      const response = await apiFetch(`${baseURL}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/cancel-join`, {
         method: "POST",
         headers: { Authorization: `Bearer ${access.media.token}` },
         signal,
@@ -108,15 +111,9 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
-    bootstrap: input.access.media.clientPayload,
+    bootstrap: mediaBootstrap(input.access.media),
     participantId: subject.participantId,
-    replaceMediaConnection: replaceMediaConnection
-      ? async () => {
-          const replacement = await replaceMediaConnection();
-          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-          return replacement.clientPayload;
-        }
-      : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
@@ -128,18 +125,15 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
     }),
     onError: input.onFailure,
+    // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
+    onDiagnostic: (event) => console.warn("chalk.media.local_offer_pending", event),
+    onReceiveHealth: input.onTransportDiagnostic,
     onScreenEnded: input.onScreenEnded,
   });
   return createSFUConnectionMediaClient(client);
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): ConnectionMediaClient {
-  return bindConnectionMediaClient(client, (input) => {
-    if ("provider" in input) {
-      if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-      return client.restart(input.clientPayload);
-    }
-    return client.restart(input);
-  });
+  return bindConnectionMediaClient(client, (input) => client.restart("provider" in input ? mediaBootstrap(input) : input));
 }
 type BoundMediaClient = Pick<
   ConnectionMediaClient,
@@ -149,9 +143,11 @@ type BoundMediaClient = Pick<
   | "closeForcedLocalPublication"
   | "observeLocalPublications"
   | "observeRemotePublications"
+  | "observeAudioElement"
   | "remotePublicationsChanged"
   | "remoteParticipantsChanged"
   | "remotePublicationResumed"
+  | "localPublicationWithdrawn"
   | "start"
   | "stop"
   | "prepareLocalTrack"
@@ -167,9 +163,11 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     ...(client.closeForcedLocalPublication ? { closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client) } : {}),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
+    ...(client.observeAudioElement ? { observeAudioElement: client.observeAudioElement.bind(client) } : {}),
     ...(client.remoteParticipantsChanged ? { remoteParticipantsChanged: client.remoteParticipantsChanged.bind(client) } : {}),
     ...(client.remotePublicationsChanged ? { remotePublicationsChanged: client.remotePublicationsChanged.bind(client) } : {}),
     ...(client.remotePublicationResumed ? { remotePublicationResumed: client.remotePublicationResumed.bind(client) } : {}),
+    ...(client.localPublicationWithdrawn ? { localPublicationWithdrawn: client.localPublicationWithdrawn.bind(client) } : {}),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
     restart,

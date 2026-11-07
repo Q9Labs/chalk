@@ -34,7 +34,7 @@ describe("SpaceClient media convergence", () => {
     }
   });
 
-  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused through recovery", async (source) => {
+  it.each(["microphone", "camera", "screen"] as const)("keeps rejected %s Off paused and resends it through recovery", async (source) => {
     const localTargets: boolean[] = [];
     const { platform, command, client, setEnabled, track } = createConvergenceScenario(source, {
       media: {
@@ -53,12 +53,8 @@ describe("SpaceClient media convergence", () => {
       expect(localTargets).toEqual([false]);
       await enterRecovery({ platform, client });
       command.mockClear();
-      if (source === "screen") await resumeWithOff({ platform, command });
-      else {
-        platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
-        await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
-        expect(command).not.toHaveBeenCalled();
-      }
+      // The off is the device's decision: recovery resends it until Sync accepts one, and never sends an on.
+      await resumeWithOff({ platform, command });
       expect(localTargets).not.toContain(true);
       expect(track.enabled).toBe(false);
       command.mockClear();
@@ -169,7 +165,8 @@ describe("SpaceClient media convergence", () => {
       if (!newerStop) for (const result of results) expect(result).toMatchObject({ code: "connection.invalid_state" });
       expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
       command.mockClear();
-      await resumeWithOff({ platform, command }, source === "screen" || newerStop);
+      // The user's off is owed to Sync even when a later enable was rejected.
+      await resumeWithOff({ platform, command });
     } finally {
       finishPause();
       client.dispose();
@@ -186,7 +183,7 @@ describe("SpaceClient media convergence", () => {
       await expect(setEnabled(true)).rejects.toMatchObject({ code: "connection.invalid_state" });
       await enterRecovery({ platform, client });
       command.mockReset().mockResolvedValue({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" });
-      await resumeWithOff({ platform, command }, source === "screen");
+      await resumeWithOff({ platform, command });
     } finally {
       client.dispose();
     }
@@ -428,6 +425,24 @@ describe("SpaceClient media convergence", () => {
       expect(close).not.toHaveBeenCalled();
       await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("left"));
       expect(stop).toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("marks a remote camera the SFU paused for network, and clears it when the SFU resumes it", async () => {
+    const platform = createCoreTestPlatform();
+    const track = mediaTrack();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, platform);
+    try {
+      await client.join({ microphone: false, camera: false });
+      const publication = { participantId: "participant-2", source: "camera" as const, enabled: true, publicationId: "publication-2" };
+      platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media-1", sequence: 1, items: [publication] } });
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteTracks: [{ ...publication, track }], remoteDelivery: [{ publicationId: "publication-2", state: "paused_for_network" }] });
+      expect(client.getSnapshot().media.remote).toEqual([expect.objectContaining({ publicationId: "publication-2", track, pausedForNetwork: true })]);
+      platform.media.emit({ ...platform.media.getSnapshot(), remoteDelivery: [{ publicationId: "publication-2", state: "flowing", layer: "l" }] });
+      expect(client.getSnapshot().media.remote[0]).not.toHaveProperty("pausedForNetwork");
+      expect(client.getSnapshot().media.remote[0]?.track).toBe(track);
     } finally {
       client.dispose();
     }

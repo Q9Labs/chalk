@@ -43,6 +43,7 @@ create table tenants (
 create index tenants_created_at_id_idx on tenants(created_at desc, id desc);
 
 create table tenant_artifact_policies (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     tenant_id uuid primary key references tenants(id) on delete cascade,
     transcription_ceiling text not null default 'automatic',
     transcription_default_mode text not null default 'automatic',
@@ -184,6 +185,76 @@ create index api_key_mutation_requests_resource_idx
     on api_key_mutation_requests (tenant_id, api_key_id)
     where api_key_id is not null;
 
+-- Self-hosted OAuth for the hosted MCP server. Every bearer value (authorization
+-- request handle, code, access token, refresh token) is stored as a SHA-256 hash.
+create table mcp_oauth_clients (
+    id uuid primary key,
+    client_id text not null unique,
+    client_name text not null,
+    redirect_uris text[] not null,
+    created_at timestamptz not null default now(),
+    constraint mcp_oauth_clients_redirect_uris_count_check
+        check (cardinality(redirect_uris) between 1 and 5)
+);
+
+create table mcp_oauth_authorization_requests (
+    request_hash text primary key,
+    client_id uuid not null references mcp_oauth_clients(id),
+    redirect_uri text not null,
+    -- False when the client omitted redirect_uri and the registered one was used (RFC 6749 4.1.3).
+    redirect_uri_supplied boolean not null,
+    state text,
+    code_challenge text not null,
+    scopes text[] not null,
+    resource text not null,
+    expires_at timestamptz not null,
+    decided_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+-- A grant is one connected app: a tenant's consent for one client and resource.
+create table mcp_oauth_grants (
+    id uuid primary key,
+    tenant_id uuid not null references tenants(id),
+    client_id uuid not null references mcp_oauth_clients(id),
+    scopes text[] not null,
+    resource text not null,
+    approved_by_service_id text not null,
+    last_used_at timestamptz,
+    revoked_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+create index mcp_oauth_grants_tenant_idx
+    on mcp_oauth_grants (tenant_id, created_at desc)
+    where revoked_at is null;
+
+create table mcp_oauth_codes (
+    code_hash text primary key,
+    grant_id uuid not null references mcp_oauth_grants(id) on delete cascade,
+    redirect_uri text not null,
+    -- False when the client omitted redirect_uri and the registered one was used (RFC 6749 4.1.3).
+    redirect_uri_supplied boolean not null,
+    code_challenge text not null,
+    expires_at timestamptz not null,
+    consumed_at timestamptz
+);
+
+create index mcp_oauth_codes_grant_idx on mcp_oauth_codes (grant_id);
+
+create table mcp_oauth_tokens (
+    token_hash text primary key,
+    kind text not null check (kind in ('access', 'refresh')),
+    grant_id uuid not null references mcp_oauth_grants(id) on delete cascade,
+    resource text not null,
+    expires_at timestamptz not null,
+    used_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+create index mcp_oauth_tokens_grant_idx on mcp_oauth_tokens (grant_id);
+create index mcp_oauth_tokens_expiry_idx on mcp_oauth_tokens (expires_at);
+
 -- Participant tokens: JWT/JWS
 -- Algorithm: EdDSA / Ed25519
 -- Key model: tenant signs with private key, Chalk stores public
@@ -227,6 +298,7 @@ create table spaces (
         check (recording_policy in ('disabled', 'manual', 'automatic')),
     transcription_policy text not null default 'automatic'
         check (transcription_policy in ('disabled', 'on_demand', 'automatic')),
+    transcript_language text check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     default_episode_duration_seconds integer not null default 86400,
     maximum_episode_duration_seconds integer not null default 86400,
     linger_window_seconds integer not null default 0,
@@ -2001,6 +2073,29 @@ create table sync_media_pauses (
     check (octet_length(publication_id) between 1 and 256)
 );
 
+-- A host stop (mute, camera stop, screen stop) kept until a newer host stop for the same participant and source replaces it.
+-- Sync projects it as the off reason "host" so a client that missed the stop event can still see it.
+create table sync_media_stops (
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    participant_generation bigint not null,
+    source text not null,
+    revision bigint not null,
+    created_at timestamptz not null default now(),
+    primary key (tenant_id, episode_id, participant_id, source),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
+        on delete cascade,
+    foreign key (tenant_id, space_id, episode_id, participant_id, participant_generation)
+        references participants(tenant_id, space_id, episode_id, id, generation)
+        on delete cascade,
+    check (participant_generation > 0),
+    check (source in ('microphone', 'camera', 'screen')),
+    check (revision > 0)
+);
+
 create table sync_publication_fences (
     tenant_id uuid not null,
     space_id uuid not null,
@@ -2067,6 +2162,16 @@ create unique index sync_publication_grant_reservations_active_source_key
     where status in ('pending', 'ambiguous');
 create index sync_publication_grant_reservations_expiry_idx
     on sync_publication_grant_reservations(expires_at, reservation_id);
+-- The revision at which Sync decided a grant or stop, unique and rising in commit order within
+-- an Episode because every decision holds the Episode row lock. Null rows are never renewed.
+create sequence sync_source_control_revisions as bigint;
+alter table sync_publication_grant_reservations
+    add column control_revision bigint check (control_revision > 0);
+alter table sync_external_operations
+    add column control_revision bigint check (control_revision > 0);
+create index sync_publication_grant_reservations_confirmed_source_idx
+    on sync_publication_grant_reservations(tenant_id, episode_id, participant_id, source, control_revision desc)
+    where status = 'confirmed' and control_revision is not null;
 
 create table sync_recordings (
     tenant_id uuid not null,
@@ -2198,6 +2303,7 @@ create index recordings_tenant_episode_created_at_id_idx on recordings(tenant_id
 create index recordings_tenant_space_created_at_id_idx on recordings(tenant_id, space_id, created_at desc, id desc);
 
 create table transcriptions (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     id uuid primary key,
     tenant_id uuid not null references tenants(id),
     recording_id uuid not null references recordings(id),
@@ -2281,6 +2387,7 @@ create table recording_transcription_source_chunks (
 create index recording_transcription_source_chunks_recording_idx on recording_transcription_source_chunks(recording_id, generation, chunk_index);
 
 create table artifact_jobs (
+    transcript_language text not null default 'auto' check (transcript_language in ('auto','af','am','ar','as','az','ba','be','bg','bn','bo','br','bs','ca','cs','cy','da','de','el','en','es','et','eu','fa','fi','fo','fr','gl','gu','ha','haw','he','hi','hr','ht','hu','hy','id','is','it','ja','jw','ka','kk','km','kn','ko','la','lb','ln','lo','lt','lv','mg','mi','mk','ml','mn','mr','ms','mt','my','ne','nl','nn','no','oc','pa','pl','ps','pt','ro','ru','sa','sd','si','sk','sl','sn','so','sq','sr','su','sv','sw','ta','te','tg','th','tk','tl','tr','tt','uk','ur','uz','vi','yi','yo','yue','zh')),
     id uuid primary key,
     idempotency_key text not null,
     tenant_id uuid not null references tenants(id),

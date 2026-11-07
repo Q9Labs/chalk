@@ -4,10 +4,10 @@ import Svg, { Path, Rect } from "react-native-svg";
 import { encode } from "uqr";
 import { fixed } from "../theme/tokens";
 
-/** The call link as a QR code (`svg.qr`): black on white with a two-module quiet zone, in both themes. */
+/** The call link as a QR code (`svg.qr`): black on white with a four-module quiet zone, in both themes. */
 export const QrCode = memo(function QrCode({ value, size }: { readonly value: string; readonly size: number }): React.JSX.Element {
-  const { path, modules } = useMemo(() => {
-    const { data, size: count } = encode(value, { ecc: "M", border: 2 });
+  const { path, modules, pixels } = useMemo(() => {
+    const { data, size: count } = encode(value, { ecc: "M", border: 4 });
     // One rectangle per run of dark modules in a row, so no antialiased seams show between them.
     let d = "";
     data.forEach((row, y) => {
@@ -21,11 +21,11 @@ export const QrCode = memo(function QrCode({ value, size }: { readonly value: st
         }
       });
     });
-    return { path: d, modules: count };
-  }, [value]);
+    return { path: d, modules: count, pixels: count * Math.max(2, Math.round(size / count)) };
+  }, [value, size]);
   return (
-    <View accessibilityLabel={`QR code for ${value}`} accessibilityRole="image" accessible style={{ width: size, height: size, borderRadius: 8, overflow: "hidden" }} testID="details.qr">
-      <Svg height={size} viewBox={`0 0 ${modules} ${modules}`} width={size}>
+    <View accessibilityLabel={`QR code for ${value}`} accessibilityRole="image" accessible style={{ width: pixels, height: pixels }} testID="details.qr">
+      <Svg height={pixels} viewBox={`0 0 ${modules} ${modules}`} width={pixels}>
         <Rect fill={fixed.qrLight} height={modules} width={modules} x={0} y={0} />
         <Path d={path} fill={fixed.qrDark} />
       </Svg>

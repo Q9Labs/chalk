@@ -221,7 +221,7 @@ function parseIdentity(row: Record<string, unknown>): ProviderResult["providerId
   };
 }
 
-export function classifyProviderStatus(status: number, provider: "deepinfra" | "cloudflare", code?: string): "retryable" | "nonretryable" {
+export function classifyProviderStatus(status: number, provider: "deepinfra" | "cloudflare" | "openrouter", code?: string): "retryable" | "nonretryable" {
   if (provider === "cloudflare") {
     if (status >= 500) return "retryable";
     if (status === 408 && (code === "3007" || code === "3008")) return "retryable";

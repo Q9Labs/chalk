@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/config"
@@ -23,13 +24,18 @@ import (
 )
 
 const (
-	forcedCloseTimeout = 25 * time.Second
-	defaultEndpoint    = "https://rtc.live.cloudflare.com/v1"
-	stunServer         = "stun:stun.cloudflare.com:3478"
-	syncOwner          = "elixir"
+	forcedCloseTimeout      = 25 * time.Second
+	sfuHTTP2SendPingTimeout = 5 * time.Second
+	sfuHTTP2PingTimeout     = 5 * time.Second
+	sfuIdleConnTimeout      = 90 * time.Second
+	defaultEndpoint         = "https://rtc.live.cloudflare.com/v1"
+	stunServer              = "stun:stun.cloudflare.com:3478"
+	syncOwner               = "elixir"
 )
 
 var ErrMissingConfig = errors.New("missing cloudflare sfu config")
+
+var sharedSFUTransport = sync.OnceValue(newSFUTransport)
 
 const (
 	failureStageTransport  providerFailureStage = "transport"
@@ -43,9 +49,15 @@ const (
 var (
 	sfuTracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
 
-	sfuFailureCounter, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu").Int64Counter(
+	sfuMeter = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu")
+
+	sfuFailureCounter, _ = sfuMeter.Int64Counter(
 		"chalk.api.cloudflare_sfu.failures",
 		metric.WithDescription("Cloudflare SFU request failures by bounded operation and failure classification"),
+	)
+	sfuSessionReplacements, _ = sfuMeter.Int64Counter(
+		"chalk.api.cloudflare_sfu.session_replacements",
+		metric.WithDescription("Never-negotiated Cloudflare sessions swapped for a fresh one, by outcome (proactive, recovered or failed)"),
 	)
 )
 
@@ -130,6 +142,8 @@ type Adapter struct {
 	client            httpClient
 	forcedCloseClient httpClient
 	captureReplay     *captureReplayRegistry
+	sessions          *sessionRegistry
+	turn              *TurnCredentials
 }
 
 type ConnectionMetadata struct {
@@ -140,6 +154,18 @@ type ConnectionMetadata struct {
 
 type createSessionResponse struct {
 	SessionID string `json:"sessionId"`
+}
+
+type inspectSessionResponse struct {
+	Tracks []struct {
+		Location  string `json:"location"`
+		Mid       string `json:"mid"`
+		TrackName string `json:"trackName"`
+		Status    string `json:"status"`
+		SessionID string `json:"sessionId"`
+	} `json:"tracks"`
+	ErrorCode        string `json:"errorCode"`
+	ErrorDescription string `json:"errorDescription"`
 }
 
 type tracksRequest struct {
@@ -212,6 +238,10 @@ type closeTrackResult struct {
 }
 
 func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
+	return newAdapter(cfg, sharedSFUTransport())
+}
+
+func newAdapter(cfg config.CloudflareRealtimeConfig, transport *http.Transport) (Adapter, error) {
 	appID := strings.TrimSpace(cfg.RealtimeAppID)
 	appSecret := strings.TrimSpace(cfg.RealtimeAppSecret)
 	if appID == "" || appSecret == "" || cfg.RequestTimeout <= 0 {
@@ -227,10 +257,21 @@ func NewAdapter(cfg config.CloudflareRealtimeConfig) (Adapter, error) {
 		appID:             appID,
 		appSecret:         appSecret,
 		endpoint:          endpoint,
-		client:            &http.Client{Timeout: cfg.RequestTimeout},
-		forcedCloseClient: &http.Client{Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
+		client:            &http.Client{Transport: transport, Timeout: cfg.RequestTimeout},
+		forcedCloseClient: &http.Client{Transport: transport, Timeout: max(cfg.RequestTimeout, forcedCloseTimeout)},
 		captureReplay:     newCaptureReplayRegistry(),
+		sessions:          sessionRegistryForApp(appID),
 	}, nil
+}
+
+func newSFUTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.IdleConnTimeout = sfuIdleConnTimeout
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: sfuHTTP2SendPingTimeout,
+		PingTimeout:     sfuHTTP2PingTimeout,
+	}
+	return transport
 }
 
 func NewAdapterWithClient(cfg config.CloudflareRealtimeConfig, client httpClient, endpoint string) (Adapter, error) {
@@ -269,28 +310,70 @@ func (a Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInpu
 	if err != nil {
 		return mediaplane.Join{}, err
 	}
+	a.sessions.issue(connectionID)
 
 	participantRef := input.ExternalParticipantID
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
 
-	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID), nil
+	return a.joinForConnection(input.Episode.Ref, participantRef, connectionID, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
-func (a Adapter) ResumeJoin(_ context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
+func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInput) (mediaplane.Join, error) {
 	if input.Provider != mediaplane.ProviderCloudflareSFU {
 		return mediaplane.Join{}, mediaplane.ErrInvalidProvider
 	}
 
-	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef), nil
+	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
+	// Cloudflare answers a call on a dropped session only after about 5 s, so a connection that is likely
+	// expired gets a fresh session before the call. A failed creation falls through to the 410 path below.
+	session, swapped, release, err := a.sessions.claim(ctx, input.ConnectionID, a.createConnection)
+	if err != nil {
+		return mediaplane.TracksResponse{}, fmt.Errorf("choose the Cloudflare session for connection %s: %w", input.ConnectionID, err)
+	}
+	defer release()
+	if swapped {
+		sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "proactive")))
+	}
+	result, attempt, err := a.addTracks(ctx, input, session)
+	retry := addTracksRetryNone
+	if errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		fresh, replaced, replaceErr := a.sessions.replace(ctx, input.ConnectionID, session, a.createConnection)
+		switch {
+		case replaceErr != nil:
+			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", "failed")))
+			// The record keeps the gone session's own status; the failed creation logs its own provider failure.
+			logAddTracksCall(ctx, input, result.TrackErrors, attempt, err, addTracksRetryNone, false)
+			return a.toClientIDs(result), a.errorWithClientIDs(replaceErr)
+		case replaced:
+			firstResult, first, firstErr := result, attempt, err
+			result, attempt, err = a.addTracks(ctx, input, fresh)
+			outcome := "failed"
+			if err == nil {
+				outcome = "recovered"
+			}
+			sfuSessionReplacements.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
+			logAddTracksCall(ctx, input, firstResult.TrackErrors, first, firstErr, addTracksRetrySessionReplaced, err == nil)
+			retry = addTracksRetryAfterSessionReplaced
+		}
+	}
+	// A partial pull that carries an answer is accepted by the HTTP layer and negotiates the session.
+	if err == nil || (mediaplane.IsPartialRemoteTrackResponse(err) && result.SessionDescription != nil) {
+		a.sessions.negotiated(input.ConnectionID)
+	}
+	logAddTracksCall(ctx, input, result.TrackErrors, attempt, err, retry, false)
+	return a.toClientIDs(result), a.errorWithClientIDs(err)
+}
+
+func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, session string) (mediaplane.TracksResponse, addTracksAttempt, error) {
 	tracks := make([]providerTrack, 0, len(input.Tracks))
 	localTracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		providerTrack := providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast}
+		providerTrack := providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: a.sessions.providerID(track.SessionID), Simulcast: track.Simulcast}
 		tracks = append(tracks, providerTrack)
 		if track.Location == "local" {
 			localTracks = append(localTracks, providerTrack)
@@ -301,27 +384,56 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 		Tracks:             tracks,
 	}
 	response := addTracksResponse{requestedTracks: tracks, requestedLocalTracks: localTracks}
+	ageMs, negotiated := a.sessions.sessionContext(input.ConnectionID, session)
 	started := time.Now()
-	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(input.ConnectionID)), request, &response, "add_tracks")
-	logAddTracksCall(ctx, input, time.Since(started), statusCode, err)
+	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(session)), request, &response, "add_tracks")
+	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode, sessionAgeMs: ageMs, sessionNegotiated: negotiated}, err
+}
+
+func (a Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSessionRequest) (mediaplane.SessionState, error) {
+	var response inspectSessionResponse
+	statusCode, err := a.requestStatus(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(a.sessions.providerID(input.ConnectionID))), nil, &response, "get_session")
 	if err != nil {
-		return response.toMediaPlane(), err
+		var failure providerFailure
+		if errors.As(err, &failure) && (failure.statusCode == http.StatusNotFound || failure.statusCode == http.StatusGone) {
+			return mediaplane.SessionState{Found: false}, nil
+		}
+		return mediaplane.SessionState{}, err
 	}
-	return response.toMediaPlane(), nil
+	code := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(response.ErrorCode), "-", "_"))
+	if code == "session_not_found" || code == "connection_not_found" {
+		return mediaplane.SessionState{Found: false}, nil
+	}
+	if strings.TrimSpace(response.ErrorCode) != "" {
+		return mediaplane.SessionState{}, newProviderResponseFailure("get_session", failureStageTopLevel, statusCode, response.ErrorCode, response.ErrorDescription, len(response.Tracks), 0)
+	}
+	tracks := make([]mediaplane.SessionTrack, 0, len(response.Tracks))
+	for _, track := range response.Tracks {
+		tracks = append(tracks, mediaplane.SessionTrack{
+			Location: track.Location, Mid: track.Mid, TrackName: track.TrackName,
+			Active: !strings.EqualFold(strings.TrimSpace(track.Status), "inactive"),
+		})
+	}
+	return mediaplane.SessionState{Found: true, Tracks: tracks}, nil
 }
 
 // UpdateTracks changes the simulcast layer of remote subscriptions in place.
 // Cloudflare answers with requiresImmediateRenegotiation=false, so no SDP moves.
+// Cloudflare has no pause in place, so a paused request fails instead of
+// silently switching layers.
 func (a Adapter) UpdateTracks(ctx context.Context, input mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
 	tracks := make([]providerTrack, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
-		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast})
+		if track.Paused != nil {
+			return mediaplane.TracksResponse{}, fmt.Errorf("%w: cloudflare sfu cannot pause a track in place", mediaplane.ErrInvalidSignalRequest)
+		}
+		tracks = append(tracks, providerTrack{Location: track.Location, Mid: track.Mid, TrackName: track.TrackName, SessionID: a.sessions.providerID(track.SessionID), Simulcast: track.Simulcast})
 	}
 	response := updateTracksResponse{requestedTracks: tracks}
-	if err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/update", url.PathEscape(input.ConnectionID)), tracksRequest{Tracks: tracks}, &response, "update_tracks"); err != nil {
+	if err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/update", url.PathEscape(a.sessions.providerID(input.ConnectionID))), tracksRequest{Tracks: tracks}, &response, "update_tracks"); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
-	return mediaplane.TracksResponse{Tracks: response.mediaPlaneTracks(), RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation}, nil
+	return a.toClientIDs(mediaplane.TracksResponse{Tracks: response.mediaPlaneTracks(), RequiresImmediateRenegotiation: response.RequiresImmediateRenegotiation}), nil
 }
 
 func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRequest) (mediaplane.CloseTracksResponse, error) {
@@ -337,7 +449,7 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 				Location string `json:"location"`
 			} `json:"tracks"`
 		}
-		if err := a.request(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(input.ConnectionID)), nil, &session, "get_session"); err != nil {
+		if err := a.request(ctx, http.MethodGet, fmt.Sprintf("/sessions/%s", url.PathEscape(a.sessions.providerID(input.ConnectionID))), nil, &session, "get_session"); err != nil {
 			return mediaplane.CloseTracksResponse{}, err
 		}
 		for _, requested := range input.Tracks {
@@ -375,7 +487,7 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 	if input.Force && a.forcedCloseClient != nil {
 		a.client = a.forcedCloseClient
 	}
-	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(input.ConnectionID)), request, &providerResponse, "close_tracks")
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/tracks/close", url.PathEscape(a.sessions.providerID(input.ConnectionID))), request, &providerResponse, "close_tracks")
 	if err != nil && !(input.Force && forcedCloseSatisfied(err)) {
 		return mediaplane.CloseTracksResponse{}, err
 	}
@@ -398,9 +510,13 @@ func (a Adapter) CloseTracks(ctx context.Context, input mediaplane.CloseTracksRe
 }
 
 func (a Adapter) Renegotiate(ctx context.Context, input mediaplane.RenegotiateRequest) error {
-	return a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/renegotiate", url.PathEscape(input.ConnectionID)), renegotiateRequest{
+	err := a.request(ctx, http.MethodPut, fmt.Sprintf("/sessions/%s/renegotiate", url.PathEscape(a.sessions.providerID(input.ConnectionID))), renegotiateRequest{
 		SessionDescription: input.SessionDescription,
 	}, nil, "renegotiate")
+	if err == nil {
+		a.sessions.negotiated(input.ConnectionID)
+	}
+	return err
 }
 
 func (a Adapter) createConnection(ctx context.Context) (string, error) {
@@ -456,13 +572,18 @@ func (a Adapter) requestStatus(ctx context.Context, method string, path string, 
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	providerResponse, err := a.client.Do(request)
+	timing := &callTrace{}
+	var responseHeader http.Header
+	defer func() { timing.log(ctx, operation, traceInputFor(body), statusCode, responseHeader, traceFailed(err)) }()
+	providerResponse, err := a.client.Do(request.WithContext(timing.attach(ctx)))
 	if err != nil {
 		return 0, newTransportFailure(ctx, operation, 0, err)
 	}
 	defer providerResponse.Body.Close()
+	responseHeader = providerResponse.Header
 	span.SetAttributes(attribute.Int("http.response.status_code", providerResponse.StatusCode))
 	payload, err := io.ReadAll(io.LimitReader(providerResponse.Body, 1<<20))
+	timing.readDone()
 	if err != nil {
 		return providerResponse.StatusCode, newTransportFailure(ctx, operation, providerResponse.StatusCode, err)
 	}
@@ -666,7 +787,10 @@ func (r addTracksResponse) toMediaPlane() mediaplane.TracksResponse {
 	for _, track := range providerTracks {
 		if addTrackResultFailed(track) {
 			code := normalizedProviderCode(providerRejectionCode(track.ErrorCode, track.ErrorDescription))
-			trackErrors = append(trackErrors, mediaplane.TrackError{ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code})
+			publicationMissing := strings.EqualFold(strings.TrimSpace(track.ErrorCode), "not_found_track_error") || code == "track_not_found"
+			trackErrors = append(trackErrors, mediaplane.TrackError{
+				ConnectionID: track.SessionID, TrackName: track.TrackName, Code: code, PublicationMissing: publicationMissing,
+			})
 			continue
 		}
 		tracks = append(tracks, mediaplane.Track{
@@ -872,8 +996,10 @@ func normalizedProviderCode(code string) string {
 		return "rate_limited"
 	case "timeout", "request_timeout", "deadline_exceeded":
 		return "timeout"
-	case "transport_error", "client_canceled":
-		return code
+	case "transport_error":
+		return "transport_error"
+	case "client_canceled":
+		return "client_canceled"
 	case "plane_unavailable":
 		return "plane_unavailable"
 	case "invalid_json":
@@ -887,6 +1013,15 @@ func normalizedProviderCode(code string) string {
 	default:
 		return "unknown"
 	}
+}
+
+// traceFailed reports whether a call trace should log at warn: any failure except a caller cancel.
+func traceFailed(err error) bool {
+	if err == nil {
+		return false
+	}
+	var failure providerFailure
+	return !errors.As(err, &failure) || failure.transportCause != transportCauseCallerCanceled
 }
 
 func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
@@ -922,6 +1057,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		event,
 		trace.WithAttributes(
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
+			attribute.String("chalk.provider.track_error_code", failure.details.trackErrorCode),
 			attribute.String("chalk.provider.message", failure.details.message),
 			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
 			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
@@ -937,12 +1073,13 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		message,
 		"event", logEvent,
 		"operation", failure.operation,
-		"failure_stage", failure.stage,
+		"failure_stage", string(failure.stage),
 		"http_status", failure.statusCode,
 		"http_status_class", failure.statusClass,
 		"provider_code", failure.providerCode,
-		"transport_cause", failure.transportCause,
+		"transport_cause", string(failure.transportCause),
 		"provider_raw_code", failure.details.rawCode,
+		"provider_track_error_code", failure.details.trackErrorCode,
 		"provider_message", failure.details.message,
 		"provider_message_fingerprint", failure.details.messageFingerprint,
 		"provider_response_bytes", failure.details.responseBytes,
@@ -1050,7 +1187,7 @@ func (a Adapter) providerMetadata() map[string]string {
 	}
 }
 
-func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string) mediaplane.Join {
+func (a Adapter) joinForConnection(episodeRef string, participantRef string, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderCloudflareSFU,
 		ParticipantRef: participantRef,
@@ -1059,6 +1196,7 @@ func (a Adapter) joinForConnection(episodeRef string, participantRef string, con
 			"provider":     string(mediaplane.ProviderCloudflareSFU),
 			"episodeRef":   episodeRef,
 			"stunServer":   stunServer,
+			"iceServers":   iceServers,
 			"syncOwner":    syncOwner,
 		},
 		Metadata: a.providerMetadata(),

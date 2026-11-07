@@ -30,7 +30,7 @@ it.each((["microphone", "camera"] as const).flatMap((source) => [false, true].ma
     first.emitSync({ ...first.sync.getSnapshot(), media: { projectionId: "media", sequence: 1, items: [publication] } });
     expect(client.getSnapshot().media.local[source].state).toBe("enabled");
     if (stoppedBefore) first.emitMediaPause({ source, revision: 2 });
-    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [{ ...publication, enabled: stoppedBefore }] } });
+    next.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "idle" }, media: { projectionId: "replacement", sequence: 1, items: [stoppedBefore ? publication : { ...publication, enabled: false, publicationId: null, offReason: "host", offRevision: 3 }] } });
     first.emitSync({ ...first.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
     await vi.waitFor(() => expect(creations).toBe(2), { timeout: 3000 });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"), { timeout: 3000 });
@@ -67,8 +67,8 @@ it.each(["microphone", "camera"] as const)("does not resurrect unconfirmed %s co
     platform.emitSync({ ...platform.sync.getSnapshot(), media: { projectionId: "media", sequence: 1, items: [{ ...publication, enabled: false }] } });
     platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
-    // A host stop while disconnected cannot be replayed by the full snapshot.
-    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [] } });
+    // A host stop while disconnected reaches the full snapshot as the item's off reason, with the stop's revision.
+    platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [{ ...publication, enabled: false, publicationId: null, offReason: "host", offRevision: 5 }] } });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(command.mock.calls.map(([enabled]) => enabled)).not.toContain(true);
@@ -97,7 +97,7 @@ it.each(["microphone", "camera"] as const)("does not send stale %s consent when 
     await vi.waitFor(() => expect(test.capture).toHaveBeenCalledOnce());
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
-    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [] } });
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" }, media: { projectionId: "recovered", sequence: 1, items: [{ participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "host", offRevision: 5 }] } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
     finish();
     await result;

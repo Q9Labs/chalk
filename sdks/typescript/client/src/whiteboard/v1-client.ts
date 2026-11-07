@@ -33,6 +33,11 @@ const MAX_TIMER_DRIFT_MS = 250;
 const MAX_SLOW_CONNECTION_BACKOFF_MS = 4_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+function reconnectDelay(configuredDelay: number | undefined, attempt: number, random: () => number): number {
+  if (configuredDelay === 0) return 0;
+  const base = Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(attempt, 5));
+  return Math.round(base * (0.5 + 0.5 * random()));
+}
 /** Matches the retries the hello ladder used to give a rejected token, so a key rotation or clock skew still clears up. */
 const MAX_REJECTED_HELLO_RETRIES = 4;
 type ClientPhase = "idle" | "connecting" | "authenticating" | "live" | "stopped";
@@ -931,10 +936,18 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (head) head.state = "sent";
     const entries = [...operations, ...(head ? [head.entry] : [])].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     for (const entry of entries) {
+      this.#clearOperationRetryTimer(entry.pending.operationId);
       if (this.#phase !== "live") break;
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
       this.#sendOperation(entry.pending.frame);
     }
+  }
+
+  #releaseOperationRetryToSnapshotFlush(operationId: string, entry: OperationEntry): void {
+    this.#awaitingOperationIds.delete(operationId);
+    const change = this.#accessChange(operationId);
+    if (change?.state === "sent") change.state = "ready";
+    if (!change) this.#scheduleOperationRetry(operationId, entry);
   }
 
   /**
@@ -988,7 +1001,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const timer = this.#clock().setTimeout(
       () => {
         this.#operationRetryTimers.delete(operationId);
-        if (this.#phase === "live" && this.#sentEntry(operationId) === entry) this.#sendOperation(entry.pending.frame);
+        if (this.#phase !== "live" || this.#sentEntry(operationId) !== entry) return;
+        if (this.#snapshots.size > 0) {
+          this.#releaseOperationRetryToSnapshotFlush(operationId, entry);
+          return;
+        }
+        this.#sendOperation(entry.pending.frame);
       },
       this.#options.retryDelayMs ?? Math.min(100 * 2 ** Math.min(entry.retries - 1, 4), 2_000),
     );
@@ -1063,7 +1081,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #scheduleReconnect(): void {
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    const delay = reconnectDelay(configuredDelay, this.#reconnectAttempt, this.#options.random ?? Math.random);
     this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;

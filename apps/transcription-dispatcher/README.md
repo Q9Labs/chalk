@@ -101,3 +101,53 @@ pnpm --dir apps/transcription-dispatcher run test
 The tests are deterministic and use injected fetch/control/provider boundaries;
 they do not claim live provider qualification, quota proof, DPA acceptance, or
 production credentials.
+
+## Language routing
+
+Claims carry `transcript_language` (`auto` or a supported Whisper v3 primary
+code). Missing fields from an older API default to auto. The worker parses this
+into an auto/fixed mode, forwards fixed codes as `language` on both Whisper
+adapters, and records the mode alongside actual provider facts in chunk and final
+documents. Auto uses `CODESWITCH_PROVIDER=mai` with its own SSM-resolved
+`OPENROUTER_TOKEN_PARAMETER_ARN`. Without that slot Auto retries as unavailable;
+it never falls back to Whisper. Fixed languages retain the existing qualified
+Whisper primary/fallback. Provider privacy, corpus, version, and identity
+requirements remain mandatory for Whisper.
+
+MAI receives only retained speech from the renderer's 16 kHz mono FLAC. The
+worker removes silence below -45 dB lasting at least one second, keeps 150 ms
+context, and packs at most 60 speech seconds per WAV request. Each batch retains
+a source-offset map: word and segment timestamps are mapped back before cue
+normalization. An entirely silent source completes with no cues and no paid
+request. Missing word timings for nonempty speech fail validation rather than
+inventing timestamps.
+
+If MAI emits Devanagari, only those tokens go to GPT-4.1 Mini for Urdu-script
+transliteration; English and existing Urdu are never sent for rewriting. The
+same mapping updates words and segments without changing their timing. Both
+requests require `provider.zdr=true` and `data_collection=deny`; production key
+privacy settings must exclude Safety Retention if strict ZDR is required.
+
+The module's optional `codeswitch_provider` and `openrouter_token_parameter_arn`
+inputs require a separate infrastructure configuration migration before enabling
+Auto. Ordinary media releases retain that binding from state. Disable the slot
+to pause Auto while fixed languages continue; never route Auto to Whisper as an
+undo. Keep the new API reader deployed so already-produced MAI artifacts remain
+readable.
+
+After deploying the API reader and dispatcher ZIP, enable the independently
+checked secret grant without changing code:
+
+```sh
+python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <environment-scoped-arn> --apply
+```
+
+Undo keeps the new reader and fixed-language behavior, but pauses Auto:
+
+```sh
+python3 scripts/transcription-dispatcher/configure-mai.py --environment production --disable --apply
+```
+
+Omit `--apply` to review the plan. This migration permits only the named secret's
+read grant and the matching Lambda environment change; it rejects code changes,
+replacement resources and unrelated permissions. Its plan and state stay private.

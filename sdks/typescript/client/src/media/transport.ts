@@ -1,20 +1,31 @@
 import type { MediaPublicationSource } from "./plane";
 import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
+import type { MediaFailureStep } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
-import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse } from "./types";
+import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse, SFUSubscriptionState } from "./types";
+import { withRequestContext } from "../session";
+import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
+const SIGNALING_STEPS: Readonly<Partial<Record<string, MediaFailureStep>>> = { publications: "sfu_publications", subscriptions: "sfu_subscriptions", "tracks/close": "sfu_close_tracks", renegotiate: "sfu_renegotiate" };
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
-  const fetch = options.fetch ?? globalThis.fetch;
+  const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
+  let lastToken = "";
   const base = options.apiBaseURL.replace(/\/$/, "");
   const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
+  const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
+  const freshToken = async (): Promise<string> => {
+    const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+    if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+    lastToken = token;
+    return token;
+  };
   const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     try {
-      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
-      if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+      const token = await freshToken();
       return await withDeadline(timeoutMs, async (signal) => {
         const startedAt = performance.now();
         const response = await fetch(`${mediaPath}/${path}`, {
@@ -39,7 +50,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         return (await response.json()) as T;
       });
     } catch (error) {
-      const step = path === "publications" ? "sfu_publications" : path === "tracks/close" ? "sfu_close_tracks" : path === "renegotiate" ? "sfu_renegotiate" : "sfu_tracks";
+      const step = SIGNALING_STEPS[path] ?? "sfu_tracks";
       markMediaFailure(error, step);
       throw error;
     }
@@ -81,10 +92,49 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         method: "PUT",
         body: JSON.stringify({ connection_id: input.connectionId, tracks: input.tracks }),
       }),
+    listSubscriptions: async (): Promise<readonly SFUSubscriptionState[]> => {
+      const response = await request<{
+        subscriptions: readonly {
+          mid: string;
+          session_id: string;
+          track_name: string;
+          state: SFUSubscriptionState["state"];
+          reason?: SFUSubscriptionState["reason"];
+          revision: number;
+          requested_rid?: string;
+          effective_rid?: string;
+        }[];
+      }>("subscriptions");
+      return response.subscriptions.map((subscription) => ({
+        mid: subscription.mid,
+        sessionId: subscription.session_id,
+        trackName: subscription.track_name,
+        state: subscription.state,
+        revision: subscription.revision,
+        ...(subscription.reason ? { reason: subscription.reason } : {}),
+        ...(subscription.requested_rid ? { requestedRid: subscription.requested_rid } : {}),
+        ...(subscription.effective_rid ? { effectiveRid: subscription.effective_rid } : {}),
+      }));
+    },
     renegotiate: async (input) => {
       await request("renegotiate", {
         method: "POST",
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription }),
+      });
+    },
+    uploadCallStats: async (stats: CallStatsRequest, closing: boolean) => {
+      // A hidden tab stops signaling, so the cached token can expire during a call. Only the closing batch skips the provider.
+      const token = closing ? lastToken : await freshToken();
+      if (!token) return;
+      await withDeadline(timeoutMs, async (signal) => {
+        const response = await fetch(statsPath, {
+          method: "POST",
+          signal,
+          keepalive: true,
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(stats),
+        });
+        if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
       });
     },
     listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => {

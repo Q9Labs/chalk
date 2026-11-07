@@ -13,6 +13,9 @@ const syncSockets = new Map();
 const mediaSockets = new Map();
 const participants = new Map();
 const publications = new Map();
+// Deliberately independent authorities: SFU success must not imply Sync delivery.
+const projectedPublications = new Map();
+const faults = new Map();
 const chatMessages = [];
 const connectionIds = new Map();
 const metrics = { accessRequests: 0, syncConnections: 0, mediaConnections: 0, accessReasons: [], mediaReplacements: 0 };
@@ -51,6 +54,8 @@ const httpRoutes = new Map([
   ["GET /test/state", serveState],
   ["POST /test/force-sync", forceSyncFailure],
   ["POST /test/force-media", forceMediaFailure],
+  ["POST /test/fault", configureFault],
+  ["GET /test/media-recovery", mediaRecoveryStatus],
 ]);
 
 const server = createServer((request, response) => void dispatchHTTP(request, response));
@@ -58,10 +63,20 @@ const server = createServer((request, response) => void dispatchHTTP(request, re
 server.on("upgrade", handleUpgrade);
 
 async function dispatchHTTP(request, response) {
-  const url = new URL(request.url ?? "/", "http://localhost");
-  const handler = httpRoutes.get(`${request.method ?? "GET"} ${url.pathname}`);
+  const url = new URL(request.url, "http://localhost");
+  const episodeStatus = /^\/v1\/tenants\/fixture-tenant\/spaces\/fixture-space\/episodes\/fixture-episode\/participants\/([a-z]+)\/episode-status$/u.exec(url.pathname);
+  if (request.method === "GET" && episodeStatus) return serveEpisodeStatus(request, response, episodeStatus[1]);
+  const handler = httpRoutes.get(`${request.method} ${url.pathname}`);
   if (!handler) return sendJSON(response, 404, { error: "not_found" });
   await handler(request, response, url);
+}
+
+function serveEpisodeStatus(request, response, participantId) {
+  const credential = tokenForAudience(request.headers.authorization?.replace(/^Bearer /u, ""), "chalk-media");
+  if (!credential || credential.sub !== participantId) return sendJSON(response, 401, { error: "access_denied" });
+  // Provider rejection does not end the Episode. Let the production lifecycle
+  // confirm that authority before reporting terminal media access rejection.
+  return sendJSON(response, 200, { status: "active" });
 }
 
 function serveHTML(_request, response) {
@@ -93,6 +108,37 @@ function forceSyncFailure(_request, response, url) {
 
 function forceMediaFailure(_request, response, url) {
   forceSocket(response, mediaSockets, url.searchParams.get("participant"), "message");
+}
+
+function projectParticipant(participant) {
+  for (const [key, publication] of publications) if (publication.participantId === participant) projectedPublications.set(key, publication);
+}
+
+function faultStatus(fault) {
+  return fault?.until > Date.now() ? (fault.status ?? 503) : 200;
+}
+
+async function waitForHeldFault(fault) {
+  if (fault?.hold && fault.until > Date.now()) await new Promise((resolve) => setTimeout(resolve, fault.until - Date.now()));
+}
+
+async function configureFault(request, response) {
+  const fault = await readJSON(request);
+  if (typeof fault.participant !== "string") return sendJSON(response, 400, { error: "participant_required" });
+  faults.set(fault.participant, { ...fault, until: Date.now() + (fault.durationMs ?? 0) });
+  if (fault.clear) {
+    faults.delete(fault.participant);
+    projectParticipant(fault.participant);
+    broadcastState();
+  }
+  return sendJSON(response, 200, { accepted: true });
+}
+
+async function mediaRecoveryStatus(_request, response, url) {
+  const fault = faults.get(url.searchParams.get("participant"));
+  await waitForHeldFault(fault);
+  const status = faultStatus(fault);
+  return sendJSON(response, status, { status });
 }
 
 function handleUpgrade(request, socket, head) {
@@ -130,7 +176,8 @@ mediaServer.on("connection", (socket, _request, token) => {
   broadcastPeers();
   socket.on("message", (data) => handleMediaMessage(token.sub, JSON.parse(String(data))));
   socket.on("close", () => {
-    if (mediaSockets.get(token.sub) === socket) mediaSockets.delete(token.sub);
+    if (mediaSockets.get(token.sub) !== socket) return;
+    mediaSockets.delete(token.sub);
     clearPublications(token.sub);
     broadcastPeers();
     broadcastState();
@@ -195,7 +242,9 @@ function newConnectionId(user) {
 }
 
 function accessExpiration(reason) {
-  const lifetime = reason === "join" ? 1_300 : 300_000;
+  // The SDK refreshes 60 seconds before expiry. Start just outside that
+  // window so join can finish before a genuine scheduled refresh is due.
+  const lifetime = reason === "join" ? 61_300 : 300_000;
   return new Date(Date.now() + lifetime).toISOString();
 }
 
@@ -213,10 +262,37 @@ function handleDirectedRequestMessage(socket, actor, message) {
   handleDirectedRequest(socket, actor, message);
 }
 
-function handleCommandMessage(socket, actor, message) {
-  if (typeof message.id !== "string") return;
+function rejectsEnable(fault, message) {
+  return fault.projection === "reject" && message.name.startsWith("set_");
+}
+
+function dispatchCommand(socket, actor, message) {
   const handler = syncOperationHandlers.get(message.name) ?? acknowledgeCommand;
   handler(socket, actor, message);
+}
+
+function handleEnableFault(socket, actor, message) {
+  const fault = faults.get(actor) ?? {};
+  if (fault.syncReconnect) {
+    faults.set(actor, { ...fault, syncReconnect: false });
+    socket.close(4101, "fixture_sync_reconnect_during_unmute");
+    return true;
+  }
+  if (rejectsEnable(fault, message)) {
+    socket.send(JSON.stringify({ type: "ack", id: message.id, error: "media_update_rejected" }));
+    return true;
+  }
+  return false;
+}
+
+function isEnableCommand(message) {
+  return message.payload?.enabled === true;
+}
+
+function handleCommandMessage(socket, actor, message) {
+  if (typeof message.id !== "string") return;
+  if (isEnableCommand(message) && handleEnableFault(socket, actor, message)) return;
+  dispatchCommand(socket, actor, message);
 }
 
 function handleDirectedRequest(socket, actor, message) {
@@ -344,7 +420,7 @@ function relaySignal(actor, message) {
 
 function updatePublications(actor, message) {
   if (!Array.isArray(message.publications)) return;
-  clearPublications(actor);
+  clearPublications(actor, { projected: !faults.get(actor)?.projection });
   for (const item of message.publications) updatePublication(actor, item);
   revision += 1;
   broadcastState();
@@ -352,7 +428,20 @@ function updatePublications(actor, message) {
 
 function updatePublication(actor, item) {
   if (!isActorPublication(actor, item)) return;
-  publications.set(`${actor}:${item.source}`, { participantId: actor, source: item.source, enabled: item.enabled === true, publicationId: item.enabled ? String(item.publicationId) : null });
+  const key = `${actor}:${item.source}`;
+  const publication = { participantId: actor, source: item.source, enabled: item.enabled === true, publicationId: item.enabled ? String(item.publicationId) : null };
+  publications.set(key, publication);
+  projectPublication(key, publication, faults.get(actor) ?? {});
+}
+
+function projectPublication(key, publication, fault) {
+  if (!fault.projection) projectedPublications.set(key, publication);
+  if (fault.projection === "delay")
+    setTimeout(() => {
+      // Do not deliver a stale publication over a newer user revision.
+      if (publications.get(key) === publication) projectedPublications.set(key, publication);
+      broadcastState();
+    }, fault.durationMs);
 }
 
 function isActorPublication(actor, item) {
@@ -362,8 +451,13 @@ function isActorPublication(actor, item) {
 }
 
 function broadcastState() {
-  const message = JSON.stringify({ type: "state", state: spaceState() });
-  for (const socket of [...syncSockets.values(), ...mediaSockets.values()]) if (socket.readyState === socket.OPEN) socket.send(message);
+  for (const [collection, items] of [
+    [syncSockets, projectedPublications],
+    [mediaSockets, publications],
+  ]) {
+    const message = JSON.stringify({ type: "state", state: { ...spaceState(), publications: [...items.values()] } });
+    for (const socket of collection.values()) if (socket.readyState === socket.OPEN) socket.send(message);
+  }
 }
 
 function broadcastSync(message) {
@@ -408,8 +502,13 @@ function replaceSocket(collection, participantId, socket) {
   collection.set(participantId, socket);
 }
 
-function clearPublications(participantId) {
-  for (const key of publications.keys()) if (key.startsWith(`${participantId}:`)) publications.delete(key);
+function deleteParticipantPublications(items, participantId) {
+  for (const key of items.keys()) if (key.startsWith(`${participantId}:`)) items.delete(key);
+}
+
+function clearPublications(participantId, { projected = true } = {}) {
+  deleteParticipantPublications(publications, participantId);
+  if (projected) deleteParticipantPublications(projectedPublications, participantId);
 }
 
 function token(audience, subject) {

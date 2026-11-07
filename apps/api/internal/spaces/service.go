@@ -96,6 +96,7 @@ type Space struct {
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
 	RecordingPolicy               artifactpolicy.RecordingMode
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode
 	DefaultEpisodeDurationSeconds int32
 	MaximumEpisodeDurationSeconds int32
@@ -143,6 +144,7 @@ type FilteredRepository interface {
 type Service struct {
 	repository        Repository
 	defaultMediaPlane MediaPlaneProvider
+	chalkSFUSelector  bool
 }
 
 type CreateSpaceInput struct {
@@ -158,6 +160,7 @@ type CreateSpaceInput struct {
 	AdmissionPolicy               json.RawMessage
 	RecordingPolicy               artifactpolicy.RecordingMode
 	RecordingPolicySet            bool
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode
 	TranscriptionPolicySet        bool
 	DefaultEpisodeDurationSeconds int32
@@ -176,6 +179,7 @@ type UpdateSpaceInput struct {
 	RecurringPolicy               utilities.OptionalJSON
 	AdmissionPolicy               utilities.OptionalJSON
 	RecordingPolicy               OptionalRecordingPolicy
+	TranscriptLanguage            artifactpolicy.OptionalTranscriptLanguage
 	TranscriptionPolicy           OptionalTranscriptionPolicy
 	DefaultEpisodeDurationSeconds OptionalInt32
 	MaximumEpisodeDurationSeconds OptionalInt32
@@ -229,6 +233,17 @@ func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaP
 	return Service{repository: repository, defaultMediaPlane: defaultProvider}
 }
 
+// WithChalkSFUSelector lets Spaces choose the own SFU. It is off by default, so
+// the selector cannot name a provider the deployment has not turned on.
+func (s Service) WithChalkSFUSelector(enabled bool) Service {
+	s.chalkSFUSelector = enabled
+	return s
+}
+
+func (s Service) selectable(provider string) bool {
+	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUSelector
+}
+
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
 	id, err := utilities.NewID()
 	if err != nil {
@@ -246,6 +261,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	}
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
+	}
+	if !s.selectable(input.MediaPlane) {
+		return Space{}, ErrInvalidMediaPlane
 	}
 	if input.RequestKey != "" {
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
@@ -299,6 +317,9 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 	if err := prepareUpdateSpaceInput(&input); err != nil {
 		return Space{}, err
+	}
+	if input.MediaPlane.Set && input.MediaPlane.Value != nil && !s.selectable(*input.MediaPlane.Value) {
+		return Space{}, ErrInvalidMediaPlane
 	}
 
 	return s.repository.UpdateSpace(ctx, tenantID, spaceID, input)
@@ -588,19 +609,20 @@ func requiredOptionalString(value utilities.OptionalString, invalid error) (util
 }
 
 type createFingerprintInput struct {
-	Name                          string                           `json:"name"`
-	Slug                          string                           `json:"slug"`
-	MediaPlane                    string                           `json:"media_plane"`
-	Metadata                      json.RawMessage                  `json:"metadata"`
-	RecurringPolicy               json.RawMessage                  `json:"recurring_policy"`
-	AdmissionPolicy               json.RawMessage                  `json:"admission_policy"`
-	RecordingPolicy               artifactpolicy.RecordingMode     `json:"recording_policy"`
-	RecordingPolicySet            bool                             `json:"recording_policy_set"`
-	TranscriptionPolicy           artifactpolicy.TranscriptionMode `json:"transcription_policy"`
-	TranscriptionPolicySet        bool                             `json:"transcription_policy_set"`
-	DefaultEpisodeDurationSeconds int32                            `json:"default_episode_duration_seconds"`
-	MaximumEpisodeDurationSeconds int32                            `json:"maximum_episode_duration_seconds"`
-	LingerWindowSeconds           int32                            `json:"linger_window_seconds"`
+	Name                          string                             `json:"name"`
+	Slug                          string                             `json:"slug"`
+	MediaPlane                    string                             `json:"media_plane"`
+	Metadata                      json.RawMessage                    `json:"metadata"`
+	RecurringPolicy               json.RawMessage                    `json:"recurring_policy"`
+	AdmissionPolicy               json.RawMessage                    `json:"admission_policy"`
+	RecordingPolicy               artifactpolicy.RecordingMode       `json:"recording_policy"`
+	RecordingPolicySet            bool                               `json:"recording_policy_set"`
+	TranscriptLanguage            *artifactpolicy.TranscriptLanguage `json:"transcript_language,omitempty"`
+	TranscriptionPolicy           artifactpolicy.TranscriptionMode   `json:"transcription_policy"`
+	TranscriptionPolicySet        bool                               `json:"transcription_policy_set"`
+	DefaultEpisodeDurationSeconds int32                              `json:"default_episode_duration_seconds"`
+	MaximumEpisodeDurationSeconds int32                              `json:"maximum_episode_duration_seconds"`
+	LingerWindowSeconds           int32                              `json:"linger_window_seconds"`
 }
 
 func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
@@ -609,6 +631,7 @@ func createFingerprint(input CreateSpaceInput) ([32]byte, error) {
 		Metadata: input.Metadata, RecurringPolicy: input.RecurringPolicy, AdmissionPolicy: input.AdmissionPolicy,
 		RecordingPolicy: input.RecordingPolicy, RecordingPolicySet: input.RecordingPolicySet,
 		TranscriptionPolicy: input.TranscriptionPolicy, TranscriptionPolicySet: input.TranscriptionPolicySet,
+		TranscriptLanguage:            input.TranscriptLanguage,
 		DefaultEpisodeDurationSeconds: input.DefaultEpisodeDurationSeconds, MaximumEpisodeDurationSeconds: input.MaximumEpisodeDurationSeconds,
 		LingerWindowSeconds: input.LingerWindowSeconds,
 	})

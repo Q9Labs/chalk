@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { createChalkEffectClient } from "./client";
-import { RecordingIdSchema, SpaceIdSchema, TenantIdSchema, TranscriptSchema, UpdateSpaceRequestBodySchema } from "./generated/schemas";
+import { IssueAccessGrantPathParamsSchema, RecordingIdSchema, SpaceIdSchema, TenantIdSchema, TranscriptSchema, UpdateSpaceRequestBodySchema } from "./generated/schemas";
 
 // Production Transcript list shape, with synthetic IDs, timestamps and artifact details.
 const transcript = {
@@ -11,6 +11,7 @@ const transcript = {
   space_id: "22222222-2222-4222-8222-222222222222",
   episode_id: "33333333-3333-4333-8333-333333333333",
   status: "complete",
+  transcript_language: "auto",
   languages: ["en"],
   provider: "test-provider",
   model: "test-model",
@@ -83,6 +84,7 @@ const space = {
   media_plane: "cloudflare_sfu",
   recording_policy: "off",
   transcription_policy: "off",
+  transcript_language: null,
   admission_policy: {},
   metadata: {},
   recurring_policy: {},
@@ -97,6 +99,14 @@ const space = {
 
 describe("generated Space update contract", () => {
   const decodeUpdate = Schema.decodeUnknownSync(UpdateSpaceRequestBodySchema);
+
+  it.each([null, "auto", "en", "ur", "ar"])("preserves transcript language %s in the generated contract", (language) => {
+    expect(decodeUpdate({ transcript_language: language })).toEqual({ transcript_language: language });
+  });
+
+  it.each(["en-US", "unknown", ""])("rejects unsupported transcript language %s", (language) => {
+    expect(() => decodeUpdate({ transcript_language: language })).toThrow();
+  });
 
   it("renames a Space through the client with a name-only body", async () => {
     const bodies: unknown[] = [];
@@ -133,5 +143,30 @@ describe("generated Space update contract", () => {
 
   it.each(spaceDurationFields)("rejects the internal {Set, Value} object for %s", (field) => {
     expect(() => decodeUpdate({ [field]: { Set: true, Value: 3600 } })).toThrow();
+  });
+});
+
+describe("generated access grant", () => {
+  it("sends a grant request from a caller that passes no headers", async () => {
+    const requests: Request[] = [];
+    const client = await Effect.runPromise(
+      createChalkEffectClient({
+        baseUrl: "https://chalk.test",
+        headers: { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu" },
+        fetch: async (input, init) => {
+          requests.push(new Request(input, init));
+          return Response.json({ error: { code: "participant.not_found", message: "Participant not found" } }, { status: 404 });
+        },
+      }),
+    );
+    const params = Schema.decodeUnknownSync(IssueAccessGrantPathParamsSchema)({
+      tenant_id: "11111111-1111-4111-8111-111111111111",
+      space_id: "22222222-2222-4222-8222-222222222222",
+      episode_id: "33333333-3333-4333-8333-333333333333",
+      participant_id: "44444444-4444-4444-8444-444444444444",
+    });
+    await Effect.runPromiseExit(client.default.issueAccessGrant({ params, payload: { participant_generation: 1, replace_media_connection: true } }));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.headers.get("x-chalk-media-providers")).toBe("cloudflare_sfu,chalk_sfu");
   });
 });

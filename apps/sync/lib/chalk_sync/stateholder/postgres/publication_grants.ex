@@ -214,7 +214,8 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
         source,
         status,
         failure_code,
-        expires_at
+        expires_at,
+        control_revision
       ]) do
     %{
       reservation_id: UUID.load!(reservation_id),
@@ -224,7 +225,8 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
       source: String.to_existing_atom(source),
       status: String.to_existing_atom(status),
       failure_code: failure_code,
-      expires_at: expires_at
+      expires_at: expires_at,
+      control_revision: control_revision
     }
   end
 end

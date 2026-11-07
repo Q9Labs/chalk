@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { chromium, type Browser, type Page } from "playwright";
+import jsQR from "jsqr";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { startCallHarness } from "./browser-harness";
 import type { CallStateClient } from "./fixtures";
@@ -55,6 +56,7 @@ it("joining exposes consent; the ready card copies the link and announces Copied
     .waitFor();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("state=states-ready");
   await page.getByRole("button", { name: "Show QR code" }).click();
+  await page.getByRole("img", { name: "Scan to join this call" }).waitFor();
   expect(await page.getByRole("img", { name: "Scan to join this call" }).isVisible()).toBe(true);
 }, 30_000);
 
@@ -310,6 +312,37 @@ it.each([
     } finally {
       await page.keyboard.up("Space");
       await page.unroute(boundary);
+    }
+  },
+  30_000,
+);
+
+// Sanitized link from the observed ready-card scanning failure, not a generated matrix fixture.
+it.each([1440, 390])(
+  "decodes the actual ready-card QR at 1x density (%i pixels wide)",
+  async (width) => {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1, reducedMotion: "reduce" });
+    try {
+      const qrPage = await context.newPage();
+      await qrPage.goto(`${origin}/call-states.html?state=states-ready-qr`);
+      await qrPage.getByRole("button", { name: "Show QR code" }).click();
+      const png = await qrPage.getByRole("img", { name: "Scan to join this call" }).screenshot();
+      const raster = await qrPage.evaluate(async (base64) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${base64}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("QR regression requires a canvas 2D context");
+        ctx.drawImage(image, 0, 0);
+        return { width: image.width, height: image.height, pixels: Array.from(ctx.getImageData(0, 0, image.width, image.height).data) };
+      }, png.toString("base64"));
+      expect(await qrPage.evaluate(() => devicePixelRatio)).toBe(1);
+      expect(jsQR(new Uint8ClampedArray(raster.pixels), raster.width, raster.height)?.data).toBe("https://chalk.example/join/example");
+    } finally {
+      await context.close();
     }
   },
   30_000,

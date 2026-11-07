@@ -78,3 +78,22 @@ func TestNightlyExampleLoadsActualAPIConfig(t *testing.T) {
 		t.Fatal("nightly accepted missing public-invite tenant")
 	}
 }
+
+func TestTurnKeyAndTokenMustBeSetTogether(t *testing.T) {
+	for name, cfg := range map[string]CloudflareRealtimeConfig{
+		"key only":   {TurnKeyID: "key"},
+		"token only": {TurnAPIToken: "token"},
+	} {
+		if err := validateTurnProcessConfig(cfg); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	for name, cfg := range map[string]CloudflareRealtimeConfig{
+		"neither": {},
+		"both":    {TurnKeyID: "key", TurnAPIToken: "token"},
+	} {
+		if err := validateTurnProcessConfig(cfg); err != nil {
+			t.Fatalf("%s was rejected: %v", name, err)
+		}
+	}
+}

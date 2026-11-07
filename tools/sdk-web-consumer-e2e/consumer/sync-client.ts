@@ -60,7 +60,12 @@ export class FixtureSyncClient {
   #socket: WebSocket | null = null;
   readonly #messageHandlers: ServerMessageHandlers = {
     state: (message) => this.#publish(episodeSnapshot(this.#snapshot, message.state)),
-    ack: (message) => resolvePending(this.#pending, message.id, commandAcknowledgement(message.id)),
+    ack: (message) => {
+      if (message.error) {
+        this.#pending.get(message.id)?.reject(new Error(message.error));
+        this.#pending.delete(message.id);
+      } else resolvePending(this.#pending, message.id, commandAcknowledgement(message.id));
+    },
     collaboration_event: (message) => this.#emitCollaboration(message.event),
     collaboration_result: (message) => resolvePending(this.#pendingCollaborations, message.id, message),
     directed_request: (message) => this.#emitDirectedRequest(message.request),
@@ -94,7 +99,7 @@ export class FixtureSyncClient {
       socket.addEventListener("open", () => resolve(), { once: true });
       socket.addEventListener("error", () => reject(new TypeError("Fixture Sync socket failed")), { once: true });
       socket.addEventListener("message", (event) => this.#onMessage(JSON.parse(String(event.data)) as ServerMessage));
-      socket.addEventListener("close", () => this.#handleSocketClose(socket));
+      socket.addEventListener("close", (event) => this.#handleSocketClose(socket, event.code));
     });
   }
 
@@ -219,19 +224,19 @@ export class FixtureSyncClient {
     dispatchServerMessage(this.#messageHandlers, message);
   }
 
-  #handleSocketClose(socket: WebSocket): void {
+  #handleSocketClose(socket: WebSocket, code: number): void {
     if (this.#socket !== socket) return;
     this.#socket = null;
     const error = new TypeError("Fixture Sync socket closed");
     rejectPending(this.#pending, error);
     rejectPending(this.#pendingCollaborations, error);
     rejectPending(this.#pendingDirectedRequests, error);
-    this.#publishTerminalDisconnect();
+    this.#publishTerminalDisconnect(code);
   }
 
-  #publishTerminalDisconnect(): void {
+  #publishTerminalDisconnect(code: number): void {
     if (this.#snapshot.connection.phase === "stopped") return;
-    this.#publish({ ...this.#snapshot, connection: { phase: "terminal", terminalReason: "fixture_disconnect" } });
+    this.#publish({ ...this.#snapshot, connection: { phase: "terminal", terminalReason: code === 4000 ? "stale_participant_generation" : "fixture_disconnect" } });
   }
 
   #emitChatMessages(messages: readonly ChalkChatMessage[]): void {

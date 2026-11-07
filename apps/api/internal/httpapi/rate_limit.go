@@ -176,6 +176,8 @@ func principalRateLimitKey(principal authentication.Principal) string {
 		return "user:" + principal.UserID.String()
 	case authentication.PrincipalAPIKey:
 		return "api_key:" + principal.APIKeyID.String()
+	case authentication.PrincipalOAuth:
+		return "oauth:" + principal.GrantID.String()
 	case authentication.PrincipalService:
 		return "service:" + principal.ServiceID
 	case authentication.PrincipalSystem:
@@ -272,7 +274,7 @@ func recordRateLimiterUnavailable(ctx context.Context, policy string) {
 	case ratelimit.PolicyNameCORSPolicyLookup, ratelimit.PolicyNameAuthenticatedRead, ratelimit.PolicyNameAuthenticatedWrite,
 		ratelimit.PolicyNameWebhookRead, ratelimit.PolicyNameTelemetryIntake,
 		ratelimit.PolicyNameAuthenticatedRead + ".service_ceiling", ratelimit.PolicyNameAuthenticatedWrite + ".service_ceiling",
-		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name, connectionReportParticipantLimit.Name:
+		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name, connectionReportParticipantLimit.Name, callStatsParticipantLimit.Name:
 	default:
 		policy = "unknown"
 	}

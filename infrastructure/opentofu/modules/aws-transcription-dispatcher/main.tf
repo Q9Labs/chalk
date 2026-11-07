@@ -1,11 +1,13 @@
 locals {
   ssm_parameter_arns = concat(
     [var.api_workload_auth_parameter_arn],
+    var.codeswitch_provider == "mai" ? [var.openrouter_token_parameter_arn] : [],
     var.deepinfra_enabled ? [var.deepinfra_token_parameter_arn] : [],
     var.cloudflare_enabled ? [var.cloudflare_token_parameter_arn] : [],
   )
   egress_destinations = toset(concat(
     ["control-api", "presigned-object-storage", "ssm", "kms", "telemetry"],
+    var.codeswitch_provider == "mai" ? ["openrouter.ai"] : [],
     var.deepinfra_enabled ? ["api.deepinfra.com"] : [],
     var.cloudflare_enabled ? ["api.cloudflare.com"] : [],
   ))
@@ -39,7 +41,10 @@ locals {
     CHALK_TRANSCRIPTION_WORK_BUDGET         = tostring(var.work_budget_seconds)
     CHALK_COMPLETION_RESERVE_SECONDS        = tostring(var.completion_reserve_seconds)
     CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN = var.api_workload_auth_parameter_arn
-    }, var.deepinfra_enabled ? merge({
+    }, var.codeswitch_provider == "mai" ? {
+    CODESWITCH_PROVIDER            = var.codeswitch_provider
+    OPENROUTER_TOKEN_PARAMETER_ARN = var.openrouter_token_parameter_arn
+    } : {}, var.deepinfra_enabled ? merge({
       DEEPINFRA_ADAPTER_CONTRACT_VERSION = var.deepinfra_adapter_contract_version
       DEEPINFRA_CORPUS_DIGEST            = var.deepinfra_corpus_digest
       DEEPINFRA_TOKEN_PARAMETER_ARN      = var.deepinfra_token_parameter_arn
@@ -189,6 +194,10 @@ resource "aws_lambda_function" "dispatcher" {
   depends_on = [aws_iam_role_policy.dispatcher]
 
   lifecycle {
+    precondition {
+      condition     = var.codeswitch_provider != "mai" || can(regex("^arn:aws:ssm:[a-z0-9-]+:[0-9]{12}:parameter/chalk/${var.environment_name}/", var.openrouter_token_parameter_arn))
+      error_message = "MAI requires its own environment-scoped OpenRouter secret ARN."
+    }
     precondition {
       condition     = strcontains(var.artifact_s3_key, var.release_id)
       error_message = "artifact_s3_key must contain the unique release_id so a mutable ZIP key cannot be selected."

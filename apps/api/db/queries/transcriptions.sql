@@ -20,12 +20,12 @@ returning *;
 -- name: CreateRequestedTranscription :one
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
-    languages, metadata, source_manifest_key, source_manifest_sha256,
+    transcript_language, languages, metadata, source_manifest_key, source_manifest_sha256,
     source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, sqlc.arg(status), null, null,
-    sqlc.arg(languages), sqlc.narg(metadata), sqlc.narg(source_manifest_key),
+    sqlc.arg(transcript_language), sqlc.arg(languages), sqlc.narg(metadata), sqlc.narg(source_manifest_key),
     sqlc.narg(source_manifest_sha256), sqlc.narg(source_manifest_size),
     sqlc.narg(source_manifest_content_type), sqlc.arg(source_expires_at), sqlc.arg(generation)
 from recordings
@@ -37,12 +37,12 @@ returning *;
 -- name: CreateRenderCommittedTranscription :one
 insert into transcriptions (
     id, tenant_id, recording_id, space_id, episode_id, status, provider, model,
-    languages, metadata, source_manifest_key, source_manifest_sha256,
+    transcript_language, languages, metadata, source_manifest_key, source_manifest_sha256,
     source_manifest_size, source_manifest_content_type, source_expires_at, generation
 ) select
     sqlc.arg(id), recordings.tenant_id, recordings.id, recordings.space_id,
     recordings.episode_id, sqlc.arg(status), null, null,
-    sqlc.arg(languages), sqlc.narg(metadata), sqlc.arg(source_manifest_key),
+    sqlc.arg(transcript_language), sqlc.arg(languages), sqlc.narg(metadata), sqlc.arg(source_manifest_key),
     sqlc.arg(source_manifest_sha256), sqlc.arg(source_manifest_size),
     sqlc.arg(source_manifest_content_type), sqlc.arg(source_expires_at), sqlc.arg(generation)
 from recordings
@@ -201,3 +201,10 @@ returning *;
 -- name: GetTranscriptChunkResult :one
 select * from transcription_chunk_results
 where chunk_id = sqlc.arg(chunk_id) and generation = sqlc.arg(generation);
+
+-- name: GetRecordingTranscriptLanguage :one
+select spaces.transcript_language as space_transcript_language, tenant_artifact_policies.transcript_language as tenant_transcript_language
+from recordings
+join spaces on spaces.id = recordings.space_id and spaces.tenant_id = recordings.tenant_id
+join tenant_artifact_policies on tenant_artifact_policies.tenant_id = recordings.tenant_id
+where recordings.id = sqlc.arg(recording_id) and recordings.tenant_id = sqlc.arg(tenant_id);

@@ -18,6 +18,7 @@ function StatesCall({
   reconnecting = false,
   reportProblem = false,
   endedJoin = false,
+  shareUrl,
 }: {
   readonly terminal?: Terminal;
   readonly light?: boolean;
@@ -25,6 +26,7 @@ function StatesCall({
   readonly reconnecting?: boolean;
   readonly reportProblem?: boolean;
   readonly endedJoin?: boolean;
+  readonly shareUrl?: string;
 }) {
   const [reason, setReason] = useState(terminal);
   const client = useMemo(() => {
@@ -50,6 +52,7 @@ function StatesCall({
       <Chalk
         client={client}
         spaceName={SPACE_NAME}
+        shareUrl={shareUrl}
         terminalState={terminalState}
         theme={{ colorScheme: light ? "light" : "dark" }}
         onRejoin={rejoin}
@@ -253,6 +256,7 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-ended-join", title: "Already-ended join", render: () => <StatesCall terminal="failed" endedJoin /> },
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
+  { id: "states-ready-qr", title: "Ready card QR regression", render: () => <StatesCall ready shareUrl="https://chalk.example/join/example" /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
   {
     id: "states-joining",

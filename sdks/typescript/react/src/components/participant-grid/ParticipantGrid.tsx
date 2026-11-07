@@ -23,6 +23,8 @@ export interface Participant {
   isMuted?: boolean;
   /** Camera on. Screen sharing is reported separately via `isScreenSharing`. */
   isVideoEnabled?: boolean;
+  /** The SFU stopped this camera because the viewer's link is too slow. It returns on its own. */
+  isVideoPausedForNetwork?: boolean;
   isScreenSharing?: boolean;
   isHandRaised?: boolean;
   handRaiseOrder?: number;
@@ -33,6 +35,10 @@ export interface Participant {
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
   screenShareTrack?: MediaStreamTrack | null;
+  /** The remote camera publication, so the tile can report whether it is on screen before its video arrives. */
+  videoPublicationId?: string;
+  /** The remote screen-share publication, reported the same way. */
+  screenSharePublicationId?: string;
   screenShareAudioTrack?: MediaStreamTrack | null;
 }
 

@@ -4,6 +4,7 @@ import { mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
+const hostStop = (source: "microphone" | "camera") => ({ projectionId: "recovered", sequence: 1, items: [{ participantId: "participant-1", source, enabled: false, publicationId: null, offReason: "host" as const, offRevision: 5 }] });
 describe("media readiness", () => {
   it.each(["camera", "microphone"] as const)("preserves a first %s permission failure during recovery", async (source) => {
     const { client, platform, capture, command, setEnabled } = createConvergenceScenario(source);
@@ -178,7 +179,7 @@ describe("media readiness", () => {
       client.dispose();
     }
   });
-  it.each(["camera", "microphone"] as const)("revokes unconfirmed consent if recovery starts during the first %s capture", async (source) => {
+  it.each(["camera", "microphone"] as const)("revokes unconfirmed consent if the host stopped %s while recovery started during the first capture", async (source) => {
     const { client, platform, capture, command, setEnabled, track } = createConvergenceScenario(source);
     let finishCapture = () => {};
     const capturing = new Promise<void>((resolve) => {
@@ -200,7 +201,7 @@ describe("media readiness", () => {
       finishCapture();
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(command).not.toHaveBeenCalled();
-      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, media: hostStop(source) });
       expect(await result).toMatchObject({ code: "connection.invalid_state" });
       expect(command).not.toHaveBeenCalled();
       expect(track.stop).toHaveBeenCalled();
@@ -209,7 +210,7 @@ describe("media readiness", () => {
       client.dispose();
     }
   });
-  it.each(["camera", "microphone"] as const)("revokes unconfirmed consent if recovery starts while preparing the first %s publication", async (source) => {
+  it.each(["camera", "microphone"] as const)("revokes unconfirmed consent if the host stopped %s while recovery started during the first publication", async (source) => {
     const fixture = createConvergenceScenario(source, {
       media: {
         prepareLocalTrack: () => {
@@ -235,7 +236,7 @@ describe("media readiness", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(command).not.toHaveBeenCalled();
       expect(settled).toBe(false);
-      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" } });
+      platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "live" }, media: hostStop(source) });
       expect(await result).toMatchObject({ code: "connection.invalid_state" });
       expect(command).not.toHaveBeenCalled();
       expect(fixture.track.stop).toHaveBeenCalled();
@@ -387,6 +388,60 @@ describe("media readiness", () => {
       finishStart();
       client.dispose();
       timer.mockRestore();
+    }
+  });
+
+  // The media plane briefly leaves live while another source moves to a fresh SFU connection; Sync stays live.
+  const swapMediaConnection = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "recovering", peerConnectionState: "connecting", iceConnectionState: "checking" }, failure: null });
+  const finishMediaSwap = (platform: ReturnType<typeof createConvergenceScenario>["platform"]) => platform.media.emit({ ...platform.media.getSnapshot(), connection: { phase: "live", peerConnectionState: "connected", iceConnectionState: "connected" }, failure: null });
+
+  // The lifecycle itself enters reconnecting once the swap outlasts its 250 ms grace period.
+  it.each([
+    ["microphone", 0],
+    ["camera", 0],
+    ["microphone", 300],
+    ["camera", 300],
+  ] as const)("applies a %s click made %i ms into a media connection replacement", async (source, delayMs) => {
+    const { client, platform, capture, command, setEnabled, track } = createConvergenceScenario(source);
+    try {
+      await client.join({ microphone: false, camera: false });
+      swapMediaConnection(platform);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const result = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      const tick = new Promise((resolve) => setTimeout(() => resolve("pending"), 0));
+      expect(await Promise.race([result, tick])).toBe("pending");
+      expect(command).not.toHaveBeenCalled();
+      finishMediaSwap(platform);
+      expect(await result).toBe("enabled");
+      expect(command).toHaveBeenCalledExactlyOnceWith(true);
+      expect(capture).toHaveBeenCalledOnce();
+      expect(track.enabled).toBe(true);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("reports a microphone click made during a media connection replacement when the call ends", async () => {
+    const { client, platform, capture, command, setEnabled } = createConvergenceScenario("microphone");
+    try {
+      await client.join({ microphone: false, camera: false });
+      swapMediaConnection(platform);
+      await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("reconnecting"));
+      const result = setEnabled(true).then(
+        () => "enabled",
+        (cause: unknown) => cause,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await client.leave();
+      expect(await result).toMatchObject({ code: "connection.invalid_state" });
+      expect(command).not.toHaveBeenCalledWith(true);
+      expect(capture).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
     }
   });
 });

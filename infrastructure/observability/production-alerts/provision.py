@@ -34,13 +34,17 @@ def api(method, path, payload=None):
 
 def monitor_definitions(variables, disabled=False, without_connection_reports=False):
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
-    readiness = " | union (\n" + Path(__file__).with_name("sync-readiness.apl").read_text() + "\n)"
+    branches = {
+        name: " | union (\n" + Path(__file__).with_name(file).read_text() + "\n)"
+        for name, file in (("SYNC_READINESS_BRANCH", "sync-readiness.apl"), ("SFU_READINESS_BRANCH", "sfu-readiness.apl"))
+    }
     branch = ""
     if not without_connection_reports:
         query = Path(__file__).with_name("connection-reports.apl").read_text()
         branch = " | union (\n" + query + "\n) | summarize value=max(value) by alert_message"
     for monitor in monitors:
-        monitor["aplQuery"] = monitor["aplQuery"].replace("${SYNC_READINESS_BRANCH}", readiness)
+        for name, branch_query in branches.items():
+            monitor["aplQuery"] = monitor["aplQuery"].replace("${" + name + "}", branch_query)
         monitor["aplQuery"] = monitor["aplQuery"].replace("${CONNECTION_REPORT_BRANCH}", branch)
         for key, value in variables.items():
             monitor["aplQuery"] = monitor["aplQuery"].replace("${" + key + "}", value)

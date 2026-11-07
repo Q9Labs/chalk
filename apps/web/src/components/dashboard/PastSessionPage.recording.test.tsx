@@ -259,7 +259,7 @@ it("shows a render deadline as expired with the server reason while capture sour
   expect(screen.getByText("The recording could not be rendered before its deadline.")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Prepare recording" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Make a transcript in English" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Make a transcript" })).toBeTruthy();
 });
 
 it("names the call from the session's own read, so a failing Call overview can't fail the page", async () => {
@@ -570,8 +570,9 @@ it.each([404, 410])("uses an older transcript source after the newest pending tr
   transcriptHTTPStatus = status;
   await tick();
   expect(screen.queryByText("Couldn’t load the transcript")).toBeNull();
-  await clickButton("Make a transcript in English");
+  await clickButton("Make a transcript");
   expect(requests.filter((request) => request.action === "create-transcript").at(-1)?.recordingId).toBe(older);
+  expect(requests.filter((request) => request.action === "create-transcript").at(-1)).not.toHaveProperty("languages");
 });
 
 it("shares metadata polling across pending attempts with one request per tick", async () => {
@@ -732,10 +733,10 @@ it("reads the transcript list again when the recording's answer comes without it
   transcriptStatus = "preparing";
   transcriptHTTPStatus = 503;
   await tick();
-  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Make a transcript" })).toBeNull();
   transcriptHTTPStatus = 200;
   await tick();
-  expect(screen.queryByRole("button", { name: "Make a transcript in English" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Make a transcript" })).toBeNull();
   expect(screen.getByText("The transcript is being prepared.")).toBeTruthy();
   expect(requests.filter((request) => request.action === "transcripts")).toHaveLength(1);
 });
@@ -1056,4 +1057,25 @@ it.each(["ready", "pending"])("keeps a newer %s transcript source reachable besi
     });
     expect(requests.find((request) => request.action === "create-transcript")?.recordingId).toBe(id);
   }
+});
+
+it("downloads only the text transcript through the session-authenticated BFF", async () => {
+  await open();
+  await clickButton("Download");
+  expect(screen.queryByRole("menuitem", { name: /JSON/i })).toBeNull();
+  const assign = vi.fn();
+  const browser = window;
+  vi.stubGlobal(
+    "window",
+    new Proxy(browser, {
+      get(target, property) {
+        return property === "location" ? { assign } : Reflect.get(target, property, target);
+      },
+    }),
+  );
+  await reactAct(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Transcript (text)" }));
+  });
+  expect(assign).toHaveBeenCalledWith(`/dashboard-api/transcript-text?spaceId=${id}&episodeId=${id}&transcriptId=${id}`);
+  expect(requests.some((request) => request.action === "transcript-url")).toBe(false);
 });

@@ -7,7 +7,7 @@ import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
-import { CopyAction, Dialog, ErrorPanel, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
+import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
@@ -107,6 +107,7 @@ export function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
   const startKey = useRef(intentKey());
+  const startButton = useRef<HTMLButtonElement>(null);
 
   async function startCall() {
     if (starting) return;
@@ -115,6 +116,8 @@ export function HomePage() {
       // No name: the server names it, and the person can rename it from the row.
       const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
       startKey.current = intentKey();
+      // The empty-state opener disappears when the first row is added.
+      startButton.current?.focus();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
@@ -152,28 +155,35 @@ export function HomePage() {
 
   return (
     <div className="wrap">
-      <div className="hact">
-        <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-          <Icon name="plus" />
-          Start a call
-        </button>
-        <button type="button" className="btn sec" onClick={() => setDialog({ kind: "join" })}>
-          <Icon name="link" />
-          Join with a link
-        </button>
-      </div>
-      <div className="secth">
+      <div className="secth hhead">
         <h1>Recent calls</h1>
+        <div className="hact">
+          <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+            <Icon name="plus" />
+            Start a call
+          </button>
+          <button type="button" className="btn sec" onClick={() => setDialog({ kind: "join" })}>
+            <Icon name="link" />
+            Join with a link
+          </button>
+        </div>
       </div>
       {state.kind === "loading" ? (
         <SkeletonRows count={4} />
       ) : state.kind === "error" ? (
-        <ErrorPanel title="Couldn’t load your calls" detail={errorMessage(state.error)} onRetry={reload} />
+        <HomeLoadFailed detail={errorMessage(state.error)} onRetry={reload} />
       ) : shown(state.data).length === 0 ? (
         <div className="list">
           <div className="empty">
+            <span className="empty-icon" aria-hidden="true">
+              <Icon name="cam" />
+            </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
+            <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+              <Icon name="plus" />
+              Start a call
+            </button>
           </div>
         </div>
       ) : (
@@ -469,5 +479,32 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
         ) : null}
       </div>
     </Dialog>
+  );
+}
+
+/** The Home list could not load: a card that shows a call tile cut off from the network, with one way to retry. */
+function HomeLoadFailed({ detail, onRetry }: { readonly detail: string; readonly onRetry: () => void }) {
+  return (
+    <div className="hfail" role="alert">
+      <svg className="hfail-art" viewBox="0 0 160 96" fill="none" aria-hidden="true">
+        <rect x="14" y="10" width="132" height="24" rx="8" className="hfail-tile" />
+        <circle cx="30" cy="22" r="6" className="hfail-dot" />
+        <rect x="44" y="17" width="46" height="4" rx="2" className="hfail-bar" />
+        <rect x="44" y="24" width="28" height="3" rx="1.5" className="hfail-bar" />
+        <rect x="14" y="40" width="132" height="24" rx="8" className="hfail-tile" />
+        <circle cx="30" cy="52" r="6" className="hfail-dot" />
+        <rect x="44" y="47" width="38" height="4" rx="2" className="hfail-bar" />
+        <rect x="44" y="54" width="22" height="3" rx="1.5" className="hfail-bar" />
+        <path d="M14 82h50M96 82h50" className="hfail-line" />
+        <circle cx="80" cy="82" r="7" className="hfail-badge" />
+        <path d="M80 78.5v4M80 85.5v.01" className="hfail-mark" />
+      </svg>
+      <b>Couldn’t load your calls</b>
+      <p>{detail}</p>
+      <button type="button" className="btn sec" onClick={onRetry}>
+        <Icon name="retry" />
+        Try again
+      </button>
+    </div>
   );
 }

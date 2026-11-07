@@ -8,6 +8,8 @@ import {
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
   createV1SyncClient,
+  mediaBootstrap,
+  setSessionSource,
   type GetAccess,
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
@@ -17,6 +19,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { createNativeSession, type NativeSession } from "./native-session";
 import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
 type NativeMediaClient = ReturnType<NonNullable<PlatformDependencies["createMediaClient"]>>;
@@ -35,8 +38,17 @@ export type NativeSpaceClientOptions = {
   readonly syncStartupTimeoutMs?: number;
   readonly storage?: ReactNativeAsyncStorage;
 };
-export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
+let installedSession: NativeSession | undefined;
+/** Starts the app's session and attaches it to every Chalk request; call once at launch. Later calls return the same session. */
+export function installNativeSession(): NativeSession {
+  if (installedSession) return installedSession;
   ensureRandomUUID();
+  installedSession = createNativeSession({ appState: AppState, now: () => Date.now() });
+  setSessionSource(installedSession.current);
+  return installedSession;
+}
+export function createNativeSpaceClient(options: NativeSpaceClientOptions): SpaceClient {
+  const session = installNativeSession();
   const { storage } = options;
   const syncDialTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
   const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
@@ -85,13 +97,22 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       initialCameraEnabled: options.camera,
     },
   );
-  return client;
+  client.subscribe(() => session.setCallOpen(client, CALL_OPEN_STATUSES.has(client.getSnapshot().connection.status)));
+  // A disposed client stops publishing, so a dispose without leave() must clear the open-call mark itself.
+  const disposeClient = client.dispose;
+  return Object.assign(client, {
+    dispose: () => {
+      disposeClient.call(client);
+      session.setCallOpen(client, false);
+    },
+  });
 }
+const CALL_OPEN_STATUSES: ReadonlySet<string> = new Set(["joining", "live", "reconnecting", "leaving"]);
 function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch): NativeMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const client = new CloudflareSFUClient({
-    bootstrap: input.access.media.clientPayload,
+    bootstrap: mediaBootstrap(input.access.media),
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
@@ -102,13 +123,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       participantId: subject.participantId,
       fetch,
     }),
-    replaceMediaConnection: replaceMediaConnection
-      ? async () => {
-          const replacement = await replaceMediaConnection();
-          if (replacement.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-          return replacement.clientPayload;
-        }
-      : undefined,
+    replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     peerConnectionFactory: (configuration) => {
       const connection = new RTCPeerConnection(configuration);
       return connection as unknown as globalThis.RTCPeerConnection;
@@ -125,13 +140,7 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMedi
     observeRemotePublications: client.observeRemotePublications.bind(client),
     start: client.start.bind(client),
     stop: client.stop.bind(client),
-    restart: (input) => {
-      if ("provider" in input) {
-        if (input.provider !== "cloudflare_sfu") throw new TypeError("The Cloudflare SFU adapter requires a Cloudflare SFU access grant");
-        return client.restart(input.clientPayload);
-      }
-      return client.restart(input);
-    },
+    restart: (input) => client.restart("provider" in input ? mediaBootstrap(input) : input),
     prepareLocalTrack: client.prepareLocalTrack.bind(client),
     clearPreparedLocalTrack: client.clearPreparedLocalTrack.bind(client),
     getSnapshot: client.getSnapshot.bind(client),

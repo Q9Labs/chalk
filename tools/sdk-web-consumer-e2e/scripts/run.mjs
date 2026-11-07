@@ -1,6 +1,7 @@
 import { checkDocExamples } from "./docs-examples.mjs";
 import { proveToastLayering } from "./toast-layering.mjs";
 import { forceAndWaitForRecovery } from "./recovery.mjs";
+import { proveAgreementMatrix } from "./agreement.mjs";
 import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -17,7 +18,7 @@ await run(process.execPath, ["--test", "--test-concurrency=1", "tools/sdk-web-co
 if (process.argv.includes("--preflight-only")) process.exit(0);
 
 const requireFromClient = createRequire(join(repositoryDirectory, "sdks/typescript/client/package.json"));
-const { chromium, firefox, webkit } = requireFromClient("playwright");
+const { chromium, firefox, webkit, devices } = requireFromClient("playwright");
 const arguments_ = new Set(process.argv.slice(2));
 const browsersArgument = [...arguments_].find((argument) => argument.startsWith("--browsers="));
 const requestedBrowsers = (browsersArgument?.split("=")[1] ?? "chromium,firefox,webkit").split(",").filter(Boolean);
@@ -87,16 +88,30 @@ try {
       stdio: ["ignore", "pipe", "inherit"],
     });
     const baseURL = await listeningURL(serverProcess);
+    const browserFailures = [];
     for (const browserName of requestedBrowsers) {
       const browserType = { chromium, firefox, webkit }[browserName];
       if (!browserType) throw new TypeError(`Unknown browser: ${browserName}`);
       try {
         const executablePath = browserName === "chromium" ? process.env.CHALK_E2E_CHROMIUM_EXECUTABLE : undefined;
-        const browser = await browserType.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
+        // SDK-driven join is not a trusted DOM gesture. Let the fixture's
+        // synthetic tone run; receiver proof still samples the real gated sink.
+        const browser = await browserType.launch({ headless: true, ...(browserName === "chromium" ? { args: ["--autoplay-policy=no-user-gesture-required"] } : {}), ...(executablePath ? { executablePath } : {}) });
         try {
-          await proveToastLayering(browser, baseURL);
-          if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
-          else await runLaunchSmoke(browser, browserName, baseURL);
+          if (!arguments_.has("--agreement-only")) {
+            await proveToastLayering(browser, baseURL);
+            if (browserName === "chromium") await runChromiumMatrix(browser, baseURL, tenantAPIKey);
+            else await runLaunchSmoke(browser, browserName, baseURL);
+          }
+          if (browserName !== "firefox") {
+            process.stdout.write(`[agreement] browser=${browserName}${browserName === "webkit" ? " profile=iPad Pro 11" : ""}\n`);
+            // Linux WebKit: GStreamer "Switching from passthrough to parsebin"
+            // / "not-negotiated (-4)"; VP8 also stalls outbound encoding.
+            // Evidence: ../camera-engine-evidence.md. macOS keeps frame checks.
+            const checkCameraFrames = browserName !== "webkit" || process.platform !== "linux";
+            if (!checkCameraFrames) process.stdout.write("[agreement] camera-frame assertion: known Linux WebKit engine stall (camera-engine-evidence.md); mic, controls, projections and badges remain required\n");
+            await proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device: browserName === "webkit" ? devices["iPad Pro 11"] : undefined, fast: arguments_.has("--agreement-fast"), checkCameraFrames });
+          }
         } finally {
           await browser.close();
         }
@@ -106,9 +121,10 @@ try {
           process.stdout.write(`[packed-e2e] ${browserName}: skipped because its local Playwright binary is not installed\n`);
           continue;
         }
-        throw error;
+        browserFailures.push(new Error(`${browserName}: ${error.message}`, { cause: error }));
       }
     }
+    if (browserFailures.length) throw new AggregateError(browserFailures, "Packed browser proofs failed");
   }
 } finally {
   serverProcess?.kill("SIGTERM");
@@ -323,13 +339,13 @@ function invoke(page, action, argument) {
   );
 }
 
-function waitForState(page, state) {
-  return waitFor(page, (snapshot, expected) => snapshot.state === expected, state);
+function waitForState(page, state, timeoutMs) {
+  return waitFor(page, (snapshot, expected) => snapshot.state === expected, state, timeoutMs);
 }
 
-async function waitFor(page, predicate, argument) {
+async function waitFor(page, predicate, argument, timeoutMs = 10_000) {
   try {
-    await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: 10_000 });
+    await page.waitForFunction(([source, value]) => Function("snapshot", "value", `return (${source})(snapshot, value)`)(window.__chalk.snapshot(), value), [String(predicate), argument], { timeout: timeoutMs });
   } catch (error) {
     const snapshot = await page.evaluate(() => window.__chalk.snapshot());
     process.stderr.write(`[packed-e2e] timed out with snapshot ${JSON.stringify(snapshot)}\n`);
@@ -338,7 +354,7 @@ async function waitFor(page, predicate, argument) {
 }
 
 async function waitForAccessRefresh(page) {
-  await page.waitForFunction(() => window.__chalk.accessRequests() >= 2, null, { timeout: 5_000 });
+  await page.waitForFunction(() => window.__chalk.accessReasons().includes("refresh"), null, { timeout: 10_000 });
 }
 
 async function waitForClean(page) {

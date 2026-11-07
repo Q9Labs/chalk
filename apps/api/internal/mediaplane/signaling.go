@@ -8,6 +8,16 @@ import (
 
 var ErrInvalidSignalRequest = errors.New("invalid media signal request")
 
+// Scope names the Participant connection a call acts for. Chalk SFU isolates by
+// Tenant, Episode, Participant and generation, so it needs all four. Cloudflare
+// ignores the scope.
+type Scope struct {
+	TenantID      string
+	EpisodeID     string
+	ParticipantID string
+	Generation    int64
+}
+
 type SessionDescription struct {
 	SDP  string `json:"sdp"`
 	Type string `json:"type"`
@@ -28,10 +38,16 @@ type Track struct {
 	SessionID     string     `json:"sessionId,omitempty"`
 	Source        string     `json:"source,omitempty"`
 	PublicationID string     `json:"publication_id,omitempty"`
+	// Paused, on an update of a remote subscription, stops or resumes its video in
+	// place: the MID and track stay, and no SDP moves. An update that carries only a
+	// simulcast policy also resumes, so a client keeps paused tracks out of layer
+	// updates. Only a plane that reports subscription state accepts it.
+	Paused *bool `json:"paused,omitempty"`
 }
 
 type TracksRequest struct {
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription *SessionDescription
 	Tracks             []Track
 	// SpaceID and EpisodeID only label provider diagnostics; they are never sent upstream.
@@ -47,18 +63,21 @@ type TracksResponse struct {
 }
 
 type TrackError struct {
-	ConnectionID string `json:"connectionId"`
-	TrackName    string `json:"trackName"`
-	Code         string `json:"code"`
+	ConnectionID       string `json:"connectionId"`
+	TrackName          string `json:"trackName"`
+	Code               string `json:"code"`
+	PublicationMissing bool   `json:"-"`
 }
 
 type UpdateTracksRequest struct {
 	ConnectionID string
+	Scope        Scope
 	Tracks       []Track
 }
 
 type RenegotiateRequest struct {
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription SessionDescription
 }
 
@@ -66,6 +85,7 @@ type CloseTracksRequest struct {
 	ReceiveOnly        bool
 	Provider           Provider
 	ConnectionID       string
+	Scope              Scope
 	SessionDescription *SessionDescription
 	Tracks             []CloseTrack
 	Force              bool
@@ -85,9 +105,71 @@ type CloseTracksResponse struct {
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
 }
 
+type InspectSessionRequest struct {
+	ConnectionID string
+	// Scope is the caller's own scope. Peer says the session belongs to another
+	// Participant of the same Episode, such as the publisher of a failed pull.
+	Scope Scope
+	Peer  bool
+}
+
+type SessionTrack struct {
+	Location  string
+	Mid       string
+	TrackName string
+	Active    bool
+}
+
+type SessionState struct {
+	Found  bool
+	Tracks []SessionTrack
+}
+
+// Subscription delivery states and the reasons for a pause, as the own SFU reports them.
+const (
+	SubscriptionActive  = "active"
+	SubscriptionPaused  = "paused"
+	PauseCongestion     = "congestion"
+	PauseViewer         = "viewer"
+	PauseSourceInactive = "source_inactive"
+	// PauseSourceUnauthorized: the source has no live grant, so the SFU forwards none of it.
+	PauseSourceUnauthorized = "source_unauthorized"
+)
+
+// SubscriptionState is how the plane delivers one remote subscription of the
+// caller's connection. Revision rises on every change of State or Reason, so a
+// reader keeps the highest it has seen. EffectiveRID is the layer being
+// forwarded: empty while paused, before the first keyframe, or for a track
+// without layers.
+type SubscriptionState struct {
+	Mid          string
+	SessionID    string
+	TrackName    string
+	State        string
+	Reason       string
+	Revision     uint64
+	RequestedRID string
+	EffectiveRID string
+}
+
+type SubscriptionStatesRequest struct {
+	ConnectionID string
+	Scope        Scope
+}
+
+// SubscriptionReportingPlane reports how it delivers each remote subscription,
+// such as a video it paused because the subscriber's downlink cannot carry it.
+type SubscriptionReportingPlane interface {
+	SubscriptionStates(context.Context, SubscriptionStatesRequest) ([]SubscriptionState, error)
+}
+
 type SignalingPlane interface {
 	AddTracks(context.Context, TracksRequest) (TracksResponse, error)
 	Renegotiate(context.Context, RenegotiateRequest) error
+}
+
+type SessionInspectingPlane interface {
+	InspectSession(context.Context, InspectSessionRequest) (SessionState, error)
 }
 
 // TrackUpdatingPlane changes how an existing remote subscription is delivered,
@@ -100,10 +182,19 @@ type TrackClosingPlane interface {
 	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
 
+// ICERestartingPlane answers a client offer with new ICE credentials on the
+// existing connection, so its publications and subscriptions stay.
+type ICERestartingPlane interface {
+	RestartICE(context.Context, TracksRequest) (TracksResponse, error)
+}
+
 func (s Service) AddTracks(ctx context.Context, input TracksRequest) (TracksResponse, error) {
 	signaling, ok := s.plane.(SignalingPlane)
 	if !ok {
 		return TracksResponse{}, ErrUnsupportedOperation
+	}
+	if len(input.Tracks) == 0 {
+		return s.restartICE(ctx, input)
 	}
 	if err := requireTracksRequest(&input); err != nil {
 		return TracksResponse{}, err
@@ -134,6 +225,30 @@ func (s Service) CloseTracks(ctx context.Context, input CloseTracksRequest) (Clo
 	return closing.CloseTracks(ctx, input)
 }
 
+func (s Service) InspectSession(ctx context.Context, input InspectSessionRequest) (SessionState, error) {
+	inspecting, ok := s.plane.(SessionInspectingPlane)
+	if !ok {
+		return SessionState{}, ErrUnsupportedOperation
+	}
+	trimmed := strings.TrimSpace(input.ConnectionID)
+	if trimmed == "" || trimmed != input.ConnectionID {
+		return SessionState{}, ErrInvalidSignalRequest
+	}
+	return inspecting.InspectSession(ctx, input)
+}
+
+func (s Service) SubscriptionStates(ctx context.Context, input SubscriptionStatesRequest) ([]SubscriptionState, error) {
+	reporting, ok := s.plane.(SubscriptionReportingPlane)
+	if !ok {
+		return nil, ErrUnsupportedOperation
+	}
+	trimmed := strings.TrimSpace(input.ConnectionID)
+	if trimmed == "" || trimmed != input.ConnectionID {
+		return nil, ErrInvalidSignalRequest
+	}
+	return reporting.SubscriptionStates(ctx, input)
+}
+
 func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) error {
 	signaling, ok := s.plane.(SignalingPlane)
 	if !ok {
@@ -143,6 +258,24 @@ func (s Service) Renegotiate(ctx context.Context, input RenegotiateRequest) erro
 		return err
 	}
 	return signaling.Renegotiate(ctx, input)
+}
+
+// restartICE accepts a request with no tracks only as an offer to a plane that
+// restarts ICE in place. Other planes still refuse it as an invalid request.
+func (s Service) restartICE(ctx context.Context, input TracksRequest) (TracksResponse, error) {
+	restarting, ok := s.plane.(ICERestartingPlane)
+	if !ok {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	connectionID, err := requiredString(input.ConnectionID)
+	if err != nil || input.SessionDescription == nil {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	if err := requireSessionDescription(input.SessionDescription); err != nil || input.SessionDescription.Type != "offer" {
+		return TracksResponse{}, ErrInvalidSignalRequest
+	}
+	input.ConnectionID = connectionID
+	return restarting.RestartICE(ctx, input)
 }
 
 func requireTracksRequest(input *TracksRequest) error {
@@ -161,7 +294,7 @@ func requireTracksRequest(input *TracksRequest) error {
 		if err := requireSimulcastPolicy(track.Simulcast); err != nil {
 			return err
 		}
-		if track.Simulcast != nil && track.Location != "remote" {
+		if (track.Simulcast != nil && track.Location != "remote") || track.Paused != nil {
 			return ErrInvalidSignalRequest
 		}
 		if track.TrackName == "" || (track.Location != "local" && track.Location != "remote") {
@@ -183,7 +316,8 @@ func requireTracksRequest(input *TracksRequest) error {
 }
 
 // requireUpdateTracksRequest accepts only a remote subscription that names its
-// receiving MID and carries a simulcast policy; local publications cannot change.
+// receiving MID and carries a simulcast policy, a pause state or both; local
+// publications cannot change.
 func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
 	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
@@ -196,7 +330,7 @@ func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 		track.Mid = strings.TrimSpace(track.Mid)
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
-		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || track.Simulcast == nil {
+		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || (track.Simulcast == nil && track.Paused == nil) {
 			return ErrInvalidSignalRequest
 		}
 		if err := requireSimulcastPolicy(track.Simulcast); err != nil {

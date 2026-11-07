@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -377,6 +378,7 @@ type PublicAccessGrant struct {
 type PublicAccessClientPayload struct {
 	ConnectionID    string
 	StunServer      string
+	ICEServers      []mediaplane.ICEServer
 	ProviderSubject string
 	Token           string
 }

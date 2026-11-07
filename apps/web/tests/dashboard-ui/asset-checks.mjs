@@ -23,7 +23,7 @@ try {
       });
       const page = await context.newPage();
       await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
-      if (name === "dashboard") await page.getByRole("button", { name: "Start a call", exact: true }).waitFor();
+      if (name === "dashboard") await page.getByRole("button", { name: "Start a call", exact: true }).first().waitFor();
       if (name === "sign-in") await page.getByRole("button", { name: "Continue with Google", exact: true }).waitFor();
       await page.evaluate(() => document.fonts.ready);
       const fonts = await page.evaluate(() => Array.from(document.fonts, (font) => ({ family: font.family, weight: font.weight, status: font.status })));

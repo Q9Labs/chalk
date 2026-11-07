@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { setVideoRenderSize } from "./video-render-size";
 import { ViewerLayerPolicy, ViewerLayerSelector, ViewerStatsReader, type ViewerLayerSample } from "./viewer-layer";
 
@@ -11,6 +11,15 @@ function run(policy: ViewerLayerPolicy, sample: ViewerLayerSample, count: number
 }
 
 describe("viewer layer policy", () => {
+  it("follows only the tile size when the SFU adapts layers itself", () => {
+    const policy = new ViewerLayerPolicy({ followsNetwork: false });
+    run(policy, severeFreeze, 20);
+    run(policy, lossy, 20);
+    expect(policy.layer).toBe("h");
+    expect(policy.sample({ ...good, tileHeight: 90 })).toBe("l");
+    expect(policy.sample({ ...lossy, tileHeight: 720 })).toBe("h");
+  });
+
   it("keeps h while the link is healthy", () => {
     const policy = new ViewerLayerPolicy();
     run(policy, good, 100);
@@ -182,6 +191,39 @@ describe("viewer layer selector", () => {
   const track = (id: string): MediaStreamTrack => Object.assign(Object.create(null), { id });
   const report = (rows: Row[]): RTCStatsReport => new Map(rows.map((row, index) => [String(index), row])) as unknown as RTCStatsReport;
   const camera = { publicationId: "session|cam", track: track("t") };
+
+  it.each(["rejected", "pending"])("cancels a %s small-tile downgrade after the tile grows during 60 seconds of healthy h reception", (result) => {
+    vi.useFakeTimers();
+    try {
+      const selector = new ViewerLayerSelector();
+      const growing = { ...camera, track: track("growing") };
+      setVideoRenderSize(growing.track, { width: 480, height: 270 });
+      const tick = () => {
+        const now = performance.now();
+        return selector.sample(now, report([inbound("growing", now, { packetsReceived: now / 10, framesDecoded: (now / 1000) * 30 })]), [growing]);
+      };
+      tick();
+      vi.advanceTimersByTime(1000);
+      const [downgrade] = tick();
+      expect(downgrade).toMatchObject({ layer: "l" });
+      if (result === "rejected") selector.failed(downgrade!, performance.now());
+      setVideoRenderSize(growing.track, { width: 1280, height: 720 });
+      let changes;
+      for (let second = 0; second < 60; second++) {
+        vi.advanceTimersByTime(1000);
+        changes = tick();
+      }
+      // h is already applied, so a grown tile needs no further downgrade.
+      expect(changes).toEqual([]);
+      if (result === "pending") {
+        selector.applied(downgrade!);
+        vi.advanceTimersByTime(1000);
+        expect(tick()).toMatchObject([{ layer: "h" }]);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("reports a switch once the policy drops, and again after a failed switch only after the retry delay", () => {
     const selector = new ViewerLayerSelector();

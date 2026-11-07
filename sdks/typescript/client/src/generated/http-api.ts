@@ -29,6 +29,23 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("approveMCPConsentRequest", "/v1/mcp-oauth/requests/approve", {
+      payload: S.ApproveMCPConsentRequestRequestBodySchema,
+      success: S.ApproveMCPConsentRequestResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.McpOauthInvalidScopeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.McpOauthRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.put("closeCloudflareSFUTracks", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/tracks/close", {
       params: S.CloseCloudflareSFUTracksPathParamsSchema,
       payload: S.CloseCloudflareSFUTracksRequestBodySchema,
@@ -136,6 +153,21 @@ const defaultGroup = HttpApiGroup.make("default")
         S.WebhookIdempotencyExpiredErrorSchema.pipe(HttpApiSchema.status(409)),
         S.WebhookEventErasedErrorSchema.pipe(HttpApiSchema.status(410)),
         S.WebhookEndpointRevisionConflictErrorSchema.pipe(HttpApiSchema.status(412)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("denyMCPConsentRequest", "/v1/mcp-oauth/requests/deny", {
+      payload: S.DenyMCPConsentRequestRequestBodySchema,
+      success: S.DenyMCPConsentRequestResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.McpOauthRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -272,6 +304,21 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("inspectMCPConsentRequest", "/v1/mcp-oauth/requests/inspect", {
+      payload: S.InspectMCPConsentRequestRequestBodySchema,
+      success: S.InspectMCPConsentRequestResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.McpOauthRequestNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("issueAccessGrant", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/access-grant", {
       params: S.IssueAccessGrantPathParamsSchema,
       payload: S.IssueAccessGrantRequestBodySchema,
@@ -298,6 +345,7 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.MediaTokenSubjectMismatchErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ParticipantNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantConnectionSupersededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantGenerationMismatchErrorSchema.pipe(HttpApiSchema.status(409)),
         S.ParticipantMediaReplacementPendingErrorSchema.pipe(HttpApiSchema.status(409)),
@@ -332,6 +380,44 @@ const defaultGroup = HttpApiGroup.make("default")
       error: [
         S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listMCPConnections", "/v1/tenants/:tenant_id/mcp-connections", {
+      params: S.ListMCPConnectionsPathParamsSchema,
+      query: S.ListMCPConnectionsQueryParamsSchema,
+      success: S.ListMCPConnectionsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.PaginationInvalidCursorErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.PaginationInvalidPageSizeErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("listSFUSubscriptions", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/subscriptions", {
+      params: S.ListSFUSubscriptionsPathParamsSchema,
+      success: S.ListSFUSubscriptionsResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
         S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
@@ -474,6 +560,21 @@ const defaultGroup = HttpApiGroup.make("default")
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ApiKeyNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.ApiKeyInactiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("revokeMCPConnection", "/v1/tenants/:tenant_id/mcp-connections/:connection_id", {
+      params: S.RevokeMCPConnectionPathParamsSchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.McpOauthConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
@@ -651,6 +752,23 @@ const defaultGroup = HttpApiGroup.make("default")
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
+  )
+  .add(
+    HttpApiEndpoint.post("uploadCallStats", "/v1/tenants/:tenant_id/call-stats", {
+      params: S.UploadCallStatsPathParamsSchema,
+      payload: S.UploadCallStatsRequestBodySchema,
+      success: HttpApiSchema.Empty(204).pipe(HttpApiSchema.status(204)),
+      error: [
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
   );
 
 const episodesGroup = HttpApiGroup.make("episodes")
@@ -673,6 +791,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
         S.EpisodeNotActiveErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),

@@ -22,6 +22,7 @@
     "dev:stop": "node scripts/dev/cli.mjs stop",
     "dev:reset": "node scripts/dev/cli.mjs reset",
     "dev:smoke": "node scripts/dev/media-smoke.mjs .private/chalk-dev/manifest.json",
+    "dev:turn-proof": "node scripts/dev/turn-proof.mjs .private/chalk-dev/manifest.json",
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash -lc 'serial=${ADB_SERIAL:-$(adb devices | awk '\"'\"'NR > 1 && $2 == \"device\" {print $1; exit}'\"'\"')}; if [ -z \"$serial\" ]; then echo \"No connected adb device found. Set ADB_SERIAL to a connected device.\" >&2; exit 1; fi; adb -s \"$serial\" logcat | rg \"ReactNativeJS|chalk|Expo\"'",

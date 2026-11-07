@@ -854,9 +854,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (now < attempt.expiresAt) return yield* waitForMediaLive(media);
           }
           const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
-          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
           attempt.expiresAt = (yield* Clock.currentTimeMillis) + MEDIA_RECOVERY_TIMEOUT_MS;
-          yield* foreign(() => media.restart(restartInput), "media_start_failed", "Media transport could not restart");
+          yield* foreign(() => media.restart(grant.media), "media_start_failed", "Media transport could not restart");
           yield* waitForMediaLive(media);
         }).pipe(
           Effect.tapError((cause) =>
@@ -1130,12 +1129,11 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           const scope = model.activeScope;
           const epoch = model.epoch;
           if (!media || !scope || !active(model)) return;
-          const restartInput = grant.media.provider === "cloudflare_sfu" ? grant.media.clientPayload : grant.media;
           mediaAttempt.expiresAt = (yield* Clock.currentTimeMillis) + MEDIA_RECOVERY_TIMEOUT_MS;
           yield* Effect.forkIn(
             foreign(
               () =>
-                media.restart(restartInput).then(() => {
+                media.restart(grant.media).then(() => {
                   if (media !== model.media || model.epoch !== epoch) media.stop();
                 }),
               "media_start_failed",

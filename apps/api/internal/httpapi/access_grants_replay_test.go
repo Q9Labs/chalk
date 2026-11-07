@@ -37,13 +37,13 @@ func TestAccessGrantRefreshReplayDeadline(t *testing.T) {
 				t.Fatal(err)
 			}
 			original := participantMediaSubject(t)
-			original.CloudflareConnectionID = "original"
+			original.ConnectionID = "original"
 			requestToken, err := oldIssuer.Issue(ctx, original)
 			if err != nil {
 				t.Fatal(err)
 			}
 			winning := original
-			winning.CloudflareConnectionID = "replacement"
+			winning.ConnectionID = "replacement"
 			expiredWinner, err := oldIssuer.Issue(ctx, winning)
 			if err != nil {
 				t.Fatal(err)
@@ -108,7 +108,7 @@ func TestAccessGrantRefreshReplayDeadline(t *testing.T) {
 				t.Fatalf("inside-deadline replay failed: %v", err)
 			}
 			verified, err := verifier.Verify(ctx, grant.Media.Token)
-			if err != nil || verified.CloudflareConnectionID != "replacement" || fixture.created != 0 || fixture.resumed != 1 {
+			if err != nil || verified.ConnectionID != "replacement" || fixture.created != 0 || fixture.resumed != 1 {
 				t.Fatalf("inside-deadline replay did not renew winning connection: subject=%+v err=%v", verified, err)
 			}
 			if got := repo.replays[sealed.RequestHash].createdAt; !got.Equal(now.Add(-tc.age)) {

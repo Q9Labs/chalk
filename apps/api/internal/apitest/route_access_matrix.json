@@ -33,6 +33,51 @@
     "body": "{}"
   },
   {
+    "route": "POST /v1/mcp-oauth/requests/approve",
+    "operation": "approveMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/mcp-oauth/requests/deny",
+    "operation": "denyMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "POST /v1/mcp-oauth/requests/inspect",
+    "operation": "inspectMCPConsentRequest",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 401, "foreign": 401 }
+    ],
+    "body": "{}"
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/mcp-connections",
+    "operation": "listMCPConnections",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "DELETE /v1/tenants/{tenant_id}/mcp-connections/{connection_id}",
+    "operation": "revokeMCPConnection",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
     "route": "GET /v1/tenants/by-external-id",
     "operation": "findTenantByExternalID",
     "credentials": [
@@ -138,6 +183,12 @@
     "operation": "reportConnectionFailure",
     "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
     "body": "{\"version\":1,\"trigger\":\"join_failed\",\"events\":[{\"event\":\"connection_failed\",\"elapsed_ms\":0}]}"
+  },
+  {
+    "route": "POST /v1/tenants/{tenant_id}/call-stats",
+    "operation": "uploadCallStats",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{\"version\":1,\"samples\":[{\"elapsed_ms\":0,\"window_ms\":10000,\"connection_type\":\"udp\"}]}"
   },
   { "route": "POST /v1/tenants/{tenant_id}/problem-reports", "operation": "sendProblemReport", "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }], "body": "{}" },
   { "route": "GET /v1/tenants/{tenant_id}/problem-reports/availability", "operation": "getProblemReportAvailability", "credentials": [], "publicReason": "Availability exposes no tenant data.", "body": "" },
@@ -337,6 +388,12 @@
     "body": "{\"connection_id\":\"foreign-connection\",\"session_description\":{\"type\":\"offer\",\"sdp\":\"test\"}}"
   },
   {
+    "route": "GET /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
+    "operation": "listSFUSubscriptions",
+    "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
+    "body": "{}"
+  },
+  {
     "route": "POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
     "operation": "addCloudflareSFUTracks",
     "credentials": [{ "class": "participant media token", "wrong": 401, "foreign": 403 }],
@@ -492,6 +549,15 @@
   {
     "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/document",
     "operation": "getTranscriptDocument",
+    "credentials": [
+      { "class": "tenant session", "wrong": 403, "foreign": 403 },
+      { "class": "API key", "wrong": 403, "foreign": 403 }
+    ],
+    "body": ""
+  },
+  {
+    "route": "GET /v1/tenants/{tenant_id}/transcripts/{transcript_id}/text",
+    "operation": "getTranscriptText",
     "credentials": [
       { "class": "tenant session", "wrong": 403, "foreign": 403 },
       { "class": "API key", "wrong": 403, "foreign": 403 }

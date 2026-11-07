@@ -1,13 +1,20 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { installFixture } from "./fixture.mjs";
-import { check, save, waitFor, maskCredentials } from "./runtime.mjs";
+import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mjs";
+import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
+
+// A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
+function checkMediaPlane(grant, guest) {
+  if (mediaPlane !== "chalk_sfu") return;
+  check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`);
+}
 
 async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
   const result = await build({
@@ -34,7 +41,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
-  const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0" }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
+  const chalk = createChalkServerClient({ apiKey: run.apiKey, tenantId: run.config.tenant_id, apiBaseURL: run.config.api_url, headers: { "User-Agent": "Chalk-Production-Proof/1.0", ...mediaProviders }, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(30_000) }) });
   const pages = [];
   const reopen = [];
   const close = [];
@@ -44,6 +51,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   for (let guest = 0; guest < guestCount; guest++) {
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
+    checkMediaPlane(grant, guest + 1);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
     const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
@@ -75,6 +83,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       const browser = await chromium.connect(server.wsEndpoint());
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
+      await context.addInitScript(installAgreementProbe);
+      await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
       await context.addInitScript(installFixture, { speech, guest, tones });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       const page = await context.newPage();

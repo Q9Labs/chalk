@@ -25,6 +25,14 @@ describe("server-only Access refresh state", () => {
     expect(getAccessRefreshState(next).currentMediaToken).not.toBe(retained.currentMediaToken);
     expect(Object.isFrozen(retained)).toBe(true);
   });
+  it("keeps the TURN ice servers the API put in the media client payload", async () => {
+    const wire = JSON.parse(JSON.stringify(accessGrantFromParsed(accessGrant(Date.now() + 60_000, "turn"))));
+    const iceServers = [{ urls: ["turns:turn.test:443?transport=tcp"], username: "user", credential: "secret" }];
+    wire.media.client_payload.iceServers = iceServers;
+    const client = createChalkServerClient({ apiKey: "server-secret", tenantId: "tenant-1", apiBaseURL: "https://api.chalk.test", fetch: async () => Response.json(wire, { status: 201 }) });
+    const access = await client.participants.issueAccess("space-1", "episode-1", "participant-1", { participantGeneration: 1 });
+    expect(JSON.parse(JSON.stringify(access)).media.client_payload.iceServers).toEqual(iceServers);
+  });
   it.each(["refresh", "retry"] as const)("retains media for a forwarded %s request", async (reason) => {
     const { fetch, client, state } = forwardedRequestFixture();
     const request = { space: "space-1", reason, replaceMediaConnection: false };

@@ -20,6 +20,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	lambdawaker "github.com/q9labs/chalk/apps/api/internal/adapters/aws/lambdawaker"
 	recordingkms "github.com/q9labs/chalk/apps/api/internal/adapters/aws/recordingkms"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	r2adapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/r2"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/discordreports"
@@ -38,6 +39,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 
+	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
@@ -179,8 +181,15 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane)
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane})
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUSelector(cfg.ChalkSFU.Enabled)
+	var chalkSFU *chalksfu.Fleet
+	if cfg.ChalkSFU.Enabled {
+		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
+		if err != nil {
+			return fmt.Errorf("configure chalk sfu: %w", err)
+		}
+	}
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -310,6 +319,8 @@ func run() error {
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
 		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
+		ChalkSFU:        chalkSFU,
+		Episodes:        episodeService,
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
@@ -386,7 +397,7 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository)
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
@@ -506,6 +517,7 @@ func run() error {
 			MediaTokens:        participantMediaIssuer,
 			MediaProof:         participantMediaVerifier,
 			MediaProofRecovery: participantMediaRecoveryVerifier,
+			ManagedTenantID:    managedTenantID,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite access port: %w", err)
@@ -598,6 +610,7 @@ func run() error {
 		// Transcription work is claimed and fenced through the internal worker
 		// boundary after the request transaction commits.
 		TranscriptArtifacts:    transcriptArtifacts,
+		TranscriptTextMetadata: postgres.NewTranscriptTextRepository(operationQueries),
 		TranscriptWorker:       transcriptWorker,
 		WorkloadAuthorizer:     workloadAuthorizer,
 		ChunkAuthority:         transcriptionAuthority,
@@ -618,9 +631,23 @@ func run() error {
 	applyCapabilityProfile(&routerOptions, cfg.Capabilities)
 	routerOptions.ApplyDiagnostics(diagnostics)
 
+	// The Episode binding picks the node for grants, revokes and cleanup. A typed nil
+	// adapter inside the interface would pass the nil check, so the nil case stays a
+	// nil interface.
+	var chalkNodes providerbridge.ChalkNodes
+	if chalkSFU != nil {
+		chalkNodes = func(node string) (providerbridge.ChalkNode, error) {
+			adapter, err := chalkSFU.Node(node)
+			if err != nil {
+				return nil, err
+			}
+			return adapter, nil
+		}
+	}
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
@@ -634,6 +661,10 @@ func run() error {
 		}
 	}
 
+	if oauth := cfg.API.OAuth; oauth.Issuer != "" {
+		routerOptions.OAuth = mcpauth.NewService(postgres.NewMCPOAuthRepository(pool), mcpauth.Config{Issuer: oauth.Issuer, ConsentURL: oauth.ConsentURL, ExtraRedirectURIs: oauth.ExtraRedirectURIs})
+	}
+	routerOptions.MCP = httpapi.NewMCPHandler(routerOptions)
 	handler := httpapi.NewRouter(routerOptions)
 
 	server := &http.Server{
@@ -648,6 +679,17 @@ func run() error {
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if chalkSFU != nil {
+		// Placement reads node load from these probes.
+		go chalkSFU.Watch(signalCtx)
+		// Own SFU nodes forward a source only while the API renews its grant.
+		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
+	}
+	receiveHealthDone := make(chan struct{})
+	go func() {
+		mediaPublicationService.RunReceiveHealth(signalCtx)
+		close(receiveHealthDone)
+	}()
 	dispatcherOwner, err := utilities.NewID()
 	if err != nil {
 		return fmt.Errorf("create webhook dispatcher owner: %w", err)
@@ -825,6 +867,7 @@ func run() error {
 			runErr = err
 		}
 	}
+	<-receiveHealthDone
 	return runErr
 }
 

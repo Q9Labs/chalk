@@ -1,5 +1,6 @@
 import { expect, vi } from "vitest";
 import type { ConnectionSyncClient } from "../../src/connection/dependencies";
+import type { LinkJudge } from "../../src/sync/link-watch";
 import { V1SyncError } from "../../src/sync/v1-error";
 import { createCoreTestPlatform, opaqueAccessGrant } from "../../src/space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../../src/space-client/space-client";
@@ -60,6 +61,9 @@ export function mediaStream(track: MediaStreamTrack): MediaStream {
   });
 }
 
+/** A Sync clock that always reads a short drop, for tests that do not exercise the cutoff. */
+export const provenShort: LinkJudge = { proof: () => ({ wall: 0, mono: 0, suspends: 0 }), longSince: () => false };
+
 export function createConvergenceScenario(source: "microphone" | "camera" | "screen", overrides: Parameters<typeof capturedClient>[2] = {}) {
   const platform = createCoreTestPlatform();
   const track = Object.assign(mediaTrack(), { kind: source === "microphone" ? "audio" : "video", stop: vi.fn() });
@@ -71,7 +75,7 @@ export function createConvergenceScenario(source: "microphone" | "camera" | "scr
   const client = capturedClient(platform, track, {
     ...overrides,
     mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, ...overrides.mediaDevices },
-    sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command, ...overrides.sync },
+    sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command, offReasonNegotiated: () => true, link: provenShort, ...overrides.sync },
   });
   const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : source === "camera" ? client.media.setCameraEnabled : client.media.setScreenShareEnabled;
   return { platform, track, capture, command, client, setEnabled };

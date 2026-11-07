@@ -296,3 +296,61 @@ permissions, remote state and lock access, SSM configuration read, and versioned
 artifact read/copy permissions. CI installs the repository-pinned OpenTofu. No
 new API trust key, allowlist of older releases or authentication exception is
 introduced. Public workflow runs must not log private configuration or state.
+
+## Transcript language
+
+Tenant artifact policy exposes `transcript_language`: `auto` (the default for
+existing and new tenants) or a Whisper v3 primary language code such as `en`,
+`ur`, or `ar`. Spaces expose the same field; `null` inherits the current tenant
+default. Regional tags, names, and aliases are rejected. The dashboard controls
+live under Developer → Transcript language and the call's settings.
+
+At admission, a manual request's explicit `language` wins over the Space override,
+then the tenant default. The legacy `languages` hint pins a single code; multiple
+codes select auto. Conflicting singular/plural hints are rejected. The resolved
+mode is stored on the transcript and every chunk job; retries and claims never
+re-resolve current settings. Language policy is evaluated at job creation, not
+frozen with the Episode's transcription permission or retention snapshot.
+
+Fixed mode sends `language` to the qualified DeepInfra Whisper adapter (or the
+qualified Cloudflare Whisper adapter if enabled). Auto uses MAI-Transcribe-2 via
+OpenRouter when `CODESWITCH_PROVIDER=mai` is configured. An unavailable or disabled
+MAI slot fails closed and retries; Auto never falls back to Whisper. Fixed-mode
+privacy, corpus, adapter-version, and provider-identity checks remain enforced.
+Chunk and final `transcript.v1` documents record `transcriptLanguage` as
+`{mode:"auto"}` or `{mode:"fixed",language:"ur"}`, alongside the actual provider,
+model, and version contract. Older documents lacking the field remain readable.
+
+### Submitted audio and silence
+
+The current recorder uses **5-minute** maximum chunks with zero context overlap
+(`apps/api/internal/recorderworker/transcript_source.go`), not 15-minute chunks. It partitions each
+microphone source's full `[StartMS, EndMS)` span in `apps/api/internal/recorderworker/render_attempt.go`.
+`BuildTranscriptionAudioPlan` extracts that interval as mono 16 kHz FLAC without
+VAD or a silence-removal filter. The decoder explicitly preserves DTX gaps as
+silence (`apps/api/internal/recordingdecode/audio.go`). The source manifest authenticates source
+intervals and identities; it is not a voice-activity/speaker-turn selector. The
+dispatcher decodes Auto chunks, removes long silence and uploads at most 60 speech
+seconds per request, retaining an offset map to restore original timestamps.
+Fixed-language Whisper still receives the original FLAC, including silence.
+All-silent Auto chunks complete without a provider upload.
+
+Code-derived estimate, not a production measurement: four microphone sources
+covering a full one-hour meeting submit approximately **4 provider audio-hours**
+(48 five-minute chunks), before silence trimming and retries. Muting or listening inside a retained
+source span does not itself remove duration; absent tracks or shorter source
+spans reduce it. FLAC compression reduces bytes, not audio seconds. At 2,000 such
+meeting-hours/month the same assumption gives 8,000 submitted audio-hours before
+silence trimming and retries. This does not establish a dollar price or provider billing fact.
+
+Speaking-span-only submission is feasible before chunk encoding in
+`persistTranscription` in `apps/api/internal/recorderworker/render_attempt.go`: detect bounded
+speech intervals per decoded microphone source, retain a small context margin,
+and split only those intervals. Keep each interval's recording/source offsets
+and authenticated track provenance in the canonical manifest. Separate interval
+chunks fit the renderer's linear timestamp mapping; the MAI provider adapter
+already retains a piecewise source-time map when packing disjoint speech. Account for VAD
+misses, overlap, quiet speech, all-silent sources, maximum chunk counts, and the
+manifest's minimum-one-chunk admission rule before moving trimming into rendering.
+The current energy-based silence optimization lives only in the MAI adapter;
+fixed-language Whisper still receives the original source.

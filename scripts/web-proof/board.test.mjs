@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
 import { runInNewContext } from "node:vm";
 import { test } from "node:test";
 import { boardOpen, boardDraw, boardElements } from "./board.mjs";
@@ -19,12 +20,14 @@ test("board helpers survive page.evaluate serialization and retain received scen
       listener({ type: "update", ...update });
     },
   };
-  const page = { window: { proofClient: { whiteboard: { transport: () => transport } } } };
+  const page = { crypto: webcrypto, window: { proofClient: { whiteboard: { transport: () => transport } } } };
   await runInNewContext(`(${boardOpen.toString()})()`, page);
   await runInNewContext(`(${boardDraw.toString()})()`, page);
+  await runInNewContext(`(${boardDraw.toString()})()`, page);
   assert.equal(updates[0].sceneId, "scene");
+  assert.notEqual(updates[0].elements[0].id, updates[1].elements[0].id, "Repeated browser profiles must submit distinct strokes");
   assert.deepEqual(
     Array.from(runInNewContext(`(${boardElements.toString()})()`, page), (element) => element.id),
-    ["remote", "proof-guest-stroke"],
+    ["remote", ...updates.map((update) => update.elements[0].id)],
   );
 });

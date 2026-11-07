@@ -36,6 +36,8 @@ export type ConnectionMediaRemoteTrack = Pick<MediaPublication, "participantId" 
 
 export type ConnectionMediaSnapshot = {
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
+  /** Remote videos whose delivery the SFU reported. Omitted or empty on planes without `subscriptionState`. */
+  readonly remoteDelivery?: readonly import("./subscription-delivery").RemoteVideoDelivery[];
   readonly connection: {
     readonly phase: ConnectionMediaPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;
@@ -62,6 +64,7 @@ export type MediaPlaneResult = {
 };
 
 export type ClientMediaPlane = {
+  readonly observeAudioElement?: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
   readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;
@@ -72,4 +75,5 @@ export type ClientMediaPlane = {
   readonly remotePublicationsChanged?: (publications?: readonly MediaPublication[], projectionState?: "available" | "unavailable") => void;
   readonly remoteParticipantsChanged?: (participantIds: readonly string[]) => void;
   readonly remotePublicationResumed?: (publicationId: string) => void;
+  readonly localPublicationWithdrawn?: (publicationId: string) => void;
 };

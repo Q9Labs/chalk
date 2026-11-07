@@ -24,6 +24,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 func TestAccessGrantRefreshHTTP(t *testing.T) {
@@ -69,7 +70,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now().UTC().Truncate(time.Second)
 			subject := participantMediaSubject(t)
-			subject.CloudflareConnectionID = "original"
+			subject.ConnectionID = "original"
 			public, private, err := ed25519.GenerateKey(rand.Reader)
 			if err != nil {
 				t.Fatal(err)
@@ -253,7 +254,7 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 				t.Fatal(err)
 			}
 			issued, err := verifier.Verify(context.Background(), grant.Media.Token)
-			if err != nil || issued.CloudflareConnectionID != wantConnection {
+			if err != nil || issued.ConnectionID != wantConnection {
 				t.Fatalf("issued subject=%+v err=%v", issued, err)
 			}
 			if tc.replacement && tc.change != "replace" {
@@ -300,7 +301,6 @@ func TestAccessGrantRefreshHTTP(t *testing.T) {
 		})
 	}
 }
-
 func boolCount(value bool) int {
 	if value {
 		return 1
@@ -378,7 +378,7 @@ func (f *refreshGrantPlane) ResumeJoin(_ context.Context, input mediaplane.Resum
 	f.resumed++
 	return mediaplane.Join{Provider: mediaplane.ProviderCloudflareSFU, ClientPayload: map[string]any{"connectionId": input.ConnectionRef, "stunServer": "stun:stun.cloudflare.com:3478"}}, nil
 }
-func (f *refreshGrantPlane) Resolve(context.Context, tenants.Tenant, spaces.Space) (*mediaplane.Service, error) {
+func (f *refreshGrantPlane) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
 	service := mediaplane.NewServiceForProvider(mediaplane.ProviderCloudflareSFU, f)
 	return &service, nil
 }

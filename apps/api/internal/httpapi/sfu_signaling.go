@@ -3,9 +3,11 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -103,6 +105,21 @@ type sfuPublicationsResponse struct {
 	Publications []sfuPublicationResponse `json:"publications"`
 }
 
+type sfuSubscriptionResponse struct {
+	Mid          string `json:"mid"`
+	SessionID    string `json:"session_id"`
+	TrackName    string `json:"track_name"`
+	State        string `json:"state"`
+	Reason       string `json:"reason,omitempty"`
+	Revision     uint64 `json:"revision"`
+	RequestedRID string `json:"requested_rid,omitempty"`
+	EffectiveRID string `json:"effective_rid,omitempty"`
+}
+
+type sfuSubscriptionsResponse struct {
+	Subscriptions []sfuSubscriptionResponse `json:"subscriptions"`
+}
+
 // EpisodeLookup provides the bounded read needed to ensure participant media
 // routes refer to an Episode belonging to the requested Space.
 type EpisodeLookup interface {
@@ -123,6 +140,7 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
+		sfuListSubscriptionsEndpoint(spaces, episodeLookup, tenants, media),
 	}
 }
 
@@ -161,13 +179,34 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
+	var capture mediapublications.ListenerPullCapture
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			if observer, ok := publications.(interface {
+				CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
+			}); ok {
+				capture = observer.CaptureListenerPull(episode)
+			}
+			break
+		}
+	}
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
+		Scope:              sfuScope(ctx),
 		SessionDescription: request.Body.SessionDescription,
 		Tracks:             request.Body.Tracks,
 		SpaceID:            request.SpaceID.String(),
 		EpisodeID:          request.EpisodeID.String(),
 	})
+	if observer, ok := publications.(mediapublications.ListenerPullObserver); ok {
+		observer.ObserveListenerPull(ctx, mediapublications.ListenerPullInput{
+			ReceiveHealthEpisode: episode,
+			ParticipantID:        request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
+			ConnectionID: request.Body.ConnectionID, Capture: capture, Requested: request.Body.Tracks, Response: response, Err: err,
+		})
+	}
+	confirmFailedRemoteTracks(ctx, service, publications, request, response, err)
 	if err != nil {
 		observation, observed := remoteTrackObservationForFailure(request, err)
 		if observed {
@@ -217,6 +256,83 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 		}
 	}
 	return response, nil
+}
+
+func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse, providerErr error) {
+	requested := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(request.Body.Tracks))
+	for _, track := range request.Body.Tracks {
+		if track.Location == "remote" {
+			requested[mediapublications.RemoteTrackIdentity{
+				ConnectionID: strings.TrimSpace(track.SessionID),
+				TrackName:    strings.TrimSpace(track.TrackName),
+			}] = struct{}{}
+		}
+	}
+	if len(requested) == 0 {
+		return
+	}
+	failed := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(response.TrackErrors))
+	for _, trackErr := range response.TrackErrors {
+		if !trackErr.PublicationMissing {
+			continue
+		}
+		identity := mediapublications.RemoteTrackIdentity{
+			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
+			TrackName:    strings.TrimSpace(trackErr.TrackName),
+		}
+		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
+			failed[identity] = struct{}{}
+		}
+	}
+	for _, trackErr := range mediaplane.MissingRemoteTracks(providerErr) {
+		identity := mediapublications.RemoteTrackIdentity{
+			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
+			TrackName:    strings.TrimSpace(trackErr.TrackName),
+		}
+		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
+			failed[identity] = struct{}{}
+		}
+	}
+	if len(failed) == 0 {
+		return
+	}
+	confirmer, ok := publications.(mediapublications.RemoteTrackFailureConfirmer)
+	if !ok {
+		return
+	}
+	failedTracks := make([]mediapublications.RemoteTrackIdentity, 0, len(failed))
+	for identity := range failed {
+		failedTracks = append(failedTracks, identity)
+	}
+	reader := func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
+		state, err := service.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: connectionID, Scope: sfuScope(ctx), Peer: true})
+		if err != nil {
+			return mediapublications.PublisherSession{}, err
+		}
+		session := mediapublications.PublisherSession{Found: state.Found}
+		for _, track := range state.Tracks {
+			if track.Location == "local" {
+				session.Tracks = append(session.Tracks, mediapublications.PublisherTrack{
+					MID: track.Mid, TrackName: track.TrackName, Active: track.Active,
+				})
+			}
+		}
+		return session, nil
+	}
+	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
+		TenantID:              request.TenantID,
+		EpisodeID:             request.EpisodeID,
+		ListenerParticipantID: request.ParticipantID,
+		ListenerConnectionID:  request.Body.ConnectionID,
+		Failed:                failedTracks,
+	}, reader); err != nil {
+		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
+			"event", "media_publication.failure_confirmation_failed",
+			"error", err,
+		)
+	}
 }
 
 func remoteTrackObserver(publications mediapublications.Registry) (mediapublications.RemoteTrackObserver, bool) {
@@ -302,8 +418,9 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 		return mediapublications.RemoteTrackObservationInput{}, false
 	}
 	return mediapublications.RemoteTrackObservationInput{
-		TenantID: request.TenantID, EpisodeID: request.EpisodeID,
-		Requested: requested, Missing: missingPublications,
+		TenantID: request.TenantID, EpisodeID: request.EpisodeID, ListenerParticipantID: request.ParticipantID,
+		ListenerConnectionID: request.Body.ConnectionID,
+		Requested:            requested, Missing: missingPublications,
 	}, true
 }
 
@@ -331,7 +448,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			}
 			if request.Body.ReceiveOnly {
 				return service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-					Provider: service.Provider(), ConnectionID: request.Body.ConnectionID,
+					Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
 					Tracks: tracks, Force: true, ReceiveOnly: true,
 				})
 			}
@@ -358,7 +475,7 @@ func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 				return mediaplane.CloseTracksResponse{Tracks: tracks}, nil
 			}
 			response, err := service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-				Provider: service.Provider(), ConnectionID: request.Body.ConnectionID,
+				Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
 				SessionDescription: request.Body.SessionDescription, Tracks: requiredTracks, Force: request.Body.Force,
 			})
 			if err != nil {
@@ -450,6 +567,48 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 		MapErrors(episodeLifecycleEndpointAPIError)
 }
 
+// sfuListSubscriptionsEndpoint reports whether the plane is delivering each
+// remote video of the caller's connection, and on which layer. A client reads it
+// when a video goes quiet, so it can tell a paused subscription from a stall.
+func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuPublicationsEndpointRequest, sfuSubscriptionsResponse] {
+	return Get(
+		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
+		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
+		"listSFUSubscriptions",
+		decodeSFUPublicationsRequest,
+		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuSubscriptionsResponse, error) {
+			if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, ""); err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			service, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID)
+			if err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			subject, _ := accessgrants.SubjectFromContext(ctx)
+			states, err := service.SubscriptionStates(ctx, mediaplane.SubscriptionStatesRequest{ConnectionID: subject.ConnectionID, Scope: sfuScope(ctx)})
+			if errors.Is(err, mediaplane.ErrUnsupportedOperation) {
+				return sfuSubscriptionsResponse{}, fmt.Errorf("%w: this media plane reports no subscription state", mediaplane.ErrInvalidSignalRequest)
+			}
+			if err != nil {
+				return sfuSubscriptionsResponse{}, err
+			}
+			response := sfuSubscriptionsResponse{Subscriptions: make([]sfuSubscriptionResponse, 0, len(states))}
+			for _, state := range states {
+				response.Subscriptions = append(response.Subscriptions, sfuSubscriptionResponse{
+					Mid: state.Mid, SessionID: state.SessionID, TrackName: state.TrackName, State: state.State, Reason: state.Reason,
+					Revision: state.Revision, RequestedRID: state.RequestedRID, EffectiveRID: state.EffectiveRID,
+				})
+			}
+			return response, nil
+		},
+	).
+		Auth(APIAuthParticipantMedia).
+		Parameters(tenantSpaceEpisodeParticipantParameters()...).
+		Responds(http.StatusOK, "SFUSubscriptionsResponse", sfuSubscriptionsResponse{}).
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
+		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
 func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
@@ -464,7 +623,7 @@ func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, t
 			if err != nil {
 				return mediaplane.TracksResponse{}, err
 			}
-			return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Tracks: request.Body.Tracks})
+			return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx), Tracks: request.Body.Tracks})
 		},
 	).
 		Auth(APIAuthParticipantMedia).
@@ -492,6 +651,7 @@ func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, te
 			}
 			err = service.Renegotiate(ctx, mediaplane.RenegotiateRequest{
 				ConnectionID:       request.Body.ConnectionID,
+				Scope:              sfuScope(ctx),
 				SessionDescription: request.Body.SessionDescription,
 			})
 			return sfuRenegotiateResponse{Accepted: err == nil}, err
@@ -581,12 +741,22 @@ func authorizeSFURequest(ctx context.Context, tenantID, spaceID, episodeID, part
 		return apiErrorUnauthenticated
 	}
 	if connectionID == "" {
-		connectionID = subject.CloudflareConnectionID
+		connectionID = subject.ConnectionID
 	}
 	return requireParticipantMediaRoute(
 		ctx, tenantID, spaceID, episodeID, participantID, subject.ParticipantGeneration,
-		accessgrants.ProviderCloudflareSFU, connectionID,
+		subject.Provider, connectionID,
 	)
+}
+
+// sfuScope names the connection the verified media credential belongs to. The route
+// check in authorizeSFURequest has already matched it to the URL.
+func sfuScope(ctx context.Context) mediaplane.Scope {
+	subject, _ := accessgrants.SubjectFromContext(ctx)
+	return mediaplane.Scope{
+		TenantID: subject.TenantID.String(), EpisodeID: subject.EpisodeID.String(),
+		ParticipantID: subject.ParticipantID.String(), Generation: subject.ParticipantGeneration,
+	}
 }
 
 func resolveSFUSignalingPlane(ctx context.Context, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, tenantID utilities.ID, spaceID utilities.ID, episodeID utilities.ID) (*mediaplane.Service, error) {
@@ -599,11 +769,12 @@ func resolveSFUSignalingPlane(ctx context.Context, spaces SpaceService, episodeL
 	if _, err := episodeLookup.GetEpisode(ctx, tenantID, spaceID, episodeID); err != nil {
 		return nil, err
 	}
-	service, err := resolveMediaPlane(ctx, media, spaces, tenants, tenantID, spaceID)
+	service, err := resolveMediaPlane(ctx, media, spaces, tenants, tenantID, spaceID, episodeID)
 	if err != nil {
 		return nil, err
 	}
-	if service == nil || service.Provider() != mediaplane.ProviderCloudflareSFU {
+	subject, _ := accessgrants.SubjectFromContext(ctx)
+	if service == nil || string(service.Provider()) != subject.Provider {
 		return nil, mediaplane.ErrInvalidProvider
 	}
 	return service, nil

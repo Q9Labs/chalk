@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { z } from "./zod-mini";
-import type { SpaceClient } from "@q9labsai/chalk-client";
+import { currentSessionId, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 
+const apiFetch = withRequestContext();
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
 type ReportConnection = Pick<ReturnType<SpaceClient["getSnapshot"]>["connection"], "lastError"> & { readonly status: string };
 export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
@@ -39,7 +40,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       const attempt = new AbortController();
       activeProbe = attempt;
       try {
-        const response = await fetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports/availability`, { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
+        const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports/availability`, { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
         if (!response.ok) throw new Error("Availability probe failed");
         const enabled = availability.parse(await response.json()).available;
         if (!controller.signal.aborted && !attempt.signal.aborted) {
@@ -74,13 +75,13 @@ export function problemReporter({ baseURL, tenantId, mediaProof, connection }: {
     const credential = mediaProof();
     const snapshot = connection();
     if (!credential || !tenantId) throw new Error("Join the call before sending a report.");
-    const response = await fetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports`, {
+    const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports`, {
       method: "POST",
       signal: AbortSignal.timeout(12000),
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` },
       body: JSON.stringify({
         description,
-        ...(diagnostics === undefined ? {} : { diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join("\n") }),
+        ...(diagnostics === undefined ? {} : { diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join("\n") }),
       }),
     });
     if (!response.ok) {

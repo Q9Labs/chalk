@@ -448,6 +448,107 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("does not resend an operation from its retry timer while a snapshot is in flight", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("clears a pending retry timer when the snapshot flush resends its operation", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.advance(50);
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("retries a drawing after a non-recoverable snapshot failure", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      const requestId = sockets[0]?.requestId();
+      if (typeof requestId !== "string") throw new Error("missing snapshot request");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: requestId, operation: "request_snapshot", code: "storage_unavailable", recoverable: false, message: "Storage failed." });
+      await expect(snapshot).rejects.toMatchObject({ code: "storage_unavailable", recoverable: false });
+      await settle();
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
     const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
@@ -691,7 +792,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
     const clock = new ManualClock();
-    const { client, sockets } = recoveryClient(clock, 100);
+    const { client, sockets } = recoveryClient(clock, 100, { random: () => 1 });
 
     const startup = client.startSceneSubscription();
     void startup.catch(() => undefined);
@@ -706,6 +807,47 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     expect(sockets).toHaveLength(2);
     clock.advance(1);
     expect(sockets).toHaveLength(3);
+
+    await client.stopSceneSubscription();
+  });
+
+  it("spreads reconnect waits across clients that close together", async () => {
+    const clock = new ManualClock();
+    const random = mulberry32(0x1a2b3c4d);
+    const clients = [];
+    const reconnectTimes = new Map<number, number>();
+
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        clients.push(await startedRecoveryClient(clock, undefined, { random }));
+      }
+      for (const { sockets } of clients) sockets[0]?.close(1012);
+
+      for (let elapsed = 1; elapsed <= 250; elapsed += 1) {
+        clock.advance(1);
+        await settle();
+        clients.forEach(({ sockets }, index) => {
+          if (sockets.length > 1 && !reconnectTimes.has(index)) reconnectTimes.set(index, elapsed);
+        });
+      }
+
+      const times = [...reconnectTimes.values()];
+      expect(times).toHaveLength(20);
+      expect(times.every((time) => time >= 125 && time <= 250)).toBe(true);
+      expect(new Set(times).size).toBeGreaterThanOrEqual(10);
+    } finally {
+      await Promise.all(clients.map(({ client }) => client.stopSceneSubscription()));
+    }
+  });
+
+  it("reconnects immediately when the configured delay is zero", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 0, { random: () => 0.5 });
+
+    sockets[0]?.close(1012);
+    clock.advance(0);
+    await settle();
+    expect(sockets).toHaveLength(2);
 
     await client.stopSceneSubscription();
   });
@@ -796,6 +938,44 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
       expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked", "picked", false, "everyone", true]);
       await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined, undefined, undefined]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("defers a head access-change retry until a snapshot completes without overtaking it", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock, { retryDelayMs: 100 });
+    const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
+    const first = client.setDrawPolicy("hosts");
+    void first.catch(() => undefined);
+    let later: Promise<void> | undefined;
+    try {
+      await settle();
+      const firstFrame = sent()[0];
+      sockets[0]?.receive({ type: "operation_error", correlation_id: firstFrame.operation_id, operation: "set_draw_policy", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      later = client.setDrawPolicy("picked");
+      void later.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(sent()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts"]);
+
+      commit(sockets[0], firstFrame.operation_id, "2");
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts", "picked"]);
+      commit(sockets[0], sent()[2]!.operation_id, "3");
+      await expect(Promise.all([first, later])).resolves.toEqual([undefined, undefined]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -1631,6 +1811,16 @@ describe("whiteboard slow-connection watchdog", () => {
 
 function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
+}
+
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    let value = (state += 0x6d2b79f5);
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+  };
 }
 
 function recoveryClient(clock = new ManualClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {

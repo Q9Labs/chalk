@@ -89,6 +89,39 @@ test("the real runtime validator binds telemetry to the selected environment", a
   }
 });
 
+test("TURN inputs are set together and required only for nightly and production on the Cloudflare SFU", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "chalk-runtime-turn-"));
+  try {
+    await runtimeFixture(directory);
+    const args = [new URL("scripts/validate-runtime", managedRoot).pathname, "--env-root", directory, "--secret-root", join(directory, "secrets"), "--manifest", join(directory, "manifest.json"), "--sync-proof", join(directory, "proof.json"), "--excluded-secrets", excluded];
+    const apiPath = join(directory, "api.env");
+    const complete = await readFile(apiPath, "utf8");
+    const without = (name) => complete.replace(new RegExp(`^${name}=.*\\n`, "m"), "");
+
+    await writeFile(apiPath, without("CHALK_CLOUDFLARE_TURN_KEY_ID"));
+    const half = spawnSync("bash", args, { encoding: "utf8" });
+    assert.notEqual(half.status, 0);
+    assert.match(half.stderr, /must be set together/);
+
+    await writeFile(apiPath, without("CHALK_CLOUDFLARE_TURN_KEY_ID").replace(/^CHALK_CLOUDFLARE_TURN_API_TOKEN=.*\n/m, ""));
+    const none = spawnSync("bash", args, { encoding: "utf8" });
+    assert.notEqual(none.status, 0);
+    assert.match(none.stderr, /production on the Cloudflare SFU requires/);
+
+    const apiRuntime = [new URL("scripts/validate-api-runtime", managedRoot).pathname, "--env-file", apiPath];
+    await writeFile(
+      apiPath,
+      without("CHALK_CLOUDFLARE_TURN_KEY_ID")
+        .replace(/^CHALK_CLOUDFLARE_TURN_API_TOKEN=.*\n/m, "")
+        .replace("CHALK_API_ENV=production", "CHALK_API_ENV=mock"),
+    );
+    const mock = spawnSync("bash", apiRuntime, { encoding: "utf8" });
+    assert.equal(mock.status, 0, mock.stderr);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("the real runtime validator accepts rendered entry-ownership migration units and rejects altered ones", async () => {
   const directory = await mkdtemp(join(tmpdir(), "chalk-runtime-entry-migrator-"));
   try {

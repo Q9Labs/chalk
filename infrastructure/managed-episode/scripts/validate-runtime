@@ -144,6 +144,18 @@ else
   secure_regular_file "${api_env}"
   grep -Eq '__[A-Z0-9_]+__' "${api_env}" && fail "runtime API environment contains unresolved placeholders"
   for name in "${api_required[@]}"; do require_env "${api_env}" "${name}"; done
+  # Relay (TURN) is optional for the API, which then serves STUN only, so the
+  # two inputs are set together or not at all. A nightly or production
+  # deployment on the Cloudflare SFU must have them, because strict networks
+  # cannot connect without a relay.
+  turn_key_set=false
+  turn_token_set=false
+  env_value "${api_env}" CHALK_CLOUDFLARE_TURN_KEY_ID >/dev/null && turn_key_set=true
+  env_value "${api_env}" CHALK_CLOUDFLARE_TURN_API_TOKEN >/dev/null && turn_token_set=true
+  [[ "${turn_key_set}" == "${turn_token_set}" ]] || fail "CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN must be set together"
+  if [[ "${turn_key_set}" == false && ( "${environment}" == nightly || "${environment}" == production ) && "$(env_value "${api_env}" CHALK_DEFAULT_MEDIA_PLANE || true)" == cf_sfu ]]; then
+    fail "${environment} on the Cloudflare SFU requires CHALK_CLOUDFLARE_TURN_KEY_ID and CHALK_CLOUDFLARE_TURN_API_TOKEN"
+  fi
 fi
 if is_excluded sync-env && input_is_absent "${sync_env}"; then
   sync_available=false

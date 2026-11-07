@@ -1,0 +1,57 @@
+name: Listener audio check
+
+on:
+  pull_request:
+    paths:
+      - infrastructure/listener-audio-alert/**
+      - .github/workflows/listener-audio-check.yml
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: Send one marked test notification to Oncall instead of checking audio.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Listener audio check tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+      - run: node --test infrastructure/listener-audio-alert/listener-audio-check.test.mjs
+
+  check:
+    name: Check listener audio
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version-file: .tool-versions
+      - name: Read audio signals and notify Oncall
+        env:
+          CHALK_AXIOM_QUERY_TOKEN: ${{ secrets.CHALK_AXIOM_QUERY_TOKEN }}
+          CHALK_AXIOM_LOG_DATASET: ${{ secrets.CHALK_AXIOM_LOG_DATASET }}
+          ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
+          LISTENER_AUDIO_CHECK_DRILL: ${{ inputs.drill }}
+        run: node infrastructure/listener-audio-alert/listener-audio-check.mjs

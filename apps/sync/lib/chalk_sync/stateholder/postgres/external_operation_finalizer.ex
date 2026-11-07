@@ -9,6 +9,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.Lifecycle
+  alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
   alias ChalkSync.Stateholder.Postgres.RoleTransitionSettlement
@@ -40,15 +41,46 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         settle_stale_maximum_duration(connection, episode, external)
 
       true ->
-        with {:ok, state} <- Control.validate_fold(episode, control, policy),
-             :ok <- validate_finalization_authority(connection, episode, external, policy),
-             :ok <- Recording.validate_capture_epoch(connection, episode, external) do
-          finalize_pending_operation(connection, episode, external, state, outcome)
-        else
-          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+        case Control.validate_fold(episode, control, policy) do
+          {:ok, state} ->
+            finalize_with_authority(connection, episode, external, state, policy, outcome)
+
+          {:error, reason} ->
+            Postgrex.rollback(connection, {:error, reason})
         end
     end
   end
+
+  defp finalize_with_authority(connection, episode, external, state, policy, outcome) do
+    case validate_finalization_authority(connection, episode, external, policy) do
+      :ok ->
+        case Recording.validate_capture_epoch(connection, episode, external) do
+          :ok -> finalize_pending_operation(connection, episode, external, state, outcome)
+          {:error, reason} -> Postgrex.rollback(connection, {:error, reason})
+        end
+
+      {:error, reason} ->
+        settle_stale_media(connection, episode, external, state, outcome, reason)
+    end
+  end
+
+  defp settle_stale_media(connection, episode, %{name: name} = external, state, outcome, reason)
+       when name in [:mute_participant, :stop_participant_camera, :stop_participant_screen_share] and
+              reason in [:participant_inactive, :stale_participant_generation] do
+    case outcome do
+      {:confirmed, :provider} ->
+        finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+
+      {:failed, failure} when is_atom(failure) ->
+        finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+
+      _ ->
+        Postgrex.rollback(connection, {:error, reason})
+    end
+  end
+
+  defp settle_stale_media(connection, _episode, _external, _state, _outcome, reason),
+    do: Postgrex.rollback(connection, {:error, reason})
 
   defp settle_leave_cleanup(connection, episode, external, {:confirmed, :provider}) do
     mark_external_applied(connection, episode, external, nil, nil)
@@ -397,6 +429,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     case expected_external_fact(external, state, name, payload) do
       {:ok, event, next_state} ->
         event_id = persist_event(connection, episode, external, event, next_state)
+        record_media_stop(connection, episode, external, event)
 
         webhook_object =
           update_external_products(connection, episode, external, event, next_state)
@@ -429,6 +462,28 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
       {:error, _reason} ->
         Postgrex.rollback(connection, {:error, :invalid_operation_outcome})
+    end
+  end
+
+  @stop_sources %{
+    "participant_microphone_stopped" => :microphone,
+    "participant_camera_stopped" => :camera,
+    "participant_screen_share_stopped" => :screen
+  }
+
+  defp record_media_stop(connection, episode, external, %{name: name} = event) do
+    case Map.fetch(@stop_sources, to_string(name)) do
+      {:ok, source} ->
+        MediaPauses.record_stop(
+          connection,
+          episode,
+          external.target_participant_id,
+          source,
+          event.revision
+        )
+
+      :error ->
+        :ok
     end
   end
 

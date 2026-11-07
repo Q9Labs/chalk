@@ -60,6 +60,9 @@ function scenario(source: "microphone" | "camera" = "microphone", media: NonNull
     join: async () => {
       await peer.join({ microphone: false, camera: false });
       await client.join({ microphone: source === "microphone", camera: source === "camera" });
+      // The on a join sends for its own source is not a repair, so scenarios count commands after it.
+      await vi.waitFor(() => expect(command).toHaveBeenCalledExactlyOnceWith(true));
+      command.mockClear();
       project(false);
       observer.media.emit({ ...observer.media.getSnapshot(), remoteTracks: [{ ...publication, track: received }] });
       platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ ...publication, track }] });
@@ -411,7 +414,9 @@ it("preserves a recovered host stop until fresh consent", async () => {
     test.project(true);
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "recovering" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("reconnecting"));
-    test.project(false);
+    // The host stopped it while the device was gone: Sync's item carries the stop's revision.
+    const stop = { participantId: "participant-1", source: "microphone", enabled: false, publicationId: null, offReason: "host", offRevision: 5 } as const;
+    test.platform.emitSync({ ...test.platform.sync.getSnapshot(), media: { projectionId: "media", sequence: 2, items: [stop] } });
     test.platform.emitSync({ ...test.platform.sync.getSnapshot(), connection: { phase: "live" } });
     await vi.waitFor(() => expect(test.client.getSnapshot().connection.status).toBe("live"));
     expect(test.track.enabled).toBe(false);

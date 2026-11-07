@@ -20,6 +20,7 @@ pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
 pnpm prod:proof leave
+pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
 ```
 
@@ -32,8 +33,12 @@ The Leave plan runs the integrity-verified published 5.2.6 client and the candid
 on the same host and backend. It compares five ordinary baseline samples with
 five ordinary and five publications-403 candidate samples, and independently
 reproduces the old client's premature peer close. It does not start recording.
-The separate comparison session uses the actual restored 2ec22c54 production
-backend for the old SDK and staging for the candidate. Supply production's
+The separate comparison session uses the currently deployed production backend
+for the old SDK and staging for the candidate. Set
+CHALK_PROOF_EXPECTED_PRODUCTION_SHA to the full SHA shown by production's
+release.json; the comparison refuses to start if the live identity differs and
+checks it again before and after measurement. Pass this separately as a direct
+process environment variable, not inside CHALK_PROOF_BASELINE_ENV. Supply production's
 CHALK*PROOF*\* environment mapping as JSON in CHALK_PROOF_BASELINE_ENV, with
 credentials injected only at runtime. Promote requires that session's captured
 median and encrypted evidence hash, and uses the captured median for its limit.
@@ -85,6 +90,12 @@ scripts/prod-proof/integrator-session.test.mjs`, in `pnpm test`, and in Gate's
 required `self-test` lane. It covers setup longer than the three-minute empty
 linger, early access, simultaneous Join, and refresh serialization.
 
+Every two-guest media proof now checks each participant's local microphone and
+camera state against every other participant's Sync-derived media state and
+actual playback: nonzero audio energy and advancing video frames. It saves
+the media-agreement JSON artifact alongside the recording and RTP evidence.
+The deployed web proof also checks rendered badges in Chromium and WebKit.
+
 ## Configuration and ownership
 
 By default, the local command reads the 1Password item `Chalk production proof Tenant`. It holds
@@ -100,6 +111,12 @@ variables instead. Each field maps to `CHALK_PROOF_` plus its uppercase name;
 for example, `api_url` maps to `CHALK_PROOF_API_URL`. Missing required fields fail
 before creating resources. Redacted or wrong-namespace API keys fail before any
 HTTP request. Local runs still default to 1Password.
+
+The proof Space uses Cloudflare. Set `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` to run
+it on the own SFU where the API's switch is on, as on nightly. The proof's
+clients declare both media providers, so the Episode binds the Space's choice.
+Recording and export need Cloudflare, so use `camera-share` for the own SFU; it
+skips the Capture there and checks the call alone.
 
 ### One-time webhook setup (each environment)
 
@@ -209,6 +226,20 @@ retention policy. The provisioned Tenant and bootstrap API key are retained.
 
 ## What counts as proof
 
+- **offreason:** Sync's off-reason extension (`media_off_reason`) over the WebSocket
+  protocol, with no browser or media. It admits a host and two guests, then for each
+  guest has the host stop the camera while no publication exists. The first guest
+  uses the candidate SDK (the checkout, or the built entry named by
+  CHALK_PROOF_CANDIDATE_SDK_ENTRY, for example an installed package's built entry). The second uses the integrity-verified published 5.2.6 client.
+  The candidate's welcome must carry `media_off_reason: true`, and the stopped item
+  must be `enabled: false`, `publication_id: null`, `off_reason: "host"` with an
+  `off_revision`, and the SDK's decoded media state must keep the same
+  `offReason` and `offRevision`, also in a snapshot after the socket closes and
+  reopens. Both SDKs must stay live with no unexpected socket close. The 5.2.6 welcome must not carry the field, and its wire item and decoded
+  state must be off with no reason or revision, before and after the reopen. A Sync without the extension fails
+  the candidate checks, and the baseline item checks need an item for an
+  unpublished stop, which only a Sync with the extension projects. The criteria
+  live in `off-reason-criteria.mjs`; the evidence is saved in the run directory.
 - **smoke:** API key, Space, Episode, two live guests, Recording, signed lifecycle
   webhooks correlated to this run's objects, successful Export and MP4 download.
   A temporary Webhook.site URL captures raw signed bodies and headers. They are

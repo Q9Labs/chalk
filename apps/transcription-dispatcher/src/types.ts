@@ -1,3 +1,5 @@
+import type { TranscriptLanguageMode } from "@chalk/transcript-language";
+
 export type FetchLike = typeof fetch;
 
 export interface JourneyContext {
@@ -28,7 +30,7 @@ export interface ProviderResult {
   providerReportedCostUsd?: number;
   segments: ProviderSegment[];
   words?: ProviderWord[];
-  provider: "deepinfra" | "cloudflare";
+  provider: "deepinfra" | "cloudflare" | "openrouter";
   model: string;
   versionContract: string;
   executionIdentity?: string;
@@ -54,6 +56,7 @@ export interface ProviderTimingRepair {
 }
 
 export interface ProviderRequest {
+  transcriptLanguage?: TranscriptLanguageMode;
   audio: Uint8Array;
   contentType: string;
   chunkId: string;
@@ -62,7 +65,7 @@ export interface ProviderRequest {
 }
 
 export interface TranscriptionProvider {
-  readonly name: "deepinfra" | "cloudflare";
+  readonly name: "deepinfra" | "cloudflare" | "openrouter";
   transcribe(request: ProviderRequest): Promise<ProviderResult>;
 }
 
@@ -129,6 +132,7 @@ export interface ManifestAssignment {
 }
 
 export interface TranscriptionAssignment {
+  transcriptLanguage?: TranscriptLanguageMode;
   jobId: string;
   tenantId: string;
   episodeId: string;
@@ -206,6 +210,7 @@ export interface NormalizedCue {
 }
 
 export interface NormalizedTranscriptDocument {
+  transcriptLanguage?: TranscriptLanguageMode;
   schemaVersion: "transcript.v1";
   jobId: string;
   episodeId: string;
@@ -240,6 +245,8 @@ export interface ProviderPolicy {
 }
 
 export interface ReleaseConfig {
+  codeswitchProvider?: "mai";
+  openRouterToken?: string;
   environment: string;
   releaseId: string;
   controlApiAudience: string;

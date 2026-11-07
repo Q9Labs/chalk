@@ -9,7 +9,7 @@ import { mediaTrack } from "../../../../client/tests/helpers/media-convergence";
 import { useMedia, useParticipants, useSelf } from "../../bindings/hooks";
 import { AudioOutput } from "./AudioOutput";
 
-vi.mock("../../bindings/hooks", () => ({ useSelf: vi.fn(), useMedia: vi.fn(), useParticipants: vi.fn() }));
+vi.mock("../../bindings/hooks", () => ({ useSelf: vi.fn(), useMedia: vi.fn(), useParticipants: vi.fn(), useSpaceClient: () => ({ media: { observeAudioElement: () => ({ played: () => {}, detach: () => {} }) } }) }));
 vi.mock("../participants-panel/participant-volume-context", () => ({ useParticipantVolumeContext: () => null }));
 afterEach(() => vi.restoreAllMocks());
 

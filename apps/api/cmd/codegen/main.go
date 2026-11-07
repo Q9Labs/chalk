@@ -14,6 +14,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/problemreports"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
@@ -229,8 +230,12 @@ func (g *generator) responses(route httpapi.APIRouteContract) map[string]any {
 			body["headers"] = headers(response.Headers)
 		}
 		if response.Schema != nil {
+			contentType := response.ContentType
+			if contentType == "" {
+				contentType = "application/json"
+			}
 			body["content"] = map[string]any{
-				"application/json": map[string]any{
+				contentType: map[string]any{
 					"schema": g.schemaRef(*response.Schema, false),
 				},
 			}
@@ -370,6 +375,9 @@ func (g *generator) schemaRef(ref httpapi.APISchemaRef, request bool) map[string
 }
 
 func (g *generator) schemaFromType(t reflect.Type, request bool, currentName string) map[string]any {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return map[string]any{"type": "string"}
+	}
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
@@ -470,6 +478,14 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 		property := g.fieldSchema(currentName, name, field, request)
 		if nullable && !schemaIncludesNull(property) {
 			property = nullableSchema(property)
+		}
+
+		if name == "transcript_language" && schemaIncludesNull(property) {
+			values := make([]any, 0, len(artifactpolicy.TranscriptLanguageValues())+1)
+			for _, value := range artifactpolicy.TranscriptLanguageValues() {
+				values = append(values, value)
+			}
+			property["enum"] = append(values, nil)
 		}
 
 		properties[name] = property
@@ -648,6 +664,29 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		case "http_status":
 			schema["minimum"] = 400
 			schema["maximum"] = 599
+		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off":
+			schema["minimum"] = 0
+			schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
+		}
+	}
+	if schemaName == "CallStatsRequest" {
+		switch fieldName {
+		case "version":
+			schema["enum"] = []int{1}
+		case "samples":
+			schema["minItems"] = 1
+			schema["maxItems"] = httpapi.CallStatsSampleLimit
+		case "elapsed_ms":
+			schema["minimum"] = 0
+			schema["maximum"] = httpapi.CallStatsMaxElapsedMS
+		case "window_ms":
+			schema["minimum"] = httpapi.CallStatsMinWindowMS
+			schema["maximum"] = httpapi.CallStatsMaxWindowMS
+		default:
+			if maximum := httpapi.CallStatsMaximum(fieldName); maximum > 0 {
+				schema["minimum"] = 0
+				schema["maximum"] = maximum
+			}
 		}
 	}
 	if schemaName == "ProblemReportRequest" {
@@ -720,7 +759,20 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "ConnectionReportRequest" {
 		return httpapi.ConnectionReportFieldEnum(fieldName)
 	}
+	if schemaName == "CallStatsRequest" {
+		return httpapi.CallStatsFieldEnum(fieldName)
+	}
+	if schemaName == "SFUSubscriptionsResponse" {
+		switch fieldName {
+		case "state":
+			return []string{mediaplane.SubscriptionActive, mediaplane.SubscriptionPaused}
+		case "reason":
+			return []string{mediaplane.PauseCongestion, mediaplane.PauseViewer, mediaplane.PauseSourceInactive, mediaplane.PauseSourceUnauthorized}
+		}
+	}
 	switch fieldName {
+	case "transcript_language":
+		return artifactpolicy.TranscriptLanguageValues()
 	case "recording_render_mode":
 		return []string{"on_demand", "automatic"}
 	case "admission":
@@ -801,6 +853,9 @@ func nullableSchema(schema map[string]any) map[string]any {
 }
 
 func isOptionalRequestField(t reflect.Type) bool {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return true
+	}
 	return t.Kind() == reflect.Pointer ||
 		isRawJSON(t) ||
 		isOptionalString(t) ||
@@ -813,6 +868,9 @@ func isOptionalRequestField(t reflect.Type) bool {
 }
 
 func nullableHelperField(schemaName string, fieldName string, t reflect.Type) bool {
+	if dereference(t) == reflect.TypeOf(artifactpolicy.OptionalTranscriptLanguage{}) {
+		return schemaName != "UpdateTenantRequest"
+	}
 	if _, ok := providerConfigSchemaName(fieldName); ok {
 		return true
 	}
@@ -1126,6 +1184,9 @@ func isUUIDField(fieldName string) bool {
 
 func isOpaqueIDField(schemaName string, fieldName string) bool {
 	if schemaName == "IssueAccessGrantRequest" && fieldName == "expected_media_connection_id" {
+		return true
+	}
+	if schemaName == "SFUSubscriptionsResponse" && fieldName == "session_id" {
 		return true
 	}
 	if fieldName == "publication_id" || fieldName == "track_id" || fieldName == "external_id" || fieldName == "identity_external_id" {

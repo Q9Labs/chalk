@@ -28,6 +28,120 @@ When a Participant joined without a knock, check the journey root named
 that asked for direct admission leaves `"admission": "direct"` in its
 attributes. Policy admissions carry no `admission` attribute.
 
+### Follow a user's session
+
+A session is one run of a Chalk app on one device: a browser tab, or an app launch
+on mobile. The SDK shows its ID in Call details as "Session ID" and adds it to
+problem-report diagnostics, so a user can quote it. It is the OpenTelemetry
+attribute `session.id`, never an Episode or a Cloudflare or dashboard `sessionId`.
+
+A tab keeps its session across reloads, and a new tab, including a duplicated tab,
+starts a new one. Mobile
+starts a session at launch and another after 30 minutes in the background, never
+while a call is open. Server-side SDK clients have no session.
+
+The SDK sends `baggage: session.id=<uuid>` with a `traceparent` on every Chalk API
+request, and the same `baggage` text in the Sync `hello` frame (browsers cannot set
+upgrade headers). The API copies a valid lowercase UUID onto every span started
+under the request and adds `session.id` to its structured logs. Sync adds it to
+connection spans and logs. Any other value is ignored. The ID is request and
+connection scoped: it is not written to the journey ledger, to Sync frames sent
+back to the client, or to durable lifecycle rows.
+
+```apl
+| where ['session.id'] == "<session-id>"
+```
+
+Run it in the API log and Sync trace datasets to see everything one device did,
+including requests before a join and across several joins.
+
+Deploy the API and Sync before the SDK. The API must allow the `Baggage` header in
+CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
+frame, then close 1009), so the SDK retries once at once without it, remembers
+that server for the rest of the page or app run, and sends the legacy `hello` on
+later reconnects. The whiteboard socket does not carry the ID yet.
+
+### Compare call quality by connection type
+
+The SDK summarises WebRTC stats on the device every 10 seconds and uploads them
+under the session ID: about every minute while a call is open and once at leave,
+through `POST /v1/tenants/{tenant_id}/call-stats`. A call stops producing
+summaries after 360 (about an hour), a batch holds at most 30, a failed upload is
+dropped, and the API allows 30 uploads per participant per ten minutes. Each
+summary becomes one `sdk.call_stats` API log line with the session ID, Space,
+Episode, a hashed participant ID, and these fields: `connection_type` (`udp`,
+`tcp`, `turn`, `unknown`), `rtt_ms`, `send_loss_pct`, `recv_loss_pct`,
+`send_jitter_ms`, `recv_jitter_ms`, `send_bitrate_kbps`, `recv_bitrate_kbps`,
+`send_layer` (`h`, `m`, `l`: the highest layer that sent during the window),
+`recv_height`, `freeze_count`, `freeze_ms`, and `recv_paused_videos` (own SFU
+only: remote videos the SFU paused for this device's network at the end of the
+window, 0 to 64). Candidate types come from the
+selected candidate pair. The body has no IP address, SDP, or free text. The API
+adds `country` (the edge's country code), `client_family`, and `client_os` from
+the request, so calls compare by region and platform without storing an address.
+It also adds `provider` (`cloudflare_sfu` or `chalk_sfu`) and
+`provider_session_id`, the media connection ID from the participant's media
+credential. That ID is the session the own SFU names in its logs and in
+`/inspect`, so one device's stats join the SFU's view of the same connection.
+
+```apl
+['<api-log-dataset>']
+| where ['attributes.event'] == "sdk.call_stats"
+| summarize
+    samples = count(),
+    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
+    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
+    loss_p50 = percentile(todouble(['attributes.recv_loss_pct']), 50),
+    loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
+    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count()
+  by ['attributes.connection_type']
+```
+
+Add `by ['attributes.country']` to compare regions. Field paths follow the
+dataset's log mapping, so match them to how `sdk.connection_report` appears there.
+Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
+### Own-SFU video paused for network
+
+On the own SFU (`chalk_sfu`), the SFU picks each viewer's simulcast layer under
+the one the SDK requests, and pauses a remote video when the viewer's link cannot
+carry even the lowest layer. Audio keeps flowing. The join sends the
+`serverLayerAdaptation` and `subscriptionState` capabilities, and the SDK then
+changes three things. Its own layer policy only caps the layer at the tile size,
+so the SDK and the SFU do not run competing upswitch loops. A remote video that
+has been quiet for 2 s makes the SDK read
+`GET .../participants/{participant_id}/media/sfu/subscriptions`, which returns
+each of the caller's subscriptions with `state`, `reason` (`congestion`,
+`viewer`, `source_inactive`, `source_unauthorized`), `revision`,
+`requested_rid`, and `effective_rid`.
+The route reads only the credential's own connection, and a Cloudflare Episode
+answers 400. While the SFU reports a pause, the stall check leaves that video
+out, so the SDK does not repull it after the 7 s window, and the tile shows
+"Video paused for network" until RTP returns or a read says the SFU resumed it.
+A read that says the video is active, or a read that fails, gives the video back
+to normal stall recovery. Off-screen video is paused in place with a
+`tracks/update` that carries `paused` and no simulcast, and is resumed the same
+way, so it needs no close, pull, or renegotiation. The Cloudflare adapter refuses
+`paused`, and the Cloudflare path keeps its `h`-first pulls and receive-only
+closes.
+
+To follow one device, find its `provider_session_id` in `sdk.call_stats` and
+match it to the session in the SFU's logs. A rising `recv_paused_videos` with low
+`recv_bitrate_kbps` means the SFU is protecting audio on a slow link, not a
+receive stall. A failed subscriptions read appears in connection reports as
+`media_error_step` `sfu_subscriptions`.
+
+A congestion pause is transient delivery that the client observes. It changes no
+durable journey boundary: the Episode, the participant, and the publication stay
+as they were. So it adds no journey-ledger event, and its evidence is the call
+stats and the SFU's own state. Proof is in
+`sdks/typescript/client/src/media/cloudflare-sfu.test.ts` (the "own-SFU
+subscription state" tests), `sdks/typescript/client/src/media/subscription-delivery.test.ts`,
+`sdks/typescript/client/src/media/call-stats.test.ts`,
+`apps/api/internal/httpapi/sfu_subscriptions_test.go`,
+`apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
+`apps/api/internal/adapters/chalksfu/conformance_test.go`.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback
@@ -91,6 +205,11 @@ HTTP 200 acceptance rules are unchanged. The regression in
 checks the recorded logs and span events against provider responses with
 credential-shaped fields.
 
+When the API cannot mint Cloudflare TURN credentials it logs
+`cloudflare_turn.credentials_failed` at warning level with the failure cause and
+no credential, and the join continues with STUN only. A sustained stream of this
+event means clients behind strict networks cannot connect.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
@@ -120,6 +239,90 @@ fields. `omittedTracks` reports omitted entries. Use it to build a sanitized
 fixture after a new occurrence; a documentation-based fixture alone does not
 prove the shape of an earlier production failure.
 
+### Listeners missing active audio publications
+
+The API samples active Cloudflare SFU Episodes every five seconds, independently
+of client requests. Each other participant's enabled `microphone` or
+`screen_audio` publication starts a listener/publication grace window when first
+observed. After more than 15 seconds without a successful pull, it emits
+`media.listener_publication_unpulled` once for that pair. `step` is
+`no_pull_attempted` or `pull_failed`; `error_kind` is a bounded per-track provider
+code, `request_failed`, or `missing_result`. Success requires an exact returned
+remote track identity and receiving MID, not merely an HTTP 200. A later failure
+does not downgrade `pull_succeeded` on the same listener connection. This proves
+provider pull acceptance, not received audio packets or completed renegotiation.
+
+Affected Episodes emit `media.listener_publication_summary` at most once a minute
+with `no_pull_attempted_count`, `pull_failed_count`, `pull_succeeded_count`, and
+`overdue_count`. Healthy Episodes remain silent. Paused publications do not age;
+closed/replaced publications and departed listeners are removed. Listener
+connection replacement resets pull progress. The one-shot marker survives pauses
+and listener connection replacement for a retained pair. Episode end removes
+state on the next sample; shutdown clears it too. These process-local diagnostics
+reset on API restart and assume pulls for an Episode reach the same API process.
+
+Pull observations do not read the database or write logs. They retain bounded,
+hashed publication-identity results, including pulls completed before the first
+sample. Results are keyed by listener generation and connection and expire after
+two minutes. Results bind to the request's publication reference when available,
+otherwise to an in-memory identity snapshot captured before the SFU provider call
+and fed by committed publication writes.
+The write hook performs no extra reads or logging and cannot fail the publication
+write when diagnostic capacity is exhausted. The sampler also refreshes identity
+snapshots; an older incarnation/sequence cannot overwrite a newer commit. These
+snapshots retain at most 128 Episodes and 128 hashed identities per Episode and
+expire after two minutes without a refresh. After a process restart, a pull
+without a known identity remains bounded pending evidence until the first
+sample; it is matched only if no publication write for that Episode intervened.
+Reusing a publisher connection and track name therefore does not transfer
+success to a replacement publication, even if it commits during an in-flight pull.
+Episode reconciliation and event collection share one per-Episode lock; payloads
+are emitted after unlocking, so a slow log sink does not hold up pull observations.
+
+Events reuse Tenant, Space and Episode IDs, plus `participant_id_hash` and
+`publication_id_hash` (lowercase hexadecimal SHA-256 of the listener's participant
+ID and the complete publication reference, respectively). Publication references
+can encode client-supplied track names and MIDs, so they are never logged raw or
+reversibly encoded. No identity labels, raw error text, credentials, SDP or media
+payloads are added. The existing
+`cloudflare_sfu.add_tracks` log also includes up to 16 normalized
+`track_error_kinds`, without remote track names or remote session IDs.
+
+Retained state is capped at 128 Episodes, 128 participants and 128 publication
+entries per Episode, and 1024 pairs per Episode. Publication references above
+4096 bytes are ignored. Pending pull results are also capped at 1024 per Episode,
+with at most 128 distinct remote tracks retained from each request.
+A truncated Episode summary marks `truncated=true`;
+Episode overflow or read failures emit the rate-limited
+`media.listener_publication_sampling_incomplete` event. After two minutes without
+a fresh sample, stale state is discarded rather than diagnosing from old data.
+Caps and failed reads can leave coverage incomplete. Discovery and evaluation
+are sampled, so a newly visible pair normally logs roughly 15–25 seconds later.
+The fake-time regressions live in
+`apps/api/internal/mediapublications/receive_health_test.go`.
+
+#### Alarm
+
+The [listener audio check](../infrastructure/listener-audio-alert/README.md)
+runs every five minutes against a ten-minute Axiom window. At least one
+`media.listener_publication_unpulled` event pages Oncall, with one incident per
+Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
+key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
+contain only aggregate counts; the query projects only `episode_id`, `signal` and
+`events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
+`CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` and the existing
+`ONCALL_WEBHOOK_URL`. `CHALK_AXIOM_LOG_DATASET` must be the production API log
+dataset, the same one the production Axiom monitors use as `LOG_DATASET`.
+The query does not filter by environment: pointing it at a dataset that also
+holds nightly logs would page for nightly. A fired alert fails the run so GitHub
+sends a failed-run email. Because `media.listener_publication_unpulled` is
+one-shot per pair, a stuck Episode stops firing roughly ten minutes after its
+last new event. A webhook-only drill never reads Axiom.
+The `listener-audio` scope must also be registered for Chalk in Oncall's registry
+outside this repo. #721 will add `sdk.connection_report` with
+`['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not
+included yet. GitHub scheduling can delay the roughly five-minute paging target.
+
 ### Background-tab and presence-expiry evidence
 
 Every v1 `sync.websocket.closed` event includes `socket_age_ms` and
@@ -137,6 +340,83 @@ includes `joined_age_ms` instead: there was no observed heartbeat to age.
 The span's `reserved` attribute distinguishes a successful reservation from a
 failed attempt; only a committed transaction retains the durable journey root.
 No token, raw participant or user identity, error text, or media payload is added.
+
+### Own SFU congestion, repair and admission
+
+The own SFU (`features/media/sfu`) logs structured JSON with no Tenant, Episode,
+Participant, address, SDP, certificate or payload in its node-wide lines.
+`features/media/sfu/tests/impairment_test.go` scans the logs of impaired calls for those.
+
+- `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
+  the repair and probe parts of it, subscriptions paused for congestion, subscriptions
+  the Episode plan pauses to hold its ceiling (`plannerPaused`), cameras
+  the Episode ceilings cap or pause, pacer queue delay p95, Go scheduler latency
+  p99, CPU steal where the host reports it, and the admission reason.
+- `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
+  the admission reason changes to or from `cpu_steal`, `cpu_busy`,
+  `pacer_queue_delay`, `pacer_drops` or `udp_buffer_errors`, with the readings
+  that decided it. Every refused join or screen share logs a `refused` warning
+  with its reason. Live Episodes keep admitting
+  their Participants while new ones are refused.
+- `media readers still running after close` (error) when shutdown gave up
+  waiting for a stream reader. A publisher that sent a second SSRC under a RID
+  causes it; the process still exits.
+
+To follow one subscriber, call the session's `inspect`. Each subscription shows
+its requested and effective RID, `state` and `reason` (`congestion` for a
+network pause; the wire reason of a pause by the Episode plan is `congestion` too,
+and only `plannerPaused` and the metrics tell the two apart), and its transport shows the estimate, proven rate, feedback age,
+queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
+probes. The Episode block shows its packets/s against its ceiling. `/readyz`
+shows the host signals behind admission.
+
+The node also exports metrics over OTLP/HTTP to the API's metrics dataset, as
+`service.name=chalk-sfu` with `deployment.environment.name` and the node
+incarnation as `service.instance.id`, so call quality and host health are
+readable without SSH. They carry no Tenant, Episode, Participant, session or
+address. Their only attributes are `chalk.sfu.direction` (`in`, `out`),
+`chalk.sfu.media_kind` (`audio`, `video`, and `repair` and `probe` out),
+`chalk.sfu.refusal_reason` and `chalk.sfu.admission_reason`.
+`features/media/sfu/tests/telemetry_test.go` runs an impaired call and checks
+the export against `inspect` and for identities.
+
+- Load: `chalk.sfu.sessions`, `chalk.sfu.episodes`, `chalk.sfu.packet_budget`,
+  `chalk.sfu.packets.reserved`, and `chalk.sfu.packet_rate` and
+  `chalk.sfu.bitrate` over the last second by direction and kind.
+- Totals since start, as cumulative counters: `chalk.sfu.packets` and
+  `chalk.sfu.bytes` by direction and kind (RTX sent is `out`/`repair`),
+  `chalk.sfu.pacer.drops`, `chalk.sfu.repairs.cut`, `chalk.sfu.nack.requested`,
+  `chalk.sfu.keyframe_repairs`, `chalk.sfu.rtx.received`,
+  `chalk.sfu.layer.switches`, `chalk.sfu.udp.send_refused` and
+  `chalk.sfu.udp.receive_truncated` (datagrams the media socket's kernel calls
+  refused or cut short; both stay 0 when `SFU_UDP_BATCH` is off), and
+  `chalk.sfu.refusals` by reason (`draining`,
+  `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
+  `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
+  `udp_buffer_errors`, `screen_ceiling`, `cameras`).
+- Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
+  only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
+  ceiling),
+  `chalk.sfu.cameras.capped` and `.paused`, `chalk.sfu.pacer.queue_delay.p95`
+  and `chalk.sfu.scheduler.latency.p99` in seconds, and
+  `chalk.sfu.host.cpu.steal`, `chalk.sfu.host.cpu.utilization` (ratios over the
+  guard window) and `chalk.sfu.host.udp.receive_buffer_errors` and `.send_buffer_errors`
+  where the host reports them.
+- State and process: `chalk.sfu.draining` and `chalk.sfu.admission.closed`
+  (1 or 0, with the admission reason), `process.cpu.time` and
+  `process.memory.usage` (resident bytes, Linux).
+
+A rate from the totals is exact over any window. A stream that closes between two
+100 ms control ticks loses that tick's counts, so totals can run slightly under
+the sum of every session's `inspect`. A restart starts every total again from
+zero under a new `service.instance.id`.
+
+The alert collector samples the node's `/readyz` and alerts when it stays
+unreachable, draining, closed to new Episodes or above 90% of its packet budget;
+see [Alerts](#alerts). `media readers still running after close` stays a journal
+line and has no monitor, because it only happens while the process exits.
+The paused-for-network journey (SDK `subscriptionState`) lands with the API and
+SDK change, and adds its journey ledger entry then.
 
 ## Alerts
 
@@ -176,6 +456,14 @@ read-only synthetic Axiom query tests replay the blip and sustained window,
 recovery, duplicate/missing samples and a change of reason.
 An independent uptime Worker checks API/Sync health and readiness and reports
 failures directly to Discord.
+The collector also samples the own SFU's `/readyz` over mutual TLS when
+`CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
+grouped monitor alerts on four unhealthy minute samples in five minutes: a
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
+queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
+allowlisted reason codes are exported, never TLS or HTTP error text, response
+bodies or node identifiers. The freshness monitor does not count this row, so
+hosts without an SFU stay quiet. See the production-alerts README for setup.
 
 ### Sync lifecycle readiness evidence
 
@@ -246,6 +534,11 @@ from an edge rejection; an empty reason must not be labeled as a server timeout.
 `sync_connect_failed`, `sync_dial_timeout`, and `connection_failed` identify
 telemetry events, not public error codes. Retries can still succeed within the
 startup budget.
+
+Sync connection spans, the three lifecycle events, and their stdout lines also
+carry `session.id` when the client sent one in W3C `baggage` on the upgrade or
+the `hello` frame. Search stdout for it to find every connection of one device
+session. Sync never echoes it on frames or stores it with lifecycle records.
 
 ### Automatic browser connection reports
 
@@ -331,7 +624,8 @@ The TypeScript Connection SDK keeps the latest 64 connection events in memory
 from construction, without installing a recorder. A failed join, terminal
 connection failure, or exhausted recovery freezes one report and posts it to
 `POST /v1/tenants/{tenant_id}/connection-reports`. Successful joins, normal leaves,
-and successful recovery do not upload it. Sync socket opens/closes include codes
+and successful recovery do not trigger failure reports; listener health summaries
+can still upload during a healthy call. Sync socket opens/closes include codes
 and timings; heartbeat gaps, join steps, media state/HTTP failures, and recovery
 attempts use only known labels and bounded numbers. Cloudflare SFU uses HTTP
 signaling and WebRTC, not a media WebSocket.
@@ -387,8 +681,8 @@ session; only another binding's takeover returns the terminal superseded code.
 Failed media acquisition/start spans and media recovery reports include
 `media_error_kind` (allowlisted DOMException name, `CloudflareSFUError`,
 `network`, `timeout`, or `unknown`) and `media_error_step` (`local_capture`,
-`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`, or
-`sfu_publications`). SFU HTTP failures also carry `http_status` (400–599).
+`peer_connection`, `access_refresh`, `sfu_tracks`, `sfu_close_tracks`, `sfu_renegotiate`,
+`sfu_publications`, or `sfu_subscriptions`). SFU HTTP failures also carry `http_status` (400–599).
 `network` identifies a fetch rejection or browser NetworkError, not an arbitrary
 TypeError. `granted_audio` and `granted_video` are `granted`, `not_granted`, or
 `unknown`: live tracks returned by acquisition, regardless of mute state, not
@@ -399,11 +693,87 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+Listener audio receive health uses the same report endpoint, not a second
+diagnostic channel. It tracks desired remote `microphone` and `screen_audio`
+publications, never camera or local capture. Two event names also serve as report
+triggers:
+
+- `audio_receive_stuck`: Warn-level `sdk.connection_report`, sharing the
+  participant failure cooldown with join/recovery failures and projection
+  mismatches.
+- `audio_receive_summary`: Info-level `sdk.connection_report`, not alerting.
+  The event buffer retains only the latest summary. Summaries have their own
+  per-reporter spacing of at most one new report per five minutes; they neither
+  use nor consume the participant failure cooldown. Summary uploads contain only
+  `audio_receive_*` events. A failure replaces an unsent summary or queues after
+  an in-flight summary, so a pending summary cannot suppress the failure.
+
+The `receive_state` ladder records the furthest consecutive stage observed:
+
+```text
+announced → pull_requested → pull_failed / pull_succeeded → track_received → bytes_flowing → element_bound → playing
+```
+
+`pull_failed` is the failed branch of a pull, not a prerequisite for success.
+Read the state with the companion fields, rather than treating an attached track
+or a resolved `play()` promise alone as proof of audible audio:
+
+| Furthest state   | Interpretation                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                               |
+| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                  |
+| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                           |
+| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                      |
+| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path. |
+| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                    |
+| `element_bound`  | Audio is progressing and an element is bound, but the element is paused. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path.                     |
+| `playing`        | Audio is progressing and the bound element is not paused. This does not prove the output device is audible or its volume is nonzero.                                                           |
+
+Companion fields are bounded labels: `track_state` is `live`, `muted`, or `ended`;
+`element_state` is `paused` or `playing`; `play_result` is `ok`,
+`NotAllowedError`, `AbortError`, or `unknown`. Rejected playback contributes only
+that label, never raw error text. Summaries carry `receive_counts`, a fixed-key
+object with optional counts from 0 to 10000 for each ladder state plus
+`projection_off`. A disabled authoritative remote projection counts as
+`projection_off` even when no track was pulled. Screen audio follows the screen
+projection. Before authoritative projection state is available, the tracker
+falls back to `track.enabled === false`. Disabled publications never trigger a stuck event;
+re-enabling it restarts its stuck clock. Projection gating is not bypassed.
+
+Sampling runs every five seconds, using one `getStats()` call on the receive peer
+connection per sample regardless of audio track count, and no call when no audio
+publications are tracked. This is the receive-health sampler's budget; other
+media monitors can sample stats independently. The tracker produces a summary
+every twelve samples (normally sixty seconds), while the reporter applies the
+five-minute upload spacing. A non-playing publication becomes stuck only after
+strictly more than ten seconds since announcement or the last healthy sample
+(not at ten seconds). Each unhealthy episode reports once and re-arms only after
+`playing`, with a lifetime cap of eight stuck events per media session. The
+timer stops on media stop, including leave/dispose; results arriving after
+disposal are ignored.
+
+These observations change no user-visible lifecycle or durable journey boundary,
+so they add no journey-ledger event. Diagnostic proof is covered by
+`sdks/typescript/client/src/media/audio-receive-health.test.ts`,
+`sdks/typescript/client/src/media/cloudflare-sfu.test.ts`,
+`sdks/typescript/client/src/connection/report.test.ts`,
+`sdks/typescript/client/src/space-client/audio-observation.test.ts`,
+`sdks/typescript/react/src/components/audio-output/AudioOutput.test.tsx`, and
+`apps/api/internal/httpapi/connection_reports_test.go`. These test state/timing,
+sampling disposal, pull failures, report spacing/priority/privacy, synchronous
+element observation, playback rejection/cleanup, and API validation/log levels.
+They do not constitute a real-browser audible-playback proof. The production
+alert query in
+`infrastructure/observability/production-alerts/connection-reports.apl` selects
+only `join_failed`, `recovery_exhausted`, and `media_projection_mismatch` triggers;
+neither receive-health trigger currently matches it.
+
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
 Tenant. It deliberately does not require an active participant or passing Sync
 readiness: those can be the failure being reported. Identity comes exclusively
-from that verified credential. The `sdk.connection_report` warning includes
+from that verified credential. The `sdk.connection_report` log (Info for
+`audio_receive_summary`, Warn for other triggers) includes
 `tenant_id`, `space_id`, `episode_id`, SHA-256 `participant_id_hash` (the same
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
@@ -432,9 +802,10 @@ error messages never enter the log.
 
 There are no tokens, names, emails, IP addresses, URLs, peer close reasons, error
 messages, media contents, or arbitrary payloads in the report body. The SDK
-allows one report per participant per minute across connections in the same
-module instance; the API enforces six per participant per ten minutes through
-its existing limiter. The SDK holds one pending report while offline, retries a
+allows one failure report per participant per minute across connections in the
+same module instance; summaries use their separate spacing described above.
+The API enforces six reports per participant per ten minutes through its existing
+limiter, including summaries. The SDK holds one pending report while offline, retries a
 transport failure once on a later browser `online` event, bounds each upload to
 five seconds, and discards it on disposal. An `online` event during an active
 upload is retained for that retry if the upload subsequently fails. An HTTP response, including rejection,
@@ -468,3 +839,44 @@ Cleanup inherits the journey and trace context, so its provider span and retaine
 terminal failure can be inspected separately from the confirmed Leave. The
 Postgres durable Leave proof blocks a fake cleanup provider and checks the
 receipt, attendance timestamp, and webhook while that provider is still blocked.
+
+## Hosted MCP operations
+
+`/mcp` uses the API's HTTP trace context. Each application call adds a child span
+named `mcp.<operationID>` with the tenant ID and the existing API operation ID.
+The same application handler preserves the domain's durable journey events;
+MCP does not introduce a parallel lifecycle ledger.
+
+`mcp.tool.completed` records the curated tool, tenant ID, API-key actor ID, and
+an allowlisted outcome code. `mcp.operation.completed` identifies the selected
+application operation, including the action of a mixed-action tool. Look for
+`mcp.protocol.rejected` for schema or protocol failures and `mcp.origin.rejected`
+for Origin denial. Authentication failures retain the normal API HTTP signal.
+These events contain no tool arguments, result bodies, bearer tokens, signed
+URLs, transcript text, or signing secrets. Unexpected application errors return
+only the existing public API error code and message.
+
+OAuth sign-in for `/mcp` logs `mcp.oauth.*` events with grant, tenant and client
+IDs only: `client_registered`, `grant_created`, `grant_revoked`, `reuse_detected`
+(a replayed code or refresh token) and the `*_failed` events for server errors. They never carry tokens, codes, authorization request
+handles, PKCE values or redirect query strings. `TestMCPOAuthKeepsSecretsOutOfLogs`
+proves it. A rise in `reuse_detected` means a client is racing refreshes or
+a token leaked. The grant lifecycle (approve, use, revoke) is visible in the
+connected apps list; there is no separate journey ledger entry.
+
+The Postgres proof `TestMCPPostgresToolsAndPermissions` drives the official Go
+MCP client through Streamable HTTP. The MCP module's transport proof covers
+Origin rejection, bounded UTF-8 continuation, body limits, and disabled SSE.
+
+## Auto transcription provider
+
+Auto MAI requests retain the existing dispatcher/API transcript lifecycle and
+journey carrier. `dispatcher_completed` identifies `provider=openrouter`, fallback
+use and attempts. Provider HTTP/timeout failures keep the existing bounded
+`provider_*` retry reasons; malformed timing or Urdu conversion emits
+`provider_schema_invalid` with field/type metadata, never transcript text,
+provider bodies or audio. Silent Auto chunks complete with zero cues and zero
+provider cost, not a provider failure. Fixed-language requests remain Whisper.
+Provider word and segment timestamps are restored to the original source clock
+before manifest-based speaker attribution. The dispatcher tests exercise this
+mapping through a real synthetic FLAC decoder and a fake provider boundary.

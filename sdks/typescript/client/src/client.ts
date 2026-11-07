@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { ChalkApi } from "./generated/http-api";
+import { withRequestContext } from "./session";
 export type ChalkBearerAuth = {
   readonly type: "bearer";
   readonly token: string;
@@ -26,7 +27,7 @@ export const createChalkEffectClient = (options: ChalkEffectClientOptions) => {
       }),
   }).pipe(Effect.provide(FetchHttpClient.layer));
   const configuredClient = options.credentials === undefined ? client : client.pipe(Effect.provideService(FetchHttpClient.RequestInit, { credentials: options.credentials }));
-  return options.fetch ? configuredClient.pipe(Effect.provideService(FetchHttpClient.Fetch, options.fetch)) : configuredClient;
+  return configuredClient.pipe(Effect.provideService(FetchHttpClient.Fetch, withRequestContext(options.fetch)));
 };
 function requestHeaders(options: ChalkEffectClientOptions): Record<string, string> {
   return {

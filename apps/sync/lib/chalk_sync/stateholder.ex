@@ -52,6 +52,8 @@ defmodule ChalkSync.Stateholder do
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback claim_local_operations(pos_integer()) ::
               {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  @callback claim_provider_operations(pos_integer()) ::
+              {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   @callback read_operation(EpisodeKey.t(), String.t()) ::
               {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}
   @callback finalize_operation(EpisodeKey.t(), String.t(), tuple()) ::
@@ -73,6 +75,8 @@ defmodule ChalkSync.Stateholder do
   @callback participant_devices(EpisodeKey.t()) :: {:ok, [map()]} | {:retryable, atom()}
   @callback media_pauses(EpisodeKey.t()) ::
               {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
+  @callback media_stops(EpisodeKey.t()) ::
+              {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
   @callback set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
               :ok | {:error, atom()} | {:retryable, atom()}
   @callback begin_role_transition(Identity.t(), Command.t(), [MediaPlane.publication()]) ::
@@ -126,6 +130,11 @@ defmodule ChalkSync.Stateholder do
   @spec media_pauses(EpisodeKey.t()) ::
           {:ok, %{{String.t(), String.t()} => String.t()}} | {:retryable, atom()}
   def media_pauses(%EpisodeKey{} = episode), do: impl().media_pauses(episode)
+
+  @doc "The latest host stop for each participant and source, as `{participant_id, source} => event revision`."
+  @spec media_stops(EpisodeKey.t()) ::
+          {:ok, %{{String.t(), String.t()} => pos_integer()}} | {:retryable, atom()}
+  def media_stops(%EpisodeKey{} = episode), do: impl().media_stops(episode)
 
   @spec set_media_pause(Identity.t(), :microphone | :camera | :screen, String.t() | nil) ::
           :ok | {:error, atom()} | {:retryable, atom()}
@@ -206,6 +215,11 @@ defmodule ChalkSync.Stateholder do
           {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
   def claim_local_operations(limit) when is_integer(limit) and limit in 1..64,
     do: impl().claim_local_operations(limit)
+
+  @spec claim_provider_operations(pos_integer()) ::
+          {:ok, [{EpisodeKey.t(), ExternalOperation.t()}]} | {:retryable, atom()}
+  def claim_provider_operations(limit) when is_integer(limit) and limit in 1..64,
+    do: impl().claim_provider_operations(limit)
 
   @spec read_operation(EpisodeKey.t(), String.t()) ::
           {:ok, ExternalOperation.t()} | :not_found | {:retryable, atom()}

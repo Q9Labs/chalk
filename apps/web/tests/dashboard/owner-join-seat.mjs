@@ -64,7 +64,7 @@ try {
         return output.stream;
       };
     });
-    await mediaFailurePage.getByRole("button", { name: "Start a call", exact: true }).click();
+    await mediaFailurePage.getByRole("button", { name: "Start a call", exact: true }).first().click();
     await mediaFailurePage.getByRole("button", { name: "Join call", exact: true }).click();
     await mediaFailurePage.getByRole("button", { name: "Try again", exact: true }).waitFor({ timeout: 65000 });
     assert(helloObserved && recoveredObserved && failedSignaling > 0, "SFU must fail only after a real Sync hello and recovery");
@@ -87,7 +87,7 @@ try {
       if (!blockSync) socket.connectToServer();
     });
     await page.goto(`${origin}/dashboard`);
-    await page.getByRole("button", { name: "Start a call", exact: true }).click();
+    await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
     await page.getByRole("button", { name: "Join call", exact: true }).click();
     await page.getByRole("button", { name: "Try again", exact: true }).waitFor({ timeout: 65000 });
     const spaceId = new URL(page.url()).pathname.split("/").at(-2);

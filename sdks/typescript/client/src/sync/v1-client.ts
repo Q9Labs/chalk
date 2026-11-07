@@ -2,8 +2,10 @@ import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
 import { scheduleSyncDialDeadline } from "./dial-deadline";
+import { LinkWatch, type LinkJudge } from "./link-watch";
 import { SyncProtocolLimits, type SyncV1ClientFrame, type SyncV1ServerFrame, type MediaProjectionItemSchema } from "../generated/sync";
 import type { ClientMediaPlane } from "../media/plane";
+import { sessionBaggage } from "../session";
 import type { ChalkChatReactionInput, ChalkChatReactions, ChalkChatMessage, ChalkChatPageResult, ChalkChatReadReceipt, ChalkReaction, ChalkReactionEvent, ChalkSendChatMessageInput, ChalkSyncV1CollaborationCapability } from "../collaboration/types";
 import { encodeV1ClientFrame, decodeV1ServerFrame } from "./v1-codec";
 import { V1CollaborationState } from "./v1-collaboration-state";
@@ -41,6 +43,8 @@ const MAX_REPLAY_EVENTS = SyncProtocolLimits.completeReplayMaxEvents;
 const MAX_REPLAY_BYTES = SyncProtocolLimits.completeReplayEncodedBytes;
 const MAX_PROJECTION_EVENT_EVIDENCE = 256;
 const CLIENT_RESTART_CLOSE_CODE = 4000;
+/** Sync servers that rejected a hello carrying `baggage`; they predate the session ID. Kept for the page or app run only. */
+const legacyHelloServers = new Set<string>();
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const FAST_RECONNECT_ATTEMPTS = 8;
@@ -106,12 +110,19 @@ export class V1SyncClient implements V1CollaborationClient {
   #socketCloses: SyncRecoveryDiagnostic["socketCloses"][number][] = [];
   #omittedSocketCloses = 0;
   #lastHeartbeatReplyAt: number | null = null;
+  /** Whether this connection's welcome advertised `media_off_reason`; reset for each connection. */
+  #offReasonNegotiated = false;
+  readonly #watch: LinkWatch;
+  /** Tells a recovery whether the drop was proven short. */
+  readonly link: LinkJudge;
   #opened = false;
   #connectFailure: SyncConnectDiagnostic | undefined;
   #connectDiagnostic(): SyncConnectDiagnostic {
     return { stage: this.#opened ? "hello" : "upgrade", opened: this.#opened, closeCode: null, closeReason: null, durationMs: Math.max(0, this.#clock().now() - (this.#connectStartedAt ?? this.#clock().now())), attempt: this.#connectAttemptCount };
   }
   #reconnectAttempt = 0;
+  /** The socket whose hello carried baggage and has not been answered by a welcome yet. */
+  #baggageHelloSocket: V1Socket | null = null;
   #episodeEndTimer: unknown;
   #heartbeatTimer: unknown;
   #missedHeartbeats = 0;
@@ -130,6 +141,8 @@ export class V1SyncClient implements V1CollaborationClient {
   constructor(options: V1SyncClientOptions) {
     assertV1Url(options.url);
     this.#options = options;
+    this.#watch = new LinkWatch({ wall: () => this.#now(), mono: options.monotonic ?? (() => performance.now()) }, options.page === undefined ? (typeof document === "object" ? document : null) : options.page);
+    this.link = this.#watch;
     this.#commandScheduler = new V1CommandScheduler({
       store: options.pendingStore ?? new InMemoryV1PendingTargetStore(),
       ids: options.ids,
@@ -176,6 +189,7 @@ export class V1SyncClient implements V1CollaborationClient {
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
+    this.#watch.open();
     this.#connectAttemptCount = 0;
     this.#socketCloses = [];
     this.#omittedSocketCloses = 0;
@@ -188,6 +202,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } catch (error) {
       if (startupGeneration === this.#startupGeneration) {
         this.#started = false;
+        this.#watch.close();
       }
       throw error;
     }
@@ -199,6 +214,7 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   stop(): void {
     this.#started = false;
+    this.#watch.close();
     this.#entryPending = false;
     this.#entryGeneration = null;
     this.#startupGeneration += 1;
@@ -232,6 +248,10 @@ export class V1SyncClient implements V1CollaborationClient {
     // Without negotiation, Sync confirmed the entry at hello.
     if (!this.#entryNegotiated) return;
     this.#send({ type: "entered" });
+  }
+  /** True when the connected Sync advertised `media_off_reason` in its welcome, so media items may carry `off_reason`. */
+  offReasonNegotiated(): boolean {
+    return this.#offReasonNegotiated;
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -403,6 +423,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (this.#connectFailure?.opened) this.#connectFailure = undefined;
     this.#emit();
     this.#entryNegotiated = false;
+    this.#offReasonNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(entryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -451,11 +472,12 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#clock().setTimeout(() => {
         if (connectionGeneration !== this.#connectionGeneration) return;
         this.#inbound = this.#inbound.then(() => {
+          const legacyHello = event.code === 1009 && this.#legacyHelloRejected(socket);
           if (socket === this.#socket && event.code === 1008 && (event.reason === "" || event.reason === "invalid token" || event.reason === "policy violation" || event.reason === "entry timeout")) {
             this.#phase = { phase: "terminal", terminalReason: event.reason === "entry timeout" ? "entry_timeout" : "access_rejected" };
             this.#emit();
           }
-          this.#disconnected(socket);
+          this.#disconnected(socket, legacyHello);
         });
       }, 0);
     };
@@ -472,10 +494,12 @@ export class V1SyncClient implements V1CollaborationClient {
       const token = await this.#options.token();
       if (socket !== this.#socket) return;
       this.#phase = { phase: "recovering" };
+      const baggage = legacyHelloServers.has(this.#options.url) ? undefined : sessionBaggage();
       const hello = {
         type: "hello",
         protocol: 1,
         ...(this.#options.traceparent ? { traceparent: this.#options.traceparent } : {}),
+        ...(baggage ? { baggage } : {}),
         token,
         streams: {
           control: { cursor: this.#control && { revision: this.#control.revision, state_schema_version: this.#control.stateSchemaVersion, state_digest: this.#control.stateDigest } },
@@ -485,6 +509,7 @@ export class V1SyncClient implements V1CollaborationClient {
         },
       } as const;
       const collaborationExtension = this.#collaborationState.helloExtension;
+      this.#baggageHelloSocket = baggage ? socket : null;
       if (!collaborationExtension) {
         this.#send(hello);
       } else {
@@ -504,7 +529,7 @@ export class V1SyncClient implements V1CollaborationClient {
     } catch (error) {
       if (this.#snapshotRecoveryRequested) this.#failDigestRecovery();
       else if (error instanceof V1StateDigestMismatchError) this.#recoverDigestMismatch();
-      else this.#recover("invalid_frame");
+      else this.#recover("invalid_frame", error instanceof V1ReplicaError && error.message === "invalid_frame" && this.#legacyHelloRejected(socket));
     }
   }
   async #handleFrame(frame: SyncV1ServerFrame): Promise<void> {
@@ -617,6 +642,7 @@ export class V1SyncClient implements V1CollaborationClient {
         return;
       case "pong": {
         this.#requireLive();
+        this.#watch.ponged();
         this.#missedHeartbeats = 0;
         this.#lastHeartbeatReplyAt = this.#now();
         const previous = this.#health.health;
@@ -635,8 +661,10 @@ export class V1SyncClient implements V1CollaborationClient {
     >,
   ): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
+    this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
+    this.#offReasonNegotiated = frame.media_off_reason === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -746,6 +774,9 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#media = updateProjection(this.#media, frame.projection_id, frame.sequence, item, mediaKey);
       rememberBoundedEvidence(this.#mediaEventEvidence, frame.sequence, frameSignature(frame), MAX_PROJECTION_EVENT_EVIDENCE);
       this.#notifyRemotePublicationResumed(previous, item);
+      if (!this.#mediaEnded() && item.participantId === this.#participantId && previous?.publicationId && previous.publicationId !== item.publicationId) {
+        this.#options.mediaPlane?.localPublicationWithdrawn?.(previous.publicationId);
+      }
       if (!this.#mediaEnded() && item.participantId !== this.#participantId && (previous?.enabled !== item.enabled || previous?.publicationId !== item.publicationId)) {
         this.#options.mediaPlane?.remotePublicationsChanged?.(this.#media?.items ?? []);
       }
@@ -844,7 +875,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (evidence.get(frame.sequence) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate projection event");
     return true;
   }
-  #disconnected(socket: V1Socket): void {
+  #disconnected(socket: V1Socket, retryNow = false): void {
     if (socket !== this.#socket) return;
     this.#socket = null;
     this.#clearDial();
@@ -863,6 +894,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     if (!this.#transportAvailable) return;
     this.#clearReconnect();
+    if (retryNow) {
+      this.#reconnectTimer = this.#clock().setTimeout(() => {
+        this.#reconnectTimer = undefined;
+        this.#connect();
+      }, 0);
+      return;
+    }
     const configuredDelay = this.#options.reconnectDelayMs;
     // Cover brief service restarts without a growing gap; sustained failures
     // still back off, and explicitly configured retry policies are unchanged.
@@ -876,11 +914,21 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#connect();
     }, delay);
   }
-  #recover(reason: string): void {
+  #recover(reason: string, retryNow = false): void {
     const socket = this.#socket;
     if (!socket) return;
     socket.close(CLIENT_RESTART_CLOSE_CODE, reason);
-    this.#disconnected(socket);
+    this.#disconnected(socket, retryNow);
+  }
+  /**
+   * A Sync that predates the session ID rejects any hello with an unknown `baggage` field before welcome. The first
+   * rejection marks that server as legacy, so the retry and every later reconnect send the hello without it.
+   */
+  #legacyHelloRejected(socket: V1Socket): boolean {
+    if (this.#baggageHelloSocket !== socket) return false;
+    this.#baggageHelloSocket = null;
+    legacyHelloServers.add(this.#options.url);
+    return true;
   }
   #recoverDigestMismatch(): void {
     const now = this.#clock().now();
@@ -1018,7 +1066,7 @@ export class V1SyncClient implements V1CollaborationClient {
         this.#socket?.close(CLIENT_RESTART_CLOSE_CODE, "heartbeat timeout");
         return;
       }
-      this.#send({ type: "ping" });
+      if (!this.#sendPing()) return;
       this.#startHeartbeat();
     }, 20000);
   }
@@ -1029,7 +1077,8 @@ export class V1SyncClient implements V1CollaborationClient {
   }
   #startNoticeProbe(): void {
     this.#clearNoticeProbe();
-    this.#send({ type: "ping" });
+    this.#watch.restart();
+    this.#sendPing();
     this.#health = new V1SyncHealth(this.#now());
     const tick = () => {
       this.#noticeProbeTimer = undefined;
@@ -1037,7 +1086,7 @@ export class V1SyncClient implements V1CollaborationClient {
       const previous = this.#health.health;
       this.#health.check(this.#now());
       if (previous !== this.#health.health) this.#emit();
-      this.#send({ type: "ping" });
+      if (!this.#sendPing()) return;
       this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
     };
     this.#noticeProbeTimer = this.#clock().setTimeout(tick, SYNC_HEALTH_BUDGET.probeIntervalMs);
@@ -1046,6 +1095,16 @@ export class V1SyncClient implements V1CollaborationClient {
       this.#health.check(this.#now());
       this.#emit();
     }, SYNC_HEALTH_BUDGET.degradedAfterMs);
+  }
+  // The link watch times each ping, so every ping goes through here. When the oldest ping has gone unanswered for over 60 s, the
+  // old heartbeat timeout, the socket is dead: it is replaced through the normal reconnect and this ping is not sent.
+  #sendPing(): boolean {
+    if (!this.#watch.pinged()) {
+      this.#recover("ping unanswered for 60 s");
+      return false;
+    }
+    this.#send({ type: "ping" });
+    return true;
   }
   #clearNoticeProbe(): void {
     if (this.#noticeTimer !== undefined) this.#clock().clearTimeout(this.#noticeTimer);
@@ -1065,7 +1124,14 @@ function updateProjection<T>(projection: V1Projection<T> | null, projectionId: s
   return { projectionId, sequence, items: [...projection.items.filter((candidate) => key(candidate) !== itemKey), item] };
 }
 function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublication {
-  return { participantId: item.participant_id, source: item.source, enabled: item.enabled, publicationId: item.publication_id };
+  return {
+    participantId: item.participant_id,
+    source: item.source,
+    enabled: item.enabled,
+    publicationId: item.publication_id,
+    ...(item.off_reason === undefined ? {} : { offReason: item.off_reason }),
+    ...(item.off_revision === undefined ? {} : { offRevision: item.off_revision }),
+  };
 }
 function presenceItem(item: typeof import("../generated/sync").PresenceProjectionItemSchema.Type): V1Presence {
   return { participantId: item.participant_id, admissionRevision: item.admission_revision, identityId: item.identity_id, deviceType: item.device_type, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
@@ -1112,6 +1178,8 @@ function entryUrl(value: string, generation: number | null, confirmation: boolea
   const url = new URL(value);
   url.searchParams.set("participant_devices", "1");
   url.searchParams.set("participant_device_admissions", "2");
+  // Previous Sync ignores this query and sends the earlier item shape, which means "no evidence".
+  url.searchParams.set("media_off_reason", "1");
   url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
   if (confirmation) url.searchParams.set("entry_confirmation", "1");
   return url.toString();

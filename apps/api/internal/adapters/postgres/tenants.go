@@ -144,6 +144,8 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 		TranscriptionCeilingSet:       input.ArtifactPolicy.TranscriptionCeiling.Set,
 		TranscriptionCeiling:          requiredText(input.ArtifactPolicy.TranscriptionCeiling),
 		TranscriptionDefaultModeSet:   input.ArtifactPolicy.TranscriptionDefaultMode.Set,
+		TranscriptLanguageSet:         input.ArtifactPolicy.TranscriptLanguage.Set,
+		TranscriptLanguage:            optionalLanguageValue(input.ArtifactPolicy.TranscriptLanguage.Value),
 		TranscriptionDefaultMode:      requiredText(input.ArtifactPolicy.TranscriptionDefaultMode),
 		ProviderPolicyVersionSet:      input.ArtifactPolicy.ProviderPolicyVersion.Set,
 		ProviderPolicyVersion:         text(input.ArtifactPolicy.ProviderPolicyVersion.Value),
@@ -220,6 +222,7 @@ type tenantRecord struct {
 	CreatedAt                  pgtype.Timestamptz
 	TranscriptionCeiling       string
 	TranscriptionDefaultMode   string
+	TranscriptLanguage         string
 	ProviderPolicyVersion      string
 	RecordingRetentionSeconds  int64
 	TranscriptRetentionSeconds int64
@@ -238,6 +241,7 @@ func tenantArtifactPolicy(tenant tenantRecord) artifactpolicy.TenantPolicy {
 	return artifactpolicy.TenantPolicy{
 		TranscriptionCeiling:      ceiling,
 		TranscriptionDefault:      defaultMode,
+		TranscriptLanguage:        storedTranscriptLanguage(tenant.TranscriptLanguage),
 		ProviderPolicyVersion:     tenant.ProviderPolicyVersion,
 		RecordingRetention:        time.Duration(tenant.RecordingRetentionSeconds) * time.Second,
 		TranscriptRetention:       time.Duration(tenant.TranscriptRetentionSeconds) * time.Second,
@@ -261,6 +265,7 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		TranscriptLanguage:         row.TranscriptLanguage,
 		ProviderPolicyVersion:      row.ProviderPolicyVersion,
 		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
 		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
@@ -286,6 +291,7 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		TranscriptLanguage:         row.TranscriptLanguage,
 		ProviderPolicyVersion:      row.ProviderPolicyVersion,
 		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
 		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
@@ -311,6 +317,7 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		TranscriptLanguage:         row.TranscriptLanguage,
 		ProviderPolicyVersion:      row.ProviderPolicyVersion,
 		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
 		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,
@@ -336,6 +343,7 @@ func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 		Website:                    row.Website,
 		TranscriptionCeiling:       row.TranscriptionCeiling,
 		TranscriptionDefaultMode:   row.TranscriptionDefaultMode,
+		TranscriptLanguage:         row.TranscriptLanguage,
 		ProviderPolicyVersion:      row.ProviderPolicyVersion,
 		RecordingRetentionSeconds:  row.RecordingRetentionSeconds,
 		TranscriptRetentionSeconds: row.TranscriptRetentionSeconds,

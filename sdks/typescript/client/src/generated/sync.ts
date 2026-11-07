@@ -109,11 +109,20 @@ export const SyncProtocolMetadata = {
         pattern: "^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$",
       },
     },
+    helloOnlyFields: {
+      baggage: {
+        kind: "string",
+        minBytes: 47,
+        maxBytes: 47,
+        format: "w3c-baggage-session-id",
+        pattern: "^session\\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      },
+    },
     acceptedOn: {
       hello: "client-to-server",
       serverFrames: "server-to-client",
     },
-    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate"],
+    upgradeHeaders: ["x-chalk-journey-id", "traceparent", "tracestate", "baggage"],
     rule: "propagate_from_first_observed_layer_to_every_downstream_frame",
   },
   externalIntents: [
@@ -428,7 +437,9 @@ function strictCommand(value: Record<string, unknown>): boolean {
 function strictCollaborationsHelloExtension(value: unknown): boolean {
   return exactObject(value, ["name", "chat_cursor"]) && ["collaboration_v1", "collaboration_v2"].includes(String(value.name)) && exactObject(value.chat_cursor, ["after_sequence", "retained_floor_sequence"]);
 }
-function strictHello(value: Record<string, unknown>): boolean {
+function strictHello(hello: Record<string, unknown>): boolean {
+  const { baggage, ...value } = hello;
+  if (baggage !== undefined && !(typeof baggage === "string" && boundedCorrelationString(baggage, 47, 47) && /^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(baggage))) return false;
   const base = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams"]);
   const extended = exactObjectWithCorrelation(value, ["type", "protocol", "token", "streams", "extensions"]) && Array.isArray(value.extensions) && value.extensions.length === 1 && strictCollaborationsHelloExtension(value.extensions[0]);
   if ((!base && !extended) || !exactObject(value.streams, ["control", "media", "presence", "requests"])) return false;
@@ -597,8 +608,13 @@ function strictEvent(value: Record<string, unknown>): boolean {
       return false;
   }
 }
+function validMediaOffReason(item: Record<string, unknown>): boolean {
+  if (!Object.hasOwn(item, "off_reason")) return !Object.hasOwn(item, "off_revision");
+  if (item.off_reason === "host") return Number.isInteger(item.off_revision) && (item.off_revision as number) > 0;
+  return item.enabled === false && (item.off_reason === "self" || item.off_reason === "dead") && !Object.hasOwn(item, "off_revision");
+}
 function strictProjectionItem(value: unknown, stream: unknown): boolean {
-  if (stream === "media") return exactObject(value, ["participant_id", "source", "enabled", "publication_id"]);
+  if (stream === "media") return isObject(value) && exactObject(value, [...["participant_id", "source", "enabled", "publication_id"], ...(Object.hasOwn(value, "off_reason") ? ["off_reason"] : []), ...(Object.hasOwn(value, "off_revision") ? ["off_revision"] : [])]) && validMediaOffReason(value);
   if (stream === "presence")
     return (
       isObject(value) &&
@@ -616,10 +632,12 @@ function strictWelcome(value: Record<string, unknown>): boolean {
   const extensionValid =
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
+  if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
     ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
+    ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -725,10 +743,11 @@ export const TraceparentSchema = boundedUtf8String(55, 55).check(
 export const TracestateSchema = boundedUtf8String(512, 1).check(
   Schema.makeFilter((value) => (new RegExp("^[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256}(,[a-z][a-z0-9_*\\-/]{0,255}=[\\x21-\\x2b\\x2d-\\x3c\\x3e-\\x7e]{1,256})*$", "u").test(value) ? undefined : { path: [], issue: "must be a valid bounded W3C tracestate" })),
 );
+export const BaggageSchema = boundedUtf8String(47, 47).check(Schema.makeFilter((value) => (/^session\.id=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value) ? undefined : { path: [], issue: "must be the single W3C baggage member session.id=<lowercase UUID>" })));
 export const SyncCorrelationFieldsSchema = Schema.Struct({ journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) });
 export type SyncCorrelationFields = typeof SyncCorrelationFieldsSchema.Type;
-const HelloCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };
-const ServerCorrelationFields = { ...HelloCorrelationFields };
+const ServerCorrelationFields = { journey_id: Schema.optional(JourneyIdSchema), traceparent: Schema.optional(TraceparentSchema), tracestate: Schema.optional(TracestateSchema) };
+const HelloCorrelationFields = { ...ServerCorrelationFields, baggage: Schema.optional(BaggageSchema) };
 export const StateDigestSchema = Schema.String.check(Schema.makeFilter((value) => (/^[0-9a-f]{64}$/u.test(value) ? undefined : { path: [], issue: "must be a lowercase hexadecimal SHA-256 digest" })));
 export const UnsignedDecimalSchema = Schema.String.check(Schema.makeFilter((value) => (/^(?:0|[1-9][0-9]*)$/u.test(value) ? undefined : { path: [], issue: "must be an unsigned decimal integer" })));
 export const CommandIdSchema = boundedUtf8String(64).check(Schema.makeFilter((value) => (textEncoder.encode(value).byteLength >= 16 ? undefined : { path: [], issue: "must meet the command ID minimum byte length" })));
@@ -1283,6 +1302,7 @@ const WelcomeBase = {
   recovery_id: UuidSchema,
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
+  media_off_reason: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
@@ -1329,9 +1349,14 @@ export const SatisfiedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack
 export const RejectedAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("rejected"), reason: RejectionReasonSchema, ...ServerCorrelationFields });
 export const CommandIdConflictAckFrameSchema = Schema.Struct({ type: Schema.Literal("ack"), command_id: CommandIdSchema, delivery: AckDeliverySchema, outcome: Schema.Literal("command_id_conflict"), reason: Schema.Literal("command_id_conflict"), ...ServerCorrelationFields });
 
-export const MediaProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]), enabled: Schema.Boolean, publication_id: Schema.NullOr(boundedUtf8String(256, 1)) }).check(
-  Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })),
-);
+export const MediaProjectionItemSchema = Schema.Struct({
+  participant_id: UuidSchema,
+  source: Schema.Union([Schema.Literal("microphone"), Schema.Literal("camera"), Schema.Literal("screen")]),
+  enabled: Schema.Boolean,
+  publication_id: Schema.NullOr(boundedUtf8String(256, 1)),
+  off_reason: Schema.optional(Schema.Literals(["host", "self", "dead"])),
+  off_revision: Schema.optional(PositiveIntegerSchema),
+}).check(Schema.makeFilter((item) => (!item.enabled || item.publication_id !== null ? undefined : { path: [], issue: "enabled requires a publication_id" })));
 export const PresenceProjectionItemSchema = Schema.Struct({
   participant_id: UuidSchema,
   state: Schema.Union([Schema.Literal("connected"), Schema.Literal("disconnected")]),

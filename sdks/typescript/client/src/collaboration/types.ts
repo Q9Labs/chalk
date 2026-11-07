@@ -9,6 +9,10 @@ export type ChalkParticipantMediaState = {
   readonly camera: "active" | "inactive" | "unknown";
   readonly screenShare: "active" | "inactive" | "unknown";
   readonly screenShareHasAudio?: boolean;
+  /** The active camera publication, for `setVideoTileVisibility` before its video is pulled. */
+  readonly cameraPublicationId?: string;
+  /** The active screen-share video publication, for `setVideoTileVisibility`. */
+  readonly screenSharePublicationId?: string;
 };
 
 export const CHALK_REACTIONS = ReactionValues;
