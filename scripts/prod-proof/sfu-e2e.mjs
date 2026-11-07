@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Live end-to-end scenarios for one media provider, driven by real SDK clients in headless Chromium.
 //
-//   CHALK_PROOF_MEDIA_PLANE=chalk_sfu node scripts/prod-proof/sfu-e2e.mjs ten publisher-leaves background
+//   CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:sfu-e2e ten publisher-leaves background
 //
 // Scenarios (default: all that need no outside command):
 //   ten               ten clients with camera and microphone; every client receives media from every other
@@ -24,14 +24,17 @@ import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 
 const shell = (script) => command("sh", ["-c", script]);
 
+const sameStream = (row) => (candidate) => candidate.id === row.id && candidate.connection === row.connection;
+
+function advanced(row, was, kind) {
+  if (!was || !(row.bytesReceived > was.bytesReceived)) return false;
+  return kind !== "video" || row.framesDecoded > was.framesDecoded;
+}
+
 // Streams of one kind and source whose counters grew between two samples of one guest.
 function moving(rows, before, kind, source) {
-  return rows.filter((row) => {
-    if (row.type !== "inbound-rtp" || row.kind !== kind || row.source !== source) return false;
-    const was = before.find((candidate) => candidate.id === row.id && candidate.connection === row.connection);
-    if (!was || !(row.bytesReceived > was.bytesReceived)) return false;
-    return kind !== "video" || row.framesDecoded > was.framesDecoded;
-  }).length;
+  const isStream = (row) => row.type === "inbound-rtp" && row.kind === kind && row.source === source;
+  return rows.filter((row) => isStream(row) && advanced(row, before.find(sameStream(row)), kind)).length;
 }
 
 async function movement(pages, windowMs) {
@@ -167,6 +170,23 @@ function impairment() {
 const guestCounts = { ten: 10 };
 const defaults = ["ten", "publisher-leaves", "background"];
 
+async function runScenario(run, receiver, name) {
+  const mark = run.resources.length;
+  const teardown = [];
+  const reason = (error) => (error instanceof Error ? error.message : String(error));
+  let call;
+  let outcome;
+  try {
+    call = await openCall(run, receiver, guestCounts[name] ?? 3);
+    outcome = { result: "passed", ...(await scenarios[name](call)) };
+  } catch (error) {
+    outcome = { result: "failed", error: reason(error) };
+  }
+  if (call) await call.end().catch((error) => teardown.push(`end Episode: ${reason(error)}`));
+  for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => teardown.push(`dispose: ${reason(error)}`));
+  return teardown.length ? { ...outcome, result: "failed", teardown } : outcome;
+}
+
 async function main() {
   const names = process.argv.slice(2).length ? process.argv.slice(2) : defaults;
   for (const name of names) check(name in scenarios, `Unknown scenario ${name}`, "configuration");
@@ -182,18 +202,7 @@ async function main() {
     run = await createRun(config, directory, undefined, runId);
     const receiver = await prepareIntegration(run, false);
     for (const name of names) {
-      const mark = run.resources.length;
-      let call;
-      const teardown = [];
-      try {
-        call = await openCall(run, receiver, guestCounts[name] ?? 3);
-        report.scenarios[name] = { result: "passed", ...(await scenarios[name](call)) };
-      } catch (error) {
-        report.scenarios[name] = { result: "failed", error: error instanceof Error ? error.message : String(error) };
-      }
-      if (call) await call.end().catch((error) => teardown.push(`end Episode: ${error instanceof Error ? error.message : String(error)}`));
-      for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => teardown.push(`dispose: ${error instanceof Error ? error.message : String(error)}`));
-      if (teardown.length) report.scenarios[name] = { ...report.scenarios[name], result: "failed", teardown };
+      report.scenarios[name] = await runScenario(run, receiver, name);
       console.log(`${name}: ${report.scenarios[name].result}`);
     }
   } catch (error) {
