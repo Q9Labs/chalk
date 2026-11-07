@@ -170,52 +170,76 @@ function impairment() {
 const guestCounts = { ten: 10 };
 const defaults = ["ten", "publisher-leaves", "background"];
 
-async function runScenario(run, receiver, name) {
-  const mark = run.resources.length;
-  const teardown = [];
-  const reason = (error) => (error instanceof Error ? error.message : String(error));
+const reason = (error) => (error instanceof Error ? error.message : String(error));
+
+function scenarioNames() {
+  const names = process.argv.slice(2).length ? process.argv.slice(2) : defaults;
+  for (const name of names) check(name in scenarios, `Unknown scenario ${name}`, "configuration");
+  return names;
+}
+
+async function play(run, receiver, name) {
   let call;
-  let outcome;
   try {
     call = await openCall(run, receiver, guestCounts[name] ?? 3);
-    outcome = { result: "passed", ...(await scenarios[name](call)) };
+    return { call, outcome: { result: "passed", ...(await scenarios[name](call)) } };
   } catch (error) {
-    outcome = { result: "failed", error: reason(error) };
+    return { call, outcome: { result: "failed", error: reason(error) } };
   }
-  if (call) await call.end().catch((error) => teardown.push(`end Episode: ${reason(error)}`));
-  for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => teardown.push(`dispose: ${reason(error)}`));
+}
+
+// tearDown returns every failure to end the Episode or dispose a resource.
+async function tearDown(run, call, mark) {
+  const failures = [];
+  if (call) await call.end().catch((error) => failures.push(`end Episode: ${reason(error)}`));
+  for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => failures.push(`dispose: ${reason(error)}`));
+  return failures;
+}
+
+async function runScenario(run, receiver, name) {
+  const mark = run.resources.length;
+  const { call, outcome } = await play(run, receiver, name);
+  const teardown = await tearDown(run, call, mark);
   return teardown.length ? { ...outcome, result: "failed", teardown } : outcome;
 }
 
-async function main() {
-  const names = process.argv.slice(2).length ? process.argv.slice(2) : defaults;
-  for (const name of names) check(name in scenarios, `Unknown scenario ${name}`, "configuration");
-  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
-  const directory = resolve(".private", "prod-proof", runId);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const report = { provider: mediaPlane, startedAt: new Date().toISOString(), scenarios: {} };
-  let run;
-  try {
-    const config = await loadConfig();
-    await sweepStaleRuns(config);
-    run = await createRun(config, directory, undefined, runId);
-    const receiver = await prepareIntegration(run, false);
-    for (const name of names) {
-      report.scenarios[name] = await runScenario(run, receiver, name);
-      console.log(`${name}: ${report.scenarios[name].result}`);
-    }
-  } catch (error) {
-    report.error = errorEvidence(error);
-    publicFailure("sfu-e2e", error);
-  } finally {
-    if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
+async function runScenarios(state, names, report) {
+  const config = await loadConfig();
+  await sweepStaleRuns(config);
+  state.run = await createRun(config, state.directory, undefined, state.runId);
+  const receiver = await prepareIntegration(state.run, false);
+  for (const name of names) {
+    report.scenarios[name] = await runScenario(state.run, receiver, name);
+    console.log(`${name}: ${report.scenarios[name].result}`);
   }
-  report.result = !report.error && !report.cleanupError && Object.values(report.scenarios).every((scenario) => scenario.result === "passed") ? "passed" : "failed";
+}
+
+const allPassed = (report) => !report.error && !report.cleanupError && Object.values(report.scenarios).every((scenario) => scenario.result === "passed");
+
+async function finish(directory, report) {
+  report.result = allPassed(report) ? "passed" : "failed";
   await save(`${directory}/sfu-e2e-${mediaPlane}.json`, report);
   console.log(JSON.stringify(report, null, 2));
   console.log(`Private evidence: ${directory}`);
   if (report.result !== "passed") process.exitCode = 1;
+}
+
+async function main() {
+  const names = scenarioNames();
+  const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
+  runLabel(runId);
+  const state = { runId, directory: resolve(".private", "prod-proof", runId) };
+  await mkdir(state.directory, { recursive: true, mode: 0o700 });
+  const report = { provider: mediaPlane, startedAt: new Date().toISOString(), scenarios: {} };
+  try {
+    await runScenarios(state, names, report);
+  } catch (error) {
+    report.error = errorEvidence(error);
+    publicFailure("sfu-e2e", error);
+  } finally {
+    if (state.run) await cleanupRun(state.run).catch((error) => (report.cleanupError = errorEvidence(error)));
+  }
+  await finish(state.directory, report);
 }
 
 await main();
