@@ -76,7 +76,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
       await guest.getByRole("button", { name: "Join call", exact: true }).click();
       await guest.getByText(/Asking to join/).waitFor();
       if (before || dashboard) return { context, guest, failures };
-      await page.getByRole("button", { name: `Admit ${name}`, exact: true }).waitFor({ timeout: 15000 });
+      await page.getByRole("button", { name: `Let ${name} in`, exact: true }).waitFor({ timeout: 15000 });
       const badge = page.getByLabel("1 waiting to join", { exact: true });
       await badge.waitFor();
       assert.equal(await page.getByRole("tab", { name: /^People/ }).getAttribute("aria-selected"), "true", "A public knock opens People automatically");
@@ -325,7 +325,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     try {
       await page.getByRole("button", { name: /^People,/ }).click();
       await page.getByRole("region", { name: "People", exact: true }).waitFor();
-      await assert.rejects(page.getByRole("button", { name: "Admit Approve guest", exact: true }).waitFor({ timeout: 5000 }), { name: "TimeoutError" });
+      await assert.rejects(page.getByRole("button", { name: "Let Approve guest in", exact: true }).waitFor({ timeout: 5000 }), { name: "TimeoutError" });
       assert.equal(await page.getByLabel("1 waiting to join", { exact: true }).count(), 0);
       await page.screenshot({ path: resolve(out, "before-host-pending.png") });
       await pending.guest.screenshot({ path: resolve(out, "before-guest-pending.png") });
@@ -339,7 +339,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   try {
     await page.screenshot({ path: resolve(out, "after-host-pending.png") });
     await approved.guest.screenshot({ path: resolve(out, "after-guest-pending.png") });
-    await page.getByRole("button", { name: "Admit Approve guest", exact: true }).click();
+    await page.getByRole("button", { name: "Let Approve guest in", exact: true }).click();
     await approved.guest.getByTestId("stage").waitFor({ timeout: 15000 });
     await approved.guest.getByRole("group", { name: "Stage with 2 participants", exact: true }).waitFor({ timeout: 15000 });
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
@@ -353,7 +353,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
 
   const denied = await knock("Deny guest");
   try {
-    await page.getByRole("button", { name: "Deny Deny guest", exact: true }).click();
+    await page.getByRole("button", { name: "Decline Deny guest", exact: true }).click();
     await denied.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
     await terminalProjection("Deny guest", "denied");
     await denied.guest.screenshot({ path: resolve(out, "after-guest-denied.png") });
@@ -367,7 +367,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     // Sync expiry operation, without waiting five minutes in every proof run.
     await promisify(execFile)("psql", [process.env.CHALK_DATABASE_URL, "-v", "ON_ERROR_STOP=1", "-c", `update sync_admission_requests set expires_at=now() where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Expired guest' and status='pending'`]);
     await expired.guest.getByText("Your request to join expired or is no longer available.", { exact: true }).waitFor({ timeout: 20000 });
-    await page.getByRole("button", { name: "Admit Expired guest", exact: true }).waitFor({ state: "hidden", timeout: 20000 });
+    await page.getByRole("button", { name: "Let Expired guest in", exact: true }).waitFor({ state: "hidden", timeout: 20000 });
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
     await terminalProjection("Expired guest", "expired");
     await expired.guest.screenshot({ path: resolve(out, "after-guest-expired.png") });
@@ -377,7 +377,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   }
 
   // Dashboard detail controls use the exact same canonical request and Sync
-  // decision operation as the live SDK's Admit/Deny buttons.
+  // decision operation as the live SDK's Let in/Decline buttons.
   const session = await page.request.get(`${origin}/auth/session`);
   assert.equal(session.status(), 200);
   const { csrfToken } = await session.json();
@@ -414,7 +414,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   }
   const abandoned = await knock("Uncollected guest");
   await abandoned.context.close();
-  await page.getByRole("button", { name: "Admit Uncollected guest", exact: true }).click();
+  await page.getByRole("button", { name: "Let Uncollected guest in", exact: true }).click();
   await waitForSql(`select status from sync_admission_requests where tenant_id='${tenantId}' and space_id='${spaceId}' and display_name='Uncollected guest'`, "admitted");
   await promisify(execFile)("psql", [
     process.env.CHALK_DATABASE_URL,

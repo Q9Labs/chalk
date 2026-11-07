@@ -123,7 +123,7 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 	// An authenticated arrival can collect its approved grant before it has a
 	// media proof. Reuse the admitted Participant and provider connection.
 	if arrival.State == publicinvites.ArrivalAdmitted {
-		return a.resumePublicAccess(ctx, arrival, false)
+		return a.resumePublicAccess(ctx, arrival, input.MediaClients, false)
 	}
 	var result episodes.PublicJoinResult
 	var err error
@@ -147,6 +147,8 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 			IdentityMode: string(arrival.IdentityMode), DisplayName: arrival.DisplayName,
 			Role:    publicinvites.PublicRoleCollaborator,
 			Request: episodes.Request{Key: arrival.IdempotencyKey, Fingerprint: arrival.IdempotencyFingerprint},
+
+			MediaClients: input.MediaClients,
 		})
 	}
 	if err != nil {
@@ -156,7 +158,7 @@ func (a accessPort) GrantPublicAccess(ctx context.Context, input publicinvites.P
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
-	return a.issue(ctx, arrival, ready, false, false)
+	return a.issue(ctx, arrival, ready, input.MediaClients, false, false)
 }
 
 func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
@@ -199,10 +201,10 @@ func (a accessPort) RefreshPublicAccess(ctx context.Context, input publicinvites
 			return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 		}
 	}
-	return a.resumePublicAccess(ctx, arrival, input.ReplaceMediaConnection)
+	return a.resumePublicAccess(ctx, arrival, input.MediaClients, input.ReplaceMediaConnection)
 }
 
-func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvites.Arrival, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
+func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvites.Arrival, clients mediaplane.ClientProviders, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
 	if arrival.Provider == "" || arrival.ProviderSubject == "" {
 		return publicinvites.PublicAccessGrant{}, ErrAccessUnavailable
 	}
@@ -221,7 +223,7 @@ func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvite
 	if result.Participant.TenantID != arrival.TenantID || result.Participant.SpaceID != arrival.SpaceID || result.Participant.EpisodeID != arrival.EpisodeID || result.Participant.ID != arrival.ParticipantID || result.Participant.Generation != arrival.ParticipantGeneration {
 		return publicinvites.PublicAccessGrant{}, publicinvites.ErrMediaProofRejected
 	}
-	return a.issue(ctx, arrival, ready, true, replaceMediaConnection)
+	return a.issue(ctx, arrival, ready, clients, true, replaceMediaConnection)
 }
 
 func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) error {
@@ -246,7 +248,8 @@ func (a accessPort) RevokePublicAccess(ctx context.Context, input publicinvites.
 		return nil
 	}
 	_ = service.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
-		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: arrival.ProviderSubject,
+		Provider: service.Provider(), Scope: scopeOf(arrival.TenantID, arrival.EpisodeID, arrival.ParticipantID, arrival.ParticipantGeneration),
+		EpisodeRef: episode.Ref, ParticipantRef: arrival.ProviderSubject,
 	})
 	return nil
 }
@@ -257,7 +260,8 @@ func (a accessPort) DiscardPublicAccess(ctx context.Context, grant publicinvites
 		return err
 	}
 	return service.RemoveParticipant(ctx, mediaplane.RemoveParticipantInput{
-		Provider: service.Provider(), EpisodeRef: episode.Ref, ParticipantRef: grant.ProviderSubject,
+		Provider: service.Provider(), Scope: scopeOf(grant.TenantID, grant.EpisodeID, grant.ParticipantID, grant.ParticipantGeneration),
+		EpisodeRef: episode.Ref, ParticipantRef: grant.ProviderSubject,
 	})
 }
 
@@ -289,10 +293,15 @@ func (a accessPort) waitReady(ctx context.Context, result episodes.PublicJoinRes
 	}
 }
 
-func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, result episodes.PublicJoinResult, refresh, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
+func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, result episodes.PublicJoinResult, clients mediaplane.ClientProviders, refresh, replaceMediaConnection bool) (publicinvites.PublicAccessGrant, error) {
 	service, episode, err := a.resolveMedia(ctx, arrival.TenantID, arrival.SpaceID, result.Episode.ID, arrival.Provider)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
+	}
+	// The Episode keeps its provider. A guest whose SDK cannot run it is refused
+	// here, before any provider work, and needs a newer app.
+	if !clients.Runs(service.Provider()) {
+		return publicinvites.PublicAccessGrant{}, mediaplane.ErrClientUnsupported
 	}
 	// Guests of an account's Space inherit that account's relay allowance;
 	// anonymous public Spaces have no accountable owner.
@@ -300,12 +309,12 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 	var join mediaplane.Join
 	if refresh && !replaceMediaConnection {
 		join, err = service.ResumeJoin(ctx, mediaplane.ResumeJoinInput{
-			Provider: service.Provider(), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
+			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode, ExternalParticipantID: result.Participant.ID.String(), ConnectionRef: arrival.ProviderSubject,
 			AllowRelay: allowRelay,
 		})
 	} else {
 		join, err = service.CreateJoin(ctx, mediaplane.CreateJoinInput{
-			Provider: service.Provider(), Episode: episode,
+			Provider: service.Provider(), Scope: scopeOf(result.Participant.TenantID, result.Participant.EpisodeID, result.Participant.ID, result.Participant.Generation), Episode: episode,
 			ParticipantName: arrival.DisplayName, ExternalParticipantID: result.Participant.ID.String(), ParticipantPreset: "contributor",
 			Metadata:   map[string]string{"tenant_id": arrival.TenantID.String(), "space_id": arrival.SpaceID.String()},
 			AllowRelay: allowRelay,
@@ -331,11 +340,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		ParticipantID: result.Participant.ID, ParticipantGeneration: result.Participant.Generation,
 		Provider: provider,
 	}
-	if service.Provider() == mediaplane.ProviderCloudflareSFU {
-		mediaSubject.ConnectionID = providerSubject
-	} else {
-		mediaSubject.ProviderSubject = providerSubject
-	}
+	mediaSubject.ConnectionID = providerSubject
 	mediaToken, err := a.mediaTokens.Issue(ctx, mediaSubject)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
@@ -375,9 +380,7 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	if persistedProvider != "" && string(service.Provider()) != persistedProvider {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
-	// Public access is Cloudflare-only in this release. An Episode bound to another
-	// provider refuses here instead of falling back to Cloudflare.
-	if service.Provider() != mediaplane.ProviderCloudflareSFU {
+	if !publicProvider(service.Provider()) {
 		return nil, mediaplane.Episode{}, ErrAccessUnavailable
 	}
 	episode, err := service.EnsureEpisode(ctx, mediaplane.EnsureEpisodeInput{
@@ -393,8 +396,34 @@ func (a accessPort) resolveMedia(ctx context.Context, tenantID, spaceID, episode
 	return service, episode, nil
 }
 
+// scopeOf names the Participant connection a media call acts for. Chalk SFU
+// rejects a call without all four parts; Cloudflare ignores them.
+func scopeOf(tenantID, episodeID, participantID utilities.ID, generation int64) mediaplane.Scope {
+	return mediaplane.Scope{TenantID: tenantID.String(), EpisodeID: episodeID.String(), ParticipantID: participantID.String(), Generation: generation}
+}
+
+// publicProvider reports whether the provider's joins name one connection, which
+// the guest's media proof binds to. Both SFU providers do.
+func publicProvider(provider mediaplane.Provider) bool {
+	return provider == mediaplane.ProviderCloudflareSFU || provider == mediaplane.ProviderChalkSFU
+}
+
 func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (string, publicinvites.PublicAccessClientPayload, error) {
 	switch provider {
+	case mediaplane.ProviderChalkSFU:
+		connectionID, ok := join.ClientPayload["connectionId"].(string)
+		episodeRef, refOK := join.ClientPayload["episodeRef"].(string)
+		if !ok || !refOK || strings.TrimSpace(connectionID) == "" || strings.TrimSpace(episodeRef) == "" {
+			return "", publicinvites.PublicAccessClientPayload{}, ErrAccessUnavailable
+		}
+		iceServers, _ := join.ClientPayload["iceServers"].([]mediaplane.ICEServer)
+		flags, _ := join.ClientPayload["capabilities"].(map[string]any)
+		capabilities := publicinvites.PublicAccessCapabilities{
+			ServerLayerAdaptation: flags["serverLayerAdaptation"] == true,
+			SubscriptionState:     flags["subscriptionState"] == true,
+			ICERestart:            flags["iceRestart"] == true,
+		}
+		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 	case mediaplane.ProviderCloudflareSFU:
 		connectionID, ok := join.ClientPayload["connectionId"].(string)
 		stunServer, stunOK := join.ClientPayload["stunServer"].(string)
@@ -413,11 +442,12 @@ func sameMediaSubject(subject accessgrants.Subject, arrival publicinvites.Arriva
 	if subject.TenantID != arrival.TenantID || subject.SpaceID != arrival.SpaceID || subject.EpisodeID != arrival.EpisodeID || subject.ParticipantID != arrival.ParticipantID || subject.ParticipantGeneration != arrival.ParticipantGeneration || subject.Provider != arrival.Provider {
 		return false
 	}
-	if arrival.Provider == publicinvites.PublicProviderCloudflareSFU {
+	switch arrival.Provider {
+	case publicinvites.PublicProviderCloudflareSFU, publicinvites.PublicProviderChalkSFU:
 		return subject.ConnectionID == arrival.ProviderSubject && subject.ProviderSubject == ""
+	default:
+		return false
 	}
-
-	return false
 }
 
 var _ publicinvites.Access = accessPort{}

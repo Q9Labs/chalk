@@ -1,0 +1,9 @@
+# Broken variants of the code. `run.sh` runs each one and
+# requires TLC to report the named rule as broken.
+# Format: <Break value><TAB><rule TLC must report><TAB><code edit it mirrors>
+admit_ignores_claimed_leave	LeftOnlyByNewestEntry	join_seats.ex validate_entry_dispatch returns :ok while a claimed participant_leave is pending
+leave_never_defers	LeftOnlyByNewestEntry	join_seats.ex prepare_leave returns :ready instead of :pending while a newer entry is issued
+defer_ignores_lease	LeaveEnds	join_seats.ex prepare_leave drops `seat.issued_entry_expires_at > clock_timestamp()`
+claim_ignores_lease	LeftOnlyByNewestEntry	join_seats.ex claim_entry drops `or issued_entry_expires_at > clock_timestamp()`
+supersede_keeps_leaving	LeavingOnlyWhileLeavePending	join_seats.ex claim_entry drops `update participants set status='active'`
+supersede_own_leave	CancelledOnlyByNewerEntry	join_seats.ex claim_entry drops `confirmed_entry_generation < $6` and `entryGeneration < $6`

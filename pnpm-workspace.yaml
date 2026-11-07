@@ -1,7 +1,8 @@
 packages:
   - packages/*
   - sdks/typescript/*
-  - tools/*
+  - tools/contract-fixture-proof
+  - tools/sdk-web-consumer-e2e
   - apps/transcription-dispatcher
   - apps/recording-renderer
   - apps/mobile

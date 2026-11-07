@@ -11,13 +11,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 // Public admission records only associate an authenticated arrival with the
 // canonical Episode request. Sync owns admission, denial, and expiry.
-func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest) (publicinvites.AdmissionRequest, error) {
+func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, request publicinvites.AdmissionRequest, clients mediaplane.ClientProviders) (publicinvites.AdmissionRequest, error) {
 	arrival, err := r.GetArrival(ctx, request.ArrivalHandle)
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, err
@@ -54,7 +55,7 @@ func (r PublicInviteRepository) CreateAdmissionRequest(ctx context.Context, requ
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		episode, _, metric, err := r.lifecycle.ensurePublicLiveEpisode(ctx, queries, tx, arrival.TenantID, arrival.SpaceID, space)
+		episode, _, metric, err := r.lifecycle.ensurePublicLiveEpisode(ctx, queries, tx, arrival.TenantID, arrival.SpaceID, space, clients)
 		if err != nil {
 			return err
 		}

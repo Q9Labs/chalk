@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -205,12 +206,14 @@ func (d *RenderDaemon) reportAttemptFailure(ctx context.Context, lease recording
 	if cause == nil {
 		cause = errors.New("render attempt failed without a cause")
 	}
-	_, reportErr := d.control.Fail(ctx, recordingpipeline.FailureInput{
+	input := recordingpipeline.FailureInput{
 		LeaseInput:  lease,
 		AvailableAt: d.config.Now().UTC().Add(d.config.AttemptRetryDelay),
 		ErrorCode:   defaultRenderFailureCode,
 		ErrorDetail: boundedFailureDetail(cause),
-	})
+	}
+	observability.LogRenderAttemptFailure(ctx, slog.Default(), input)
+	_, reportErr := d.control.Fail(ctx, input)
 	if reportErr != nil {
 		return fmt.Errorf("report recorder render failure: %w", errors.Join(cause, reportErr))
 	}

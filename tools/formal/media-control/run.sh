@@ -4,20 +4,13 @@
 #   ./run.sh               all runs
 #   ./run.sh cf-decided-safety-1src   one run
 #   DEEP=1 ./run.sh       also the deep-* runs (about 20 minutes)
-# Needs Java 11+ and curl. The pinned TLC jar is downloaded once and verified.
+# Needs Java 11+ and curl. The TLA+ tools pin is in ../tla2tools.sh.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
-jar_url="https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
-jar_sha="654aa50197faa48fa0136b41257270de6469d29ef323e7822ead59d2be43ce10"
-jar="${TLA2TOOLS_JAR:-${XDG_CACHE_HOME:-$HOME/.cache}/chalk-tla/tla2tools-${jar_sha:0:12}.jar}"
-
-if [ ! -f "$jar" ]; then
-  mkdir -p "$(dirname "$jar")"
-  curl -fsSL -o "$jar.part" "$jar_url"
-  echo "$jar_sha  $jar.part" | shasum -a 256 -c - >/dev/null || { echo "tla2tools.jar checksum mismatch" >&2; rm -f "$jar.part"; exit 1; }
-  mv "$jar.part" "$jar"
-fi
+# shellcheck source=../tla2tools.sh
+source "$here/../tla2tools.sh"
+jar="$(tla2tools_jar)"
 
 mkdir -p "$here/results"
 work=$(mktemp -d)
@@ -33,12 +26,12 @@ tlc_check() {
   start=$(date +%s)
   # TLC exits non-zero when it finds a violation.
   (cd "$work" && java -Xmx6g -XX:+UseParallelGC -cp "$jar" tlc2.TLC -workers "${TLC_WORKERS:-auto}" \
-      -noTE -metadir "$work/states" -config "$cfg" "$tla" > "$work/$name.log" 2>&1) || true
+      -metadir "$work/states" -config "$cfg" "$tla" > "$work/$name.log" 2>&1) || true
   seconds=$(( $(date +%s) - start ))
 
   grep -v -E "^(Parsing file|Semantic processing|Linting of module|Trace exploration spec path|Running breadth-first|Starting\.\.\.|Progress\()" "$work/$name.log" > "$here/results/$name.txt"
   if grep -q "Model checking completed. No error has been found" "$work/$name.log"; then outcome=pass
-  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated" "$work/$name.log"; then outcome=violated
+  elif grep -q -E "(Invariant|property|Temporal property) .* (is|was) violated|Temporal properties were violated" "$work/$name.log"; then outcome=violated
   else outcome=error; fi
   counts=$(grep -E "^[0-9,]+ states generated" "$work/$name.log" | tail -1)
   gen=$(echo "$counts" | sed -E 's/^([0-9,]+) states generated.*/\1/')

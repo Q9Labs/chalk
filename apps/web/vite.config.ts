@@ -20,6 +20,8 @@ const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
 const localWebOrigin = `http://127.0.0.1:${localWebPort}`;
 const localAPIOrigin = process.env.CHALK_DEV_API_ORIGIN?.trim() || "http://127.0.0.1:8080";
+const localSyncOrigin = process.env.CHALK_DEV_SYNC_ORIGIN?.trim() || "http://127.0.0.1:4100";
+const publicHost = process.env.PUBLIC_ORIGIN?.trim() ? new URL(process.env.PUBLIC_ORIGIN).hostname : undefined;
 function resolveCommitHash(configuredHash: string | undefined): string {
   const candidate = configuredHash || execSync("git rev-parse HEAD").toString().trim();
   if (!/^[0-9a-f]{40}$/.test(candidate)) {
@@ -72,7 +74,15 @@ const config = defineConfig({
   server: {
     host: "127.0.0.1",
     port: localWebPort,
+    // A reverse proxy forwards the public hostname here; Vite rejects hosts it was not told about.
+    allowedHosts: publicHost ? [publicHost] : undefined,
     proxy: {
+      // Sync's socket shares the public origin, so a browser off this box needs one address for web, API and Sync.
+      "/v1/sync": {
+        target: localSyncOrigin,
+        ws: true,
+        changeOrigin: true,
+      },
       "/v1": {
         target: localAPIOrigin,
         changeOrigin: true,

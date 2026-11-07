@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -58,6 +58,36 @@ test("the CLI scans Git-visible TypeScript variants and keeps only the generated
     await rm(path);
   }
   await writeFile(join(root, "safe.ts"), "export const value: unknown = 1;\n");
+  const safe = run();
+  assert.equal(safe.status, 0, safe.stderr);
+  assert.match(safe.stdout, /0 existing violations remain across 1 scanned files/u);
+});
+
+test("the CLI tolerates unstaged deletions and scans unstaged renames", async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "chalk-any-deletions-")));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const gates = join(root, "scripts/gates");
+  await mkdir(gates, { recursive: true });
+  await mkdir(join(root, "node_modules"));
+  const require = createRequire(import.meta.url);
+  await symlink(dirname(require.resolve("typescript/package.json")), join(root, "node_modules/typescript"), "dir");
+  await copyFile(new URL("./explicit-any.mjs", import.meta.url), join(gates, "explicit-any.mjs"));
+  await writeFile(join(gates, "explicit-any-baseline.json"), "[]\n");
+  assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+  await writeFile(join(root, "gone.ts"), "export type Gone = unknown;\n");
+  await writeFile(join(root, "old.ts"), "export type Old = unknown;\n");
+  assert.equal(spawnSync("git", ["add", "gone.ts", "old.ts"], { cwd: root }).status, 0);
+  await rm(join(root, "gone.ts"));
+  await rename(join(root, "old.ts"), join(root, "new.ts"));
+  await writeFile(join(root, "new.ts"), "type Unsafe = any;\n");
+
+  const run = () => spawnSync(process.execPath, [join(gates, "explicit-any.mjs")], { cwd: root, encoding: "utf8" });
+  const unsafe = run();
+  assert.equal(unsafe.status, 1, `${unsafe.stdout}\n${unsafe.stderr}`);
+  assert.ok(unsafe.stderr.includes("new.ts:1"), unsafe.stderr);
+  assert.doesNotMatch(unsafe.stderr, /ENOENT/u);
+
+  await writeFile(join(root, "new.ts"), "export type Safe = unknown;\n");
   const safe = run();
   assert.equal(safe.status, 0, safe.stderr);
   assert.match(safe.stdout, /0 existing violations remain across 1 scanned files/u);
