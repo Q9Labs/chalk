@@ -26,7 +26,7 @@ func bindMCPArtifactTools(server *mcp.Server, o Options) {
 		ref := transcriptDocumentRequest{TenantID: b.tenant, TranscriptID: b.optionalID(i.TranscriptID)}
 		switch i.View {
 		case "metadata":
-			return mcpInvoke(b, getTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), getTranscriptRequest{TenantID: ref.TenantID, TranscriptID: ref.TranscriptID})
+			return mcpInvoke(b, getTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), getTranscriptRequest(ref))
 		case "text":
 			return mcpInvoke(b, transcriptTextEndpoint(o.TranscriptArtifacts, o.RecordingObjects, o.TranscriptTextMetadata, o.TenantAuthz), ref)
 		case "document":
