@@ -349,7 +349,7 @@ async function dashboard(request, response, page, url, entry) {
     if (page === "connections") {
       const start = Number(query.cursor ?? 0);
       const end = start + 25;
-      return send(response, 200, { connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null });
+      return send(response, 200, { mcpUrl: "https://api.chalk.test/mcp", connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null });
     }
     if (page === "developer")
       return send(response, 200, {

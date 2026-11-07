@@ -8,7 +8,7 @@ const handle = `chalk_oar_${"a".repeat(43)}`;
 const tenantId = "11111111-1111-4111-8111-111111111111";
 
 function engine(api: Record<string, unknown>) {
-  return { api: { default: api, tenants: { getTenant: () => Effect.succeed({ name: "Hasan Shoaib" }) } }, tenantId, dashboardOrigin: "https://dashboard.example.test" } as unknown as Engine;
+  return { api: { default: api, tenants: { getTenant: () => Effect.succeed({ name: "Hasan Shoaib" }) } }, tenantId, dashboardOrigin: "https://dashboard.example.test", mcpUrl: "https://api.example.test/mcp" } as unknown as Engine;
 }
 
 it("approves for the signed-in session's tenant and never a tenant from the request", async () => {
@@ -37,6 +37,7 @@ it("shows what the app asked for and lists and revokes connections for the sessi
   const page = await connectionsPage(engine({ listMCPConnections: list }), "cursor-1");
   expect(page.connections[0]).toMatchObject({ clientName: "ChatGPT", lastUsedAt: null });
   expect(page.nextCursor).toBe("next");
+  expect(page.mcpUrl).toBe("https://api.example.test/mcp");
   expect(list).toHaveBeenCalledWith({ params: { tenant_id: tenantId }, query: { page_size: 25, cursor: "cursor-1" } });
 
   const revoke = vi.fn(() => Effect.succeed(undefined));

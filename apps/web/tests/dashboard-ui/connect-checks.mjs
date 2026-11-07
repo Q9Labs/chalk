@@ -131,15 +131,59 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
+    const { tab, context } = await open("/dashboard/developer");
+    try {
+      const tiles = tab.locator(".ctile");
+      await tiles.first().waitFor();
+      check("the catalog lists the clients that can connect", (await tiles.count()) === 7);
+      const boxes = await tiles.evaluateAll((nodes) => nodes.map((node) => ({ w: Math.round(node.getBoundingClientRect().width), h: Math.round(node.getBoundingClientRect().height) })));
+      check(
+        "every tile is the same size",
+        boxes.every((box) => box.w === boxes[0].w && box.h === boxes[0].h),
+      );
+      const off = await tiles.evaluateAll((nodes) =>
+        nodes.flatMap((node) => {
+          const tile = node.querySelector(".alogo")?.getBoundingClientRect();
+          const art = node.querySelector(".alogo img, .alogo .glyph")?.getBoundingClientRect();
+          if (!tile || !art) return [];
+          const dx = Math.abs(tile.x + tile.width / 2 - (art.x + art.width / 2));
+          const dy = Math.abs(tile.y + tile.height / 2 - (art.y + art.height / 2));
+          return dx < 1.5 && dy < 1.5 ? [] : [node.querySelector(".nm")?.textContent];
+        }),
+      );
+      check("logos sit centred inside their tiles", off.length === 0);
+      check("a connected app shows Connected and the same name with a suffix does not", (await tiles.filter({ hasText: "Claude" }).first().innerText()).includes("Connected") && !(await tiles.filter({ hasText: "Claude Code" }).innerText()).includes("Connected"));
+      check("an app that can't connect yet says Soon", (await tiles.filter({ hasText: "Grok" }).innerText()).includes("Soon"));
+      const search = tab.getByRole("searchbox", { name: "Search AI apps" });
+      await search.fill("codex");
+      check("search narrows the catalog", (await tiles.count()) === 1);
+      await search.fill("zzz");
+      check("search with no match says so", await tab.getByText("No app matches “zzz”.").isVisible());
+      await search.fill("");
+      await tab.getByRole("button", { name: "Coding agents" }).click();
+      check("the kind filter shows only coding agents", (await tiles.count()) === 4);
+      await tab.getByRole("button", { name: "All" }).click();
+      await tiles.filter({ hasText: "Claude Code" }).click();
+      const sheet = tab.getByRole("dialog");
+      check("a client sheet gives the command with this server's address", (await sheet.locator("code").innerText()) === "claude mcp add --transport http chalk https://api.chalk.test/mcp");
+      await tab.keyboard.press("Escape");
+      await tiles.filter({ hasText: "Claude" }).first().click();
+      check("a chat app sheet gives the URL and numbered steps", (await sheet.locator("code").innerText()) === "https://api.chalk.test/mcp" && (await sheet.locator("ol li").count()) === 5);
+      await tab.keyboard.press("Escape");
+      await tiles.filter({ hasText: "Grok" }).click();
+      check("an app that can't connect yet offers no steps", (await sheet.locator("code, ol").count()) === 0 && (await sheet.getByText("end to end").isVisible()));
+      await tab.keyboard.press("Escape");
+      check("Escape closes the sheet", (await tab.getByRole("dialog").count()) === 0);
+    } finally {
+      await context.close();
+    }
+  }
+  {
     const { tab, context } = await open("/dashboard/developer", { account: "new" });
     try {
       await tab.getByText("No connected apps").waitFor();
-      check("no connected apps explains how to add one", await tab.getByText("Add Chalk as a custom connector").isVisible());
-      const tile = tab.locator(".cempty-app .alogo").first();
-      const logo = tab.locator(".cempty-app .alogo img, .cempty-app .alogo .glyph").first();
-      const [tileBox, logoBox] = await Promise.all([tile.boundingBox(), logo.boundingBox()]);
-      const centered = tileBox && logoBox && Math.abs(tileBox.x + tileBox.width / 2 - (logoBox.x + logoBox.width / 2)) < 1.5 && Math.abs(tileBox.y + tileBox.height / 2 - (logoBox.y + logoBox.height / 2)) < 1.5;
-      check("logos sit centred inside their tiles in the empty state", centered === true);
+      check("no connected apps points at the catalog", await tab.getByText("Pick an app above").isVisible());
+      check("with nothing connected no tile says Connected", (await tab.locator(".ctile", { hasText: "Connected" }).count()) === 0);
     } finally {
       await context.close();
     }

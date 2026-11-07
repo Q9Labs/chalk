@@ -14,6 +14,8 @@ const KNOWN_APPS: readonly KnownApp[] = [
   { match: /codex/i, file: "codex", brand: false },
   { match: /devin|cognition/i, file: "devin", brand: false },
   { match: /vs ?code|visual studio code/i, file: "vscode", brand: true },
+  { match: /gemini|antigravity/i, file: "gemini", brand: true },
+  { match: /grok|xai/i, file: "grok", brand: false },
 ];
 
 function Tile({ className, children }: { readonly className?: string; readonly children?: ReactNode }) {

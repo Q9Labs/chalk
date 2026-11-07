@@ -25,7 +25,7 @@ export async function connectMutation(engine: Engine, action: ConnectAction): Pr
 
 export async function connectionsPage(engine: Engine, cursor?: string): Promise<ConnectionsDTO> {
   const result = await run(engine.api.default.listMCPConnections({ params: { tenant_id: engine.tenantId }, query: { page_size: 25, cursor } }));
-  return { connections: result.data.map((row) => ({ id: row.id, clientName: row.client_name, scope: bundle(row.scope), lastUsedAt: row.last_used_at, createdAt: row.created_at })), nextCursor: result.pagination.next_cursor };
+  return { mcpUrl: engine.mcpUrl, connections: result.data.map((row) => ({ id: row.id, clientName: row.client_name, scope: bundle(row.scope), lastUsedAt: row.last_used_at, createdAt: row.created_at })), nextCursor: result.pagination.next_cursor };
 }
 
 export async function connectionsMutation(engine: Engine, action: ConnectionsAction) {

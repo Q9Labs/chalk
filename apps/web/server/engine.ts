@@ -37,7 +37,7 @@ export async function resolveTenant(env: DashboardEnvironment, person: Identity,
   if (!provision) throw new DashboardError(409, "account_not_provisioned");
   return (await run(api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([dashboardWebsiteOrigin, env.DASHBOARD_ORIGIN])] } }))).id;
 }
-export type Engine = { api: Awaited<ReturnType<typeof client>>; tenantId: Awaited<ReturnType<typeof resolveTenant>>; dashboardOrigin: string };
+export type Engine = { api: Awaited<ReturnType<typeof client>>; tenantId: Awaited<ReturnType<typeof resolveTenant>>; dashboardOrigin: string; /** Where AI apps connect to this environment's MCP server. */ mcpUrl: string };
 const tenantSession = z.object({ scope: z.string(), tenantId: z.uuid(), expiresAt: z.number() });
 /** Cache only engine-derived authority, sealed and bound to the authenticated session and engine environment. */
 export async function withSessionEngine(request: Request, env: DashboardEnvironment, person: Identity, respond: (engine: Engine) => Promise<Response>): Promise<Response> {
@@ -46,7 +46,7 @@ export async function withSessionEngine(request: Request, env: DashboardEnvironm
   const cached = value ? tenantSession.parse(await unseal(value, env.SESSION_SECRET, "tenant")) : null;
   const hit = cached !== null && cached.scope === scope && cached.expiresAt > Date.now();
   const tenantId = hit ? Schema.decodeUnknownSync(TenantIdSchema)(cached.tenantId) : await resolveTenant(env, person);
-  const response = await respond({ api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN });
+  const response = await respond({ api: await client(env), tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN, mcpUrl: new URL("/mcp", env.CHALK_API_ORIGIN).href });
   if (!hit) writeCookie(response, env, "tenant", await seal({ scope, tenantId, expiresAt: person.expiresAt }, env.SESSION_SECRET, "tenant"), Math.max(0, Math.floor((person.expiresAt - Date.now()) / 1000)));
   return response;
 }

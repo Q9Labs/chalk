@@ -8,10 +8,11 @@ import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { DisconnectPrompt } from "./DisconnectPrompt";
 import { MoreButton, Sk, useToast } from "./kit";
+import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
-/** Apps such as Claude and ChatGPT that signed in to this account through OAuth. */
+/** How to connect an AI app to Chalk, and the apps that signed in to this account through OAuth. */
 export function ConnectedApps() {
   const { state, update } = useLoad(() => readPage("connections", {}), "connections");
   const [revoking, setRevoking] = useState<ConnectionDTO | null>(null);
@@ -19,6 +20,7 @@ export function ConnectedApps() {
 
   return (
     <>
+      {state.kind === "ready" ? <McpClients mcpUrl={state.data.mcpUrl} registeredNames={state.data.connections.map((connection) => connection.clientName)} /> : null}
       <div className="secth" style={{ marginTop: 48 }}>
         <h2>Connected apps</h2>
       </div>
@@ -28,17 +30,7 @@ export function ConnectedApps() {
         <div className="list">
           <div className="empty">
             <b>No connected apps</b>
-            <p>Add Chalk as a custom connector in Claude or ChatGPT and approve it here. It then shows up in this list.</p>
-            <div className="cempty">
-              <span className="cempty-app">
-                <AppLogo name="Claude" size="sm" />
-                Claude
-              </span>
-              <span className="cempty-app">
-                <AppLogo name="ChatGPT" size="sm" />
-                ChatGPT
-              </span>
-            </div>
+            <p>Pick an app above and approve it here. It then shows up in this list.</p>
           </div>
         </div>
       ) : null}
@@ -94,7 +86,7 @@ export function ConnectedApps() {
         </div>
       ) : null}
       {state.kind === "ready" && state.data.nextCursor ? (
-        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
+        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ ...value, connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
       ) : null}
       {revoking ? (
         <DisconnectPrompt
