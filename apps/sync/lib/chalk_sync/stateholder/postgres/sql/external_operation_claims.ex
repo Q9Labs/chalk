@@ -45,7 +45,6 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.ExternalOperationClaims do
       from sync_external_operations
       where status = 'pending'
         and next_attempt_at <= now()
-        and (attempt_count < 100 or (operation_name = 'remove_participant' and payload ? 'departureOperationId'))
         and #{operation_filter}
         and (
           (

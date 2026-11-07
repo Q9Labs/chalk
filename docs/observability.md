@@ -28,6 +28,25 @@ When a Participant joined without a knock, check the journey root named
 that asked for direct admission leaves `"admission": "direct"` in its
 attributes. Policy admissions carry no `admission` attribute.
 
+### Recording render attempts
+
+Every failed render attempt emits `recording.render_attempt_failed` with `job_id`,
+`attempt_count`, `fencing_generation`, `error_code`, `error_detail`, and W3C
+`trace_id` / `span_id`. The worker emits it before reporting failure; the API
+emits it after accepting the fenced report, so it reaches the managed API log
+exporter even when the disposable node has no log exporter. The worker sends
+W3C trace context independently of global telemetry initialization. Only validated
+`session.id` baggage is forwarded; unknown members and member properties are dropped.
+
+`error_detail` emits only fixed internal diagnostic phrases, capped at 512 bytes.
+Other text, including individual diagnostic words, paths, identifiers, numbers,
+URLs, credentials, and media-derived text, is redacted. The private job row still retains the existing bounded diagnostic
+error. No new durable journey event or lifecycle transition is introduced.
+Tests in `apps/api/internal/recordingdecode/writer_test.go` cover H264 with more than 512 variable
+frame intervals in both copy and re-encode paths, checking every decoded frame's
+timestamp. Worker and API tests check accepted-failure evidence, trace correlation,
+and redaction; rejected failure reports do not emit accepted-failure evidence.
+
 ### Follow a user's session
 
 A session is one run of a Chalk app on one device: a browser tab, or an app launch
@@ -59,7 +78,9 @@ Deploy the API and Sync before the SDK. The API must allow the `Baggage` header 
 CORS. A Sync that predates the field rejects a `hello` with `baggage` (an error
 frame, then close 1009), so the SDK retries once at once without it, remembers
 that server for the rest of the page or app run, and sends the legacy `hello` on
-later reconnects. The whiteboard socket does not carry the ID yet.
+later reconnects. The whiteboard client sends the same baggage member beside its
+presenter-view extensions, then retries without baggage after a 1009 close from
+an older server.
 
 ### Compare call quality by connection type
 
@@ -141,6 +162,14 @@ subscription state" tests), `sdks/typescript/client/src/media/subscription-deliv
 `apps/api/internal/httpapi/sfu_subscriptions_test.go`,
 `apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
 `apps/api/internal/adapters/chalksfu/conformance_test.go`.
+
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
 
 ### Interrupted recording stops and missing provider tracks
 

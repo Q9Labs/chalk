@@ -16,6 +16,11 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
+      media_plane:
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share
+        type: choice
+        options: [cf_sfu, chalk_sfu]
+        default: cf_sfu
       release_sha:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
@@ -38,6 +43,10 @@ on:
         description: Space-separated proof commands
         type: string
         default: smoke transcript
+      media_plane:
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share
+        type: string
+        default: cf_sfu
       release_sha:
         description: Exact deployed revision to prove
         type: string
@@ -145,6 +154,7 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
+          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
           CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
@@ -159,11 +169,20 @@ jobs:
             echo "PROOF configuration: failed (empty-proof-list)" >&2
             exit 1
           fi
+          case "$CHALK_PROOF_MEDIA_PLANE" in
+            cf_sfu|chalk_sfu) ;;
+            *) echo "Unsupported media plane" >&2; exit 1 ;;
+          esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
               all|smoke|camera-share|recording-rejoin|export|transcript|leave) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
+            # Recording, export and transcripts need Cloudflare, and smoke includes an export, so the own SFU proves the call alone.
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ]; then
+              echo "chalk_sfu supports only camera-share" >&2
+              exit 1
+            fi
           done
           mkdir -p .private
           for proof in "${proofs[@]}"; do

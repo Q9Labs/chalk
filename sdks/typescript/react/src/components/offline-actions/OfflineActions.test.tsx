@@ -11,7 +11,8 @@ import { SpaceView } from "../space-view/SpaceView";
 import { useConnection } from "../../bindings/hooks";
 import { ChalkProvider } from "../../bindings/context";
 import { createPreviewClient, createSnapshot } from "../../test-support";
-import { OfflineActions, RECONNECTING_GRACE_MS, offlineNoticeText } from "./OfflineActions";
+import { OfflineActions, RECONNECTING_GRACE_MS } from "./OfflineActions";
+import { offlineNotice } from "../reconnecting-overlay/ReconnectingCard";
 import { RECONNECTING_NOTICE_MS } from "../reconnecting-overlay/ReconnectingOverlay";
 
 const actions: readonly OfflineAction[] = [
@@ -55,8 +56,8 @@ describe("OfflineActions", () => {
     await act(async () => vi.advanceTimersByTime(RECONNECTING_GRACE_MS));
     expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toContain("Reconnecting…");
     expect(container.querySelector("[role=dialog]")).toBeNull();
-    expect(offlineNoticeText(1, false)).toBe("You're offline. 1 action will send when you're back.");
-    expect(offlineNoticeText(0, false)).toBe("You're offline. Reconnecting…");
+    expect(offlineNotice(false, "1 action")).toEqual({ headline: "You're offline", detail: "1 action will send when you’re back." });
+    expect(offlineNotice(false, null).detail).toBe("You’ll rejoin as soon as your connection is back.");
     vi.useRealTimers();
   });
 
@@ -66,7 +67,7 @@ describe("OfflineActions", () => {
       const { client, container } = await mount(withOffline("reconnecting", { pending: [] }));
       expect(container.querySelector('[data-part="connection-notice"]')).toBeNull();
       await act(async () => vi.advanceTimersByTime(RECONNECTING_GRACE_MS));
-      expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toBe("Reconnecting…");
+      expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toContain("Reconnecting…");
       await act(async () => client.updateSnapshot((snapshot) => ({ ...snapshot, connection: { ...snapshot.connection, status: "live" } })));
       expect(container.querySelector('[data-part="connection-notice"]')).toBeNull();
     } finally {
@@ -92,7 +93,7 @@ it("uses one non-blocking notice through a continuous disconnection and clears o
   expect(container.querySelector('[data-part="connection-notice"]')).toBeNull();
 
   await act(async () => vi.advanceTimersByTime(RECONNECTING_NOTICE_MS));
-  expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toBe("You're offline. Reconnecting…");
+  expect(container.querySelector('[data-part="connection-notice"]')?.textContent).toContain("You're offline");
   for (const element of container.querySelectorAll<HTMLElement>("*")) {
     expect(element.style.filter).toBe("");
     expect(element.inert).not.toBe(true);

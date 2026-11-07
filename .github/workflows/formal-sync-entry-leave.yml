@@ -1,0 +1,42 @@
+name: Sync entry and Leave model
+
+# Model-checks Sync entry admission and Leave ordering. See
+# .agents/skills/sync-entry-leave-formal/SKILL.md. Keep these paths in step with
+# the skill's coverage record.
+on:
+  pull_request:
+    paths:
+      - apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex
+      - apps/sync/lib/chalk_sync/external_operation_consumer.ex
+      - apps/sync/lib/chalk_sync/stateholder/postgres.ex
+      - tools/formal/sync-entry-leave/**
+      - .github/workflows/formal-sync-entry-leave.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-sync-entry-leave-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Sync entry and Leave model
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # ubuntu-24.04 ships Java 17, which TLC needs.
+      - name: Model-check entry admission and Leave
+        run: tools/formal/sync-entry-leave/run.sh

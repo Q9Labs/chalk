@@ -1,5 +1,6 @@
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
+import { sessionBaggage } from "../session";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
@@ -122,7 +123,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewsSupported = false;
   #presenting = false;
   #presenterId: string | null = null;
-  #hello: HelloLevel = "presenter-view";
+  #hello: HelloLevel = HELLO_LEVELS[0];
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -177,7 +178,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "presenter-view";
+    this.#hello = HELLO_LEVELS[0];
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -787,7 +788,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (isAccessChange(frame)) return this.#queueAccessChange({ pending, deferred, retries: 0 }, deferred, promise);
     const entry = { pending, deferred, retries: 0 };
     this.#savingOperations.set(frame.operation_id, entry);
-    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, cause));
+    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, error(failure(operationName(frame), "unavailable", true, "Unable to queue the whiteboard operation."), cause)));
     return promise;
   }
 
@@ -937,6 +938,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const entries = [...operations, ...(head ? [head.entry] : [])].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     for (const entry of entries) {
       this.#clearOperationRetryTimer(entry.pending.operationId);
+      if (this.#phase !== "live") break;
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
       this.#sendOperation(entry.pending.frame);
     }
@@ -1027,7 +1029,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = "presenter-view";
+    if (phase === "live") this.#hello = HELLO_LEVELS[0];
     return true;
   }
 
@@ -1044,7 +1046,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #fallbackHello(): void {
-    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + 1, HELLO_LEVELS.length - 1)] ?? "legacy";
+    const step = this.#hello === "session" && sessionBaggage() === undefined ? 2 : 1;
+    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + step, HELLO_LEVELS.length - 1)] ?? "legacy";
     if (!viewsNegotiated(this.#hello)) this.#pendingLeadingView = null;
   }
 
@@ -1123,7 +1126,24 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
-    for (const outbound of whiteboardV1OperationFrames(frame)) this.#send(outbound);
+    const socket = this.#socket;
+    if (!socket || this.#phase !== "live") return;
+    for (const outbound of whiteboardV1OperationFrames(frame)) {
+      const wire = encodeWhiteboardV1ClientFrame(outbound);
+      try {
+        socket.send(wire);
+      } catch {
+        // A partial send is not a receipt. Keep the operation and its caller for the next connection.
+        this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
+        try {
+          socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard send failed");
+        } catch {
+          // Reconnect already owns recovery even if the broken socket cannot close.
+        }
+        return;
+      }
+      if (socket !== this.#socket || this.#phase !== "live") return;
+    }
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
@@ -1412,25 +1432,31 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
 }
 
 // Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = ["presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
+const HELLO_LEVELS = ["session", "presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
 type HelloLevel = (typeof HELLO_LEVELS)[number];
+const PRESENTER_VIEW_EXTENSIONS = [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] as const;
 
 function viewsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
 }
 
 function viewOriginsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
 }
 
 function drawPolicyNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy";
 }
 
 function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
   const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
   if (level === "legacy") return hello;
-  if (level === "presenter-view") return { ...hello, extensions: [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
+  if (level === "session") {
+    const baggage = sessionBaggage();
+    const presenterView = { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
+    return baggage === undefined ? presenterView : { ...presenterView, baggage };
+  }
+  if (level === "presenter-view") return { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };

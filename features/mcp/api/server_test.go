@@ -18,7 +18,7 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 		Text string `json:"text"`
 	}{strings.Repeat("untrusted 🖍️ ", 10000)})
 	Bind(server, ListSpaces, func(context.Context, PageInput) (json.RawMessage, error) { return payload, nil })
-	transport := NewHandler(server, []string{"https://trusted.example"})
+	transport := NewHandler(server, []string{"https://trusted.example"}, nil)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		transport.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{TenantID: "fixture-tenant", Scopes: []string{"spaces:read"}})))
 	})
@@ -91,7 +91,7 @@ func TestTransportBoundsAndOrigin(t *testing.T) {
 }
 
 func TestTransportRejectsBatches(t *testing.T) {
-	handler := NewHandler(NewServer(), nil)
+	handler := NewHandler(NewServer(), nil, nil)
 	batch := `[{"jsonrpc":"2.0","id":1,"method":"tools/list"},{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`
 	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader("  \n"+batch))
 	request.Header.Set("Content-Type", "application/json")
