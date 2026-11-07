@@ -16,10 +16,19 @@ const SCRIPT_RADIUS = /^border(?:(?:Top|Bottom)(?:Left|Right|Start|End)|Start(?:
 const LENGTH = /(?<![\w.#-])-?(?:\d*\.)?\d+(?:px|rem)(?![\w%])/giu;
 const CSS_DECLARATION = /(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+)(?=[;}])/giu;
 const SCRIPT_ENTRY = /\b([A-Za-z]+)(\s*:\s*)(?:"([^"\n]*)"|'([^'\n]*)'|(-?(?:\d+(?:\.\d+)?|\.\d+))\b)/gu;
+const TEMPLATE = /`(?:\\.|[^`\\])*`/gu;
 const TAILWIND = /(?<![\w-])(-?)(p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy]|rounded(?:-(?:t|r|b|l|s|e|tl|tr|bl|br|ss|se|es|ee))?|text)-\[(-?[\d.]+)(px|rem)\]/gu;
 
-const kindOfCss = (p) => (CSS_SPACING.test(p) ? "space" : CSS_RADIUS.test(p) ? "corner" : p === "font-size" ? "type" : undefined);
+const kindOfCss = (p) => (p === "font" ? "type" : CSS_SPACING.test(p) ? "space" : CSS_RADIUS.test(p) ? "corner" : p === "font-size" ? "type" : undefined);
 const kindOfScript = (k) => (SCRIPT_SPACING.test(k) ? "space" : SCRIPT_RADIUS.test(k) ? "corner" : k === "fontSize" ? "type" : undefined);
+
+/** A radius that is half the width or height written on the same line makes a circle, which is the pill step. */
+function isCircle(text, index, px) {
+  const start = text.lastIndexOf("\n", index) + 1;
+  const end = text.indexOf("\n", index);
+  const line = text.slice(start, end === -1 ? text.length : end);
+  return [...line.matchAll(/\b(?:width|height)\s*:\s*(\d+)\b/gu)].some((m) => Number(m[1]) === px * 2);
+}
 
 /** The step name for a magnitude in px, and whether it was snapped. */
 function stepFor(kind, px) {
@@ -51,11 +60,14 @@ function protectedCopy(value) {
 }
 
 /** Rewrites the lengths of one CSS value. `render(kind, name, negative)` makes the replacement text. */
-function rewriteLengths(kind, value, render, onChange) {
+function rewriteLengths(kind, value, render, onChange, firstOnly = false) {
   const scan = protectedCopy(value);
   let out = "";
   let last = 0;
+  let seen = false;
   for (const match of scan.matchAll(LENGTH)) {
+    if (firstOnly && seen) break;
+    seen = true;
     const literal = match[0].toLowerCase();
     const number = Number.parseFloat(literal);
     const px = Math.abs(literal.endsWith("rem") ? number * 16 : number);
@@ -78,15 +90,20 @@ function transform(file, text, isNative) {
   const edits = [];
   const note = (base) => (change) => changes.push({ ...change, file, line: lineOf(base + change.offset) });
 
-  for (const match of text.matchAll(CSS_DECLARATION)) {
-    const kind = kindOfCss(match[1].toLowerCase());
-    if (!kind) continue;
-    const valueStart = match.index + match[0].length - match[2].length;
-    const next = rewriteLengths(kind, match[2], cssRender, note(valueStart));
-    if (next !== match[2]) edits.push({ start: valueStart, end: valueStart + match[2].length, text: next });
+  // CSS declarations: the whole file in a .css file, only template literals in code (as the gate reads it).
+  const isCss = file.endsWith(".css");
+  const cssRanges = isCss ? [[0, text.length]] : [...text.matchAll(TEMPLATE)].map((m) => [m.index, m.index + m[0].length]);
+  for (const [from, to] of cssRanges) {
+    for (const match of text.slice(from, to).matchAll(CSS_DECLARATION)) {
+      const kind = kindOfCss(match[1].toLowerCase());
+      if (!kind) continue;
+      const valueStart = from + match.index + match[0].length - match[2].length;
+      const next = rewriteLengths(kind, match[2], cssRender, note(valueStart), match[1].toLowerCase() === "font");
+      if (next !== match[2]) edits.push({ start: valueStart, end: valueStart + match[2].length, text: next });
+    }
   }
 
-  for (const match of text.matchAll(SCRIPT_ENTRY)) {
+  for (const match of isCss ? [] : text.matchAll(SCRIPT_ENTRY)) {
     const key = match[1];
     const kind = kindOfScript(key);
     if (!kind) continue;
@@ -101,7 +118,7 @@ function transform(file, text, isNative) {
     }
     const number = Number.parseFloat(match[5]);
     const px = Math.abs(number);
-    const step = px === 0 ? undefined : stepFor(kind, px);
+    const step = px === 0 ? undefined : kind === "corner" && isCircle(text, match.index, px) ? { name: "pill", snapped: false } : stepFor(kind, px);
     if (!step || (kind === "space" && px === 1)) continue;
     changes.push({ file, line: lineOf(literalStart), kind, from: match[5], name: step.name, snapped: step.snapped });
     const replacement = isNative ? tsRender(kind, step.name, number < 0) : JSON.stringify(cssRender(kind, step.name, number < 0));

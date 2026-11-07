@@ -10,6 +10,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import { DASHBOARD_PATHS, installDashboardStubs } from "./dashboard-stubs.mjs";
 
 const [command, ...rest] = process.argv.slice(2);
 const option = (name) => {
@@ -66,12 +67,21 @@ async function shoot() {
         for (const scheme of ["light", "dark"]) jobs.push({ id: `web-${slug(path)}-${device}-${scheme}`, url: `${web}${path}`, viewport, fullPage: true, scheme });
       }
     }
+    for (const path of DASHBOARD_PATHS) {
+      for (const [device, viewport] of [
+        ["desktop", { width: 1440, height: 900 }],
+        ["phone", { width: 390, height: 844 }],
+      ]) {
+        for (const scheme of ["light", "dark"]) jobs.push({ id: `dash-${slug(path.replace(/[0-9a-f-]{36}/gu, "id"))}-${device}-${scheme}`, url: `${web}${path}`, viewport, fullPage: true, scheme, stub: true });
+      }
+    }
   }
 
   const selected = jobs.filter((job) => !only || only.test(job.id));
   let failures = 0;
   await pool(selected, 4, async (job) => {
     const context = await browser.newContext({ viewport: job.viewport, colorScheme: job.scheme, reducedMotion: "reduce", deviceScaleFactor: 1 });
+    if (job.stub) await installDashboardStubs(context);
     const page = await context.newPage();
     try {
       await page.goto(job.url, { waitUntil: "load" });
