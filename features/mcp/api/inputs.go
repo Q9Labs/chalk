@@ -1,5 +1,7 @@
 package mcpapi
 
+import "encoding/json"
+
 // Inputs deliberately contain no tenant selector. The authenticated connection
 // supplies the tenant for every operation, including requests without initialize.
 type ReadInput struct {
@@ -38,6 +40,25 @@ type RemovalInput struct {
 	EpisodeInput
 	ParticipantID         string `json:"participant_id"`
 	ParticipantGeneration int64  `json:"participant_generation"`
+}
+
+// CallInput carries every field of chalk_control_call; the action picks which apply.
+type CallInput struct {
+	Action                    string          `json:"action"`
+	SpaceID                   string          `json:"space_id"`
+	EpisodeID                 string          `json:"episode_id"`
+	ParticipantID             string          `json:"participant_id,omitempty"`
+	RequestKey                string          `json:"request_key,omitempty"`
+	Admission                 string          `json:"admission,omitempty"`
+	Name                      string          `json:"name,omitempty"`
+	Role                      string          `json:"role,omitempty"`
+	Metadata                  json.RawMessage `json:"metadata,omitempty"`
+	IdentityID                string          `json:"identity_id,omitempty"`
+	IdentityExternalID        string          `json:"identity_external_id,omitempty"`
+	ParticipantGeneration     int64           `json:"participant_generation,omitempty"`
+	CurrentMediaToken         string          `json:"current_media_token,omitempty"`
+	ReplaceMediaConnection    bool            `json:"replace_media_connection,omitempty"`
+	ExpectedMediaConnectionID string          `json:"expected_media_connection_id,omitempty"`
 }
 type AdmissionDecisionInput struct {
 	SpaceID       string `json:"space_id"`
