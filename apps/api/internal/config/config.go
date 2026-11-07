@@ -82,6 +82,7 @@ const (
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
 	ChalkSFUEnabled        = "CHALK_SFU_ENABLED"
+	ChalkSFUCaptureEnabled = "CHALK_SFU_CAPTURE_ENABLED"
 	ChalkSFUNodes          = "CHALK_SFU_NODES"
 	ChalkSFUApplicationID  = "CHALK_SFU_APPLICATION_ID"
 	ChalkSFUServerName     = "CHALK_SFU_SERVER_NAME"
@@ -206,6 +207,10 @@ type ChalkSFUNode struct {
 // Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
 type ChalkSFUConfig struct {
 	Enabled bool
+	// CaptureEnabled lets the recorder reach the pool's nodes through the capture plane. It is
+	// off by default and needs Enabled. Starting a recording on the own SFU stays refused until
+	// the milestone's last step removes that check.
+	CaptureEnabled bool
 	// ApplicationID names the SFU pool and goes into each Episode binding, so it
 	// stays the same when hosts or certificates rotate.
 	ApplicationID string
@@ -651,6 +656,7 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	}
 	config := ChalkSFUConfig{
 		Enabled:        true,
+		CaptureEnabled: envBool(ChalkSFUCaptureEnabled),
 		ApplicationID:  strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
 		ServerName:     strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
 		CAFile:         strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),

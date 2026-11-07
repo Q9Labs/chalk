@@ -28,6 +28,20 @@ func TestChalkSFUStaysOffUntilEnabled(t *testing.T) {
 	}
 }
 
+func TestChalkSFUCaptureStaysOffUntilEnabled(t *testing.T) {
+	setChalkSFUEnv(t, "sfu-a=https://sfu-a.chalk.test:8443")
+	t.Setenv(ChalkSFUCaptureEnabled, "")
+	config, err := loadChalkSFUConfig()
+	if err != nil || config.CaptureEnabled {
+		t.Fatalf("default config: %+v, %v", config, err)
+	}
+	t.Setenv(ChalkSFUCaptureEnabled, "true")
+	config, err = loadChalkSFUConfig()
+	if err != nil || !config.CaptureEnabled {
+		t.Fatalf("capture on: %+v, %v", config, err)
+	}
+}
+
 func TestChalkSFUNodesKeepTheirOrder(t *testing.T) {
 	setChalkSFUEnv(t, "sfu-a=https://sfu-a.chalk.test:8443, sfu-b=https://sfu-b.chalk.test:8443")
 	config, err := loadChalkSFUConfig()

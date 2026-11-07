@@ -119,6 +119,7 @@ func TestNewRegistryRejectsInvalidAndDuplicateRegistrations(t *testing.T) {
 		{name: "missing source", registrations: []Registration{{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}}}},
 		{name: "missing registrations", source: source},
 		{name: "missing plane", source: source, registrations: []Registration{{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint}}},
+		{name: "plane and nodes", source: source, registrations: []Registration{{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}, Nodes: testNodes{}}}},
 		{name: "invalid provider", source: source, registrations: []Registration{{Provider: "UNKNOWN", AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}}}},
 		{name: "duplicate provider", source: source, registrations: []Registration{
 			{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Plane: firstCaptureTestPlane{}},
@@ -218,4 +219,51 @@ func mustBinding(t *testing.T, provider, applicationID string) mediaplane.Bindin
 		t.Fatalf("new media plane binding: %v", err)
 	}
 	return binding
+}
+
+// testNodes serves a plane for node "a" and fails for any other.
+type testNodes struct{}
+
+func (testNodes) CapturePlane(node string) (captureplane.CapturePlane, error) {
+	if node == "a" {
+		return firstCaptureTestPlane{}, nil
+	}
+	return nil, errors.New("node is not configured")
+}
+
+func TestRegistryRoutesANodeProviderByTheBindingNode(t *testing.T) {
+	binding := mustBinding(t, "chalk_sfu", "pool-a")
+	cases := []struct {
+		name    string
+		node    string
+		want    error
+		retried bool
+	}{
+		{name: "a configured node", node: "a"},
+		{name: "a node this process does not configure", node: "b", want: ErrAdapterUnavailable, retried: true},
+		{name: "a binding without a node", node: "", want: ErrInvalidBinding},
+	}
+	for index, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			identity := captureIdentity(byte(10 + index))
+			bound := binding
+			bound.Node = test.node
+			registry, err := NewRegistry(&bindingSource{bindings: map[utilities.ID]mediaplane.Binding{identity.EpisodeID: bound}},
+				Registration{Provider: binding.Provider, AdapterFingerprint: binding.AdapterFingerprint, Nodes: testNodes{}})
+			if err != nil {
+				t.Fatalf("new registry: %v", err)
+			}
+			plane, err := registry.Resolve(context.Background(), identity)
+			if test.want == nil {
+				if err != nil || plane == nil {
+					t.Fatalf("resolve = %v, %v", plane, err)
+				}
+				return
+			}
+			var failure captureplane.ProviderError
+			if !errors.Is(err, test.want) || !errors.As(err, &failure) || failure.Retryable != test.retried {
+				t.Fatalf("resolve error = %v, want %v with retryable %v", err, test.want, test.retried)
+			}
+		})
+	}
 }
