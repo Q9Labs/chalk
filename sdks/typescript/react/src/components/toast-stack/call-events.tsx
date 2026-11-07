@@ -1,7 +1,7 @@
 import { commandFailurePresentation, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { CallEventIcon } from "./CallEventIcon";
 import { Avatar } from "../atomic/Avatar";
-import type { ClientFailure, SpaceSnapshot } from "@q9labsai/chalk-client";
+import { getRecordingFailureDetail, type ClientFailure, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import type { Toast } from "./ToastStack";
 
 export function mediaFailureToast(failure: ClientFailure | null, source?: MediaCommandSource, action?: MediaCommandAction, onRetry?: () => void): Omit<Toast, "id"> | null {
@@ -87,7 +87,7 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
       });
   const wasRecording = previous.recording.current?.status === "recording";
   const isRecording = next.recording.current?.status === "recording";
-  if (wasRecording !== isRecording)
+  if (wasRecording !== isRecording && next.recording.current?.status !== "failed")
     events.push({
       icon: <CallEventIcon kind="recording" error={isRecording} />,
       message: isRecording ? (
@@ -98,6 +98,8 @@ export function callEventToasts(previous: SpaceSnapshot, next: SpaceSnapshot): O
         "Recording stopped"
       ),
     });
+  const failure = next.recording.current;
+  if (failure?.status === "failed" && (previous.recording.current?.status !== "failed" || previous.recording.current.recordingId !== failure.recordingId)) events.push({ icon: <CallEventIcon kind="recording" error />, type: "error", message: getRecordingFailureDetail(failure.failureCode) });
   for (const source of ["microphone", "camera"] as const) {
     if (previous.media.selection[source] !== next.media.selection[source]) {
       const devices = source === "camera" ? next.media.devices.cameras : next.media.devices.microphones;

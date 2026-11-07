@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -170,6 +171,70 @@ func assertPreparationDemand(t *testing.T, queries *sqlc.Queries, now time.Time,
 	demand, err := queries.GetRecordingFleetDemand(t.Context(), sqlc.GetRecordingFleetDemandParams{Role: "capture", ObservedAt: pgtype.Timestamptz{Time: now, Valid: true}})
 	if err != nil || demand.DesiredNodes != want {
 		t.Fatalf("capture demand = %+v, %v; want %d", demand, err, want)
+	}
+}
+
+// The own SFU has no capture path yet, so a Space that selects it, directly or through its
+// Tenant's default, must not hold a pre-warmed recorder that scheduled-capture demand would count.
+func TestOwnSFUSpacesHoldNoRecordingPreparation(t *testing.T) {
+	pool, err := pgxpool.New(t.Context(), os.Getenv(config.DatabaseURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(t.Context()); err != nil {
+		t.Skipf("postgres unavailable: %v", err)
+	}
+	cases := []struct {
+		name          string
+		tenantDefault string
+		spacePlane    string
+		prepared      bool
+	}{
+		{"space selects the own SFU", "", "chalk_sfu", false},
+		{"tenant default is the own SFU", "chalk_sfu", "", false},
+		{"space overrides a tenant default", "chalk_sfu", "cf_sfu", true},
+		{"cloudflare control", "", "cf_sfu", true},
+	}
+	repository := postgres.NewRecordingPreparationRepository(pool)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for i, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			tenant := mustID(t, fmt.Sprintf("bc390000-0000-4000-8000-0000000001%02d", i))
+			space := mustID(t, fmt.Sprintf("bc390000-0000-4000-8000-0000000002%02d", i))
+			var defaultPlane any
+			if test.tenantDefault != "" {
+				defaultPlane = test.tenantDefault
+			}
+			if _, err := pool.Exec(t.Context(), `insert into tenants (id,name,default_media_plane) values ($1,'Own SFU proof',$2)`, tenant.Bytes(), defaultPlane); err != nil {
+				t.Fatal(err)
+			}
+			defer pool.Exec(context.Background(), `delete from tenants where id=$1`, tenant.Bytes())
+			if _, err := pool.Exec(t.Context(), `insert into spaces (id,tenant_id,name,slug,media_plane,recording_policy) values ($1,$2,'Own SFU proof','own-sfu-proof',$3,'automatic')`, space.Bytes(), tenant.Bytes(), test.spacePlane); err != nil {
+				t.Fatal(err)
+			}
+			created, err := repository.PrepareEntrance(t.Context(), tenant, space, now)
+			if err != nil || created != test.prepared {
+				t.Fatalf("Entrance preparation = %v, %v; want %v", created, err, test.prepared)
+			}
+			if !test.prepared {
+				// The write itself refuses too, so no path leaves a row behind.
+				_, err = sqlc.New(pool).PrepareRecordingSpace(t.Context(), sqlc.PrepareRecordingSpaceParams{
+					TenantID: pgtype.UUID{Bytes: tenant.Bytes(), Valid: true}, SpaceID: pgtype.UUID{Bytes: space.Bytes(), Valid: true},
+					StartsAt: pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true}, ObservedAt: pgtype.Timestamptz{Time: now, Valid: true},
+				})
+				if !errors.Is(err, pgx.ErrNoRows) {
+					t.Fatalf("scheduled preparation write = %v, want no rows", err)
+				}
+			}
+			var rows int
+			if err := pool.QueryRow(t.Context(), `select count(*) from recording_preparations where space_id=$1`, space.Bytes()).Scan(&rows); err != nil {
+				t.Fatal(err)
+			}
+			if (rows == 1) != test.prepared {
+				t.Fatalf("preparation rows = %d, prepared = %v", rows, test.prepared)
+			}
+		})
 	}
 }
 

@@ -82,6 +82,7 @@ function StatesCall({
           </button>
           <button onClick={() => client.updateSnapshot((current) => ({ ...current, participants: { ...current.participants, roster: current.participants.roster.map((p) => (p.participantId !== current.self.participantId ? { ...p, handRaised: true } : p)) } }))}>Simulate raised hand</button>
           <button onClick={() => void client.recording.start()}>Simulate recording</button>
+          <button onClick={() => client.updateSnapshot((current) => ({ ...current, recording: { current: { recordingId: "fixture", status: "failed", failureCode: "recording_capture_unsupported" } } }))}>Simulate unsupported recording</button>
           <button
             onClick={() => {
               client.emit("error", { error: new SpaceClientError({ code: "media.permission_denied", recoverable: true, message: "Camera blocked" }) });
@@ -128,9 +129,11 @@ function toastForFixture(id: string) {
   const next: SpaceSnapshot =
     id === "hand"
       ? { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, handRaised: true })) } }
-      : id === "recording"
-        ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "recording" satisfies "recording", failureCode: null } } }
-        : populated;
+      : id === "recording-failed"
+        ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "failed" satisfies "failed", failureCode: "recording_capture_unsupported" } } }
+        : id === "recording"
+          ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "recording" satisfies "recording", failureCode: null } } }
+          : populated;
   const toast = callEventToasts(previous, next)[0];
   if (!toast) throw new Error(`No production event for ${id}`);
   return toast;
@@ -292,6 +295,7 @@ export const STATES_LANE: readonly CallState[] = [
       ["joined", "Nora joined", false],
       ["hand", "Nora raised a hand", false],
       ["recording", "Recording started. Everyone in the call can see it.", false],
+      ["recording-failed", "Recording isn’t available in this call yet.", true],
       ["camera", "Chalk can’t use your camera. Click the camera icon in the address bar and allow Camera.", true],
       ["host", "Nora left. You’re now the host.", false],
       ["device", "AirPods Pro disconnected. Switched to MacBook Air Microphone", false],

@@ -23,10 +23,11 @@ type Shape = {
   readonly selfCapabilities?: readonly Capability[];
   readonly microphone?: "enabled" | "disabled";
   readonly requests?: SpaceSnapshot["media"]["incomingRequests"];
-  readonly recording?: "recording" | "stopped";
+  readonly recording?: "recording" | "stopped" | "failed";
+  readonly failureCode?: string;
 };
 
-function snapshot({ status = "live", roster = [], selfCapabilities = [], microphone = "disabled", requests = [], recording }: Shape): SpaceSnapshot {
+function snapshot({ status = "live", roster = [], selfCapabilities = [], microphone = "disabled", requests = [], recording, failureCode }: Shape): SpaceSnapshot {
   const local = (state: "enabled" | "disabled") => ({ source: "microphone" as const, state, track: null });
   return {
     connection: { status, episode: null, lastError: null },
@@ -42,7 +43,7 @@ function snapshot({ status = "live", roster = [], selfCapabilities = [], microph
     },
     chat: { status: "ready", messages: [], pendingSends: [], readReceipts: [], unreadCount: 0, pagination: { cursor: null, hasOlder: false, historyTruncated: false }, lastError: null },
     reactions: { active: [] },
-    recording: { current: recording ? { recordingId: "r1", status: recording, failureCode: null } : null },
+    recording: { current: recording ? { recordingId: "r1", status: recording, failureCode: recording === "failed" ? (failureCode ?? "provider_rejected") : null } : null },
     whiteboard: { open: false, engine: { status: "unsubscribed", sceneId: null, revision: null, presenting: false, error: null }, access: { canDraw: false, policy: null, permissions: [] } },
     offline: { pending: [], decisionNeeded: false, policy: "ask" },
   };
@@ -88,5 +89,12 @@ describe("callNotices", () => {
   it("reports recording starting and stopping", () => {
     expect(callNotices(snapshot({}), snapshot({ recording: "recording" }), false)).toEqual([{ kind: "recordingStarted" }]);
     expect(callNotices(snapshot({ recording: "recording" }), snapshot({ recording: "stopped" }), false)).toEqual([{ kind: "recordingStopped" }]);
+  });
+
+  it("says why a recording failed, once, instead of a plain stop", () => {
+    const failed = snapshot({ recording: "failed", failureCode: "recording_capture_unsupported" });
+    expect(callNotices(snapshot({}), failed, false)).toEqual([{ kind: "recordingFailed", failureCode: "recording_capture_unsupported" }]);
+    expect(callNotices(snapshot({ recording: "recording" }), failed, false)).toEqual([{ kind: "recordingFailed", failureCode: "recording_capture_unsupported" }]);
+    expect(callNotices(failed, failed, false)).toEqual([]);
   });
 });
