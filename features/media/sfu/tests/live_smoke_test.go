@@ -92,6 +92,11 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 			t.Fatalf("%s=%q: %v", setting.name, value, err)
 		}
 	}
+	// The subscriber is judged every two seconds, so the hold must outlast the
+	// deadline by two polls or a run could end with no verdict.
+	if need := load.capAfter + load.capWithin + 4*time.Second; load.capKbps > 0 && load.hold < need {
+		t.Fatalf("SFU_LIVE_HOLD=%v ends before the capped Participant is judged; it needs at least SFU_LIVE_CAP_AFTER + SFU_LIVE_CAP_WITHIN + 4s = %v", load.hold, need)
+	}
 	return load
 }
 
@@ -215,8 +220,10 @@ func TestLiveSmokeClasses(t *testing.T) {
 			time.Sleep(10 * time.Second)
 		}
 	}
+	var capVerdictPending atomic.Bool // a cap is on and its subscriber has not yet backed off or failed
+	capVerdictPending.Store(load.capKbps > 0)
 	if load.capKbps > 0 {
-		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load)
+		go capFirstParticipant(sharing, t, svc, classes[0].people[0], load, &capVerdictPending)
 	}
 	cpu := readHostCPU()
 	// The baseline comes before the first wait, so drops during that wait count.
@@ -258,6 +265,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 	}
 	mu.Lock()
 	if load.capKbps > 0 {
+		if capVerdictPending.Load() {
+			t.Errorf("the run ended before the capped Participant backed off or failed its %v deadline", load.capWithin)
+		}
 		capped := classes[0].receivers[0]
 		capped.mu.Lock()
 		for key, track := range capped.tracks {
@@ -294,12 +304,12 @@ func TestLiveSmokeClasses(t *testing.T) {
 // logs, every two seconds, what the node thinks of it: the estimate and what
 // its subscriptions forward. Each cap must bring the estimate under twice the
 // cap and take every tile off the high layer within load.capWithin, or the run
-// fails. The final report fails the run too if that Participant's audio stalled.
-func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad) {
+// fails. The final report fails the run too if that Participant's audio stalled,
+// or if the run ends before a cap has been judged.
+func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person *participant, load liveLoad, backedOff *atomic.Bool) {
 	started := time.Now()
 	capped := 0 // cap changes so far: odd while the cap is on
 	var cappedAt time.Duration
-	backedOff := true // false from each cap until the estimate and the layers fall
 	var switchAt time.Duration
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -315,21 +325,22 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 			if capped%2 == 1 {
 				person.link.shape(rate, int(rate/8/5), 20*time.Millisecond, 0, 0)
 				t.Logf("capped: %s downlink limited to %d kbit/s at %s", person.name, load.capKbps, time.Now().Format(time.TimeOnly))
-				cappedAt, backedOff = since, false
+				cappedAt = since
+				backedOff.Store(false)
 			} else {
 				person.link.shape(0, 0, 0, 0, 0)
-				if !backedOff {
+				if !backedOff.Load() {
 					t.Errorf("%s was lifted from the %d kbit/s cap before it backed off", person.name, load.capKbps)
 				}
-				backedOff = true
+				backedOff.Store(true)
 				t.Logf("capped: %s downlink lifted at %s", person.name, time.Now().Format(time.TimeOnly))
 			}
 			switchAt = since + load.capEvery
 		}
 		var inspected protocol.InspectResponse
 		if err := post(svc, "/v1/sessions/"+person.conn+"/inspect", protocol.InspectRequest{Scope: person.scope}, &inspected); err != nil {
-			if !backedOff && time.Since(started)-cappedAt > load.capWithin {
-				backedOff = true
+			if capped%2 == 1 && !backedOff.Load() && time.Since(started)-cappedAt > load.capWithin {
+				backedOff.Store(true)
 				t.Errorf("%s could not be inspected for %v after the %d kbit/s cap: %v", person.name, load.capWithin, load.capKbps, err)
 			}
 			continue
@@ -341,15 +352,15 @@ func capFirstParticipant(ctx context.Context, t *testing.T, svc *service, person
 			}
 		}
 		transport := inspected.Transport
-		if !backedOff {
+		if capped%2 == 1 && !backedOff.Load() {
 			since := time.Since(started) - cappedAt
 			fell := forwarded["h"] == 0 && float64(transport.EstimateBps) <= 2*float64(load.capKbps)*1000
 			switch {
 			case since > load.capWithin:
-				backedOff = true
+				backedOff.Store(true)
 				t.Errorf("%s did not back off within %v of the %d kbit/s cap (backed off by %v: %t): estimate %d, forwarding %v", person.name, load.capWithin, load.capKbps, since.Round(time.Second), fell, transport.EstimateBps, forwarded)
 			case fell:
-				backedOff = true
+				backedOff.Store(true)
 				t.Logf("capped: %s backed off %v after the cap: estimate %d, forwarding %v", person.name, since.Round(time.Second), transport.EstimateBps, forwarded)
 			}
 		}
