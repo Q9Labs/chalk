@@ -33,9 +33,9 @@ export function diffMetrics(baseline, current, budgets) {
     const gate = budget?.gate === true;
     const row = { id: metric.id, unit: metric.unit, gate, budget, baseline: base && primary(base, budget), now: primary(metric, budget), changePct: null, status: "same" };
     if (metric.n === 0) return { ...row, status: "empty" };
-    if (overBudget(metric, budget)) return { ...row, status: "over" };
-    if (!base || base.n === 0) return { ...row, status: "new" };
+    if (!base || base.n === 0) return { ...row, status: overBudget(metric, budget) ? "over" : "new" };
     row.changePct = worsePct(metric.unit, row.baseline, row.now);
+    if (overBudget(metric, budget)) return { ...row, status: "over" };
     if (row.changePct > (budget?.tolerancePct ?? DEFAULT_TOLERANCE_PCT)) row.status = "worse";
     else if (row.changePct < -BETTER_PCT) row.status = "better";
     return row;
