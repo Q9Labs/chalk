@@ -4,14 +4,19 @@ import { ChalkMark } from "../site/Lockup";
 
 type Size = "sm" | "md" | "lg" | "xl";
 
-type KnownApp = { readonly match: RegExp; readonly file: string; /** Single-colour logos follow the theme's text colour; the rest keep their brand colours. */ readonly brand: boolean };
+type KnownApp = {
+  readonly match: RegExp;
+  readonly file: string;
+  /** Single-colour logos follow the theme's text colour; the rest keep their brand colours. */ readonly brand: boolean;
+  /** Share of the tile the mark fills, for a mark whose detail is lost at the usual size. */ readonly fill?: string;
+};
 
 // Logos come from Svgl (svgl.app). Devin is not on Svgl, so its file is the mark from devin.ai.
 const KNOWN_APPS: readonly KnownApp[] = [
   { match: /claude/i, file: "claude", brand: true },
   { match: /chatgpt|openai/i, file: "openai", brand: false },
   { match: /cursor/i, file: "cursor", brand: false },
-  { match: /codex/i, file: "codex", brand: false },
+  { match: /codex/i, file: "codex", brand: false, fill: "76%" },
   { match: /devin|cognition/i, file: "devin", brand: false },
   { match: /vs ?code|visual studio code/i, file: "vscode", brand: true },
   { match: /gemini|antigravity/i, file: "gemini", brand: true },
@@ -33,7 +38,7 @@ export function AppLogo({ name, size = "md" }: { readonly name: string; readonly
   return (
     <Tile className={size}>
       {known && url && known.brand ? <img src={url} alt="" /> : null}
-      {known && url && !known.brand ? <span className="glyph" style={{ "--logo": `url(${url})` } as CSSProperties} /> : null}
+      {known && url && !known.brand ? <span className="glyph" style={{ "--logo": `url(${url})`, "--fill": known.fill } as CSSProperties} /> : null}
       {!known ? <span className="initial">{name.trim().charAt(0).toUpperCase()}</span> : null}
     </Tile>
   );

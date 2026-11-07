@@ -586,8 +586,8 @@
 .site .dash .alogo img,
 .site .dash .alogo .glyph,
 .site .dash .alogo > svg {
-  width: 55%;
-  height: 55%;
+  width: var(--fill, 55%);
+  height: var(--fill, 55%);
 }
 
 .site .dash .alogo .glyph {
@@ -850,8 +850,8 @@
 .site .dash .ctile .alogo img,
 .site .dash .ctile .alogo .glyph,
 .site .dash .ctile .alogo > svg {
-  width: 58%;
-  height: 58%;
+  width: var(--fill, 58%);
+  height: var(--fill, 58%);
 }
 
 .site .dash .ctile .ctext {

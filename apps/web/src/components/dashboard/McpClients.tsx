@@ -121,7 +121,7 @@ export function McpClients({ mcpUrl, registeredNames }: { readonly mcpUrl: strin
   const searchId = useId();
 
   const needle = query.trim().toLowerCase();
-  const shown = CLIENTS.filter((client) => (filter === "all" || client.category === filter) && (!needle || `${client.name} ${client.line}`.toLowerCase().includes(needle)));
+  const shown = CLIENTS.filter((client) => (filter === "all" || client.category === filter) && (!needle || client.name.toLowerCase().includes(needle)));
 
   return (
     <>
