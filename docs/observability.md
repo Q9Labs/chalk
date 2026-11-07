@@ -144,6 +144,14 @@ subscription state" tests), `sdks/typescript/client/src/media/subscription-deliv
 `apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
 `apps/api/internal/adapters/chalksfu/conformance_test.go`.
 
+### Rejected CORS origins
+
+A rejected `Origin` emits a `cors.origin_forbidden` API warning log with the
+sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
+`cors.policy` and `cors.origin` to the `journey.phase.http` span. The origin keeps
+only scheme and host: ports, paths, queries and credentials are dropped, IP
+literals become `[ip]`, and anything else unparseable becomes `invalid`.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback
