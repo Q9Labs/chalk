@@ -408,7 +408,7 @@ network pause; the wire reason of a pause by the Episode plan is `congestion` to
 and only `plannerPaused` and the metrics tell the two apart), and its transport shows the estimate, proven rate, feedback age,
 queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
 probes. The Episode block shows its packets/s against its ceiling. `/readyz`
-shows the host signals behind admission.
+shows the host signals behind admission, plus goroutines, in-use heap and resident memory for a soak sampler; `/debug/pprof/` (same service identity) gives heap and goroutine profiles, never exported as telemetry.
 
 The node also exports metrics over OTLP/HTTP to the API's metrics dataset, as
 `service.name=chalk-sfu` with `deployment.environment.name` and the node
