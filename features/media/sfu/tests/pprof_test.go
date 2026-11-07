@@ -30,24 +30,24 @@ func TestProfilingNeedsTheOperatorIdentity(t *testing.T) {
 	svc := startService(t, ca)
 	stranger := clientFor(t, ca, ca, "someone-else.test")
 
-	wantStatus, wantBody := get(t, stranger, svc.baseURL+"/readyz")
+	wantStatus, wantBody := fetch(t, stranger, svc.baseURL+"/readyz")
 	if wantStatus != http.StatusForbidden {
 		t.Fatalf("readiness with the wrong identity: status %d, want 403", wantStatus)
 	}
 	for _, path := range []string{"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/goroutine", "/debug/pprof/profile?seconds=1"} {
-		if status, body := get(t, stranger, svc.baseURL+path); status != wantStatus || !bytes.Equal(body, wantBody) {
+		if status, body := fetch(t, stranger, svc.baseURL+path); status != wantStatus || !bytes.Equal(body, wantBody) {
 			t.Fatalf("%s with the wrong identity: status %d body %q, want the /readyz refusal %d %q", path, status, body, wantStatus, wantBody)
 		}
 	}
 
-	status, profile := get(t, svc.client, svc.baseURL+"/debug/pprof/heap")
+	status, profile := fetch(t, svc.client, svc.baseURL+"/debug/pprof/heap")
 	if status != http.StatusOK {
 		t.Fatalf("heap profile with the operator identity: status %d, want 200", status)
 	}
 	if !bytes.HasPrefix(profile, []byte{0x1f, 0x8b}) {
 		t.Fatalf("heap profile is not gzip: starts %x", profile[:min(len(profile), 4)])
 	}
-	if status, _ := get(t, svc.client, svc.baseURL+"/debug/pprof/cmdline"); status != http.StatusNotFound {
+	if status, _ := fetch(t, svc.client, svc.baseURL+"/debug/pprof/cmdline"); status != http.StatusNotFound {
 		t.Fatalf("cmdline: status %d, want 404", status)
 	}
 }
@@ -55,7 +55,7 @@ func TestProfilingNeedsTheOperatorIdentity(t *testing.T) {
 func TestReadinessReportsProcessMemory(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
-	status, body := get(t, svc.client, svc.baseURL+"/readyz")
+	status, body := fetch(t, svc.client, svc.baseURL+"/readyz")
 	if status != http.StatusOK {
 		t.Fatalf("readiness: status %d", status)
 	}
