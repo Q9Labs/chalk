@@ -207,7 +207,7 @@ func TestMCPInspectViewsNeedTheirFields(t *testing.T) {
 		{"chalk_inspect_recordings", `{"view":"download_url","recording_id":"` + other + `"}`, "View download_url also requires: expires_in_seconds"},
 		{"chalk_inspect_webhooks", `{"view":"endpoint"}`, "View endpoint also requires: endpoint_id"},
 		{"chalk_inspect_webhooks", `{"view":"delivery","endpoint_id":"` + space + `"}`, "View delivery also requires: delivery_id"},
-		{"chalk_inspect_webhooks", `{"view":"unknown"}`, "Unknown view: unknown"},
+		{"chalk_inspect_webhooks", `{"view":"unknown"}`, "does not equal any of: [endpoints endpoint deliveries delivery]"},
 	} {
 		response := scopeTestCall(t, &all, toolCallBody(call.tool, call.arguments))
 		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), call.want) {
