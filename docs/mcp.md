@@ -110,9 +110,9 @@ API keys.
 ## Available tools
 
 An OAuth connection never sees the tools that need API-key, membership, tenant
-settings or delete scopes (`update_tenant`, `set_membership`, `issue_api_key`,
-`revoke_api_key`, `delete_transcript`). A `chalk:manage` connection lists the
-other 28 tools and a `chalk:read` connection lists 17: the reads,
+settings or delete scopes (`update_tenant`, `inspect_tenant`, `set_membership`,
+`issue_api_key`, `revoke_api_key`, `delete_transcript`). A `chalk:manage` connection
+lists the other 27 tools and a `chalk:read` connection lists 16: the reads,
 `export_recording`, and `prepare_recording` for inspection. An API key lists the
 tools its scopes allow, up to all 33.
 
@@ -163,7 +163,10 @@ annotations guide agents but do not authorize calls.
 
 `inspect_tenant` reads the tenant's settings by default: CORS origins, retention,
 default media plane and transcription defaults. Provider secrets in them are
-redacted, the same as in the response of `update_tenant`.
+redacted, the same as in the response of `update_tenant`. It is for API keys only:
+both OAuth bundles hold `tenants:read` for the profile tool, but the tool is not
+listed for them and a call is refused without a step-up, because no bundle includes
+tenant settings.
 
 `inspect_transcripts` lists transcripts (`view=list`, the default) and reads one by
 `transcript_id`: `metadata`, `text` (the readable transcript), `document` (cues with

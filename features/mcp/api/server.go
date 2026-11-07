@@ -24,6 +24,8 @@ type Principal struct {
 	TenantID  string
 	ActorID   string
 	Scopes    []string
+	// Delegated marks a connected app (OAuth). Some views stay API-key only.
+	Delegated bool
 }
 
 type Profile struct {
@@ -77,10 +79,10 @@ func (c *catalog) find(name string) (Definition, bool) {
 // listable keeps the tools the connection can call at least once. Listing is not
 // authorization: Bind still checks the scope of every call.
 func (c *catalog) listable(ctx context.Context, tools []*mcp.Tool) []*mcp.Tool {
-	scopes := Connection(ctx).Scopes
+	connection := Connection(ctx)
 	return slices.DeleteFunc(slices.Clone(tools), func(tool *mcp.Tool) bool {
 		d, ok := c.find(tool.Name)
-		return !ok || !d.Callable(scopes)
+		return !ok || !d.Callable(connection.Scopes, connection.Delegated)
 	})
 }
 
@@ -121,7 +123,7 @@ func Bind[I any](server *mcp.Server, d Definition, call func(context.Context, I)
 		var data json.RawMessage
 		action, err := d.checkArguments(request.Params.Arguments)
 		if err == nil {
-			err = RequireScope(ctx, d.ScopeFor(action))
+			err = d.Authorize(ctx, action)
 		}
 		if err == nil {
 			data, err = call(ctx, input)
@@ -267,7 +269,11 @@ func deniedCall(server *mcp.Server, ctx context.Context, body []byte) (tool, sco
 	}
 	selected, _ := d.selected(message.Params.Arguments)
 	scope = d.ScopeFor(selected)
-	return message.Params.Name, scope, RequireScope(ctx, scope) != nil
+	if RequireScope(ctx, scope) != nil {
+		return message.Params.Name, scope, true
+	}
+	// A view closed to connected apps has no bundle to step up to.
+	return message.Params.Name, "", d.Authorize(ctx, selected) != nil
 }
 
 // readSingleMessage reads the body for reuse and refuses JSON-RPC batch arrays.

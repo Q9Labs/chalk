@@ -1,6 +1,7 @@
 package mcpapi
 
 import (
+	"context"
 	"encoding/json"
 	"maps"
 	"slices"
@@ -21,6 +22,8 @@ type Definition struct {
 	// that change things, "view" for inspect tools. A call that omits it gets Default.
 	Selector string
 	Default  string
+	// KeyOnly lists views that connected apps (OAuth) never reach, even when they hold the scope.
+	KeyOnly []string
 	// Untrusted marks results that carry text written by call participants.
 	Untrusted bool
 	// Actions maps each selector value of a multi-purpose tool to the fields it needs.
@@ -45,8 +48,23 @@ func (d Definition) ScopeFor(action string) string {
 
 // Callable says whether a connection holding scopes can make at least one call
 // to this tool. It decides what tools/list shows; each call is still checked.
-func (d Definition) Callable(scopes []string) bool {
-	return slices.Contains(scopes, d.Scope) || slices.ContainsFunc(slices.Collect(maps.Values(d.ActionScopes)), func(scope string) bool { return slices.Contains(scopes, scope) })
+func (d Definition) Callable(scopes []string, delegated bool) bool {
+	selectors := append(slices.Collect(maps.Keys(d.ActionScopes)), d.Default)
+	return slices.ContainsFunc(selectors, func(selected string) bool {
+		return slices.Contains(scopes, d.ScopeFor(selected)) && !(delegated && slices.Contains(d.KeyOnly, selected))
+	})
+}
+
+// Authorize checks one call: the scope of its action or view, and whether a
+// connected app (OAuth) may use that view at all.
+func (d Definition) Authorize(ctx context.Context, selected string) error {
+	if err := RequireScope(ctx, d.ScopeFor(selected)); err != nil {
+		return err
+	}
+	if Connection(ctx).Delegated && slices.Contains(d.KeyOnly, selected) {
+		return Error{Code: "auth.forbidden", Message: "The " + selected + " view is available to API key connections only"}
+	}
+	return nil
 }
 
 // requireActions records which fields each action needs. Anthropic's API refuses
@@ -123,7 +141,8 @@ func init() {
 	ConfigureWebhook.ActionScopes = map[string]string{"delete": "webhooks:delete"}
 	PrepareRecording.ActionScopes = map[string]string{"inspect": "spaces:read"}
 	GetConnection.Schema = object(fields())
-	InspectTenant.ActionScopes = map[string]string{"memberships": "memberships:read", "api_keys": "api_keys:read"}
+	InspectTenant.ActionScopes = map[string]string{"settings": "tenants:read", "memberships": "memberships:read", "api_keys": "api_keys:read"}
+	InspectTenant.KeyOnly = []string{"settings"}
 	InspectTenant = requireViews(InspectTenant, "settings", map[string][]string{"settings": nil, "memberships": nil, "api_keys": nil})
 	InspectTranscripts.Untrusted = true
 	InspectTranscripts = requireViews(InspectTranscripts, "list", map[string][]string{"list": nil, "metadata": {"transcript_id"}, "text": {"transcript_id"}, "document": {"transcript_id"}, "download_url": {"transcript_id", "expires_in_seconds"}})
@@ -153,7 +172,7 @@ func define(name, description, scope string, hints byte, p map[string]*Schema, r
 }
 
 var GetConnection = define("get_connection", "Identify this connection's tenant profile and granted scopes. This is the profile tool. Reconnect with a different key for another tenant.", "tenants:read", 'R', fields())
-var InspectTenant = define("inspect_tenant", "Inspect this tenant. view=settings (default) reads its settings and artifact defaults: CORS origins, retention, default media plane, transcription defaults; provider secrets are redacted. view=memberships lists members and roles (needs memberships:read). view=api_keys lists key metadata, never secrets (needs api_keys:read).", "tenants:read", 'R', page(map[string]*Schema{"view": choice("settings", "memberships", "api_keys")}))
+var InspectTenant = define("inspect_tenant", "Inspect this tenant. view=settings (default, API keys only) reads its settings and artifact defaults: CORS origins, retention, default media plane, transcription defaults; provider secrets are redacted. view=memberships lists members and roles (needs memberships:read). view=api_keys lists key metadata, never secrets (needs api_keys:read).", "tenants:read", 'R', page(map[string]*Schema{"view": choice("settings", "memberships", "api_keys")}))
 var UpdateTenant = define("update_tenant", "Change this tenant's settings and artifact defaults.", "tenants:write", 'M', map[string]*Schema{"body": tenantSettings()}, "body")
 var SetMembership = define("set_membership", "Explicitly add a member or change an existing member's role.", "memberships:write", 'M', map[string]*Schema{"action": choice("create", "update"), "membership_id": id(), "create": object(map[string]*Schema{"user_id": id(), "role": text("")}, "user_id", "role"), "update": object(fields("role"), "role")}, "action")
 var IssueAPIKey = define("issue_api_key", "Explicitly create or rotate a tenant API key. Returns the secret ONCE. Cannot grant scopes beyond this connection; do not put the secret in logs.", "api_keys:write", 'M', requestKey(map[string]*Schema{"action": choice("create", "rotate"), "api_key_id": id(), "create": object(map[string]*Schema{"name": text(""), "scopes": stringsSchema(40), "expires_at": text("RFC3339 timestamp")}, "name", "scopes", "expires_at"), "rotate": object(map[string]*Schema{"expires_at": nullable(text("RFC3339 timestamp"))})}), "action")

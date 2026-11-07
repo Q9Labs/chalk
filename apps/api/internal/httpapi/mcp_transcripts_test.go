@@ -7,11 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"go.opentelemetry.io/otel"
@@ -102,7 +104,7 @@ func TestMCPTranscriptViewsNeedTheirFieldsAndScope(t *testing.T) {
 }
 
 func TestMCPTenantViewsNeedTheirOwnScope(t *testing.T) {
-	read := scopeTestPrincipal(t, authentication.PrincipalOAuth, authentication.ScopeTenantsRead)
+	read := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeTenantsRead)
 	for view, wantRefused := range map[string]bool{"settings": false, "memberships": true, "api_keys": true} {
 		response := scopeTestCall(t, &read, toolCallBody("chalk_inspect_tenant", `{"view":"`+view+`"}`))
 		refused := strings.Contains(response.Body.String(), "auth.forbidden")
@@ -113,6 +115,23 @@ func TestMCPTenantViewsNeedTheirOwnScope(t *testing.T) {
 	response := scopeTestCall(t, &read, toolCallBody("chalk_inspect_tenant", `{}`))
 	if strings.Contains(response.Body.String(), "auth.forbidden") {
 		t.Errorf("a call without view must read settings with tenants:read: %s", response.Body.String())
+	}
+}
+
+// Both OAuth bundles hold tenants:read for the profile, but the bundles exclude tenant
+// settings, so a connected app never reaches that view and never gets a step-up.
+func TestMCPConnectedAppsNeverReadTenantSettings(t *testing.T) {
+	for _, bundle := range []string{mcpauth.ScopeRead, mcpauth.ScopeManage} {
+		app := scopeTestPrincipal(t, authentication.PrincipalOAuth, mcpauth.AuthenticationScopes(bundle)...)
+		if slices.Contains(toolNames(scopeTestList(t, app)), "chalk_inspect_tenant") {
+			t.Errorf("%s lists chalk_inspect_tenant", bundle)
+		}
+		for _, arguments := range []string{`{}`, `{"view":"settings"}`} {
+			response := scopeTestCall(t, &app, toolCallBody("chalk_inspect_tenant", arguments))
+			if response.Code != http.StatusOK || response.Header().Get("WWW-Authenticate") != "" || !strings.Contains(response.Body.String(), "auth.forbidden") || strings.Contains(response.Body.String(), "cors_allowed_origins") {
+				t.Errorf("%s %s: %d %q %s", bundle, arguments, response.Code, response.Header().Get("WWW-Authenticate"), response.Body.String())
+			}
+		}
 	}
 }
 
