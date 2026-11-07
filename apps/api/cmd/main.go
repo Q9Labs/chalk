@@ -181,7 +181,7 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUSelector(cfg.ChalkSFU.Enabled)
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUAllowlist(cfg.ChalkSFU.AllowedSpaces)
 	var chalkSFU *chalksfu.Fleet
 	if cfg.ChalkSFU.Enabled {
 		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
@@ -189,7 +189,7 @@ func run() error {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
 	}
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU})
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer

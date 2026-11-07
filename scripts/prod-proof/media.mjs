@@ -146,6 +146,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await page.addScriptTag({ content: bundle });
       if (options.deferJoin && !replacing) return page;
       try {
+        options.onJoinStart?.(guest, performance.now());
         await page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
       } finally {
         await save(`${run.directory}/guest-${guest + 1}-network.json`, network);
