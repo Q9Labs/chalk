@@ -8,6 +8,7 @@ import { IconButton } from "../../primitives/IconButton";
 import { useTheme } from "../../theme/theme";
 import { ChatTab } from "./ChatTab";
 import { PeopleTab } from "./PeopleTab";
+import { space, corners } from "../../theme/tokens";
 
 export type PeopleChatTab = "people" | "chat";
 
@@ -91,11 +92,11 @@ function useMarkChatRead(reading: boolean): void {
 
 const styles = StyleSheet.create({
   // `.tabs`: 4 pt above, 8 right, 10 left, a hairline under it.
-  tabs: { flexDirection: "row", alignItems: "center", gap: 4, paddingTop: 4, paddingRight: 8, paddingLeft: 10, borderBottomWidth: 1 },
-  tab: { height: 46, justifyContent: "center", paddingHorizontal: 10 },
+  tabs: { flexDirection: "row", alignItems: "center", gap: space[1], paddingTop: space[1], paddingRight: space[2], paddingLeft: space["2-5"], borderBottomWidth: 1 },
+  tab: { height: 46, justifyContent: "center", paddingHorizontal: space["2-5"] },
   tabLabel: { flexDirection: "row", alignItems: "center" },
-  count: { marginLeft: 5 },
-  underline: { position: "absolute", left: 10, right: 10, bottom: -1, height: 2, borderRadius: 2 },
-  unread: { position: "absolute", right: 0, top: 13, width: 7, height: 7, borderRadius: 4 },
+  count: { marginLeft: space["1-5"] },
+  underline: { position: "absolute", left: 10, right: 10, bottom: -1, height: 2, borderRadius: corners.xs },
+  unread: { position: "absolute", right: 0, top: 13, width: 7, height: 7, borderRadius: corners.sm },
   close: { marginLeft: "auto" },
 });

@@ -9,7 +9,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { haptics } from "../haptics/haptics";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
-import { durations, fixed, radii } from "../theme/tokens";
+import { durations, fixed, radii, space, corners } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
 export type BottomSheetProps = {
@@ -21,7 +21,7 @@ export type BottomSheetProps = {
   readonly title?: string;
   /** A fixed height as a share of the screen; People and Chat use 0.78. Without it the sheet fits its content. */
   readonly heightRatio?: number;
-  /** Side padding: 12 for menu-like sheets (`.sheet`), 20 for card-like ones (`.ready`). */
+  /** Side padding: space[3] for menu-like sheets (`.sheet`), 20 for card-like ones (`.ready`). */
   readonly inset?: 12 | 14 | 20;
   /**
    * `card` is the People and Chat card (`.phone .card`): no side padding, the grabber 8 pt from the
@@ -205,9 +205,9 @@ export function SheetDragRegion({ children }: { readonly children: ReactNode }):
 }
 
 const styles = StyleSheet.create({
-  sheet: { position: "absolute", bottom: 0, paddingTop: 8, borderTopLeftRadius: radii.sheet, borderTopRightRadius: radii.sheet },
-  grabArea: { alignItems: "center", paddingTop: 4, paddingBottom: 12 },
+  sheet: { position: "absolute", bottom: 0, paddingTop: space[2], borderTopLeftRadius: radii.sheet, borderTopRightRadius: radii.sheet },
+  grabArea: { alignItems: "center", paddingTop: space[1], paddingBottom: space[3] },
   cardGrabArea: { alignItems: "center" },
-  grabber: { width: 36, height: 5, borderRadius: 3 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 4, paddingHorizontal: 8, paddingBottom: 14 },
+  grabber: { width: 36, height: 5, borderRadius: corners.xs },
+  header: { flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: space[1], paddingHorizontal: space[2], paddingBottom: space[3] },
 });

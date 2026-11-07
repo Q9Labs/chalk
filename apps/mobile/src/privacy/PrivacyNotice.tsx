@@ -3,6 +3,7 @@ import { ChalkText, IconButton, useTheme, useToasts } from "@q9labsai/chalk-reac
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { MOBILE_PRIVACY_EFFECTIVE_DATE, MOBILE_PRIVACY_NOTICE_LINK_TEXT, MOBILE_PRIVACY_NOTICE_TEXT } from "./privacy-policy";
+import { space, corners } from "@q9labsai/chalk-react-native";
 
 const dismissalKey = `chalk:privacy-notice:${MOBILE_PRIVACY_EFFECTIVE_DATE}`;
 
@@ -61,7 +62,7 @@ export function PrivacyNotice({ topInset = 0 }: { readonly topInset?: number } =
 }
 
 const styles = StyleSheet.create({
-  notice: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 12, padding: 8, marginVertical: 8 },
+  notice: { flexDirection: "row", alignItems: "center", gap: space[2], borderWidth: 1, borderRadius: corners.xl, padding: space[2], marginVertical: space[2] },
   text: { flex: 1 },
   link: { textDecorationLine: "underline" },
 });

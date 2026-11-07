@@ -2,7 +2,7 @@ import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useMeasuredRef } from "../../frame/measurement";
 import { useTheme } from "../../theme/theme";
-import { fontFamilies } from "../../theme/tokens";
+import { fontFamilies, space, corners } from "../../theme/tokens";
 import { ChalkText } from "../ChalkText";
 import { IconButton } from "../IconButton";
 import { PillButton } from "../PillButton";
@@ -43,8 +43,8 @@ export const Toast = memo(function Toast({ toast, onDismiss }: ToastProps): Reac
 });
 
 const styles = StyleSheet.create({
-  toast: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingVertical: 6, paddingRight: 6, paddingLeft: 14, borderWidth: 1, borderRadius: 12 },
-  message: { flexShrink: 1, marginRight: 4 },
-  wrapped: { lineHeight: 14 * 1.35, paddingVertical: 4 },
+  toast: { flexDirection: "row", alignItems: "center", gap: space["2-5"], minHeight: 48, paddingVertical: space["1-5"], paddingRight: space["1-5"], paddingLeft: space[3], borderWidth: 1, borderRadius: corners.xl },
+  message: { flexShrink: 1, marginRight: space[1] },
+  wrapped: { lineHeight: 14 * 1.35, paddingVertical: space[1] },
   strong: { fontFamily: fontFamilies[600] },
 });

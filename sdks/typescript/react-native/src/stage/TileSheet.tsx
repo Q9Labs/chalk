@@ -12,6 +12,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { cameraFacing, otherCamera } from "./camera";
 import { shallowEqual, useSpaceSelector } from "./space-selector";
 import { useStageView } from "./stage-view";
+import { space } from "../theme/tokens";
 
 export type TileSheetProps = {
   /** The person whose tile was tapped last; it stays set while the sheet closes, so the rows don't empty mid-slide. */
@@ -130,6 +131,6 @@ export function TileSheet({ participantId, open, onClose }: TileSheetProps): Rea
 
 const styles = StyleSheet.create({
   // `.shd`: the person's face and name over the rows.
-  header: { flexDirection: "row", alignItems: "center", gap: 12, paddingTop: 4, paddingHorizontal: 8, paddingBottom: 14 },
+  header: { flexDirection: "row", alignItems: "center", gap: space[3], paddingTop: space[1], paddingHorizontal: space[2], paddingBottom: space[3] },
   name: { flexShrink: 1 },
 });

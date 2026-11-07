@@ -8,6 +8,7 @@ import { usePressAnimation } from "../motion/press";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
 import type { Arrangement } from "../frame/regions";
+import { space, corners } from "../theme/tokens";
 
 export type HeaderProps = {
   readonly callName: string;
@@ -91,18 +92,18 @@ export function formatElapsed(milliseconds: number): string {
 }
 
 const styles = StyleSheet.create({
-  header: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  portrait: { paddingLeft: 14, paddingRight: 12 },
-  landscape: { paddingHorizontal: 8, justifyContent: "flex-start" },
-  pad: { paddingLeft: 24, paddingRight: 16 },
+  header: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] },
+  portrait: { paddingLeft: space[3], paddingRight: space[3] },
+  landscape: { paddingHorizontal: space[2], justifyContent: "flex-start" },
+  pad: { paddingLeft: space[6], paddingRight: space[4] },
   nameButton: { flexShrink: 1 },
   // `.nameb`: 44 pt high, pulled 6 pt left so the text lines up with the header padding.
-  name: { flexDirection: "row", alignItems: "center", gap: 4, height: 44, paddingHorizontal: 6, marginLeft: -6, borderRadius: 999 },
+  name: { flexDirection: "row", alignItems: "center", gap: space[1], height: 44, paddingHorizontal: space["1-5"], marginLeft: -space["1-5"], borderRadius: corners.pill },
   // `.lnd .title`: a 40 pt pill. The mockup pulls `.nameb` 6 pt into the pill's 2 pt padding, so the
   // text starts 2 pt in, and the name's own 6 pt plus the pill's 12 pt follow the chevron.
-  namePill: { height: 40, marginLeft: 0, paddingLeft: 2, paddingRight: 18 },
+  namePill: { height: 40, marginLeft: 0, paddingLeft: space["0-5"], paddingRight: space[4] },
   nameText: { flexShrink: 1 },
-  status: { flexDirection: "row", alignItems: "center", gap: 10 },
-  rec: { flexDirection: "row", alignItems: "center", gap: 6 },
-  recDot: { width: 8, height: 8, borderRadius: 4 },
+  status: { flexDirection: "row", alignItems: "center", gap: space["2-5"] },
+  rec: { flexDirection: "row", alignItems: "center", gap: space["1-5"] },
+  recDot: { width: 8, height: 8, borderRadius: corners.pill },
 });

@@ -2,6 +2,7 @@ import { recordDevDiagnosticsLifecycleEvent, recordDiagnosticsFailure, resolveDe
 import { installNativeSession } from "@q9labsai/chalk-react-native/client";
 import { getDeviceInfo } from "@q9labsai/chalk-react-native/runtime";
 import { ChalkUI, useDeviceLayout, useTheme, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { space } from "@q9labsai/chalk-react-native";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking, View } from "react-native";
@@ -97,7 +98,7 @@ function Shell(props: ShellProps): React.JSX.Element {
   const { colors } = useTheme();
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-      <View style={{ paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right }}>
+      <View style={{ paddingLeft: space[4] + insets.left, paddingRight: space[4] + insets.right }}>
         <PrivacyNotice topInset={insets.top} />
       </View>
       <SafeAreaProvider>

@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { useMeasuredRef } from "../frame/measurement";
 import { useTheme } from "../theme/theme";
-import { fixed } from "../theme/tokens";
+import { fixed, space, corners } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
 export type SegmentOption<TValue extends string> = {
@@ -49,7 +49,7 @@ function Segment<TValue extends string>({ option, selected, compact, onChange }:
 }
 
 const styles = StyleSheet.create({
-  track: { flexDirection: "row", padding: 3, borderRadius: 999 },
-  segment: { justifyContent: "center", paddingHorizontal: 14, borderRadius: 999 },
+  track: { flexDirection: "row", padding: space[1], borderRadius: corners.pill },
+  segment: { justifyContent: "center", paddingHorizontal: space[3], borderRadius: corners.pill },
   lifted: { boxShadow: fixed.segmentShadow },
 });
