@@ -186,6 +186,10 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 		"SFU_CAMERA_UPLINK_COST=150",
 		"SFU_VIDEO_STREAM_COST=150",
 		"SFU_SCREEN_STREAM_COST=150",
+		// Every camera reserves the full stream cost however large the call. The node refuses
+		// to start when the large-call reservation it would use instead does not fit the small
+		// budgets the placement and admission tests count in.
+		"SFU_LARGE_CALL_PARTICIPANTS=0",
 	)
 	for key, value := range settings {
 		env = append(env, key+"="+value)
