@@ -109,7 +109,7 @@ func TestMixedLocalAndMissingRemoteTracksCannotBecomeSuccessfulPartialResponse(t
 			{Location: "remote", SessionID: "sender", TrackName: "screen", ErrorCode: "TRACK_NOT_FOUND"},
 		},
 	}
-	err := response.providerError("add_tracks")
+	err := response.providerError("add_tracks", http.StatusOK)
 	if err == nil || mediaplane.IsExactRemoteTrackAbsence(err) || mediaplane.IsPartialRemoteTrackResponse(err) {
 		t.Fatalf("mixed batch must remain a failure, got %v", err)
 	}
@@ -186,7 +186,7 @@ func TestForcedCloseBudgetDoesNotChangeInteractiveBudget(t *testing.T) {
 
 func TestAlreadyClosedReceiveItemDoesNotHideAnotherFailure(t *testing.T) {
 	response := closeTracksResponse{requestedTracks: []mediaplane.CloseTrack{{Mid: "0"}, {Mid: "1"}}, Tracks: []closeTrackResult{{Mid: "0", ErrorCode: "close_track_error"}, {Mid: "1", ErrorCode: "internal_error"}}}
-	if err := response.providerError("close_tracks"); err == nil {
+	if err := response.providerError("close_tracks", http.StatusOK); err == nil {
 		t.Fatal("unresolved item must remain a failure")
 	}
 }
