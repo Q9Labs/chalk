@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "re
 import { CallCardStyles } from "./CallCardStyles";
 import { cn } from "../../utils/cn";
 import { useIsMobile } from "../../internal/useMediaQuery";
+import { useNarrowCall } from "../../internal/call-width";
 import { ChalkSheet } from "../chalk-ui";
 import type { DrawerState } from "../space-view/useDrawerPresence";
 
@@ -23,7 +24,8 @@ export interface CallCardProps {
  * where it came from. Panels keep their own landmarks, so the drawer itself carries no role.
  */
 export function CallCard({ state, onClose, interactive = true, children, panel, onPanelChange, peopleCount, chatEnabled = true, participantsEnabled = true }: CallCardProps) {
-  const phone = useIsMobile();
+  const narrowWindow = useIsMobile();
+  const phone = useNarrowCall() || narrowWindow;
   const id = useId();
   const tabs: ("participants" | "chat")[] = [];
   if (participantsEnabled) tabs.push("participants");
