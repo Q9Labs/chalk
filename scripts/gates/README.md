@@ -15,7 +15,7 @@ the `services` lane, because CI runs the API and Sync gates as separate jobs.
 
 ## The Gate workflow
 
-`.github/workflows/gate.yml` runs on every pull request, every push to `master`,
+`.github/workflows/gate.yml` runs on every pull request, every merge queue group,
 every night, and on manual dispatch. `Select gate jobs` runs
 `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the
 same plan as the lanes to pick the jobs a pull request needs: the API gate, the
@@ -27,15 +27,21 @@ consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboa
 budget, Publint and Are The Types Wrong, which read the build output). The call
 bundle budget and the leak journeys run only when a file the call-states page
 imports changes (see `callUi` in `chalk-gate-plan.mjs`) or on a full gate.
+`Select gate jobs` and `Root gate` run on `ubuntu-slim`. GitHub documents the same concurrency model for single-CPU runners as for the others, but in a probe during a backlog they started at once instead of waiting for one of the 20 hosted-runner slots, so treat that as observed, not guaranteed. Editing `.fallowrc.json` or the design-token baseline in `scripts/gates/` (added by the design-token pull requests) selects only the `checks` group (a `.fallowrc.json` edit also runs a whole-repository Fallow audit); any other file under `scripts/gates/` or `package.json` still selects the full gate.
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when every
 selected group passed; a job that the planner skips counts as passed. When the
 planner cannot select jobs, for example because the base does not resolve, or
-`Select gate jobs` fails, every job runs and every lane runs with `--full`. Pushes to `master`, the nightly run, and manual runs select every job and
-run every lane with `--full`, so anything a pull request skips still runs once it merges, and
-master pushes share one run slot, so a newer push replaces the run still queued and some commits get no run. A full run scans staged files and commits
-for secrets: the pushed range on a push to `master`, otherwise the commits since
-the base, or the last commit.
+`Select gate jobs` fails, every job runs and every lane runs with `--full`. The nightly run and manual runs select every job and
+run every lane with `--full`.
+
+A merge queue group selects jobs the same way a pull request does, but diffs against the group's base commit
+(`github.event.merge_group.base_sha`), which is the master tip or the head of the group ahead of it. Master receives only
+a commit whose group passed, and `scripts/releases/release.py` accepts that group's run as the Gate of the commit that
+landed. Each group has its own concurrency key, so no group cancels another. A commit that reaches master without a
+group (an administrator bypass or a direct push) has no Gate run until someone dispatches one. A full run scans staged
+files and commits for secrets: the group's range in a merge queue group, otherwise the commits since the base, or the
+last commit.
 
 On a pull request that the planner narrowed, the workflow sets
 `GATE_VULN_BASE_REF` to the base branch.
@@ -43,16 +49,16 @@ When OSV-Scanner (`osv` lane) or govulncheck (API gate) finds a vulnerability,
 `osv-scanner.sh` and `govulncheck.sh` run the same scan on the merge base, and
 `new-vulnerabilities.mjs` fails the pull request only for a finding the base
 lacks, that is, a package version the pull request changed. A new advisory
-against a package nobody changed fails the nightly run instead. Master pushes set
-`GATE_OSV_BASE_COMMIT` to `github.event.before`: OSV compares against that exact
-commit, not the merge base (including force pushes and merge commits). Branch
-creation's all-zero SHA has no baseline and fails on all findings. An unavailable
-old tip is fetched by SHA; a failed fetch fails the check. PR behavior is unchanged.
+against a package nobody changed fails the nightly run instead. Merge queue groups set
+`GATE_OSV_BASE_COMMIT` to `github.event.merge_group.base_sha`: OSV compares against that exact
+commit, not the merge base. An all-zero SHA has no baseline and fails on all findings. An unavailable
+base is fetched by SHA; a failed fetch fails the check. PR behavior is unchanged.
 The separate Daily OSV workflow also scans without a baseline, stays red on any
 finding, and reports to the standing `security-osv-daily` issue.
 
-Only pushes to `master` save the Go build caches and the Metro cache, so pull
-requests start from the latest master caches and do not evict each other's.
+Only the `Cache warm-up` workflow (`.github/workflows/cache-warm.yml`), which runs on pushes to `master`, saves the Go
+build caches, so pull requests and queue groups start from the latest master caches and do not evict each other's.
+The Metro cache is no longer saved; the mobile export starts cold.
 The API job sets `-count=1` because a cached Go test result would not see a
 migration or database change. CI calls `scripts/gates/commit.sh` directly with
 `GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the

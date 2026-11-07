@@ -27,6 +27,13 @@ func object(p map[string]*Schema, required ...string) *Schema {
 func text(description string) *Schema {
 	return &Schema{Type: "string", Description: description, MaxLength: 4096}
 }
+
+// nonEmpty makes an optional string either absent or at least one non-space character.
+func nonEmpty(s *Schema) *Schema {
+	s.MinLength = 1
+	s.Pattern = `\S`
+	return s
+}
 func choice(values ...string) *Schema { return &Schema{Type: "string", Enum: values} }
 func integer(min, max int) *Schema    { return &Schema{Type: "integer", Minimum: &min, Maximum: &max} }
 func boolean() *Schema                { return &Schema{Type: "boolean"} }

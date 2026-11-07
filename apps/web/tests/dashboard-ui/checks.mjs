@@ -73,6 +73,7 @@ try {
     await context.close();
   }
   await (await import("./developer-recording-checks.mjs")).developerRecordingChecks({ open, fixture, check });
+  await (await import("./connect-checks.mjs")).connectChecks({ open, check });
   await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
   {

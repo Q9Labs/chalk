@@ -287,8 +287,9 @@ func readSingleMessage(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	return body, true
 }
 
-// grantedScopes lists the scopes the credential holds. TenantSettingsScope is derived
-// by the API shell and is not a scope a key can be issued, so it stays out of the list.
+// grantedScopes lists the scopes the credential holds. TenantSettingsScope and
+// CallCredentialsScope are derived by the API shell and are not scopes a key can be
+// issued, so they stay out of the list.
 func grantedScopes(p Principal) []string {
-	return slices.DeleteFunc(slices.Clone(p.Scopes), func(scope string) bool { return scope == TenantSettingsScope })
+	return slices.DeleteFunc(slices.Clone(p.Scopes), func(scope string) bool { return scope == TenantSettingsScope || scope == CallCredentialsScope })
 }
