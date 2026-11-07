@@ -75,8 +75,8 @@ async function openCall(run, receiver) {
   await save(`${run.directory}/episode.json`, episode);
   const ending = episodeEnd(run, `${episodePath}/${episode.id}`);
   let startedAt = performance.now();
-  // A join starts when the last guest calls the SDK join, not when its browser launches.
-  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (_guest, at) => (startedAt = at) });
+  // A join starts when the first guest calls the SDK join, not when its browser launches.
+  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 0 && (startedAt = at) });
   ending.useSDK(guests.pages[0]);
   return { ...ending, guests, startedAt };
 }
@@ -95,9 +95,8 @@ async function faultRound(pages, muted) {
     restoredAt = performance.now();
     await shell(faultUp);
   }
-  // A muted client sends no audio, so the muted round proves video and that the mute held.
   if (!muted) return rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
-  const recovered = await videoRendersWithin(pages, restoredAt, recoveryLimitMs);
+  const recovered = await mutedRendersWithin(pages, restoredAt, recoveryLimitMs);
   check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");
   return recovered;
 }
@@ -113,21 +112,23 @@ async function trial(run, receiver, fault) {
     const recoveries = [await faultRound(pages, false), await faultRound(pages, true)];
     return { ms: Math.max(...recoveries), joinMs, recoveries };
   } catch (error) {
-    return { error: errorEvidence(error).message ?? "failed" };
+    return { error: error instanceof Error ? error.message : String(error) };
   } finally {
     if (call) await call.end().catch(() => {});
     for (const resource of run.resources.splice(mark)) await resource.dispose().catch(() => {});
   }
 }
 
-async function videoRendersWithin(pages, startedAt, limitMs) {
+// The muted client sends no audio, so the other client's audio must reach it and video must reach both.
+async function mutedRendersWithin(pages, startedAt, limitMs) {
   let previous = await stats(pages);
   for (;;) {
     await sleep(pollMs);
     const current = await stats(pages);
-    if (current.every((rows, guest) => grew(rows, previous[guest], "video", "camera"))) return Math.round(performance.now() - startedAt);
+    const video = current.every((rows, guest) => grew(rows, previous[guest], "video", "camera"));
+    if (video && grew(current[0], previous[0], "audio", "microphone")) return Math.round(performance.now() - startedAt);
     previous = current;
-    check(performance.now() - startedAt < limitMs + 15_000, "muted recovery: no rendered video");
+    check(performance.now() - startedAt < limitMs + 15_000, "muted recovery: no rendered video and audio");
   }
 }
 
