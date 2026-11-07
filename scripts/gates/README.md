@@ -39,7 +39,12 @@ A merge queue group selects jobs the same way a pull request does, but diffs aga
 (`github.event.merge_group.base_sha`), which is the master tip or the head of the group ahead of it. Master receives only
 a commit whose group passed, and `scripts/releases/release.py` accepts that group's run as the Gate of the commit that
 landed. Each group has its own concurrency key, so no group cancels another. A commit that reaches master without a
-group (an administrator bypass or a direct push) has no Gate run until someone dispatches one. A full run scans staged
+group (an administrator bypass or a direct push) has no Gate run until someone dispatches one.
+
+Merge with `~/.codex/skills/file-pr/merge.sh <pr>`. Auto-merge is off for the repository, because the queue is a ruleset
+rule, so `gh pr merge` cannot enqueue. The script enqueues with the `enqueuePullRequest` mutation, pinned to the head it
+checked (`expectedHeadOid`), and waits until the pull request lands or the queue drops it. A push after enqueueing drops
+the entry: fix the cause and run the script again. A full run scans staged
 files and commits for secrets: the group's range in a merge queue group, otherwise the commits since the base, or the
 last commit.
 
