@@ -194,16 +194,24 @@ func freezeTicks(p *hostPressure, from, to, period, freeze time.Duration) {
 }
 
 func TestRepeatedShortStallsCannotRestartTheCap(t *testing.T) {
+	// 2.1 s: each stall begins inside the hold of the one before. 2.4 s: each begins
+	// exactly where the hold of the one before ends.
+	for _, period := range []time.Duration{2100 * time.Millisecond, 2400 * time.Millisecond} {
+		var p hostPressure
+		freezeTicks(&p, 0, 9*time.Second, period, 300*time.Millisecond)
+		if !p.active(at(9 * time.Second)) {
+			t.Fatalf("period %v: no pressure 9 s into a run of repeating stalls", period)
+		}
+		freezeTicks(&p, 9*time.Second, 40*time.Second, period, 300*time.Millisecond)
+		if p.active(at(40 * time.Second)) {
+			t.Fatalf("period %v: pressure still held after 40 s of repeating stalls, the cap restarts on each one", period)
+		}
+		if got := p.underFor; got > pressureMax+allocationInterval {
+			t.Fatalf("period %v: counted %v of pressure, want at most the cap %v", period, got, pressureMax)
+		}
+	}
 	var p hostPressure
-	// 300 ms freezes every 2.1 s: each stall begins inside the hold of the one before.
-	freezeTicks(&p, 0, 9*time.Second, 2100*time.Millisecond, 300*time.Millisecond)
-	if !p.active(at(9 * time.Second)) {
-		t.Fatalf("no pressure 9 s into a run of repeating stalls")
-	}
-	freezeTicks(&p, 9*time.Second, 40*time.Second, 2100*time.Millisecond, 300*time.Millisecond)
-	if p.active(at(40 * time.Second)) {
-		t.Fatalf("pressure still held after 40 s of repeating stalls, the cap restarts on each one")
-	}
+	freezeTicks(&p, 0, 40*time.Second, 2100*time.Millisecond, 300*time.Millisecond)
 	// A quiet gap longer than the hold ends the run, so a later stall begins a new one.
 	tickThrough(&p, 40*time.Second, 50*time.Second, 0)
 	p.controlTick(at(50*time.Second + 400*time.Millisecond))
