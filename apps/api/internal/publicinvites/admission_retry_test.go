@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"testing"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -36,7 +37,7 @@ func (r *retryReplayRepository) CreateArrival(_ context.Context, arrival Arrival
 	r.arrival = arrival
 	return arrival, nil
 }
-func (r *retryReplayRepository) CreateAdmissionRequest(context.Context, AdmissionRequest) (AdmissionRequest, error) {
+func (r *retryReplayRepository) CreateAdmissionRequest(context.Context, AdmissionRequest, mediaplane.ClientProviders) (AdmissionRequest, error) {
 	// The real CreateAdmissionRequest rejects a non-pending arrival via publicAdmissionProvenanceValid.
 	return AdmissionRequest{}, ErrArrivalUnavailable
 }

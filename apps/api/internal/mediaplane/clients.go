@@ -28,6 +28,12 @@ func ParseClientProviders(list string) ClientProviders {
 	return clients
 }
 
+// AllClientProviders is for a request with no SDK of its own to ask, such as a
+// host approving a guest. The guest's SDK is checked when the guest collects access.
+func AllClientProviders() ClientProviders {
+	return ClientProviders{chalk: true}
+}
+
 // Runs reports whether the caller's SDK can run the provider.
 func (c ClientProviders) Runs(provider Provider) bool {
 	switch provider {

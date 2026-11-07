@@ -102,7 +102,7 @@ try {
     await guest.getByLabel("Your name").fill("Deadline Guest");
     await guest.getByRole("button", { name: "Join call", exact: true }).click();
     const guestJoined = guest.locator('[data-tour="video-grid"]').first().waitFor({ timeout: 45000 });
-    const admit = page.getByRole("button", { name: "Admit Deadline Guest", exact: true });
+    const admit = page.getByRole("button", { name: "Let Deadline Guest in", exact: true });
     await Promise.race([guestJoined, admit.waitFor({ timeout: 45000 })]);
     if (await admit.isVisible()) await admit.click();
     await guestJoined;

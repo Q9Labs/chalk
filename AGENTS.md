@@ -17,3 +17,14 @@ Put shared behavior in packages first, then wire it into apps. Don't fix SDK beh
 ## Verification
 
 Use the relevant checks for the change. Run heavy Linux checks on Instabox; [gate operations](scripts/gates/README.md) covers the full gate, API and Sync gates, setup, and the commit hook. For code review, apply [CODING_STANDARDS.md](CODING_STANDARDS.md).
+
+## Orbs
+
+Every change to UI or user-facing behavior is tested on an Orb: the running product on its own Instabox machine, started from Chalk's base snapshot with your branch on top. A change with no visible effect (docs, tests, CI, a refactor that keeps behavior) skips it.
+
+1. Push the branch, then run `orb start chalk <branch>` (the `orb` skill). It starts the stack, runs the journeys against the public URL, saves the panel and evidence (the command prints where), and deletes the machine, in about 5 to 10 minutes.
+   The scripted journeys are a baseline. When they don't cover the feature you changed, use `orb up chalk <branch>` instead of `orb start`, drive that feature through the real UI, run `orb verify <orb>`, and finish with `orb down <orb>`.
+2. Put the preview URL, the journey results and the evidence location in the PR body, and say that a reviewer recreates the Orb with `orb resume chalk:<branch>`.
+3. Never leave an Orb running. If the test fails, fix the cause and run it again. `orb start --keep-on-fail` keeps a failed Orb for inspection, and `orb down <orb>` deletes it.
+
+Orbs share the Instabox plan's monthly credit with CI. `orb` refuses to start machines past that credit, and raising the cap needs the owner's approval.

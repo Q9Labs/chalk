@@ -2339,6 +2339,7 @@ export const ArriveBySpacePublicInviteRequestHeadersSchema = /* @__PURE__ */ (()
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
     "X-Chalk-Arrival-Handle": Schema.optional(Schema.String),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type ArriveBySpacePublicInviteRequestHeaders = typeof ArriveBySpacePublicInviteRequestHeadersSchema.Type;
 
@@ -2497,6 +2498,7 @@ export type CreateMembership429ResponseHeaders = typeof CreateMembership429Respo
 export const CreatePublicSpaceRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "Idempotency-Key": Schema.String.check(Schema.isMinLength(16), Schema.isMaxLength(128), Schema.isPattern(new RegExp("^[A-Za-z0-9_-]+$"))),
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type CreatePublicSpaceRequestHeaders = typeof CreatePublicSpaceRequestHeadersSchema.Type;
 
@@ -2866,6 +2868,7 @@ export type GetSpacePublicInvite429ResponseHeaders = typeof GetSpacePublicInvite
 export const GetSpacePublicInviteArrivalRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "X-Chalk-Arrival-Handle": Schema.String,
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type GetSpacePublicInviteArrivalRequestHeaders = typeof GetSpacePublicInviteArrivalRequestHeadersSchema.Type;
 
@@ -3493,6 +3496,7 @@ export type RedeliverWebhookDelivery429ResponseHeaders = typeof RedeliverWebhook
 export const RefreshSpacePublicInviteAccessRequestHeadersSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     "X-Chalk-Arrival-Handle": Schema.String,
+    "X-Chalk-Media-Providers": Schema.optional(Schema.String.check(Schema.isMaxLength(256))),
   }))();
 export type RefreshSpacePublicInviteAccessRequestHeaders = typeof RefreshSpacePublicInviteAccessRequestHeadersSchema.Type;
 
@@ -6328,6 +6332,7 @@ export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6439,6 +6444,7 @@ export const CreatePublicSpaceErrorSchema = Schema.Union([
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6713,6 +6719,7 @@ export const GetSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6904,6 +6911,7 @@ export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -7143,6 +7151,7 @@ export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
   ArrivalUnavailableErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,

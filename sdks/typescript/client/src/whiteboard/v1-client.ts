@@ -1,5 +1,6 @@
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
+import { sessionBaggage } from "../session";
 import { WhiteboardV1ProtocolLimits, type WhiteboardV1ClientFrame, type WhiteboardV1Element, type WhiteboardV1ServerFrame } from "../generated/whiteboard-v1";
 import type { SyncSocket } from "../sync/types";
 import {
@@ -33,6 +34,11 @@ const MAX_TIMER_DRIFT_MS = 250;
 const MAX_SLOW_CONNECTION_BACKOFF_MS = 4_000;
 const DEFAULT_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 5_000;
+function reconnectDelay(configuredDelay: number | undefined, attempt: number, random: () => number): number {
+  if (configuredDelay === 0) return 0;
+  const base = Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(attempt, 5));
+  return Math.round(base * (0.5 + 0.5 * random()));
+}
 /** Matches the retries the hello ladder used to give a rejected token, so a key rotation or clock skew still clears up. */
 const MAX_REJECTED_HELLO_RETRIES = 4;
 type ClientPhase = "idle" | "connecting" | "authenticating" | "live" | "stopped";
@@ -50,7 +56,7 @@ const encoder = new TextEncoder();
 
 type Deferred<T> = {
   readonly resolve: (value: T) => void;
-  readonly reject: (error: Error) => void;
+  readonly reject: (error: unknown) => void;
   settled: boolean;
 };
 
@@ -87,9 +93,9 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   readonly #latestViews = new Map<string, Extract<ChalkWhiteboardV1Event, { readonly type: "view" }>>();
   readonly #summaryListeners = new Set<(summary: ChalkWhiteboardSummary) => void>();
   readonly #operations = new Map<string, OperationEntry>();
+  readonly #savingOperations = new Map<string, OperationEntry>();
   /** Strictly increasing, so a restore replays operations made in the same millisecond in the order they were made. */
   #lastCreatedAt = 0;
-  readonly #reservedOperationIds = new Set<string>();
   /**
    * Policy changes and per-person choices in the order the host made them. Only the first one is sent, and only once it
    * is saved, so the order comes from creation and never from which save finishes first.
@@ -117,7 +123,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #viewsSupported = false;
   #presenting = false;
   #presenterId: string | null = null;
-  #hello: HelloLevel = "presenter-view";
+  #hello: HelloLevel = HELLO_LEVELS[0];
   #viewSequence = 0;
   #viewOwnerId: string | null = null;
   readonly #viewVersions = new ChalkWhiteboardViewVersions();
@@ -172,7 +178,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (this.#started && this.#startPromise) return this.#startPromise;
     this.#started = true;
     globalThis.document?.addEventListener("visibilitychange", this.#visibilityChanged);
-    this.#hello = "presenter-view";
+    this.#hello = HELLO_LEVELS[0];
     this.#rejectedHelloRetries = 0;
     this.#viewsSupported = false;
     this.#phase = "connecting";
@@ -417,6 +423,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
         void this.#store.remove(pending.operationId).catch(() => undefined);
         continue;
       }
+      if (!isAccessChange(pending.frame) && this.#savingOperations.has(pending.operationId)) continue;
       if (this.#operationCount() >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) return;
       this.#lastCreatedAt = Math.max(this.#lastCreatedAt, pending.createdAt);
       if (!isAccessChange(pending.frame)) this.#operations.set(pending.operationId, { pending, retries: 0 });
@@ -779,16 +786,25 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     }
     const { promise, deferred } = commitDeferred();
     if (isAccessChange(frame)) return this.#queueAccessChange({ pending, deferred, retries: 0 }, deferred, promise);
-    this.#reservedOperationIds.add(frame.operation_id);
-    const saveFailure = await this.#persist(pending);
-    this.#reservedOperationIds.delete(frame.operation_id);
-    if (saveFailure) throw saveFailure;
-    this.#operations.set(frame.operation_id, { pending, deferred, retries: 0 });
-    if (this.#phase === "live" && this.#snapshots.size === 0) {
-      if (this.#waitingForOperations) this.#awaitingOperationIds.add(frame.operation_id);
-      this.#sendOperation(frame);
-    }
+    const entry = { pending, deferred, retries: 0 };
+    this.#savingOperations.set(frame.operation_id, entry);
+    void this.#saveOperation(entry, deferred).catch((cause: unknown) => rejectDeferred(deferred, error(failure(operationName(frame), "unavailable", true, "Unable to queue the whiteboard operation."), cause)));
     return promise;
+  }
+
+  async #saveOperation(entry: OperationEntry, deferred: Deferred<ChalkWhiteboardV1Commit>): Promise<void> {
+    const { pending } = entry;
+    const saveFailure = await this.#persist(pending);
+    this.#savingOperations.delete(pending.operationId);
+    if (saveFailure) {
+      rejectDeferred(deferred, saveFailure);
+      return;
+    }
+    this.#operations.set(pending.operationId, entry);
+    if (this.#phase === "live" && this.#snapshots.size === 0) {
+      if (this.#waitingForOperations) this.#awaitingOperationIds.add(pending.operationId);
+      this.#sendOperation(pending.frame);
+    }
   }
 
   /**
@@ -921,9 +937,18 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (head) head.state = "sent";
     const entries = [...operations, ...(head ? [head.entry] : [])].sort((left, right) => compareChalkWhiteboardV1PendingOperations(left.pending, right.pending));
     for (const entry of entries) {
+      this.#clearOperationRetryTimer(entry.pending.operationId);
+      if (this.#phase !== "live") break;
       if (this.#waitingForOperations) this.#awaitingOperationIds.add(entry.pending.operationId);
       this.#sendOperation(entry.pending.frame);
     }
+  }
+
+  #releaseOperationRetryToSnapshotFlush(operationId: string, entry: OperationEntry): void {
+    this.#awaitingOperationIds.delete(operationId);
+    const change = this.#accessChange(operationId);
+    if (change?.state === "sent") change.state = "ready";
+    if (!change) this.#scheduleOperationRetry(operationId, entry);
   }
 
   /**
@@ -964,11 +989,11 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #pendingEntries(): OperationEntry[] {
-    return [...this.#operations.values(), ...this.#accessChanges.map((change) => change.entry)];
+    return [...this.#operations.values(), ...this.#savingOperations.values(), ...this.#accessChanges.map((change) => change.entry)];
   }
 
   #operationCount(): number {
-    return this.#operations.size + this.#accessChanges.length;
+    return this.#operations.size + this.#savingOperations.size + this.#accessChanges.length;
   }
 
   #scheduleOperationRetry(operationId: string, entry: OperationEntry): void {
@@ -977,7 +1002,12 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     const timer = this.#clock().setTimeout(
       () => {
         this.#operationRetryTimers.delete(operationId);
-        if (this.#phase === "live" && this.#sentEntry(operationId) === entry) this.#sendOperation(entry.pending.frame);
+        if (this.#phase !== "live" || this.#sentEntry(operationId) !== entry) return;
+        if (this.#snapshots.size > 0) {
+          this.#releaseOperationRetryToSnapshotFlush(operationId, entry);
+          return;
+        }
+        this.#sendOperation(entry.pending.frame);
       },
       this.#options.retryDelayMs ?? Math.min(100 * 2 ** Math.min(entry.retries - 1, 4), 2_000),
     );
@@ -999,7 +1029,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
     if (step === "fail") return false;
     if (step === "step-down") return this.#stepDownHello();
     if (step === "retry-hello") return this.#retryHello();
-    if (phase === "live") this.#hello = "presenter-view";
+    if (phase === "live") this.#hello = HELLO_LEVELS[0];
     return true;
   }
 
@@ -1016,7 +1046,8 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #fallbackHello(): void {
-    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + 1, HELLO_LEVELS.length - 1)] ?? "legacy";
+    const step = this.#hello === "session" && sessionBaggage() === undefined ? 2 : 1;
+    this.#hello = HELLO_LEVELS[Math.min(HELLO_LEVELS.indexOf(this.#hello) + step, HELLO_LEVELS.length - 1)] ?? "legacy";
     if (!viewsNegotiated(this.#hello)) this.#pendingLeadingView = null;
   }
 
@@ -1052,7 +1083,7 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   #scheduleReconnect(): void {
     this.#clearReconnect();
     const configuredDelay = this.#options.reconnectDelayMs;
-    const delay = configuredDelay === 0 ? 0 : Math.min(MAX_RECONNECT_DELAY_MS, (configuredDelay ?? DEFAULT_RECONNECT_DELAY_MS) * 2 ** Math.min(this.#reconnectAttempt, 5));
+    const delay = reconnectDelay(configuredDelay, this.#reconnectAttempt, this.#options.random ?? Math.random);
     this.#reconnectAttempt += 1;
     this.#reconnectTimer = this.#clock().setTimeout(() => {
       this.#reconnectTimer = undefined;
@@ -1077,14 +1108,14 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #assertOperationCapacity(): void {
-    if (this.#operationCount() + this.#reservedOperationIds.size >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) {
+    if (this.#operationCount() >= WhiteboardV1ProtocolLimits.pendingOperationMaxItems) {
       throw error(failure("submit_update", "unavailable", true, "Whiteboard operation capacity is full."));
     }
   }
 
   #nextId(): string {
     const id = this.#options.ids?.next() ?? crypto.randomUUID();
-    if (this.#operations.has(id) || this.#accessChange(id) || this.#reservedOperationIds.has(id) || this.#snapshots.has(id)) {
+    if (this.#operations.has(id) || this.#savingOperations.has(id) || this.#accessChange(id) || this.#snapshots.has(id)) {
       throw error(failure("submit_update", "invalid_payload", false, "Whiteboard operation ID is already pending."));
     }
     return id;
@@ -1095,7 +1126,24 @@ export class ChalkWhiteboardV1Client implements ChalkWhiteboardV1Transport {
   }
 
   #sendOperation(frame: ChalkWhiteboardV1PendingOperation["frame"]): void {
-    for (const outbound of whiteboardV1OperationFrames(frame)) this.#send(outbound);
+    const socket = this.#socket;
+    if (!socket || this.#phase !== "live") return;
+    for (const outbound of whiteboardV1OperationFrames(frame)) {
+      const wire = encodeWhiteboardV1ClientFrame(outbound);
+      try {
+        socket.send(wire);
+      } catch {
+        // A partial send is not a receipt. Keep the operation and its caller for the next connection.
+        this.#disconnected(socket, DEPENDENCY_UNAVAILABLE_CLOSE_CODE);
+        try {
+          socket.close(CLIENT_RESTART_CLOSE_CODE, "whiteboard send failed");
+        } catch {
+          // Reconnect already owns recovery even if the broken socket cannot close.
+        }
+        return;
+      }
+      if (socket !== this.#socket || this.#phase !== "live") return;
+    }
   }
 
   #emit(event: ChalkWhiteboardV1Event): void {
@@ -1384,25 +1432,31 @@ function retryableOperationCode(code: Extract<WhiteboardV1ServerFrame, { readonl
 }
 
 // Older Sync servers close an unknown hello, so the client steps down this list.
-const HELLO_LEVELS = ["presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
+const HELLO_LEVELS = ["session", "presenter-view", "owner-view", "draw-policy", "versioned-view", "view", "presentation", "legacy"] as const;
 type HelloLevel = (typeof HELLO_LEVELS)[number];
+const PRESENTER_VIEW_EXTENSIONS = [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] as const;
 
 function viewsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view" || level === "view";
 }
 
 function viewOriginsNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy" || level === "versioned-view";
 }
 
 function drawPolicyNegotiated(level: HelloLevel): boolean {
-  return level === "presenter-view" || level === "owner-view" || level === "draw-policy";
+  return level === "session" || level === "presenter-view" || level === "owner-view" || level === "draw-policy";
 }
 
 function helloFrame(level: HelloLevel, token: string, cursor: { readonly scene_id: string; readonly revision: string } | null): WhiteboardV1ClientFrame {
   const hello = { type: "hello", protocol: "whiteboard-v1", token, cursor } as const;
   if (level === "legacy") return hello;
-  if (level === "presenter-view") return { ...hello, extensions: [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }] };
+  if (level === "session") {
+    const baggage = sessionBaggage();
+    const presenterView = { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
+    return baggage === undefined ? presenterView : { ...presenterView, baggage };
+  }
+  if (level === "presenter-view") return { ...hello, extensions: PRESENTER_VIEW_EXTENSIONS };
   if (level === "presentation") return { ...hello, extensions: [{ name: "presentation_v1" }] };
   if (level === "view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1" }] };
   if (level === "versioned-view") return { ...hello, extensions: [{ name: "presentation_v1" }, { name: "view_v1", origins: true }] };
@@ -1448,7 +1502,7 @@ function resolveDeferred<T>(deferred: Deferred<T>, value: T): void {
   deferred.resolve(value);
 }
 
-function rejectDeferred<T>(deferred: Deferred<T>, value: Error): void {
+function rejectDeferred<T>(deferred: Deferred<T>, value: unknown): void {
   if (deferred.settled) return;
   deferred.settled = true;
   deferred.reject(value);

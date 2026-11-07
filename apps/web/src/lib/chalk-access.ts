@@ -1,7 +1,6 @@
 import { createChalkPublicClient, reloadRejoinAccess, resumeReloadRejoin, type ReloadRejoinMarker, type AccessGrant, type GetAccess, type PublicArrivalOptions, type PublicSpaceArrival, type PublicSpaceCreated } from "@q9labsai/chalk-client";
 import type { SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
-import { z } from "./zod-mini";
-import { ZodRealError } from "zod";
+import { Schema } from "effect";
 export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
@@ -86,9 +85,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     },
     reportCredential: () => mediaProof,
     reportCredentialExpiresAt: () => {
-      const access = reportMediaAccess.safeParse(current);
-      if (!access.success) throw new ZodRealError(access.error.issues);
-      return Date.parse(access.data.media.expires_at);
+      return Date.parse(parseReportMediaAccess(current).media.expires_at);
     },
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),
     arrival,
@@ -129,7 +126,8 @@ function accessMediaProof(access: AccessGrant): string {
   }
   return value.media.token;
 }
-const reportMediaAccess = z.object({ media: z.object({ expires_at: z.iso.datetime() }) });
+const isoUtcDatetime = Schema.makeFilter<string>((value) => (/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().startsWith(value.slice(0, 10))) || "Invalid ISO datetime");
+const parseReportMediaAccess = Schema.decodeUnknownSync(Schema.Struct({ media: Schema.Struct({ expires_at: Schema.String.check(isoUtcDatetime) }) }));
 function publicSpaceSlug(arrival: PublicSpaceArrival): string {
   const slug = arrival.space?.slug?.trim();
   if (!slug) throw new Error("This Space is unavailable.");

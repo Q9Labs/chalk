@@ -74,13 +74,13 @@
   --border: var(--chalk-line);
   --input: var(--chalk-line-strong);
   --ring: var(--chalk-focus);
-  --chalk-canvas: #0b0c0e;
-  --chalk-surface: #151619;
-  --chalk-raised: #1d1f23;
-  --chalk-hover: #272a2f;
-  --chalk-pressed: #30333a;
-  --chalk-line: rgba(255, 255, 255, 0.08);
-  --chalk-line-strong: rgba(255, 255, 255, 0.14);
+  --chalk-canvas: #000000;
+  --chalk-surface: #060606;
+  --chalk-raised: #0c0c0c;
+  --chalk-hover: #161616;
+  --chalk-pressed: #1f1f1f;
+  --chalk-line: rgba(255, 255, 255, 0.045);
+  --chalk-line-strong: rgba(255, 255, 255, 0.08);
   --chalk-text: #ececee;
   --chalk-muted-text: #9a9ca3;
   --chalk-danger: #e5484d;
@@ -90,22 +90,22 @@
   --chalk-positive: #80b879;
   --chalk-warning: #d9b641;
   --chalk-accent: #55aac9;
-  --chalk-tile: #151619;
-  --chalk-popover: #1d1f23;
+  --chalk-tile: #060606;
+  --chalk-popover: #0c0c0c;
   --chalk-text-strong: #fff;
   --chalk-soft-text: #c4c6cc;
   --chalk-wash: rgba(255, 255, 255, 0.05);
   --chalk-wash-strong: rgba(255, 255, 255, 0.08);
-  --chalk-chrome: #0b0c0e;
-  --chalk-stage: #0b0c0e;
-  --chalk-accent-text: #0b0c0e;
-  --chalk-danger-surface: #1d1f23;
+  --chalk-chrome: #000000;
+  --chalk-stage: #000000;
+  --chalk-accent-text: #000000;
+  --chalk-danger-surface: #0c0c0c;
   --chalk-focus: #ececee;
   --chalk-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --chalk-overlay: rgba(12, 14, 18, 0.75);
-  --chalk-overlay-strong: rgba(12, 14, 18, 0.82);
+  --chalk-overlay: rgba(0, 0, 0, 0.75);
+  --chalk-overlay-strong: rgba(0, 0, 0, 0.82);
   --chalk-photo-viewer-overlay: rgba(8, 8, 10, 0.94);
-  --chalk-overlay-hover: rgba(40, 42, 48, 0.95);
+  --chalk-overlay-hover: rgba(34, 34, 34, 0.95);
   --chalk-on-overlay: #ffffff;
   --chalk-overlay-warning: #e2bd3a;
   --chalk-overlay-danger: #ff6b6b;
@@ -183,6 +183,9 @@
   color-scheme: dark;
 }
 [data-chalk][data-chalk-theme="light"]:not([data-chalk] [data-chalk]) {
+  --chalk-overlay: rgba(12, 14, 18, 0.75);
+  --chalk-overlay-strong: rgba(12, 14, 18, 0.82);
+  --chalk-overlay-hover: rgba(40, 42, 48, 0.95);
   --chalk-canvas: #f3f3f5;
   --chalk-surface: #ffffff;
   --chalk-raised: #ececf0;
@@ -1543,6 +1546,7 @@
   box-shadow: 0 0 0 1px var(--chalk-line);
 }
 .chalk-frame {
+  container: chalk-call / inline-size;
   position: relative;
   width: 100%;
   height: 100%;
@@ -1785,6 +1789,49 @@
     border-radius: 24px 24px 0 0;
   }
 }
+@container chalk-call (max-width: 640px) {
+  .chalk-frame-header,
+  .chalk-header {
+    height: 52px;
+  }
+  .chalk-header {
+    padding: 0 20px;
+  }
+  .chalk-header-layout {
+    display: none;
+  }
+  .chalk-stage-layout,
+  .chalk-frame:has(.chalk-drawer[data-state="open"]) .chalk-stage-layout {
+    inset: 52px 8px 106px;
+  }
+  .chalk-frame-dock {
+    bottom: 42px;
+    height: 52px;
+  }
+  .chalk-frame-regular {
+    display: none;
+  }
+  .chalk-frame-compact {
+    display: block;
+  }
+  .chalk-menu-item {
+    min-height: 48px;
+  }
+  .chalk-toasts {
+    --chalk-toast-top: 52px;
+    --chalk-toast-lift: 110px;
+  }
+  .chalk-drawer {
+    inset: auto 0 0;
+    width: 100%;
+    max-height: calc(100% - 52px);
+    height: 70%;
+    border-radius: 24px 24px 0 0;
+  }
+  .chalk-drawer-content {
+    border-radius: 24px 24px 0 0;
+  }
+}
 @media (pointer: coarse) {
   .chalk-icon-button {
     min-width: 44px;
@@ -1912,6 +1959,17 @@
     height: 52px;
   }
 }
+@container chalk-call (max-width: 640px) {
+  .chalk-frame-dock {
+    padding: 0 22px;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .chalk-icon-button[data-chalk-size="lg"] {
+    width: 52px;
+    height: 52px;
+  }
+}
 
 .chalk-drawer {
   background: var(--chalk-surface);
@@ -1978,6 +2036,26 @@
     0 12px 32px rgba(0, 0, 0, 0.12);
 }
 @media (max-width: 640px) {
+  .chalk-header-title {
+    flex: 1;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .chalk-call-name-phone {
+    gap: 4px;
+    height: 44px;
+    padding: 0 6px;
+    margin-left: -6px;
+    transition: all 0s ease;
+  }
+  .chalk-call-name-phone > svg {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+}
+@container chalk-call (max-width: 640px) {
   .chalk-header-title {
     flex: 1;
     justify-content: space-between;

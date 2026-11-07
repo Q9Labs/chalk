@@ -5,7 +5,8 @@
   "workspaces": [
     "packages/*",
     "sdks/typescript/*",
-    "tools/*",
+    "tools/contract-fixture-proof",
+    "tools/sdk-web-consumer-e2e",
     "apps/transcription-dispatcher",
     "apps/recording-renderer",
     "apps/mobile",
@@ -20,6 +21,8 @@
     "dev:status": "node scripts/dev/cli.mjs status",
     "dev:logs": "node scripts/dev/cli.mjs logs",
     "dev:stop": "node scripts/dev/cli.mjs stop",
+    "dev:doctor": "node scripts/dev/cli.mjs doctor",
+    "dev:down": "node scripts/dev/cli.mjs down",
     "dev:reset": "node scripts/dev/cli.mjs reset",
     "dev:smoke": "node scripts/dev/media-smoke.mjs .private/chalk-dev/manifest.json",
     "dev:turn-proof": "node scripts/dev/turn-proof.mjs .private/chalk-dev/manifest.json",

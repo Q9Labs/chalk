@@ -1,8 +1,10 @@
 package mcpapi
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -10,22 +12,72 @@ import (
 type Definition struct {
 	Name        string
 	Description string
-	Scope       string
-	Hints       byte
-	Schema      *Schema
+	// Scope is the scope every call needs, except for the actions in ActionScopes.
+	Scope        string
+	ActionScopes map[string]string
+	Hints        byte
+	Schema       *Schema
+	// Actions maps each action of an action-based tool to the fields it needs.
+	Actions map[string][]string
 }
 
-// Action-specific requirements prevent omitted booleans or payloads from
-// silently becoming destructive zero values after typed JSON decoding.
-func requireActions(d Definition, requirements map[string][]string) Definition {
-	for _, action := range slices.Sorted(maps.Keys(requirements)) {
-		required := requirements[action]
-		d.Schema.AnyOf = append(d.Schema.AnyOf, &Schema{Properties: map[string]*Schema{"action": choice(action)}, Required: append([]string{"action"}, required...)})
+// ScopeFor names the scope one call needs. Reads that share a tool with writes,
+// and deletes that share a tool with updates, need a different scope than the rest.
+func (d Definition) ScopeFor(action string) string {
+	if scope, ok := d.ActionScopes[action]; ok {
+		return scope
 	}
+	return d.Scope
+}
+
+// Callable says whether a connection holding scopes can make at least one call
+// to this tool. It decides what tools/list shows; each call is still checked.
+func (d Definition) Callable(scopes []string) bool {
+	return slices.Contains(scopes, d.Scope) || slices.ContainsFunc(slices.Collect(maps.Values(d.ActionScopes)), func(scope string) bool { return slices.Contains(scopes, scope) })
+}
+
+// requireActions records which fields each action needs. Anthropic's API refuses
+// a top-level anyOf, so the schema stays a plain object, the description tells
+// the model the per-action rules, and Bind rejects a call that omits a field.
+func requireActions(d Definition, requirements map[string][]string) Definition {
+	d.Actions = requirements
+	rules := make([]string, 0, len(requirements))
+	for _, action := range slices.Sorted(maps.Keys(requirements)) {
+		needs := "no other field"
+		if fields := requirements[action]; len(fields) > 0 {
+			needs = strings.Join(fields, ", ")
+		}
+		rules = append(rules, action+": "+needs)
+	}
+	d.Description += " Fields required besides action, by action (" + strings.Join(rules, "; ") + ")."
 	return d
 }
 
+// checkArguments returns the call's action and rejects an action call that omits
+// a field the action needs. The schema cannot say this without a top-level anyOf.
+func (d Definition) checkArguments(raw json.RawMessage) (string, error) {
+	if d.Actions == nil {
+		return "", nil
+	}
+	var arguments map[string]json.RawMessage
+	var action string
+	if json.Unmarshal(raw, &arguments) != nil || json.Unmarshal(arguments["action"], &action) != nil {
+		return "", Error{Code: "mcp.invalid_arguments", Message: "Arguments must be an object with a string action."}
+	}
+	required, known := d.Actions[action]
+	if !known {
+		return "", Error{Code: "mcp.invalid_arguments", Message: "Unknown action: " + action}
+	}
+	missing := slices.DeleteFunc(slices.Clone(required), func(field string) bool { _, present := arguments[field]; return present })
+	if len(missing) > 0 {
+		return "", Error{Code: "mcp.invalid_arguments", Message: "Action " + action + " also requires: " + strings.Join(missing, ", ")}
+	}
+	return action, nil
+}
+
 func init() {
+	ConfigureWebhook.ActionScopes = map[string]string{"delete": "webhooks:delete"}
+	PrepareRecording.ActionScopes = map[string]string{"inspect": "spaces:read"}
 	GetConnection.Schema = object(fields())
 	SetMembership = requireActions(SetMembership, map[string][]string{"create": {"create"}, "update": {"membership_id", "update"}})
 	IssueAPIKey = requireActions(IssueAPIKey, map[string][]string{"create": {"create", "request_key"}, "rotate": {"api_key_id", "request_key"}})
@@ -49,7 +101,7 @@ func define(name, description, scope string, hints byte, p map[string]*Schema, r
 	if hints == 'R' {
 		read(p)
 	}
-	return Definition{name, description, scope, hints, object(p, required...)}
+	return Definition{Name: name, Description: description, Scope: scope, Hints: hints, Schema: object(p, required...)}
 }
 
 var GetConnection = define("get_connection", "Identify this connection's tenant profile and granted scopes. This is the profile tool. Reconnect with a different key for another tenant.", "tenants:read", 'R', fields())
@@ -60,7 +112,7 @@ var ListAPIKeys = define("list_api_keys", "List key metadata only, never secret 
 var IssueAPIKey = define("issue_api_key", "Explicitly create or rotate a tenant API key. Returns the secret ONCE. Cannot grant scopes beyond this connection; do not put the secret in logs.", "api_keys:write", 'M', requestKey(map[string]*Schema{"action": choice("create", "rotate"), "api_key_id": id(), "create": object(map[string]*Schema{"name": text(""), "scopes": stringsSchema(40), "expires_at": text("RFC3339 timestamp")}, "name", "scopes", "expires_at"), "rotate": object(map[string]*Schema{"expires_at": nullable(text("RFC3339 timestamp"))})}), "action")
 var RevokeAPIKey = define("revoke_api_key", "Revoke a tenant API key; may disable this connection.", "api_keys:delete", 'M', map[string]*Schema{"api_key_id": id()}, "api_key_id")
 var InspectWebhooks = define("inspect_webhooks", "List webhook endpoints, or inspect one endpoint by ID. Secrets are redacted.", "webhooks:read", 'R', page(map[string]*Schema{"endpoint_id": id()}))
-var ConfigureWebhook = define("configure_webhook", "Explicitly create, update, rotate a signing secret, or delete an endpoint. Update/delete require the current revision. Delete requires webhooks:delete; other actions require webhooks:write. Secret issuance returns sensitive data once.", "", 'M', requestKey(map[string]*Schema{"action": choice("create", "update", "rotate_secret", "delete"), "endpoint_id": id(), "revision": integer(1, 2147483647), "create": webhookSettings(true), "update": webhookSettings(false), "rotate": object(map[string]*Schema{"revoke_previous_immediately": boolean()}, "revoke_previous_immediately")}), "action")
+var ConfigureWebhook = define("configure_webhook", "Explicitly create, update, rotate a signing secret, or delete an endpoint. Update/delete require the current revision. Delete requires webhooks:delete; other actions require webhooks:write. Secret issuance returns sensitive data once.", "webhooks:write", 'M', requestKey(map[string]*Schema{"action": choice("create", "update", "rotate_secret", "delete"), "endpoint_id": id(), "revision": integer(1, 2147483647), "create": webhookSettings(true), "update": webhookSettings(false), "rotate": object(map[string]*Schema{"revoke_previous_immediately": boolean()}, "revoke_previous_immediately")}), "action")
 var InspectWebhookDeliveries = define("inspect_webhook_deliveries", "List endpoint deliveries with pagination and optional status/event_type filters, or inspect a delivery.", "webhooks:read", 'R', page(map[string]*Schema{"endpoint_id": id(), "delivery_id": id(), "states": stringsSchema(20), "event_types": stringsSchema(100)}), "endpoint_id")
 var SendWebhook = define("send_webhook", "Send a test webhook or redeliver a specific delivery.", "webhooks:write", 'M', requestKey(map[string]*Schema{"endpoint_id": id(), "delivery_id": id(), "action": choice("test", "redeliver")}), "endpoint_id", "action")
 var ListSpaceActivity = define("list_space_activity", "Inspect recent activity across up to 300 explicitly selected Spaces.", "episodes:read", 'R', map[string]*Schema{"space_ids": {Type: "array", Items: id(), MaxItems: 300, MinItems: 1}}, "space_ids")
@@ -69,7 +121,7 @@ var InspectSpace = define("inspect_space", "Inspect Space configuration (default
 var CreateSpace = define("create_space", "Create a configured Space without joining it.", "spaces:write", 'A', requestKey(map[string]*Schema{"body": spaceSettings(true)}), "body", "request_key")
 var ConfigureSpace = define("configure_space", "Edit Space settings, enable/disable invite access, or rotate the invite. Choose an explicit action.", "spaces:write", 'M', requestKey(map[string]*Schema{"space_id": id(), "action": choice("settings", "invite", "rotate_invite"), "settings": spaceSettings(false), "enabled": boolean()}), "space_id", "action")
 var SetSpaceArchived = define("set_space_archived", "Archive or restore a Space. Set archived to the desired state.", "spaces:write", 'M', map[string]*Schema{"space_id": id(), "archived": boolean()}, "space_id", "archived")
-var PrepareRecording = define("prepare_recording", "Inspect, prepare, or cancel recording preparation. Inspect requires spaces:read; prepare/cancel require spaces:write and expected_revision. Preparation starts_at is RFC3339.", "", 'M', read(map[string]*Schema{"space_id": id(), "action": choice("inspect", "prepare", "cancel"), "starts_at": text("RFC3339 timestamp"), "expected_revision": integer(0, 2147483647)}), "space_id", "action")
+var PrepareRecording = define("prepare_recording", "Inspect, prepare, or cancel recording preparation. Inspect requires spaces:read; prepare/cancel require spaces:write and expected_revision. Preparation starts_at is RFC3339.", "spaces:write", 'M', read(map[string]*Schema{"space_id": id(), "action": choice("inspect", "prepare", "cancel"), "starts_at": text("RFC3339 timestamp"), "expected_revision": integer(0, 2147483647)}), "space_id", "action")
 var ListEpisodes = define("list_episodes", "List a Space's Episodes with cursor pagination.", "episodes:read", 'R', page(map[string]*Schema{"space_id": id()}), "space_id")
 var InspectEpisode = define("inspect_episode", "Inspect an Episode (default view=episode), or its attendance (view=attendance).", "episodes:read", 'R', map[string]*Schema{"space_id": id(), "episode_id": id(), "view": choice("episode", "attendance")}, "space_id", "episode_id")
 var CreateEpisode = define("create_episode", "Start an Episode without admitting a participant or joining a seat.", "episodes:write", 'A', requestKey(map[string]*Schema{"space_id": id(), "body": object(map[string]*Schema{"metadata": {}, "started_at": nullable(text("RFC3339 timestamp"))})}), "space_id", "body", "request_key")

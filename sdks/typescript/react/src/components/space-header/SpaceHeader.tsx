@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
+import { useNarrowCall } from "../../internal/call-width";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { ChalkPopover, ChalkSheet } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
@@ -11,6 +12,7 @@ import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
@@ -23,7 +25,8 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
-  const phone = useMediaQuery("(max-width: 640px)");
+  const narrowWindow = useMediaQuery("(max-width: 640px)");
+  const phone = useNarrowCall() || narrowWindow;
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />

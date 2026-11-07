@@ -1,19 +1,98 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Schema } from "effect";
 
 import { WhiteboardV1ClientFrameSchema } from "../generated/whiteboard-v1";
+import { setSessionSource } from "../session";
 import type { SyncSocket } from "../sync/types";
 import { ChalkWhiteboardV1Client } from "./v1-client";
+import { ChalkWhiteboardV1Error } from "./types";
 import { InMemoryChalkWhiteboardV1PendingOperationStore } from "./v1-persistence";
 import { ManualClock } from "../../tests/helpers/manual-clock";
 import type { ChalkWhiteboardDrawPolicy, ChalkWhiteboardV1ClientOptions, ChalkWhiteboardSummary, ChalkWhiteboardV1Event, ChalkWhiteboardV1FileTransport, ChalkWhiteboardV1PendingOperation } from "./types";
 
 const sceneId = "10000000-0000-4000-8000-000000000001";
+const sessionId = "3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c";
 const files: ChalkWhiteboardV1FileTransport = {
   getDownloadUrl: async () => ({ downloadUrl: "https://files.test/download", expiresAt: "2026-08-23T00:00:00.000Z" }),
 };
 
 describe("ChalkWhiteboardV1Client recovery summaries", () => {
+  afterEach(() => setSessionSource(() => undefined));
+
+  it("accepts valid session baggage on both hello shapes", () => {
+    const baggage = `session.id=${sessionId}`;
+    const frames = [
+      { type: "hello", protocol: "whiteboard-v1", token: "token", cursor: null, baggage },
+      {
+        type: "hello",
+        protocol: "whiteboard-v1",
+        token: "token",
+        cursor: null,
+        extensions: [{ name: "presentation_v1" }, { name: "view_v1" }],
+        baggage,
+      },
+    ];
+
+    for (const frame of frames) {
+      expect(Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)(frame)).toEqual(frame);
+    }
+    expect(() => Schema.decodeUnknownSync(WhiteboardV1ClientFrameSchema)({ ...frames[0], baggage: "session.id=invalid" })).toThrow();
+  });
+
+  it("includes session baggage in the presenter-view hello", async () => {
+    setSessionSource(() => sessionId);
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
+    try {
+      expect(sentFrames(sockets[0])[0]).toMatchObject({
+        type: "hello",
+        baggage: `session.id=${sessionId}`,
+        extensions: [{ name: "presentation_v1", presenter: true }, { name: "view_v1", origins: true, owner: true }, { name: "draw_policy_v1" }],
+      });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("steps down to presenter-view without baggage for an older server", async () => {
+    setSessionSource(() => sessionId);
+    const clock = new ManualClock();
+    const { client, sockets } = recoveryClient(clock);
+    const startup = client.startSceneSubscription();
+    try {
+      await settle();
+      sockets[0]?.open();
+      await settle();
+      const firstHello = sentFrames(sockets[0])[0];
+      expect(firstHello).toHaveProperty("baggage", `session.id=${sessionId}`);
+      sockets[0]?.close(1009);
+      await settle();
+      clock.advance(250);
+      await settle();
+      sockets[1]?.open();
+      await settle();
+
+      const secondHello = sentFrames(sockets[1])[0];
+      expect(secondHello.extensions).toEqual(firstHello.extensions);
+      expect(Object.hasOwn(secondHello, "baggage")).toBe(false);
+      sockets[1]?.receive(welcome());
+      await settle();
+      sockets[1]?.receive(snapshotPage(sockets[1]?.requestId()));
+      await startup;
+    } finally {
+      void startup.catch(() => undefined);
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("omits session baggage when no session exists", async () => {
+    const { client, sockets } = await startedRecoveryClient(new ManualClock());
+    try {
+      expect(Object.hasOwn(sentFrames(sockets[0])[0], "baggage")).toBe(false);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("publishes the opener on presentation changes and reconnect", async () => {
     const { client, sockets } = recoveryClient();
     const summaries: ChalkWhiteboardSummary[] = [];
@@ -447,6 +526,107 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     }
   });
 
+  it("does not resend an operation from its retry timer while a snapshot is in flight", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("clears a pending retry timer when the snapshot flush resends its operation", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      clock.advance(50);
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(updates()).toHaveLength(2);
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("retries a drawing after a non-recoverable snapshot failure", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, undefined, { retryDelayMs: 100 });
+    const updates = () => sentFrames(sockets[0], "submit_update");
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      const operationId = updates()[0]?.operation_id;
+      if (typeof operationId !== "string") throw new Error("missing update");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: operationId, operation: "submit_update", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(updates()).toHaveLength(1);
+
+      const requestId = sockets[0]?.requestId();
+      if (typeof requestId !== "string") throw new Error("missing snapshot request");
+      sockets[0]?.receive({ type: "operation_error", correlation_id: requestId, operation: "request_snapshot", code: "storage_unavailable", recoverable: false, message: "Storage failed." });
+      await expect(snapshot).rejects.toMatchObject({ code: "storage_unavailable", recoverable: false });
+      await settle();
+
+      clock.advance(2_000);
+      await settle();
+      expect(updates()).toHaveLength(2);
+      commit(sockets[0], operationId, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("retains and replays a rectangle drawn during socket recovery before replacing the snapshot", async () => {
     const clock = new ManualClock();
     const { client, sockets } = recoveryClient(clock, 100);
@@ -472,6 +652,203 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     await client.stopSceneSubscription();
   });
 
+  it("settles a drawing whose save is still running when Sync rejects the connection with 1008", async () => {
+    const save = Promise.withResolvers<void>();
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: ChalkWhiteboardV1PendingOperation): Promise<void> {
+        await super.put(operation);
+        if (operation.frame.type === "submit_update") await save.promise;
+      }
+    })();
+    const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { pendingStore });
+    try {
+      let settled = false;
+      const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+      void drawing.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      await settle();
+      sockets[0]?.close(1008);
+      await settle();
+      save.resolve();
+      await settle();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(settled).toBe(true);
+    } finally {
+      save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("keeps the rejected-connection failure when an operation save fails later", async () => {
+    const unhandled = unhandledRejections();
+    const save = Promise.withResolvers<void>();
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: ChalkWhiteboardV1PendingOperation): Promise<void> {
+        await super.put(operation);
+        if (operation.frame.type === "submit_update") {
+          await save.promise;
+          throw new Error("disk full");
+        }
+      }
+    })();
+    const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { pendingStore });
+    const outcomes: unknown[] = [];
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.then(
+      () => outcomes.push("resolved"),
+      (cause) => outcomes.push(cause),
+    );
+    try {
+      await settle();
+      sockets[0]?.close(1008);
+      await settle();
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0]).toMatchObject({ operation: "submit_update", code: "permission_denied", recoverable: false });
+
+      save.resolve();
+      await settle();
+      expect(outcomes).toHaveLength(1);
+      await client.stopSceneSubscription();
+      expect(await pendingStore.load()).toEqual([]);
+      expect(await unhandled.after()).toEqual([]);
+    } finally {
+      save.resolve();
+      await client.stopSceneSubscription();
+      unhandled.stop();
+    }
+  });
+
+  it.each(["submit_update", "set_draw_policy", "set_draw_permission", "clear", "set_presentation"] as const)("keeps a failed %s send pending until reconnect confirms it", async (type) => {
+    const clock = new ManualClock();
+    const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+    const { client, sockets } = await hostClient(clock, { pendingStore });
+    const unhandled = unhandledRejections();
+    try {
+      const socket = sockets[0];
+      if (!socket) throw new Error("missing socket");
+      const send = socket.send.bind(socket);
+      socket.send = (data) => {
+        if (JSON.parse(data).type === type) throw new Error("socket send failed");
+        send(data);
+      };
+      const operation =
+        type === "submit_update"
+          ? client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] })
+          : type === "set_draw_policy"
+            ? client.setDrawPolicy("hosts")
+            : type === "set_draw_permission"
+              ? client.setDrawPermission(sceneId, true)
+              : type === "clear"
+                ? client.clear()
+                : client.setPresentation(true);
+      const outcomes: unknown[] = [];
+      void operation.then(
+        () => outcomes.push("confirmed"),
+        (cause) => outcomes.push(cause),
+      );
+      await settle();
+      expect(outcomes).toEqual([]);
+      const [stored] = await pendingStore.load();
+      expect(stored?.frame.type).toBe(type);
+      expect(socket.closeCalls).toContainEqual({ code: 4000, reason: "whiteboard send failed" });
+      clock.advance(1_000);
+      await acceptWelcome(sockets, 1);
+      await settle();
+      expect(sentFrames(sockets[1], type)).toEqual([stored?.frame]);
+      expect(outcomes).toEqual([]);
+      commit(sockets[1], stored!.operationId, "2");
+      await operation;
+      expect(outcomes).toEqual(["confirmed"]);
+      expect(await pendingStore.load()).toEqual([]);
+      expect(await unhandled.after()).toEqual([]);
+    } finally {
+      await client.stopSceneSubscription();
+      unhandled.stop();
+    }
+  });
+
+  it.each(["submit_update", "set_draw_policy", "set_draw_permission"] as const)("settles a failed %s send with typed final failures", async (type) => {
+    for (const outcome of ["rejected_connection", "rejected_operation", "stop"] as const) {
+      const clock = new ManualClock();
+      const pendingStore = new InMemoryChalkWhiteboardV1PendingOperationStore();
+      const { client, sockets } = await hostClient(clock, { pendingStore });
+      const socket = sockets[0]!;
+      const send = socket.send.bind(socket);
+      socket.send = (data) => {
+        if (JSON.parse(data).type === type) throw new Error("socket send failed");
+        send(data);
+      };
+      const operation = type === "submit_update" ? client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] }) : type === "set_draw_policy" ? client.setDrawPolicy("hosts") : client.setDrawPermission(sceneId, true);
+      const outcomes: unknown[] = [];
+      void operation.then(
+        () => outcomes.push("confirmed"),
+        (cause) => outcomes.push(cause),
+      );
+      try {
+        await settle();
+        expect(outcomes).toEqual([]);
+        const [stored] = await pendingStore.load();
+        if (outcome === "stop") await client.stopSceneSubscription();
+        else {
+          clock.advance(1_000);
+          await acceptWelcome(sockets, 1);
+          if (outcome === "rejected_connection") sockets[1]?.close(1008);
+          else sockets[1]?.receive({ type: "operation_error", correlation_id: stored!.operationId, operation: type, code: "permission_denied", recoverable: false, message: "Drawing refused." });
+        }
+        await settle();
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]).toBeInstanceOf(ChalkWhiteboardV1Error);
+        expect(outcomes[0]).toMatchObject({ operation: type, code: outcome === "stop" ? "unavailable" : "permission_denied", recoverable: outcome === "stop" });
+        await expect(operation).rejects.toBe(outcomes[0]);
+      } finally {
+        await client.stopSceneSubscription();
+      }
+    }
+  });
+
+  it("sends a live drawing once after its save resolves", async () => {
+    const save = Promise.withResolvers<void>();
+    const pendingStore = new (class extends InMemoryChalkWhiteboardV1PendingOperationStore {
+      override async put(operation: ChalkWhiteboardV1PendingOperation): Promise<void> {
+        if (operation.frame.type === "submit_update") await save.promise;
+        await super.put(operation);
+      }
+    })();
+    const { client, sockets } = await startedRecoveryClient(new ManualClock(), undefined, { pendingStore });
+    const drawing = client.submitUpdate({ sceneId, syncAll: false, elements: [rectangle()] });
+    void drawing.catch(() => undefined);
+    try {
+      await settle();
+      expect(sentFrames(sockets[0], "submit_update")).toEqual([]);
+      save.resolve();
+      await settle();
+      const [update] = sentFrames(sockets[0], "submit_update");
+      if (!update) throw new Error("missing update");
+      commit(sockets[0], update.operation_id, "2");
+      await expect(drawing).resolves.toMatchObject({ revision: "2" });
+      expect(sentFrames(sockets[0], "submit_update")).toHaveLength(1);
+    } finally {
+      save.resolve();
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("returns a capacity failure as a rejected promise", async () => {
+    const { client } = await startedRecoveryClient(new ManualClock());
+    try {
+      for (let index = 0; index < 128; index += 1) {
+        void client.submitUpdate({ sceneId, syncAll: false, elements: [] }).catch(() => undefined);
+      }
+      await settle();
+      const rejected = client.submitUpdate({ sceneId, syncAll: false, elements: [] });
+      await expect(rejected).rejects.toMatchObject({ code: "unavailable" });
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
   it("uses the application close code when token authentication fails", async () => {
     const socket = new TestSocket();
     const client = new ChalkWhiteboardV1Client({
@@ -493,7 +870,7 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
 
   it("uses capped exponential reconnect backoff until a welcome is live", async () => {
     const clock = new ManualClock();
-    const { client, sockets } = recoveryClient(clock, 100);
+    const { client, sockets } = recoveryClient(clock, 100, { random: () => 1 });
 
     const startup = client.startSceneSubscription();
     void startup.catch(() => undefined);
@@ -508,6 +885,47 @@ describe("ChalkWhiteboardV1Client recovery summaries", () => {
     expect(sockets).toHaveLength(2);
     clock.advance(1);
     expect(sockets).toHaveLength(3);
+
+    await client.stopSceneSubscription();
+  });
+
+  it("spreads reconnect waits across clients that close together", async () => {
+    const clock = new ManualClock();
+    const random = mulberry32(0x1a2b3c4d);
+    const clients = [];
+    const reconnectTimes = new Map<number, number>();
+
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        clients.push(await startedRecoveryClient(clock, undefined, { random }));
+      }
+      for (const { sockets } of clients) sockets[0]?.close(1012);
+
+      for (let elapsed = 1; elapsed <= 250; elapsed += 1) {
+        clock.advance(1);
+        await settle();
+        clients.forEach(({ sockets }, index) => {
+          if (sockets.length > 1 && !reconnectTimes.has(index)) reconnectTimes.set(index, elapsed);
+        });
+      }
+
+      const times = [...reconnectTimes.values()];
+      expect(times).toHaveLength(20);
+      expect(times.every((time) => time >= 125 && time <= 250)).toBe(true);
+      expect(new Set(times).size).toBeGreaterThanOrEqual(10);
+    } finally {
+      await Promise.all(clients.map(({ client }) => client.stopSceneSubscription()));
+    }
+  });
+
+  it("reconnects immediately when the configured delay is zero", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await startedRecoveryClient(clock, 0, { random: () => 0.5 });
+
+    sockets[0]?.close(1012);
+    clock.advance(0);
+    await settle();
+    expect(sockets).toHaveLength(2);
 
     await client.stopSceneSubscription();
   });
@@ -598,6 +1016,44 @@ describe("ChalkWhiteboardV1Client drawing policy", () => {
 
       expect(sent().map((frame) => frame.policy ?? frame.can_draw)).toEqual(["picked", "picked", false, "everyone", true]);
       await expect(Promise.all(changes)).resolves.toEqual([undefined, undefined, undefined, undefined]);
+    } finally {
+      await client.stopSceneSubscription();
+    }
+  });
+
+  it("defers a head access-change retry until a snapshot completes without overtaking it", async () => {
+    const clock = new ManualClock();
+    const { client, sockets } = await hostClient(clock, { retryDelayMs: 100 });
+    const sent = () => sentFrames(sockets[0], "set_draw_policy", "set_draw_permission");
+    const first = client.setDrawPolicy("hosts");
+    void first.catch(() => undefined);
+    let later: Promise<void> | undefined;
+    try {
+      await settle();
+      const firstFrame = sent()[0];
+      sockets[0]?.receive({ type: "operation_error", correlation_id: firstFrame.operation_id, operation: "set_draw_policy", code: "overloaded", recoverable: true, message: "Try again." });
+      await settle();
+      const snapshot = client.requestSnapshot();
+      void snapshot.catch(() => undefined);
+      await settle();
+      later = client.setDrawPolicy("picked");
+      void later.catch(() => undefined);
+      await settle();
+
+      clock.stall(2_000);
+      await settle();
+      expect(sent()).toHaveLength(1);
+
+      sockets[0]?.receive(snapshotPage(sockets[0]?.requestId()));
+      await snapshot;
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts"]);
+
+      commit(sockets[0], firstFrame.operation_id, "2");
+      await settle();
+      expect(sent().map((frame) => frame.policy)).toEqual(["hosts", "hosts", "picked"]);
+      commit(sockets[0], sent()[2]!.operation_id, "3");
+      await expect(Promise.all([first, later])).resolves.toEqual([undefined, undefined]);
     } finally {
       await client.stopSceneSubscription();
     }
@@ -1433,6 +1889,16 @@ describe("whiteboard slow-connection watchdog", () => {
 
 function rectangle() {
   return { id: "rectangle", type: "rectangle", version: 1, versionNonce: 1, index: "a0", isDeleted: false, payload: { x: 10, y: 10, width: 100, height: 100 } };
+}
+
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    let value = (state += 0x6d2b79f5);
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
+  };
 }
 
 function recoveryClient(clock = new ManualClock(), reconnectDelayMs?: number, options: Partial<ChalkWhiteboardV1ClientOptions> = {}) {

@@ -17,7 +17,12 @@ it("announces a new external commandError after rotation, through the real Space
         this.notify = notify;
       }
       observe(target: HTMLElement) {
-        if (target.dataset.part === "call-frame") resize = this.notify;
+        if (target.dataset.part !== "call-frame") return;
+        const [previous, notify] = [resize, this.notify];
+        resize = () => {
+          previous();
+          notify();
+        };
       }
       unobserve() {}
       disconnect() {}

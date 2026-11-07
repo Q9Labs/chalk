@@ -314,13 +314,14 @@ Next ==
 
 \* Faults (loss, drops, host mutes, user actions, timeouts) get no fairness:
 \* they are bounded by budgets. Everything that repairs state does.
-Fair(A) == WF_vars(A /\ Stamp)
+\* Each WF is written out: TLC v1.7.4 cannot check fairness through an operator
+\* that takes an action, such as Fair(A) == WF_vars(A /\ Stamp).
 Fairness ==
-  /\ \A s \in Sources : Fair(DeviceSendOn(s)) /\ Fair(DeviceSendOff(s))
-                        /\ Fair(DevicePublish(s)) /\ Fair(SyncSnap(s))
-  /\ Fair(DeviceRecvSnap) /\ Fair(SyncRecvOn) /\ Fair(SyncRecvOff)
-  /\ Fair(SfuAdmit) /\ Fair(SyncCloseOk) /\ Fair(SfuGc)
-  /\ Fair(ReconnectSync) /\ Fair(RebuildSfu)
+  /\ \A s \in Sources : WF_vars(DeviceSendOn(s) /\ Stamp) /\ WF_vars(DeviceSendOff(s) /\ Stamp)
+                        /\ WF_vars(DevicePublish(s) /\ Stamp) /\ WF_vars(SyncSnap(s) /\ Stamp)
+  /\ WF_vars(DeviceRecvSnap /\ Stamp) /\ WF_vars(SyncRecvOn /\ Stamp) /\ WF_vars(SyncRecvOff /\ Stamp)
+  /\ WF_vars(SfuAdmit /\ Stamp) /\ WF_vars(SyncCloseOk /\ Stamp) /\ WF_vars(SfuGc /\ Stamp)
+  /\ WF_vars(ReconnectSync /\ Stamp) /\ WF_vars(RebuildSfu /\ Stamp)
 
 Spec == Init /\ [][Next]_vars /\ Fairness
 

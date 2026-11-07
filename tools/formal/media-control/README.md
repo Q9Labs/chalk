@@ -116,7 +116,7 @@ DEEP=1 ./run.sh          # plus the multi-source runs
 node trace-diff.mjs results/cf-current-P2-1src.txt   # a counterexample, one line per step
 ```
 
-It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. The release URL is a moving tag, so the checksum in `run.sh` is what pins the tool; the results were produced with TLC 2026.11.06 (rev 3ec1cc4). Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
+It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. Every model under `tools/formal` reads one pin, stable v1.7.4 with its checksum, from `tools/formal/tla2tools.sh`, so a re-published release fails the checksum for all of them at once. The committed results were produced with a v1.8.0 pre-release (TLC 2026.10.30, rev 090e85c). v1.7.4 (TLC 2.19) reproduces the outcome of every run. MediaControl pass runs give the same state counts, but MediaHeal runs find more distinct states (1,867,947 against 1,617,232 for `heal-decided-safety`), with or without the written-out fairness, so the count depends on the TLC version. Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
 
 Files:
 
