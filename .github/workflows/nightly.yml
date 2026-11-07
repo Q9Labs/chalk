@@ -101,6 +101,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -112,3 +113,23 @@ jobs:
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
           PREVIOUS_SHA: ${{ needs.plan.outputs.previous_nightly_sha }}
         run: python3 scripts/releases/publish_github_release.py
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Download the nightly scorecards
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: scorecard-nightly-*
+          path: artifacts/nightly
+          merge-multiple: true
+      - name: Score the nightly run and add it to the history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cards=$(ls artifacts/nightly/scorecard-*.json 2> /dev/null || true)
+          if [ -z "$cards" ]; then
+            echo "No nightly scorecard in this run."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          features/scorecard/nightly.sh $cards
