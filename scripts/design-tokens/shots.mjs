@@ -51,9 +51,9 @@ async function shoot() {
     const probe = await browser.newPage();
     await probe.goto(`${states}/call-states.html`);
     await probe.waitForFunction(() => window.__CALL_STATES__);
-    const ids = await probe.evaluate(() => window.__CALL_STATES__.map((state) => state.id));
+    const stateList = await probe.evaluate(() => window.__CALL_STATES__.map((state) => ({ id: state.id, actions: state.actions ?? [], stallBoard: Boolean(state.stallBoard) })));
     await probe.close();
-    for (const id of ids) jobs.push({ id: `state-${id}`, url: `${states}/call-states.html?state=${id}`, viewport: { width: 1280, height: 800 }, fullPage: false, scheme: "dark" });
+    for (const state of stateList) jobs.push({ id: `state-${state.id}`, url: `${states}/call-states.html?state=${state.id}`, viewport: { width: 1280, height: 800 }, fullPage: false, scheme: "dark", actions: state.actions, stallBoard: state.stallBoard });
   }
   if (web) {
     const probe = await browser.newPage();
@@ -85,12 +85,20 @@ async function shoot() {
     if (job.stub) await installDashboardStubs(context);
     const page = await context.newPage();
     try {
+      // The board waits for a CDN stylesheet; holding it back keeps the loading screen, as the call-state captures do.
+      if (job.stallBoard) await page.route(/\/chalk-whiteboard\//u, () => undefined);
       await page.goto(job.url, { waitUntil: "load" });
       // Web pages fill in after their data requests answer; a blank shot would compare equal to itself.
       if (!job.id.startsWith("state-")) await page.waitForFunction(() => document.body.innerText.trim().length > 40);
       await page.addStyleTag({ content: STILL });
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(700);
+      // States such as the chat card open a panel first; the same actions run before both shots.
+      for (const action of job.actions ?? []) {
+        if ("wait" in action) await page.waitForTimeout(action.wait);
+        else await page.getByRole(action.role ?? "button", { name: action.click }).first().click({ timeout: 5000 });
+        await page.waitForTimeout(400);
+      }
       await page.screenshot({ path: join(out, `${job.id}.png`), fullPage: job.fullPage });
     } catch (error) {
       failures += 1;

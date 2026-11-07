@@ -16,7 +16,38 @@ const SCRIPT_RADIUS = /^border(?:(?:Top|Bottom)(?:Left|Right|Start|End)|Start(?:
 const LENGTH = /(?<![\w.#-])-?(?:\d*\.)?\d+(?:px|rem)(?![\w%])/giu;
 const CSS_DECLARATION = /(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+)(?=[;}])/giu;
 const SCRIPT_ENTRY = /\b([A-Za-z]+)(\s*:\s*)(?:"([^"\n]*)"|'([^'\n]*)'|(-?(?:\d+(?:\.\d+)?|\.\d+))(?![\w.%]))/gu;
-const TEMPLATE = /`(?:\\.|[^`\\])*`/gu;
+// Outermost template literals, with interpolations (and templates inside them) kept inside the range.
+function templateRanges(text) {
+  const ranges = [];
+  const stack = []; // "t" = inside a template, "e" = inside a ${ } expression, with its open brace depth
+  let start = -1;
+  let braces = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const top = stack.at(-1);
+    if (top === undefined || top === "e") {
+      if (char === "`") {
+        if (stack.length === 0) start = i;
+        stack.push("t");
+      } else if (top === "e") {
+        if (char === "{") braces += 1;
+        else if (char === "}" && braces === 0) stack.pop();
+        else if (char === "}") braces -= 1;
+      }
+      continue;
+    }
+    if (char === "\\") i += 1;
+    else if (char === "`") {
+      stack.pop();
+      if (stack.length === 0) ranges.push([start, i + 1]);
+    } else if (char === "$" && text[i + 1] === "{") {
+      stack.push("e");
+      braces = 0;
+      i += 1;
+    }
+  }
+  return ranges;
+}
 const TAILWIND = /(?<![\w-])(-?)(p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy]|rounded(?:-(?:t|r|b|l|s|e|tl|tr|bl|br|ss|se|es|ee))?|text)-\[(-?[\d.]+)(px|rem)\]/gu;
 
 const kindOfCss = (p) => (p === "font" ? "type" : CSS_SPACING.test(p) ? "space" : CSS_RADIUS.test(p) ? "corner" : p === "font-size" ? "type" : undefined);
@@ -92,7 +123,7 @@ function transform(file, text, isNative) {
 
   // CSS declarations: the whole file in a .css file, only template literals in code (as the gate reads it).
   const isCss = file.endsWith(".css");
-  const cssRanges = isCss ? [[0, text.length]] : [...text.matchAll(TEMPLATE)].map((m) => [m.index, m.index + m[0].length]);
+  const cssRanges = isCss ? [[0, text.length]] : templateRanges(text);
   for (const [from, to] of cssRanges) {
     for (const match of text.slice(from, to).matchAll(CSS_DECLARATION)) {
       const kind = kindOfCss(match[1].toLowerCase());

@@ -46,3 +46,14 @@ test("the codemod rewrites a decimal length in a CSS template as one whole value
   execFileSync("node", [new URL("./codemod.mjs", import.meta.url).pathname, "--write", file], { stdio: "pipe" });
   assert.equal(readFileSync(file, "utf8"), "export const css = `.a { gap: var(--space-10); padding: var(--space-3); }`;\n");
 });
+
+test("the codemod rewrites CSS inside a template nested in an interpolation", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codemod-"));
+  const file = join(dir, "Fixture.tsx");
+  writeFileSync(file, "export const css = `.a { gap: 14px; }\n${rules(`.b { padding: 14px; }`)}\n.c { gap: 14px; }`;\n");
+  execFileSync("node", [new URL("./codemod.mjs", import.meta.url).pathname, "--write", file], { stdio: "pipe" });
+  assert.equal(
+    readFileSync(file, "utf8"),
+    "export const css = `.a { gap: var(--space-3); }\n${rules(`.b { padding: var(--space-3); }`)}\n.c { gap: var(--space-3); }`;\n",
+  );
+});
