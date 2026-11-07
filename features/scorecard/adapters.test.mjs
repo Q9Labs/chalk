@@ -13,7 +13,7 @@ const budgetsFile = JSON.parse(readFileSync(new URL("../../perf/budgets.json", i
 
 const card = ({ metrics, dropped }) => ({
   schema: SCORECARD_SCHEMA,
-  run: { id: "local-1", commit: "a".repeat(40), tier: "pr", environment: "ci", startedAt: "2026-11-07T10:20:30.000Z", client: { kind: "browser", browser: "chromium/150.0.1", region: "github-hosted", size: "ubuntu-24.04" } },
+  run: { id: "local-1", commit: "a".repeat(40), tier: "pr", environment: "ci", startedAt: "2026-11-07T10:20:30.000Z", client: { kind: "browser", browser: "chromium/150.0.1", region: "github-hosted", size: "ubuntu-24-04" } },
   mediaPlane: "chalk_sfu",
   metrics,
   dropped,
@@ -31,7 +31,8 @@ test("the web registry covers exactly the scenarios the check runs and the budge
 });
 
 test("every budget entry names a registered metric, and a pass budget bounds from below", () => {
-  for (const [id, entry] of Object.entries(budgetsFile.budgets)) {
+  for (const [key, entry] of Object.entries(budgetsFile.budgets)) {
+    const id = key.replace(/^(chalk_sfu|cf_sfu)\./, "");
     assert.ok(METRICS[id], `${id} is not in the registry`);
     assert.equal(METRICS[id].unit === "pass", entry.min_p50 !== undefined, `${id}: pass metrics use min_p50 and no other metric does`);
   }

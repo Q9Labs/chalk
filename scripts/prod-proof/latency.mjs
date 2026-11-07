@@ -9,9 +9,9 @@
 // Metric ids and what each one times are in features/scorecard/schema.mjs.
 // A cycle whose admission lands on the other plane, or that fails, is dropped and rerun; its reason is kept.
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
-// public scorecard shape. With budgets in latency-budgets.json, a p95 over budget, a timeout or a plane short
+// public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
 // of samples makes the exit code non-zero.
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -22,7 +22,8 @@ import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { budgetFailures, summarize } from "./latency-stats.mjs";
-import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "../../features/scorecard/schema.mjs";
+import { planeBudgets, readBudgets } from "../../features/scorecard/budgets.mjs";
+import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
 const timeoutMs = 20_000;
@@ -181,22 +182,19 @@ async function measureAll(run, origin, { samples, planes, headed }, report) {
   }
 }
 
-async function budgets() {
-  try {
-    return JSON.parse(await readFile(new URL("./latency-budgets.json", import.meta.url), "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  }
+// planeLimits is the p95 limit of every action metric that has a budget for the plane, in the shape budgetFailures reads.
+function planeLimits(budgets, plane) {
+  const entries = Object.entries(planeBudgets(budgets, plane)).filter(([id, entry]) => id.startsWith("action.") && entry.max_p95 !== undefined);
+  return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95 }]));
 }
 
 async function conclude(report, { samples, planes }) {
-  const limits = await budgets();
+  const { budgets } = await readBudgets();
   report.planes = {};
   for (const plane of planes) {
     const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
     const summary = summarize(kept.map((outcome) => outcome.sample));
-    const failures = limits?.planes?.[plane] ? budgetFailures(summary, limits.planes[plane], samples) : [];
+    const failures = budgetFailures(summary, planeLimits(budgets, plane), samples);
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
     report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures };
   }
@@ -207,7 +205,7 @@ function scorecard(report, plane, run) {
   const { summary } = report.planes[plane];
   const drops = new Map();
   for (const outcome of report.cycles.filter((cycle) => cycle.plane === plane && cycle.dropped)) {
-    for (const metric of Object.keys(METRICS)) drops.set(`${metric} ${outcome.dropped}`, (drops.get(`${metric} ${outcome.dropped}`) ?? 0) + 1);
+    drops.set(`${WHOLE_CYCLE} ${outcome.dropped}`, (drops.get(`${WHOLE_CYCLE} ${outcome.dropped}`) ?? 0) + 1);
   }
   for (const [metric, { timeouts }] of Object.entries(summary)) if (timeouts) drops.set(`${metric} timeout`, timeouts);
   return parseScorecard({

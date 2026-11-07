@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
-import { readBudgets, validateBudgetEntries } from "./budgets.mjs";
+import { planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { deviceMetrics } from "./adapters/device.mjs";
 import { joinStartupMetrics, leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
@@ -80,7 +80,7 @@ async function diff(argv) {
   const baseline = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
   const { budgets } = await readBudgets();
   validateBudgetEntries(budgets);
-  const result = diffMetrics(baseline?.metrics ?? [], current.metrics, budgets);
+  const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
   const table = renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
   if (values.markdown) writeFileSync(values.markdown, table);
   console.log(table);

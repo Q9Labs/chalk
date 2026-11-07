@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planeBudgets } from "./budgets.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
 
 const ms = (id, p50, p95 = p50) => ({ id, unit: "ms", n: 20, p50, p95, source: "t" });
@@ -68,4 +69,13 @@ test("each job owns one section of the single comment", async () => {
   assert.doesNotMatch(again, /\nweb table/);
   assert.match(again, /sfu table[\s\S]*newer web table/);
   assert.equal(again.split(MARKER).length, 2);
+});
+
+test("a plane's own limit replaces the plain one, and the other plane's limit is left out", () => {
+  const own = { max_p95: 700, tolerancePct: 10, gate: false };
+  const other = { max_p95: 900, tolerancePct: 10, gate: false };
+  const plain = { max_p95: 5000, tolerancePct: 10, gate: true };
+  const all = { "action.leave_ms": plain, "chalk_sfu.action.leave_ms": own, "cf_sfu.action.leave_ms": other, "web.route.js_gzip_kib": plain };
+  assert.deepEqual(planeBudgets(all, "chalk_sfu"), { "action.leave_ms": own, "web.route.js_gzip_kib": plain });
+  assert.deepEqual(planeBudgets(all, "cf_sfu")["action.leave_ms"], other);
 });

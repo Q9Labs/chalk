@@ -79,7 +79,7 @@ Cloudflare), when it fails (`cycle_failed`), or when it can't end the Episode
 `timeout`. The run writes every sample to a private latency report and one
 `scorecard-<plane>.json` per plane, in the public `chalk.scorecard/v1` shape,
 which `parseScorecard` validates. A scorecard has no hosts, IPs, URLs, Tenant
-or Space ids. With budgets in [`latency-budgets.json`](latency-budgets.json),
+or Space ids. With the `action.*` budgets in [`perf/budgets.json`](../../perf/budgets.json) (keyed by plane, for example `chalk_sfu.action.leave_ms`),
 the run fails on a p95 over budget, on any timeout, or when a plane has fewer
 kept cycles than `--samples`.
 

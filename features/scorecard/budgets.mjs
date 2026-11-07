@@ -6,6 +6,7 @@ import { CALL_METRICS, ROUTE_METRICS, callMetricId, routeMetricId } from "./metr
 
 const BUDGETS_FILE = new URL("../../perf/budgets.json", import.meta.url);
 
+const PLANES = ["chalk_sfu", "cf_sfu"];
 const CALL_SEGMENTS = Object.fromEntries(Object.entries(CALL_METRICS).map(([metric, { segment }]) => [metric, segment]));
 
 export async function readBudgets() {
@@ -25,6 +26,21 @@ export function validateBudgetEntries(entries) {
     if (!Number.isFinite(entry.tolerancePct) || entry.tolerancePct < 0) throw new Error(`${id}: tolerancePct must be a non-negative number`);
     if (typeof entry.gate !== "boolean") throw new Error(`${id}: gate must be true or false`);
   }
+}
+
+/**
+ * planeBudgets returns the budgets that apply to one media plane. A limit that differs by plane is keyed by the plane
+ * first (chalk_sfu.action.leave_ms) and replaces the plain entry of the same id.
+ * @param {Record<string, any>} budgets  The budgets object of perf/budgets.json.
+ * @param {string} plane
+ */
+export function planeBudgets(budgets, plane) {
+  const prefix = `${plane}.`;
+  const own = Object.entries(budgets)
+    .filter(([id]) => id.startsWith(prefix))
+    .map(([id, entry]) => [id.slice(prefix.length), entry]);
+  const others = Object.entries(budgets).filter(([id]) => !PLANES.some((name) => id.startsWith(`${name}.`)));
+  return Object.fromEntries([...others, ...own]);
 }
 
 /**

@@ -2,13 +2,7 @@ import { WHOLE_CYCLE } from "../schema.mjs";
 import { metric, passMetric } from "../stats.mjs";
 
 // TestAPublisherThatSendsRTXUnderItsRIDCannotHangShutdown is skipped unconditionally, so it is not listed.
-const IMPAIRMENT_TESTS = [
-  "TestOneConstrainedSubscriberAdaptsAlone",
-  "TestVideoOnlySubscriberResumesAfterStarvation",
-  "TestLossOnEachLegIsRepairedOverRTX",
-  "TestTenPersonCallWithAScreenShareStaysUnderTheEpisodeCeiling",
-  "TestImpairedCallsLogNothingForbidden",
-];
+const IMPAIRMENT_TESTS = ["TestOneConstrainedSubscriberAdaptsAlone", "TestVideoOnlySubscriberResumesAfterStarvation", "TestLossOnEachLegIsRepairedOverRTX", "TestTenPersonCallWithAScreenShareStaysUnderTheEpisodeCeiling", "TestImpairedCallsLogNothingForbidden"];
 
 const jsonLines = (text) =>
   text

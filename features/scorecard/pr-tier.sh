@@ -16,7 +16,7 @@ if [[ ! -s "${report}" ]]; then
 fi
 
 scorecard=artifacts/scorecard-${section}.json
-node features/scorecard/scorecard.mjs build "${flag}" "${report}" --tier pr --environment ci --region github-hosted --size ubuntu-24.04 --out "${scorecard}"
+node features/scorecard/scorecard.mjs build "${flag}" "${report}" --tier pr --environment ci --region github-hosted --size ubuntu-24-04 --out "${scorecard}"
 
 baseline=()
 if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
