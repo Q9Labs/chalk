@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { parseAccessGrant, type AccessGrant } from "../access/grant.js";
-import { createChalkEffectClient } from "../client.js";
+import { makeChalkEffectClient } from "../effect-client.js";
+import { ChalkPublicApi } from "../generated/public-http-api.js";
 import type { PublicSpaceArrival as GeneratedPublicSpaceArrival, PublicSpaceCreated as GeneratedPublicSpaceCreated } from "../generated/schemas.js";
 import type { ArriveBySpacePublicInviteInput, ChalkPublicClient, ChalkPublicClientOptions, ChalkPublicIdempotencyOptions, CreatePublicSpaceInput, PublicArrivalOptions, PublicArrivalReference, PublicLeaveOptions, PublicRefreshAccessInput, PublicSpaceArrival, PublicSpaceCreated } from "./types.js";
 export function createChalkPublicClient(options: ChalkPublicClientOptions): ChalkPublicClient {
@@ -10,7 +11,7 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
     fetch: options.fetch,
   };
   const createClient = (guestCredential: string | undefined, requestInit?: RequestInit) =>
-    createChalkEffectClient({
+    makeChalkEffectClient(ChalkPublicApi, {
       ...baseClientOptions,
       ...(requestInit ? { fetch: requestInitFetch(options.fetch, requestInit) } : {}),
       headers: requestHeaders(options, guestCredential),

@@ -239,6 +239,14 @@ When the API cannot mint Cloudflare TURN credentials it logs
 no credential, and the join continues with STUN only. A sustained stream of this
 event means clients behind strict networks cannot connect.
 
+The own SFU does the same: it logs `chalk_sfu.turn_credentials_failed` with the
+node and the Episode id, and the join continues with STUN only. Each failure also
+adds one to the API metric `chalk.sfu.turn_mint_failures`, whose only attribute is
+`chalk.media_plane.provider`; it carries no Episode id, so its cardinality stays
+fixed. Search the log for the Episode id to find the affected class. Any value
+above zero over a few minutes means clients on UDP-blocked networks cannot
+connect media.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
@@ -386,7 +394,7 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
   p99, CPU steal where the host reports it, and the admission reason.
 - `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
   the admission reason changes to or from `cpu_steal`, `cpu_busy`,
-  `pacer_queue_delay`, `pacer_drops` or `udp_buffer_errors`, with the readings
+  `scheduler_latency`, `pacer_drops` or `udp_buffer_errors`, with the readings
   that decided it. Every refused join or screen share logs a `refused` warning
   with its reason. Live Episodes keep admitting
   their Participants while new ones are refused.
@@ -400,7 +408,7 @@ network pause; the wire reason of a pause by the Episode plan is `congestion` to
 and only `plannerPaused` and the metrics tell the two apart), and its transport shows the estimate, proven rate, feedback age,
 queued bytes, packets per class, pacer drops, repairs cut by the rate cap and
 probes. The Episode block shows its packets/s against its ceiling. `/readyz`
-shows the host signals behind admission.
+shows the host signals behind admission, plus goroutines, in-use heap and resident memory for a soak sampler; `/debug/pprof/` (same service identity) gives heap and goroutine profiles, never exported as telemetry.
 
 The node also exports metrics over OTLP/HTTP to the API's metrics dataset, as
 `service.name=chalk-sfu` with `deployment.environment.name` and the node
@@ -424,7 +432,7 @@ the export against `inspect` and for identities.
   refused or cut short; both stay 0 when `SFU_UDP_BATCH` is off), and
   `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
-  `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
+  `cpu_steal`, `cpu_busy`, `scheduler_latency`, `pacer_drops`,
   `udp_buffer_errors`, `screen_ceiling`, `cameras`).
 - Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
   only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
@@ -491,8 +499,8 @@ failures directly to Discord.
 The collector also samples the own SFU's `/readyz` over mutual TLS when
 `CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
 grouped monitor alerts on four unhealthy minute samples in five minutes: a
-draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
-queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, scheduler
+latency, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
 allowlisted reason codes are exported, never TLS or HTTP error text, response
 bodies or node identifiers. The freshness monitor does not count this row, so
 hosts without an SFU stay quiet. See the production-alerts README for setup.
@@ -755,19 +763,19 @@ announced → pull_requested → pull_failed / pull_succeeded → track_received
 Read the state with the companion fields, rather than treating an attached track
 or a resolved `play()` promise alone as proof of audible audio:
 
-| Furthest state   | Interpretation                                                                                                                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                               |
-| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                  |
-| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                           |
-| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                      |
-| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path. |
-| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                    |
-| `element_bound`  | Audio is progressing and an element is bound, but the element is paused. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path.                     |
-| `playing`        | Audio is progressing and the bound element is not paused. This does not prove the output device is audible or its volume is nonzero.                                                           |
+| Furthest state   | Interpretation                                                                                                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `announced`      | An audio publication is desired, but no pull has been requested.                                                                                                                                                                    |
+| `pull_requested` | A pull was requested but has not reported success or failure.                                                                                                                                                                       |
+| `pull_failed`    | Pull signaling failed; inspect the allowlisted `media_error_kind` and `media_error_step=sfu_tracks`.                                                                                                                                |
+| `pull_succeeded` | Pull negotiation succeeded, but a live remote track has not been observed by the sampler.                                                                                                                                           |
+| `track_received` | A live remote track exists, but matching inbound audio stats have not shown progress. With `track_state=muted`, no RTP is reaching the browser track; investigate the sender and receive path.                                      |
+| `bytes_flowing`  | Inbound audio is progressing, but no observed audio element contains this track. Check that `AudioOutput` is mounted and binding the track.                                                                                         |
+| `element_bound`  | Audio is progressing and an element is bound, but playback has not started or its `currentTime` has not advanced between samples. `play_result=NotAllowedError` identifies blocked autoplay; inspect the resume-audio gesture path. |
+| `playing`        | Audio is progressing, the bound element's play promise resolved or its `playing` event fired, and its `currentTime` advanced between samples. This does not prove the output device is audible or its volume is nonzero.            |
 
 Companion fields are bounded labels: `track_state` is `live`, `muted`, or `ended`;
-`element_state` is `paused` or `playing`; `play_result` is `ok`,
+`element_state` is `paused` or `playing`, reflecting the observed `paused` flag rather than confirmed playback; `play_result` is `ok`,
 `NotAllowedError`, `AbortError`, or `unknown`. Rejected playback contributes only
 that label, never raw error text. Summaries carry `receive_counts`, a fixed-key
 object with optional counts from 0 to 10000 for each ladder state plus

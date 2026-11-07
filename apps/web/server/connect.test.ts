@@ -8,7 +8,7 @@ const handle = `chalk_oar_${"a".repeat(43)}`;
 const tenantId = "11111111-1111-4111-8111-111111111111";
 
 function engine(api: Record<string, unknown>) {
-  return { api: { default: api }, tenantId, dashboardOrigin: "https://dashboard.example.test" } as unknown as Engine;
+  return { api: { default: api, tenants: { getTenant: () => Effect.succeed({ name: "Hasan Shoaib" }) } }, tenantId, dashboardOrigin: "https://dashboard.example.test" } as unknown as Engine;
 }
 
 it("approves for the signed-in session's tenant and never a tenant from the request", async () => {
@@ -28,7 +28,10 @@ it("refuses malformed handles and scopes beyond the two bundles", () => {
 
 it("shows what the app asked for and lists and revokes connections for the session's tenant", async () => {
   const inspect = vi.fn(() => Effect.succeed({ client_name: "Claude", redirect_host: "claude.ai", scope: "chalk:manage", expires_at: "2026-11-05T12:00:00Z" }));
-  expect(await connectPage(engine({ inspectMCPConsentRequest: inspect }), handle)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", requestedScope: "chalk:manage" });
+  expect(await connectPage(engine({ inspectMCPConsentRequest: inspect }), handle)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", requestedScope: "chalk:manage", tenantName: "Hasan Shoaib" });
+
+  const noTenant = { api: { default: { inspectMCPConsentRequest: inspect }, tenants: { getTenant: () => Effect.fail(new Error("unavailable")) } }, tenantId, dashboardOrigin: "https://dashboard.example.test" } as unknown as Engine;
+  expect(await connectPage(noTenant, handle)).toEqual({ clientName: "Claude", redirectHost: "claude.ai", requestedScope: "chalk:manage", tenantName: null });
 
   const list = vi.fn(() => Effect.succeed({ data: [{ id: crypto.randomUUID(), client_name: "ChatGPT", scope: "chalk:read", last_used_at: null, created_at: "2026-11-05T10:00:00Z" }], pagination: { page_size: 25, next_cursor: "next", has_more: true } }));
   const page = await connectionsPage(engine({ listMCPConnections: list }), "cursor-1");

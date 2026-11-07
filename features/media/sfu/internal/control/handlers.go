@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/pprof"
+	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
@@ -15,11 +19,18 @@ import (
 
 const requestDeadline = 15 * time.Second
 
+// maxProfileSeconds is the longest CPU profile: the request deadline would cut a longer one short.
+const maxProfileSeconds = int(requestDeadline / time.Second)
+
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	// Readiness names the node incarnation and its load, so it needs the same identity as /v1.
 	mux.Handle("GET /readyz", s.v1(s.ready))
+	// Profiles hold heap contents and stacks, so they need the same identity. The index serves
+	// heap, goroutine and allocs. A CPU profile samples for ?seconds= (default and limit 15, the request deadline).
+	mux.Handle("GET /debug/pprof/", s.v1(servePprof(pprof.Index)))
+	mux.Handle("GET /debug/pprof/profile", s.v1(s.profile))
 
 	prefix := "/" + protocol.Version
 	mux.Handle("POST "+prefix+"/sessions", s.v1(s.createSession))
@@ -41,6 +52,40 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 	budget, reserved := s.node.Budget()
 	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host()})
 	return nil
+}
+
+func servePprof(handle http.HandlerFunc) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		handle(w, r)
+		return nil
+	}
+}
+
+// profile samples the CPU for the asked seconds. The standard handler defaults to 30, which the
+// request deadline would cut short, so an absent value means the limit and a longer one is refused.
+func (s *Server) profile(w http.ResponseWriter, r *http.Request) error {
+	query := r.URL.Query()
+	seconds, err := profileSeconds(query)
+	if err != nil {
+		return err
+	}
+	query.Set("seconds", strconv.Itoa(seconds))
+	sampled := r.Clone(r.Context())
+	sampled.URL.RawQuery = query.Encode()
+	pprof.Profile(w, sampled)
+	return nil
+}
+
+func profileSeconds(query url.Values) (int, error) {
+	raw := query.Get("seconds")
+	if raw == "" {
+		return maxProfileSeconds, nil
+	}
+	seconds, err := strconv.Atoi(raw)
+	if err != nil || seconds < 1 || seconds > maxProfileSeconds {
+		return 0, fmt.Errorf("%w: seconds must be a whole number from 1 to %d", media.ErrInvalidRequest, maxProfileSeconds)
+	}
+	return seconds, nil
 }
 
 // v1 guards an operation: the caller must hold the expected service identity.

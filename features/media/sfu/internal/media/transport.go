@@ -33,8 +33,11 @@ const (
 	minPace    = 600_000 // bits/s
 	// paceBurst is how long a sender may run ahead of its pace.
 	paceBurst = 40 * time.Millisecond
-	// queueTarget is how long the pacer lets a burst wait. A longer backlog
-	// raises the pace, so only a starved node holds packets past it.
+	// queueTarget is how long the pacer aims to let a burst wait. A longer
+	// backlog raises the pace, but the raise shrinks as the queue drains, so the
+	// tail of a burst many times the pace's burst allowance waits longer, on any
+	// host: a new transport's 120 kB of keyframes at its first estimate takes
+	// about 130 ms.
 	queueTarget = 40 * time.Millisecond
 	// repairShare bounds retransmissions to a share of the proven rate.
 	repairShare   = 0.25

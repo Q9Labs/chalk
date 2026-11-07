@@ -10,10 +10,12 @@ const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.j
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
+// options: sdkEntry, observeLeave, plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
-function checkMediaPlane(grant, guest) {
-  if (mediaPlane !== "chalk_sfu") return;
-  check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`);
+function checkMediaPlane(grant, guest, plane) {
+  if (plane !== "chalk_sfu") return;
+  check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
 }
 
 async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
@@ -48,10 +50,13 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const participants = [];
   const refreshes = [];
   const networks = [];
+  const admissions = [];
   for (let guest = 0; guest < guestCount; guest++) {
+    const admitStartedAt = performance.now();
     const admission = await chalk.participants.admit(space.id, episode.id, { name: `Proof guest ${guest + 1}`, role: "owner" });
     let grant = admission.access;
-    checkMediaPlane(grant, guest + 1);
+    admissions.push({ ms: performance.now() - admitStartedAt, provider: grant.media?.provider ?? null });
+    checkMediaPlane(grant, guest + 1, options.plane ?? mediaPlane);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
     const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
@@ -61,7 +66,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     const open = async (replacing = false) => {
       let replaceOnNextAccess = replacing;
       const server = await chromium.launchServer({
-        headless: true,
+        headless: !options.headed,
         handleSIGINT: false,
         handleSIGTERM: false,
         args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
@@ -139,6 +144,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await page.goto(origin);
       await page.evaluate(installTransportDiagnostics);
       await page.addScriptTag({ content: bundle });
+      if (options.deferJoin && !replacing) return page;
       try {
         options.onJoinStart?.(guest, performance.now());
         await page.evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${guest + 1}` });
@@ -163,10 +169,11 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       }
       return true;
     });
-  if (guestCount > 1) await ready();
+  if (guestCount > 1 && !options.deferJoin) await ready();
   return {
     pages,
     participants,
+    admissions,
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);

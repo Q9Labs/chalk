@@ -6,25 +6,21 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
 func bindMCPSpaceTools(server *mcp.Server, o Options) {
-	bindMCPEndpoint(server, mcpapi.ListSpaceActivity, listSpaceActivityEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpaceSetInput) listSpaceActivityRequest {
-		return listSpaceActivityRequest{TenantID: b.tenant, SpaceIDs: b.ids(i.SpaceIDs, episodes.MaximumActivitySpaces)}
-	})
-	bindMCPEndpoint(server, mcpapi.ListSpaces, listSpacesEndpoint(o.Spaces, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpacesInput) listSpacesRequest {
-		return listSpacesRequest{TenantID: b.tenant, Page: b.page(i.PageInput), Archived: i.Archived}
-	})
-	mcpapi.Bind(server, mcpapi.InspectSpace, func(ctx context.Context, i mcpapi.SpaceInput) (json.RawMessage, error) {
+	mcpapi.Bind(server, mcpapi.InspectSpaces, func(ctx context.Context, i mcpapi.SpacesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
-		spaceID := b.id(i.SpaceID)
-		if i.View == "invite" {
-			return mcpInvoke(b, getSpacePublicInviteEndpoint(o.PublicInvites, o.TenantAuthz), publicInvitePathRequest{TenantID: b.tenant, SpaceID: spaceID})
+		switch i.View {
+		case "settings":
+			return mcpInvoke(b, getSpaceEndpoint(o.Spaces, o.TenantAuthz), getSpaceRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID)})
+		case "invite":
+			return mcpInvoke(b, getSpacePublicInviteEndpoint(o.PublicInvites, o.TenantAuthz), publicInvitePathRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID)})
+		default:
+			return mcpInvoke(b, listSpacesEndpoint(o.Spaces, o.TenantAuthz), listSpacesRequest{TenantID: b.tenant, Page: b.page(i.PageInput), Archived: i.Archived})
 		}
-		return mcpInvoke(b, getSpaceEndpoint(o.Spaces, o.TenantAuthz), getSpaceRequest{TenantID: b.tenant, SpaceID: spaceID})
 	})
 	bindMCPEndpoint(server, mcpapi.CreateSpace, createSpaceEndpoint(o.Spaces, o.TenantAuthz), func(b *mcpRequest, i mcpapi.BodyInput[createSpaceRequest]) createSpaceEndpointRequest {
 		return createSpaceEndpointRequest{TenantID: b.tenant, RequestKey: i.RequestKey, Body: i.Body}

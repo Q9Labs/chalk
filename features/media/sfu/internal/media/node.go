@@ -364,6 +364,10 @@ func (n *Node) Host() protocol.HostState {
 		UDPReceiveBufferBytes: n.receiveBuffer,
 		UDPSendBufferBytes:    n.sendBuffer,
 	}
+	state.Goroutines, state.HeapInuseBytes = readRuntime()
+	if rss, known := readRSS(rssPath); known {
+		state.RSSBytes = &rss
+	}
 	if errs, known := readUDPErrors(udpStatsPath); known {
 		state.UDPReceiveBufferErrors, state.UDPSendBufferErrors = &errs.receive, &errs.send
 	}

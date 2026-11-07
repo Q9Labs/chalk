@@ -547,53 +547,243 @@
   color: var(--chalk-text);
 }
 
-.site .dash .cscope {
-  margin: 24px 0 0;
-  padding: 0;
-  border: 0;
+/* Connect: the app and Chalk as a pair, the access it asks for, and the connected apps table. */
+.site .dash .cbox {
+  width: 400px;
+  text-align: center;
+}
+
+.site .dash .cbox .sib {
+  text-align: initial;
+}
+
+.site .dash .alogo {
   display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--chalk-surface);
+  border: 1px solid var(--chalk-line-strong);
+  color: var(--chalk-text);
+}
+
+.site .dash .alogo.lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+}
+
+.site .dash .alogo.xl {
+  width: 84px;
+  height: 84px;
+  border-radius: 24px;
+}
+
+.site .dash .alogo.sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.site .dash .alogo img,
+.site .dash .alogo .glyph,
+.site .dash .alogo > svg {
+  width: 55%;
+  height: 55%;
+}
+
+.site .dash .alogo .glyph {
+  background: currentColor;
+  mask: var(--logo) center / contain no-repeat;
+}
+
+.site .dash .alogo .initial {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.site .dash .apair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 28px;
+}
+
+.site .dash .aconn {
+  width: 72px;
+  height: 24px;
+  fill: none;
+  stroke: var(--chalk-muted-text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.site .dash .aconn .cut {
+  stroke: var(--chalk-danger-text);
+}
+
+.site .dash .cacc {
+  margin-top: 24px;
+  display: grid;
+  justify-items: center;
   gap: 8px;
 }
 
-.site .dash .cscope legend {
+.site .dash .cacc .lbl {
+  margin: 0;
+}
+
+.site .dash .cperm {
+  list-style: none;
+  margin: 24px 0 0;
   padding: 0;
-  margin-bottom: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  text-align: initial;
+  border-top: 1px solid var(--chalk-line);
+}
+
+.site .dash .cperm li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--chalk-line);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--chalk-text);
+}
+
+.site .dash .cperm li.no {
   color: var(--chalk-muted-text);
 }
 
-.site .dash .cscope label {
+.site .dash .cperm svg.site-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.site .dash .cperm li:not(.no) svg.site-icon {
+  color: var(--chalk-positive);
+}
+
+.site .dash .capp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.site .dash .capp > span:last-child {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 10px;
-  align-items: start;
-  padding: 12px 14px;
-  border-radius: 12px;
+}
+
+.site .dash .csub {
+  display: none;
+  font-size: 13px;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .capps td.act {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.site .dash .capps .cdis:hover {
+  color: var(--chalk-danger-text);
+}
+
+.site .dash .capps td.act .ib {
+  margin-left: auto;
+}
+
+.site .dash .brk {
+  width: 460px;
+  max-width: 100%;
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  padding: 44px 40px 32px;
+  text-align: center;
   background: var(--chalk-surface);
   border: 1px solid var(--chalk-line-strong);
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--chalk-soft-text);
-  cursor: pointer;
+  border-radius: 24px;
+  box-shadow: var(--raise);
+  animation: dash-up 0.22s var(--ease);
 }
 
-.site .dash .cscope label:has(input:checked) {
-  border-color: var(--chalk-text);
+.site .dash .brk .apair {
+  margin-bottom: 32px;
 }
 
-.site .dash .cscope label:has(input:focus-visible) {
-  outline: 2px solid var(--chalk-text);
-  outline-offset: 2px;
+.site .dash .brk .aconn {
+  width: 104px;
 }
 
-.site .dash .cscope input {
-  margin-top: 2px;
-}
-
-.site .dash .cscope b {
-  display: block;
+.site .dash .brk h2 {
+  font-size: 22px;
   font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.site .dash .brk p {
+  max-width: 34ch;
+  overflow-wrap: anywhere;
+  margin: 0 auto;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .brk .acts {
+  margin-top: 32px;
+  gap: 12px;
+}
+
+.site .dash .brk .acts .btn {
+  flex: 1;
+}
+
+.site .dash .cempty {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--chalk-soft-text);
+}
+
+/* A class of its own: a bare `.cempty span` also matched the logo tile and its glyph and broke their centering. */
+.site .dash .cempty-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.site .dash .cwho {
+  font-size: 13px;
+  color: var(--chalk-muted-text);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+.site .dash .cwho b {
+  font-weight: 500;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .cwho button {
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+
+.site .dash .cwho button:hover {
   color: var(--chalk-text);
 }
 
@@ -1887,6 +2077,16 @@
 }
 
 @media (max-width: 640px) {
+  .site .dash .capps .wide {
+    display: none;
+  }
+
+  .site .dash .capps .csub {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
   .site .dash .sihead .lockup {
     font-size: 22px;
   }
@@ -1944,6 +2144,35 @@
     border-radius: 24px 24px 0 0;
     padding: 26px 20px 34px;
     border-width: 1px 0 0;
+  }
+
+  .site .dash .brk {
+    position: relative;
+    width: 100%;
+    max-height: 92%;
+    border-radius: 28px 28px 0 0;
+    border-width: 1px 0 0;
+    padding: 40px 20px 34px;
+  }
+
+  .site .dash .brk::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 36px;
+    height: 5px;
+    margin-left: -18px;
+    border-radius: 3px;
+    background: var(--chalk-line-strong);
+  }
+
+  .site .dash .brk .aconn {
+    width: 72px;
+  }
+
+  .site .dash .brk .acts .btn {
+    flex: none;
   }
 
   .site .dash .dlg::before {
