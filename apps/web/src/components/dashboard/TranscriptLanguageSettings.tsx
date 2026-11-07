@@ -59,7 +59,7 @@ export function TranscriptLanguageSettings({ value, inherit = false, onSave }: {
           {error}
         </p>
       ) : null}
-      <button type="submit" className="btn pri" style={{ marginTop: 16 }} disabled={busy || draft === value}>
+      <button type="submit" className="btn pri" style={{ marginTop: "var(--space-4)" }} disabled={busy || draft === value}>
         {busy ? "Saving…" : "Save transcript language"}
       </button>
     </form>

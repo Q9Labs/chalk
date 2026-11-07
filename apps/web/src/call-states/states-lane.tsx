@@ -138,7 +138,7 @@ function toastForFixture(id: string) {
 function ToastFixture({ message, icon, action, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly action?: { readonly label: string; readonly onClick: () => void }; readonly error?: boolean; readonly light?: boolean }) {
   const [visible, setVisible] = useState(true);
   return (
-    <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
+    <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: "var(--type-body)", lineHeight: 1.4 }}>
       {visible ? (
         <ToastStack
           toasts={[
@@ -168,7 +168,7 @@ function CallLinkFixture() {
   const [alone, setAlone] = useState(true);
   const callLink = useCallLink(alone);
   return (
-    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
+    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: "var(--type-body)", lineHeight: 1.4 }}>
       <button data-call-link-trigger aria-pressed={callLink.open} onClick={callLink.toggle}>
         {callLink.open ? "Hide call link" : "Show call link"}
       </button>
@@ -233,7 +233,7 @@ function CommandFailureFixture() {
   const [source, setSource] = useState<"microphone" | "camera" | "screen">("camera");
   const toast = mediaFailureToast(failure, source);
   return (
-    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: 14, lineHeight: 1.4 }}>
+    <main data-chalk data-chalk-theme="dark" className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: "var(--type-body)", lineHeight: 1.4 }}>
       {(["camera", "microphone", "screen"] as const).map((value) => (
         <button key={value} onClick={() => setSource(value)}>
           {value}

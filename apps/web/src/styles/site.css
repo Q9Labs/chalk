@@ -39,6 +39,7 @@
   --site-selection-strong: rgba(217, 182, 65, 0.38);
   --site-tint-strong: rgba(255, 255, 255, 0.3);
   --site-tint-medium: rgba(255, 255, 255, 0.2);
+  --site-tint-soft: rgba(255, 255, 255, 0.12);
   --site-tint-faint: rgba(255, 255, 255, 0.08);
   --site-shadow-panel: 0 30px 70px -40px rgba(0, 0, 0, 0.35);
   --site-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.35);
