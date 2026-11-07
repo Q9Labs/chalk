@@ -8,7 +8,7 @@ import { SCORECARD_SCHEMA, scorecardProblems } from "./schema.mjs";
 
 const night = (day, leaveMs, plane = "chalk_sfu") => ({
   schema: SCORECARD_SCHEMA,
-  run: { id: `run-${day}`, commit: "b".repeat(40), tier: "nightly", environment: "staging", startedAt: `2026-11-${String(day).padStart(2, "0")}T03:00:00.000Z`, client: { kind: "browser", browser: "chromium/150.0.1", region: "github-hosted", size: "ubuntu-24.04" } },
+  run: { id: `run-${day}`, commit: "b".repeat(40), tier: "nightly", environment: "staging", startedAt: `2026-11-${String(day).padStart(2, "0")}T03:00:00.000Z`, client: { kind: "browser", browser: "chromium/150.0.1", region: "github-hosted", size: "ubuntu-24-04" } },
   mediaPlane: plane,
   metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: leaveMs, p95: leaveMs * 2, source: "latency-kit" }],
   dropped: [],

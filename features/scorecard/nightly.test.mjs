@@ -25,7 +25,7 @@ function setup() {
 function card(day, leaveMs, passRate = 1) {
   return {
     schema: SCORECARD_SCHEMA,
-    run: { id: `run-${day}`, commit: "c".repeat(40), tier: "nightly", environment: "staging", startedAt: `2026-11-${String(day).padStart(2, "0")}T03:00:00.000Z`, client: { kind: "browser", browser: "none", region: "github-hosted", size: "ubuntu-24.04" } },
+    run: { id: `run-${day}`, commit: "c".repeat(40), tier: "nightly", environment: "staging", startedAt: `2026-11-${String(day).padStart(2, "0")}T03:00:00.000Z`, client: { kind: "browser", browser: "none", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
     metrics: [
       { id: "proof.leave_median_ms", unit: "ms", n: 10, p50: leaveMs, p95: leaveMs, source: "leave-proof" },
