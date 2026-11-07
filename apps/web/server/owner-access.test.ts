@@ -76,7 +76,7 @@ it.each([false, true])("refreshes this tab's seat after a sibling join, recoveri
       },
     }),
   );
-  const result = ownerAccess(request, env, { api, tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN }, identity, { action: "refresh-access", spaceId, joinKey: participantId, currentMediaToken: "lost-response-old-token" });
+  const result = ownerAccess(request, env, { api, tenantId, dashboardOrigin: env.DASHBOARD_ORIGIN, mcpUrl: "https://api.example.test/mcp" }, identity, { action: "refresh-access", spaceId, joinKey: participantId, currentMediaToken: "lost-response-old-token" });
   if (recoveryFails) await expect(result).rejects.toMatchObject({ status: 409 });
   else expect(await (await result).json()).toEqual({ access, ownerSeat: expect.any(String), deadlineCeiling: "2026-10-23T14:00:00.000Z" });
   expect(payloads).toEqual([

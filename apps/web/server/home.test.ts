@@ -75,7 +75,7 @@ async function fakeEngine(spaces: string[], live: Record<string, string>, archiv
       },
     }),
   );
-  return { engine: { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(tenant), dashboardOrigin: "https://dashboard.example.test" }, requests };
+  return { engine: { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(tenant), dashboardOrigin: "https://dashboard.example.test", mcpUrl: "https://api.example.test/mcp" }, requests };
 }
 const spaceIds = (count: number) => Array.from({ length: count }, (_, index) => uuid(0x100 + index));
 const paths = (requests: URL[]) => requests.map((url) => url.pathname.split("/").at(-1));

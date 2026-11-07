@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DeveloperPage } from "./DeveloperPage";
 import { ToastProvider } from "./kit";
+
+vi.mock("@tanstack/react-router", async () => {
+  const { createElement } = await import("react");
+  const router = { state: { location: { pathname: "/dashboard/developer" } }, navigate: vi.fn() };
+  return { Link: ({ children }: { children: ReactNode }) => createElement("a", null, children), useNavigate: () => router.navigate, useRouter: () => router };
+});
 
 let mode = "on_demand";
 let fail = false;
@@ -24,7 +31,6 @@ beforeEach(() => {
       if (typeof body === "object" && body !== null && "mode" in body && typeof body.mode === "string") mode = body.mode;
       return Response.json({ recordingRenderMode: mode });
     }
-    if (input === "/dashboard-api/connections") return Response.json({ connections: [], nextCursor: null });
     return Response.json({ tenantId: "00000000-0000-4000-8000-000000000001", recordingRenderMode: mode, allowedWebsites: [], keys: [], webhooks: [], nextKeyCursor: null, nextWebhookCursor: null });
   });
 });

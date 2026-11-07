@@ -205,17 +205,20 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
 
 function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const developer = pathname.startsWith("/dashboard/developer");
+  const section = pathname.startsWith("/dashboard/developer") ? "developer" : pathname.startsWith("/dashboard/apps") ? "apps" : "home";
   return (
     <header className="topb">
-      <Link to="/dashboard" aria-label="Chalk, Home">
+      <Link to="/dashboard" activeOptions={{ exact: true }} aria-label="Chalk, Home">
         <Lockup />
       </Link>
       <nav className="ttabs" aria-label="Dashboard">
-        <Link to="/dashboard" activeOptions={{ exact: true }} aria-current={developer ? undefined : "page"}>
+        <Link to="/dashboard" activeOptions={{ exact: true }} aria-current={section === "home" ? "page" : undefined}>
           Home
         </Link>
-        <Link to="/dashboard/developer" aria-current={developer ? "page" : undefined}>
+        <Link to="/dashboard/apps" aria-current={section === "apps" ? "page" : undefined}>
+          AI apps
+        </Link>
+        <Link to="/dashboard/developer" aria-current={section === "developer" ? "page" : undefined}>
           Developer
         </Link>
       </nav>

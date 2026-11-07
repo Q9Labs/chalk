@@ -317,10 +317,6 @@
   }
 }
 
-.site .dash .dlg.w {
-  width: 580px;
-}
-
 .site .dash .dlg h2 {
   font-size: 16px;
   font-weight: 600;
@@ -590,8 +586,8 @@
 .site .dash .alogo img,
 .site .dash .alogo .glyph,
 .site .dash .alogo > svg {
-  width: 55%;
-  height: 55%;
+  width: var(--fill, 55%);
+  height: var(--fill, 55%);
 }
 
 .site .dash .alogo .glyph {
@@ -748,20 +744,294 @@
   flex: 1;
 }
 
-.site .dash .cempty {
+.site .dash .murl {
   display: flex;
-  justify-content: center;
-  gap: 20px;
+  align-items: center;
+  gap: 12px;
   margin-top: 20px;
-  font-size: 14px;
+  padding: 8px 8px 8px 16px;
+  max-width: 640px;
+  background: var(--chalk-raised);
+  border: 1px solid var(--chalk-line);
+  border-radius: 14px;
+}
+
+.site .dash .murl .lbl {
+  margin: 0;
+  flex: none;
+}
+
+.site .dash .murl code {
+  flex: 1;
+  min-width: 0;
+  font: 500 13px/1.5 var(--chalk-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.site .dash .cfind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 32px 0 16px;
+}
+
+.site .dash .cquery {
+  position: relative;
+  display: block;
+  flex: 1 1 240px;
+  max-width: 380px;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .cquery svg {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  pointer-events: none;
+}
+
+.site .dash .cquery .inp {
+  padding-left: 40px;
+}
+
+.site .dash .cgrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site .dash .ctile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  min-height: 148px;
+  padding: 18px;
+  text-align: left;
+  background: var(--chalk-surface);
+  border: 1px solid var(--chalk-line);
+  border-radius: 16px;
+  color: var(--chalk-text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s var(--ease),
+    background-color 0.15s var(--ease);
+}
+
+.site .dash .ctile:hover {
+  border-color: var(--chalk-line-strong);
+  background: var(--chalk-raised);
+}
+
+.site .dash .ctile:focus-visible {
+  outline: 2px solid var(--chalk-text);
+  outline-offset: 2px;
+}
+
+.site .dash .ctile .alogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--chalk-raised);
+  border-color: var(--chalk-line);
+}
+
+.site .dash .ctile:hover .alogo {
+  background: var(--chalk-surface);
+}
+
+.site .dash .ctile .alogo img,
+.site .dash .ctile .alogo .glyph,
+.site .dash .ctile .alogo > svg {
+  width: var(--fill, 58%);
+  height: var(--fill, 58%);
+}
+
+.site .dash .ctile .ctext {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.site .dash .ctile .nm {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.site .dash .ctile .ln {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .cbadge {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--chalk-line-strong);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
   color: var(--chalk-soft-text);
 }
 
-/* A class of its own: a bare `.cempty span` also matched the logo tile and its glyph and broke their centering. */
-.site .dash .cempty-app {
-  display: inline-flex;
+.site .dash .cbadge.ok {
+  color: var(--chalk-positive);
+  border-color: currentColor;
+}
+
+.site .dash .dlg .apair + h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  text-align: center;
+}
+
+.site .dash .dlg .apair {
+  margin: 12px 0 20px;
+}
+
+.site .dash .dlg.w {
+  width: 640px;
+}
+
+.site .dash .cfield {
+  margin-top: 20px;
+}
+
+.site .dash .cbox2 {
+  display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 10px 10px 10px 16px;
+  background: var(--chalk-raised);
+  border: 1px solid var(--chalk-line);
+  border-radius: 14px;
+}
+
+.site .dash .cbox2 code {
+  flex: 1;
+  min-width: 0;
+  font: 500 13px/1.5 var(--chalk-font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.site .dash .cbox2 .btn {
+  flex: none;
+  height: 44px;
+  padding: 0 18px;
+}
+
+.site .dash .csteps {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+.site .dash .csteps li {
+  position: relative;
+  min-height: 26px;
+  padding-left: 40px;
+  counter-increment: step;
+}
+
+.site .dash .csteps li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--chalk-raised);
+  border: 1px solid var(--chalk-line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .csteps li + li {
+  margin-top: 12px;
+}
+
+.site .dash .cnote,
+.site .dash .csoon {
+  margin: 18px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .csoon {
+  font-size: 14.5px;
+}
+
+@media (max-width: 1099px) {
+  .site .dash .cgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 599px) {
+  .site .dash .cgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site .dash .ctile {
+    flex-direction: row;
+    align-items: center;
+    min-height: 0;
+    gap: 14px;
+    padding: 14px 16px;
+  }
+
+  .site .dash .ctile .ctext {
+    flex: 1;
+  }
+
+  .site .dash .cbadge {
+    position: static;
+    flex: none;
+  }
+
+  .site .dash .murl {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .site .dash .murl code {
+    font-size: 12.5px;
+  }
+
+  .site .dash .cbox2 {
+    flex-wrap: wrap;
+  }
+
+  .site .dash .cbox2 .btn {
+    flex: 1 1 100%;
+  }
 }
 
 .site .dash .cwho {
@@ -2099,7 +2369,8 @@
     padding: 0;
   }
 
-  .site .dash .dlg {
+  .site .dash .dlg,
+  .site .dash .dlg.w {
     width: 100%;
     max-height: 92%;
     border-radius: 24px 24px 0 0;
@@ -2134,6 +2405,11 @@
 
   .site .dash .brk .acts .btn {
     flex: none;
+  }
+
+  .site .dash .dlg.tall {
+    height: calc(100dvh - 12px);
+    max-height: none;
   }
 
   .site .dash .dlg::before {

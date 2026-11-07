@@ -1,5 +1,5 @@
-import { ConnectedApps } from "./ConnectedApps";
 import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import type { DeliveryDTO, DeveloperDTO, RecordingRenderSettingsDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
@@ -150,7 +150,12 @@ export function DeveloperPage() {
         <MoreButton label="Show more endpoints" cursor={data.nextWebhookCursor} load={(webhookCursor) => readPage("developer", { webhookCursor })} onLoaded={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))} />
       ) : null}
 
-      <ConnectedApps />
+      <div className="secth" style={{ marginTop: 48 }}>
+        <h2>AI apps</h2>
+      </div>
+      <p className="ohelp">
+        Let Claude, ChatGPT and other AI apps use Chalk for you. <Link to="/dashboard/apps">Connect an AI app</Link>
+      </p>
 
       {open?.kind === "create-key" ? (
         <CreateKeyDialog

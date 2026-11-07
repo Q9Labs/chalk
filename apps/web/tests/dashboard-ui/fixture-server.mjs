@@ -349,7 +349,13 @@ async function dashboard(request, response, page, url, entry) {
     if (page === "connections") {
       const start = Number(query.cursor ?? 0);
       const end = start + 25;
-      return send(response, 200, { connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null });
+      const mcpUrl = "https://api.chalk.test/mcp";
+      // "connections-list" is the server's answer when the grants can't be read: the address still comes back.
+      if (state.fail.has("connections-list")) return send(response, 200, { mcpUrl, connections: [], nextCursor: null, connectedNames: [], listError: true });
+      // "connections-scan" is a name scan that failed after the first page: only that page's names come back.
+      const named = state.fail.has("connections-scan") ? data.connections.slice(0, 25) : data.connections;
+      const connectedNames = query.cursor ? [] : [...new Set(named.map((item) => item.clientName))];
+      return send(response, 200, { mcpUrl, connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null, connectedNames, listError: false });
     }
     if (page === "developer")
       return send(response, 200, {
@@ -518,7 +524,7 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
-          else if (key === "manyConnections" && value === "1") accounts.hasan.connections.push(...Array.from({ length: 22 }, (_, n) => ({ id: uuid(0x4a0 + n), clientName: `Notes ${n + 1}`, scope: "chalk:read", lastUsedAt: null, createdAt: at(30 + n, 9, 0) })));
+          else if (key === "manyConnections" && value === "1") accounts.hasan.connections.unshift(...Array.from({ length: 22 }, (_, n) => ({ id: uuid(0x4a0 + n), clientName: `Notes ${n + 1}`, scope: "chalk:read", lastUsedAt: null, createdAt: at(30 + n, 9, 0) })));
           else if (key === "freshLive") {
             accounts.hasan.live = true;
             accounts.hasan.sessions = [];
