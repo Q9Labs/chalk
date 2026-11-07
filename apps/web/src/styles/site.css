@@ -16,8 +16,37 @@
   min-height: 100vh;
   background: var(--chalk-canvas);
   color: var(--chalk-text);
-  font: 14px/1.45 var(--chalk-font-family);
+  font: var(--type-body)/1.45 var(--chalk-font-family);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Colors and shadows the marketing site owns. The call's own palette lives in packages/ui. */
+:root {
+  --site-band-space: 120px;
+  --site-type-poster: 80px;
+  --site-black: #000000;
+  --site-white: #ffffff;
+  --site-ink: #0b0c0e;
+  --site-paper: #f3f3f5;
+  --site-paper-tint: rgba(241, 240, 234, 0.1);
+  --site-gold: #dcb740;
+  --site-on-gold: #16140c;
+  --site-danger: #e5484d;
+  --site-danger-hover: #ec5d61;
+  --site-danger-text: #ff6b6b;
+  --site-scrim: rgba(0, 0, 0, 0.55);
+  --site-selection: rgba(217, 182, 65, 0.3);
+  --site-selection-strong: rgba(217, 182, 65, 0.38);
+  --site-tint-strong: rgba(255, 255, 255, 0.3);
+  --site-tint-medium: rgba(255, 255, 255, 0.2);
+  --site-tint-faint: rgba(255, 255, 255, 0.08);
+  --site-shadow-panel: 0 30px 70px -40px rgba(0, 0, 0, 0.35);
+  --site-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --site-shadow-float: 0 24px 60px -30px rgba(0, 0, 0, 0.5);
+  --site-shadow-hero: 0 50px 120px -40px rgba(0, 0, 0, 0.7);
+  --site-shadow-hero-light: 0 50px 110px -40px rgba(27, 28, 31, 0.35);
+  --site-glow-hero: 0 -20px 80px -20px rgba(80, 140, 255, 0.35);
+  --site-shadow-key-edge: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 
 .site[data-chalk-theme="light"] {
@@ -34,12 +63,12 @@
 /* The page behind the site follows its theme too, so overscroll and scrollbars match.
    Inline `color-scheme` on <html> comes from the web theme, which keeps every non-call route light. */
 html:has(.site[data-chalk-theme="dark"]) {
-  background: #000000;
+  background: var(--site-black);
   color-scheme: dark !important;
 }
 
 html:has(.site[data-chalk-theme="light"]) {
-  background: #f3f3f5;
+  background: var(--site-paper);
   color-scheme: light !important;
 }
 
@@ -109,7 +138,7 @@ html:has(.site[data-chalk-theme="light"]) {
   & .ctn {
     max-width: 1320px;
     margin: 0 auto;
-    padding: 0 56px;
+    padding: 0 var(--space-14);
   }
 
   & .mono {
@@ -130,13 +159,13 @@ html:has(.site[data-chalk-theme="light"]) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--space-1-5);
     height: 36px;
-    padding: 0 14px;
-    border-radius: 999px;
+    padding: 0 var(--space-3);
+    border-radius: var(--corner-pill);
     background: var(--chalk-hover);
     color: var(--chalk-text);
-    font-size: 13px;
+    font-size: var(--type-body-sm);
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
@@ -163,13 +192,13 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .btn.lg {
     height: 44px;
-    padding: 0 18px;
-    font-size: 14px;
+    padding: 0 var(--space-4);
+    font-size: var(--type-body);
   }
 
   & .btn.sm {
     height: 32px;
-    padding: 0 12px;
+    padding: 0 var(--space-3);
   }
 
   & .btn.pri {
@@ -193,7 +222,7 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .btn.dz {
     background: var(--redbtn);
-    color: #fff;
+    color: var(--site-white);
   }
 
   & .btn.dz:hover {
@@ -240,17 +269,17 @@ html:has(.site[data-chalk-theme="light"]) {
   & .join {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     height: 44px;
-    padding: 0 4px 0 16px;
+    padding: 0 var(--space-1) 0 var(--space-4);
     border: 1px solid var(--edge);
-    border-radius: 999px;
+    border-radius: var(--corner-pill);
     background: var(--chalk-raised);
   }
 
   & .join:focus-within {
     border-color: var(--chalk-text);
-    box-shadow: 0 0 0 1px var(--chalk-text);
+    box-shadow: var(--elevation-outline);
   }
 
   & .join.bad {
@@ -260,7 +289,7 @@ html:has(.site[data-chalk-theme="light"]) {
   & .join input {
     flex: 1;
     height: 100%;
-    font-size: 14px;
+    font-size: var(--type-body);
   }
 
   & .join .btn {
@@ -270,13 +299,13 @@ html:has(.site[data-chalk-theme="light"]) {
   & .lrow {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-width: 0;
     height: 44px;
-    padding: 0 4px 0 16px;
-    border-radius: 999px;
+    padding: 0 var(--space-1) 0 var(--space-4);
+    border-radius: var(--corner-pill);
     background: var(--chalk-raised);
-    font: 500 13.5px var(--chalk-font-mono);
+    font: 500 var(--type-body-sm) var(--chalk-font-mono);
   }
 
   & .lrow > span {
@@ -299,10 +328,10 @@ html:has(.site[data-chalk-theme="light"]) {
   & .err {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin: 8px 4px 0;
+    gap: var(--space-1-5);
+    margin: var(--space-2) var(--space-1) 0;
     color: var(--chalk-danger-text);
-    font-size: 13px;
+    font-size: var(--type-body-sm);
     line-height: 1.4;
   }
 
@@ -317,12 +346,12 @@ html:has(.site[data-chalk-theme="light"]) {
     place-items: center;
     min-width: 24px;
     height: 24px;
-    padding: 0 6px;
-    border-radius: 6px;
+    padding: 0 var(--space-1-5);
+    border-radius: var(--corner-md);
     background: var(--chalk-hover);
-    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    box-shadow: var(--site-shadow-key-edge);
     color: var(--chalk-text);
-    font: 600 12px/1 var(--chalk-font-family);
+    font: 600 var(--type-caption)/1 var(--chalk-font-family);
   }
 
   & .dot {
@@ -337,8 +366,8 @@ html:has(.site[data-chalk-theme="light"]) {
   & .status {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--space-2);
+    font-size: var(--type-body);
     white-space: nowrap;
   }
 
@@ -348,11 +377,11 @@ html:has(.site[data-chalk-theme="light"]) {
     top: calc(100% + 6px);
     left: 50%;
     z-index: 85;
-    padding: 5px 10px;
-    border-radius: 999px;
+    padding: var(--space-1-5) var(--space-2-5);
+    border-radius: var(--corner-pill);
     background: var(--chalk-text);
     color: var(--chalk-canvas);
-    font: 600 12px/1.2 var(--chalk-font-family);
+    font: 600 var(--type-caption)/1.2 var(--chalk-font-family);
     white-space: nowrap;
     pointer-events: none;
     transform: translateX(-50%);
@@ -373,26 +402,26 @@ html:has(.site[data-chalk-theme="light"]) {
   }
 
   & .faces .av {
-    box-shadow: 0 0 0 2px var(--chalk-canvas);
+    box-shadow: var(--elevation-halo-canvas);
   }
 
   & .faces .av + .av {
-    margin-left: -7px;
+    margin-left: calc(var(--space-2) * -1);
   }
 
   & .faces .more {
-    margin-left: 5px;
+    margin-left: var(--space-1-5);
     color: var(--chalk-muted-text);
-    font-size: 12px;
+    font-size: var(--type-caption);
     font-weight: 600;
   }
 
   & .menu {
     position: absolute;
     z-index: 80;
-    padding: 6px;
+    padding: var(--space-1-5);
     border: 1px solid var(--chalk-line-strong);
-    border-radius: 12px;
+    border-radius: var(--corner-xl);
     background: var(--chalk-popover);
     box-shadow: var(--raise);
     animation: site-pop 0.18s var(--ease);
@@ -404,8 +433,8 @@ html:has(.site[data-chalk-theme="light"]) {
     z-index: 90;
     display: grid;
     place-items: center;
-    padding: 24px;
-    background: rgba(0, 0, 0, 0.55);
+    padding: var(--space-6);
+    background: var(--site-scrim);
     animation: site-fade 0.2s ease-out;
   }
 
@@ -416,7 +445,7 @@ html:has(.site[data-chalk-theme="light"]) {
     max-height: calc(100% - 16px);
     overflow: auto;
     border: 1px solid var(--chalk-line-strong);
-    border-radius: 16px;
+    border-radius: var(--corner-2xl);
     background: var(--chalk-surface);
     box-shadow: var(--raise);
     animation: site-rise 0.2s var(--ease);
@@ -427,9 +456,10 @@ html:has(.site[data-chalk-theme="light"]) {
   & .lockup {
     display: inline-flex;
     align-items: center;
+    /* token-ratchet-ignore: the gap scales with the wordmark's own font size, so it stays in em */
     gap: 0.16em;
     color: var(--chalk-text);
-    font-size: 24px;
+    font-size: var(--type-title);
   }
 
   & .lockup svg {
@@ -438,6 +468,7 @@ html:has(.site[data-chalk-theme="light"]) {
   }
 
   & .lockup b {
+    /* token-ratchet-ignore: inherits the size of the parent mark, so it stays relative */
     font: 700 1em/1 var(--chalk-font-family);
     letter-spacing: -0.03em;
   }
@@ -455,24 +486,24 @@ html:has(.site[data-chalk-theme="light"]) {
   & .nav .ctn {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: var(--space-6);
     height: 100%;
   }
 
   & .nl {
     display: flex;
-    gap: 2px;
+    gap: var(--space-0-5);
   }
 
   & .nl a {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     height: 36px;
-    padding: 0 14px;
-    border-radius: 999px;
+    padding: 0 var(--space-3);
+    border-radius: var(--corner-pill);
     color: var(--chalk-soft-text);
-    font-size: 14px;
+    font-size: var(--type-body);
     font-weight: 500;
   }
 
@@ -488,7 +519,7 @@ html:has(.site[data-chalk-theme="light"]) {
   & .nr {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-1-5);
     margin-left: auto;
   }
 
@@ -501,9 +532,9 @@ html:has(.site[data-chalk-theme="light"]) {
     top: calc(100% - 4px);
     right: 12px;
     left: 12px;
-    padding: 6px;
+    padding: var(--space-1-5);
     border: 1px solid var(--chalk-line-strong);
-    border-radius: 16px;
+    border-radius: var(--corner-2xl);
     background: var(--chalk-popover);
     box-shadow: var(--raise);
     animation: site-pop 0.18s var(--ease);
@@ -512,11 +543,11 @@ html:has(.site[data-chalk-theme="light"]) {
   & .navsheet a {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2-5);
     min-height: 48px;
-    padding: 0 12px;
-    border-radius: 10px;
-    font-size: 16px;
+    padding: 0 var(--space-3);
+    border-radius: var(--corner-xl);
+    font-size: var(--type-lead);
     font-weight: 500;
   }
 
@@ -527,36 +558,36 @@ html:has(.site[data-chalk-theme="light"]) {
   /* ---------- the site footer ---------- */
 
   & .foot {
-    padding: 72px 0 40px;
+    padding: var(--space-16) 0 var(--space-10);
     border-top: 1px solid var(--chalk-line);
   }
 
   & .foot .top {
     display: grid;
     grid-template-columns: 2fr 1fr 1fr;
-    gap: 40px;
+    gap: var(--space-10);
   }
 
   & .foot .lockup {
-    font-size: 26px;
+    font-size: var(--type-title);
   }
 
   & .foot .brand p {
     max-width: 340px;
-    margin-top: 14px;
+    margin-top: var(--space-3);
     color: var(--chalk-muted-text);
   }
 
   & .foot h3 {
-    margin-bottom: 8px;
-    font-size: 13px;
+    margin-bottom: var(--space-2);
+    font-size: var(--type-body-sm);
   }
 
   & .foot li a {
     display: inline-block;
-    padding: 5px 0;
+    padding: var(--space-1-5) 0;
     color: var(--chalk-muted-text);
-    font-size: 14px;
+    font-size: var(--type-body);
   }
 
   & .foot li a:hover,
@@ -567,10 +598,10 @@ html:has(.site[data-chalk-theme="light"]) {
   & .foot .legal {
     display: flex;
     flex-wrap: wrap;
-    gap: 20px;
-    margin-top: 48px;
+    gap: var(--space-5);
+    margin-top: var(--space-12);
     color: var(--chalk-muted-text);
-    font-size: 13px;
+    font-size: var(--type-body-sm);
   }
 
   & .foot .legal span {
@@ -583,38 +614,38 @@ html:has(.site[data-chalk-theme="light"]) {
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--chalk-line-strong);
-    border-radius: 12px;
+    border-radius: var(--corner-xl);
     background: var(--chalk-surface);
   }
 
   & .code .ch {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     height: 40px;
-    padding: 0 2px 0 14px;
+    padding: 0 var(--space-0-5) 0 var(--space-3);
     background: var(--chalk-raised);
   }
 
   & .clang {
     margin-right: auto;
     color: var(--chalk-muted-text);
-    font-size: 12.5px;
+    font-size: var(--type-caption);
     font-weight: 600;
   }
 
   & .ctabs + .clang {
-    margin-right: 4px;
+    margin-right: var(--space-1);
     margin-left: auto;
   }
 
   & .code pre {
     margin: 0;
-    padding: 16px 18px;
+    padding: var(--space-4) var(--space-4);
     overflow-x: auto;
     background: none !important;
     color: var(--chalk-text);
-    font: 400 13px/1.7 var(--chalk-font-mono);
+    font: 400 var(--type-body-sm)/1.7 var(--chalk-font-mono);
     tab-size: 2;
   }
 
@@ -641,16 +672,16 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .ctabs {
     display: flex;
-    gap: 2px;
-    margin-left: -8px;
+    gap: var(--space-0-5);
+    margin-left: calc(var(--space-2) * -1);
   }
 
   & .ctabs button {
     height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
+    padding: 0 var(--space-2-5);
+    border-radius: var(--corner-pill);
     color: var(--chalk-muted-text);
-    font-size: 12.5px;
+    font-size: var(--type-caption);
     font-weight: 600;
   }
 
@@ -665,37 +696,38 @@ html:has(.site[data-chalk-theme="light"]) {
 
   &[data-chalk-theme="light"] .ctabs button[aria-pressed="true"] {
     background: var(--chalk-surface);
-    box-shadow: 0 0 0 1px var(--chalk-line);
+    box-shadow: var(--elevation-hairline);
   }
 
   & .ic {
-    padding: 1px 6px;
-    border-radius: 6px;
+    padding: 1px var(--space-1-5);
+    border-radius: var(--corner-md);
     background: var(--chalk-raised);
+    /* token-ratchet-ignore: inline code scales with the surrounding prose, so it stays in em */
     font: 500 0.88em var(--chalk-font-mono);
     white-space: nowrap;
   }
 
   & mark {
     padding: 0 1px;
-    border-radius: 3px;
-    background: rgba(217, 182, 65, 0.3);
+    border-radius: var(--corner-xs);
+    background: var(--site-selection);
     color: var(--chalk-text);
   }
 
   &[data-chalk-theme="light"] mark {
-    background: rgba(217, 182, 65, 0.38);
+    background: var(--site-selection-strong);
   }
 
   /* ---------- landing: hero ---------- */
 
   & .hero {
-    padding: 96px 0 0;
+    padding: var(--space-22) 0 0;
   }
 
   & .h1 {
     max-width: 1120px;
-    font: 600 92px/1 var(--chalk-font-family);
+    font: 600 var(--type-hero)/1 var(--chalk-font-family);
     letter-spacing: -0.045em;
   }
 
@@ -722,9 +754,9 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .lede {
     max-width: 640px;
-    margin-top: 24px;
+    margin-top: var(--space-6);
     color: var(--chalk-soft-text);
-    font-size: 19px;
+    font-size: var(--type-title-sm);
     line-height: 1.55;
   }
 
@@ -741,14 +773,14 @@ html:has(.site[data-chalk-theme="light"]) {
   }
 
   & .hvis {
-    margin-top: 72px;
-    padding-bottom: 120px;
+    margin-top: var(--space-16);
+    padding-bottom: var(--site-band-space);
   }
 
   & .hframe {
-    padding: 8px;
+    padding: var(--space-2);
     border: 1px solid var(--chalk-line-strong);
-    border-radius: 20px;
+    border-radius: var(--corner-2xl);
     background: var(--chalk-surface);
   }
 
@@ -760,7 +792,7 @@ html:has(.site[data-chalk-theme="light"]) {
   /* ---------- landing sections: spacing does the work, not rules and boxes ---------- */
 
   & .band {
-    padding: 120px 0;
+    padding: var(--site-band-space) 0;
   }
 
   & :is(.band, .hero) {
@@ -769,15 +801,15 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .h2 {
     max-width: 860px;
-    font: 600 56px/1.04 var(--chalk-font-family);
+    font: 600 var(--type-display-lg)/1.04 var(--chalk-font-family);
     letter-spacing: -0.04em;
   }
 
   & .sub {
     max-width: 600px;
-    margin-top: 18px;
+    margin-top: var(--space-4);
     color: var(--chalk-soft-text);
-    font-size: 17px;
+    font-size: var(--type-lead);
     line-height: 1.55;
   }
 
@@ -785,13 +817,13 @@ html:has(.site[data-chalk-theme="light"]) {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
     align-items: start;
-    gap: 72px;
+    gap: var(--space-16);
   }
 
   & .facts {
     display: grid;
-    gap: 22px;
-    margin-top: 36px;
+    gap: var(--space-6);
+    margin-top: var(--space-10);
   }
 
   & .facts.flush {
@@ -801,14 +833,14 @@ html:has(.site[data-chalk-theme="light"]) {
   & .facts li {
     display: grid;
     grid-template-columns: 20px 1fr;
-    gap: 14px;
-    font-size: 14.5px;
+    gap: var(--space-3);
+    font-size: var(--type-body);
     line-height: 1.5;
   }
 
   & .facts li b {
     display: block;
-    font-size: 15px;
+    font-size: var(--type-body-lg);
     font-weight: 600;
   }
 
@@ -824,7 +856,7 @@ html:has(.site[data-chalk-theme="light"]) {
   & .surf {
     overflow: hidden;
     border: 1px solid var(--chalk-line);
-    border-radius: 16px;
+    border-radius: var(--corner-2xl);
     background: var(--chalk-surface);
   }
 
@@ -835,14 +867,14 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .fine {
     max-width: 720px;
-    margin-top: 24px;
+    margin-top: var(--space-6);
     color: var(--chalk-muted-text);
-    font-size: 13.5px;
+    font-size: var(--type-body-sm);
   }
 
   & .links {
     display: grid;
-    margin: 28px -12px 0;
+    margin: var(--space-6) calc(var(--space-3) * -1) 0;
   }
 
   & .links a {
@@ -850,9 +882,9 @@ html:has(.site[data-chalk-theme="light"]) {
     align-items: center;
     justify-content: space-between;
     min-height: 48px;
-    padding: 0 12px;
-    border-radius: 12px;
-    font-size: 15px;
+    padding: 0 var(--space-3);
+    border-radius: var(--corner-xl);
+    font-size: var(--type-body-lg);
     font-weight: 600;
   }
 
@@ -874,23 +906,23 @@ html:has(.site[data-chalk-theme="light"]) {
     overflow: hidden;
     margin: 0;
     border: 1px solid var(--chalk-line);
-    border-radius: 16px;
+    border-radius: var(--corner-2xl);
     background: var(--chalk-surface);
   }
 
   & .hostbar {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: var(--space-4);
     height: 44px;
-    padding: 0 14px 0 16px;
+    padding: 0 var(--space-3) 0 var(--space-4);
     color: var(--chalk-muted-text);
-    font-size: 13px;
+    font-size: var(--type-body-sm);
   }
 
   & .hostbar b {
     color: var(--chalk-text);
-    font-size: 14px;
+    font-size: var(--type-body);
   }
 
   & .hostbar .av {
@@ -898,48 +930,48 @@ html:has(.site[data-chalk-theme="light"]) {
   }
 
   & .hostin {
-    padding: 4px 14px 14px;
+    padding: var(--space-1) var(--space-3) var(--space-3);
   }
 
   & .hostin h4 {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 10px;
-    font-size: 15px;
+    margin-bottom: var(--space-2-5);
+    font-size: var(--type-body-lg);
   }
 
   & .hostin h4 span {
     color: var(--chalk-muted-text);
-    font-size: 13px;
+    font-size: var(--type-body-sm);
     font-weight: 500;
   }
 
   & .hostin .cfit {
-    border-radius: 10px;
+    border-radius: var(--corner-xl);
   }
 
   /* ---------- landing: product fragments, in the call's card style ---------- */
 
   & .lp-h b {
     display: block;
-    font-size: 17px;
+    font-size: var(--type-lead);
     font-weight: 600;
     line-height: 1.2;
   }
 
   & .lp-h .mono {
     display: block;
-    margin-top: 4px;
+    margin-top: var(--space-1);
     color: var(--chalk-muted-text);
-    font-size: 12.5px;
+    font-size: var(--type-caption);
   }
 
   & .lp-live .faces .av {
-    box-shadow: 0 0 0 2px var(--chalk-raised);
+    box-shadow: var(--elevation-halo-raised);
   }
 
   & .lp-row .faces .av {
-    box-shadow: 0 0 0 2px var(--chalk-surface);
+    box-shadow: var(--elevation-halo-surface);
   }
 
   & .lp-k svg.site-icon {
@@ -952,8 +984,8 @@ html:has(.site[data-chalk-theme="light"]) {
     position: relative;
     overflow: hidden;
     aspect-ratio: 16 / 9;
-    border-radius: 12px;
-    background: #000000;
+    border-radius: var(--corner-xl);
+    background: var(--site-black);
   }
 
   & .mplay svg.still {
@@ -971,14 +1003,14 @@ html:has(.site[data-chalk-theme="light"]) {
     place-items: center;
     width: 56px;
     height: 56px;
-    margin: -28px 0 0 -28px;
+    margin: calc(var(--space-6) * -1) 0 0 calc(var(--space-6) * -1);
     border-radius: 50%;
     background: var(--chalk-overlay);
-    color: #fff;
+    color: var(--site-white);
   }
 
   & .mp-btn svg.site-icon {
-    margin-left: 3px;
+    margin-left: var(--space-1);
   }
 
   & .mp-bar {
@@ -987,47 +1019,47 @@ html:has(.site[data-chalk-theme="light"]) {
     bottom: 16px;
     left: 12px;
     height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.3);
+    border-radius: var(--corner-xs);
+    background: var(--site-tint-strong);
   }
 
   & .mp-bar i {
     display: block;
     width: 34%;
     height: 100%;
-    border-radius: 2px;
-    background: #fff;
+    border-radius: var(--corner-xs);
+    background: var(--site-white);
   }
 
   & .mp-t {
     position: absolute;
     right: 12px;
     bottom: 9px;
-    padding: 2px 6px;
-    border-radius: 5px;
+    padding: var(--space-0-5) var(--space-1-5);
+    border-radius: var(--corner-md);
     background: var(--chalk-overlay);
-    color: #fff;
-    font-size: 11px;
+    color: var(--site-white);
+    font-size: var(--type-caption);
   }
 
   & .mtr {
     overflow: hidden;
-    padding: 6px;
+    padding: var(--space-1-5);
     border: 1px solid var(--chalk-line);
-    border-radius: 12px;
+    border-radius: var(--corner-xl);
     background: var(--chalk-surface);
   }
 
   & .mtr-q {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     height: 36px;
-    margin-bottom: 4px;
-    padding: 0 12px;
-    border-radius: 999px;
+    margin-bottom: var(--space-1);
+    padding: 0 var(--space-3);
+    border-radius: var(--corner-pill);
     background: var(--chalk-raised);
-    font-size: 13.5px;
+    font-size: var(--type-body-sm);
   }
 
   & .mtr-q svg.site-icon {
@@ -1039,55 +1071,55 @@ html:has(.site[data-chalk-theme="light"]) {
   & .mtr-q em {
     margin-left: auto;
     color: var(--chalk-muted-text);
-    font-size: 12px;
+    font-size: var(--type-caption);
     font-style: normal;
   }
 
   & .mtr-l {
     display: grid;
     grid-template-columns: 44px 1fr;
-    gap: 8px;
-    padding: 8px;
-    font-size: 14px;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    font-size: var(--type-body);
     line-height: 1.45;
   }
 
   & .mtr-l .mono {
-    padding-top: 2px;
+    padding-top: var(--space-0-5);
     color: var(--chalk-muted-text);
-    font-size: 12px;
+    font-size: var(--type-caption);
   }
 
   & .mtr-l b {
-    font-size: 13px;
+    font-size: var(--type-body-sm);
     font-weight: 600;
   }
 
   & .mwho li {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2-5);
     height: 40px;
-    font-size: 14px;
+    font-size: var(--type-body);
   }
 
   & .mwho li .wr {
     margin-left: auto;
-    font-size: 12px;
+    font-size: var(--type-caption);
     white-space: nowrap;
   }
 
   & .mwho .till {
-    margin-left: 6px;
-    font-size: 11.5px;
+    margin-left: var(--space-1-5);
+    font-size: var(--type-caption);
   }
 
   & .ghrow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
-    margin-top: 36px;
+    gap: var(--space-3);
+    margin-top: var(--space-10);
   }
 
   & .ghrow > div {
@@ -1097,13 +1129,13 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .ghrow b {
     display: block;
-    font-size: 15px;
+    font-size: var(--type-body-lg);
   }
 
   & .ghrow .mono {
     display: block;
-    margin-top: 2px;
-    font-size: 12.5px;
+    margin-top: var(--space-0-5);
+    font-size: var(--type-caption);
     overflow-wrap: anywhere;
   }
 }
@@ -1132,23 +1164,23 @@ html:has(.site[data-chalk-theme="light"]) {
 @media (max-width: 1365px) {
   .site {
     & .ctn {
-      padding: 0 40px;
+      padding: 0 var(--space-10);
     }
 
     & .hero {
-      padding-top: 80px;
+      padding-top: var(--space-22);
     }
 
     & .h1 {
-      font-size: 80px;
+      font-size: var(--site-type-poster);
     }
 
     & .band {
-      padding: 100px 0;
+      padding: var(--space-22) 0;
     }
 
     & .h2 {
-      font-size: 50px;
+      font-size: var(--type-display);
     }
   }
 }
@@ -1157,7 +1189,7 @@ html:has(.site[data-chalk-theme="light"]) {
 @media (max-width: 720px) {
   .site {
     & .ctn {
-      padding: 0 20px;
+      padding: 0 var(--space-5);
     }
 
     & .btn {
@@ -1178,7 +1210,7 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .join input {
-      font-size: 16px;
+      font-size: var(--type-lead);
     }
 
     & [data-tip]:hover::after {
@@ -1186,7 +1218,7 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .lockup {
-      font-size: 22px;
+      font-size: var(--type-title);
     }
 
     & .nav {
@@ -1194,7 +1226,7 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .nav .ctn {
-      gap: 8px;
+      gap: var(--space-2);
     }
 
     & .nl,
@@ -1203,7 +1235,7 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .nr {
-      gap: 2px;
+      gap: var(--space-0-5);
     }
 
     & .nav-menu {
@@ -1219,18 +1251,18 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .hero {
-      padding-top: 36px;
+      padding-top: var(--space-10);
     }
 
     & .h1 {
-      font-size: 46px;
+      font-size: var(--type-display);
       letter-spacing: -0.04em;
       line-height: 1.04;
     }
 
     & .lede {
-      margin-top: 18px;
-      font-size: 16px;
+      margin-top: var(--space-4);
+      font-size: var(--type-lead);
     }
 
     & .drow > .btn {
@@ -1247,32 +1279,32 @@ html:has(.site[data-chalk-theme="light"]) {
     }
 
     & .hvis {
-      margin-top: 44px;
-      padding-bottom: 64px;
+      margin-top: var(--space-10);
+      padding-bottom: var(--space-16);
     }
 
     & .band {
-      padding: 64px 0;
+      padding: var(--space-16) 0;
     }
 
     & .h2 {
-      font-size: 34px;
+      font-size: var(--type-display-sm);
       letter-spacing: -0.035em;
       line-height: 1.08;
     }
 
     & .sub {
-      font-size: 16px;
+      font-size: var(--type-lead);
     }
 
     & .split {
       grid-template-columns: minmax(0, 1fr);
-      gap: 40px;
+      gap: var(--space-10);
     }
 
     & .code pre {
-      padding: 14px;
-      font-size: 12.5px;
+      padding: var(--space-3);
+      font-size: var(--type-caption);
     }
 
     & .lp-row > .num,
