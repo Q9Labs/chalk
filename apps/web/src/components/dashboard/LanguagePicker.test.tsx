@@ -170,6 +170,13 @@ it("keeps focus inside while Tab moves between its own buttons, and closes when 
   expect(screen.queryByRole("combobox")).toBeNull();
 });
 
+it("lets a press on the search box focus it, but keeps a press on a row from taking focus", () => {
+  render(<Harness initial="ur" />);
+  fireEvent.click(trigger());
+  expect(fireEvent.mouseDown(search())).toBe(true);
+  expect(fireEvent.mouseDown(screen.getByRole("option", { name: /Auto-detect/ }))).toBe(false);
+});
+
 it("leaves Enter and the arrows to the input method while it composes text", () => {
   const change = vi.fn();
   render(<Harness initial="ur" onChange={change} />);

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { Icon, type IconName } from "../site/Icon";
 import { usePhone } from "./kit";
@@ -202,6 +202,11 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
     event.preventDefault();
   }
 
+  // A press on a row or button must not pull focus off the search box, or the list would close; a press on the box itself must still focus it.
+  function keepFocusInSearch(event: MouseEvent<HTMLDivElement>) {
+    if (!(event.target instanceof HTMLInputElement)) event.preventDefault();
+  }
+
   let at = -1;
   const list: ReactNode = (
     <>
@@ -332,13 +337,13 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
       {open ? (
         phone ? (
           <div className="scrim" onPointerDown={(event) => event.target === event.currentTarget && close()}>
-            <div className="lp-pop sheet" role="dialog" aria-label="Transcript language" onMouseDown={(event) => event.preventDefault()}>
+            <div className="lp-pop sheet" role="dialog" aria-label="Transcript language" onMouseDown={keepFocusInSearch}>
               <span className="lp-grab" aria-hidden="true" />
               {list}
             </div>
           </div>
         ) : (
-          <div className="lp-pop" role="dialog" aria-label="Transcript language" onMouseDown={(event) => event.preventDefault()}>
+          <div className="lp-pop" role="dialog" aria-label="Transcript language" onMouseDown={keepFocusInSearch}>
             {list}
           </div>
         )
