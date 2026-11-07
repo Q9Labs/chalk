@@ -94,7 +94,7 @@ The API gate runs the Python checks, shell syntax check and tagged host compile.
 
 ## Cost, time and cleanup
 
-A full comparison is 144 trials. The configured stop budgets total $216, though an in-flight request can overshoot a CLI budget. Actual cost should be much lower; use the committed proof report's measured extrapolation. Trial timeouts bound model execution to 240 seconds each. At concurrency two, the model-time upper bound is about 4.8 hours for both arms, plus fixtures, SSH and setup. These are bounds, not performance estimates.
+A full comparison is 150 trials. The configured stop budgets total $225, though an in-flight request can overshoot a CLI budget. Actual cost should be much lower; use the committed proof report's measured extrapolation. Trial timeouts bound model execution to 240 seconds each. At concurrency two, the model-time upper bound is about 4.8 hours for both arms, plus fixtures, SSH and setup. These are bounds, not performance estimates.
 
 Stop the stack with Ctrl-C or `tmux send-keys -t mcp-eval C-c`, then stop the SSH forward. The script stops its host and removes its owned Postgres container. Delete the kept Instabox when finished:
 
