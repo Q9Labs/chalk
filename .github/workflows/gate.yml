@@ -110,6 +110,11 @@ jobs:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
+    # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
     timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
@@ -225,6 +230,7 @@ jobs:
         env:
           GATE_LANE_GROUP: ${{ matrix.group }}
           GATE_SERVICES: external
+          SFU_TEST_JSON: ${{ github.workspace }}/artifacts/sfu-tests.json
           GATE_BASE_REF: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || 'master') }}
           # A queue group scans every commit it brings in for secrets.
           GITLEAKS_LOG_OPTS: ${{ github.event_name == 'merge_group' && format('{0}..{1}', github.event.merge_group.base_sha, github.sha) || '' }}
@@ -234,6 +240,24 @@ jobs:
           else
             pnpm exec bash scripts/gates/commit.sh --full
           fi
+
+      # The scorecard reads the reports the lanes above wrote: the call bundle sizes in the build group and the SFU
+      # loopback and impairment tests in the checks group. It adds no job; a lane that did not run leaves no report.
+      - name: Score the run against the latest master run
+        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'checks') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CAN_COMMENT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: features/scorecard/pr-tier.sh ${{ matrix.group == 'build' && 'web' || 'sfu' }}
+
+      - name: Save the scorecard
+        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'checks') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scorecard-${{ matrix.group == 'build' && 'web' || 'sfu' }}
+          path: artifacts/scorecard-*.json
+          if-no-files-found: ignore
 
       - name: Save leak shard report
         if: always() && startsWith(matrix.group, 'call-leaks-')

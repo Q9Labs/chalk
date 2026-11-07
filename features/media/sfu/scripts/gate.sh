@@ -35,4 +35,10 @@ printf '\n==> go vet\n'
 go vet ./...
 
 printf '\n==> go test -race\n'
-go test -race -count=1 ./...
+if [[ -n "${SFU_TEST_JSON:-}" ]]; then
+  mkdir -p "$(dirname "${SFU_TEST_JSON}")"
+  # The scorecard reads the JSON events; the log keeps the readable lines. pipefail keeps go test's exit code.
+  go test -race -count=1 -json ./... | tee "${SFU_TEST_JSON}" | node "${repo_root}/features/scorecard/scorecard.mjs" go-output
+else
+  go test -race -count=1 ./...
+fi

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // scorecard build: adapters turn existing measurement output into one validated scorecard file.
 // scorecard diff:  compares a scorecard with a baseline and prints the delta table.
+// scorecard comment: creates or updates one section of the pull request's single scorecard comment.
 // scorecard go-output: prints the human-readable lines of `go test -json` on stdin, so a gate can keep its log.
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
@@ -10,6 +12,7 @@ import { deviceMetrics } from "./adapters/device.mjs";
 import { joinStartupMetrics, leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
 import { webMetrics } from "./adapters/web.mjs";
+import { MARKER, upsertSection } from "./comment.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
 import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
 
@@ -42,7 +45,7 @@ function build(argv) {
       commit: { type: "string", default: process.env.GITHUB_SHA },
       id: { type: "string", default: `${process.env.GITHUB_RUN_ID ?? "local"}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}` },
       "client-kind": { type: "string", default: "browser" },
-      browser: { type: "string", default: "none" },
+      browser: { type: "string" },
       region: { type: "string" },
       size: { type: "string" },
       ...Object.fromEntries(Object.keys(INPUTS).map((name) => [name, { type: "string" }])),
@@ -56,9 +59,10 @@ function build(argv) {
     metrics.push(...result.metrics);
     dropped.push(...result.dropped);
   }
+  const browser = values.browser ?? (values.web ? `chromium/${readJson(values.web).browser}` : "none");
   const card = parseScorecard({
     schema: SCORECARD_SCHEMA,
-    run: { id: values.id, commit: values.commit, tier: values.tier, environment: values.environment, startedAt: new Date().toISOString(), client: { kind: values["client-kind"], browser: values.browser, region: values.region, size: values.size } },
+    run: { id: values.id, commit: values.commit, tier: values.tier, environment: values.environment, startedAt: new Date().toISOString(), client: { kind: values["client-kind"], browser, region: values.region, size: values.size } },
     mediaPlane: values.plane,
     metrics,
     dropped,
@@ -86,6 +90,17 @@ async function diff(argv) {
   }
 }
 
+async function comment(argv) {
+  const { values } = parseArgs({ args: argv, options: { repo: { type: "string" }, pr: { type: "string" }, section: { type: "string" }, file: { type: "string" } } });
+  const gh = (...args) => execFileSync("gh", ["api", ...args], { encoding: "utf8" });
+  const existing = JSON.parse(gh(`repos/${values.repo}/issues/${values.pr}/comments`, "--paginate", "--slurp"))
+    .flat()
+    .find((item) => item.body.startsWith(MARKER));
+  const body = upsertSection(existing?.body, values.section, read(values.file));
+  if (existing) gh(`repos/${values.repo}/issues/comments/${existing.id}`, "-X", "PATCH", "-f", `body=${body}`);
+  else gh(`repos/${values.repo}/issues/${values.pr}/comments`, "-f", `body=${body}`);
+}
+
 async function goOutput() {
   for await (const line of createInterface({ input: process.stdin })) {
     if (!line.startsWith("{")) continue;
@@ -97,5 +112,6 @@ async function goOutput() {
 const [command, ...rest] = process.argv.slice(2);
 if (command === "build") build(rest);
 else if (command === "diff") await diff(rest);
+else if (command === "comment") comment(rest);
 else if (command === "go-output") await goOutput();
-else throw new Error("Usage: scorecard.mjs build|diff|go-output");
+else throw new Error("Usage: scorecard.mjs build|diff|comment|go-output");

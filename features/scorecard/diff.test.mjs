@@ -57,3 +57,15 @@ test("the table lists changed rows only, counts the rest and names the drops", (
   assert.match(table, /1 within tolerance, 0 without a baseline\./);
   assert.match(table, /Dropped: whole cycle: cycle_failed ×2\./);
 });
+
+test("each job owns one section of the single comment", async () => {
+  const { MARKER, upsertSection } = await import("./comment.mjs");
+  const first = upsertSection(undefined, "web", "web table");
+  assert.ok(first.startsWith(MARKER));
+  const both = upsertSection(first, "sfu", "sfu table");
+  assert.match(both, /web table[\s\S]*sfu table/);
+  const again = upsertSection(both, "web", "newer web table");
+  assert.doesNotMatch(again, /\nweb table/);
+  assert.match(again, /sfu table[\s\S]*newer web table/);
+  assert.equal(again.split(MARKER).length, 2);
+});
