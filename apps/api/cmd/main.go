@@ -293,9 +293,19 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recording application identity: %w", err)
 		}
-		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureproviders.Registration{
+		captureRegistrations := []captureproviders.Registration{{
 			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
-		})
+		}}
+		if chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled {
+			ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, chalkSFU.ApplicationID())
+			if err != nil {
+				return fmt.Errorf("configure own SFU recording identity: %w", err)
+			}
+			captureRegistrations = append(captureRegistrations, captureproviders.Registration{
+				Provider: ownBinding.Provider, AdapterFingerprint: ownBinding.AdapterFingerprint, Nodes: chalkSFU,
+			})
+		}
+		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureRegistrations...)
 		if err != nil {
 			return fmt.Errorf("configure recording provider registry: %w", err)
 		}
