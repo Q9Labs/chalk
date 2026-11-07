@@ -3,6 +3,7 @@ package media
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -20,21 +21,25 @@ func TestReadRSS(t *testing.T) {
 	}
 }
 
-var retained []byte
-
 func TestReadRuntime(t *testing.T) {
 	goroutines, _ := readRuntime()
 	stop := make(chan struct{})
 	t.Cleanup(func() { close(stop) })
 	go func() { <-stop }()
-	retained = make([]byte, 8<<20)
-	t.Cleanup(func() { retained = nil })
+
+	// A live slice is in the heap whatever the baseline or any collection does, so the reading
+	// must be at least its size.
+	const size = 64 << 20
+	live := make([]byte, size)
+	for offset := 0; offset < size; offset += os.Getpagesize() {
+		live[offset] = 1
+	}
 	moreGoroutines, heap := readRuntime()
+	runtime.KeepAlive(live)
 	if moreGoroutines <= goroutines {
 		t.Fatalf("goroutines %d then %d after starting one, want a rise", goroutines, moreGoroutines)
 	}
-	// The kept 8 MiB is live, so in-use heap holds it however much garbage a collection frees.
-	if heap < uint64(len(retained)) {
-		t.Fatalf("heap in use %d while keeping %d bytes", heap, len(retained))
+	if heap < size {
+		t.Fatalf("heap in use %d while keeping %d bytes live", heap, size)
 	}
 }
