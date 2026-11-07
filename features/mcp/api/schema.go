@@ -90,3 +90,6 @@ func webhookSettings(create bool) *Schema {
 	}
 	return object(p)
 }
+func transcriptViewFields() map[string]*Schema {
+	return page(map[string]*Schema{"view": choice("list", "metadata", "text", "document", "download_url"), "recording_id": id(), "transcript_id": id(), "expires_in_seconds": integer(1, 300)})
+}

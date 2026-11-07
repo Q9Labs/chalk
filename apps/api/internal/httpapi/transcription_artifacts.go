@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type TranscriptArtifactService interface {
@@ -112,6 +113,15 @@ type requestTranscriptEndpointRequest struct {
 	Traceparent string
 	Tracestate  string
 	Body        requestTranscriptBody
+}
+
+// withTrace gives MCP calls the carrier that /v1 reads from headers. mcpInvoke calls it
+// inside the operation span, so transcription jobs parent that span.
+func (r requestTranscriptEndpointRequest) withTrace(ctx context.Context) requestTranscriptEndpointRequest {
+	carrier := propagation.HeaderCarrier{}
+	propagation.TraceContext{}.Inject(ctx, carrier)
+	r.Traceparent, r.Tracestate = carrier.Get("traceparent"), carrier.Get("tracestate")
+	return r
 }
 
 func decodeRequestTranscriptEndpointRequest(r *http.Request) (requestTranscriptEndpointRequest, error) {

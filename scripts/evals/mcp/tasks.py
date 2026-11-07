@@ -27,6 +27,8 @@ def suite(f):
              {"names": ["Atlas", "Beacon", "Commons"]}),
         Task("archived-spaces", 'List every archived Space. Return {"names":[names sorted alphabetically]}.',
              {"names": ["Retired"]}),
+        Task("tenant-settings", 'Read the connected tenant\'s settings. Return {"recording_retention_days":integer,"transcription_default_mode":string}.',
+             {"recording_retention_days": 30, "transcription_default_mode": "automatic"}),
         Task("space-settings", 'Inspect Atlas. Return {"recording_policy":string,"transcription_policy":string}.',
              {"recording_policy": "manual", "transcription_policy": "on_demand"}),
         Task("episode-counts", 'Count all Episodes, both active and ended, separately for Atlas and Beacon. Return {"Atlas":integer,"Beacon":integer}.',
@@ -68,14 +70,17 @@ def suite(f):
         Task("restore-space", 'Restore archived Space Retired. Read it back to verify. Return {"name":"Retired","archived":boolean}.',
              {"name": "Retired", "archived": False},
              f"select archived_at is null from spaces where id={retired}", "t"),
+        Task("request-existing-transcript", 'Request a transcript for the Atlas recording whose export failed. Do NOT pretend it was created if it was refused. Return {"requested":boolean,"already_exists":boolean}.',
+             {"requested": False, "already_exists": True},
+             f"select count(*) from transcriptions where tenant_id={tenant}", "4"),
         Task("invoice-search", 'Search ALL transcript text for English invoicing (not invoice). Return every matching utterance as {"matches":[{"speaker":string,"start_ms":integer,"text":string}]}.',
-             {"matches": [{"speaker": "Amina", "start_ms": 12000, "text": "Please review invoicing on Tuesday."}]}, capability_gap=True),
+             {"matches": [{"speaker": "Amina", "start_ms": 12000, "text": "Please review invoicing on Tuesday."}]}),
         Task("urdu-reading", 'Read the Urdu-only transcript. Return its first utterance exactly, preserving Urdu script, as {"speaker":string,"start_ms":integer,"text":string}.',
-             {"speaker": "Amina", "start_ms": 12000, "text": "انوائسنگ کی رپورٹ منگل کو بھیجیں۔"}, capability_gap=True),
+             {"speaker": "Amina", "start_ms": 12000, "text": "انوائسنگ کی رپورٹ منگل کو بھیجیں۔"}),
         Task("arabic-reading", 'Read the Arabic-only transcript. Return its first utterance exactly, preserving Arabic script, as {"speaker":string,"start_ms":integer,"text":string}.',
-             {"speaker": "Amina", "start_ms": 12000, "text": "يرجى إرسال الفاتورة يوم الثلاثاء."}, capability_gap=True),
+             {"speaker": "Amina", "start_ms": 12000, "text": "يرجى إرسال الفاتورة يوم الثلاثاء."}),
         Task("long-transcript", 'Read the entire long mixed-language transcript and find the invoice approval code. Return {"code":string,"speaker":string,"start_ms":integer}.',
-             {"code": "ORCHID-73", "speaker": "Amina", "start_ms": 4100000}, capability_gap=True),
+             {"code": "ORCHID-73", "speaker": "Amina", "start_ms": 4100000}),
     ]
 
 
@@ -83,6 +88,9 @@ def grade(task, answer, db, evidence=None):
     facts = json.dumps(answer, sort_keys=True) == json.dumps(task.expected, sort_keys=True)
     state = task.sql is None or db.query(task.sql) == task.state
     checks = {"facts": facts, "state": state}
+    if task.id == "request-existing-transcript":
+        outcomes = (evidence or {}).get("server_outcomes", {})
+        checks["refusal_observed"] = outcomes.get("chalk_request_transcript:transcript.already_exists", 0) > 0
     if task.id == "missing-scope":
         outcomes = (evidence or {}).get("server_outcomes", {})
         checks["scope_rejection_observed"] = outcomes.get("chalk_update_tenant:auth.forbidden", 0) > 0

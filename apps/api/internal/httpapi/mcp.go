@@ -48,6 +48,9 @@ func NewMCPHandler(options Options) http.Handler {
 		for _, s := range principal.Scopes {
 			scopes = append(scopes, string(s))
 		}
+		if principal.Kind == authentication.PrincipalAPIKey && principal.HasScope(authentication.ScopeTenantsRead) {
+			scopes = append(scopes, mcpapi.TenantSettingsScope)
+		}
 		ctx := mcpapi.WithPrincipal(r.Context(), mcpapi.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: scopes})
 		quota := mcpQuota{key: rateLimitKey(r, options.RateLimit.ClientIP), options: options.RateLimit}
 		ctx = context.WithValue(ctx, mcpQuotaKey{}, quota)
@@ -238,6 +241,9 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	}
 	ctx, span := otel.Tracer("chalk/mcp").Start(b.ctx, "mcp."+endpoint.contract.OperationID, trace.WithAttributes(attribute.String("tenant_id", b.tenant.String()), attribute.String("operation", endpoint.contract.OperationID)))
 	defer span.End()
+	if traced, ok := any(request).(interface{ withTrace(context.Context) Request }); ok {
+		request = traced.withTrace(ctx)
+	}
 	response, err := endpoint.handle(ctx, request)
 	outcome := "ok"
 	if err != nil {

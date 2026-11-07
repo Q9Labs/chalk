@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -45,6 +46,13 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 		RespondsText(http.StatusOK, "TranscriptText").ResponseHeaders(APIHeaderContract{Name: "Content-Disposition", Type: "string", Required: true}).
 		Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).
 		MapErrors(transcriptDocumentAPIError).WriteWith(writeTranscriptText)
+}
+
+// MarshalJSON lets the MCP tool return the text; HTTP writes it as text/plain.
+func (r transcriptTextResponse) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Text string `json:"text"`
+	}{r.text})
 }
 
 func writeTranscriptText(w http.ResponseWriter, _ *http.Request, status int, response transcriptTextResponse) {
