@@ -121,7 +121,7 @@ start_docker_postgres() {
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=postgres \
     -p 127.0.0.1::5432 \
-    -d postgres:18.3-alpine >/dev/null
+    -d public.ecr.aws/docker/library/postgres:18.3-alpine >/dev/null
 
   for _ in {1..60}; do
     if postgres_ready; then

@@ -42,6 +42,18 @@ case "$command" in
     ;;
 esac
 
+# A Hex download can fail for a moment, so a failed fetch is retried a bounded number of times.
+fetch_dependencies() {
+  local delay
+  for delay in 10 30 0; do
+    mix deps.get --check-locked && return 0
+    ((delay)) || break
+    echo "mix deps.get failed; retrying in ${delay}s" >&2
+    sleep "$delay"
+  done
+  return 1
+}
+
 run() {
   local label="$1"
   shift
@@ -50,7 +62,7 @@ run() {
 }
 
 run "Elixir version" elixir --version
-run "Dependencies" mix deps.get --check-locked
+run "Dependencies" fetch_dependencies
 run "Format check" mix format --check-formatted
 run "Compile (warnings as errors)" env MIX_ENV=test mix compile --warnings-as-errors
 
