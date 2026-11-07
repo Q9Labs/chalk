@@ -97,7 +97,7 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 	read := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalOAuth, mcpauth.AuthenticationScopes(mcpauth.ScopeRead)...)))
 	t.Logf("tools listed: api key with all scopes=%d, chalk:manage=%d, chalk:read=%d", len(all), len(manage), len(read))
 
-	if len(all) != 33 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 16 {
+	if len(all) != 25 || len(manage) != len(all)-len(toolsOutsideEveryBundle) || len(read) != 8 {
 		t.Fatalf("listed %d, %d and %d tools for all scopes, chalk:manage and chalk:read", len(all), len(manage), len(read))
 	}
 	for _, name := range toolsOutsideEveryBundle {
@@ -110,7 +110,7 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 			t.Errorf("chalk:manage must list %s", name)
 		}
 	}
-	for _, name := range []string{"chalk_get_connection", "chalk_list_spaces", "chalk_get_recording_download", "chalk_prepare_recording"} {
+	for _, name := range []string{"chalk_get_connection", "chalk_inspect_spaces", "chalk_inspect_recordings", "chalk_prepare_recording"} {
 		if !slices.Contains(read, name) {
 			t.Errorf("chalk:read must list %s", name)
 		}
@@ -122,7 +122,7 @@ func TestMCPToolListFollowsGrantedScopes(t *testing.T) {
 	}
 
 	spacesRead := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeSpacesRead)))
-	if !slices.Equal(slices.Sorted(slices.Values(spacesRead)), []string{"chalk_inspect_space", "chalk_list_spaces", "chalk_prepare_recording"}) {
+	if !slices.Equal(slices.Sorted(slices.Values(spacesRead)), []string{"chalk_inspect_spaces", "chalk_prepare_recording"}) {
 		t.Errorf("spaces:read lists %v", spacesRead)
 	}
 	deleteOnly := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeWebhooksDelete)))
@@ -189,5 +189,64 @@ func TestMCPChallengeNamesTheSupportedScopes(t *testing.T) {
 	want := `Bearer resource_metadata="` + scopeTestMetadata + `", scope="chalk:read chalk:manage"`
 	if response.Code != http.StatusUnauthorized || response.Header().Get("WWW-Authenticate") != want {
 		t.Fatalf("%d %q", response.Code, response.Header().Get("WWW-Authenticate"))
+	}
+}
+
+func TestMCPInspectViewsNeedTheirFields(t *testing.T) {
+	all := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.AllScopes...)
+	space, other := strings.Repeat("a", 36), strings.Repeat("b", 36)
+	for _, call := range []struct{ tool, arguments, want string }{
+		{"chalk_inspect_spaces", `{"view":"settings"}`, "View settings also requires: space_id"},
+		{"chalk_inspect_spaces", `{"view":"invite"}`, "View invite also requires: space_id"},
+		{"chalk_inspect_episodes", `{}`, "View list also requires: space_id"},
+		{"chalk_inspect_episodes", `{"view":"episode","space_id":"` + space + `"}`, "View episode also requires: episode_id"},
+		{"chalk_inspect_episodes", `{"view":"live"}`, "View live also requires: space_ids"},
+		{"chalk_inspect_episodes", `{"view":"activity"}`, "View activity also requires: space_ids"},
+		{"chalk_inspect_episodes", `{"view":"admissions"}`, "View admissions also requires: space_id"},
+		{"chalk_inspect_recordings", `{"view":"recording"}`, "View recording also requires: recording_id"},
+		{"chalk_inspect_recordings", `{"view":"download_url","recording_id":"` + other + `"}`, "View download_url also requires: expires_in_seconds"},
+		{"chalk_inspect_webhooks", `{"view":"endpoint"}`, "View endpoint also requires: endpoint_id"},
+		{"chalk_inspect_webhooks", `{"view":"delivery","endpoint_id":"` + space + `"}`, "View delivery also requires: delivery_id"},
+		{"chalk_inspect_webhooks", `{"view":"unknown"}`, "does not equal any of: [endpoints endpoint deliveries delivery]"},
+	} {
+		response := scopeTestCall(t, &all, toolCallBody(call.tool, call.arguments))
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), call.want) {
+			t.Errorf("%s %s: %d %s", call.tool, call.arguments, response.Code, response.Body.String())
+		}
+	}
+}
+
+func TestMCPInspectToolsAreListedPerScope(t *testing.T) {
+	for scope, want := range map[authentication.Scope]string{
+		authentication.ScopeSpacesRead:     "chalk_inspect_spaces",
+		authentication.ScopeEpisodesRead:   "chalk_inspect_episodes",
+		authentication.ScopeRecordingsRead: "chalk_inspect_recordings",
+		authentication.ScopeWebhooksRead:   "chalk_inspect_webhooks",
+	} {
+		listed := toolNames(scopeTestList(t, scopeTestPrincipal(t, authentication.PrincipalAPIKey, scope)))
+		if !slices.Contains(listed, want) {
+			t.Errorf("%s does not list %s: %v", scope, want, listed)
+		}
+		response := scopeTestCall(t, ptr(scopeTestPrincipal(t, authentication.PrincipalAPIKey, scope)), toolCallBody("chalk_inspect_transcripts", `{}`))
+		if !strings.Contains(response.Body.String(), "auth.forbidden") {
+			t.Errorf("%s read transcripts: %s", scope, response.Body.String())
+		}
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// The schema publishes one space_ids cap for two views, so the live view's lower cap
+// is enforced at the MCP boundary and answered with a typed error, not an internal one.
+func TestMCPLiveViewRefusesMoreThanThirtySpaces(t *testing.T) {
+	all := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.AllScopes...)
+	ids := make([]string, 31)
+	for i := range ids {
+		id, _ := utilities.NewID()
+		ids[i] = `"` + id.String() + `"`
+	}
+	response := scopeTestCall(t, &all, toolCallBody("chalk_inspect_episodes", `{"view":"live","space_ids":[`+strings.Join(ids, ",")+`]}`))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "invalid_space_ids") {
+		t.Fatalf("%d %s", response.Code, response.Body.String())
 	}
 }
