@@ -96,6 +96,19 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
+    const { tab, context } = await open("/dashboard/developer", { set: "manyConnections=1" });
+    try {
+      const rows = tab.locator("table.capps tbody tr");
+      await rows.first().waitFor();
+      check("connected apps loads the first page of 25", (await rows.count()) === 25);
+      await tab.getByRole("button", { name: "Show more apps" }).click();
+      await tab.locator("table.capps tbody tr:nth-child(27)").waitFor();
+      check("show more apps adds the rest", (await rows.count()) === 27 && (await tab.getByRole("button", { name: "Show more apps" }).count()) === 0);
+    } finally {
+      await context.close();
+    }
+  }
+  {
     const { tab, context } = await open("/dashboard/developer", { account: "new" });
     try {
       await tab.getByText("No connected apps").waitFor();

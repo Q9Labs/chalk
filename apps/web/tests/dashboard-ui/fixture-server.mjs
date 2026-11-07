@@ -4,7 +4,7 @@
 // every request for the browser checks. It lives outside src/, so no build can bundle it.
 //
 //   node tests/dashboard-ui/fixture-server.mjs   (Vite on 3070, fixture on 3071)
-//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>&newCall=<name>
+//   GET /__fixture/set?account=hasan|new&delay=ms&fail=home&limit=call&expire=1&freshSignIn=create-key&session=<id>&newCall=<name>&manyConnections=1
 //   GET /__fixture/log   GET /__fixture/reset
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
@@ -348,7 +348,8 @@ async function dashboard(request, response, page, url, entry) {
     }
     if (page === "connections") {
       const start = Number(query.cursor ?? 0);
-      return send(response, 200, { connections: data.connections.slice(start, start + 25), nextCursor: null });
+      const end = start + 25;
+      return send(response, 200, { connections: data.connections.slice(start, end), nextCursor: end < data.connections.length ? String(end) : null });
     }
     if (page === "developer")
       return send(response, 200, {
@@ -517,6 +518,7 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
+          else if (key === "manyConnections" && value === "1") accounts.hasan.connections.push(...Array.from({ length: 22 }, (_, n) => ({ id: uuid(0x4a0 + n), clientName: `Notes ${n + 1}`, scope: "chalk:read", lastUsedAt: null, createdAt: at(30 + n, 9, 0) })));
           else if (key === "freshLive") {
             accounts.hasan.live = true;
             accounts.hasan.sessions = [];

@@ -71,7 +71,7 @@ export function ConnectedApps() {
                         <span>
                           <span className="nm">{connection.clientName}</span>
                           <span className="csub">
-                            {ACCESS_LABEL[connection.scope]} · {lastUsed}
+                            {ACCESS_LABEL[connection.scope]} · Connected {fullDate(connection.createdAt)} · {lastUsed}
                           </span>
                         </span>
                       </span>
