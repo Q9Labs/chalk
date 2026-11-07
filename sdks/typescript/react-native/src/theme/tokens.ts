@@ -196,8 +196,53 @@ export const radii = {
   round: 999,
 } as const;
 
-/** Four-point grid. */
-export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40 } as const;
+/** Spacing steps, named as in design.md (`space[3]` is 12). The same scale is `--space-*` in the web CSS. */
+export const space = {
+  "0-5": 2,
+  1: 4,
+  "1-5": 6,
+  2: 8,
+  "2-5": 10,
+  3: 12,
+  4: 16,
+  5: 20,
+  6: 24,
+  8: 32,
+  10: 40,
+  12: 48,
+  14: 56,
+  16: 64,
+  22: 88,
+} as const;
+
+/** Font sizes by role. The same scale is `--type-*` in the web CSS. */
+export const fontSizes = {
+  micro: 10,
+  caption: 12,
+  "body-sm": 13,
+  body: 14,
+  "body-lg": 15,
+  lead: 16,
+  "title-sm": 20,
+  title: 24,
+  headline: 28,
+  "display-sm": 36,
+  display: 44,
+  "display-lg": 56,
+  hero: 92,
+} as const;
+
+/** Corner radii. The same scale is `--corner-*` in the web CSS. */
+export const corners = {
+  xs: 2,
+  sm: 4,
+  md: 6,
+  lg: 8,
+  xl: 12,
+  "2xl": 16,
+  "3xl": 24,
+  pill: 999,
+} as const;
 
 export const sizes = {
   control: 44,
