@@ -47,6 +47,13 @@ func TestProfilingNeedsTheOperatorIdentity(t *testing.T) {
 	if !bytes.HasPrefix(profile, []byte{0x1f, 0x8b}) {
 		t.Fatalf("heap profile is not gzip: starts %x", profile[:min(len(profile), 4)])
 	}
+	status, profile = fetch(t, svc.client, svc.baseURL+"/debug/pprof/profile?seconds=1")
+	if status != http.StatusOK || !bytes.HasPrefix(profile, []byte{0x1f, 0x8b}) {
+		t.Fatalf("1-second CPU profile: status %d, want 200 and gzip", status)
+	}
+	if status, _ := fetch(t, svc.client, svc.baseURL+"/debug/pprof/profile?seconds=30"); status != http.StatusBadRequest {
+		t.Fatalf("CPU profile longer than the request deadline: status %d, want 400", status)
+	}
 	if status, _ := fetch(t, svc.client, svc.baseURL+"/debug/pprof/cmdline"); status != http.StatusNotFound {
 		t.Fatalf("cmdline: status %d, want 404", status)
 	}
