@@ -3,9 +3,11 @@
 package postgres
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -23,6 +25,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/httpapi"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/publicinviteapp"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -110,7 +113,8 @@ func TestMCPEvalHost(t *testing.T) {
 		Recordings:            recordings.NewService(NewRecordingRepository(q)),
 		RecordingExports:      recordingpipeline.NewService(NewRecordingPipelineRepositoryWithPool(pool)),
 		TranscriptArtifacts:   transcripts.NewArtifactService(transcriptRepo, transcriptRepo),
-		Webhooks:              webhookService, RateLimit: httpapi.DefaultRateLimitOptions(),
+		RecordingObjects:      evalObjects{pool: pool}, TranscriptTextMetadata: NewTranscriptTextRepository(q),
+		Webhooks: webhookService, RateLimit: httpapi.DefaultRateLimitOptions(),
 	}
 	options.RateLimit.DisableAuthenticated = true
 	options.MCP = httpapi.NewMCPHandler(options)
@@ -126,4 +130,17 @@ func TestMCPEvalHost(t *testing.T) {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		t.Fatal(err)
 	}
+}
+
+// evalObjects serves the fixture's transcript artifacts from mcp_eval_objects, the
+// fixture-only corpus table. Size and content type are the stored bytes' own, so the
+// API's artifact checks run unchanged.
+type evalObjects struct{ pool *pgxpool.Pool }
+
+func (o evalObjects) GetObject(ctx context.Context, key string) (objectstorage.ObjectReader, error) {
+	var body string
+	if err := o.pool.QueryRow(ctx, "select body from mcp_eval_objects where object_key = $1", key).Scan(&body); err != nil {
+		return objectstorage.ObjectReader{}, err
+	}
+	return objectstorage.ObjectReader{Object: objectstorage.Object{Key: key, Size: int64(len(body)), ContentType: "application/json"}, Body: io.NopCloser(bytes.NewReader([]byte(body)))}, nil
 }

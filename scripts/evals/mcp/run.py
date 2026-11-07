@@ -129,7 +129,7 @@ def preflight(args, db):
         rpc(endpoint, f["key"], "tools/call", {"name": "chalk_execute", "arguments": {"code": "return await chalk.get_connection({});"}})
     for name, arguments in [
         ("get_connection", {}), ("list_spaces", {}), ("list_recordings", {}),
-        ("list_transcripts", {}), ("list_admission_requests", {"space_id": f["spaces"]["Atlas"]}),
+        ("inspect_transcripts", {}), ("list_admission_requests", {"space_id": f["spaces"]["Atlas"]}),
         ("inspect_webhooks", {}),
     ]:
         reply = rpc(base, f["key"], "tools/call", {"name": "chalk_" + name, "arguments": arguments})

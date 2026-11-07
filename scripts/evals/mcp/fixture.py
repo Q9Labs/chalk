@@ -72,9 +72,23 @@ class Database:
         end $$;
         commit;
         create table if not exists mcp_eval_objects (
-          tenant_id uuid not null, object_key text primary key, body jsonb not null
+          tenant_id uuid not null, object_key text primary key, body text not null
         );
         """)
+
+
+def transcript_document(episode, cues):
+    """A transcript.v1 artifact exactly as the dispatcher persists it; the exact bytes are what the API serves."""
+    provider = {"provider": "deepinfra", "model": "openai/whisper-large-v3-turbo",
+                "versionContract": "deepinfra-native-whisper-turbo.v1", "attempt": 1}
+    body = {"schemaVersion": "transcript.v1", "jobId": "eval-job", "episodeId": episode, **provider,
+            "measuredAudioMs": cues[-1][1] + 1000,
+            "cues": [{"startMs": start, "endMs": start + 900, "text": text, "overlap": False,
+                      "identity": {"kind": "participant", "participantRef": "eval-" + speaker, "participantGeneration": 1,
+                                   "trackId": "track-" + speaker, "trackEpoch": "epoch-1"},
+                      "trackClass": "microphone", "displayNameSnapshot": speaker, **provider}
+                     for speaker, start, text in cues]}
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
 
 
 def seed(db, label):
@@ -183,14 +197,13 @@ def seed(db, label):
                    object_key=key, content_type="video/mp4", byte_size=1, checksum="\\x" + "00" * 32,
                    duration_millis=3600000, committed_at="2026-10-26T00:00:00Z", expires_at="2099-01-01T00:00:00Z")
         artifact = f"tenants/{tenant}/transcripts/{transcript}.json"
-        segments = [{"speaker": "Amina", "start_ms": 12000, "text": text[number]}]
+        cues = [("Amina", 12000, text[number])]
         if number == 3:
-            segments = [{"speaker": "Bilal", "start_ms": i * 1000, "text": "Routine update."} for i in range(4500)]
-            segments[0] = {"speaker": "Amina", "start_ms": 0, "text": text[number]}
-            segments[4100] = {"speaker": "Amina", "start_ms": 4100000, "text": "The invoice approval code is ORCHID-73."}
-        body = {"segments": segments}
-        encoded = json.dumps(body, ensure_ascii=False).encode()
-        insert("mcp_eval_objects", tenant_id=tenant, object_key=artifact, body=body)
+            cues = [("Bilal", i * 1000, "Routine update.") for i in range(4500)]
+            cues[0] = ("Amina", 0, text[number])
+            cues[4100] = ("Amina", 4100000, "The invoice approval code is ORCHID-73.")
+        encoded = transcript_document(episodes[number], cues).encode()
+        insert("mcp_eval_objects", tenant_id=tenant, object_key=artifact, body=encoded.decode())
         insert("transcriptions", id=transcript, tenant_id=tenant, recording_id=recording, space_id=spaces["Atlas"],
                episode_id=episodes[number], status="complete", languages=languages[number], artifact_key=artifact,
                artifact_content_type="application/json", artifact_size=len(encoded),
