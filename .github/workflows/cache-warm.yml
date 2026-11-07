@@ -72,3 +72,36 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
           key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
+
+  tofu:
+    name: Warm OpenTofu providers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up OpenTofu
+        uses: ./.github/actions/setup-opentofu
+
+      - name: Check for a saved provider cache
+        id: saved
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
+          lookup-only: true
+
+      - name: Download providers
+        if: steps.saved.outputs.cache-hit != 'true'
+        run: |
+          export TF_PLUGIN_CACHE_DIR="$HOME/.terraform.d/plugin-cache"
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          bash scripts/recorder/tofu-init.sh infrastructure/recorder
+
+      - name: Save providers
+        if: steps.saved.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}

@@ -182,6 +182,21 @@ jobs:
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-opentofu
 
+      # Providers come from the cache that cache-warm.yml saves on master, so a flaky github.com download cannot fail
+      # a queue group. A cache miss falls back to the download, which scripts/recorder/tofu-init.sh retries.
+      - name: Restore OpenTofu providers
+        if: matrix.group == 'checks'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
+
+      - name: Use the OpenTofu provider cache
+        if: matrix.group == 'checks'
+        run: |
+          mkdir -p ~/.terraform.d/plugin-cache
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
       - name: Set up security scanners
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-scanners
