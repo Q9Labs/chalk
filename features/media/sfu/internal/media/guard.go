@@ -25,7 +25,8 @@ const (
 	minGuardPacerDrops     = 100 // drops in a window below which the drop share is noise
 	// latencyWindow is how far back the guard reads scheduler latency, whatever
 	// the guard window is. It is short so admission reopens within seconds of a
-	// host stall ending, and long enough that one slow second can't close it.
+	// host stall ending. The p99 pools every wakeup in it, so a stall closes
+	// admission once its late wakeups pass 1% of the window's.
 	latencyWindow = 10 * time.Second
 	latencySlots  = int(latencyWindow / time.Second) // one-second samples in latencyWindow
 )
