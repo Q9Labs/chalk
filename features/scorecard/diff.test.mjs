@@ -78,13 +78,12 @@ test("a plane's own limit replaces the plain one, and the other plane's limit is
   assert.deepEqual(planeBudgets(all, "cf_sfu")["action.leave_ms"], other);
 });
 
-test("only action limits with a p95 and the asked gate setting become latency limits", () => {
+test("action limits with a p95 become latency limits, and gate false makes one warn-only", () => {
   const budgets = {
     "chalk_sfu.action.leave_ms": { max_p95: 700, tolerancePct: 10, gate: false },
     "action.spinup_ms": { max_p95: 3000, tolerancePct: 10, gate: true },
     "action.mic_toggle.on_ms": { max_p50: 100, tolerancePct: 10, gate: true },
     "web.route.js_gzip_kib": { max_p50: 217, tolerancePct: 1, gate: true },
   };
-  assert.deepEqual(planeLimits(budgets, "chalk_sfu", true), { "action.spinup_ms": { p95Ms: 3000 } });
-  assert.deepEqual(planeLimits(budgets, "chalk_sfu", false), { "action.leave_ms": { p95Ms: 700 } });
+  assert.deepEqual(planeLimits(budgets, "chalk_sfu"), { "action.leave_ms": { p95Ms: 700, warnOnly: true }, "action.spinup_ms": { p95Ms: 3000, warnOnly: false } });
 });

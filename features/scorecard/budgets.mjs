@@ -97,9 +97,9 @@ function isCallRunId(id) {
   return id.startsWith("web.") && Object.values(CALL_SEGMENTS).some((segment) => id.endsWith(`.${segment}`));
 }
 
-// planeLimits is the p95 limit of every action metric that has a budget for the plane and the given gate setting, in the shape
-// budgetFailures reads. Gating limits fail the run; the others are only reported as warnings.
-export function planeLimits(budgets, plane, gate) {
-  const entries = Object.entries(planeBudgets(budgets, plane)).filter(([id, entry]) => id.startsWith("action.") && entry.max_p95 !== undefined && entry.gate === gate);
-  return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95 }]));
+// planeLimits is the p95 limit of every action metric that has a budget for the plane, in the shape budgetFailures reads.
+// A limit whose entry has gate false is warnOnly: going over it warns, but a timeout or too few samples still fails the run.
+export function planeLimits(budgets, plane) {
+  const entries = Object.entries(planeBudgets(budgets, plane)).filter(([id, entry]) => id.startsWith("action.") && entry.max_p95 !== undefined);
+  return Object.fromEntries(entries.map(([id, entry]) => [id, { p95Ms: entry.max_p95, warnOnly: !entry.gate }]));
 }

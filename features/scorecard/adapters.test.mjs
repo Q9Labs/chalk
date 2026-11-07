@@ -99,6 +99,9 @@ test("live smoke samples give interval loss, stalls per class-hour and refusals"
   // 3 stalls over 1 class for 2 minutes plus 2 classes for 1 minute: 4 class-minutes.
   assert.equal(by["sfu.stalls_per_class_hour"].p50, 3 / (4 / 60));
   assert.deepEqual(dropped, []);
+  // Packets that were missing at one boundary and arrive in the next interval never make the loss negative.
+  const late = [sample("1m0s", 1, 100, 90, 0, false), sample("2m0s", 1, 200, 200, 0, false)].map((line) => JSON.stringify(line)).join("\n");
+  assert.equal(liveSampleMetrics(late).metrics.find((entry) => entry.id === "sfu.loss_pct").p50, 0);
   assert.deepEqual(liveSampleMetrics("").dropped, [{ metric: "*", reason: "no_samples", count: 1 }]);
 });
 

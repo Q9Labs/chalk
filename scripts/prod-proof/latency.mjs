@@ -21,7 +21,7 @@ import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
-import { budgetFailures, summarize } from "./latency-stats.mjs";
+import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
@@ -188,8 +188,9 @@ async function conclude(report, { samples, planes }) {
   for (const plane of planes) {
     const kept = report.cycles.filter((outcome) => outcome.plane === plane && !outcome.dropped);
     const summary = summarize(kept.map((outcome) => outcome.sample));
-    const failures = budgetFailures(summary, planeLimits(budgets, plane, true), samples);
-    const warnings = budgetFailures(summary, planeLimits(budgets, plane, false), samples);
+    const limits = planeLimits(budgets, plane);
+    const failures = budgetFailures(summary, limits, samples);
+    const warnings = budgetWarnings(summary, limits);
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
     report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures, warnings };
   }

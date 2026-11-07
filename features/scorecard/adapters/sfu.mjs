@@ -61,7 +61,8 @@ export function liveSampleMetrics(text) {
     const seconds = elapsedSeconds(sample.elapsed);
     const expected = sample.peers.expected - previous.peers.expected;
     const received = sample.peers.received - previous.peers.received;
-    if (expected > 0 && received >= 0) loss.push((100 * (expected - received)) / expected);
+    // Late packets that arrive in a later interval can make received outrun expected there, so a recovered interval counts as no loss.
+    if (expected > 0) loss.push(Math.max(0, (100 * (expected - received)) / expected));
     if (seconds > previous.seconds) classHours += (sample.classes * (seconds - previous.seconds)) / 3600;
     previous = { peers: sample.peers, seconds: Number.isFinite(seconds) ? seconds : previous.seconds };
   }
