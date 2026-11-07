@@ -582,6 +582,11 @@
   border-color: var(--chalk-text);
 }
 
+.site .dash .cscope label:has(input:focus-visible) {
+  outline: 2px solid var(--chalk-text);
+  outline-offset: 2px;
+}
+
 .site .dash .cscope input {
   margin-top: 2px;
 }
