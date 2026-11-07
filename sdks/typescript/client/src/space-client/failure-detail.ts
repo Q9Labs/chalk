@@ -7,8 +7,8 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
   "connection.sync_start_failed": "Couldn’t reach the call service. Try again.",
   "connection.sync_hello_timeout": "The call service did not respond in time. Try again.",
   "connection.sync_recovery_exhausted": "You’re disconnected from the call. Rejoin to continue.",
-  "connection.media_start_failed": "Audio and video could not connect. Try again.",
-  "connection.media_recovery_exhausted": "Audio and video could not reconnect. Try again.",
+  "connection.media_start_failed": "Audio and video could not connect. Your network may block calls. Try again, or switch networks.",
+  "connection.media_recovery_exhausted": "Audio and video could not reconnect. Check your network, then try again.",
   "environment.unsupported": "This device cannot start the call. Use an up-to-date browser over HTTPS, or update the app.",
 };
 
