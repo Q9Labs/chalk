@@ -155,7 +155,15 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
     if (serviceId === "web") {
       // A browser off this box reaches the API and Sync through the public origin, where Vite proxies /v1 and /v1/sync to the local ports.
       const browserSync = config.publicOrigin ? `${config.publicOrigin.replace(/^http/, "ws")}/v1/sync` : base.CHALK_SYNC_URL;
-      return { ...base, ...(config.publicOrigin ? { PUBLIC_ORIGIN: config.publicOrigin } : {}), CHALK_DEV_SYNC_ORIGIN: config.urls.sync, VITE_API_URL: config.publicOrigin ?? config.urls.api, VITE_CHALK_SYNC_URL: browserSync, VITE_CHALK_DEV_SYNC_URL: browserSync, VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu" };
+      return {
+        ...base,
+        ...(config.publicOrigin ? { PUBLIC_ORIGIN: config.publicOrigin } : {}),
+        CHALK_DEV_SYNC_ORIGIN: config.urls.sync,
+        VITE_API_URL: config.publicOrigin ?? config.urls.api,
+        VITE_CHALK_SYNC_URL: browserSync,
+        VITE_CHALK_DEV_SYNC_URL: browserSync,
+        VITE_CHALK_DEV_MEDIA_PLANE: "cf_sfu",
+      };
     }
     if (serviceId === "mobile") return { ...base, RCT_METRO_PORT: String(config.metro.port) };
     return {};
