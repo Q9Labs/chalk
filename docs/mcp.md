@@ -164,8 +164,8 @@ annotations guide agents but do not authorize calls.
 `inspect_tenant` reads the tenant's settings by default: CORS origins, retention,
 default media plane and transcription defaults. Provider secrets in them are
 redacted, the same as in the response of `update_tenant`. It needs
-`tenants:settings:read`, a permission Chalk gives to API keys that hold
-`tenants:read` and shows in the scopes of `get_connection`. Both OAuth bundles hold
+`tenants:settings:read`, a permission Chalk derives for API keys that hold
+`tenants:read`; it is not an issuable key scope and `get_connection` does not list it. Both OAuth bundles hold
 `tenants:read` for the profile tool but not this permission, so the tool is not
 listed for them and a call is refused without a step-up.
 

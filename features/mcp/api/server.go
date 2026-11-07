@@ -182,7 +182,7 @@ func Bind[I any](server *mcp.Server, d Definition, call func(context.Context, I)
 				Source   string   `json:"source"`
 				TenantID string   `json:"tenant_id"`
 				Scopes   []string `json:"scopes"`
-			}{citation, Connection(ctx).TenantID, Connection(ctx).Scopes})
+			}{citation, Connection(ctx).TenantID, grantedScopes(Connection(ctx))})
 			if err != nil {
 				return nil, nil, err
 			}
@@ -285,4 +285,10 @@ func readSingleMessage(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 		return nil, false
 	}
 	return body, true
+}
+
+// grantedScopes lists the scopes the credential holds. TenantSettingsScope is derived
+// by the API shell and is not a scope a key can be issued, so it stays out of the list.
+func grantedScopes(p Principal) []string {
+	return slices.DeleteFunc(slices.Clone(p.Scopes), func(scope string) bool { return scope == TenantSettingsScope })
 }

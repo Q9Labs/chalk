@@ -166,3 +166,12 @@ func TestMCPRequestTranscriptKeepsTheTraceCarrier(t *testing.T) {
 		t.Fatalf("%d %s traceparent=%q", response.Code, response.Body.String(), service.got.Traceparent)
 	}
 }
+
+func TestMCPConnectionDoesNotListTheDerivedSettingsPermission(t *testing.T) {
+	key := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeTenantsRead)
+	response := scopeTestCall(t, &key, toolCallBody("chalk_get_connection", `{}`))
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "tenants:read") || strings.Contains(body, "tenants:settings:read") {
+		t.Fatalf("%d %s", response.Code, body)
+	}
+}
