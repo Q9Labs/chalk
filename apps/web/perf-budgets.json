@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage loads the admitted call from SpaceCall after Join (#730); the hosted MCP OAuth contract (#814) and entrance UI polish (#855) leave its ceiling at 219 KiB. Non-board call fixtures measure the full call: master c2772b1f4 measures 386.044 KiB JavaScript gzip, already above the old 386 KiB limit, and the inherited camera feature brings it to 387.016 KiB. Their limit is therefore 388 KiB, the smallest whole-KiB ceiling above this build. Board, CSS, timing, video-quality and leak limits are unchanged.",
+  "_comment": "The route limit covers the pre-join entrance (#712); SpaceCall loads the admitted call after Join (#730), with the MCP OAuth contract (#814) and entrance UI polish (#855) leaving its ceiling at 219 KiB. Five fresh-context bundle-only runs per revision on Linux x64, 8-core Intel Xeon, Node 24.19.0, pnpm 12.8.1 and Chromium 151.0.7922.34 give non-board JavaScript gzip min/median/max of 386.486/386.486/386.486 KiB on master 35a9d072c and 387.472/387.472/387.472 KiB with camera backgrounds. The 388 KiB ceiling accepts the capture/picker integration cost while presets and segmentation stay lazy. Board, CSS, timing, video-quality and leak limits and the historical timing baseline remain unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
