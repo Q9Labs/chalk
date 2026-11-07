@@ -177,7 +177,7 @@ func (f httpsMetadataFetcher) Fetch(ctx context.Context, clientID string) ([]byt
 	pinned := addresses[0]
 	transport := &http.Transport{
 		Proxy:           nil,
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: u.Hostname()},
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: u.Hostname(), RootCAs: f.roots},
 		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			return f.dial(ctx, network, net.JoinHostPort(pinned.String(), "443"))
 		},
