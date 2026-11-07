@@ -110,10 +110,10 @@ func TestMCPControlCallActionsNeedTheirFields(t *testing.T) {
 	episode, _ := utilities.NewID()
 	base := `"space_id":"` + space.String() + `","episode_id":"` + episode.String() + `"`
 	for arguments, want := range map[string]string{
-		`{"action":"sync_token",` + base + `}`:                       "also requires: participant_id",
-		`{"action":"access_grant",` + base + `}`:                     "also requires: participant_id, participant_generation",
-		`{"action":"admit",` + base + `}`:                            "also requires: name, role, request_key",
-		`{"action":"mute_everyone",` + base + `}`:                    "action",
+		`{"action":"sync_token",` + base + `}`:                                            "also requires: participant_id",
+		`{"action":"access_grant",` + base + `}`:                                          "also requires: participant_id, participant_generation",
+		`{"action":"admit",` + base + `}`:                                                 "also requires: name, role, request_key",
+		`{"action":"mute_everyone",` + base + `}`:                                         "action",
 		`{"action":"cancel_join",` + base + `,"participant_id":"` + space.String() + `"}`: "action",
 	} {
 		response := callControlCall(t, handler, writer, arguments)
