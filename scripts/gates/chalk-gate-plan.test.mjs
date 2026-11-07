@@ -124,7 +124,6 @@ test("service gate selection follows the plan inputs", () => {
   const services = (files) => createGatePlan(files).services;
   assert.deepEqual(services(["docs/contract-codegen.md"]), { api: false, sync: false });
   assert.deepEqual(services(["apps/api/internal/server.go"]), { api: true, sync: false });
-  assert.deepEqual(services(["features/media/sfu/internal/config/config.go"]), { api: true, sync: false });
   assert.deepEqual(services(["apps/sync/lib/chalk_sync.ex"]), { api: false, sync: true });
   assert.deepEqual(services(["apps/api/db/migrations/20261028120000_example.sql"]), { api: true, sync: true });
   assert.deepEqual(services(["sdks/typescript/client/src/generated/sync.ts"]), { api: false, sync: true });
@@ -250,11 +249,11 @@ test("CI runs only the jobs whose lanes the plan selects", () => {
   assert.deepEqual(ciJobs([], { full: true }), { api: true, sync: true, rootGroups: ["checks", "tests", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] });
 });
 
-test("SFU changes run the SFU gate and nothing else that is Go", () => {
+test("SFU changes run the SFU gate and the API gate that builds the SFU, not Sync", () => {
   const plan = createGatePlan(["features/media/sfu/internal/media/session.go"]);
   assert.equal(plan.full, false);
   assert.equal(plan.tasks.find((task) => task.id === "sfu")?.selected, true);
-  assert.equal(plan.services.api, false);
+  assert.deepEqual(plan.services, { api: true, sync: false });
   assert.equal(createGatePlan(["apps/api/internal/server.go"]).tasks.find((task) => task.id === "sfu")?.selected, false);
   assert.equal(createGatePlan(["features/media/sfu/README.md"]).tasks.find((task) => task.id === "sfu")?.selected, true);
 });
