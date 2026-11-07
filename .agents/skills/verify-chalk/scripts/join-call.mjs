@@ -54,7 +54,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, recordVideo: { dir: join(out, "video"), size: { width: 1440, height: 960 } } });
     await context.addInitScript(webMediaFixture(person.fixture));
     const page = await context.newPage();
-    page.on("console", (message) => logs.console.push({ who: person.name, type: message.type(), text: message.text().slice(0, 300) }));
+    page.on("console", (message) => logs.console.push({ who: person.name, type: message.type(), text: message.text().slice(0, 300), url: message.location().url.replace(/[?#].*/, "") }));
     page.on("pageerror", (error) => logs.console.push({ who: person.name, type: "pageerror", text: String(error.message).slice(0, 300) }));
     page.on("response", (response) => {
       const { pathname } = new URL(response.url());
@@ -94,12 +94,14 @@ try {
 
   for (const { name, page } of sessions) {
     await step(`${name} turns on microphone and camera`, async () => {
-      for (const [control, enabled] of [
+      const controls = [
         ["Unmute microphone", "Mute microphone"],
         ["Turn on camera", "Turn off camera"],
-      ]) {
-        await page.getByRole("region", { name: "Space stage", exact: true }).hover();
-        await page.getByRole("button", { name: control, exact: true }).click();
+      ];
+      // Click both at once, as a person does: the first publish swaps a connection that never negotiated, and the second enable must survive that.
+      await page.getByRole("region", { name: "Space stage", exact: true }).hover();
+      for (const [control] of controls) await page.getByRole("button", { name: control, exact: true }).click();
+      for (const [control, enabled] of controls) {
         // A dropped enable puts the button back to its off label with an error toast; say so here, not 60 s later as "never published".
         await page
           .getByRole("button", { name: enabled, exact: true })
