@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ArrivalUnavailableError, SpacePublicInviteUnavailableError } from "./index";
 import { createChalkPublicClient } from "./client";
+import type { ChalkPublicClient } from "./types";
 
 describe("public Space invite media recovery", () => {
   it("prepares an Entrance with the invite capability without creating participant access", async () => {
@@ -41,6 +42,25 @@ describe("public Space invite media recovery", () => {
     await client.refreshSpacePublicInviteAccess({ arrivalHandle: "55555555-5555-4555-8555-555555555555", mediaProof: "media-proof", replaceMediaConnection: true });
 
     expect(requestBody).toEqual({ media_proof: "media-proof", replace_media_connection: true });
+  });
+  it.each([
+    ["creates a Space", (client: ChalkPublicClient) => client.createPublicSpace({ displayName: "Ada" })],
+    ["arrives", (client: ChalkPublicClient) => client.arriveBySpacePublicInvite({ spaceInviteToken: "valid-invite", displayName: "Ada" })],
+    ["polls status", (client: ChalkPublicClient) => client.getSpacePublicInviteArrival({ arrivalHandle: "55555555-5555-4555-8555-555555555555" })],
+    ["refreshes access", (client: ChalkPublicClient) => client.refreshSpacePublicInviteAccess({ arrivalHandle: "55555555-5555-4555-8555-555555555555", mediaProof: "media-proof" })],
+  ])("declares both media providers when it %s", async (_name, call) => {
+    const declared: (string | null)[] = [];
+    const client = createChalkPublicClient({
+      baseUrl: "https://api.chalk.test",
+      fetch: async (input, init) => {
+        declared.push(new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)).get("x-chalk-media-providers"));
+        return Response.json({}, { status: 500 });
+      },
+    });
+
+    await call(client).catch(() => undefined);
+
+    expect(declared).toEqual(["cloudflare_sfu,chalk_sfu"]);
   });
 });
 
