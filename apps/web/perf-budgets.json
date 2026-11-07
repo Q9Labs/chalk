@@ -1,6 +1,6 @@
 {
   "baselineCommit": "d3cb32526401f033327b8449d01050e600c84cd7",
-  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage now loads the admitted call (LocalSpace, the Chalk call UI, the SDK client and media stack, problem reporting and the status and report surfaces) from SpaceCall after the participant presses Join, so with TURN credentials (#676) and per-call stats (#671) merged the route measured 216.843 KiB, down from 472.364 KiB on master (that code now loads after Join too). The OAuth sign-in for the hosted MCP server (#814) then added five generated MCP consent and connection endpoints and their schemas to the client contract, which grew the chalk-access chunk by 0.21 KiB and the errors chunk by 0.23 KiB (216.6 to 217.08 KiB at 6e82e8f40), so the limit was 217.5. UI polish for the entrance (join screen, privacy notice, times with AM/PM) then used the remaining 0.2 KiB, so the limit is 219. The call-scenario JS limit still measures the full call, which this change does not shrink, so it and all other limits stay unchanged.",
+  "_comment": "The route limit covers only the pre-join entrance (#712). SpacePage loads the admitted call from SpaceCall after Join (#730); the hosted MCP OAuth contract (#814) and entrance UI polish (#855) leave its ceiling at 219 KiB. Non-board call fixtures measure the full call: master c2772b1f4 measures 386.044 KiB JavaScript gzip, already above the old 386 KiB limit, and the inherited camera feature brings it to 387.016 KiB. Their limit is therefore 388 KiB, the smallest whole-KiB ceiling above this build. Board, CSS, timing, video-quality and leak limits are unchanged.",
   "repeats": 5,
   "sampleMs": 3000,
   "devices": {
@@ -47,7 +47,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1920,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -60,7 +60,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 6543,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -73,7 +73,7 @@
         "interactionMs": 530,
         "heapMiB": 17,
         "domNodes": 2455,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -86,7 +86,7 @@
         "interactionMs": 24,
         "heapMiB": 15,
         "domNodes": 2215,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -112,7 +112,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1993,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -125,7 +125,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1947,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -139,7 +139,7 @@
         "heapMiB": 14,
         "domNodes": 1920,
         "firstCallMs": 1861,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -154,7 +154,7 @@
         "interactionMs": 24,
         "heapMiB": 15,
         "domNodes": 1968,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -167,7 +167,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 6593,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -180,7 +180,7 @@
         "interactionMs": 420,
         "heapMiB": 17,
         "domNodes": 2318,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -193,7 +193,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 2233,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -219,7 +219,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 2040,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -232,7 +232,7 @@
         "interactionMs": 24,
         "heapMiB": 16,
         "domNodes": 1994,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
@@ -246,7 +246,7 @@
         "heapMiB": 15,
         "domNodes": 1968,
         "firstCallMs": 2499,
-        "jsGzipKiB": 386,
+        "jsGzipKiB": 388,
         "cssGzipKiB": 54,
         "videoDroppedFramePercent": 5,
         "layoutShift": 0.05
