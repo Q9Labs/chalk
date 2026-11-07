@@ -132,7 +132,9 @@ try {
         await trigger("Transcript language").click();
         await page.getByRole("option", { name: /Auto-detect/ }).click();
         await save().click();
-        await page.getByText("Transcript language saved", { exact: true }).waitFor();
+        const saved = page.getByText("Transcript language saved", { exact: true });
+        await saved.waitFor();
+        await saved.waitFor({ state: "detached" });
       }
       await page.evaluate(() => window.localStorage.setItem("chalk.transcript-language.recent", '["ur","en","ar"]'));
       await shot("account-closed", account);
