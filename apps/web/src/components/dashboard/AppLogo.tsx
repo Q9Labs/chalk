@@ -36,7 +36,7 @@ export function AppLogo({ name, size = "md" }: { readonly name: string; readonly
 }
 
 /** Chalk's own side of the pair. */
-export function ChalkLogo({ size = "md" }: { readonly size?: "sm" | "md" | "lg" }) {
+function ChalkLogo({ size = "md" }: { readonly size?: "sm" | "md" | "lg" }) {
   return (
     <Tile className={size}>
       <ChalkMark />

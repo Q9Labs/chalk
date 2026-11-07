@@ -17,7 +17,7 @@ export async function connectChecks({ open, check }) {
     try {
       await tab.getByRole("heading", { name: "Connect Claude to Chalk" }).waitFor();
       check("read request has no access choice", (await tab.getByRole("button", { name: "Read and change" }).count()) === 0);
-      check("consent names the signed-in account and tenant", await tab.getByText("hasan@q9labs.ai").isVisible() && (await tab.locator(".cwho").innerText()).includes("Hasan Shoaib"));
+      check("consent names the signed-in account and tenant", (await tab.getByText("hasan@q9labs.ai").isVisible()) && (await tab.locator(".cwho").innerText()).includes("Hasan Shoaib"));
       check("consent offers to switch account", await tab.getByRole("button", { name: "Switch account" }).isVisible());
       await tab.getByRole("button", { name: "Switch account" }).click();
       // The next sign-in is as the other fixture account.
