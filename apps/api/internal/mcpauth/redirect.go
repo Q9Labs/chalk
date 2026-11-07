@@ -35,7 +35,7 @@ func (c Config) validRedirectURI(raw string) bool {
 	case "claude.ai", "claude.com":
 		return u.Path == "/api/mcp/auth_callback"
 	case "api.devin.ai":
-		return u.Path == "/mcp/oauth/callback"
+		return raw == "https://api.devin.ai/mcp/oauth/callback"
 	case "chatgpt.com":
 		return u.Path == "/connector_platform_oauth_redirect" || chatGPTConnectorPath.MatchString(u.Path)
 	default:
