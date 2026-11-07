@@ -72,9 +72,10 @@ const scenarios = {
     return { ...joined, guests: 10 };
   },
 
-  async "publisher-leaves"({ guests }) {
+  async "publisher-leaves"({ guests, useSDK }) {
     const { pages } = guests;
     await waitForMovement(pages, everyone(3), 2, 30_000, "before the leave");
+    useSDK(pages[1]); // The page that leaves can no longer end the Episode.
     const leftAt = performance.now();
     await pages[0].evaluate(() => window.proofClient.leave());
     const leaver = guests.participants[0];
@@ -111,7 +112,8 @@ const scenarios = {
     const whileHidden = await movement(pages, 5000);
     await hide(false);
     const back = await waitForMovement(pages, everyone(3), 2, 30_000, "after the tab came back");
-    check(whileHidden[0].microphones >= 1 && whileHidden[2].microphones >= 1, "The others stopped hearing audio while one tab was hidden");
+    // Each of the others hears two microphones: the hidden guest and the other one.
+    check(whileHidden[0].microphones >= 2 && whileHidden[2].microphones >= 2, "The others stopped hearing the hidden guest while its tab was hidden");
     return { emulatedVisibility: true, hiddenSeconds: 65, whileHidden, backMs: back.ms };
   },
 
@@ -136,7 +138,7 @@ const scenarios = {
     return { held, restoredMs: restored.ms };
   },
 
-  async "node-restart"({ guests }) {
+  async "node-restart"({ guests, useSDK }) {
     const restart = process.env.CHALK_E2E_RESTART;
     check(restart, "Set CHALK_E2E_RESTART to the command that restarts the media node", "configuration");
     const { pages } = guests;
@@ -150,6 +152,7 @@ const scenarios = {
       // The brief accepts an explicit rejoin after a node restart.
     }
     await guests.rejoinAll();
+    useSDK(guests.pages[0]);
     const recovered = await waitForMovement(guests.pages, everyone(3), 2, 60_000, "after the explicit rejoin");
     return { recovery: "by explicit rejoin", ms: Math.round(performance.now() - restartedAt), seen: recovered.seen };
   },
@@ -181,15 +184,16 @@ async function main() {
     for (const name of names) {
       const mark = run.resources.length;
       let call;
+      const teardown = [];
       try {
         call = await openCall(run, receiver, guestCounts[name] ?? 3);
         report.scenarios[name] = { result: "passed", ...(await scenarios[name](call)) };
       } catch (error) {
-        report.scenarios[name] = { result: "failed", error: error instanceof Error ? error.message : "failed" };
-      } finally {
-        if (call) await call.end().catch(() => {});
-        for (const resource of run.resources.splice(mark)) await resource.dispose().catch(() => {});
+        report.scenarios[name] = { result: "failed", error: error instanceof Error ? error.message : String(error) };
       }
+      if (call) await call.end().catch((error) => teardown.push(`end Episode: ${error instanceof Error ? error.message : String(error)}`));
+      for (const resource of run.resources.splice(mark)) await resource.dispose().catch((error) => teardown.push(`dispose: ${error instanceof Error ? error.message : String(error)}`));
+      if (teardown.length) report.scenarios[name] = { ...report.scenarios[name], result: "failed", teardown };
       console.log(`${name}: ${report.scenarios[name].result}`);
     }
   } catch (error) {
