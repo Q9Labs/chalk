@@ -370,6 +370,15 @@ async function dashboard(request, response, page, url, entry) {
   await wait(250);
   const call = data.calls.find((item) => item.id === action.spaceId);
   switch (action.action) {
+    case "approve-connection":
+    case "deny-connection": {
+      const host = CONNECT_APPS[action.request.split("_")[2]];
+      if (!host) return fail(response, 404, "not_found");
+      return send(response, 200, { redirectUrl: `https://${host.host}/oauth/callback?${action.action === "approve-connection" ? "code=fixture" : "error=access_denied"}` });
+    }
+    case "revoke-connection":
+      data.connections = data.connections.filter((item) => item.id !== action.connectionId);
+      return send(response, 200, { ok: true });
     case "create-call": {
       const created = { id: uuid(0x1000 + data.calls.length), slug: `call-${action.idempotencyKey}`, name: action.name ?? "New call", archived: false, admission: action.admission, createdAt: new Date().toISOString() };
       data.calls.unshift(created);

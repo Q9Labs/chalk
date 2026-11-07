@@ -45,7 +45,7 @@ export function ConnectMissing() {
 function ToDashboard() {
   return (
     <div className="sib">
-      <Link to="/dashboard" className="btn sec">
+      <Link to="/dashboard" className="btn sec lg">
         Go to your dashboard
       </Link>
     </div>
@@ -72,7 +72,7 @@ export function ConnectPage({ request }: { readonly request: string }) {
         <ConnectShell app={null} broken title="Chalk couldn’t load this request">
           <p>{errorMessage(state.error)}</p>
           <div className="sib">
-            <button type="button" className="btn" onClick={reload}>
+            <button type="button" className="btn pri lg" onClick={reload}>
               Try again
             </button>
           </div>
@@ -93,7 +93,7 @@ export function ConnectPage({ request }: { readonly request: string }) {
       <ConnectShell app={clientName} broken={!approved} title={approved ? `Connecting ${clientName}` : `${clientName} wasn’t connected`}>
         <p role="status">{approved ? `Taking you back to ${redirectHost}…` : `You cancelled, so ${clientName} has no access to your Chalk account. Taking you back to ${redirectHost}…`}</p>
         <div className="sib">
-          <a className="btn sec" href={decided.url}>
+          <a className="btn sec lg" href={decided.url}>
             Continue to {redirectHost}
           </a>
         </div>
@@ -163,10 +163,10 @@ export function ConnectPage({ request }: { readonly request: string }) {
         </div>
       ) : null}
       <div className="sib">
-        <button type="button" className="btn" disabled={busy !== null} aria-busy={busy === "approve" ? true : undefined} onClick={() => decide("approve")}>
+        <button type="button" className="btn pri lg" disabled={busy !== null} aria-busy={busy === "approve" ? true : undefined} onClick={() => decide("approve")}>
           {busy === "approve" ? `Connecting ${clientName}…` : `Connect ${clientName}`}
         </button>
-        <button type="button" className="btn gh" disabled={busy !== null} aria-busy={busy === "deny" ? true : undefined} onClick={() => decide("deny")}>
+        <button type="button" className="btn gh lg" disabled={busy !== null} aria-busy={busy === "deny" ? true : undefined} onClick={() => decide("deny")}>
           Cancel
         </button>
       </div>
