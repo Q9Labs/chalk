@@ -268,6 +268,7 @@ func newBandwidthEstimator() bandwidthEstimator {
 func (e *bandwidthEstimator) pressure(on bool) {
 	if e.pressured && !on {
 		e.trend = trendline{threshold: e.trend.threshold, thresholdAt: e.trend.thresholdAt}
+		e.overusingSince = 0
 	}
 	e.pressured = on
 }

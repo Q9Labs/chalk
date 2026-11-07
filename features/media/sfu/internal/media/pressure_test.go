@@ -49,19 +49,55 @@ func TestStealRaisesPressureAndSustainedStealCannotFreezeForever(t *testing.T) {
 	}
 }
 
+// tickThrough ticks the control loop every allocationInterval from one moment
+// to another, raising steal pressure on each whole second when steal is on.
+func tickThrough(p *hostPressure, from, to time.Duration, steal float64) {
+	for moment := from; moment <= to; moment += allocationInterval {
+		p.controlTick(at(moment))
+		if moment%time.Second == 0 {
+			p.stealSample(at(moment), steal)
+		}
+	}
+}
+
 func TestTheNodeCountsHowLongPressureHeld(t *testing.T) {
 	var p hostPressure
-	p.controlTick(at(0))
-	p.controlTick(at(450 * time.Millisecond)) // a stall: pressure from 0 to 450 ms plus the hold
-	if got := p.settle(at(time.Minute)); got != 450*time.Millisecond+pressureHold {
-		t.Fatalf("one stall held pressure for %v, want %v", got, 450*time.Millisecond+pressureHold)
+	tickThrough(&p, 0, time.Second, 0)
+	p.controlTick(at(time.Second + 450*time.Millisecond)) // a stall: pressure from 1 s to 1.45 s plus the hold
+	tickThrough(&p, 1600*time.Millisecond, time.Minute, 0)
+	want := 450*time.Millisecond + pressureHold
+	if got := p.underFor; got < want-allocationInterval || got > want+allocationInterval {
+		t.Fatalf("one stall held pressure for %v, want %v", got, want)
 	}
 	// Steal for a long stretch counts to the cap and no further.
-	for second := range 30 {
-		p.stealSample(at(10*time.Second+time.Duration(second)*time.Second), 20)
+	before := p.underFor
+	tickThrough(&p, time.Minute+allocationInterval, time.Minute+30*time.Second, 20)
+	if got := p.underFor - before; got < pressureMax-2*time.Second || got > pressureMax {
+		t.Fatalf("30 s of steal added %v, want the cap %v less the second the first sample takes to arrive", got, pressureMax)
 	}
-	if got := p.settle(at(time.Minute)); got != 450*time.Millisecond+pressureHold+pressureMax {
-		t.Fatalf("30 s of steal added %v, want the cap %v", got-450*time.Millisecond-pressureHold, pressureMax)
+}
+
+func TestAStealSampleThatBeginsBeforeAnActiveStallStillCountsItsWholeSpan(t *testing.T) {
+	var p hostPressure
+	tickThrough(&p, 0, time.Second, 0)
+	p.stealSample(at(3*time.Second), 20) // pressure from 2 s to 5 s
+	p.controlTick(at(6 * time.Second))   // a stall that began at 1 s: pressure from 1 s to 8 s
+	tickThrough(&p, 6100*time.Millisecond, 20*time.Second, 0)
+	want := 7 * time.Second
+	if got := p.underFor; got < want-allocationInterval || got > want+allocationInterval {
+		t.Fatalf("pressure counted %v, want the 7 s from 1 s to 8 s", got)
+	}
+}
+
+func TestTwoOverlappingSignsOfPressureCountTheOverlapOnce(t *testing.T) {
+	var p hostPressure
+	tickThrough(&p, 0, time.Second, 0)
+	p.stealSample(at(time.Second), 20)         // the signal is on from 1 s to 3 s
+	p.controlTick(at(1500 * time.Millisecond)) // a stall from 1 s to 1.5 s inside it moves the end to 3.5 s
+	tickThrough(&p, 1600*time.Millisecond, 20*time.Second, 0)
+	want := 2500 * time.Millisecond
+	if got := p.underFor; got < want-allocationInterval || got > want+allocationInterval {
+		t.Fatalf("pressure counted %v, want %v", got, want)
 	}
 }
 
@@ -126,15 +162,5 @@ func TestRunningProbesCountAgainstTheNodesProbeBudget(t *testing.T) {
 	budget = node.shareHostState(idle, now)
 	if !budget.take() || !budget.take() || budget.take() {
 		t.Fatal("an idle node must give out exactly maxProbes slots")
-	}
-}
-
-func TestAStallThatBeginsBeforeTheRunItFollowsStillCountsItsWholeSpan(t *testing.T) {
-	var p hostPressure
-	p.controlTick(at(time.Second))
-	p.stealSample(at(3*time.Second), 20) // pressure from 2 s to 5 s
-	p.controlTick(at(6 * time.Second))   // a stall that began at 1 s: pressure from 1 s to 8 s
-	if got := p.settle(at(9 * time.Second)); got != 7*time.Second {
-		t.Fatalf("pressure counted %v, want the 7 s from 1 s to 8 s", got)
 	}
 }

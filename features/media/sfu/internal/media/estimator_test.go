@@ -380,3 +380,49 @@ func TestADecreaseAlreadyMadeDoesNotLetTheNextOveruseSkipTheWait(t *testing.T) {
 		t.Fatalf("estimate fell from %.0f to %.0f on the first new read of overuse", lowered, e.current())
 	}
 }
+
+func TestOveruseReadDuringAStallDoesNotShortenTheWaitAfterIt(t *testing.T) {
+	run := newSimulation(&bottleneck{capacity: 20e6, queueBytes: 1 << 20, delay: int64(20 * time.Millisecond)})
+	run.run(20*time.Second, steady(3e6), 0)
+	e := run.estimator
+	before := e.current()
+	now := int64(30 * time.Second)
+	step := 0
+	feed := func() {
+		var acks []packetAck
+		for index := range 5 {
+			sent := now + int64(index)*int64(10*time.Millisecond)
+			delay := int64(20*time.Millisecond) + int64(step*5+index)*int64(3*time.Millisecond)
+			acks = append(acks, packetAck{sent: sent, arrival: sent + delay, size: 1000, received: true})
+		}
+		now += int64(50 * time.Millisecond)
+		step++
+		e.onFeedback(acks, now)
+	}
+	e.pressure(true)
+	for e.trend.signal != signalOveruse {
+		feed()
+		if step > 60 {
+			t.Fatal("a growing delay never read as overuse")
+		}
+	}
+	// The stall lasts a while. When it ends the trend starts again, and one large
+	// batch of late feedback can fill it. Its first read of overuse must wait for
+	// the node's verdict too.
+	now += int64(time.Second)
+	e.pressure(false)
+	var acks []packetAck
+	for index := range 200 {
+		sent := now + int64(index)*int64(10*time.Millisecond)
+		delay := int64(20*time.Millisecond) + int64(index)*int64(3*time.Millisecond)
+		acks = append(acks, packetAck{sent: sent, arrival: sent + delay, size: 1000, received: true})
+	}
+	now += int64(2 * time.Second)
+	e.onFeedback(acks, now)
+	if e.trend.signal != signalOveruse {
+		t.Fatal("a batch of growing delay never read as overuse")
+	}
+	if e.current() < before {
+		t.Fatalf("estimate %.0f fell at the first read of overuse after a stall, from %.0f", e.current(), before)
+	}
+}

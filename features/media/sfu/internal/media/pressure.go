@@ -31,8 +31,7 @@ type hostPressure struct {
 	since    int64 // start of the current run of pressure
 	until    int64 // pressure lasts to here
 
-	counted  int64         // pressure up to here is already in underFor
-	underFor time.Duration // how long pressure has held since start
+	underFor time.Duration // how long pressure has held since start, in whole control ticks
 
 	stalls       uint64        // control-loop stalls since start
 	longestStall time.Duration // the longest since the last takeLongest
@@ -43,12 +42,23 @@ type hostPressure struct {
 func (p *hostPressure) controlTick(now int64) (from int64, stalled bool) {
 	last := p.lastTick
 	p.lastTick = now
-	if last == 0 || now-last <= int64(stallGap) {
+	if last == 0 {
 		return 0, false
 	}
-	p.raise(last, now)
-	p.stalls++
-	p.longestStall = max(p.longestStall, time.Duration(now-last))
+	stalled = now-last > int64(stallGap)
+	if stalled {
+		p.raise(last, now)
+		p.stalls++
+		p.longestStall = max(p.longestStall, time.Duration(now-last))
+	}
+	// Pressure is counted by the tick that finds it on, for the whole span since
+	// the last tick, so a stall counts in full and no span counts twice.
+	if p.active(now) {
+		p.underFor += time.Duration(now - last)
+	}
+	if !stalled {
+		return 0, false
+	}
 	return last, true
 }
 
@@ -67,26 +77,10 @@ func (p *hostPressure) stealSample(now int64, percent float64) {
 }
 
 func (p *hostPressure) raise(from, now int64) {
-	p.settle(now)
 	if now >= p.until {
-		if p.until != 0 && from < p.since {
-			// A late tick starts its stall before the run it follows.
-			p.underFor += time.Duration(p.since - from)
-		}
 		p.since = from
 	}
 	p.until = now + int64(pressureHold)
-}
-
-// settle adds the pressure held up to now to underFor, so telemetry can say
-// what share of the time the signal is on.
-func (p *hostPressure) settle(now int64) time.Duration {
-	end := min(now, p.until, p.since+int64(pressureMax))
-	if start := max(p.counted, p.since); end > start {
-		p.underFor += time.Duration(end - start)
-	}
-	p.counted = max(p.counted, end)
-	return p.underFor
 }
 
 // active reports whether the node has shown pressure recently.
