@@ -9,13 +9,19 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("react-native", () => ({ AppState: { currentState: "active", addEventListener: vi.fn(() => ({ remove: vi.fn() })) } }));
 vi.mock("@cloudflare/react-native-webrtc", () => ({ RTCPeerConnection: mocks.peerConnection, mediaDevices: {} }));
-vi.mock("@q9labsai/chalk-client/effect", () => ({ createSpaceClientForPlatform: mocks.platform }));
+vi.mock("@q9labsai/chalk-client/effect", async (importActual) => ({ ...(await importActual<typeof import("@q9labsai/chalk-client/effect")>()), createSpaceClientForPlatform: mocks.platform }));
 import { createNativeSpaceClient } from "./create-native-space-client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   mocks.platform.mockClear();
   mocks.peerConnection.mockReset();
+});
+
+it("reaches Sync on the nightly host when the app talks to the nightly API", () => {
+  createNativeSpaceClient({ space: "test", baseUrl: "https://nightly-api.chalkmeet.com", getAccess: async () => Promise.reject(new Error("unused")) });
+
+  expect(mocks.platform.mock.calls[0]?.[1].syncUrl).toBe("wss://nightly-sync.chalkmeet.com/v1/sync");
 });
 
 it("builds the native peer connection from an own SFU grant, which names no Cloudflare STUN server", () => {
