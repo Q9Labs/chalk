@@ -82,6 +82,15 @@ test("token scanner, exception, baseline and CI changes retain executable token 
   }
 });
 
+test("gate data files do not force the full gate", () => {
+  for (const file of [".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]) {
+    const plan = createGatePlan([file]);
+    assert.equal(plan.full, false, file);
+    assert.deepEqual(ciJobs([file]), { api: false, sync: false, rootGroups: ["checks"] }, file);
+  }
+  assert.equal(createGatePlan(["scripts/gates/chalk-gate-plan.mjs"]).full, true);
+});
+
 test("dependency changes select the package boundary check", () => {
   assert.equal(boundaryTask(["pnpm-lock.yaml"])?.selected, true);
 });
@@ -246,7 +255,9 @@ test("every path that makes q9gate run in full also makes Chalk's plan run in fu
   const workspaces = discoverWorkspaces();
   const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" }).split("\n").filter(Boolean);
   const nested = ["apps/web/turbo.json", "packages/ui/lefthook.yml", "apps/sync/scripts/gates/run.sh", "tools/x/.github/workflows/ci.yml", "apps/web/public/logo.svg", "osv-scanner.toml", ".tool-versions"];
-  for (const file of [...tracked, ...nested]) {
+  // q9gate also treats these as full-required, but only the always-selected checks lane reads them in CI.
+  const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
+  for (const file of [...tracked, ...nested].filter((candidate) => !gateDataFiles.has(candidate))) {
     if (classify([file], gateConfig.classifiers).fullRequired) assert.equal(createGatePlan([file], { workspaces }).full, true, file);
   }
 });

@@ -27,6 +27,7 @@ consumer workspaces whose tests drive Chromium), `dashboard-engine` (the dashboa
 budget, Publint and Are The Types Wrong, which read the build output). The call
 bundle budget and the leak journeys run only when a file the call-states page
 imports changes (see `callUi` in `chalk-gate-plan.mjs`) or on a full gate.
+`Select gate jobs` and `Root gate` run on `ubuntu-slim`, which does not wait for one of the organisation's 20 hosted-runner slots. Editing `.fallowrc.json` or the design-token baseline in `scripts/gates/` selects only the `checks` group; any other file under `scripts/gates/` or `package.json` still selects the full gate.
 Each job sets `GATE_LANE_GROUP`, so q9gate plans only that group's lanes and
 keeps its own selection inside the group. `Root gate` passes only when every
 selected group passed; a job that the planner skips counts as passed. When the

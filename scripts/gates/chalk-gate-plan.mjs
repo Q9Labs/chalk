@@ -12,10 +12,11 @@ const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", "
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
 const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
-// q9gate matches these by basename and directory anywhere in the tree; matching at least as much keeps the CI job
-// selection from skipping a job that q9gate would run in full mode.
-const gateDefinitionNames = new Set([".dependency-cruiser.cjs", ".fallowrc.json", "gate.config.ts", "lefthook.yml", "turbo.json"]);
+// q9gate matches these by basename and directory anywhere in the tree. The CI job selection matches the same names,
+// except for the data files below, which only the always-selected checks lane reads.
+const gateDefinitionNames = new Set([".dependency-cruiser.cjs", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
+const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -79,6 +80,7 @@ function startsWithAny(file, prefixes) {
 }
 
 function isGateDefinition(file) {
+  if (gateDataFiles.has(file)) return false;
   return gateDefinitionPaths.has(file) || gateDefinitionNames.has(path.posix.basename(file)) || gateDefinitionDirectories.some((directory) => file.startsWith(directory) || file.includes(`/${directory}`));
 }
 
