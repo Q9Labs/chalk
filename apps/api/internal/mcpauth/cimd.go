@@ -186,10 +186,14 @@ func (f httpsMetadataFetcher) Fetch(ctx context.Context, clientID string) ([]byt
 		MaxResponseHeaderBytes: 16 << 10,
 	}
 	client := &http.Client{Transport: transport, Timeout: metadataFetchLimit, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
+	// The request goes to the address that passed the public check; the document's own host stays in the
+	// Host header and the TLS server name, so the certificate is still verified against it.
+	target := url.URL{Scheme: "https", Host: net.JoinHostPort(pinned.String(), "443"), Path: u.Path, RawPath: u.RawPath}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		return nil, err
 	}
+	request.Host = u.Hostname()
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("User-Agent", "Chalk-MCP-OAuth/1.0")
 	response, err := client.Do(request)
