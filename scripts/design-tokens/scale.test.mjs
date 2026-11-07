@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 const scale = JSON.parse(readFileSync(new URL("./scale.json", import.meta.url), "utf8"));
@@ -35,3 +38,11 @@ for (const kind of Object.keys(cssNames)) {
     }
   });
 }
+
+test("the codemod rewrites a decimal length in a CSS template as one whole value", () => {
+  const dir = mkdtempSync(join(tmpdir(), "codemod-"));
+  const file = join(dir, "Fixture.tsx");
+  writeFileSync(file, "export const css = `.a { gap: 2.5rem; padding: 14px; }`;\n");
+  execFileSync("node", [new URL("./codemod.mjs", import.meta.url).pathname, "--write", file], { stdio: "pipe" });
+  assert.equal(readFileSync(file, "utf8"), "export const css = `.a { gap: var(--space-10); padding: var(--space-3); }`;\n");
+});

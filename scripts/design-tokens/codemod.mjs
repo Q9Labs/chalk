@@ -15,7 +15,7 @@ const SCRIPT_RADIUS = /^border(?:(?:Top|Bottom)(?:Left|Right|Start|End)|Start(?:
 
 const LENGTH = /(?<![\w.#-])-?(?:\d*\.)?\d+(?:px|rem)(?![\w%])/giu;
 const CSS_DECLARATION = /(?<![\w-])([a-z-]+)\s*:\s*([^;{}]+)(?=[;}])/giu;
-const SCRIPT_ENTRY = /\b([A-Za-z]+)(\s*:\s*)(?:"([^"\n]*)"|'([^'\n]*)'|(-?(?:\d+(?:\.\d+)?|\.\d+))\b)/gu;
+const SCRIPT_ENTRY = /\b([A-Za-z]+)(\s*:\s*)(?:"([^"\n]*)"|'([^'\n]*)'|(-?(?:\d+(?:\.\d+)?|\.\d+))(?![\w.%]))/gu;
 const TEMPLATE = /`(?:\\.|[^`\\])*`/gu;
 const TAILWIND = /(?<![\w-])(-?)(p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy]|rounded(?:-(?:t|r|b|l|s|e|tl|tr|bl|br|ss|se|es|ee))?|text)-\[(-?[\d.]+)(px|rem)\]/gu;
 
