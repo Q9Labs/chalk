@@ -3,7 +3,7 @@ import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { z } from "../../lib/zod-mini";
+import { Schema } from "effect";
 
 import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
 import { act, clearOwnerSeats, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
@@ -14,14 +14,14 @@ import { ErrorPanel } from "./kit";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
-const ownerReloadIntent = z.object({ ownerJoinKey: z.uuid(), ownerUserId: z.string() });
+const isOwnerReloadIntent = Schema.is(Schema.Struct({ ownerJoinKey: Schema.String.check(Schema.isUUID()), ownerUserId: Schema.String }));
 
 function readOwnerReload(spaceId: string, userId: string) {
   try {
     const encoded = window.sessionStorage.getItem(reloadRejoinStorageKey);
     const marker = readReloadRejoin(window.sessionStorage, spaceId);
-    const saved = encoded ? ownerReloadIntent.safeParse(JSON.parse(encoded)) : null;
-    return marker && saved?.success && saved.data.ownerUserId === userId ? { episodeId: marker.episodeId, joinKey: saved.data.ownerJoinKey } : null;
+    const saved: unknown = encoded ? JSON.parse(encoded) : null;
+    return marker && isOwnerReloadIntent(saved) && saved.ownerUserId === userId ? { episodeId: marker.episodeId, joinKey: saved.ownerJoinKey } : null;
   } catch {
     return null;
   }
