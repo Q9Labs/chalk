@@ -285,3 +285,77 @@ func TestAPausedTileBeforeAPlayingOneResumes(t *testing.T) {
 		t.Fatal("the earlier paused tile never resumed while the later tile held h")
 	}
 }
+
+func TestAStalledNodeNeitherDropsNorPausesATile(t *testing.T) {
+	// The estimate fell to 100 kbit/s because the node stalled for 400 ms, so no layer fits.
+	stalled := estimateOf(100_000, 100_000)
+	stalled.pressured = true
+	var state allocation
+	tiles := []tile{camera(&state)}
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, at(0))
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, at(600*time.Millisecond))
+	if state.rid != "h" {
+		t.Fatalf("rid %q on a proven 5 Mbit/s path, want h", state.rid)
+	}
+	for tick := range 40 { // four seconds of a node that keeps the estimate low
+		if probe := allocate(tiles, stalled, 0, 0, at(time.Second+time.Duration(tick)*100*time.Millisecond)); probe != 0 {
+			t.Fatalf("asked for a probe of %.0f while the node was stalled", probe)
+		}
+	}
+	if state.rid != "h" || state.paused {
+		t.Fatalf("rid %q paused %v after a stall, want h and flowing", state.rid, state.paused)
+	}
+	// The same low estimate on a healthy node is real congestion and still drops the tile.
+	allocate(tiles, estimateOf(100_000, 100_000), 0, 0, at(5*time.Second))
+	if state.rid != "l" {
+		t.Fatalf("rid %q on a real 100 kbit/s estimate, want l", state.rid)
+	}
+}
+
+// A 650 kbit/s stream on a 600 kbit/s path, with the control loop freezing for
+// 300 ms every 2.1 s, must still give up its high layer once the cap on pressure
+// ends. Each freeze begins inside the hold of the one before, so a cap that
+// restarted on every freeze would hold the layer for as long as the freezes last.
+func TestRepeatedControlFreezesHoldAHighLayerNoLongerThanTheCap(t *testing.T) {
+	link := &bottleneck{capacity: 600_000, queueBytes: 60_000, delay: int64(20 * time.Millisecond)}
+	run := newSimulation(link)
+	var node hostPressure
+	var state allocation
+	tiles := []tile{{layers: []layerRate{{rid: "h", bps: 650_000}, {rid: "l", bps: 300_000}}, state: &state}}
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, run.now)
+	allocate(tiles, estimateOf(5e6, 5e6), 0, 0, run.now+int64(600*time.Millisecond))
+	if state.rid != "h" {
+		t.Fatalf("rid %q before the run, want h", state.rid)
+	}
+	sending := func(*simulation) float64 {
+		if state.rid == "h" {
+			return 650_000
+		}
+		return 300_000
+	}
+	start := run.now
+	var dropped time.Duration
+	for tick := time.Duration(0); tick < 40*time.Second && dropped == 0; tick += allocationInterval {
+		frozen := tick >= 300*time.Millisecond && (tick-300*time.Millisecond)%(2100*time.Millisecond) < 300*time.Millisecond
+		run.run(allocationInterval, sending, 0)
+		if frozen {
+			continue
+		}
+		node.controlTick(run.now)
+		pressured := node.active(run.now)
+		run.estimator.pressure(pressured)
+		estimate := estimateOf(run.estimator.current(), run.estimator.proven(run.now))
+		estimate.pressured = pressured
+		allocate(tiles, estimate, 0, 0, run.now)
+		if state.rid == "l" || state.paused {
+			dropped = time.Duration(run.now - start)
+		}
+	}
+	t.Logf("the high layer went after %v", dropped)
+	if dropped == 0 {
+		t.Fatalf("the high layer was still sent 40 s into repeating freezes on a path too small for it")
+	}
+	if limit := pressureMax + 2*time.Second; dropped > limit {
+		t.Fatalf("the high layer went after %v, want within %v of the first freeze", dropped, limit)
+	}
+}

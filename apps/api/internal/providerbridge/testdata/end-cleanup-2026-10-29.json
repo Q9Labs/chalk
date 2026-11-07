@@ -1,0 +1,55 @@
+{
+  "provenance": "Sanitized pending operation and receipt rows from the 2026-10-29 episode provider-details ledger; publication snapshot and GET session read taken read-only the same day. IDs, request keys and provider references replaced. Raw close response unavailable; failure status/stage/code retained from its correlated API log.",
+  "operations": [
+    {
+      "operation_id": "44444444-4444-4444-8444-000000000001",
+      "operation_name": "participant_leave",
+      "status": "pending",
+      "attempt_count": 51,
+      "fence_active": true,
+      "applied_event_id": null,
+      "receipt": {
+        "effect": "media.remove_participant",
+        "state": "dispatching",
+        "outcome": null,
+        "reason": "provider_provider_internal",
+        "last_error_code": "provider_provider_internal",
+        "completed_at": null
+      }
+    },
+    {
+      "operation_id": "44444444-4444-4444-8444-000000000002",
+      "operation_name": "tenant_end_episode",
+      "status": "pending",
+      "attempt_count": 46,
+      "fence_active": true,
+      "applied_event_id": null,
+      "receipt": {
+        "effect": "media.end_episode",
+        "state": "dispatching",
+        "outcome": null,
+        "reason": "provider_provider_internal",
+        "last_error_code": "provider_provider_internal",
+        "completed_at": null
+      }
+    }
+  ],
+  "publication": {
+    "participant_id": "33333333-3333-4333-8333-333333333333",
+    "source": "microphone",
+    "enabled": false,
+    "publication_id": "chalk_pub_v1.eyJjIjoicmV0aXJlZC1jb25uZWN0aW9uIiwibSI6IjAiLCJ0IjoibWljcm9waG9uZS1maXh0dXJlIiwiZyI6MX0"
+  },
+  "session_response": {
+    "tracks": [],
+    "dataChannels": []
+  },
+  "close_failure": {
+    "http_status": 200,
+    "failure_stage": "track",
+    "provider_code": "provider_internal",
+    "request_track_count": 1,
+    "response_track_count": 1,
+    "failed_track_count": 1
+  }
+}
