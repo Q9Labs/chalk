@@ -109,13 +109,22 @@ jobs:
         run: |
           mkdir -p .verify/ci
           cp -r .logs .verify/ci/logs 2>/dev/null || true
+          # The evidence is downloadable from a public repository, so drop any file that holds a credential.
+          token=$(node -p 'require("./.private/chalk-dev/seed.json").systemToken' 2>/dev/null || true)
+          for secret in "$CHALK_CLOUDFLARE_REALTIME_APP_ID" "$CHALK_CLOUDFLARE_REALTIME_APP_SECRET" "$token"; do
+            [ -n "$secret" ] && grep -rlaF -- "$secret" .verify | xargs -r rm -f
+          done
           pnpm dev:down
 
+      # .verify is a hidden directory, which upload-artifact skips unless told otherwise; without that no run ever
+      # uploaded evidence. Read diagnostics.json first: it holds each page's tile state, WebRTC stats and failed requests.
       - name: Upload evidence
-        if: failure()
-        uses: actions/upload-artifact@v4
+        if: ${{ !success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: boot-smoke-evidence-${{ github.run_id }}
+          name: boot-smoke-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           # The runtime directory holds the system token, so only evidence and the copied service logs are uploaded.
           path: .verify/
+          include-hidden-files: true
           if-no-files-found: warn
+          retention-days: 7

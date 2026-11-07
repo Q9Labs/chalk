@@ -54,6 +54,7 @@ Evidence goes to `.verify/<run-id>/` (git-ignored). Choose a unique `<run-id>`, 
 - `screenshots/`: entrance and in-call screenshots per participant, and a failure screenshot on error.
 - `video/`: one recording per participant (webm).
 - console.json and network.json: browser console and every `/v1` response (method, path, status).
+- diagnostics.json: written only when a join-call step fails. Per page: tile and track state, first-frame times, WebRTC stats (inbound and outbound video counters, ICE and transport state, selected candidate pair type), console errors and failed `/v1` requests (status, error code).
 - attendance.json: the API's attendance for the Episode, read back with the system token.
 
 Proof standards: enter through the invite page and the buttons a user presses, not internal setters; check the resulting state in the page (decoded frames of the remote tile must increase) and through a second view (the API attendance lists both people); keep the SFU real. Only the camera and microphone are fakes. The helper scans every text artifact for the run's credentials and exits 3 if one appears. If it does, delete the artifact and fix the leak before you share anything.
