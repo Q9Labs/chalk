@@ -114,7 +114,7 @@ func TestMCPControlCallActionsNeedTheirFields(t *testing.T) {
 		`{"action":"access_grant",` + base + `}`:                     "also requires: participant_id, participant_generation",
 		`{"action":"admit",` + base + `}`:                            "also requires: name, role, request_key",
 		`{"action":"mute_everyone",` + base + `}`:                    "action",
-		`{"action":"cancel_join",` + base + `,"participant_id":"x"}`: "action",
+		`{"action":"cancel_join",` + base + `,"participant_id":"` + space.String() + `"}`: "action",
 	} {
 		response := callControlCall(t, handler, writer, arguments)
 		if !strings.Contains(response.Body.String(), `"isError":true`) || !strings.Contains(response.Body.String(), want) {
