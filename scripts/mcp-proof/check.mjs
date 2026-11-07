@@ -77,7 +77,7 @@ function sessionHeaders(response) {
 async function checkToolList(fetchImpl, mcpUrl, apiKey, sessionHeaders) {
   const listed = await json(await rpc(fetchImpl, mcpUrl, apiKey, 3, "tools/list", {}, sessionHeaders), "tools/list");
   const names = (listed.result?.tools ?? []).map((tool) => tool.name);
-  if (!names.includes("chalk_list_spaces")) fail("tools/list", `expected chalk_list_spaces among ${names.length} tools`);
+  if (!names.includes("chalk_inspect_spaces")) fail("tools/list", `expected chalk_inspect_spaces among ${names.length} tools`);
   return names.length;
 }
 
@@ -86,9 +86,9 @@ function toolSucceeded(status, result) {
 }
 
 async function checkToolCall(fetchImpl, mcpUrl, apiKey, headers) {
-  const called = await rpc(fetchImpl, mcpUrl, apiKey, 4, "tools/call", { name: "chalk_list_spaces", arguments: {} }, headers);
-  const result = await json(called, "tools/call chalk_list_spaces");
-  if (!toolSucceeded(called.status, result)) fail("tools/call chalk_list_spaces", `HTTP ${called.status}: ${JSON.stringify(result).slice(0, 300)}`);
+  const called = await rpc(fetchImpl, mcpUrl, apiKey, 4, "tools/call", { name: "chalk_inspect_spaces", arguments: {} }, headers);
+  const result = await json(called, "tools/call chalk_inspect_spaces");
+  if (!toolSucceeded(called.status, result)) fail("tools/call chalk_inspect_spaces", `HTTP ${called.status}: ${JSON.stringify(result).slice(0, 300)}`);
 }
 
 /** Runs the checks a person connecting an MCP client would hit, in order. Returns the step names that passed. */

@@ -38,7 +38,7 @@ const text = "Release planning · 1 Nov 2026 · 42 min\nLanguages: Urdu\n\n[00:0
 const filename = "attachment; filename=transcript-2026-11-01.txt; filename*=UTF-8''%D8%A7%D8%B1%D8%AF%D9%88-2026-11-01.txt";
 async function engine() {
   const api = await Effect.runPromise(createChalkEffectClient({ baseUrl: env.CHALK_API_ORIGIN, auth: { type: "bearer", token: env.DASHBOARD_SERVICE_TOKEN } }));
-  return { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(4)), dashboardOrigin: env.DASHBOARD_ORIGIN };
+  return { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(4)), dashboardOrigin: env.DASHBOARD_ORIGIN, mcpUrl: "https://api.example.test/mcp" };
 }
 afterEach(() => vi.restoreAllMocks());
 

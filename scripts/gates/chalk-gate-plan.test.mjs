@@ -82,6 +82,13 @@ test("token scanner, exception, baseline and CI changes retain executable token 
   }
 });
 
+test("the budget file and the scorecard module are known paths, so a budget change plans a scoped gate", () => {
+  for (const file of ["perf/budgets.json", "features/scorecard/budgets.mjs"]) {
+    assert.equal(createGatePlan([file]).full, false, file);
+  }
+  assert.doesNotThrow(() => createGatePlan(["perf/budgets.json"], { target: "web" }));
+});
+
 test("gate data files do not force the full gate", () => {
   for (const file of [".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]) {
     const plan = createGatePlan([file]);

@@ -120,8 +120,8 @@ def preflight(args, db):
     base = args.base_url.rstrip("/") + "/mcp"
     endpoint = base if args.arm == "tools" else base + "/code"
     catalog = rpc(endpoint, f["key"], "tools/list", {})["tools"]
-    # The runner key lacks tenants:write on purpose (the missing-scope task), so the filtered list is 24 of 25.
-    if not catalog or args.arm == "tools" and len(catalog) != 24:
+    # The runner key lacks tenants:write on purpose (the missing-scope task), so the filtered list is 25 of 26.
+    if not catalog or args.arm == "tools" and len(catalog) != 25:
         raise RuntimeError("Unexpected MCP tool catalog; update the suite deliberately")
     if args.arm == "code":
         if {t["name"] for t in catalog} != {"chalk_search_api", "chalk_execute"}:

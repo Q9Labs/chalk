@@ -101,6 +101,10 @@ type DialogProps = {
   readonly description?: ReactNode;
   readonly alert?: boolean;
   readonly wide?: boolean;
+  /** On a phone the sheet fills the screen height. */
+  readonly tall?: boolean;
+  /** Artwork above the title, such as the app and Chalk logos. */
+  readonly lead?: ReactNode;
   readonly onClose: () => void;
   readonly onSubmit?: () => void;
   readonly children?: ReactNode;
@@ -108,7 +112,7 @@ type DialogProps = {
 };
 
 /** Traps focus, closes on Esc or the scrim, and gives focus back to whatever opened it. */
-export function Dialog({ title, description, alert, wide, onClose, onSubmit, children, actions }: DialogProps) {
+export function Dialog({ title, description, alert, wide, tall, lead, onClose, onSubmit, children, actions }: DialogProps) {
   const card = useRef<HTMLElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -136,6 +140,7 @@ export function Dialog({ title, description, alert, wide, onClose, onSubmit, chi
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
         <Icon name="x" />
       </button>
+      {lead}
       <h2 id={titleId}>{title}</h2>
       {description ? <p id={descriptionId}>{description}</p> : null}
       {children}
@@ -143,7 +148,7 @@ export function Dialog({ title, description, alert, wide, onClose, onSubmit, chi
     </>
   );
   const shared = {
-    className: wide ? "dlg w" : "dlg",
+    className: ["dlg", wide && "w", tall && "tall"].filter(Boolean).join(" "),
     role: alert ? "alertdialog" : "dialog",
     "aria-modal": true,
     "aria-labelledby": titleId,

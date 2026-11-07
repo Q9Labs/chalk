@@ -7,8 +7,8 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
   "connection.sync_start_failed": "Couldn’t reach the call service. Try again.",
   "connection.sync_hello_timeout": "The call service did not respond in time. Try again.",
   "connection.sync_recovery_exhausted": "You’re disconnected from the call. Rejoin to continue.",
-  "connection.media_start_failed": "Audio and video could not connect. Try again.",
-  "connection.media_recovery_exhausted": "Audio and video could not reconnect. Try again.",
+  "connection.media_start_failed": "Audio and video could not connect. Your network may block calls. Try again, or switch networks.",
+  "connection.media_recovery_exhausted": "Audio and video could not reconnect. Check your network, then try again.",
   "environment.unsupported": "This device cannot start the call. Use an up-to-date browser over HTTPS, or update the app.",
 };
 
@@ -16,4 +16,13 @@ const FAILURE_DETAILS: Readonly<Partial<Record<ErrorCode, string>>> = {
 export function getConnectionFailureDetail({ code, sync }: { readonly code?: ErrorCode; readonly sync?: ClientFailure["sync"] }): string {
   if (sync?.stage === "upgrade") return sync.closeCode !== null ? "The connection closed before the call service could be reached. Try again." : "A connection to the call service could not be opened. Try again.";
   return (code && FAILURE_DETAILS[code]) ?? DEFAULT_FAILURE_DETAIL;
+}
+
+const RECORDING_FAILURE_DETAILS: Readonly<Record<string, string>> = {
+  recording_capture_unsupported: "Recording isn’t available in this call yet.",
+};
+
+/** What to tell people when the Recording failed, shared by web and native call screens. */
+export function getRecordingFailureDetail(failureCode: string | null): string {
+  return (failureCode && RECORDING_FAILURE_DETAILS[failureCode]) ?? "Recording failed. Try again.";
 }

@@ -61,11 +61,13 @@ Results and per-arm Markdown reports checkpoint after each trial. Comparison ref
 
 ## Recorded proof
 
-The [November 1, 2026 comparison](proof/comparison-k1.md) contains full-suite k=1 runs for both arms, with sanitized [tools JSON](proof/tools-k1.json) and [code JSON](proof/code-k1.json). Both used harness `47cffbf3f`, API source `529a9e7e9db6` and Claude Code 2.1.316. Tools passed 20/20 operational tasks; code passed 19/20, reporting attendance as unsupported. Both failed the four known transcript-text gaps. Every trial had API-side evidence and complete CLI accounting.
+The [November 1, 2026 comparison](proof/comparison-k1.md) contains full-suite k=1 runs for both arms. Both used harness `47cffbf3f`, API source `529a9e7e9db6` and Claude Code 2.1.316. Tools passed 20/20 operational tasks; code passed 19/20, reporting attendance as unsupported. Both failed the four known transcript-text gaps. Every trial had API-side evidence and complete CLI accounting.
 
 The observed CLI costs were $0.4658 (tools) and $0.8971 (code). Elapsed times including fixtures and SSH were 10.0 and 12.1 minutes. A linear extrapolation gives approximately **$4.09 and 66 minutes** for both arms at k=3, concurrency two. This is not a measured k=3 result or a winner selection.
 
-The [k=3 comparison](proof/comparison-k3.md) (sanitized [tools JSON](proof/tools-k3.json) and [code JSON](proof/code-k3.json)) ran 144 sessions on harness `ef0ed54af` and Claude Code 2.1.318. Accuracy tied: tools passed 57 of 72 trials (57 of 60 operational) and code passed 58 of 72 (58 of 60). Code mode used about 2.5 times the output tokens ($2.82 against $1.54 in CLI list-price accounting), about 1.8 times the wall time per trial, and its programs made 83 failed shared-operation calls against 9 for tools. Two code trials lacked server evidence, so that arm returned the infrastructure exit code. Code mode showed no accuracy or cost advantage on this task suite.
+The [k=3 comparison](proof/comparison-k3.md) ([tools summary](proof/tools-k3.json) and [code summary](proof/code-k3.json)) ran 144 sessions on harness `ef0ed54af` and Claude Code 2.1.318. Accuracy tied: tools passed 57 of 72 trials (57 of 60 operational) and code passed 58 of 72 (58 of 60). Code mode used about 2.5 times the output tokens ($2.82 against $1.54 in CLI list-price accounting), about 1.8 times the wall time per trial, and its programs made 83 failed shared-operation calls against 9 for tools. Two code trials lacked server evidence, so that arm returned the infrastructure exit code. Code mode showed no accuracy or cost advantage on this task suite.
+
+The committed k=3 JSON files hold the run configuration, the summary and one slim record per trial (task, result, failure category, time, cost, turns, call counts). `run.py report` rebuilds the k=3 comparison from them. The full sanitized runs, with checks, tool lists and server outcomes, sit in the `chalk-miscellaneous` R2 bucket under `evals/mcp/2026-11-01/` as `tools-k1`, `code-k1`, `tools-k3` and `code-k3` JSON; the k=1 runs are kept there only.
 
 ## Grading and accounting
 
@@ -94,7 +96,7 @@ The API gate runs the Python checks, shell syntax check and tagged host compile.
 
 ## Cost, time and cleanup
 
-A full comparison is 144 trials. The configured stop budgets total $216, though an in-flight request can overshoot a CLI budget. Actual cost should be much lower; use the committed proof report's measured extrapolation. Trial timeouts bound model execution to 240 seconds each. At concurrency two, the model-time upper bound is about 4.8 hours for both arms, plus fixtures, SSH and setup. These are bounds, not performance estimates.
+A full comparison is 150 trials. The configured stop budgets total $225, though an in-flight request can overshoot a CLI budget. Actual cost should be much lower; use the committed proof report's measured extrapolation. Trial timeouts bound model execution to 240 seconds each. At concurrency two, the model-time upper bound is about 4.8 hours for both arms, plus fixtures, SSH and setup. These are bounds, not performance estimates.
 
 Stop the stack with Ctrl-C or `tmux send-keys -t mcp-eval C-c`, then stop the SSH forward. The script stops its host and removes its owned Postgres container. Delete the kept Instabox when finished:
 

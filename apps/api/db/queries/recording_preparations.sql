@@ -5,6 +5,8 @@ with written as (
     from spaces
     where tenant_id = sqlc.arg(tenant_id) and id = sqlc.arg(space_id)
       and archived_at is null and recording_policy <> 'disabled'
+      -- The own SFU has no capture path yet, so no Space that selects it, directly or through its Tenant, holds a preparation.
+      and coalesce(nullif(btrim(media_plane), ''), (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
       and (sqlc.arg(expected_revision)::bigint = 0 or exists (
           select 1 from recording_preparations where tenant_id = sqlc.arg(tenant_id) and space_id = sqlc.arg(space_id)
       ))
@@ -72,6 +74,7 @@ where preparation.tenant_id = sqlc.arg(tenant_id) and preparation.space_id = sql
 
 -- name: GetRecordingEntranceEligibility :one
 select spaces.recording_policy, spaces.archived_at,
+    coalesce(nullif(btrim(spaces.media_plane), ''), (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '')::text as media_plane,
     (exists (select 1 from sync_recordings where sync_recordings.tenant_id = spaces.tenant_id
         and sync_recordings.space_id = spaces.id and sync_recordings.status in ('starting', 'recording', 'stopping'))
      or exists (select 1 from recordings join episodes on episodes.id = recordings.episode_id

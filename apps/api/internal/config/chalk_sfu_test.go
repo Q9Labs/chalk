@@ -70,3 +70,20 @@ func TestChalkSFUConfigNeedsItsCertificates(t *testing.T) {
 		t.Fatalf("error %v, want the missing client key named", err)
 	}
 }
+
+func TestChalkSFUAllowedSpacesAreEmptyUntilListed(t *testing.T) {
+	setChalkSFUEnv(t, "sfu-a=https://sfu-a.chalk.test:8443")
+	t.Setenv(ChalkSFUAllowedSpaces, "")
+	config, err := loadChalkSFUConfig()
+	if err != nil || config.AllowedSpaces.Size() != 0 {
+		t.Fatalf("turning the own SFU on must allow no Space by itself: size %d, %v", config.AllowedSpaces.Size(), err)
+	}
+	t.Setenv(ChalkSFUAllowedSpaces, "11111111-1111-4111-8111-111111111111, 22222222-2222-4222-8222-222222222222")
+	if config, err = loadChalkSFUConfig(); err != nil || config.AllowedSpaces.Size() != 2 {
+		t.Fatalf("two Spaces: size %d, %v", config.AllowedSpaces.Size(), err)
+	}
+	t.Setenv(ChalkSFUAllowedSpaces, "11111111-1111-4111-8111-111111111111,oops")
+	if _, err := loadChalkSFUConfig(); err == nil || !strings.Contains(err.Error(), ChalkSFUAllowedSpaces) {
+		t.Fatalf("error %v, want the setting named", err)
+	}
+}

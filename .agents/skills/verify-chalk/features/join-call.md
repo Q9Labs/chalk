@@ -29,7 +29,8 @@ Preconditions:
 - **Enter and join.** Each participant goes to the invite path, runs `getByLabel("Your name", { exact: true }).fill(<name>)` and `getByRole("button", { name: "Join call", exact: true }).click()`. A button named `Video tile for <name>` appears within 60 s.
 - **Both tiles.** Each page shows `Video tile for Verify A` and `Video tile for Verify B`.
 - **Publish.** Hover `getByRole("region", { name: "Space stage" })`, then click `Unmute microphone` and `Turn on camera`.
-- **Receive video.** Read `video.getVideoPlaybackQuality().totalVideoFrames` for the other person's tile twice, three seconds apart. The second value exceeds the first by more than 5. result.json stores both values.
+- **Own video.** Each page's own tile decodes a frame within 60 s. If not, the step fails with `sender never published`, so a receiver is never blamed for a sender that sent nothing.
+- **Receive video.** The other person's tile decodes a first frame within 60 s (a miss fails with `60 s timeout`), then `video.getVideoPlaybackQuality().totalVideoFrames` read twice, three seconds apart, rises by more than 5. result.json stores the first-frame time per page under `measurements` and both frame counts.
 - **Attendance.** Read `GET /v1/tenants/<tenantId>/spaces/<spaceId>/episodes`, then `.../episodes/<id>/attendance` with `Authorization: Bearer <systemToken>`. attendance.json lists both names.
 - **Leave.** Hover the stage, click `Leave call`. A button named `Rejoin` appears.
 - **Proof.** `.verify/<run-id>/screenshots/Verify-A-in-call.png` shows the other person's moving test pattern and the person's own mirrored tile. `video/*.webm` shows the whole session.

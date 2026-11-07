@@ -2,14 +2,14 @@ name: Gate
 
 # Required status checks: "Root gate", "API gate", "Sync gate".
 # A pull request runs only the jobs and lanes its diff selects; a skipped job counts as passed.
-# Pushes to master, manual runs and the nightly run run every job and lane in full, and only pushes to master
-# save caches, so every pull request starts from the caches of the latest master run.
+# Merge queue groups run the same selection against the group's base commit, so master only receives commits whose
+# Gate passed as the exact commit that lands. Manual runs and the nightly run run every job and lane in full. A push to
+# master runs Cache warm-up, which saves the caches that pull requests and queue groups start from.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
 
 on:
   pull_request:
-  push:
-    branches: [master]
+  merge_group:
   schedule:
     # New advisories against packages nobody changed fail here, not on unrelated pull requests.
     - cron: "17 1 * * *"
@@ -24,10 +24,9 @@ permissions:
   contents: read
 
 concurrency:
-  # A new push to a pull request cancels its older run. Master pushes share one group without cancelling the running
-  # Gate: one run executes, only the newest push waits, and the pending runs it replaces are cancelled. A release or
-  # nightly therefore ships the newest commit whose Gate ran and passed. Scheduled and manual runs keep their own group.
-  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && 'master' || github.sha }}
+  # A new push to a pull request cancels its older run. A merge queue group, a scheduled run and a manual run each get
+  # their own group by commit and never cancel, so a queued group is never lost to a later one.
+  group: chalk-gate-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -57,10 +56,11 @@ jobs:
       - name: Select jobs from changed paths
         id: select
         env:
-          BASE_REF: ${{ github.base_ref }}
+          # A merge queue group diffs against the commit it was built on, which may be an earlier group's head.
+          DIFF_BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            node scripts/gates/chalk-gate-plan.mjs --ci-jobs "origin/${BASE_REF}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group" ]]; then
+            node scripts/gates/chalk-gate-plan.mjs --ci-jobs "${DIFF_BASE}" >> "${GITHUB_OUTPUT}"
           else
             node scripts/gates/chalk-gate-plan.mjs --ci-jobs --full >> "${GITHUB_OUTPUT}"
           fi
@@ -121,9 +121,9 @@ jobs:
         group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
-      # Compare pushes with the exact previous tip, including non-ancestor force pushes.
-      GATE_OSV_BASE_COMMIT: ${{ github.event_name == 'push' && github.event.before || '' }}
+      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      # A queue group compares with the exact commit it was built on, so an advisory that master already had does not block it.
+      GATE_OSV_BASE_COMMIT: ${{ github.event.merge_group.base_sha || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "2"
     steps:
@@ -182,6 +182,21 @@ jobs:
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-opentofu
 
+      # Providers come from the cache that cache-warm.yml saves on master, so a flaky github.com download cannot fail
+      # a queue group. A cache miss falls back to the download, which scripts/recorder/tofu-init.sh retries.
+      - name: Restore OpenTofu providers
+        if: matrix.group == 'checks'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
+
+      - name: Use the OpenTofu provider cache
+        if: matrix.group == 'checks'
+        run: |
+          mkdir -p ~/.terraform.d/plugin-cache
+          echo "TF_PLUGIN_CACHE_DIR=$HOME/.terraform.d/plugin-cache" >> "$GITHUB_ENV"
+
       - name: Set up security scanners
         if: matrix.group == 'checks'
         uses: ./.github/actions/setup-scanners
@@ -210,11 +225,11 @@ jobs:
         env:
           GATE_LANE_GROUP: ${{ matrix.group }}
           GATE_SERVICES: external
-          GATE_BASE_REF: origin/${{ github.base_ref || 'master' }}
-          # A push to master scans every pushed commit for secrets, including the commits a merge brings in.
-          GITLEAKS_LOG_OPTS: ${{ github.event_name == 'push' && format('{0}..{1}', github.event.before, github.sha) || '' }}
+          GATE_BASE_REF: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref || 'master') }}
+          # A queue group scans every commit it brings in for secrets.
+          GITLEAKS_LOG_OPTS: ${{ github.event_name == 'merge_group' && format('{0}..{1}', github.event.merge_group.base_sha, github.sha) || '' }}
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ needs.changes.result }}" == "success" && "${{ needs.changes.outputs.full }}" == "false" ]]; then
+          if [[ ("${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "merge_group") && "${{ needs.changes.result }}" == "success" && "${{ needs.changes.outputs.full }}" == "false" ]]; then
             pnpm exec bash scripts/gates/commit.sh --base "${GATE_BASE_REF}"
           else
             pnpm exec bash scripts/gates/commit.sh --full
@@ -227,22 +242,6 @@ jobs:
           name: ${{ matrix.group }}
           path: artifacts/${{ matrix.group }}.json
           if-no-files-found: error
-
-      - name: Save Metro cache
-        if: matrix.group == 'build' && github.event_name == 'push'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: /tmp/metro-cache
-          key: metro-${{ runner.os }}-${{ github.sha }}
-
-      - name: Save Go caches
-        if: matrix.group == 'checks' && github.event_name == 'push'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
 
   root:
     name: Root gate
@@ -290,7 +289,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       # A cached Go test result would not see migration or database changes.
       GOFLAGS: -buildvcs=false -count=1
@@ -342,15 +341,6 @@ jobs:
       - name: Run the API gate
         run: apps/api/scripts/gate.sh
 
-      - name: Save Go caches
-        if: github.event_name == 'push'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-api-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
-
   sync:
     name: Sync gate
     needs: changes
@@ -358,7 +348,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      GATE_VULN_BASE_REF: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && format('origin/{0}', github.base_ref) || '' }}
+      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       VITEST_MAX_WORKERS: "2"
     steps:
@@ -401,8 +391,9 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache Mix dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      # cache-warm.yml saves this on master; a queue group's own save would be unreadable by anything else.
+      - name: Restore Mix dependencies
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             apps/sync/deps
@@ -417,12 +408,3 @@ jobs:
       # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
       - name: Run the Sync gate and correctness harness
         run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
-
-      - name: Save Go caches
-        if: github.event_name == 'push'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-sync-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}

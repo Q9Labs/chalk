@@ -3,7 +3,12 @@
 The call must remain responsive on constrained CPUs. The `call-performance`
 gate builds the real call-state fixtures in production mode and drives Chromium;
 it does not time Vite's development server, a screenshot, or a loading placeholder.
-The machine-readable limits are in `apps/web/perf-budgets.json`.
+The machine-readable limits are in `perf/budgets.json`, the one budget file for
+every scorecard metric (see [the scorecard](../features/scorecard/README.md)).
+Each entry is keyed by metric id and holds `max_p50` and/or `max_p95`, a
+`tolerancePct` and a `gate` flag. This check compares the median of its runs, so
+its entries use `max_p50`. A budget changes only in a pull request that edits
+`perf/budgets.json` and adds a reason line to `_comment`.
 
 ## Run
 
@@ -201,7 +206,7 @@ canvas. Counts are collected without holding application objects strongly:
   callbacks, including self-rescheduling animation loops. A pending one-shot RAF
   can vary by one; these counters measure scheduled work, not CPU consumption.
 
-`apps/web/perf-budgets.json` owns the cycle count, settle delay and per-metric
+`perf/budgets.json` owns the cycle count, settle delay and per-metric
 budgets. Ordinary least-squares slope includes the warm baseline (cycle zero).
 A journey fails if **either** slope exceeds `perCycle` or any subsequent sample
 exceeds baseline plus `allowance`. Heap also checks the last ten samples against

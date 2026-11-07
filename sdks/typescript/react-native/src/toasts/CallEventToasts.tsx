@@ -1,4 +1,4 @@
-import { SpaceClientError, type SpaceClient } from "@q9labsai/chalk-client";
+import { getRecordingFailureDetail, SpaceClientError, type SpaceClient } from "@q9labsai/chalk-client";
 import { useCallback, useEffect, useRef } from "react";
 import { Linking, Platform } from "react-native";
 import { FaceAvatar } from "../avatar/FaceAvatar";
@@ -199,5 +199,7 @@ function noticeToast(notice: Notice, { client, toasts, colors, dismiss }: Notice
       return { input: { leading: icon("rec", "danger"), message: [{ strong: "Recording started." }, " Everyone in the call can see it."], testID: "toast.recording-started" }, sound: "recording" };
     case "recordingStopped":
       return { input: { leading: icon("rec"), message: "Recording stopped", testID: "toast.recording-stopped" } };
+    case "recordingFailed":
+      return { input: { kind: "error", leading: icon("rec", "danger"), dismissible: true, wrap: true, message: getRecordingFailureDetail(notice.failureCode), testID: "toast.recording-failed" } };
   }
 }

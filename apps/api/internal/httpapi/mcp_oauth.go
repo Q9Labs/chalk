@@ -74,6 +74,7 @@ func mountMCPOAuthProtocolRoutes(r chi.Router, service MCPOAuthService, limits R
 		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":               []string{"S256"},
 		"token_endpoint_auth_methods_supported":          []string{"none"},
+		"client_id_metadata_document_supported":          true,
 		"scopes_supported":                               mcpauth.SupportedScopes(),
 		"authorization_response_iss_parameter_supported": true,
 	}))

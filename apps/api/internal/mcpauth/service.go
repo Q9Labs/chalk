@@ -25,10 +25,11 @@ const (
 type Service struct {
 	repository Repository
 	config     Config
+	metadata   MetadataFetcher
 }
 
 func NewService(repository Repository, config Config) Service {
-	return Service{repository: repository, config: config.withDefaults()}
+	return Service{repository: repository, config: config.withDefaults(), metadata: newHTTPSMetadataFetcher()}
 }
 
 func (s Service) Config() Config { return s.config }
@@ -82,13 +83,22 @@ type AuthorizeParams struct {
 // Authorize validates an /authorize request and stores it until a signed-in
 // person decides. It returns the dashboard consent URL.
 func (s Service) Authorize(ctx context.Context, params AuthorizeParams) (string, *AuthorizeFailure) {
-	client, err := s.repository.GetClient(ctx, params.ClientID)
-	if errors.Is(err, ErrClientNotFound) {
-		return "", &AuthorizeFailure{Err: oauthError(400, "invalid_request", "unknown client_id")}
-	}
-	if err != nil {
-		slog.ErrorContext(ctx, "MCP OAuth client lookup failed", "event", "mcp.oauth.authorize_failed", "error", err)
-		return "", &AuthorizeFailure{Err: oauthError(500, "server_error", "temporary failure")}
+	var client Client
+	if IsMetadataClientID(params.ClientID) {
+		var failure *Error
+		if client, failure = s.metadataClient(ctx, params.ClientID); failure != nil {
+			return "", &AuthorizeFailure{Err: failure}
+		}
+	} else {
+		var err error
+		client, err = s.repository.GetClient(ctx, params.ClientID)
+		if errors.Is(err, ErrClientNotFound) {
+			return "", &AuthorizeFailure{Err: oauthError(400, "invalid_request", "unknown client_id")}
+		}
+		if err != nil {
+			slog.ErrorContext(ctx, "MCP OAuth client lookup failed", "event", "mcp.oauth.authorize_failed", "error", err)
+			return "", &AuthorizeFailure{Err: oauthError(500, "server_error", "temporary failure")}
+		}
 	}
 	redirectURI := params.RedirectURI
 	if redirectURI == "" && len(client.RedirectURIs) == 1 {

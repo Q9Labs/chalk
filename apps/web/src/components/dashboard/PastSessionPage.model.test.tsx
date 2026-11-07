@@ -246,7 +246,7 @@ async function answer(url: URL, body: unknown): Promise<Response> {
 }
 
 beforeEach(async () => {
-  engine = { api: await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://api.chalk.test", fetch: chalkAPI })), tenantId: Schema.decodeUnknownSync(TenantIdSchema)(TENANT), dashboardOrigin: "https://chalk.test" };
+  engine = { api: await Effect.runPromise(createChalkEffectClient({ baseUrl: "https://api.chalk.test", fetch: chalkAPI })), tenantId: Schema.decodeUnknownSync(TenantIdSchema)(TENANT), dashboardOrigin: "https://chalk.test", mcpUrl: "https://api.chalk.test/mcp" };
   log = [];
   router.navigate.mockClear();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });

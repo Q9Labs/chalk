@@ -144,7 +144,7 @@ type FilteredRepository interface {
 type Service struct {
 	repository        Repository
 	defaultMediaPlane MediaPlaneProvider
-	chalkSFUSelector  bool
+	chalkSFUAllowed   ChalkSFUAllowlist
 }
 
 type CreateSpaceInput struct {
@@ -233,15 +233,16 @@ func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaP
 	return Service{repository: repository, defaultMediaPlane: defaultProvider}
 }
 
-// WithChalkSFUSelector lets Spaces choose the own SFU. It is off by default, so
-// the selector cannot name a provider the deployment has not turned on.
-func (s Service) WithChalkSFUSelector(enabled bool) Service {
-	s.chalkSFUSelector = enabled
+// WithChalkSFUAllowlist lets the listed Spaces choose the own SFU. It is empty by
+// default, so the selector cannot name a provider the deployment has not turned
+// on, and a Space outside the list cannot select it.
+func (s Service) WithChalkSFUAllowlist(allowed ChalkSFUAllowlist) Service {
+	s.chalkSFUAllowed = allowed
 	return s
 }
 
-func (s Service) selectable(provider string) bool {
-	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUSelector
+func (s Service) selectable(provider string, spaceID utilities.ID) bool {
+	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUAllowed.Allows(spaceID)
 }
 
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
@@ -262,7 +263,7 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	if !s.selectable(input.MediaPlane) {
+	if !s.selectable(input.MediaPlane, input.ID) {
 		return Space{}, ErrInvalidMediaPlane
 	}
 	if input.RequestKey != "" {
@@ -318,7 +319,7 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	if err := prepareUpdateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	if input.MediaPlane.Set && input.MediaPlane.Value != nil && !s.selectable(*input.MediaPlane.Value) {
+	if input.MediaPlane.Set && input.MediaPlane.Value != nil && !s.selectable(*input.MediaPlane.Value, spaceID) {
 		return Space{}, ErrInvalidMediaPlane
 	}
 

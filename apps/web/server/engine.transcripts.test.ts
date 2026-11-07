@@ -40,7 +40,7 @@ it.each(["call", "past-session"] as const)("reads exactly one %s transcript page
       },
     }),
   );
-  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" }, recording, view);
+  const result = await listedRecording({ api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test", mcpUrl: "https://api.example.test/mcp" }, recording, view);
   expect(requests).toHaveLength(1);
   expect(requests[0]?.searchParams.get("page_size")).toBe(String(pageSize));
   expect(requests[0]?.searchParams.has("cursor")).toBe(false);
@@ -61,7 +61,7 @@ it.each(["call", "past-session"] as const)("keeps %s metadata and list retries a
       },
     }),
   );
-  const engine = { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test" };
+  const engine = { api, tenantId: Schema.decodeUnknownSync(TenantIdSchema)(id(2)), dashboardOrigin: "https://chalk.test", mcpUrl: "https://api.example.test/mcp" };
   await callMetadata(engine, { kind: "recording", spaceId: recording.space_id, id: recording.id, view });
   const result = await pastMutation(engine, { action: "transcripts", spaceId: recording.space_id, episodeId: recording.episode_id, recordingId: recording.id, view });
   const lists = requests.filter((url) => url.pathname.endsWith("/transcripts"));

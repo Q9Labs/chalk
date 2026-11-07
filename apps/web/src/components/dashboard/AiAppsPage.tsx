@@ -7,38 +7,56 @@ import { Icon } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { DisconnectPrompt } from "./DisconnectPrompt";
-import { MoreButton, Sk, useToast } from "./kit";
+import { CopyAction, ErrorPanel, MoreButton, Sk, useToast } from "./kit";
+import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
 
-/** Apps such as Claude and ChatGPT that signed in to this account through OAuth. */
-export function ConnectedApps() {
-  const { state, update } = useLoad(() => readPage("connections", {}), "connections");
+/** How to connect an AI app to Chalk, and the apps that signed in to this account through OAuth. */
+export function AiAppsPage() {
+  const { state, reload, update } = useLoad(() => readPage("connections", {}), "connections");
   const [revoking, setRevoking] = useState<ConnectionDTO | null>(null);
   const toast = useToast();
 
   return (
-    <>
-      <div className="secth" style={{ marginTop: 48 }}>
-        <h2>Connected apps</h2>
+    <div className="wrap wide">
+      <div className="pgh">
+        <h1>AI apps</h1>
       </div>
-      {state.kind === "loading" ? <Sk width="100%" height={48} /> : null}
-      {state.kind === "error" ? <p className="ohelp">Couldn’t load connected apps. {errorMessage(state.error)}</p> : null}
-      {state.kind === "ready" && state.data.connections.length === 0 ? (
+      <p className="intro">Connect Claude, ChatGPT and other AI apps to Chalk, and they can work with your Spaces for you. You choose what each app is allowed to do.</p>
+      {state.kind === "ready" ? (
+        <>
+          <div className="murl">
+            <span className="lbl">Chalk URL</span>
+            <code>{state.data.mcpUrl}</code>
+            <CopyAction pill small text={state.data.mcpUrl} label="Copy URL" toastMessage="URL copied" />
+          </div>
+          <McpClients mcpUrl={state.data.mcpUrl} registeredNames={[...(state.data.nextCursor ? state.data.connectedNames : []), ...state.data.connections.map((connection) => connection.clientName)]} />
+        </>
+      ) : null}
+      {state.kind === "loading" ? (
+        <div className="cgrid" aria-hidden="true">
+          {[0, 1, 2, 3].map((index) => (
+            <Sk key={index} width="100%" height={132} radius="16px" />
+          ))}
+        </div>
+      ) : null}
+      {state.kind === "error" ? (
+        <div style={{ marginTop: 32 }}>
+          <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
+        </div>
+      ) : null}
+      {state.kind === "ready" ? (
+        <div className="secth" style={{ marginTop: 48 }}>
+          <h2>Connected apps</h2>
+        </div>
+      ) : null}
+      {state.kind === "ready" && state.data.listError ? <ErrorPanel title="Couldn’t load your connected apps" detail="Adding an app above still works." onRetry={reload} /> : null}
+      {state.kind === "ready" && !state.data.listError && state.data.connections.length === 0 ? (
         <div className="list">
           <div className="empty">
             <b>No connected apps</b>
-            <p>Add Chalk as a custom connector in Claude or ChatGPT and approve it here. It then shows up in this list.</p>
-            <div className="cempty">
-              <span className="cempty-app">
-                <AppLogo name="Claude" size="sm" />
-                Claude
-              </span>
-              <span className="cempty-app">
-                <AppLogo name="ChatGPT" size="sm" />
-                ChatGPT
-              </span>
-            </div>
+            <p>Pick an app above and approve it here. It then shows up in this list.</p>
           </div>
         </div>
       ) : null}
@@ -94,7 +112,7 @@ export function ConnectedApps() {
         </div>
       ) : null}
       {state.kind === "ready" && state.data.nextCursor ? (
-        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
+        <MoreButton label="Show more apps" cursor={state.data.nextCursor} load={(cursor) => readPage("connections", { cursor })} onLoaded={(page) => update((value) => ({ ...value, connections: [...value.connections, ...page.connections], nextCursor: page.nextCursor }))} />
       ) : null}
       {revoking ? (
         <DisconnectPrompt
@@ -104,6 +122,8 @@ export function ConnectedApps() {
             act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
               () => {
                 update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
+                // With more pages, the catalog's names came from every page, so read them again.
+                if (state.kind === "ready" && state.data.nextCursor) reload();
                 setRevoking(null);
                 toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
               },
@@ -112,6 +132,6 @@ export function ConnectedApps() {
           }
         />
       ) : null}
-    </>
+    </div>
   );
 }

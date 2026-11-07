@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=scripts/gates/postgres-image.sh
+source "$(dirname "${BASH_SOURCE[0]}")/postgres-image.sh"
+
 if (($# == 0)); then
   echo "with-postgres.sh requires at least one gate command" >&2
   exit 2
@@ -115,13 +118,14 @@ postgres_ready() {
 
 start_docker_postgres() {
   container="chalk-gate-postgres-${suffix}"
+  pull_postgres_image "${docker_bin}"
   "${docker_bin}" run \
     --name "${container}" \
     -e POSTGRES_DB=chalk_gate \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=postgres \
     -p 127.0.0.1::5432 \
-    -d postgres:18.3-alpine >/dev/null
+    -d "${postgres_image}" >/dev/null
 
   for _ in {1..60}; do
     if postgres_ready; then

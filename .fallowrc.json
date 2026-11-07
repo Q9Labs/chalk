@@ -172,6 +172,8 @@
   "dynamicallyLoaded": ["sdks/typescript/client/scripts/node-restart-sync-worker.mjs", "sdks/typescript/client/scripts/sync-breaker-v1-wire-sdk.mjs"],
   "health": {
     "ignore": [
+      "features/scorecard/**",
+      "scripts/prod-proof/**",
       "**/dist/**",
       "**/__tests__/**",
       "**/*.test.ts",

@@ -3,10 +3,14 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
@@ -52,6 +56,38 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 		default:
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
+	})
+	mcpapi.Bind(server, mcpapi.ControlCall, func(ctx context.Context, i mcpapi.CallInput) (json.RawMessage, error) {
+		b := newMCPRequest(ctx)
+		space, episode, participant := b.id(i.SpaceID), b.id(i.EpisodeID), b.optionalID(i.ParticipantID)
+		var (
+			data json.RawMessage
+			err  error
+		)
+		switch i.Action {
+		case "admit":
+			endpoint := admitParticipantEndpoint(o.Episodes, o.SyncTokens, o.SyncTokenRefresh, o.ParticipantMediaIssuer, o.ParticipantGeneration, o.Spaces, o.Tenants, o.MediaPlane, o.TenantAuthz)
+			data, err = mcpInvoke(b, endpoint, admitParticipantEndpointRequest{TenantID: b.tenant, SpaceID: space, EpisodeID: episode, RequestKey: i.RequestKey, MediaClients: mediaplane.AllClientProviders(), ParticipantID: participant, IdentityID: b.optionalID(i.IdentityID), Body: admitParticipantRequest{Admission: episodes.AdmissionMode(i.Admission), Name: i.Name, Metadata: utilities.OptionalJSON{Set: len(i.Metadata) > 0, Value: i.Metadata}, Role: i.Role, IdentityID: i.IdentityID, IdentityExternalID: i.IdentityExternalID}})
+		case "sync_token":
+			data, err = mcpInvoke(b, issueSyncTokenEndpoint(o.SyncTokenRefresh, o.TenantAuthz), issueSyncTokenEndpointRequest{TenantID: b.tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant})
+		case "access_grant":
+			// An empty fence must never mean "replace without a check": reject it here, whatever replace_media_connection says.
+			if i.ExpectedMediaConnectionID != nil && strings.TrimSpace(*i.ExpectedMediaConnectionID) == "" {
+				return nil, mcpError(apiErrorInvalidRequest)
+			}
+			body := issueAccessGrantBody{ParticipantGeneration: i.ParticipantGeneration, CurrentMediaToken: i.CurrentMediaToken, ReplaceMediaConnection: i.ReplaceMediaConnection, ExpectedMediaConnectionID: i.ExpectedMediaConnectionID}
+			endpoint := issueAccessGrantEndpoint(o.SyncTokenRefresh, o.ParticipantMediaIssuer, o.ParticipantMediaVerify, o.ParticipantMediaActive, o.ParticipantGeneration, o.Spaces, o.Tenants, o.MediaPlane, o.TenantAuthz)
+			data, err = mcpInvoke(b, endpoint, issueAccessGrantRequest{TenantID: b.tenant, SpaceID: space, EpisodeID: episode, ParticipantID: participant, MediaClients: mediaplane.AllClientProviders(), Body: body})
+		default:
+			return nil, mcpError(apiErrorInvalidRequest)
+		}
+		outcome := "ok"
+		if err != nil {
+			outcome = "rejected"
+		}
+		// The audit line names who minted credentials for whom. It never holds a credential.
+		slog.InfoContext(ctx, "MCP call credentials requested", "event", "mcp.call_credentials.requested", "action", i.Action, "tenant_id", b.tenant.String(), "actor_id", mcpapi.Connection(ctx).ActorID, "space_id", space.String(), "episode_id", episode.String(), "participant_id", participant.String(), "outcome", outcome)
+		return data, err
 	})
 	bindMCPEndpoint(server, mcpapi.RemoveParticipant, removeParticipantEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RemovalInput) removeParticipantEndpointRequest {
 		return removeParticipantEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), ParticipantID: b.id(i.ParticipantID), RequestKey: i.RequestKey, Body: removeParticipantRequest{ParticipantGeneration: i.ParticipantGeneration}}

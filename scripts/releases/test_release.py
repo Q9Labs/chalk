@@ -36,6 +36,7 @@ class MemoryGitHub(GitHub):
         self.items = []
         self.archives = {}
         self.tip = SHA
+        self.dropped = set()
         self.dispatches = 0
         self.created_at = '2026-10-17T02:00:00Z'
         self.gates = [dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master',
@@ -74,6 +75,8 @@ class MemoryGitHub(GitHub):
             return items[start:start + 100]
         if route == 'git/ref/heads/master':
             return dict(object=dict(sha=self.tip))
+        if route.startswith('compare/master...'):
+            return dict(status='behind' if route.split('...')[1] not in self.dropped else 'diverged')
         if route.startswith('actions/workflows/gate.yml/runs?') and 'status=success' in route:
             return dict(workflow_runs=[run for run in reversed(self.gates)
                                        if run['event'] == 'push' and run['conclusion'] == 'success'])
@@ -279,6 +282,50 @@ class CutTests(unittest.TestCase):
         with patch.object(api, 'pages', return_value=[old, {**old, 'run_attempt': 2, 'conclusion': None}]):
             self.assertFalse(api.has_green_gate(SHA))
 
+    def test_merge_queue_gate_counts_only_on_a_queue_branch_of_master(self):
+        api = object.__new__(GitHub)
+        queue = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='gh-readonly-queue/master/pr-9-abc', event='merge_group', conclusion='success')
+        for name, run, green in [('queue group', queue, True),
+                                 ('queue group of another base', {**queue, 'head_branch': 'gh-readonly-queue/release/pr-9-abc'}, False),
+                                 ('push on a queue-named branch', {**queue, 'event': 'push'}, False),
+                                 ('merge group on master', {**queue, 'head_branch': 'master'}, False),
+                                 ('pull request', {**queue, 'event': 'pull_request', 'head_branch': 'master'}, False)]:
+            with self.subTest(name), patch.object(api, 'pages', return_value=[run]), patch.object(api, 'request', return_value=dict(status='behind')):
+                self.assertEqual(api.has_green_gate(SHA), green)
+                self.assertEqual(api.has_green_gate(SHA, push_only=True), green)
+
+    def test_a_queue_group_that_never_landed_is_not_a_master_gate(self):
+        api = object.__new__(GitHub)
+        queue = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='gh-readonly-queue/master/pr-9-abc', event='merge_group', conclusion='success')
+        for status, green in [('behind', True), ('identical', True), ('diverged', False), ('ahead', False)]:
+            with self.subTest(status), patch.object(api, 'pages', return_value=[queue]), patch.object(api, 'request', return_value=dict(status=status)):
+                self.assertEqual(api.has_green_gate(SHA), green)
+
+    def test_nightly_skips_a_push_gate_of_history_master_dropped(self):
+        older = 'b' * 40
+        api = MemoryGitHub()
+        api.gates = [dict(api.gates[0], head_sha=older), dict(api.gates[0], run_number=2, head_sha='d' * 40)]
+        api.dropped = {'d' * 40}
+        self.assertEqual(api.newest_green_push_gate(), older)
+
+    def test_newest_green_gate_pages_past_unlanded_groups(self):
+        api = object.__new__(GitHub)
+        landed = 'c' * 40
+        def group(sha):
+            return dict(run_number=1, run_attempt=1, head_sha=sha, head_branch=f'gh-readonly-queue/master/pr-1-{sha}', event='merge_group',
+                        conclusion='success', created_at='2026-11-07T10:00:00Z')
+        everything = [group('%040x' % number) for number in range(1, 150)] + [group(landed)]
+        def request(route):
+            if route.startswith('compare/'):
+                return dict(status='behind' if route.endswith(landed) else 'diverged')
+            if 'event=merge_group' not in route:
+                return dict(workflow_runs=[])
+            page = int(route.rsplit('page=', 1)[1])
+            return dict(workflow_runs=everything[(page - 1) * 100:page * 100])
+        with patch.object(api, 'request', side_effect=request), \
+                patch.object(api, 'pages', side_effect=lambda route, key: [group(route.split('head_sha=')[1])]):
+            self.assertEqual(api.newest_green_push_gate(), landed)
+
     FRESH = dict(GITHUB_EVENT_NAME='workflow_dispatch', TARGET_SHA=SHA, MANIFEST_RUN_ID='', PAGES_ROLLBACK_ID='', RELEASE_MANAGED='true', DEPLOY_MANAGED='false', DEPLOY_WEB='false')
 
     def require_gate(self, runs, **inputs):
@@ -290,7 +337,7 @@ class CutTests(unittest.TestCase):
     def test_fresh_release_needs_a_green_master_gate_for_the_exact_target(self):
         master = dict(run_number=1, run_attempt=1, head_sha=SHA, head_branch='master', event='push', conclusion='success')
         pages = self.require_gate([master])
-        self.assertIn(f'head_sha={SHA}&branch=master', pages.call_args.args[0])
+        self.assertIn(f'head_sha={SHA}', pages.call_args.args[0])
         for name, runs in [('pull request Gate only', [{**master, 'event': 'pull_request'}]),
                            ('failed master Gate', [{**master, 'conclusion': 'failure'}]),
                            ('no Gate run', [])]:
