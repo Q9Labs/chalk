@@ -264,7 +264,7 @@ func TestMCPOAuthFullFlowIsTenantScoped(t *testing.T) {
 	}
 
 	session := connectMCP(t, h.server, tokens.AccessToken, "2025-11-25")
-	text := mcpText(callMCP(t, session, "list_spaces", `{}`))
+	text := mcpText(callMCP(t, session, "inspect_spaces", `{}`))
 	if !strings.Contains(text, "Alpha OAuth Space") || strings.Contains(text, "Beta OAuth Space") {
 		t.Fatalf("tenant A grant must see only its own Spaces: %s", text)
 	}

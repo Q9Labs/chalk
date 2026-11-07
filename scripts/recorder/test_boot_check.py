@@ -532,6 +532,43 @@ class BootCheckTests(unittest.TestCase):
         for result in ({'status': 409, 'body': None}, {'status': 409, 'body': {'error': {'code': 'drift'}}}, {'status': 503}):
             self.assertFalse(host.bootstrap_pending(result))
 
+    def issuer_runtime(self, roots):
+        environment = {
+            'CHALK_RECORDER_FLEET_ISSUER_STATE_PATH': '/state/issuer.json',
+            'CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_CERT': '/ca.pem',
+            'CHALK_RECORDER_FLEET_ISSUER_SPIFFE_TRUST_DOMAIN': 'chalk',
+        }
+        return patch.object(host, 'runtime', side_effect=[({}, environment, root) for root in roots])
+
+    def test_registration_re_resolves_a_stale_issuer_root_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            live = Path(directory, 'live')
+            (live / 'state').mkdir(parents=True)
+            (live / 'state' / 'issuer.json').write_text(json.dumps({'registrations': {'1': {'certificates': ['c']}}}))
+            (live / 'ca.pem').write_text('ca')
+            with self.issuer_runtime([str(Path(directory, 'stale')), str(live)]) as resolve, patch.object(host.time, 'sleep') as pause:
+                evidence = host.registration(1000, '1')
+        self.assertEqual(resolve.call_count, 2)
+        pause.assert_called_once_with(5)
+        self.assertEqual(evidence, {'record': {'certificates': ['c']}, 'ca_pem': 'ca', 'trust_domain': 'chalk'})
+
+    def test_registration_fails_when_the_issuer_state_stays_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            roots = [str(Path(directory, 'stale-1')), str(Path(directory, 'stale-2')), str(Path(directory, 'unused'))]
+            with self.issuer_runtime(roots) as resolve, patch.object(host.time, 'sleep'), self.assertRaises(FileNotFoundError) as caught:
+                host.registration(1000, '1')
+        self.assertEqual(resolve.call_count, 2)
+        self.assertIn('stale-2', str(caught.exception))
+
+    def test_registration_does_not_retry_other_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            live = Path(directory, 'live')
+            (live / 'state').mkdir(parents=True)
+            (live / 'state' / 'issuer.json').write_text('not json')
+            with self.issuer_runtime([str(live), str(live)]) as resolve, self.assertRaises(json.JSONDecodeError):
+                host.registration(1000, '1')
+        self.assertEqual(resolve.call_count, 1)
+
     def run_registration(self, responses, timeout=12):
         now = [0]
 

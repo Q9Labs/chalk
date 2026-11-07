@@ -121,8 +121,9 @@ type Guard struct {
 	// MaxBusyPercent is the host CPU time spent working, steal and idle excluded, over Window,
 	// above which new Episodes are refused.
 	MaxBusyPercent float64
-	// MaxQueueDelay is the pacer queue delay p95, over Window, above which new Episodes are refused.
-	MaxQueueDelay time.Duration
+	// MaxSchedulerLatency is the Go scheduler latency p99, over the last 10 seconds, above which
+	// new Episodes are refused.
+	MaxSchedulerLatency time.Duration
 	// MaxPacerDropPercent is the share of video the pacers dropped for a full queue, over Window,
 	// above which new Episodes are refused.
 	MaxPacerDropPercent float64
@@ -178,7 +179,7 @@ func Load(lookup Lookup) (Config, error) {
 		Guard: Guard{
 			MaxStealPercent:       float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", 3, 1, 100)),
 			MaxBusyPercent:        float64(r.integer("SFU_GUARD_MAX_BUSY_PERCENT", 90, 1, 100)),
-			MaxQueueDelay:         r.duration("SFU_GUARD_MAX_QUEUE_DELAY", 50*time.Millisecond, 5*time.Millisecond, 5*time.Second),
+			MaxSchedulerLatency:   r.duration("SFU_GUARD_MAX_SCHEDULER_LATENCY", 20*time.Millisecond, time.Millisecond, 5*time.Second),
 			MaxPacerDropPercent:   float64(r.integer("SFU_GUARD_MAX_PACER_DROP_PERCENT", 5, 1, 100)),
 			MaxUDPErrorsPerSecond: r.integer("SFU_GUARD_MAX_UDP_ERRORS_PER_SECOND", 5, 1, 1000000),
 			Window:                r.duration("SFU_GUARD_WINDOW", 30*time.Second, 5*time.Second, 10*time.Minute),

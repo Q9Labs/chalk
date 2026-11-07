@@ -92,7 +92,7 @@ export default defineGate({
   targets: { web: ["apps/web", ...sharedTargetRoots], mobile: ["apps/mobile", ...sharedTargetRoots] },
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],
-    gateDefinition: [".dependency-cruiser.cjs", ".fallowrc.json"],
+    gateDefinition: [".dependency-cruiser.cjs"],
     // Every path counts as source to q9gate. Chalk's planner maps paths to workspaces and fails closed on unknown
     // paths itself, so q9gate does not force a full gate for every JSON, CSS, or image change.
     source: ["*", "**/.*"],

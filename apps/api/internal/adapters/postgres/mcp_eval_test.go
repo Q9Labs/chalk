@@ -90,7 +90,7 @@ func TestMCPEvalHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, admissionProofLinks{})
+	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, mcpInviteLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}

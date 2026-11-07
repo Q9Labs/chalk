@@ -175,7 +175,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, admissionProofLinks{})
+	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, mcpInviteLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,6 +246,17 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	// Every view of a multi-view read tool needs its own scope and fields. The
 	// transcript fixture has no artifact, so reading its content must refuse as not ready.
 	for _, view := range []mcpToolCase{
+		{"inspect_webhooks", fmt.Sprintf(`{"view":"endpoint","endpoint_id":%q}`, hook.Endpoint.ID), ""},
+		{"inspect_webhooks", fmt.Sprintf(`{"view":"deliveries","endpoint_id":%q}`, hook.Endpoint.ID), ""},
+		{"inspect_spaces", fmt.Sprintf(`{"view":"settings","space_id":%q}`, spaceID), ""},
+		{"inspect_spaces", fmt.Sprintf(`{"view":"invite","space_id":%q}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"episode","space_id":%q,"episode_id":%q}`, spaceID, episodeID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"attendance","space_id":%q,"episode_id":%q}`, spaceID, episodeID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"live","space_ids":[%q]}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"activity","space_ids":[%q]}`, spaceID), ""},
+		{"inspect_episodes", fmt.Sprintf(`{"view":"admissions","space_id":%q}`, spaceID), ""},
+		{"inspect_recordings", fmt.Sprintf(`{"view":"recording","recording_id":%q}`, recordingID), ""},
+		{"inspect_recordings", fmt.Sprintf(`{"view":"download_url","recording_id":%q,"expires_in_seconds":60}`, recordingID), ""},
 		{"inspect_tenant", `{"view":"settings"}`, ""},
 		{"inspect_tenant", `{"view":"memberships"}`, ""},
 		{"inspect_tenant", `{"view":"api_keys"}`, ""},
@@ -287,7 +298,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if !result.IsError || !strings.Contains(mcpText(result), "rate_limited") {
 		t.Fatalf("MCP escaped the HTTP write quota: %s", mcpText(result))
 	}
-	result = callMCP(t, limitedSession, "list_spaces", `{}`)
+	result = callMCP(t, limitedSession, "inspect_spaces", `{}`)
 	if result.IsError {
 		t.Fatal("exhausting writes also denied reads")
 	}
@@ -303,7 +314,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 			if result.IsError || !ok || profile["id"] != tenantID.String() || profile["name"] != "MCP changed" || !strings.Contains(mcpText(result), "tenants:read") {
 				t.Fatal("profile identity changed after reconnection or tenant rename, or lost its scopes")
 			}
-			result = callMCP(t, session, "inspect_space", fmt.Sprintf(`{"space_id":%q}`, foreignSpace))
+			result = callMCP(t, session, "inspect_spaces", fmt.Sprintf(`{"view":"settings","space_id":%q}`, foreignSpace))
 			if !result.IsError || strings.Contains(mcpText(result), "MCP foreign private") {
 				t.Fatal("foreign identifier escaped tenant isolation")
 			}
@@ -326,7 +337,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	// Schema validation must reject tenant selection and missing destructive
 	// action fields before any operation can execute.
 	for _, attempt := range []mcpToolCase{
-		{name: "list_spaces", args: fmt.Sprintf(`{"tenant_id":%q}`, foreignTenant)},
+		{name: "inspect_spaces", args: fmt.Sprintf(`{"tenant_id":%q}`, foreignTenant)},
 		{name: "configure_space", args: fmt.Sprintf(`{"action":"invite","space_id":%q}`, spaceID)},
 		{name: "configure_webhook", args: fmt.Sprintf(`{"action":"delete","endpoint_id":%q}`, hook.Endpoint.ID)},
 	} {
@@ -354,4 +365,11 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if _, err := deniedSession.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_get_connection", Arguments: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("revoked key retained an initialized MCP connection")
 	}
+}
+
+// mcpInviteLinks gives the invite view a canonical URL; the shared proof stub has no links.
+type mcpInviteLinks struct{ publicinvites.Links }
+
+func (mcpInviteLinks) InviteURL(code string) (string, error) {
+	return "https://invite.example/" + code, nil
 }

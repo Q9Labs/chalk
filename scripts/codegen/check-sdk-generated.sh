@@ -28,6 +28,7 @@ CODEGEN_EFFECT_OUTPUT_PATH="$tmpdir/schemas.ts" \
 
 CODEGEN_OPENAPI_PATH="$tmpdir/openapi.json" \
 CODEGEN_HTTP_API_OUTPUT_PATH="$tmpdir/http-api.ts" \
+CODEGEN_PUBLIC_HTTP_API_OUTPUT_PATH="$tmpdir/public-http-api.ts" \
   node tools/contract-fixture-proof/src/emitters/effect-http-api.mjs
 
 CODEGEN_SYNC_PROTOCOL_VERSION=1 \
@@ -50,6 +51,7 @@ pnpm exec oxfmt --write \
   "$tmpdir/openapi.json" \
   "$tmpdir/schemas.ts" \
   "$tmpdir/http-api.ts" \
+  "$tmpdir/public-http-api.ts" \
   "$tmpdir/sync.ts" \
   "$tmpdir/whiteboard-v1.ts" \
   "$tmpdir/whiteboard-view-limits.ts" \
@@ -58,6 +60,7 @@ pnpm exec oxfmt --write \
 diff -u contract/generated/openapi.json "$tmpdir/openapi.json"
 diff -u sdks/typescript/client/src/generated/schemas.ts "$tmpdir/schemas.ts"
 diff -u sdks/typescript/client/src/generated/http-api.ts "$tmpdir/http-api.ts"
+diff -u sdks/typescript/client/src/generated/public-http-api.ts "$tmpdir/public-http-api.ts"
 diff -u sdks/typescript/client/src/generated/sync.ts "$tmpdir/sync.ts"
 diff -u sdks/typescript/client/src/generated/whiteboard-v1.ts "$tmpdir/whiteboard-v1.ts"
 diff -u packages/whiteboard/src/collab/view-limits.ts "$tmpdir/whiteboard-view-limits.ts"
