@@ -8,6 +8,8 @@ import { Avatar, Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
+import { LanguagePicker } from "./LanguagePicker";
+import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
@@ -107,6 +109,7 @@ export function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
   const startKey = useRef(intentKey());
+  const [language, setLanguage] = useState<NewCallLanguage>(readNewCallLanguage);
   const startButton = useRef<HTMLButtonElement>(null);
 
   async function startCall() {
@@ -114,7 +117,7 @@ export function HomePage() {
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
-      const { call } = await act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current });
+      const { call } = await act("home", { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey: startKey.current });
       startKey.current = intentKey();
       // The empty-state opener disappears when the first row is added.
       startButton.current?.focus();
@@ -128,6 +131,14 @@ export function HomePage() {
     } finally {
       setStarting(false);
     }
+  }
+
+  function chooseLanguage(next: NewCallLanguage) {
+    setLanguage(next);
+    saveNewCallLanguage(next);
+    if (next && next !== "auto") rememberLanguage(next);
+    // The same key with another language would be a conflicting retry.
+    startKey.current = intentKey();
   }
 
   async function archive(call: Row) {
@@ -157,15 +168,21 @@ export function HomePage() {
     <div className="wrap">
       <div className="secth hhead">
         <h1>Recent calls</h1>
-        <div className="hact">
-          <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-            <Icon name="plus" />
-            Start a call
-          </button>
-          <button type="button" className="btn sec" onClick={() => setDialog({ kind: "join" })}>
-            <Icon name="link" />
-            Join with a link
-          </button>
+        <div className="hbox">
+          <div className="hact">
+            <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+              <Icon name="plus" />
+              Start a call
+            </button>
+            <button type="button" className="btn sec" onClick={() => setDialog({ kind: "join" })}>
+              <Icon name="link" />
+              Join with a link
+            </button>
+          </div>
+          <div className="hlang">
+            <span id="new-call-language-label">Transcript for new calls</span>
+            <LanguagePicker id="new-call-language" labelledBy="new-call-language-label" variant="chip" allowDefault value={language} disabled={starting} onChange={chooseLanguage} />
+          </div>
         </div>
       </div>
       {state.kind === "loading" ? (
