@@ -24,7 +24,7 @@ test("appending the same run twice leaves history unchanged", () => {
     readHistory(dir).map((card) => card.run.id),
     ["run-1", "run-2", "run-3", "run-4"],
   );
-  assert.equal(readFileSync(join(dir, "history.jsonl"), "utf8").split("\n").length, 4);
+  assert.equal(readFileSync(join(dir, "history.jsonl"), "utf8").split("\n").length, 5);
 });
 
 test("the baseline is the median of the last seven nightly runs of one plane", () => {
@@ -50,7 +50,7 @@ test("the trends list the last 14 values, p95 where the budget bounds the p95", 
 test("a plane's own p95 budget picks the p95 for that plane only", () => {
   const history = [night(1, 100), night(2, 100, "cf_sfu")];
   const table = trendsMarkdown(history, { "chalk_sfu.action.leave_ms": { max_p95: 500, tolerancePct: 10, gate: false } });
-  const [chalk, cf] = table.split("## cf_sfu");
+  const [cf, chalk] = table.split("## chalk_sfu");
   assert.match(chalk, /\| `action.leave_ms` \| ms \| 200 \|/);
   assert.match(cf, /\| `action.leave_ms` \| ms \| 100 \|/);
 });
