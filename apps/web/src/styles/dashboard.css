@@ -2449,6 +2449,11 @@
   cursor: pointer;
 }
 
+.site .dash .lp-chip .lp-pop:not(.sheet) {
+  left: auto;
+  right: 0;
+}
+
 .site .dash .lp-chip .lp-trigger {
   gap: 8px;
 }

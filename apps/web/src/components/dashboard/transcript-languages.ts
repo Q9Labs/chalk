@@ -147,7 +147,7 @@ export function languageName(value: TranscriptLanguage): string {
 
 export type SearchHit = { readonly option: LanguageOption; readonly rank: "best" | "contains" };
 
-/** Names, native names and codes that start with the text come first; those that only contain it follow. */
+/** Names, native names and codes (from two letters) that start with the text come first; those that only contain it follow. */
 export function searchLanguages(query: string): readonly SearchHit[] {
   const text = fold(query.trim());
   if (!text) return [];
@@ -155,7 +155,7 @@ export function searchLanguages(query: string): readonly SearchHit[] {
   const contains: SearchHit[] = [];
   for (const item of languageOptions) {
     const [name, native, code] = item.haystack;
-    if (code === text || name.startsWith(text) || native.startsWith(text)) best.push({ option: item, rank: "best" });
+    if (code === text || (text.length > 1 && code.startsWith(text)) || name.startsWith(text) || native.startsWith(text)) best.push({ option: item, rank: "best" });
     else if (name.includes(text) || native.includes(text)) contains.push({ option: item, rank: "contains" });
   }
   return [...best, ...contains];

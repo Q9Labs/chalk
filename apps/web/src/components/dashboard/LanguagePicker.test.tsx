@@ -160,6 +160,33 @@ it("closes when the person clicks elsewhere", () => {
   expect(screen.queryByRole("option")).toBeNull();
 });
 
+it("keeps focus inside while Tab moves between its own buttons, and closes when focus leaves", () => {
+  render(<Harness initial="ur" />);
+  fireEvent.click(trigger());
+  fireEvent.change(search(), { target: { value: "klingon" } });
+  fireEvent.blur(search(), { relatedTarget: screen.getByRole("button", { name: "Use Auto-detect" }) });
+  expect(screen.getByRole("button", { name: "Use Auto-detect" })).toBeTruthy();
+  fireEvent.blur(screen.getByRole("button", { name: "Use Auto-detect" }), { relatedTarget: document.body });
+  expect(screen.queryByRole("combobox")).toBeNull();
+});
+
+it("leaves Enter and the arrows to the input method while it composes text", () => {
+  const change = vi.fn();
+  render(<Harness initial="ur" onChange={change} />);
+  fireEvent.click(trigger());
+  fireEvent.change(search(), { target: { value: "に" } });
+  fireEvent.keyDown(search(), { key: "Enter", isComposing: true });
+  expect(change).not.toHaveBeenCalled();
+  expect(screen.getByRole("combobox")).toBeTruthy();
+});
+
+it("finds a language by the start of its code", () => {
+  render(<Harness initial="ur" />);
+  fireEvent.click(trigger());
+  fireEvent.change(search(), { target: { value: "yu" } });
+  expect(options().some((name) => name.includes("Cantonese"))).toBe(true);
+});
+
 it("can't be opened while disabled or loading, and says what it is waiting for", () => {
   const { rerender } = render(<LanguagePicker id="picker" labelledBy="label" value="ur" onChange={vi.fn()} disabled />);
   expect(screen.getByRole("button")).toHaveProperty("disabled", true);

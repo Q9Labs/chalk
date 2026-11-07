@@ -169,6 +169,8 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
   }, [open, active, listId]);
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    // Enter and the arrows belong to the input method while it composes text.
+    if (event.nativeEvent.isComposing) return;
     const last = rows.length - 1;
     switch (event.key) {
       case "ArrowDown":
@@ -194,9 +196,6 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
         event.stopPropagation();
         close();
         break;
-      case "Tab":
-        close(false);
-        return;
       default:
         return;
     }
@@ -299,7 +298,14 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
   );
 
   return (
-    <div className={`lp lp-${variant}`} ref={wrap}>
+    <div
+      className={`lp lp-${variant}`}
+      ref={wrap}
+      onBlur={(event) => {
+        // Tab can move among the picker's own buttons; the list closes once focus leaves it.
+        if (open && !(event.relatedTarget instanceof Node && wrap.current?.contains(event.relatedTarget))) close(false);
+      }}
+    >
       <button
         ref={trigger}
         id={id}
@@ -326,13 +332,13 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
       {open ? (
         phone ? (
           <div className="scrim" onPointerDown={(event) => event.target === event.currentTarget && close()}>
-            <div className="lp-pop sheet" role="dialog" aria-label="Transcript language">
+            <div className="lp-pop sheet" role="dialog" aria-label="Transcript language" onMouseDown={(event) => event.preventDefault()}>
               <span className="lp-grab" aria-hidden="true" />
               {list}
             </div>
           </div>
         ) : (
-          <div className="lp-pop" role="dialog" aria-label="Transcript language">
+          <div className="lp-pop" role="dialog" aria-label="Transcript language" onMouseDown={(event) => event.preventDefault()}>
             {list}
           </div>
         )
