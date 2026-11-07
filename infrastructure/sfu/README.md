@@ -63,5 +63,66 @@ CHALK_SFU_CLIENT_KEY_FILE=/run/chalk/provider-bridge/server.key
 CHALK_SFU_STUN_URLS=stun:stun.cloudflare.com:3478
 ```
 
-The switch lets a Space choose `chalk_sfu`; every other Space keeps Cloudflare.
-Production keeps the switch off until the M7 canary.
+The switch lets a Space choose `chalk_sfu`, and the allowlist decides which
+Spaces may:
+
+```sh
+CHALK_SFU_ALLOWED_SPACES=<space id>,<space id>
+```
+
+The list holds Space IDs, comma separated. An empty or missing list allows no
+Space even when the switch is on, and `*` allows every Space (staging only). A
+Space outside the list cannot be created or updated with `chalk_sfu`, and an
+Episode of a Space outside the list starts on Cloudflare even when the Space or
+its Tenant default says `chalk_sfu`. Changing the list changes only new
+Episodes: a live Episode keeps the provider its binding pinned. Keep the real
+list in the private API settings, not in Git. Production keeps the switch off
+until the M7 canary.
+
+## Run the canary
+
+Move internal Spaces one at a time: add the Space ID to
+`CHALK_SFU_ALLOWED_SPACES`, redeploy the API, then set the Space's
+`media_plane` to `chalk_sfu`. To roll a Space back, set `media_plane` to
+`cf_sfu`; live Episodes finish on the node, and new Episodes use Cloudflare. To
+stop the whole canary, empty the list.
+
+The scripted check joins two real SDK clients per trial, measures how long both
+take to render audio and video, then blocks UDP to the media provider, proves
+that video stopped, restores it, and measures recovery, once with the first
+client's microphone on and once muted. Playwright's offline mode does not stop
+established WebRTC media, so you give the check the commands that block and
+restore the path. Run it once per provider from the same machine, so the two
+reports compare:
+
+```sh
+export CHALK_CANARY_FAULT_DOWN='sudo iptables -I OUTPUT -p udp -d <media address> -j DROP'
+export CHALK_CANARY_FAULT_UP='sudo iptables -D OUTPUT -p udp -d <media address> -j DROP'
+CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
+```
+
+For Cloudflare, use that provider's media address in both commands.
+
+A report passes when every join (including the join of each fault trial) renders within 10 seconds, every short fault
+recovers rendered media within 15 seconds without a manual toggle, and recovery
+never turns a muted microphone back on. Set `CHALK_CANARY_SPACE_ID` to reuse one
+allowlisted Space instead of creating a Space for each trial.
+
+## Watch the cohort
+
+Every call on a node is a canary call, so the node's metrics are the cohort
+view. In Axiom, query the `chalk-prod-metrics` dataset with
+`service.name == "chalk-sfu"`:
+
+```text
+`chalk-prod-metrics`:`chalk.sfu.sessions` | where `service.name` == "chalk-sfu" | align to 5m using max
+`chalk-prod-metrics`:`chalk.sfu.refusals` | where `service.name` == "chalk-sfu" | align to 5m using sum
+`chalk-prod-metrics`:`chalk.sfu.pacer.drops` | where `service.name` == "chalk-sfu" | align to 5m using sum
+`chalk-prod-metrics`:`chalk.sfu.packet_rate` | where `service.name` == "chalk-sfu" | align to 5m using max
+`chalk-prod-metrics`:`chalk.sfu.host.cpu.steal` | where `service.name` == "chalk-sfu" | align to 5m using max
+```
+
+Compare `packet_rate` with `packet_budget` for headroom. Any `refusals`, any
+sustained `pacer.drops`, or steal above a few percent during a call means the
+node is at its limit. The `sfu-readiness` alert in
+`infrastructure/observability/production-alerts` watches the node's `/readyz`.

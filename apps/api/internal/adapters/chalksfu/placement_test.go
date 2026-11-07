@@ -119,7 +119,7 @@ func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	registry := func(process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, Episodes: episodeBindings{live},
+			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
 		})
 	}
 	withCloudflare := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
