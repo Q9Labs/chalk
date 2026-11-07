@@ -41,10 +41,19 @@ a commit whose group passed, and `scripts/releases/release.py` accepts that grou
 landed. Each group has its own concurrency key, so no group cancels another. A commit that reaches master without a
 group (an administrator bypass or a direct push) has no Gate run until someone dispatches one.
 
-Merge with `~/.codex/skills/file-pr/merge.sh <pr>`. Auto-merge is off for the repository, because the queue is a ruleset
-rule, so `gh pr merge` cannot enqueue. The script enqueues with the `enqueuePullRequest` mutation, pinned to the head it
-checked (`expectedHeadOid`), and waits until the pull request lands or the queue drops it. A push after enqueueing drops
-the entry: fix the cause and run the script again. A full run scans staged
+Auto-merge is off for the repository, because the queue is a ruleset rule, so `gh pr merge` cannot enqueue. Enqueue a
+pull request whose required checks passed with the `enqueuePullRequest` mutation, pinned to the head you checked
+(`expectedHeadOid`), so a later push cannot join the group unseen:
+
+```sh
+gh api graphql -f id="$(gh pr view <pr> --json id --jq .id)" -f head="$(gh pr view <pr> --json headRefOid --jq .headRefOid)" -f query='
+  mutation($id: ID!, $head: GitObjectID!) {
+    enqueuePullRequest(input: {pullRequestId: $id, expectedHeadOid: $head}) { mergeQueueEntry { id } }
+  }'
+```
+
+A push after enqueueing drops the entry: fix the cause and enqueue again. Q9's agents use a script that runs this mutation
+and waits until the pull request lands or the queue drops it. A full run scans staged
 files and commits for secrets: the group's range in a merge queue group, otherwise the commits since the base, or the
 last commit.
 
