@@ -7,7 +7,7 @@ import { Icon, type IconName } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
-import { fontFamilies } from "../theme/tokens";
+import { fontFamilies, space, corners } from "../theme/tokens";
 
 /** The ways a call ends for you (A3 to A7). */
 export type CallOutcome = "left" | "ended" | "failed" | "removed" | "exited" | "full";
@@ -122,11 +122,11 @@ const StatusAction = memo(
 );
 
 const styles = StyleSheet.create({
-  page: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
+  page: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center", gap: space[3], padding: space[6] },
   center: { textAlign: "center" },
-  actions: { flexDirection: "row", gap: 28, marginTop: 20 },
-  action: { alignItems: "center", gap: 8 },
-  round: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
+  actions: { flexDirection: "row", gap: space[6], marginTop: space[5] },
+  action: { alignItems: "center", gap: space[2] },
+  round: { width: 56, height: 56, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
   // `.act` is 13 pt at weight 500; the type scale has 13 pt only at 400 and 600.
   actionLabel: { fontFamily: fontFamilies[500] },
 });

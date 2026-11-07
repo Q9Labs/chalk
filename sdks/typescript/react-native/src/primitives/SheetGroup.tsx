@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Icon, type IconName } from "../icons/Icon";
 import { useTheme } from "../theme/theme";
 import { ChalkText } from "./ChalkText";
+import { corners, space } from "../theme/tokens";
 
 /** A rounded group of sheet rows (`.sgrp`), with a hairline between rows. */
 export function SheetGroup({ children, testID }: { readonly children: ReactNode; readonly testID?: string }): React.JSX.Element {
@@ -63,10 +64,10 @@ export function SheetRow({ label, icon, end, badge, accessibilityLabel = label, 
 }
 
 const styles = StyleSheet.create({
-  group: { borderRadius: 16, overflow: "hidden" },
+  group: { borderRadius: corners["2xl"], overflow: "hidden" },
   divider: { height: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 52, paddingHorizontal: 16 },
+  row: { flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 52, paddingHorizontal: space[4] },
   label: { flex: 1 },
   labelShrink: { flexShrink: 1 },
-  badge: { marginLeft: 2, marginRight: "auto" },
+  badge: { marginLeft: space["0-5"], marginRight: "auto" },
 });

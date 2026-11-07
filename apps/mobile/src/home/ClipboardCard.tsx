@@ -5,6 +5,7 @@ import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import Animated, { Easing, Keyframe } from "react-native-reanimated";
 import { displayLink, parseSpaceLink, type SpaceRoute } from "../lib/spaces";
 import { PasteButton } from "./PasteButton";
+import { space, corners } from "@q9labsai/chalk-react-native";
 
 /**
  * What the clipboard offers. iOS can only tell that text or a URL is there without reading it
@@ -120,8 +121,8 @@ export function ClipboardCard({ offer, onDismiss, onJoin, onNotALink }: Clipboar
 }
 
 const styles = StyleSheet.create({
-  card: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 60, paddingTop: 8, paddingBottom: 8, paddingLeft: 12, paddingRight: 4, marginBottom: 2, borderRadius: 16, borderWidth: 1 },
-  icon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  card: { flexDirection: "row", alignItems: "center", gap: space["2-5"], minHeight: 60, paddingTop: space[2], paddingBottom: space[2], paddingLeft: space[3], paddingRight: space[1], marginBottom: space["0-5"], borderRadius: corners["2xl"], borderWidth: 1 },
+  icon: { width: 36, height: 36, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
   text: { flex: 1, minWidth: 0, lineHeight: 14 * 1.35 },
   link: { fontFamily: fontFamilies[600] },
 });

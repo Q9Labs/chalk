@@ -3,6 +3,7 @@ import { useEffect, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { TextField } from "./TextField";
+import { space } from "@q9labsai/chalk-react-native";
 
 const SCHEMES = [
   { value: "dark", label: "Dark", testID: "you.appearance.dark" },
@@ -64,6 +65,6 @@ export function YouSheet({ open, onClose, name, onSaveName, preferences, returnF
 }
 
 const styles = StyleSheet.create({
-  form: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
+  form: { gap: space[2], paddingHorizontal: space[1], paddingBottom: space[4] },
+  row: { flexDirection: "row", alignItems: "center", gap: space[2] },
 });

@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { parseSpaceLink, type SpaceRoute } from "../lib/spaces";
 import { PasteButton } from "./PasteButton";
 import { TextField } from "./TextField";
+import { space } from "@q9labsai/chalk-react-native";
 
 type JoinSheetProps = {
   readonly open: boolean;
@@ -51,7 +52,7 @@ export function JoinSheet({ open, onClose, onJoin, returnFocusRef }: JoinSheetPr
 }
 
 const styles = StyleSheet.create({
-  form: { gap: 8, paddingHorizontal: 4, paddingBottom: 16 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8 },
-  submit: { marginTop: 8 },
+  form: { gap: space[2], paddingHorizontal: space[1], paddingBottom: space[4] },
+  row: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  submit: { marginTop: space[2] },
 });

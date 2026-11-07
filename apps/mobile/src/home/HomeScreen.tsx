@@ -11,6 +11,7 @@ import { ClipboardCard, type ClipboardState } from "./ClipboardCard";
 import { JoinSheet } from "./JoinSheet";
 import { formatJoinedAt, type RecentCall, type RecentCalls } from "./recent-calls";
 import { YouSheet } from "./YouSheet";
+import { space, corners } from "@q9labsai/chalk-react-native";
 
 type HomeScreenProps = {
   readonly name: string | null;
@@ -193,16 +194,17 @@ const RecentCallRow = memo(function RecentCallRow({ call, menuOpen, onJoin, onOp
 const styles = StyleSheet.create({
   root: { flex: 1 },
   top: { height: 56, flexDirection: "row", alignItems: "center" },
-  you: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 6, paddingRight: 12, marginLeft: -6, borderRadius: 999 },
-  body: { flex: 1, marginHorizontal: -8 },
-  bodyContent: { paddingHorizontal: 8 },
-  section: { paddingTop: 14, paddingHorizontal: 4, paddingBottom: 6 },
-  empty: { paddingVertical: 8, paddingHorizontal: 4 },
-  row: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: 16 },
-  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 8, borderRadius: 16 },
+  you: { flexDirection: "row", alignItems: "center", gap: space[2], height: 44, paddingLeft: space["1-5"], paddingRight: space[3], marginLeft: -space["1-5"], borderRadius: corners.pill },
+  body: { flex: 1, marginHorizontal: -space[2] },
+  bodyContent: { paddingHorizontal: space[2] },
+  section: { paddingTop: space[3], paddingHorizontal: space[1], paddingBottom: space["1-5"] },
+  empty: { paddingVertical: space[2], paddingHorizontal: space[1] },
+  row: { flexDirection: "row", alignItems: "center", gap: space[1], borderRadius: corners["2xl"] },
+  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 64, paddingHorizontal: space[2], borderRadius: corners["2xl"] },
   faces: { width: 52, flexDirection: "row" },
-  face: { width: 28, height: 28, borderRadius: 14 },
-  faceOverlap: { marginLeft: -12 },
+  face: { width: 28, height: 28, borderRadius: corners.pill },
+  faceOverlap: { marginLeft: -space[3] },
+  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
   rowText: { flex: 1, minWidth: 0, gap: 1 },
-  foot: { gap: 10, paddingTop: 12 },
+  foot: { gap: space["2-5"], paddingTop: space[3] },
 });

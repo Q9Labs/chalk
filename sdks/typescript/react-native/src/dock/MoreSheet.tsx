@@ -19,7 +19,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { playSound } from "../sounds/sounds";
 import { useStageView, type StageLayoutChoice } from "../stage/stage-view";
 import { useTheme } from "../theme/theme";
-import { durations, fixed } from "../theme/tokens";
+import { durations, fixed, space, corners, fontSizes } from "../theme/tokens";
 
 export type MoreSheetProps = {
   readonly open: boolean;
@@ -248,11 +248,11 @@ function RecordingRow({ onDone }: { readonly onDone: () => void }): React.JSX.El
 const styles = StyleSheet.create({
   // `.rxrow`: wraps onto a second line on narrow phones.
   // One line on every phone: the reactions narrow from 44 pt to 32 pt before they would wrap beside the hand.
-  reactions: { flexDirection: "row", alignItems: "center", gap: 2, paddingBottom: 12 },
-  hand: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 12, paddingRight: 16, marginRight: 6, borderRadius: 999 },
+  reactions: { flexDirection: "row", alignItems: "center", gap: space["0-5"], paddingBottom: space[3] },
+  hand: { flexDirection: "row", alignItems: "center", gap: space[2], height: 44, paddingLeft: space[3], paddingRight: space[4], marginRight: space["1-5"], borderRadius: corners.pill },
   emojiSlot: { flexBasis: 44, flexShrink: 1, minWidth: 32 },
-  emoji: { height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  emojiText: { fontSize: 22 },
-  end: { flexDirection: "row", alignItems: "center", gap: 14 },
-  unread: { width: 8, height: 8, borderRadius: 4 },
+  emoji: { height: 44, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
+  emojiText: { fontSize: fontSizes.title },
+  end: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  unread: { width: 8, height: 8, borderRadius: corners.pill },
 });
