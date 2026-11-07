@@ -220,7 +220,9 @@ async function compare() {
   ];
   writeFileSync(join(out, "diff.txt"), `${summary.join("\n")}\n`);
   const strips = changed.filter((result) => result.strip).map(({ id, changed: count, strip }) => ({ id, changed: count, strip }));
-  const sheets = strips.length > 0 ? await page.evaluate(sheetInPage, [strips, 3]) : [];
+  // Full-page strips are large, so stack them into sheets in small batches rather than in one evaluate call.
+  const sheets = [];
+  for (let start = 0; start < strips.length; start += 15) sheets.push(...(await page.evaluate(sheetInPage, [strips.slice(start, start + 15), 3])));
   sheets.forEach((sheet, index) => writeFileSync(join(out, `sheet-${String(index + 1).padStart(2, "0")}.png`), Buffer.from(sheet, "base64")));
   await browser.close();
   console.log(summary[0]);
