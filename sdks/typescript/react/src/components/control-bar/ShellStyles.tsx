@@ -405,9 +405,9 @@ ${phoneRules(`
     height: 52px;
     justify-content: space-between;
     gap: 0;
-    padding-inline: 22px;
+    padding-inline: var(--space-6);
   }
-  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + 44px);margin-inline:-22px;}
+  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + var(--space-6) * 2);margin-inline:calc(var(--space-6) * -1);}
   .chalk-shell-dock .chalk-shell-desktop,
   .chalk-shell-corner {
     display: none;
@@ -443,8 +443,8 @@ ${phoneRules(`
     transform: none;
     width: 100%;
     max-width: none;
-    border-radius: 24px 24px 0 0;
-    padding-bottom: 42px;
+    border-radius: var(--corner-3xl) var(--corner-3xl) 0 0;
+    padding-bottom: var(--space-10);
   }
   .chalk-shell-detail-action {
     min-height: 48px;
@@ -566,13 +566,13 @@ ${phoneRules(`
     flex-wrap: wrap;
     justify-content: center;
     width: 300px;
-    border-radius: 22px;
+    border-radius: var(--corner-3xl);
   }
   .chalk-shell-raise {
     width: 100%;
     min-height:48px;
     justify-content: center;
-    margin: 0 0 4px;
+    margin: 0 0 var(--space-1);
   }
   .chalk-shell-reactions-expanded {
     width: auto;
