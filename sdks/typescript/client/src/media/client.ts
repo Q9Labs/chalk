@@ -1496,7 +1496,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (matched.length === 0) return [];
         await this.#waitForConnection(connection, generation).catch((error: unknown) => {
           // A connection that never went live is not a transient pull error: report it so the call recovers or fails.
-          if (this.#connectedEpoch !== this.#connectionEpoch && generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
+          if (connection === this.#connection && this.#connectedEpoch !== this.#connectionEpoch && generation === this.#generation && !this.#stopped) this.#setFailure(error, "media_failed");
           throw error;
         });
         this.#negotiatedGeneration = generation;
