@@ -318,7 +318,7 @@ describe("join with media on", () => {
       await left;
       getUserMedia.mockClear();
       await client.join();
-      expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything() }));
+      expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything() }), expect.any(AbortSignal));
     } finally {
       client.dispose();
     }
