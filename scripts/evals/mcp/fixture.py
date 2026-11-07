@@ -12,7 +12,7 @@ SCOPES = [
     "tenants:read", "memberships:read", "memberships:write", "api_keys:read",
     "api_keys:write", "api_keys:delete", "webhooks:read", "webhooks:write",
     "webhooks:delete", "spaces:read", "spaces:write", "episodes:read",
-    "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:delete",
+    "episodes:write", "recordings:read", "transcriptions:read", "transcriptions:write", "transcriptions:delete",
 ]
 NAMESPACE = uuid.UUID("4bdf8332-cb27-4db6-9134-03c485176c86")
 SNAPSHOT = {
