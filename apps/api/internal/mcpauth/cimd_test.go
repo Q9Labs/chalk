@@ -2,7 +2,6 @@ package mcpauth
 
 import (
 	"context"
-	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -132,8 +131,7 @@ func TestMetadataFetcherReadsOnlySmallJSONFromThePinnedAddress(t *testing.T) {
 	var behavior func(http.ResponseWriter, *http.Request)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { behavior(w, r) }))
 	defer server.Close()
-	roots := x509.NewCertPool()
-	roots.AddCert(server.Certificate())
+	roots := server.Client().Transport.(*http.Transport).TLSClientConfig.RootCAs
 	fetcher := httpsMetadataFetcher{
 		resolver: fixedResolver{netip.MustParseAddr("93.184.216.34")},
 		roots:    roots,
