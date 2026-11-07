@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/pprof"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
@@ -20,6 +21,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	// Readiness names the node incarnation and its load, so it needs the same identity as /v1.
 	mux.Handle("GET /readyz", s.v1(s.ready))
+	// Profiles hold heap contents and stacks, so they need the same identity. The index serves
+	// heap, goroutine and allocs; profile needs ?seconds= of 15 or less (the request deadline).
+	mux.Handle("GET /debug/pprof/", s.v1(servePprof(pprof.Index)))
+	mux.Handle("GET /debug/pprof/profile", s.v1(servePprof(pprof.Profile)))
 
 	prefix := "/" + protocol.Version
 	mux.Handle("POST "+prefix+"/sessions", s.v1(s.createSession))
@@ -41,6 +46,13 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 	budget, reserved := s.node.Budget()
 	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host()})
 	return nil
+}
+
+func servePprof(handle http.HandlerFunc) func(http.ResponseWriter, *http.Request) error {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		handle(w, r)
+		return nil
+	}
 }
 
 // v1 guards an operation: the caller must hold the expected service identity.

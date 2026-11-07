@@ -353,6 +353,12 @@ type HostState struct {
 	// buffer was full, since boot (SndbufErrors). It is absent where the host
 	// does not report it. A rising count means media loss on egress.
 	UDPSendBufferErrors *uint64 `json:"udpSendBufferErrors,omitempty"`
+	// Goroutines and HeapInuseBytes are the Go runtime's live goroutines and in-use heap spans.
+	// RSSBytes is the process's resident memory, absent where the host does not report it. A
+	// sampler charts them over a soak; /debug/pprof on the control port says where they come from.
+	Goroutines     int     `json:"goroutines"`
+	HeapInuseBytes uint64  `json:"heapInuseBytes"`
+	RSSBytes       *uint64 `json:"rssBytes,omitempty"`
 }
 
 type ErrorResponse struct {
