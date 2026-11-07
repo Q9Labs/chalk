@@ -209,6 +209,7 @@ function Session({
   const newerState = newer ? videoState(newer) : null;
   const newerAction = newerState === null ? null : VIDEO[newerState].action;
   const actionLabel = (action: "prepare" | "retry") => (exporting ? "Preparing…" : action === "retry" ? "Try again" : "Prepare recording");
+  const actionIcon = (action: "prepare" | "retry") => (exporting ? <span className="spin" aria-hidden="true" /> : <Icon name={action === "retry" ? "retry" : "film"} />);
   const media = unreadable ? (
     <div className="pnote" role="alert">
       <div>
@@ -227,7 +228,8 @@ function Session({
             <b>{newerAction === "retry" ? "A newer recording couldn’t be prepared" : newerAction ? "A newer recording is ready to prepare" : "Preparing the newer recording"}</b>
             <p>{newerAction === "retry" ? "Try again to watch or download it here." : newerAction ? "Prepare it to watch or download it here." : "It replaces this video here when it’s ready."}</p>
             {newerAction === "prepare" || newerAction === "retry" ? (
-              <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(newer)}>
+              <button type="button" className="btn pri lg" aria-busy={exporting || undefined} disabled={exporting} onClick={() => void prepareRecording(newer)}>
+                {actionIcon(newerAction)}
                 {actionLabel(newerAction)}
               </button>
             ) : null}
@@ -242,7 +244,8 @@ function Session({
         <b>{note.title}</b>
         <p>{recording.failureMessage || note.detail}</p>
         {note.action === "prepare" || note.action === "retry" ? (
-          <button type="button" className="btn sec" disabled={exporting} onClick={() => void prepareRecording(recording)}>
+          <button type="button" className="btn pri lg" aria-busy={exporting || undefined} disabled={exporting} onClick={() => void prepareRecording(recording)}>
+            {actionIcon(note.action)}
             {actionLabel(note.action)}
           </button>
         ) : null}
@@ -277,9 +280,7 @@ function Session({
         <div className="sgrid">
           {media}
           {panel}
-          <div className="below" style={{ marginTop: 4 }}>
-            {who}
-          </div>
+          <div className="below">{who}</div>
         </div>
       </div>
     );
