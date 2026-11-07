@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=scripts/gates/postgres-image.sh
+source "$(dirname "${BASH_SOURCE[0]}")/postgres-image.sh"
+
 if (($# == 0)); then
   echo "with-sync-topology.sh requires at least one command" >&2
   exit 2
@@ -168,6 +171,7 @@ start_docker_topology() {
   export CHALK_SYNC_TOPOLOGY_NETWORK="${network}"
   export CHALK_SYNC_TOPOLOGY_STANDBY_VOLUME="${standby_volume}"
 
+  pull_postgres_image "${docker_bin}"
   "${docker_bin}" network create "${network}" >/dev/null
   "${docker_bin}" volume create "${standby_volume}" >/dev/null
   "${docker_bin}" run \
@@ -177,7 +181,7 @@ start_docker_topology() {
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=postgres \
     -p 127.0.0.1::5432 \
-    -d postgres:18.3-alpine \
+    -d "${postgres_image}" \
     -c wal_level=replica \
     -c max_wal_senders=8 >/dev/null
   wait_for_docker_postgres "${docker_bin}" "${primary}"
@@ -205,7 +209,7 @@ start_docker_topology() {
     -e PGPASSWORD=replicator \
     -e PGDATA=/var/lib/postgresql/data/pgdata \
     -v "${standby_volume}:/var/lib/postgresql/data" \
-    postgres:18.3-alpine \
+    "${postgres_image}" \
     sh -c 'mkdir -p "$PGDATA" && chown postgres:postgres "$PGDATA" && if command -v gosu >/dev/null; then exec gosu postgres pg_basebackup -h "$1" -U chalk_replicator -D "$PGDATA" -R --checkpoint=fast -X stream; else exec su-exec postgres pg_basebackup -h "$1" -U chalk_replicator -D "$PGDATA" -R --checkpoint=fast -X stream; fi' \
     sh "${primary}" >/dev/null
 
@@ -216,7 +220,7 @@ start_docker_topology() {
     -e PGDATA=/var/lib/postgresql/data/pgdata \
     -v "${standby_volume}:/var/lib/postgresql/data" \
     -p 127.0.0.1::5432 \
-    -d postgres:18.3-alpine \
+    -d "${postgres_image}" \
     -c hot_standby=on >/dev/null
   wait_for_docker_postgres "${docker_bin}" "${standby}"
   standby_port="$(docker_port "${docker_bin}" "${standby}")"

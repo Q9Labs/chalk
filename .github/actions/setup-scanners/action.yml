@@ -4,6 +4,13 @@ description: Install the Gitleaks and OSV-Scanner releases that the gate scripts
 runs:
   using: composite
   steps:
+    # cache-warm.yml saves the downloads on master, so a github.com outage only fails a run on a cache miss.
+    - name: Restore scanner downloads
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/chalk-scanner-downloads
+        key: scanner-downloads-${{ runner.os }}-${{ hashFiles('.github/actions/setup-scanners/action.yml') }}
+
     - name: Install pinned Gitleaks and OSV-Scanner
       shell: bash
       run: |
@@ -14,15 +21,18 @@ runs:
         gitleaks_sha256="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
         osv_version="2.6.0"
         osv_sha256="ca69b3d3cd08f889a49dc0a383122f71cc528b83803671df5fd874d97485b108"
+        download_dir="${HOME}/.cache/chalk-scanner-downloads"
         bin_dir="${RUNNER_TEMP}/scanner-bin"
-        mkdir -p "${bin_dir}"
+        mkdir -p "${download_dir}" "${bin_dir}"
 
-        archive="${RUNNER_TEMP}/gitleaks.tar.gz"
-        curl --fail --silent --show-error --location --retry 3 "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/gitleaks_${gitleaks_version}_linux_x64.tar.gz" --output "${archive}"
+        # A restored file is checked against the same checksum as a fresh download.
+        archive="${download_dir}/gitleaks_${gitleaks_version}.tar.gz"
+        [[ -s "${archive}" ]] || curl --fail --silent --show-error --location --retry 3 --retry-all-errors "https://github.com/gitleaks/gitleaks/releases/download/v${gitleaks_version}/gitleaks_${gitleaks_version}_linux_x64.tar.gz" --output "${archive}"
         echo "${gitleaks_sha256}  ${archive}" | sha256sum --check
         tar -xzf "${archive}" -C "${bin_dir}" gitleaks
 
-        curl --fail --silent --show-error --location --retry 3 "https://github.com/google/osv-scanner/releases/download/v${osv_version}/osv-scanner_linux_amd64" --output "${bin_dir}/osv-scanner"
-        echo "${osv_sha256}  ${bin_dir}/osv-scanner" | sha256sum --check
-        chmod +x "${bin_dir}/osv-scanner"
+        osv_download="${download_dir}/osv-scanner_${osv_version}"
+        [[ -s "${osv_download}" ]] || curl --fail --silent --show-error --location --retry 3 --retry-all-errors "https://github.com/google/osv-scanner/releases/download/v${osv_version}/osv-scanner_linux_amd64" --output "${osv_download}"
+        echo "${osv_sha256}  ${osv_download}" | sha256sum --check
+        install -m 0755 "${osv_download}" "${bin_dir}/osv-scanner"
         echo "${bin_dir}" >> "${GITHUB_PATH}"

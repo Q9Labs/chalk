@@ -13,7 +13,7 @@ for (const firstExit of [0, 17]) {
     const write = (file, source) => writeFileSync(path.join(root, file), source, { mode: 0o755 });
     try {
       for (const directory of ["scripts/gates", "apps/api/scripts", "bin"]) mkdirSync(path.join(root, directory), { recursive: true });
-      for (const script of ["with-postgres.sh", "owned-command.sh"]) copyFileSync(new URL(`./${script}`, import.meta.url), path.join(root, "scripts/gates", script));
+      for (const script of ["with-postgres.sh", "owned-command.sh", "postgres-image.sh"]) copyFileSync(new URL(`./${script}`, import.meta.url), path.join(root, "scripts/gates", script));
       write(
         "bin/docker",
         `#!/bin/bash
@@ -52,7 +52,7 @@ function scratchRoot(context, prefix) {
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const write = (file, source) => writeFileSync(path.join(root, file), source, { mode: 0o755 });
   for (const directory of ["scripts/gates", "apps/api/scripts", "bin", "pg"]) mkdirSync(path.join(root, directory), { recursive: true });
-  for (const script of ["with-postgres.sh", "with-sync-topology.sh", "owned-command.sh"]) copyFileSync(new URL(`./${script}`, import.meta.url), path.join(root, "scripts/gates", script));
+  for (const script of ["with-postgres.sh", "with-sync-topology.sh", "owned-command.sh", "postgres-image.sh"]) copyFileSync(new URL(`./${script}`, import.meta.url), path.join(root, "scripts/gates", script));
   write("bin/docker", `#!/bin/bash\nprintf '%s\\n' "$*" >> "$TEST_SERVICE_LOG"\ncase "$1" in port) printf '127.0.0.1:%s\\n' "$PPID" ;; esac\n`);
   write("apps/api/scripts/db-migrate.sh", "#!/bin/bash\nexit 0\n");
   // with-sync-topology.sh prefers native PostgreSQL 18, so these stubs stand in for its binaries.
