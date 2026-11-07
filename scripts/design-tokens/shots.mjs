@@ -40,7 +40,7 @@ async function shoot() {
   const out = option("out");
   const states = option("states");
   const web = option("web");
-  const only = option("only")?.split(",");
+  const only = option("only")?.split(",").filter(Boolean);
   if (!out || (!states && !web)) throw new Error("shoot needs --out and --states and/or --web");
   mkdirSync(out, { recursive: true });
   const browser = await chromium.launch();
@@ -100,6 +100,7 @@ async function shoot() {
   });
   await browser.close();
   console.log(`shot ${selected.length - failures} of ${selected.length} into ${out}`);
+  if (failures > 0) process.exitCode = 1;
 }
 
 /** Runs inside the page: counts pixels that differ, and returns a before | after | diff strip. */
@@ -217,7 +218,7 @@ async function compare() {
   const identical = results.length - changed.length;
   const summary = [
     `compared ${results.length} screens: ${identical} identical, ${changed.length} changed`,
-    `only before: ${files.filter((name) => !beforeFiles.has(name)).length}, only after: ${[...beforeFiles].filter((name) => !files.includes(name)).length}`,
+    `only before: ${[...beforeFiles].filter((name) => !files.includes(name)).length}, only after: ${files.filter((name) => !beforeFiles.has(name)).length}`,
     ...results.map((result) => `${result.changed} ${result.id}${result.sizeChanged ? " (size changed)" : ""}`),
   ];
   writeFileSync(join(out, "diff.txt"), `${summary.join("\n")}\n`);

@@ -36,6 +36,7 @@ const live = [{ spaceId: callId, episode: { id: liveEpisodeId, count: 2, partici
 const knocks = [{ handle: "k1", name: "Sam Rivera", requestedAt: day, expiresAt: "2026-10-21T10:30:00Z", state: "pending", decisionState: "none", decisionAction: null }];
 
 const pages = {
+  connections: () => ({ connections: [], nextCursor: null }),
   home: () => ({ calls: homeCalls, live, nextCursor: null }),
   "home-status": () => ({ live, calls: homeCalls.map(({ id, archived, lastActiveAt, recentPeople }) => ({ id, archived, lastActiveAt, recentPeople })) }),
   call: () => ({
