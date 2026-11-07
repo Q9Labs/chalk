@@ -13,10 +13,10 @@ on:
 permissions:
   contents: read
 
-# A pull request's new push cancels its older run. Every other run gets its own group, so a pending master scan is
-# never replaced by a later push.
+# A pull request's new push cancels its older run, and a master push cancels the older master scan, because the newest
+# commit's scan covers everything the older one did. Scheduled and manual runs get their own group.
 concurrency:
-  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && 'master' || github.run_id }}
   cancel-in-progress: true
 
 jobs:
