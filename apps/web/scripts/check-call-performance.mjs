@@ -62,6 +62,7 @@ const report = {
   calibration: [],
   results: [],
   failures: [],
+  warnings: [],
   errors: [],
   selfTest: null,
   diagnostics: [],
@@ -85,7 +86,7 @@ try {
     for (const metric of ["routeJsGzipKiB", "routeCssGzipKiB"]) {
       const value = report.routeBundle[metric];
       console.log(`Production route ${metric}: ${value.toFixed(1)}/${budgets.limits[metric]}`);
-      if (value > budgets.limits[metric]) report.failures.push(`${metric} ${value.toFixed(2)} > ${budgets.limits[metric]}`);
+      if (value > budgets.limits[metric]) (budgets.warnOnly.includes(`route/${metric}`) ? report.warnings : report.failures).push(`${metric} ${value.toFixed(2)} > ${budgets.limits[metric]}`);
     }
     if (values.diagnostics) {
       for (const [deviceName, device] of Object.entries(budgets.devices)) {
@@ -107,9 +108,15 @@ try {
         const summary = summarize(samples);
         const limits = { ...budgets.limits, ...budgets.scenarios?.[deviceName]?.[scenario.id] };
         const checked = values["bundle-only"] ? BUNDLE_METRICS : METRICS.filter((metric) => metric !== "firstCallMs" || scenario.id === "first-load");
-        const failures = budgetFailures(summary, limits, checked).map((failure) => `${deviceName}/${scenario.id}: ${failure}`);
-        report.results.push({ device: deviceName, scenario: scenario.id, samples, summary, limits, failures });
+        const failures = [];
+        const warnings = [];
+        for (const metric of checked) {
+          const over = budgetFailures(summary, limits, [metric]).map((failure) => `${deviceName}/${scenario.id}: ${failure}`);
+          (budgets.warnOnly.includes(`${deviceName}/${scenario.id}/${metric}`) ? warnings : failures).push(...over);
+        }
+        report.results.push({ device: deviceName, scenario: scenario.id, samples, summary, limits, failures, warnings });
         report.failures.push(...failures);
+        report.warnings.push(...warnings);
         console.log(`${deviceName.padEnd(7)} ${scenario.id.padEnd(16)} ${checked.map((metric) => `${metric}=${summary[metric].median.toFixed(1)}/${limits[metric]}`).join(" ")}`);
       }
     }
@@ -152,6 +159,7 @@ try {
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`Report: ${output}`);
 }
+for (const warning of report.warnings) console.warn(`Over a warn-only budget: ${warning}`);
 if (report.errors.length || report.selfTest?.detected === false || (!values["record-baseline"] && report.failures.length)) process.exitCode = 1;
 
 function installObservers() {

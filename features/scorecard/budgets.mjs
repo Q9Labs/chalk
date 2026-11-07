@@ -47,11 +47,13 @@ export function validateBudgetEntries(entries) {
  * loadCallBudgets returns the file as the call performance check reads it: run settings,
  * the route limits, and one explicit limit per device, scenario and metric. The default limit
  * of a metric is the highest scenario limit, which only a run that records a baseline uses.
+ * warnOnly lists the limits whose entry has gate false, as "route/<metric>" and "<device>/<scenario>/<metric>".
  */
 export function loadCallBudgets(file) {
   validateBudgetEntries(file.budgets);
   const { baselineCommit, repeats, sampleMs, devices, leaks } = file.callRun;
   const scenarios = {};
+  const warnOnly = [];
   for (const device of Object.keys(devices)) {
     scenarios[device] = {};
     for (const [metric, segment] of Object.entries(CALL_METRICS)) {
@@ -61,14 +63,16 @@ export function loadCallBudgets(file) {
         if (!id.startsWith(prefix) || !id.endsWith(suffix)) continue;
         const scenario = id.slice(prefix.length, id.length - suffix.length);
         (scenarios[device][scenario] ??= {})[metric] = entry.max_p50;
+        if (!entry.gate) warnOnly.push(`${device}/${scenario}/${metric}`);
       }
     }
   }
   const limits = Object.fromEntries(Object.entries(ROUTE_METRICS).map(([metric]) => [metric, file.budgets[routeMetricId(metric)]?.max_p50]));
+  for (const metric of Object.keys(ROUTE_METRICS)) if (!file.budgets[routeMetricId(metric)]?.gate) warnOnly.push(`route/${metric}`);
   for (const metric of Object.keys(CALL_METRICS)) {
     limits[metric] = Math.max(...Object.values(scenarios).flatMap((device) => Object.values(device).map((scenario) => scenario[metric] ?? 0)));
   }
-  return { baselineCommit, repeats, sampleMs, devices, leaks, limits, scenarios };
+  return { baselineCommit, repeats, sampleMs, devices, leaks, limits, scenarios, warnOnly };
 }
 
 /** withCallLimits returns a copy of the file whose call-run limits come from a measured baseline. Other entries keep every field. */

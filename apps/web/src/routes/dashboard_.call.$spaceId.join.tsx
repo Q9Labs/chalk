@@ -3,9 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PrivacyNotice } from "../components/privacy/PrivacyNotice";
 import { OwnerCall } from "../components/dashboard/OwnerCall";
 import { useSiteTheme } from "../components/site/theme";
+import coreCss from "../styles/dashboard-core.css?url";
 
 export const Route = createFileRoute("/dashboard_/call/$spaceId/join")({
-  head: () => ({ meta: [{ title: "Chalk" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({ meta: [{ title: "Chalk" }, { name: "robots", content: "noindex" }], links: [{ rel: "stylesheet", href: coreCss }] }),
   component: JoinRoute,
 });
 

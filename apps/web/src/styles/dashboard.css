@@ -884,11 +884,6 @@
   min-width: 0;
 }
 
-.site .dash .wrap {
-  max-width: 920px;
-  margin: 0 auto;
-}
-
 .site .dash .wrap.wide {
   max-width: 1280px;
 }
@@ -1171,32 +1166,6 @@
   color: var(--chalk-muted-text);
   margin: 6px auto 0;
   max-width: 420px;
-}
-
-.site .dash .errp {
-  display: grid;
-  grid-template-columns: 20px 1fr auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 12px 12px 16px;
-  border-radius: 12px;
-  background: var(--chalk-surface);
-  border: 1px solid var(--chalk-line-strong);
-  font-size: 14px;
-}
-
-.site .dash .errp svg.site-icon {
-  color: var(--chalk-danger-text);
-}
-
-.site .dash .errp b {
-  display: block;
-  font-weight: 600;
-}
-
-.site .dash .errp span {
-  color: var(--chalk-soft-text);
-  font-size: 13.5px;
 }
 
 .site .dash .skrow {
@@ -2095,16 +2064,8 @@
     font-size: 20px;
   }
 
-  .site .dash .btn {
-    height: 40px;
-  }
-
   .site .dash .btn.lg {
     height: 48px;
-  }
-
-  .site .dash .btn.sm {
-    height: 36px;
   }
 
   .site .dash .ib {
@@ -2264,14 +2225,6 @@
     width: 100%;
   }
 
-  .site .dash .errp {
-    grid-template-columns: 20px 1fr;
-  }
-
-  .site .dash .errp .btn {
-    grid-column: 1/-1;
-  }
-
   .site .dash .linkrow {
     flex-wrap: wrap;
   }
@@ -2411,5 +2364,290 @@
   .site .dash .knock .ract {
     flex-basis: 100%;
     padding-left: 50px;
+  }
+}
+
+/* The transcript language picker: a field or chip that opens a searchable list. */
+
+.site .dash .hbox {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.site .dash .hlang {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.site .dash .lp-field {
+  display: flex;
+  max-width: 320px;
+}
+
+.site .dash .lp-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.site .dash .lp-chip .lp-pop:not(.sheet) {
+  left: auto;
+  right: 0;
+}
+
+.site .dash .lp-chip .lp-trigger {
+  gap: 8px;
+}
+
+.site .dash .lp-trigger:focus-visible,
+.site .dash .lp-opt.on {
+  outline: 2px solid var(--chalk-text);
+  outline-offset: 2px;
+}
+
+.site .dash .lp-trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.site .dash .lp-trigger[aria-expanded="true"] {
+  border-color: var(--chalk-text);
+}
+
+.site .dash .lp-chev {
+  flex: none;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.site .dash .lp-native {
+  flex: none;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-flag {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--chalk-line-strong);
+}
+
+.site .dash .lp-code,
+.site .dash .lp-glyph {
+  background: var(--chalk-hover);
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .lp-code {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.site .dash .lp-pop {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  width: 372px;
+  max-width: calc(100vw - 32px);
+  background: var(--chalk-popover);
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: 12px;
+  box-shadow: var(--raise);
+  overflow: hidden;
+  animation: dash-pin 0.22s var(--ease);
+}
+
+.site .dash .lp-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 48px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--chalk-line);
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--chalk-text);
+  font-size: 14px;
+  appearance: none;
+}
+
+.site .dash .lp-search input::placeholder {
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.site .dash .lp-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.site .dash .lp-list {
+  max-height: 392px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 8px;
+}
+
+.site .dash .lp-head {
+  padding: 10px 10px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 9px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.site .dash .lp-opt.sel {
+  background: var(--chalk-raised);
+}
+
+.site .dash .lp-opt.on {
+  background: var(--chalk-hover);
+  outline-offset: -2px;
+}
+
+.site .dash .lp-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.site .dash .lp-text small {
+  font-size: 12px;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-check {
+  flex: none;
+}
+
+.site .dash .lp-none {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 18px 22px;
+  text-align: center;
+}
+
+.site .dash .lp-none b {
+  font-size: 15px;
+}
+
+.site .dash .lp-none p {
+  max-width: 290px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .lp-acts {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .site .dash .hbox {
+    justify-items: stretch;
+  }
+
+  .site .dash .lp-field {
+    max-width: none;
+  }
+
+  .site .dash .lp-pop.sheet {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    max-width: none;
+    max-height: 92%;
+    border-width: 1px 0 0;
+    border-radius: 24px 24px 0 0;
+    animation: dash-up 0.22s var(--ease);
+  }
+
+  .site .dash .lp-pop.sheet .lp-grab {
+    display: block;
+    flex: none;
+    width: 36px;
+    height: 5px;
+    margin: 8px auto 4px;
+    border-radius: 3px;
+    background: var(--chalk-line-strong);
+  }
+
+  .site .dash .lp-pop.sheet .lp-search {
+    height: 52px;
+  }
+
+  .site .dash .lp-pop.sheet .lp-search input {
+    font-size: 16px;
+  }
+
+  .site .dash .lp-pop.sheet .lp-opt {
+    min-height: 52px;
+  }
+
+  .site .dash .lp-pop.sheet .lp-list {
+    flex: 1;
+    max-height: none;
   }
 }

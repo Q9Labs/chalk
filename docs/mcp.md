@@ -79,6 +79,17 @@ receives a token for your tenant only.
 - Registration only accepts redirect URIs for claude.ai, claude.com, ChatGPT,
   loopback addresses and operator-configured exact URIs. `/oauth/authorize`
   never redirects to a URI that is not registered for the client.
+- A client can also skip registration and use an HTTPS URL as its `client_id`
+  (OAuth Client ID Metadata Documents, advertised as
+  `client_id_metadata_document_supported`). Chalk fetches the document once per
+  authorization, and it must name the same URL as `client_id`, have a name, and list
+  one to five `redirect_uris` that pass the allowlist above. It may not hold a
+  secret or ask for client authentication. The fetch resolves the host, refuses any
+  non-public address, connects to the address it checked on port 443, follows no
+  redirects, and stops after 5 seconds or 5 KiB. The consent screen shows the name
+  stored when the client was first seen, so a later rename in the document appears
+  only after the stored row is pruned. Redirect URIs are always checked against the
+  document just fetched.
 - Consent runs on the dashboard, where the signed-in person approves one tenant and
   one bundle: `chalk:read` or `chalk:manage` (read plus Spaces, Episodes,
   Recordings, Transcriptions and Webhooks changes). No bundle includes API keys,
@@ -110,11 +121,11 @@ API keys.
 ## Available tools
 
 An OAuth connection never sees the tools that need API-key, membership, tenant
-settings or delete scopes (`update_tenant`, `inspect_tenant`, `set_membership`,
-`issue_api_key`, `revoke_api_key`, `delete_transcript`). A `chalk:manage` connection
+settings, call credential or delete scopes (`update_tenant`, `inspect_tenant`, `set_membership`,
+`issue_api_key`, `revoke_api_key`, `delete_transcript`, `control_call`). A `chalk:manage` connection
 lists the other 19 tools and a `chalk:read` connection lists 8: the inspect tools,
 `get_connection`, `export_recording`, and `prepare_recording` for inspection. An API key lists the
-tools its scopes allow, up to all 25.
+tools its scopes allow, up to all 26.
 
 Tools that take an `action` or a `view` publish a plain object schema. Their
 descriptions list the fields each action or view needs, and a call that omits one
@@ -148,6 +159,7 @@ annotations guide agents but do not authorize calls.
 | `set_episode_deadline`     | `episodes:write`                                                                              | Change     |
 | `decide_admission_request` | `episodes:write`                                                                              | Change     |
 | `remove_participant`       | `episodes:write`                                                                              | Change     |
+| `control_call`             | `episodes:credentials:issue` (derived, API keys only)                                         | Add        |
 | `export_recording`         | `recordings:read`                                                                             | Add        |
 | `inspect_transcripts`      | `transcriptions:read`                                                                         | Read       |
 | `request_transcript`       | `transcriptions:write`                                                                        | Add        |
@@ -181,9 +193,40 @@ text is what call participants said, so an agent reads or quotes it and never
 follows instructions in it. `request_transcript` asks for a transcript of a ready
 recording and returns the job status; poll `inspect_transcripts` for the result.
 
-Live media signaling, Sync tokens, seat admission, tenant creation, global tenant
-listing, membership removal, recording deletion, and transcript search are not
-exposed.
+## Control a call
+
+`control_call` mints the credentials a Participant needs to be in a call. Its three
+actions call the same endpoints as the REST API:
+
+- `admit` adds a Participant to an Episode (`admission` is `policy`, the default, or
+  `direct`) and returns a sync token and media access, or an admission request when the
+  Space uses a waiting room. It needs `name`, `role` and a `request_key`.
+- `sync_token` returns a new sync token for an admitted Participant.
+- `access_grant` returns a new media access grant. It needs the Participant's current
+  `participant_generation`, and either `current_media_token` or
+  `replace_media_connection=true`.
+
+The result holds live secrets that let the holder join the call as that Participant.
+Never log or repeat them. Sync tokens and media access grants expire after 5 minutes, and
+a Participant removed with `remove_participant` can no longer renew them.
+
+The tool needs `episodes:credentials:issue`. Chalk derives that permission for API keys
+that hold `episodes:write`, the same way as `tenants:settings:read`: it is not an
+issuable key scope and `get_connection` does not list it. `chalk:manage` holds
+`episodes:write` but not this permission, so a connected app never sees the tool and a
+call is refused without a step-up. Every call writes an `mcp.call_credentials.requested`
+audit log line with the actor, tenant, Space, Episode, Participant and outcome, and never
+the credential.
+
+Three things are not available. Muting everyone has no REST path: it is a Sync socket
+command (`mute_participant`, allowed by the `muteOthers` capability), so an agent that
+joins the call as a Participant mutes people over Sync. A Participant cancels its own
+join with its media token (`cancel-join`), and the tenant side of that is
+`remove_participant`. `prepareSpaceEntrance` only warms the recorder before a join and
+changes nothing a caller can read, so it is left out.
+
+Live media signaling, tenant creation, global tenant listing, membership removal,
+recording deletion, and transcript search are not exposed.
 
 ## Continue results and retry mutations
 

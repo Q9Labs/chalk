@@ -29,6 +29,7 @@ func mcpCases(t *testing.T, spaceID, emptySpace, episodeID, participantID, recor
 		{"set_episode_deadline", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-deadline-01","deadline_at":%q}`, spaceID, episodeID, time.Now().Add(2*time.Hour).UTC().Format(time.RFC3339)), ""},
 		{"decide_admission_request", fmt.Sprintf(`{"space_id":%q,"request_handle":"missing-request-handle","decision":"deny","request_key":"mcp-admission-deny-01"}`, spaceID), "admission_request.not_found"},
 		{"remove_participant", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"participant_id":%q,"participant_generation":1,"request_key":"mcp-participant-remove-01"}`, spaceID, episodeID, participantID), ""},
+		{"control_call", fmt.Sprintf(`{"action":"admit","admission":"direct","space_id":%q,"episode_id":%q,"name":"MCP agent","role":"collaborator","request_key":"mcp-call-admit-0001"}`, spaceID, episodeID), ""},
 		{"end_episode", fmt.Sprintf(`{"space_id":%q,"episode_id":%q,"request_key":"mcp-episode-end-0001"}`, endSpace, endEpisode), ""},
 		{"inspect_recordings", `{}`, ""},
 		{"export_recording", fmt.Sprintf(`{"recording_id":%q}`, recordingID), ""},

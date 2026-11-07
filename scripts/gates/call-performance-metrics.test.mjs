@@ -116,3 +116,11 @@ test("a proposed call baseline keeps web entries it does not measure and every f
   assert.deepEqual(next.budgets["web.real_node.latency_ms"], file.budgets["web.real_node.latency_ms"]);
   assert.equal("web.laptop.panels.heap_mib" in next.budgets, false);
 });
+
+test("a limit whose entry has gate false is listed as warn-only", async () => {
+  const file = JSON.parse(readFileSync(new URL("../../perf/budgets.json", import.meta.url), "utf8"));
+  assert.deepEqual(loadCallBudgets(file).warnOnly, []);
+  file.budgets["web.laptop.panels.interaction_ms"].gate = false;
+  file.budgets["web.route.css_gzip_kib"].gate = false;
+  assert.deepEqual(loadCallBudgets(file).warnOnly.sort(), ["laptop/panels/interactionMs", "route/routeCssGzipKiB"]);
+});
