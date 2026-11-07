@@ -20,9 +20,12 @@ export async function connectChecks({ open, check }) {
       check("consent names the signed-in account and tenant", await tab.getByText("hasan@q9labs.ai").isVisible() && (await tab.locator(".cwho").innerText()).includes("Hasan Shoaib"));
       check("consent offers to switch account", await tab.getByRole("button", { name: "Switch account" }).isVisible());
       await tab.getByRole("button", { name: "Switch account" }).click();
+      // The next sign-in is as the other fixture account.
+      await tab.evaluate(() => fetch("/__fixture/set?account=new"));
       await tab.getByRole("button", { name: "Continue with Google" }).click();
       await tab.getByRole("heading", { name: "Connect Claude to Chalk" }).waitFor();
-      check("switching accounts signs in again and returns to the same request", tab.url().endsWith(`/dashboard/connect?request=${handle("claude", "read")}`));
+      const who = await tab.locator(".cwho").innerText();
+      check("switching accounts returns to the same request as the other account", tab.url().endsWith(`/dashboard/connect?request=${handle("claude", "read")}`) && who.includes("june@example.com") && who.includes("June Park") && !who.includes("hasan@q9labs.ai"), who);
       check("consent page leaves out the dashboard frame", (await tab.locator(".topb").count()) === 0);
     } finally {
       await context.close();
