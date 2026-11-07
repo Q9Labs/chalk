@@ -175,7 +175,7 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, admissionProofLinks{})
+	inviteRuntime, err := publicinvites.NewRuntime(inviteService, spacePort, inviteRepo, &terminalAdmissionAccess{}, admissionProofAccounts{}, mcpInviteLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,4 +365,11 @@ func TestMCPPostgresToolsAndPermissions(t *testing.T) {
 	if _, err := deniedSession.CallTool(ctx, &mcp.CallToolParams{Name: "chalk_get_connection", Arguments: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("revoked key retained an initialized MCP connection")
 	}
+}
+
+// mcpInviteLinks gives the invite view a canonical URL; the shared proof stub has no links.
+type mcpInviteLinks struct{ publicinvites.Links }
+
+func (mcpInviteLinks) InviteURL(code string) (string, error) {
+	return "https://invite.example/" + code, nil
 }
