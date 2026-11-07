@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -546,6 +547,14 @@ func TestSubscriptionStatesReportAnUngrantedSource(t *testing.T) {
 	}
 }
 
+// cancelingRelay gives up the join while TURN credentials are being minted.
+type cancelingRelay struct{ cancel context.CancelFunc }
+
+func (c cancelingRelay) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
+	c.cancel()
+	return nil, ctx.Err()
+}
+
 type fakeRelay struct{ err error }
 
 func (f fakeRelay) RelayServers(context.Context) ([]mediaplane.ICEServer, error) {
@@ -585,8 +594,8 @@ func TestConformanceRelayOnlyForAllowedJoins(t *testing.T) {
 		}
 		return false
 	}
-	reader := sdkmetric.NewManualReader()
-	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	reader := turnMetricsReader()
+	failuresBefore := turnMintFailureCount(t, reader)
 	var logs bytes.Buffer
 	previousLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
@@ -608,10 +617,31 @@ func TestConformanceRelayOnlyForAllowedJoins(t *testing.T) {
 		!strings.Contains(logs.String(), `"episode_id":"ep-relay-fallback"`) {
 		t.Fatalf("mint failure log lacks the event or the Episode id: %s", logs.String())
 	}
-	if got := turnMintFailureCount(t, reader); got != 2 {
+	if got := turnMintFailureCount(t, reader) - failuresBefore; got != 2 {
 		t.Fatalf("turn mint failures = %d, want 2 (one per failed join)", got)
 	}
+	canceled, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	abandoned := plain.WithRelay(cancelingRelay{cancel: cancel})
+	if _, err := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, abandoned).CreateJoin(canceled, mediaplane.CreateJoinInput{
+		Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-relay-canceled", "canceled"),
+		Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-relay-canceled"},
+		ParticipantName: "canceled", ExternalParticipantID: "canceled", ParticipantPreset: "contributor", AllowRelay: true,
+	}); err != nil {
+		t.Fatalf("a join abandoned during the TURN mint: %v", err)
+	}
+	if got := turnMintFailureCount(t, reader) - failuresBefore; got != 2 {
+		t.Fatalf("a canceled join counted as a mint failure: %d", got)
+	}
 }
+
+// The adapter's package-level counter binds to the first global meter provider only,
+// so every run in the process shares one reader and tests compare counts by difference.
+var turnMetricsReader = sync.OnceValue(func() sdkmetric.Reader {
+	reader := sdkmetric.NewManualReader()
+	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	return reader
+})
 
 func turnMintFailureCount(t *testing.T, reader sdkmetric.Reader) int64 {
 	t.Helper()

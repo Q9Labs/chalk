@@ -79,6 +79,10 @@ func (a *Adapter) iceServersFor(ctx context.Context, episodeID string, allowRela
 		return a.iceServers
 	}
 	servers, err := a.relay.RelayServers(ctx)
+	if err != nil && ctx.Err() != nil {
+		// The caller gave up, so no client gets this join and nothing failed to mint.
+		return a.iceServers
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "TURN credentials unavailable; own-SFU clients use STUN only",
 			"event", "chalk_sfu.turn_credentials_failed", "node", a.node, "episode_id", episodeID, "error", err.Error())
