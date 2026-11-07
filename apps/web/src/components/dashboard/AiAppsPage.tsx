@@ -122,6 +122,8 @@ export function AiAppsPage() {
             act("connections", { action: "revoke-connection", connectionId: revoking.id }).then(
               () => {
                 update((value) => ({ ...value, connections: value.connections.filter((item) => item.id !== revoking.id) }));
+                // With more pages, the catalog's names came from every page, so read them again.
+                if (state.kind === "ready" && state.data.nextCursor) reload();
                 setRevoking(null);
                 toast(`Disconnected ${revoking.clientName}`, { icon: "trash" });
               },

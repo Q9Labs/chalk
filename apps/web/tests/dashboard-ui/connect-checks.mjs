@@ -219,6 +219,19 @@ export async function connectChecks({ open, check }) {
     }
   }
   {
+    const { tab, context } = await open("/dashboard/apps", { set: "manyConnections=1" });
+    try {
+      await tab.locator("table.capps tbody tr").first().waitFor();
+      await tab.getByRole("button", { name: "Disconnect Claude", exact: true }).click();
+      await tab.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
+      await tab.getByText("Disconnected Claude").waitFor();
+      await tab.waitForFunction(() => !Array.from(document.querySelectorAll(".ctile")).find((node) => node.textContent?.includes("Claude") && !node.textContent.includes("Claude Code") && node.textContent.includes("Connected")));
+      check("with more pages, disconnecting an app takes its Connected badge off the tile", (await tab.locator(".ctile", { hasText: "ChatGPT" }).innerText()).includes("Connected"));
+    } finally {
+      await context.close();
+    }
+  }
+  {
     const { tab, context } = await open("/dashboard/apps", { set: "fail=connections-list" });
     try {
       await tab.getByRole("alert").filter({ hasText: "Couldn’t load your connected apps" }).waitFor();

@@ -40,20 +40,30 @@ export async function connectionsPage(engine: Engine, cursor?: string): Promise<
     const result = await read(cursor, 25);
     return { mcpUrl: engine.mcpUrl, connections: result.data.map(connectionRow), nextCursor: result.pagination.next_cursor, connectedNames: [], listError: false };
   }
+  let first: Awaited<ReturnType<typeof read>>;
   try {
-    const result = await read(undefined, 25);
-    const names = new Set(result.data.map((row) => row.client_name));
-    let next = result.pagination.next_cursor;
+    first = await read(undefined, 25);
+  } catch (error) {
+    logFailure(engine, error);
+    return { mcpUrl: engine.mcpUrl, connections: [], nextCursor: null, connectedNames: [], listError: true };
+  }
+  const names = new Set(first.data.map((row) => row.client_name));
+  // The names only drive the catalog badges, so a failed scan keeps the table and leaves the badges to the pages already read.
+  try {
+    let next = first.pagination.next_cursor;
     for (let pages = 0; next && pages < NAME_PAGE_LIMIT; pages++) {
       const more = await read(next, NAME_PAGE_SIZE);
       for (const row of more.data) names.add(row.client_name);
       next = more.pagination.next_cursor;
     }
-    return { mcpUrl: engine.mcpUrl, connections: result.data.map(connectionRow), nextCursor: result.pagination.next_cursor, connectedNames: [...names], listError: false };
   } catch (error) {
-    console.warn(JSON.stringify({ event: "dashboard.mcp_connections_failed", tenant_id: engine.tenantId, error: error instanceof Error ? error.message : "unknown" }));
-    return { mcpUrl: engine.mcpUrl, connections: [], nextCursor: null, connectedNames: [], listError: true };
+    logFailure(engine, error);
   }
+  return { mcpUrl: engine.mcpUrl, connections: first.data.map(connectionRow), nextCursor: first.pagination.next_cursor, connectedNames: [...names], listError: false };
+}
+
+function logFailure(engine: Engine, error: unknown) {
+  console.warn(JSON.stringify({ event: "dashboard.mcp_connections_failed", tenant_id: engine.tenantId, error: error instanceof Error ? error.name : "unknown" }));
 }
 
 export async function connectionsMutation(engine: Engine, action: ConnectionsAction) {

@@ -61,7 +61,16 @@ it("names every connected app on the first page, and keeps the Chalk URL when th
   const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const down = await connectionsPage(engine({ listMCPConnections: () => Effect.fail(new Error("rate limited")) }));
   expect(down).toEqual({ mcpUrl: "https://api.example.test/mcp", connections: [], nextCursor: null, connectedNames: [], listError: true });
-  warn.mockRestore();
 
   await expect(connectionsPage(engine({ listMCPConnections: () => Effect.fail(new Error("rate limited")) }), "c1")).rejects.toThrow();
+
+  // A failed name scan keeps the grants already read.
+  const scan = vi
+    .fn()
+    .mockReturnValueOnce(Effect.succeed({ data: [row("Claude")], pagination: { page_size: 25, next_cursor: "c1", has_more: true } }))
+    .mockReturnValueOnce(Effect.fail(new Error("rate limited")));
+  const kept = await connectionsPage(engine({ listMCPConnections: scan }));
+  expect(kept).toMatchObject({ listError: false, nextCursor: "c1", connectedNames: ["Claude"] });
+  expect(kept.connections).toHaveLength(1);
+  warn.mockRestore();
 });
