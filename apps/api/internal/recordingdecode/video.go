@@ -1,6 +1,7 @@
 package recordingdecode
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -9,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
+	"github.com/bluenviron/mediacommon/v2/pkg/codecs/h264"
+	"github.com/bluenviron/mediacommon/v2/pkg/formats/mpegts"
+	tscodecs "github.com/bluenviron/mediacommon/v2/pkg/formats/mpegts/codecs"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v4/pkg/media/h264writer"
@@ -375,11 +378,24 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		resultErr = errors.Join(resultErr, removeAllWithContext(segmentDirectory, "remove H264 segment workspace"))
 	}()
 
-	var segments []videoSegment
+	timedPath := filepath.Join(segmentDirectory, "source.ts")
+	timedFile, err := os.OpenFile(timedPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return Source{}, nil, fmt.Errorf("create H264 timed stream: %w", err)
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, closeFileWithContext(timedFile, "close H264 timed stream"))
+	}()
+	track := &mpegts.Track{Codec: &tscodecs.H264{}}
+	muxer := &mpegts.Writer{W: timedFile, Tracks: []*mpegts.Track{track}}
+	if err := muxer.Initialize(); err != nil {
+		return Source{}, nil, fmt.Errorf("initialize H264 timed stream: %w", err)
+	}
+	var frame bytes.Buffer
+	var frameInputBytes int
 	var frameTimestamps []uint64
 	var writer *h264writer.H264Writer
 	quality := vp8Quality{}
-	var current videoSegment
 	var previousSequence uint64
 	var previousSSRC uint32
 	var previousTimestamp uint32
@@ -395,19 +411,14 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 		if err := closing.Close(); err != nil {
 			return fmt.Errorf("close H264 segment: %w", err)
 		}
-		segments = append(segments, current)
+		frame.Reset()
+		frameInputBytes = 0
 		return nil
 	}
-	startSegment := func(packet recordingbundle.RTPPacket) error {
-		current = videoSegment{path: filepath.Join(segmentDirectory, "segment-"+strconv.Itoa(len(segments))+".h264"), startTicks: uint64(packet.Timestamp)}
-		var err error
-		writer, err = h264writer.New(current.path)
-		if err != nil {
-			return fmt.Errorf("create H264 segment: %w", err)
-		}
-		return nil
+	startSegment := func() {
+		writer = h264writer.NewWith(&frame)
 	}
-	err := readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
+	err = readSpool(state.spoolPath, func(packet recordingbundle.RTPPacket) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -438,20 +449,34 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 				started = true
 				return nil
 			}
-			if err := startSegment(packet); err != nil {
-				return err
-			}
+			startSegment()
 			if lossStart > 0 && uint64(packet.Timestamp) > lossStart {
 				resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
 					ticksToMillisecondsFloor(lossStart, videoClockRate), ticksToMillisecondsCeil(uint64(packet.Timestamp), videoClockRate), "packet_loss"))
 			}
 			waitingForKeyFrame = false
 		}
+		// Bound wire bytes before depacketization: FU-A fragments can accumulate
+		// inside Pion even before they reach the access-unit buffer.
+		if len(packet.Payload) > h264.MaxAccessUnitSize-frameInputBytes {
+			return fmt.Errorf("%w: H264 access unit exceeds size bound", ErrDecode)
+		}
+		frameInputBytes += len(packet.Payload)
 		rtpPacket := toRTPPacket(packet)
 		if err := writer.WriteRTP(&rtpPacket); err != nil {
 			return fmt.Errorf("%w: write H264 RTP: %v", ErrDecode, err)
 		}
-		if packet.Marker {
+		if packet.Marker && frame.Len() > 0 {
+			var au h264.AnnexB
+			if err := au.Unmarshal(frame.Bytes()); err != nil {
+				return fmt.Errorf("%w: parse H264 access unit: %v", ErrDecode, err)
+			}
+			timestamp := int64(packet.Timestamp)
+			if err := muxer.WriteH264(track, timestamp, timestamp, au); err != nil {
+				return fmt.Errorf("%w: mux H264 access unit: %v", ErrDecode, err)
+			}
+			frame.Reset()
+			frameInputBytes = 0
 			frameTimestamps = append(frameTimestamps, uint64(packet.Timestamp))
 		}
 		previousSequence, previousSSRC, previousTimestamp = packet.ExtendedSequenceNumber, packet.SSRC, packet.Timestamp
@@ -471,21 +496,17 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 	if err := closeSegment(); err != nil {
 		return Source{}, nil, err
 	}
-	if len(segments) == 0 || len(frameTimestamps) == 0 {
+	if len(frameTimestamps) == 0 {
 		quality.result(state, nil, durationMS, nil)
 		return Source{}, nil, nil
 	}
-	rawPath := filepath.Join(segmentDirectory, "source.h264")
 	if waitingForKeyFrame {
 		resultDiscontinuities = append(resultDiscontinuities, sourceDiscontinuity(state,
 			ticksToMillisecondsFloor(lossStart, videoClockRate), durationMS, "packet_loss"))
 	}
 	resultDiscontinuities = declaredVideoLoss(state, frameTimestamps, durationMS, resultDiscontinuities)
-	if err := concatenateFiles(rawPath, segments); err != nil {
-		return Source{}, nil, err
-	}
 	quality.result(state, frameTimestamps, durationMS, resultDiscontinuities)
-	startTicks := segments[0].startTicks
+	startTicks := frameTimestamps[0]
 	nominalTicks := nominalFrameTicks(frameTimestamps)
 	endTicks := frameTimestamps[len(frameTimestamps)-1] + nominalTicks
 	maximumTicks := uint64(durationMS) * videoClockRate / 1_000
@@ -506,7 +527,7 @@ func decodeH264Source(ctx context.Context, runner CommandRunner, ffmpegPath, wor
 	}
 	relativePath := filepath.Join("media", state.presentation.SourceID+".mp4")
 	outputPath := filepath.Join(mediaDirectory, state.presentation.SourceID+".mp4")
-	if err := writeH264MP4(ctx, runner, ffmpegPath, rawPath, outputPath, frameTimestamps, startTicks, nominalTicks, passthrough); err != nil {
+	if err := writeH264MP4(ctx, runner, ffmpegPath, timedPath, outputPath, nominalTicks, passthrough); err != nil {
 		return Source{}, nil, err
 	}
 	byteSize, checksum, err := fileFacts(outputPath)
@@ -650,120 +671,19 @@ func mergeIVF(outputPath string, segments []videoSegment) (resultErr error) {
 	return nil
 }
 
-func concatenateFiles(outputPath string, segments []videoSegment) (resultErr error) {
-	output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("create H264 stream: %w", err)
+// writeH264MP4 preserves RTP timing carried by the MPEG-TS packets. Its command
+// size and per-frame timing work do not grow with the number of timing changes.
+func writeH264MP4(ctx context.Context, runner CommandRunner, ffmpegPath, timedPath, outputPath string, nominalTicks uint64, passthrough bool) error {
+	args := []string{
+		"-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-copyts", "-start_at_zero",
+		"-f", "mpegts", "-i", timedPath, "-map", "0:v:0", "-an",
 	}
-	defer func() {
-		resultErr = errors.Join(resultErr, closeFileWithContext(output, "close H264 stream"))
-	}()
-	for _, segment := range segments {
-		input, err := os.Open(segment.path)
-		if err != nil {
-			return fmt.Errorf("open H264 segment: %w", err)
-		}
-		_, copyErr := io.Copy(output, input)
-		closeErr := input.Close()
-		if err := errors.Join(copyErr, closeErr); err != nil {
-			return fmt.Errorf("copy H264 segment: %w", err)
-		}
-	}
-	return nil
-}
-
-type h264TimingAdjustment struct {
-	frame      int
-	difference int64
-}
-
-// h264TimingAdjustments lists where frame timing departs from the nominal
-// frame spacing, as tick offsets that apply from that frame on.
-func h264TimingAdjustments(timestamps []uint64, startTicks, nominalTicks uint64) ([]h264TimingAdjustment, error) {
-	if len(timestamps) == 0 || nominalTicks == 0 {
-		return nil, fmt.Errorf("%w: missing H264 frame timestamps", ErrDecode)
-	}
-	var adjustments []h264TimingAdjustment
-	for index := 1; index < len(timestamps); index++ {
-		nominalTimestamp := startTicks + uint64(index)*nominalTicks
-		actualTimestamp := timestamps[index]
-		previousNominalTimestamp := startTicks + uint64(index-1)*nominalTicks
-		previousActualTimestamp := timestamps[index-1]
-		nominalDelta := nominalTimestamp - previousNominalTimestamp
-		actualDelta := actualTimestamp - previousActualTimestamp
-		if actualDelta == nominalDelta {
-			continue
-		}
-		if len(adjustments) == 512 {
-			return nil, fmt.Errorf("%w: H264 variable frame timing exceeds bound", ErrDecode)
-		}
-		adjustments = append(adjustments, h264TimingAdjustment{frame: index, difference: int64(actualDelta) - int64(nominalDelta)})
-	}
-	return adjustments, nil
-}
-
-// h264SetPTS is the setpts filter expression for re-encoding.
-func h264SetPTS(timestamps []uint64, startTicks, nominalTicks uint64) (string, error) {
-	adjustments, err := h264TimingAdjustments(timestamps, startTicks, nominalTicks)
-	if err != nil {
-		return "", err
-	}
-	var expression strings.Builder
-	expression.WriteString("(N*")
-	expression.WriteString(strconv.FormatUint(nominalTicks, 10))
-	expression.WriteString("/90000)/TB")
-	for _, adjustment := range adjustments {
-		expression.WriteString("+if(gte(N,")
-		expression.WriteString(strconv.Itoa(adjustment.frame))
-		expression.WriteString("),")
-		expression.WriteString(strconv.FormatInt(adjustment.difference, 10))
-		expression.WriteString("/90000/TB,0)")
-	}
-	return expression.String(), nil
-}
-
-// h264SetTS is the setts bitstream filter expression, in 90 kHz ticks, for
-// copying the stream as recorded. Commas are escaped for the filter list.
-func h264SetTS(timestamps []uint64, startTicks, nominalTicks uint64) (string, error) {
-	adjustments, err := h264TimingAdjustments(timestamps, startTicks, nominalTicks)
-	if err != nil {
-		return "", err
-	}
-	var expression strings.Builder
-	expression.WriteString("N*")
-	expression.WriteString(strconv.FormatUint(nominalTicks, 10))
-	for _, adjustment := range adjustments {
-		expression.WriteString(`+if(gte(N\,`)
-		expression.WriteString(strconv.Itoa(adjustment.frame))
-		expression.WriteString(`)\,`)
-		expression.WriteString(strconv.FormatInt(adjustment.difference, 10))
-		expression.WriteString(`\,0)`)
-	}
-	return expression.String(), nil
-}
-
-// writeH264MP4 times the raw stream from its RTP timestamps. Passthrough copies
-// the recorded frames; otherwise they are re-encoded for browser seeking.
-func writeH264MP4(ctx context.Context, runner CommandRunner, ffmpegPath, rawPath, outputPath string, frameTimestamps []uint64, startTicks, nominalTicks uint64, passthrough bool) error {
 	if passthrough {
-		timestamps, err := h264SetTS(frameTimestamps, startTicks, nominalTicks)
-		if err != nil {
-			return err
-		}
-		return runFFmpeg(ctx, runner, ffmpegPath,
-			"-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-r", strconv.FormatUint(videoClockRate, 10),
-			"-f", "h264", "-i", rawPath, "-map", "0:v:0", "-an", "-c:v", "copy", "-bsf:v", "setts=ts="+timestamps,
-			"-movflags", "+faststart", "-video_track_timescale", "90000", outputPath,
-		)
+		args = append(args, "-c:v", "copy", "-bsf:v", "setts=duration="+strconv.FormatUint(nominalTicks, 10))
+	} else {
+		args = append(args, "-fps_mode", "vfr", "-enc_time_base", "1:90000",
+			"-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p")
 	}
-	filter, err := h264SetPTS(frameTimestamps, startTicks, nominalTicks)
-	if err != nil {
-		return err
-	}
-	return runFFmpeg(ctx, runner, ffmpegPath,
-		"-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-r", fmt.Sprintf("%d/%d", videoClockRate, nominalTicks),
-		"-f", "h264", "-i", rawPath, "-map", "0:v:0", "-an", "-vf", "setpts="+filter,
-		"-fps_mode", "vfr", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
-		"-movflags", "+faststart", "-video_track_timescale", "90000", outputPath,
-	)
+	args = append(args, "-movflags", "+faststart", "-video_track_timescale", "90000", outputPath)
+	return runFFmpeg(ctx, runner, ffmpegPath, args...)
 }
