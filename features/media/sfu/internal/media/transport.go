@@ -458,6 +458,14 @@ func (t *transport) abandonProbe() {
 	t.estimator.probe = probeCluster{}
 }
 
+// stalled reports whether the node's stall excuses this transport's late feedback
+// and pacer drops at now. It does not while the receiver reports heavy loss, which a
+// stall cannot cause: then the path is congested too, and the allocator must act.
+// The caller holds t.mu.
+func (t *transport) stalled(now int64) bool {
+	return now < t.pressureUntil && !t.estimator.lossy(now)
+}
+
 // pressure tells the transport that the node is stalled until the given time.
 func (t *transport) pressure(until int64) {
 	t.mu.Lock()
@@ -507,7 +515,7 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 	t.seenNext = (t.seenNext + 1) % feedbackSeen
 	now := monotonic()
 	t.acks = walkFeedback(report, t.log[:], t.acks[:0])
-	t.estimator.pressure(now < t.pressureUntil)
+	t.estimator.pressure(t.stalled(now))
 	t.estimator.onFeedback(t.acks, now)
 	t.feedback = now
 	t.counters.Feedback++
@@ -523,7 +531,7 @@ func (t *transport) tick(now int64) (growth transportGrowth) {
 		growth.packets[class], growth.bytes[class] = t.meters[class].sample(now)
 	}
 	t.mu.Lock()
-	t.estimator.pressure(now < t.pressureUntil)
+	t.estimator.pressure(t.stalled(now))
 	t.settleProbe(now)
 	t.refill(now)
 	t.setRates(now)
@@ -586,10 +594,10 @@ type transportEstimate struct {
 func (t *transport) estimate(now int64) transportEstimate {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	congested := t.dropsUnread && now >= t.pressureUntil
+	congested := t.dropsUnread && !t.stalled(now)
 	t.dropsUnread = false
 	return transportEstimate{
-		pressured: now < t.pressureUntil,
+		pressured: t.stalled(now),
 		warm:      t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
@@ -608,7 +616,7 @@ func (t *transport) reading(now int64) estimateReading {
 	defer t.mu.Unlock()
 	return estimateReading{
 		current: t.estimator.current(), proven: t.estimator.proven(now), delivered: t.estimator.delivered(now),
-		probing: t.probeID != 0, pressured: now < t.pressureUntil,
+		probing: t.probeID != 0, pressured: t.stalled(now),
 	}
 }
 

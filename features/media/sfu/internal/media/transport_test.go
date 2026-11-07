@@ -381,3 +381,22 @@ func TestAReadingNamesTheEstimateAndTheHostPressure(t *testing.T) {
 		t.Fatal("pressure outlived its end")
 	}
 }
+
+func TestHeavyLossEndsTheStallsExcuseOnATransport(t *testing.T) {
+	transport, _, _, _ := pacedTransport(t, 128<<10)
+	now := monotonic()
+	transport.pressure(now + int64(2*time.Second))
+	if !transport.estimate(now).pressured {
+		t.Fatal("a stalled node did not excuse a healthy transport")
+	}
+	var acks []packetAck
+	for index := range 40 {
+		acks = append(acks, packetAck{sent: now, arrival: now, size: 1000, received: index >= 10})
+	}
+	transport.mu.Lock()
+	transport.estimator.onFeedback(acks, now)
+	transport.mu.Unlock()
+	if transport.estimate(now).pressured {
+		t.Fatal("a stalled node still excused a transport whose receiver reports a quarter of its packets lost")
+	}
+}

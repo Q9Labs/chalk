@@ -316,3 +316,26 @@ func TestADecreaseWaitsForTheNodesVerdictOnAStall(t *testing.T) {
 		t.Fatalf("estimate %.0f after a stall that began as early feedback, want at least %.0f", e.current(), before)
 	}
 }
+
+func TestHeavyLossIsThePathsOwnEvidenceAndLightLossIsNot(t *testing.T) {
+	lost := func(count, of int) []packetAck {
+		var acks []packetAck
+		for index := range of {
+			acks = append(acks, packetAck{sent: int64(time.Second) + int64(index), arrival: int64(time.Second) + int64(index), size: 1000, received: index >= count})
+		}
+		return acks
+	}
+	e := newBandwidthEstimator()
+	now := int64(2 * time.Second)
+	e.onFeedback(lost(1, 40), now)
+	if e.lossy(now) {
+		t.Fatal("2% loss read as the path's own evidence")
+	}
+	e.onFeedback(lost(10, 40), now)
+	if !e.lossy(now) || !e.lossy(now+int64(pressureHold)-1) {
+		t.Fatal("25% loss did not read as the path's own evidence")
+	}
+	if e.lossy(now + int64(pressureHold)) {
+		t.Fatal("loss evidence outlived the hold")
+	}
+}

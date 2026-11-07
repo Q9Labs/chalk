@@ -253,6 +253,9 @@ type bandwidthEstimator struct {
 	// before the control loop has noticed the stall, so a decrease waits one
 	// control tick for the node's verdict.
 	overusingSince int64
+	// lossAt is when the receiver last reported heavy loss. A stalled node delays
+	// packets but does not lose them, so heavy loss is the path's own evidence.
+	lossAt int64
 }
 
 func newBandwidthEstimator() bandwidthEstimator {
@@ -267,6 +270,11 @@ func (e *bandwidthEstimator) pressure(on bool) {
 		e.trend = trendline{threshold: e.trend.threshold, thresholdAt: e.trend.thresholdAt}
 	}
 	e.pressured = on
+}
+
+// lossy reports whether the receiver reported heavy loss within the last pressureHold.
+func (e *bandwidthEstimator) lossy(now int64) bool {
+	return e.lossAt != 0 && now-e.lossAt < int64(pressureHold)
 }
 
 // warm reports whether feedback has arrived yet.
@@ -318,6 +326,9 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 	}
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)
+		if loss > lossHigh {
+			e.lossAt = now
+		}
 		switch {
 		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
 			e.estimate = math.Max(e.estimate*(1-0.5*loss), minEstimate)
