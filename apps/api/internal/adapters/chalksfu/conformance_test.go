@@ -25,6 +25,15 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
+// everySpace is the staging allowlist: these tests run the own SFU for a Space without picking an ID.
+var everySpace = func() spaces.ChalkSFUAllowlist {
+	list, err := spaces.ParseChalkSFUAllowlist([]string{"*"})
+	if err != nil {
+		panic(err)
+	}
+	return list
+}()
+
 func scopeOf(episode, participant string) mediaplane.Scope {
 	return mediaplane.Scope{TenantID: "tenant-1", EpisodeID: episode, ParticipantID: participant, Generation: 1}
 }
@@ -453,7 +462,7 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	cloudflareSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
 	registry := func(live *mediaplane.Binding) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: adapter, Episodes: episodeBindings{live},
+			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: adapter, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
 		})
 	}
 
@@ -494,7 +503,7 @@ func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 	box := startSFU(t, nil)
 	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
 		ProcessConfig:   runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second},
-		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: box.fleet(t),
+		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: box.fleet(t), ChalkSFUSpaces: everySpace,
 	})
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
 	binding, err := registry.ResolveBinding(tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, ownSFUClients)

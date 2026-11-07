@@ -17,13 +17,20 @@ export function summarize(trials, limitMs) {
   };
 }
 
+const isStream = (row, kind, source) => row.type === "inbound-rtp" && row.kind === kind && row.source === source;
+const sameStream = (row) => (candidate) => candidate.id === row.id && candidate.connection === row.connection;
+
+function advanced(row, before) {
+  if (!(row.bytesReceived > before.bytesReceived)) return false;
+  return row.kind !== "video" || row.framesDecoded > before.framesDecoded;
+}
+
 // Within one connection, a stream moves when its counters grew between two samples.
 export function grew(rows, previous, kind, source) {
   return rows.some((row) => {
-    if (row.type !== "inbound-rtp" || row.kind !== kind || row.source !== source) return false;
-    const before = previous.find((candidate) => candidate.id === row.id && candidate.connection === row.connection);
-    if (!before || !(row.bytesReceived > before.bytesReceived)) return false;
-    return kind !== "video" || row.framesDecoded > before.framesDecoded;
+    if (!isStream(row, kind, source)) return false;
+    const before = previous.find(sameStream(row));
+    return before !== undefined && advanced(row, before);
   });
 }
 
@@ -31,14 +38,10 @@ export function rendering(after, before) {
   return after.length === 2 && after.every((rows, guest) => grew(rows, before[guest], "video", "camera") && grew(rows, before[guest], "audio", "microphone"));
 }
 
+const measuredCamera = (rows, before) => rows.filter((row) => isStream(row, "video", "camera") && before.some(sameStream(row)));
+
 // A fault interrupted the call when each client's camera video was measured on the same
 // stream twice and did not move. A stream that appeared or changed between samples proves nothing.
 export function stalled(after, before) {
-  return (
-    after.length === 2 &&
-    after.every((rows, guest) => {
-      const measured = rows.filter((row) => row.type === "inbound-rtp" && row.kind === "video" && row.source === "camera" && before[guest].some((candidate) => candidate.id === row.id && candidate.connection === row.connection));
-      return measured.length > 0 && !grew(rows, before[guest], "video", "camera");
-    })
-  );
+  return after.length === 2 && after.every((rows, guest) => measuredCamera(rows, before[guest]).length > 0 && !grew(rows, before[guest], "video", "camera"));
 }

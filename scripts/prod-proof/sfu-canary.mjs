@@ -81,6 +81,27 @@ async function openCall(run, receiver) {
   return { ...ending, guests, startedAt };
 }
 
+async function faultRound(pages, muted) {
+  if (muted) await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
+  let restoredAt;
+  try {
+    await shell(faultDown);
+    await sleep(faultMs - stallProbeMs);
+    const before = await stats(pages);
+    await sleep(stallProbeMs);
+    check(stalled(await stats(pages), before), "The fault did not interrupt rendered media");
+  } finally {
+    // Recovery counts from the start of the restore command, which may keep running after the path is back.
+    restoredAt = performance.now();
+    await shell(faultUp);
+  }
+  // A muted client sends no audio, so the muted round proves video and that the mute held.
+  if (!muted) return rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
+  const recovered = await videoRendersWithin(pages, restoredAt, recoveryLimitMs);
+  check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");
+  return recovered;
+}
+
 async function trial(run, receiver, fault) {
   const mark = run.resources.length;
   let call;
@@ -89,26 +110,7 @@ async function trial(run, receiver, fault) {
     const { pages } = call.guests;
     const joinMs = await rendersWithin(pages, call.startedAt, joinLimitMs, "join");
     if (!fault) return { ms: joinMs };
-    const recoveries = [];
-    for (const muted of [false, true]) {
-      if (muted) await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
-      let restoredAt;
-      try {
-        await shell(faultDown);
-        await sleep(faultMs - stallProbeMs);
-        const before = await stats(pages);
-        await sleep(stallProbeMs);
-        check(stalled(await stats(pages), before), "The fault did not interrupt rendered media");
-      } finally {
-        // Recovery counts from the start of the restore command, which may keep running after the path is back.
-        restoredAt = performance.now();
-        await shell(faultUp);
-      }
-      // A muted client sends no audio, so the muted round proves video and that the mute held.
-      const recovered = muted ? await videoRendersWithin(pages, restoredAt, recoveryLimitMs) : await rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
-      if (muted) check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");
-      recoveries.push(recovered);
-    }
+    const recoveries = [await faultRound(pages, false), await faultRound(pages, true)];
     return { ms: Math.max(...recoveries), joinMs, recoveries };
   } catch (error) {
     return { error: errorEvidence(error).message ?? "failed" };
@@ -129,6 +131,21 @@ async function videoRendersWithin(pages, startedAt, limitMs) {
   }
 }
 
+function checkConfiguration() {
+  check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 1, "--joins and --faults must each be at least 1", "configuration");
+  check(faultMs > stallProbeMs + 1000, "--fault-seconds is too short to prove an interruption", "configuration");
+  check(faultDown && faultUp, "Set CHALK_CANARY_FAULT_DOWN and CHALK_CANARY_FAULT_UP to commands that block and restore UDP to the media provider", "configuration");
+}
+
+// A fault trial also joins, so its join counts against the join limit.
+function conclude(report) {
+  const faultJoins = report.faults.map((trial) => (trial.joinMs === undefined ? trial : { ms: trial.joinMs }));
+  report.summary = { join: summarize([...report.joins, ...faultJoins], joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs) };
+  report.meetsM7Minimum = joins >= 20 && faults >= 10;
+  const { join, recovery } = report.summary;
+  report.result = !report.error && !report.cleanupError && join.withinLimit === join.trials && recovery.withinLimit === recovery.trials ? "passed" : "failed";
+}
+
 async function main() {
   const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
   runLabel(runId);
@@ -137,9 +154,7 @@ async function main() {
   const report = { provider: mediaPlane, startedAt: new Date().toISOString(), flags: { joins, faults, faultSeconds: faultMs / 1000, joinLimitMs, recoveryLimitMs }, joins: [], faults: [] };
   let run;
   try {
-    check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 1, "--joins and --faults must each be at least 1", "configuration");
-    check(faultMs > stallProbeMs + 1000, "--fault-seconds is too short to prove an interruption", "configuration");
-    check(faultDown && faultUp, "Set CHALK_CANARY_FAULT_DOWN and CHALK_CANARY_FAULT_UP to commands that block and restore UDP to the media provider", "configuration");
+    checkConfiguration();
     const config = await loadConfig();
     await sweepStaleRuns(config);
     run = await createRun(config, directory, undefined, runId);
@@ -152,17 +167,11 @@ async function main() {
   } finally {
     if (run) await cleanupRun(run).catch((error) => (report.cleanupError = errorEvidence(error)));
   }
-  // A fault trial also joins, so its join counts against the join limit.
-  const faultJoins = report.faults.map((trial) => (trial.joinMs === undefined ? trial : { ms: trial.joinMs }));
-  report.summary = { join: summarize([...report.joins, ...faultJoins], joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs) };
-  report.meetsM7Minimum = joins >= 20 && faults >= 10;
-  const { join, recovery } = report.summary;
-  const passed = !report.error && !report.cleanupError && join.withinLimit === join.trials && recovery.withinLimit === recovery.trials;
-  report.result = passed ? "passed" : "failed";
+  conclude(report);
   await save(`${directory}/sfu-canary-${mediaPlane}.json`, report);
   console.log(JSON.stringify({ provider: mediaPlane, result: report.result, meetsM7Minimum: report.meetsM7Minimum, ...report.summary }, null, 2));
   console.log(`Private evidence: ${directory}`);
-  if (!passed) process.exitCode = 1;
+  if (report.result !== "passed") process.exitCode = 1;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) await main();
