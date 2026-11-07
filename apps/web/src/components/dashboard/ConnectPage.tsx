@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { readPage } from "../../lib/dashboard/client";
+import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { ErrorPanel, Sk } from "./kit";
 
@@ -77,7 +78,11 @@ export function ConnectPage({ request }: { readonly request: string }) {
         <p className="sifine">It never gets your API keys, signing keys, members or account settings.</p>
         {failure ? (
           <div className="alert" role="alert">
-            <div>{failure}</div>
+            <Icon name="alert" />
+            <div>
+              <b>Chalk couldn’t connect {clientName}</b>
+              {failure}
+            </div>
           </div>
         ) : null}
         <div className="sib">
