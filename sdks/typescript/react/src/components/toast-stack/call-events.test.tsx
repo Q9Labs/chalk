@@ -109,3 +109,15 @@ it.each(["camera", "microphone", "screen"] as const)("does not give start-permis
   const text = renderToStaticMarkup(<>{toast?.message}</>);
   expect(text).toBe(source === "screen" ? "Couldn’t stop screen sharing. Try again." : `Couldn’t change your ${source} settings. Try again.`);
 });
+it("says why a Recording failed, once, and not as a plain stop", () => {
+  const before = live();
+  const failure = (failureCode: string | null) => ({ ...before, recording: { current: { recordingId: "r1", status: "failed" as const, failureCode } } });
+  const unsupported = callEventToasts(before, failure("recording_capture_unsupported"));
+  expect(unsupported).toHaveLength(1);
+  expect(unsupported[0]?.type).toBe("error");
+  expect(renderToStaticMarkup(<>{unsupported[0]?.message}</>)).toBe("Recording isn’t available in this call yet.");
+  expect(renderToStaticMarkup(<>{callEventToasts(before, failure("provider_rejected"))[0]?.message}</>)).toBe("Recording failed. Try again.");
+  const recording = { ...before, recording: { current: { recordingId: "r1", status: "recording" as const, failureCode: null } } };
+  expect(callEventToasts(recording, failure("provider_rejected"))).toHaveLength(1);
+  expect(callEventToasts(failure("provider_rejected"), failure("provider_rejected"))).toHaveLength(0);
+});
