@@ -92,16 +92,18 @@ async function trial(run, receiver, fault) {
     const recoveries = [];
     for (const muted of [false, true]) {
       if (muted) await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
-      await shell(faultDown);
+      let restoredAt;
       try {
+        await shell(faultDown);
         await sleep(faultMs - stallProbeMs);
         const before = await stats(pages);
         await sleep(stallProbeMs);
         check(stalled(await stats(pages), before), "The fault did not interrupt rendered media");
       } finally {
+        // Recovery counts from the start of the restore command, which may keep running after the path is back.
+        restoredAt = performance.now();
         await shell(faultUp);
       }
-      const restoredAt = performance.now();
       // A muted client sends no audio, so the muted round proves video and that the mute held.
       const recovered = muted ? await videoRendersWithin(pages, restoredAt, recoveryLimitMs) : await rendersWithin(pages, restoredAt, recoveryLimitMs, "recovery");
       if (muted) check((await microphoneState(pages[0])) !== "enabled", "Recovery turned a muted microphone back on");

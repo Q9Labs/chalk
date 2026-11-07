@@ -31,7 +31,14 @@ export function rendering(after, before) {
   return after.length === 2 && after.every((rows, guest) => grew(rows, before[guest], "video", "camera") && grew(rows, before[guest], "audio", "microphone"));
 }
 
-// A fault interrupted the call when no client's camera video moved between two samples.
+// A fault interrupted the call when each client's camera video was measured on the same
+// stream twice and did not move. A stream that appeared or changed between samples proves nothing.
 export function stalled(after, before) {
-  return after.length === 2 && after.every((rows, guest) => !grew(rows, before[guest], "video", "camera"));
+  return (
+    after.length === 2 &&
+    after.every((rows, guest) => {
+      const measured = rows.filter((row) => row.type === "inbound-rtp" && row.kind === "video" && row.source === "camera" && before[guest].some((candidate) => candidate.id === row.id && candidate.connection === row.connection));
+      return measured.length > 0 && !grew(rows, before[guest], "video", "camera");
+    })
+  );
 }

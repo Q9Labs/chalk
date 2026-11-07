@@ -35,3 +35,9 @@ test("a fault is proven only when no camera video moved", () => {
   assert.equal(stalled([guest(100, 10), guest(100, 10)], [guest(100, 10), guest(100, 10)]), true);
   assert.equal(stalled([guest(200, 20), guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
 });
+
+test("a replaced stream cannot prove that the fault stopped media", () => {
+  const replaced = { ...row("video", "camera", 500, 50, "new-stream") };
+  assert.equal(stalled([[replaced], guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
+  assert.equal(stalled([[], guest(100, 10)], [guest(100, 10), guest(100, 10)]), false);
+});
