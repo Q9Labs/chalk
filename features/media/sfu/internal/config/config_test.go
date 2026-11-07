@@ -45,7 +45,7 @@ func TestAdmissionDefaults(t *testing.T) {
 	if cfg.Memory != want {
 		t.Errorf("memory caps %+v, want the design's budget %+v", cfg.Memory, want)
 	}
-	if cfg.Guard.MaxStealPercent != 3 || cfg.Guard.MaxQueueDelay != 50*time.Millisecond || cfg.Guard.Window != 30*time.Second {
+	if cfg.Guard.MaxStealPercent != 3 || cfg.Guard.MaxSchedulerLatency != 20*time.Millisecond || cfg.Guard.Window != 30*time.Second {
 		t.Errorf("guard %+v, want 3%% steal or 50 ms queue delay over 30 s", cfg.Guard)
 	}
 }
@@ -77,7 +77,7 @@ func TestGuardDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxQueueDelay: 50 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
+	want := Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 20 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
 	if cfg.Guard != want {
 		t.Errorf("guard %+v, want %+v", cfg.Guard, want)
 	}

@@ -17,12 +17,16 @@ import (
 
 // Admission reasons the guard reports while it refuses new Episodes.
 const (
-	reasonCPUSteal        = "cpu_steal"
-	reasonCPUBusy         = "cpu_busy"
-	reasonPacerQueueDelay = "pacer_queue_delay"
-	reasonPacerDrops      = "pacer_drops"
-	reasonUDPBufferErrors = "udp_buffer_errors"
-	minGuardPacerDrops    = 100 // drops in a window below which the drop share is noise
+	reasonCPUSteal         = "cpu_steal"
+	reasonCPUBusy          = "cpu_busy"
+	reasonSchedulerLatency = "scheduler_latency"
+	reasonPacerDrops       = "pacer_drops"
+	reasonUDPBufferErrors  = "udp_buffer_errors"
+	minGuardPacerDrops     = 100 // drops in a window below which the drop share is noise
+	// latencyWindow is how far back the guard reads scheduler latency. It is
+	// shorter than the guard window, so admission reopens within seconds of a
+	// host stall ending.
+	latencyWindow = 10 * time.Second
 )
 
 // queueDelayBounds are the upper bounds of the pacer queue delay histogram. A
@@ -36,7 +40,10 @@ var queueDelayBounds = [...]time.Duration{
 const queueDelayBuckets = len(queueDelayBounds) + 1 // the last bucket holds everything slower
 
 // delayHistogram counts pacer queue delays of every subscriber on the node. Pacers
-// record without locking; the guard collects the counts once a second.
+// record without locking; the guard collects the counts once a second. Most of a
+// queue's delay is set by its subscriber's own pace, so it is reported but does
+// not close admission: a new transport draining keyframes at its first estimate
+// reads 50 ms or more on an idle node.
 type delayHistogram struct {
 	counts [queueDelayBuckets]atomic.Uint64
 }
@@ -131,8 +138,11 @@ type HostHealth struct {
 	StealKnown      bool
 	// BusyPercent is the host CPU time spent working over the window, steal and idle excluded,
 	// valid with StealKnown.
-	BusyPercent         float64
-	QueueDelayP95       time.Duration
+	BusyPercent   float64
+	QueueDelayP95 time.Duration
+	// SchedulerLatencyP99 is how long runnable goroutines waited for a CPU, over
+	// latencyWindow. It reads the whole node, readers, pacers and the control
+	// loop alike, so it is the guard's signal of a host too slow to keep up.
 	SchedulerLatencyP99 time.Duration
 	// PacerDrops is the video the pacers dropped over the window, and PacerDropPercent its share of
 	// the video they dropped or sent.
@@ -147,14 +157,16 @@ type HostHealth struct {
 type pacerLoad struct{ dropped, sent uint64 }
 
 // guard closes admission of new Episodes while the host cannot serve them on
-// time: CPU steal or busy time, pacer queue delay p95, the share of video the
-// pacers drop, or UDP socket buffer errors above their thresholds, each over the
-// guard window. Existing Episodes keep running.
+// time: CPU steal or busy time, the share of video the pacers drop, or UDP
+// socket buffer errors above their thresholds over the guard window, or Go
+// scheduler latency p99 above its threshold over latencyWindow. Existing
+// Episodes keep running.
 type guard struct {
 	cfg       config.Guard
 	log       *slog.Logger
 	readSteal stealReader
 	readUDP   func() (udpErrors, bool)
+	readSched func() *metrics.Float64Histogram
 	delays    delayHistogram
 
 	mu        sync.Mutex
@@ -168,7 +180,10 @@ type guard struct {
 }
 
 func newGuard(cfg config.Guard, log *slog.Logger) *guard {
-	return &guard{cfg: cfg, log: log, readSteal: readProcStat, readUDP: func() (udpErrors, bool) { return readUDPErrors(udpStatsPath) }}
+	return &guard{
+		cfg: cfg, log: log, readSteal: readProcStat, readSched: readSchedulerLatencies,
+		readUDP: func() (udpErrors, bool) { return readUDPErrors(udpStatsPath) },
+	}
 }
 
 // observePacer hands the guard the node's cumulative pacer counts for its next tick.
@@ -195,6 +210,9 @@ func (g *guard) recentSteal() float64 {
 // slots is how many one-second samples the window holds.
 func (g *guard) slots() int { return max(int(g.cfg.Window/time.Second), 1) }
 
+// latencySlots is how many one-second samples the scheduler latency reads.
+func (g *guard) latencySlots() int { return min(g.slots(), int(latencyWindow/time.Second)) }
+
 // closedReason is why new Episodes are refused, or empty.
 func (g *guard) closedReason() string {
 	g.mu.Lock()
@@ -213,7 +231,7 @@ func (g *guard) tick() {
 	times, known := g.readSteal()
 	udp, udpKnown := g.readUDP()
 	delays := g.delays.collect()
-	sched := readSchedulerLatencies()
+	sched := g.readSched()
 
 	g.mu.Lock()
 	slots := g.slots()
@@ -230,7 +248,7 @@ func (g *guard) tick() {
 	g.pacer = appendBounded(g.pacer, g.latest, slots+1)
 	g.delayRing = appendBounded(g.delayRing, delays, slots)
 	if sched != nil {
-		g.sched = appendBounded(g.sched, *sched, slots+1)
+		g.sched = appendBounded(g.sched, *sched, g.latencySlots()+1)
 	}
 
 	health := HostHealth{StealKnown: len(g.steal) > 1}
@@ -272,8 +290,8 @@ func (g *guard) tick() {
 		health.AdmissionReason = reasonCPUSteal
 	case health.StealKnown && fullWindow && health.BusyPercent > g.cfg.MaxBusyPercent:
 		health.AdmissionReason = reasonCPUBusy
-	case health.QueueDelayP95 > g.cfg.MaxQueueDelay:
-		health.AdmissionReason = reasonPacerQueueDelay
+	case len(g.sched) > g.latencySlots() && health.SchedulerLatencyP99 > g.cfg.MaxSchedulerLatency:
+		health.AdmissionReason = reasonSchedulerLatency
 	case health.PacerDrops >= minGuardPacerDrops && health.PacerDropPercent > g.cfg.MaxPacerDropPercent:
 		health.AdmissionReason = reasonPacerDrops
 	case max(health.UDPReceiveErrorsPerSecond, health.UDPSendErrorsPerSecond) > float64(g.cfg.MaxUDPErrorsPerSecond):
@@ -287,6 +305,7 @@ func (g *guard) tick() {
 		attributes := []any{
 			"reason", health.AdmissionReason, "previousReason", previous,
 			"stealPercent", round2(health.StealPercent), "busyPercent", round2(health.BusyPercent),
+			"schedulerLatencyP99Ms", health.SchedulerLatencyP99.Milliseconds(),
 			"queueDelayP95Ms", health.QueueDelayP95.Milliseconds(),
 			"pacerDrops", health.PacerDrops, "pacerDropPercent", round2(health.PacerDropPercent),
 			"udpReceiveErrorsPerSecond", round2(health.UDPReceiveErrorsPerSecond),

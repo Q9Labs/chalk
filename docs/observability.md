@@ -386,7 +386,7 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
   p99, CPU steal where the host reports it, and the admission reason.
 - `new Episodes refused` (warn) and `new Episodes admitted again` (info) when
   the admission reason changes to or from `cpu_steal`, `cpu_busy`,
-  `pacer_queue_delay`, `pacer_drops` or `udp_buffer_errors`, with the readings
+  `scheduler_latency`, `pacer_drops` or `udp_buffer_errors`, with the readings
   that decided it. Every refused join or screen share logs a `refused` warning
   with its reason. Live Episodes keep admitting
   their Participants while new ones are refused.
@@ -424,7 +424,7 @@ the export against `inspect` and for identities.
   refused or cut short; both stay 0 when `SFU_UDP_BATCH` is off), and
   `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
-  `cpu_steal`, `cpu_busy`, `pacer_queue_delay`, `pacer_drops`,
+  `cpu_steal`, `cpu_busy`, `scheduler_latency`, `pacer_drops`,
   `udp_buffer_errors`, `screen_ceiling`, `cameras`).
 - Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
   only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
@@ -491,8 +491,8 @@ failures directly to Discord.
 The collector also samples the own SFU's `/readyz` over mutual TLS when
 `CHALK_ALERT_SFU_READY_URL` is set, and emits no SFU row otherwise. The same
 grouped monitor alerts on four unhealthy minute samples in five minutes: a
-draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, pacer
-queue delay, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
+draining or unreachable node, a node that refuses new Episodes (CPU steal, CPU busy, scheduler
+latency, pacer drops or UDP buffer errors), or reserved packets at 90% of the packet budget. Only
 allowlisted reason codes are exported, never TLS or HTTP error text, response
 bodies or node identifiers. The freshness monitor does not count this row, so
 hosts without an SFU stay quiet. See the production-alerts README for setup.

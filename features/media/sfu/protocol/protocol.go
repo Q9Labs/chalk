@@ -328,13 +328,17 @@ type ReadyResponse struct {
 // HostState is the host-health guard's view over its window.
 type HostState struct {
 	// AdmissionReason names why new Episodes are refused, absent while they are
-	// admitted: "cpu_steal", "cpu_busy", "pacer_queue_delay", "pacer_drops" or
+	// admitted: "cpu_steal", "cpu_busy", "scheduler_latency", "pacer_drops" or
 	// "udp_buffer_errors". Existing Episodes continue.
 	AdmissionReason string `json:"admissionReason,omitempty"`
 	// StealPercent is absent where the host does not report steal.
-	StealPercent          *float64 `json:"stealPercent,omitempty"`
-	QueueDelayP95Ms       float64  `json:"queueDelayP95Ms"`
-	SchedulerLatencyP99Ms float64  `json:"schedulerLatencyP99Ms"`
+	StealPercent *float64 `json:"stealPercent,omitempty"`
+	// QueueDelayP95Ms is the pacer queue delay of every subscriber, mostly set by
+	// each subscriber's own pace. It does not close admission.
+	QueueDelayP95Ms float64 `json:"queueDelayP95Ms"`
+	// SchedulerLatencyP99Ms is how long runnable goroutines waited for a CPU over
+	// the last 10 seconds, the guard's signal of a host too slow to keep up.
+	SchedulerLatencyP99Ms float64 `json:"schedulerLatencyP99Ms"`
 	// PacketsPerSecond is every Episode's measured media on the node.
 	PacketsPerSecond float64 `json:"packetsPerSecond"`
 	// UDPReceiveBufferBytes is the media socket's receive buffer as the kernel
