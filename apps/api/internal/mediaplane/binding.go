@@ -44,10 +44,13 @@ const (
 	// the first configured node is the primary and every later one a standby.
 	PlacementPrimary PlacementReason = "primary"
 	PlacementStandby PlacementReason = "standby"
-	// PlacementOverflowNoRoom and PlacementOverflowNodeUnavailable bind the Episode
-	// to Cloudflare because no own-SFU node had room: every probed node was full,
-	// or none answered ready (down, draining or silent).
+	// PlacementOverflowNoRoom, PlacementOverflowDraining and
+	// PlacementOverflowNodeUnavailable bind the Episode to Cloudflare because no
+	// own-SFU node had room. NoRoom: a node that takes new Episodes was full.
+	// Draining: every answering node was draining, a planned state and not a
+	// capacity shortage. NodeUnavailable: no node answered ready.
 	PlacementOverflowNoRoom          PlacementReason = "overflow_no_room"
+	PlacementOverflowDraining        PlacementReason = "overflow_draining"
 	PlacementOverflowNodeUnavailable PlacementReason = "overflow_node_unavailable"
 	// PlacementNoCapacity keeps the Episode on the first node although no node had
 	// room, because the Tenant has no Cloudflare application to take it. The
@@ -139,7 +142,7 @@ func (binding Binding) Validate() error {
 		return ErrInvalidBinding
 	}
 	switch binding.PlacementReason {
-	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
+	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
 	default:
 		return ErrInvalidBinding
 	}

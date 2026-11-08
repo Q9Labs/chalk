@@ -103,20 +103,22 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 // the primary or a standby. When no node qualifies after a probe, every node
 // would refuse the Episode, so room is false and the caller may start it on
 // another provider. The placement then names the first node, the fallback when
-// there is no other provider, and why nothing had room: every answering node was
-// full, or none answered ready. Before the first probe it reports the first node
-// with room, whose admission then answers the join. It reads the last probes and
-// does no I/O, because Episode creation calls it inside a database transaction.
+// there is no other provider, and why nothing had room: a node that takes new
+// Episodes was full, every answering node was draining, or none answered.
+// Before the first probe it reports the first node with room, whose admission
+// then answers the join. It reads the last probes and does no I/O, because
+// Episode creation calls it inside a database transaction.
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	answering := false
+	answering, serving := false, false // a node answered; a node that takes new Episodes answered
 	for index, node := range f.nodes {
 		load, probed := f.loads[node.node]
 		if !probed || time.Since(load.at) > probeFreshness {
 			continue
 		}
 		answering = true
+		serving = serving || !load.Draining
 		if !load.hasRoom {
 			continue
 		}
@@ -130,9 +132,13 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	if !f.probed {
 		return first, true
 	}
-	first.Reason = mediaplane.PlacementOverflowNodeUnavailable
-	if answering {
+	switch {
+	case serving:
 		first.Reason = mediaplane.PlacementOverflowNoRoom
+	case answering:
+		first.Reason = mediaplane.PlacementOverflowDraining
+	default:
+		first.Reason = mediaplane.PlacementOverflowNodeUnavailable
 	}
 	return first, false
 }

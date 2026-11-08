@@ -326,6 +326,57 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	}
 }
 
+// A pool whose answering nodes are all draining is a planned state, so it gets
+// its own reason and is never counted as full. With overflow on the Episode goes
+// to Cloudflare; with it off the Episode is refused. A full node next to the
+// draining one is still a capacity shortage.
+func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	draining := startSFUUnder(t, ca, nil)
+	full := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-draining", ControlURL: draining.controlURL}, {ID: "sfu-full", ControlURL: full.controlURL}}
+	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	ctx := context.Background()
+
+	reply, err := draining.httpClient(t, ca, clientIdentity).Post(draining.controlURL+"/v1/drain", "application/json", nil)
+	if err != nil || reply.StatusCode != http.StatusOK {
+		t.Fatalf("drain: %v, %v", reply, err)
+	}
+	reply.Body.Close()
+
+	overflowOn := draining.fleetWithOverflow(t, ca, clientIdentity, true, nodes[0])
+	overflowOn.Probe(ctx)
+	telemetry := &placements{}
+	moved, err := registryOn(overflowOn, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if err != nil || moved.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || moved.Node != "" || moved.PlacementReason != mediaplane.PlacementOverflowDraining {
+		t.Fatalf("draining pool, overflow on: %+v, %v, want Cloudflare overflow_draining", moved, err)
+	}
+
+	overflowOff := draining.fleetWithOverflow(t, ca, clientIdentity, false, nodes[0])
+	overflowOff.Probe(ctx)
+	refused, err := registryOn(overflowOff, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+		t.Fatalf("draining pool, overflow off: %+v, %v, want the placement refusal", refused, err)
+	}
+	if want := []string{"cf_sfu/overflow_draining", "chalk_sfu/capacity_refused"}; !slices.Equal(telemetry.got, want) {
+		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
+	}
+
+	// Once the other node is full too, a node that takes new Episodes is the
+	// reason, so the pool is out of room and not only draining.
+	mixed := draining.fleetWithOverflow(t, ca, clientIdentity, true, nodes...)
+	fullNode, err := mixed.Node("sfu-full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, fullNode), scopeOf("ep-1", "alice"))
+	mixed.Probe(ctx)
+	short, err := registryOn(mixed, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if err != nil || short.PlacementReason != mediaplane.PlacementOverflowNoRoom {
+		t.Fatalf("draining and full nodes: %+v, %v, want overflow_no_room", short, err)
+	}
+}
+
 // With the overflow switch off, a new Episode that no node can take is refused
 // with the capacity error a full node gives a join, nothing is bound to
 // Cloudflare, and an Episode already bound to its node stays there. A Tenant
