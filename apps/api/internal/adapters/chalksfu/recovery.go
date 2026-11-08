@@ -105,16 +105,16 @@ func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
 
 // candidate is a node a recovery may reserve on.
 type candidate struct {
-	adapter     *Adapter
-	standby     bool
-	incarnation string // the boot the last probe saw
+	adapter *Adapter
+	standby bool
 }
 
 // recoveryCandidates lists the nodes that may take a recovering Episode, in the order Place
-// uses: every primary that answers, is not draining, has its host guard open and has room for
-// at least one new Episode, then the same standbys. The shape needs at least that room, so the
-// check only skips nodes that cannot hold it; the node's reserve is the authority. It does no
-// I/O and, unlike Place, never offers another provider.
+// uses: every primary that answered within the freshness window and is not draining, then the
+// same standbys. It does not filter on room or the host guard: the node's reserve knows what
+// the Episode already holds there, which a probe's totals do not, so a retry can reach a node
+// that kept the room it reserved. It does no I/O and, unlike Place, never offers another
+// provider.
 func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -125,10 +125,10 @@ func (f *Fleet) recoveryCandidates() []candidate {
 				continue
 			}
 			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness || load.Draining || load.hostGuard || !load.fits(0) {
+			if !probed || time.Since(load.at) > probeFreshness || load.Draining {
 				continue
 			}
-			candidates = append(candidates, candidate{adapter: node, standby: standby, incarnation: load.incarnation})
+			candidates = append(candidates, candidate{adapter: node, standby: standby})
 		}
 	}
 	return candidates
@@ -147,9 +147,11 @@ func (f *Fleet) recoveryCandidates() []candidate {
 // hold is still alive, so a retry after the hold expired must not repeat it: the window moves
 // on every hold lifetime, which gives that retry a new operation and a new hold.
 //
-// A candidate that the Episode left earlier and that still runs the same boot may hold the
-// Episode's old sessions, at Participant generations the fixed hold generation would not
-// outrank. Those sessions belong to a replaced allocation, so the Episode is ended there first.
+// Recover never ends sessions. A node the Episode left earlier, back on the boot it left, may
+// still hold the Episode's old sessions at Participant generations above the hold's, and then
+// refuses the reserve as stale, so the Episode goes to another node or gets the capacity
+// outcome. Ending those sessions here could close the ones a winning replica has since rejoined,
+// because the end call carries no allocation fence.
 func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.Binding, tenantID, episodeID string, participants int) (mediaplane.Placement, error) {
 	candidates := f.recoveryCandidates()
 	if len(candidates) == 0 {
@@ -160,13 +162,6 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	window := time.Now().Unix() / int64(hold)
 	refusals, failures := 0, 0
 	for _, node := range candidates {
-		if returning(from, node) {
-			if err := node.adapter.call(ctx, "/v1/episodes/end", wireEndRequest{TenantID: tenantID, EpisodeID: episodeID}, nil); err != nil {
-				failures++
-				f.logRecovery(ctx, "chalk sfu node could not drop the episode's old sessions", node.adapter.node, err)
-				continue
-			}
-		}
 		reply, err := node.adapter.reserve(ctx, wireReserveRequest{
 			OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-w%d", episodeID, from.Generation+1, node.adapter.node, participants, window),
 			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
@@ -202,20 +197,6 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	}
 	RecordRecovery(ctx, reason, outcome)
 	return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcome)
-}
-
-// returning reports whether the candidate is a node the Episode left earlier and that still
-// runs the boot it left.
-func returning(from mediaplane.Binding, node candidate) bool {
-	if node.incarnation == "" {
-		return false
-	}
-	for _, old := range from.PreviousAllocations {
-		if old.Node == node.adapter.node && old.Incarnation == node.incarnation {
-			return true
-		}
-	}
-	return false
 }
 
 func (f *Fleet) recoveryHoldSeconds() int {

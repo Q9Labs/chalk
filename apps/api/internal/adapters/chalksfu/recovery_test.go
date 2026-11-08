@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -104,9 +105,10 @@ func resolve(registry mediaplaneproviders.Registry) error {
 }
 
 type nodeState struct {
-	NodeIncarnation string `json:"nodeIncarnation"`
-	ReservedPackets int    `json:"reservedPackets"`
-	Sessions        int    `json:"sessions"`
+	NodeIncarnation   string `json:"nodeIncarnation"`
+	ReservedPackets   int    `json:"reservedPackets"`
+	NewEpisodePackets int    `json:"newEpisodePackets"`
+	Sessions          int    `json:"sessions"`
 }
 
 // stateOf reads a node's readiness over the control channel.
@@ -503,9 +505,11 @@ func TestARetryAfterTheHoldExpiredReservesAgain(t *testing.T) {
 }
 
 // A node the Episode left can come back alive, still holding the Episode's old sessions at a
-// Participant generation above the recovery's. When it is the only node left, the Episode ends
-// those sessions there first and then reserves, instead of being refused as stale.
-func TestRecoveryOntoANodeTheEpisodeLeftDropsItsOldSessionsFirst(t *testing.T) {
+// Participant generation above the recovery's. It refuses the reserve as stale, so with no
+// other node the caller gets the capacity outcome and the binding stays. Recovery does not end
+// those sessions: the end call has no allocation fence, and it could close sessions another
+// replica has just rejoined.
+func TestRecoveryRefusesANodeThatStillHoldsTheEpisodeAtANewerGeneration(t *testing.T) {
 	ca, primary, standby, nodes := twoNodes(t, roomy)
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	bound := placedBinding(t, fleet)
@@ -517,8 +521,6 @@ func TestRecoveryOntoANodeTheEpisodeLeftDropsItsOldSessionsFirst(t *testing.T) {
 	old.Generation = 3
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, onPrimary), old)
 
-	// The Episode moved to the standby while the primary was out of reach, and the primary
-	// came back with the boot it left.
 	onStandby, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
 	if err != nil {
 		t.Fatal(err)
@@ -527,17 +529,42 @@ func TestRecoveryOntoANodeTheEpisodeLeftDropsItsOldSessionsFirst(t *testing.T) {
 	standby.stop()
 	fleet.Probe(context.Background())
 	chalksfu.AgeSighting(fleet, "sfu-standby")
-	if before := stateOf(t, primary); before.Sessions != 1 {
-		t.Fatalf("primary holds %d sessions, want the old one", before.Sessions)
+	err = resolve(recoveryRegistry(fleet, store))
+	if !errors.Is(err, mediaplane.ErrRecoveryRefused) || !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
+		t.Fatalf("recovery onto a node holding newer sessions: %v, want the capacity error", err)
 	}
-	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
-		t.Fatalf("recovery back onto the primary: %v", err)
+	if after, moves := store.current(); moves != 0 || after.Node != "sfu-standby" || after.Generation != 1 {
+		t.Fatalf("the refused recovery changed the binding: %+v", after)
 	}
-	moved, moves := store.current()
-	if moves != 1 || moved.Generation != 2 || moved.Node != "sfu-primary" || moved.PlacementReason != mediaplane.PlacementPrimary {
-		t.Fatalf("after the standby was lost: %+v (%d moves), want the primary at generation 2", moved, moves)
+	if state := stateOf(t, primary); state.Sessions != 1 {
+		t.Fatalf("the refused recovery closed the node's sessions: %+v", state)
 	}
-	if after := stateOf(t, primary); after.Sessions != 0 || after.ReservedPackets == 0 {
-		t.Fatalf("primary holds %+v, want the old session gone and the new hold in place", after)
+}
+
+// The reserve a crashed attempt made can take the node's last room. The next probe counts it,
+// so a filter on probed room would drop the node before the retry could replay the reserve.
+func TestARetryReachesANodeWhoseRoomItsOwnReserveTook(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	probe := startSFUUnder(t, ca, roomy)
+	oneEpisode := stateOf(t, probe).NewEpisodePackets
+	probe.stop()
+	box := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": strconv.Itoa(oneEpisode * 3 / 2)})
+	fleet := box.fleetOf(t, ca, clientIdentity, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: box.controlURL})
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 2)
+	registry := recoveryRegistry(fleet, store)
+	restart(t, box)
+	fleet.Probe(context.Background())
+
+	store.crashBefore = errors.New("api crashed before the commit")
+	if err := resolve(registry); !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
+		t.Fatalf("crash before the commit: %v", err)
+	}
+	fleet.Probe(context.Background()) // now shows the hold, and room for less than an Episode
+	if err := resolve(registry); err != nil {
+		t.Fatalf("retry on a node that holds the Episode's room: %v", err)
+	}
+	if moved, moves := store.current(); moves != 1 || moved.Generation != 1 {
+		t.Fatalf("after the retry: %+v (%d moves)", moved, moves)
 	}
 }

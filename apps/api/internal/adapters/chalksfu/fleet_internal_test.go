@@ -249,7 +249,7 @@ func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 	}
 }
 
-func TestRecoveryCandidatesFollowPlacementOrderAndSkipNodesThatCannotTakeAnEpisode(t *testing.T) {
+func TestRecoveryCandidatesFollowPlacementOrderAndSkipOnlySilentOrDrainingNodes(t *testing.T) {
 	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), primary("full"), primary("down"), primary("drain"), primary("ok")}
 	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{
 		"s": ready(testStandbyBudget, 0), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
@@ -259,7 +259,8 @@ func TestRecoveryCandidatesFollowPlacementOrderAndSkipNodesThatCannotTakeAnEpiso
 	for _, c := range fleet.recoveryCandidates() {
 		got = append(got, c.adapter.node)
 	}
-	if want := []string{"ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+	// A full node stays: its reserve may hold this very Episode, which the probe cannot show.
+	if want := []string{"full", "ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("candidates %v, want %v: primaries first, then the standby", got, want)
 	}
 }
