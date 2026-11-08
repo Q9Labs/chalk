@@ -949,7 +949,7 @@
               }
             },
             "description": "Not Found",
-            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"]
+            "x-chalk-error-codes": ["arrival.unavailable", "media.connection_not_found", "space_public_invite.unavailable"]
           },
           "409": {
             "content": {
@@ -1076,7 +1076,7 @@
               }
             },
             "description": "Not Found",
-            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"]
+            "x-chalk-error-codes": ["arrival.unavailable", "media.connection_not_found", "space_public_invite.unavailable"]
           },
           "409": {
             "content": {
@@ -1226,7 +1226,7 @@
               }
             },
             "description": "Not Found",
-            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"]
+            "x-chalk-error-codes": ["arrival.unavailable", "media.connection_not_found", "space_public_invite.unavailable"]
           },
           "409": {
             "content": {
@@ -1388,7 +1388,7 @@
               }
             },
             "description": "Not Found",
-            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"]
+            "x-chalk-error-codes": ["arrival.unavailable", "media.connection_not_found", "space_public_invite.unavailable"]
           },
           "409": {
             "content": {
@@ -1663,7 +1663,7 @@
               }
             },
             "description": "Not Found",
-            "x-chalk-error-codes": ["arrival.unavailable", "space_public_invite.unavailable"]
+            "x-chalk-error-codes": ["arrival.unavailable", "media.connection_not_found", "space_public_invite.unavailable"]
           },
           "409": {
             "content": {
