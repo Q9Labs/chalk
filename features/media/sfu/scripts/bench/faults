@@ -130,7 +130,7 @@ kill_primary_and_return() {
   old_connection="$(jq -r .connectionId <<<"$body")" old_incarnation="$(jq -r .nodeIncarnation <<<"$body")"
   snapshot
   # SIGKILL to the SFU process itself, then stop the unit before systemd restarts it after 2 s.
-  node_ssh primary "pkill -9 -x chalk-sfu && systemctl --user -M chalk-sfu@ stop chalk-sfu"
+  check "SIGKILL reaches the SFU process and the unit stops" node_ssh primary "pkill -9 -x chalk-sfu && systemctl --user -M chalk-sfu@ stop chalk-sfu"
   check "primary /readyz is unreachable" wait_until 30 is_down primary
   evidence "primary /readyz status ${status} after SIGKILL"
   sfu standby POST /v1/episodes/reserve "$(reserve_body "res-${run}-1" "$fresh" 1 3 2 60)"
@@ -146,7 +146,7 @@ kill_primary_and_return() {
   end_case
 
   begin_case 3 "the old primary returns with a new incarnation and no stale Episode"
-  unit primary start >/dev/null
+  check "the primary unit starts again" unit primary start
   check "primary /readyz answers again" wait_until 60 is_up primary
   ready primary
   check "new NodeIncarnation (was $(cut -c1-8 <<<"$old_incarnation"), now $(jq -r .nodeIncarnation <<<"$body" | cut -c1-8))" \
@@ -166,13 +166,13 @@ partition_and_heal() {
   sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-2" "$episode" 1 2 1 120)"
   check "a 120 s hold exists on the primary (HTTP ${status})" [ "$status" = 200 ]
   # iptables, not ufw: ufw skips a deny that has the same match as the allow rule it would precede.
-  node_ssh primary "iptables -I INPUT 1 -s ${runner} -p tcp --dport ${control_port} -j DROP"
+  check "the DROP rule is installed on the primary" node_ssh primary "iptables -I INPUT 1 -s ${runner} -p tcp --dport ${control_port} -j DROP"
   check "primary /readyz is unreachable from this machine" wait_until 20 is_down primary
   evidence "control port blocked, /readyz status ${status}"
   check "SSH to the primary still works" node_ssh primary true
   check "the standby still answers" is_up standby
   check "the SFU process keeps running on the primary" node_ssh primary systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu
-  node_ssh primary "iptables -D INPUT -s ${runner} -p tcp --dport ${control_port} -j DROP"
+  check "the DROP rule is removed" node_ssh primary "iptables -D INPUT -s ${runner} -p tcp --dport ${control_port} -j DROP"
   check "primary /readyz answers after the heal" wait_until 20 is_up primary
   check "same incarnation after the heal" ready_is primary ".nodeIncarnation == \"${incarnation}\""
   check "the hold survived the partition" ready_is primary ".allocations == 1"
@@ -231,21 +231,52 @@ standby_saturation() {
   end_case
 }
 
+# keep_live starts a background renewer that joins the Episode's Participant again every 20 s, so the
+# node holds an allocation until stop_live, whatever time the deploy spends preparing. A draining node
+# keeps taking joins of an Episode it hosts. With "probe" it also asks for a new Episode each round
+# and logs the answer. It stops by itself after the optional number of seconds.
+live_log="" live_pid=""
+keep_live() { # episode generation [probe] [seconds]
+  local episode="$1" generation="$2" probe="${3:-}" end=$((SECONDS + ${4:-86400}))
+  live_log="$(mktemp)"
+  (
+    while ((SECONDS < end)); do
+      sleep 20
+      ((SECONDS < end)) || break
+      generation=$((generation + 1))
+      sfu primary POST /v1/sessions "$(join_body "op-${run}-${episode}-${generation}" "$episode" p1 "$generation")"
+      echo "join ${status}" >>"$live_log"
+      [[ -z "$probe" ]] && continue
+      sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-${episode}-${generation}" "new-${episode}-${generation}" 1 2 1 5)"
+      echo "new ${status} $(jq -r '.error.code // "ok"' <<<"$body")" >>"$live_log"
+    done
+  ) &
+  live_pid=$!
+}
+stop_live() {
+  [[ -z "$live_pid" ]] || { kill "$live_pid" 2>/dev/null; wait "$live_pid" 2>/dev/null; }
+  live_pid=""
+  return 0
+}
+live_count() { grep -c "$1" "$live_log" || true; }
+
 drain_and_restart() {
-  local episode="drain-${run}" incarnation output rc code
+  local episode="drain-${run}" incarnation output rc code deploy_pid
   begin_case 6 "a drain meets a short deadline; a forced replacement and a drain to zero both complete"
   incarnation="$(ready_value primary .nodeIncarnation)"
-  sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-d1" "$episode" 1 2 1 120)"
-  check "a 120 s hold keeps an allocation on the primary (HTTP ${status})" [ "$status" = 200 ]
+  sfu primary POST /v1/sessions "$(join_body "op-${run}-d0" "$episode" p1 1)"
+  check "the primary hosts Episode ${episode} (HTTP ${status})" test "$status" = 200
   sfu primary POST /v1/drain
-  check "the drain request answers 200 (HTTP ${status})" [ "$status" = 200 ]
+  check "the drain request answers 200 (HTTP ${status})" test "$status" = 200
   ready primary
   check "/readyz is 503 and draining with the allocation still held (HTTP ${status}, allocations $(jq -r .allocations <<<"$body"))" \
     test "$status" = 503 -a "$(jq -r '.draining and .allocations >= 1' <<<"$body")" = true
   sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-d2" "drain-new-${run}" 1 2 1 30)"
   code="$(jq -r .error.code <<<"$body")"
   check "a new Episode is refused as draining (HTTP ${status} ${code})" test "$status" = 503 -a "$code" = draining
+  keep_live "$episode" 1
   output="$(SFU_DRAIN_TIMEOUT=10 redeploy primary 2>&1)" && rc=0 || rc=$?
+  stop_live
   grep -E 'remain after|did not become ready|draining:' <<<"$output" | sed 's/^/    deploy: /' || true
   check "deploy with a 10 s deadline refuses to cut the call and exits non-zero (exit ${rc})" test "$rc" != 0
   check "the node was reopened, not restarted" ready_is primary ".draining == false and .nodeIncarnation == \"${incarnation}\""
@@ -255,70 +286,86 @@ drain_and_restart() {
   grep -E 'restarting without|ready:' <<<"$output" | sed 's/^/    deploy: /' || true
   check "the forced replacement completes (exit ${rc})" test "$rc" = 0
   check "new incarnation, no allocation, not draining" ready_is primary ".nodeIncarnation != \"${incarnation}\" and .allocations == 0 and .draining == false"
-  evidence "forced replacement is disruptive: it cut the held Episode"
+  evidence "forced replacement is disruptive: it cut the live Episode"
 
+  # The renewer keeps the allocation until the deploy is seen waiting on it, then lets it go.
   incarnation="$(ready_value primary .nodeIncarnation)"
-  sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-d3" "zero-${run}" 1 2 1 100)"
-  check "a 100 s hold makes the drain wait (HTTP ${status})" [ "$status" = 200 ]
-  output="$(SFU_DRAIN_TIMEOUT=300 redeploy primary 2>&1)" && rc=0 || rc=$?
-  grep -E 'draining:|ready:' <<<"$output" | sed 's/^/    deploy: /' || true
+  episode="zero-${run}"
+  sfu primary POST /v1/sessions "$(join_body "op-${run}-z0" "$episode" p1 1)"
+  check "a live Episode keeps an allocation (HTTP ${status})" test "$status" = 200
+  keep_live "$episode" 1
+  output="$(mktemp)"
+  SFU_DRAIN_TIMEOUT=300 redeploy primary >"$output" 2>&1 &
+  deploy_pid=$!
+  for _ in $(seq 600); do
+    grep -q 'draining: allocations [1-9]' "$output" && break
+    kill -0 "$deploy_pid" 2>/dev/null || break
+    sleep 1
+  done
+  stop_live
+  wait "$deploy_pid" && rc=0 || rc=$?
+  grep -E 'draining:|ready:' "$output" | sed 's/^/    deploy: /' || true
   check "the drain to zero restarts the node (exit ${rc})" test "$rc" = 0
-  check "the drain waited for the allocation" grep -q 'draining: allocations [1-9]' <<<"$output"
+  check "the drain waited for the allocation" grep -q 'draining: allocations [1-9]' "$output"
   check "new incarnation and zero allocations" ready_is primary ".nodeIncarnation != \"${incarnation}\" and .allocations == 0"
+  rm -f "$output"
   end_case
 }
 
-# long_drain keeps a live Episode on the primary through the drain, the way a call would.
+# long_drain_case keeps a live Episode on the primary through the drain, the way a call would.
 long_drain_case() {
-  local episode="long-${run}" renewer incarnation output refused file generation=1 rc joins accepted_joins asked
+  local episode="long-${run}" incarnation output rc refused asked joins accepted_joins
   begin_case 6L "drain for ${long_drain_seconds} s: the live Episode runs, new Episodes are refused, restart at zero"
   incarnation="$(ready_value primary .nodeIncarnation)"
-  file="$(mktemp)"
   sfu primary POST /v1/sessions "$(join_body "op-${run}-L0" "$episode" p1 1)"
-  check "the primary hosts Episode ${episode} (HTTP ${status})" [ "$status" = 200 ]
+  check "the primary hosts Episode ${episode} (HTTP ${status})" test "$status" = 200
   sfu primary POST /v1/drain
-  check "the drain request answers 200 (HTTP ${status})" [ "$status" = 200 ]
-  # A draining node keeps taking joins of an Episode it hosts, so a fresh join each 20 s keeps the Episode live.
-  (
-    end=$((SECONDS + long_drain_seconds))
-    while ((SECONDS < end)); do
-      sleep 20
-      generation=$((generation + 1))
-      sfu primary POST /v1/sessions "$(join_body "op-${run}-L${generation}" "$episode" p1 "$generation")"
-      echo "join ${status}" >>"$file"
-      sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-L${generation}" "long-new-${run}-${generation}" 1 2 1 5)"
-      echo "new ${status} $(jq -r '.error.code // "ok"' <<<"$body")" >>"$file"
-    done
-  ) &
-  renewer=$!
+  check "the drain request answers 200 (HTTP ${status})" test "$status" = 200
+  keep_live "$episode" 1 probe "$long_drain_seconds"
   output="$(SFU_DRAIN_TIMEOUT=$((long_drain_seconds + 300)) redeploy primary 2>&1)" && rc=0 || rc=$?
-  wait "$renewer" || true
+  stop_live
   grep -E 'draining:|ready:' <<<"$output" | sed 's/^/    deploy: /' || true
-  refused="$(grep -c '^new 503 draining' "$file" || true)" asked="$(grep -c '^new' "$file" || true)"
-  joins="$(grep -c '^join' "$file" || true)" accepted_joins="$(grep -c '^join 200' "$file" || true)"
+  refused="$(live_count '^new 503 draining')" asked="$(live_count '^new')"
+  joins="$(live_count '^join')" accepted_joins="$(live_count '^join 200')"
   check "the restart completed after the Episode ended (exit ${rc})" test "$rc" = 0
   check "every join of the live Episode was accepted (${accepted_joins} of ${joins})" test "$joins" -ge 1 -a "$accepted_joins" = "$joins"
   check "new Episodes were refused while draining (${refused} of ${asked})" test "$refused" -ge 1 -a "$refused" = "$asked"
   check "new incarnation and zero allocations" ready_is primary ".nodeIncarnation != \"${incarnation}\" and .allocations == 0"
   evidence "drain held ${long_drain_seconds} s of live Episode, ${refused} refusals"
-  rm -f "$file"
+  rm -f "$live_log"
   end_case
 }
 
 fleet_droplets() { tagged | fleet_of; }
 
-# finish deletes this run's Droplets by ID, then the firewall and certificates, and lists what is left.
+print_results() {
+  ((${#results[@]} > 0)) || return 0
+  echo
+  echo "==> results"
+  printf '%s\n' "case|title|result|evidence" "${results[@]}" | column -t -s '|'
+}
+
+# finish prints the results, deletes this run's Droplets by ID, then the firewall and certificates,
+# and lists what is left. It runs on any exit, so a run that stops early still reports and cleans up.
 finish() {
-  local code=$? ids pending=0 remaining foreign hours cost
+  local code=$? ids pending=0 remaining foreign hours cost failed=0
   trap - EXIT INT TERM
   set +e
+  print_results
+  if ((${#results[@]} > 0)); then
+    failed="$(printf '%s\n' "${results[@]}" | grep -c '|FAIL|')"
+    echo "${failed} case(s) failed"
+    ((failed == 0)) || code=1
+  fi
   echo
   echo "==> deleting the Droplets this run created"
   ids="$(jq -s '[.[][0].id]' "${dir}"/primary.json "${dir}"/standby.json 2>/dev/null || echo '[]')"
   cost="$(fleet_droplets | jq -r --argjson ids "$ids" '[.[] | select(.id as $id | $ids | index($id)) | (now - (.created_at | fromdateiso8601)) / 3600 * .size.price_hourly] | add // 0 | . * 10000 | round / 10000')"
   hours="$(fleet_droplets | jq -r '[.[] | (now - (.created_at | fromdateiso8601)) / 3600] | max // 0 | . * 100 | round / 100')"
   tagged | jq --argjson ids "$ids" '[.[] | select(.id as $id | $ids | index($id))]' | delete_droplets || pending=1
-  [[ "$pending" == 1 ]] || delete_firewall
+  if [[ "$pending" == 0 ]]; then
+    delete_firewall || { echo "FAILED: the firewall ${firewall} is still there; run: bench down" >&2; pending=1; }
+  fi
   echo "==> doctl compute droplet list --tag-name ${tag}"
   doctl compute droplet list --tag-name "$tag" --format ID,Name,Region,Memory,VCPUs,Status
   remaining="$(fleet_droplets | jq length)"
@@ -328,6 +375,8 @@ finish() {
   if [[ "$remaining" != 0 ]]; then
     echo "FAILED: ${remaining} ${name_prefix}-* Droplet(s) remain" >&2
     code=1
+  elif [[ "$pending" == 1 ]]; then
+    code=1
   else
     rm -rf "$dir"
     echo "no ${name_prefix}-* Droplet remains"
@@ -336,7 +385,7 @@ finish() {
 }
 
 main() {
-  local long_drain=false failed
+  local long_drain=false
   case "${1:-}" in
     "") ;;
     --long-drain) long_drain=true ;;
@@ -348,6 +397,8 @@ main() {
   up
   trap finish EXIT
   trap 'exit 130' INT TERM
+  # From here a failed setup step must not skip the cases after it: a check records the failure.
+  set +e
 
   echo
   echo "==> baseline"
@@ -359,13 +410,6 @@ main() {
   standby_saturation
   drain_and_restart
   [[ "$long_drain" == false ]] || long_drain_case
-
-  echo
-  echo "==> results"
-  printf '%s\n' "case|title|result|evidence" "${results[@]}" | column -t -s '|'
-  failed="$(printf '%s\n' "${results[@]}" | grep -c '|FAIL|' || true)"
-  echo "${failed} case(s) failed"
-  ((failed == 0)) || exit 1
 }
 
 [[ "${BASH_SOURCE[0]}" != "$0" ]] || main "$@"
