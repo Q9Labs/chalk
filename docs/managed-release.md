@@ -100,7 +100,11 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 ## Promote
 
-Dispatch `Promote newest held nightly` from master with no inputs.
+Dispatch `Promote newest held nightly` from master with three required inputs:
+`expected_sha` (the held release revision you approve), `leave_baseline_median_ms` and
+`leave_baseline_evidence_sha256` (from the same-session Leave comparison in
+[prod-proof](../scripts/prod-proof/README.md)). `scorecard_override` is optional.
+Selection fails before deployment if the newest held release is not `expected_sha`.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
 first decisive record, and fetch statuses only for matching candidates. Nightly
