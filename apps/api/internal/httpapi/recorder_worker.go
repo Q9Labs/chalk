@@ -84,17 +84,6 @@ func NewRecorderWorkerRouterWithControls(service RecorderWorkerService, verifier
 	return r
 }
 
-// mountRecorderWorkerRoutes mounts internal recorder control endpoints under
-// /internal/v1/recorder. The parent router owns composition and supplies the
-// verifier; every route is protected by requireRecorderWorker.
-func mountRecorderWorkerRoutes(r chi.Router, service RecorderWorkerService, verifier RecorderWorkerVerifier, plans ...RecorderCapturePlanService) {
-	controls := RecorderWorkerControlServices{}
-	if len(plans) > 0 {
-		controls.CapturePlans = plans[0]
-	}
-	mountRecorderWorkerRoutesWithControls(r, service, verifier, controls)
-}
-
 func mountRecorderWorkerRoutesWithControls(r chi.Router, service RecorderWorkerService, verifier RecorderWorkerVerifier, controls RecorderWorkerControlServices) {
 	if service == nil || verifier == nil {
 		return
