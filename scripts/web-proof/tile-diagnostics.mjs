@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-export -- consumed by .agents/skills/verify-chalk/scripts/join-call.mjs, a hidden directory fallow does not scan
 // What the join-call check needs to say WHY a tile stayed empty: the state of the tile and its track, a measured wait,
 // and a per-page dump of WebRTC stats, console errors and failed requests. The check stays strict; this only explains it.
 
@@ -43,8 +44,8 @@ export const peerStats = async () => {
               remoteType: byId.get(pair.remoteCandidateId)?.candidateType,
             }
           : null,
-        inboundVideo: video("inbound-rtp").map((row) => pick(row, ["packetsReceived", "bytesReceived", "packetsLost", "framesReceived", "framesDecoded", "keyFramesDecoded", "pliCount", "firCount", "nackCount", "freezeCount"])),
-        outboundVideo: video("outbound-rtp").map((row) => pick(row, ["packetsSent", "bytesSent", "framesEncoded", "keyFramesEncoded", "pliCount", "firCount", "nackCount", "active"])),
+        inboundVideo: video("inbound-rtp").map((row) => pick(row, ["packetsReceived", "bytesReceived", "packetsLost", "framesReceived", "framesDecoded", "framesDropped", "framesPerSecond", "frameWidth", "frameHeight", "keyFramesDecoded", "pliCount", "firCount", "nackCount", "freezeCount"])),
+        outboundVideo: video("outbound-rtp").map((row) => pick(row, ["rid", "packetsSent", "bytesSent", "framesEncoded", "keyFramesEncoded", "frameWidth", "frameHeight", "framesPerSecond", "targetBitrate", "qualityLimitationReason", "pliCount", "firCount", "nackCount", "active"])),
       };
     }),
   );
@@ -59,6 +60,31 @@ export async function measureFirstFrame(page, name, { timeoutMs, pollMs = 500 })
     state = await page.evaluate(tileState, name);
   }
   return { firstFrameMs: state.frames > 0 ? Date.now() - started : null, state };
+}
+
+const realClock = { now: () => Date.now(), sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) };
+
+// True when the newest sample gained more than minGain frames since the newest sample that is at least windowMs older.
+function gainedInWindow(samples, windowMs, minGain) {
+  const latest = samples.at(-1);
+  const base = samples.findLast((sample) => sample.at <= latest.at - windowMs);
+  return base !== undefined && latest.frames - base.frames > minGain;
+}
+
+// A stream that just started often runs at a few frames per second until the sender's bitrate estimate has grown, so
+// one 3 s window right after the first frame calls a healthy start "not advancing". This waits until some window of
+// windowMs gained more than minGain frames; advancedAfterMs is null when no window did before the time ran out.
+export async function measureAdvance(page, name, { timeoutMs, windowMs = 3000, minGain = 5, pollMs = 500, clock = realClock }) {
+  const started = clock.now();
+  const samples = [];
+  for (;;) {
+    const state = await page.evaluate(tileState, name);
+    const at = clock.now() - started;
+    samples.push({ at, frames: state.frames });
+    if (gainedInWindow(samples, windowMs, minGain)) return { advancedAfterMs: at, samples };
+    if (at >= timeoutMs) return { advancedAfterMs: null, samples };
+    await clock.sleep(pollMs);
+  }
 }
 
 // fallow-ignore-next-line complexity
@@ -98,4 +124,10 @@ export async function collectPage(session, { tileNames, logs, measurements }) {
     consoleErrors: logs.console.filter((entry) => entry.who === name && (entry.type === "error" || entry.type === "pageerror")),
     failedRequests: logs.network.filter((entry) => entry.who === name && failedRequest(entry)),
   };
+}
+
+export function videoNotAdvancing(name, other, measured, timeoutMs, { windowMs = 3000, minGain = 5 } = {}) {
+  const { frames: first } = measured.samples[0];
+  const { frames: last } = measured.samples.at(-1);
+  return `${timeoutMs / 1000} s timeout: ${other}'s tile on ${name}'s page never gained more than ${minGain} frames in ${windowMs / 1000} s (${first} frames decoded at the first check, ${last} at the end)`;
 }
